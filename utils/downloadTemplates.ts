@@ -303,20 +303,9 @@ export function downloadInventoryRawInByCodeTemplate() {
   XLSX.writeFile(wb, 'template_inventory_raw_in_by_code.xlsx');
 }
 
+/** @deprecated Legacy raw materials import removed — use manufacturing materials. */
 export function downloadRawMaterialsMasterTemplate() {
-  const wb = XLSX.utils.book_new();
-  const rows: (string | number)[][] = [
-    ['اسم المادة الخام', 'الكود', 'الوحدة', 'الحد الأدنى', 'الحالة'],
-    ['كسر تغليف', 'RM-0001', 'unit', 0, 'نشط'],
-    ['فيشة', 'RM-0002', 'unit', 10, 'نشط'],
-    ['شحمية', 'RM-0003', 'unit', 5, 'نشط'],
-  ];
-  const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 28 }, { wch: 16 }, { wch: 12 }, { wch: 14 }, { wch: 12 }];
-  if (!ws['!views']) ws['!views'] = [];
-  (ws['!views'] as any[]).push({ rightToLeft: true });
-  XLSX.utils.book_append_sheet(wb, ws, 'تعريف المواد الخام');
-  XLSX.writeFile(wb, 'template_raw_materials_master.xlsx');
+  console.warn('downloadRawMaterialsMasterTemplate is deprecated; use /manufacturing/materials');
 }
 
 export function downloadUsersTemplate() {

@@ -267,6 +267,8 @@ export const QuickWarehouseTransfer: React.FC = () => {
     try {
       const resolvedReferenceNo = referenceNo;
       const txId = await transferApprovalService.createRequest({
+        requestType: 'manual_transfer',
+        sourceModule: 'manual_movement',
         fromWarehouseId: warehouseId,
         fromWarehouseName: selectedFromWarehouse?.name || '',
         toWarehouseId,

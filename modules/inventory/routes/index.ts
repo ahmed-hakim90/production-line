@@ -9,6 +9,8 @@ const StockCounts = lazyNamed(() => import('../pages/StockCounts'), 'StockCounts
 const TransferApprovals = lazyNamed(() => import('../pages/TransferApprovals'), 'TransferApprovals');
 const QuickWarehouseTransfer = lazyNamed(() => import('../pages/QuickWarehouseTransfer'), 'QuickWarehouseTransfer');
 const Warehouses = lazyNamed(() => import('../pages/Warehouses'), 'Warehouses');
+const InventoryAnalytics = lazyNamed(() => import('../pages/InventoryAnalytics'), 'InventoryAnalytics');
+const InventoryExceptions = lazyNamed(() => import('../pages/InventoryExceptions'), 'InventoryExceptions');
 
 export const INVENTORY_ROUTES: AppRouteDef[] = [
   { path: '/inventory', permission: 'inventory.view', component: InventoryDashboard },
@@ -19,4 +21,6 @@ export const INVENTORY_ROUTES: AppRouteDef[] = [
   { path: '/inventory/movements', permission: 'inventory.transactions.create', component: StockMovementForm },
   { path: '/inventory/transfer-approvals', permission: 'inventory.view', component: TransferApprovals },
   { path: '/inventory/counts', permission: 'inventory.counts.manage', component: StockCounts },
+  { path: '/inventory/analytics', permission: 'inventory.analytics.view', component: InventoryAnalytics },
+  { path: '/inventory/exceptions', permission: 'inventory.exceptions.view', component: InventoryExceptions },
 ];

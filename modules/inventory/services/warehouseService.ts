@@ -11,7 +11,7 @@ import {
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
-import type { PlanSettings, SystemSettings } from '../../../types';
+import type { InventoryRoutingSettings, PlanSettings, SystemSettings } from '../../../types';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import type { Warehouse } from '../types';
 import { stockService } from './stockService';
@@ -30,27 +30,49 @@ async function isWarehouseCodeTaken(code: string, excludeDocId?: string): Promis
   return snap.docs.some((d) => d.id !== excludeDocId);
 }
 
+const LEGACY_WAREHOUSE_KEYS: (keyof PlanSettings)[] = [
+  'defaultProductionWarehouseId',
+  'rawMaterialWarehouseId',
+  'decomposedSourceWarehouseId',
+  'finishedReceiveWarehouseId',
+  'wasteReceiveWarehouseId',
+  'finalProductWarehouseId',
+  'packagingSourceWarehouseId',
+  'packagingTargetWarehouseId',
+];
+
+const ROUTING_WAREHOUSE_KEYS: (keyof InventoryRoutingSettings)[] = [
+  'rawMaterialWarehouseId',
+  'decomposedWarehouseId',
+  'productionWipWarehouseId',
+  'finishedStagingWarehouseId',
+  'finalProductWarehouseId',
+  'packagingSourceWarehouseId',
+  'packagingTargetWarehouseId',
+  'wasteWarehouseId',
+];
+
 async function clearPlanSettingsWarehouseRefs(warehouseId: string): Promise<void> {
   const settings = await systemSettingsService.get();
   if (!settings?.planSettings) return;
-  const keys: (keyof PlanSettings)[] = [
-    'defaultProductionWarehouseId',
-    'rawMaterialWarehouseId',
-    'decomposedSourceWarehouseId',
-    'finishedReceiveWarehouseId',
-    'wasteReceiveWarehouseId',
-    'finalProductWarehouseId',
-    'packagingSourceWarehouseId',
-    'packagingTargetWarehouseId',
-  ];
   let changed = false;
   const next: PlanSettings = { ...settings.planSettings };
-  for (const k of keys) {
+  for (const k of LEGACY_WAREHOUSE_KEYS) {
     const v = next[k];
     if (v !== undefined && String(v) === warehouseId) {
       (next as unknown as Record<string, unknown>)[k as string] = '';
       changed = true;
     }
+  }
+  if (next.inventoryRouting) {
+    const routing = { ...next.inventoryRouting };
+    for (const k of ROUTING_WAREHOUSE_KEYS) {
+      if (routing[k] === warehouseId) {
+        routing[k] = '';
+        changed = true;
+      }
+    }
+    next.inventoryRouting = routing;
   }
   if (changed) {
     const merged: SystemSettings = { ...settings, planSettings: next };
@@ -103,6 +125,7 @@ export const warehouseService = {
     const ref = await addDoc(collection(db, COLLECTION), {
       ...payload,
       code,
+      warehouseRole: payload.warehouseRole ?? 'general',
       tenantId: getCurrentTenantId(),
       createdAt: new Date().toISOString(),
     });

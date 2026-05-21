@@ -15,6 +15,7 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { RawMaterial } from '../types';
 import { getMergedPlanSettings } from '../../shared/services/entityCodePlanSettings';
+import { assertManufacturingWriteAllowed } from '../../manufacturing/lib/legacyGuard';
 import {
   DUPLICATE_ENTITY_CODE,
   ENTITY_CODE_COUNTER_KEYS,
@@ -144,6 +145,7 @@ export const rawMaterialService = {
     payload: Omit<RawMaterial, 'id' | 'createdAt'>,
     options?: RawMaterialCreateOptions,
   ): Promise<string | null> {
+    assertManufacturingWriteAllowed();
     if (!isConfigured) return null;
     const { prefix, padding } = await mergedPlanForCodes();
     const trimmed = String(payload.code ?? '').trim();
@@ -227,6 +229,7 @@ export const rawMaterialService = {
   },
 
   async update(id: string, payload: Partial<RawMaterial>): Promise<void> {
+    assertManufacturingWriteAllowed();
     if (!isConfigured || !id) return;
     if (payload.code !== undefined) {
       const upper = String(payload.code ?? '').trim().toUpperCase();
@@ -242,6 +245,7 @@ export const rawMaterialService = {
   },
 
   async delete(id: string): Promise<void> {
+    assertManufacturingWriteAllowed();
     if (!isConfigured || !id) return;
     await deleteDoc(doc(db, COLLECTION, id));
   },
@@ -251,6 +255,7 @@ export const rawMaterialService = {
    * UI-driven creates use category-scoped `{CAT-####}-{seq}` when a category is chosen.
    */
   async syncFromProductMaterials(): Promise<{ created: number; linked: number; skipped: number }> {
+    assertManufacturingWriteAllowed();
     if (!isConfigured) return { created: 0, linked: 0, skipped: 0 };
     const tenantId = getCurrentTenantId();
 

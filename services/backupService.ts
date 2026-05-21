@@ -48,6 +48,11 @@ const ALL_COLLECTIONS = [
   'scan_events',
   // Product cost & materials
   'product_materials',
+  'materials',
+  'boms',
+  'bom_items',
+  'material_requirement_runs',
+  'production_plan_material_requirements',
   'monthly_production_costs',
   // Line worker assignments
   'line_worker_assignments',
@@ -118,6 +123,7 @@ const ALL_COLLECTIONS = [
   // Additional collections used by app/runtime
   'production_report_uniques',
   'product_categories',
+  'material_categories',
   'user_devices',
   'user_presence',
   'automation_runs',
@@ -145,6 +151,11 @@ const SETTINGS_COLLECTIONS = [
   'labor_settings',
   'line_product_config',
   'product_materials',
+  'materials',
+  'boms',
+  'bom_items',
+  'material_requirement_runs',
+  'production_plan_material_requirements',
   'hr_settings',
   'hr_config_modules',
   'penalty_rules',

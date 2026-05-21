@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import type { InventoryTransferRequest, StockTransaction } from '../../types';
 import type { ApprovedTransferGroup, CombinedRow } from './types';
 import { movementLabel } from './types';
+import { sourceModuleLabel } from '../../lib/stockLabels';
 
 export interface StockTransactionsTableProps {
   loading: boolean;
@@ -16,7 +17,7 @@ export interface StockTransactionsTableProps {
   toggleSelectRow: (rowId?: string) => void;
   warehouseMap: Map<string, string>;
   transferDisplayUnit: TransferDisplayUnitMode;
-  withResolvedUnitsPerCarton: <T extends { itemType: 'finished_good' | 'raw_material'; itemId: string; unitsPerCarton?: number }>(
+  withResolvedUnitsPerCarton: <T extends { itemType: import('../../types').InventoryItemType; itemId: string; unitsPerCarton?: number }>(
     line: T,
   ) => T;
   perm: {
@@ -76,8 +77,10 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
           <th className="erp-th">التاريخ</th>
           <th className="erp-th">الصنف</th>
           <th className="erp-th">الحركة</th>
+          <th className="erp-th">المصدر</th>
           <th className="erp-th text-center">الكمية</th>
           <th className="erp-th">المخزن</th>
+          <th className="erp-th">المرجع</th>
           <th className="erp-th">المنفذ</th>
           <th className="erp-th">إجراءات</th>
         </tr>
@@ -86,14 +89,14 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
         {loading &&
           Array.from({ length: 6 }).map((_, i) => (
             <tr key={`tx-skeleton-${i}`}>
-              <td colSpan={8} className="px-4 py-3">
+              <td colSpan={10} className="px-4 py-3">
                 <Skeleton className="h-6 w-full rounded-md" />
               </td>
             </tr>
           ))}
         {!loading && combinedRows.length === 0 && (
           <tr>
-            <td colSpan={8} className="px-4 py-10 text-center text-slate-400">
+            <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
               لا توجد حركات مطابقة.
             </td>
           </tr>
@@ -120,6 +123,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <td className="px-4 py-3">
                     <Badge variant="info">{movementLabel[tx.movementType] ?? tx.movementType}</Badge>
                   </td>
+                  <td className="px-4 py-3 text-xs">{sourceModuleLabel(tx.sourceModule)}</td>
                   <td className="px-4 py-3 text-center">
                     {tx.movementType === 'TRANSFER' ? (
                       <span className="font-bold tabular-nums text-emerald-600">
@@ -136,6 +140,9 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm">{warehouseMap.get(tx.warehouseId) ?? tx.warehouseId}</td>
+                  <td className="px-4 py-3 text-xs font-mono text-slate-500">
+                    {tx.sourceId || tx.referenceNo || '—'}
+                  </td>
                   <td className="px-4 py-3 text-sm">{tx.createdBy}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
@@ -229,6 +236,9 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                       <Badge variant="success">معتمدة</Badge>
                     </div>
                   </td>
+                  <td className="px-4 py-3 text-xs">
+                    {sourceModuleLabel(group.lines[0]?.sourceModule ?? 'transfer_request')}
+                  </td>
                   <td className="px-4 py-3 text-center">
                     <span className="font-bold tabular-nums text-emerald-700">
                       {qtySummary}
@@ -238,6 +248,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <td className="px-4 py-3 text-sm">
                     {fromName} ← {toName}
                   </td>
+                  <td className="px-4 py-3 text-xs font-mono text-slate-500">{group.referenceNo}</td>
                   <td className="px-4 py-3 text-sm">{group.createdBy}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
@@ -328,6 +339,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                     <Badge variant="warning">معلقة</Badge>
                   </div>
                 </td>
+                <td className="px-4 py-3 text-xs">{sourceModuleLabel(row.sourceModule ?? 'transfer_request')}</td>
                 <td className="px-4 py-3 text-center">
                   <span className="font-bold tabular-nums text-amber-700">
                     {qtySummary}
@@ -337,6 +349,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                 <td className="px-4 py-3 text-sm">
                   {fromName} ← {toName}
                 </td>
+                <td className="px-4 py-3 text-xs font-mono text-slate-500">{row.sourceId || row.referenceNo}</td>
                 <td className="px-4 py-3 text-sm">{row.createdBy}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">

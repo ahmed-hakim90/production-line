@@ -23,7 +23,15 @@
     "test:rules": "npm run compose:firestore-rules && npx firebase-tools emulators:exec --only firestore \"node tests/firestore.rules.test.mjs\"",
     "verify:firebase-env": "node scripts/verify-firebase-env.mjs",
     "verify:firestore-rules-deploy": "node scripts/verify-firestore-rules-deploy.mjs",
-    "verify:firebase": "npm run verify:firebase-env && npm run compose:firestore-rules && npm run verify:firestore-rules-deploy"
+    "verify:firebase": "npm run verify:firebase-env && npm run compose:firestore-rules && npm run verify:firestore-rules-deploy",
+    "preverify:firebase": "npm run compose:firestore-rules",
+    "test:manufacturing": "npx --yes tsx tests/manufacturing-engines.test.ts && npx --yes tsx tests/material-requirements-export.test.ts",
+    "test:inventory": "npx --yes tsx tests/inventory-routing.test.ts && npx --yes tsx tests/inventory-migration.test.ts && npx --yes tsx tests/production-inventory.test.ts && npx --yes tsx tests/stock-valuation.test.ts",
+    "handover:pdf": "node scripts/handover/generate-handover.mjs",
+    "handover:pdf:content": "HANDOVER_CONTENT_ONLY=1 node scripts/handover/generate-handover.mjs",
+    "handover:readiness": "node scripts/handover/check-tenant-readiness.mjs",
+    "test:categories": "npx --yes tsx tests/category-tree.test.ts && npx --yes tsx tests/category-migration.test.ts",
+    "test:operations": "npx --yes tsx tests/tenant-readiness.test.ts && npx --yes tsx tests/inventory-analytics.test.ts && npx --yes tsx tests/executive-period-report.test.ts && npx --yes tsx tests/asset-depreciation.test.ts && npx --yes tsx tests/line-efficiency.test.ts"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",

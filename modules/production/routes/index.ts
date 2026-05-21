@@ -22,6 +22,7 @@ const RoutingAnalyticsPage = lazyNamed(() => import('../routing/pages/RoutingAna
 const LineWorkerAssignment = lazyNamed(() => import('../pages/LineWorkerAssignment'), 'LineWorkerAssignment');
 const SupplyCyclesList = lazyNamed(() => import('../pages/SupplyCyclesList'), 'SupplyCyclesList');
 const SupplyCycleDetail = lazyNamed(() => import('../pages/SupplyCycleDetail'), 'SupplyCycleDetail');
+const LineEfficiencyReport = lazyNamed(() => import('../pages/LineEfficiencyReport'), 'LineEfficiencyReport');
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/lines', permission: 'lines.view', component: Lines },
@@ -41,6 +42,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/quick-action', permission: 'quickAction.view', component: QuickAction },
   { path: '/line-workers', permission: 'lineWorkers.view', component: LineWorkerAssignment },
   { path: '/production/routing/analytics', permission: 'routing.analytics', component: RoutingAnalyticsPage },
+  { path: '/production/line-efficiency', permission: 'routing.analytics', component: LineEfficiencyReport },
   { path: '/production/routing/execution/:executionId', permission: 'routing.execute', component: ExecutionPage },
   {
     path: '/production/routing/:productId',

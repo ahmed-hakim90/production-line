@@ -16,20 +16,26 @@ import { useAppStore } from '../store/useAppStore';
 export type Permission =
   | 'dashboard.view'
   | 'products.view' | 'products.create' | 'products.edit' | 'products.delete' | 'products.createRawMaterial' | 'products.rawMaterials.view'
+  | 'materials.view' | 'materials.manage'
+  | 'bom.view' | 'bom.manage'
+  | 'planning.materialRequirements.view' | 'planning.materialRequirements.generate'
+  | 'manufacturing.purchaseGap.view'
   | 'catalog.categories.view' | 'catalog.categories.create' | 'catalog.categories.edit' | 'catalog.categories.delete'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
-  | 'inventory.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove'
+  | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
+  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.executive.export' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
   | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
   | 'assets.view' | 'assets.create' | 'assets.edit' | 'assets.delete' | 'assets.depreciation.run' | 'assets.depreciation.view'
   | 'settings.view' | 'settings.edit'
+  | 'system.readiness.view'
+  | 'operations.inbox.view'
   | 'users.manage'
   | 'roles.view' | 'roles.manage'
   | 'activityLog.view'
@@ -95,6 +101,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'employeeDashboard.view', label: 'عرض لوحة الموظف' },
       { key: 'factoryDashboard.view', label: 'عرض لوحة مدير المصنع' },
       { key: 'adminDashboard.view', label: 'عرض لوحة مدير النظام' },
+      { key: 'operations.inbox.view', label: 'مركز العمليات (Ops Inbox)' },
     ],
   },
   {
@@ -111,6 +118,19 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'catalog.categories.create', label: 'إنشاء فئة كتالوج' },
       { key: 'catalog.categories.edit', label: 'تعديل فئات الكتالوج' },
       { key: 'catalog.categories.delete', label: 'حذف فئات الكتالوج' },
+    ],
+  },
+  {
+    key: 'manufacturing',
+    label: 'التصنيع والمواد',
+    permissions: [
+      { key: 'materials.view', label: 'عرض المواد التصنيعية' },
+      { key: 'materials.manage', label: 'إدارة المواد التصنيعية' },
+      { key: 'bom.view', label: 'عرض قوائم المواد (BOM)' },
+      { key: 'bom.manage', label: 'إدارة BOM' },
+      { key: 'planning.materialRequirements.view', label: 'عرض احتياجات المواد' },
+      { key: 'planning.materialRequirements.generate', label: 'توليد احتياجات المواد' },
+      { key: 'manufacturing.purchaseGap.view', label: 'تقرير فجوة الشراء' },
     ],
   },
   {
@@ -144,6 +164,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.packaging.only', label: 'تقارير تغليف فقط (إخفاء إنتاج/حقن وقفل النوع على التغليف)' },
       { key: 'reports.packaging.create', label: 'إنشاء تقرير تغليف (بدون صلاحة إنشاء تقارير الإنتاج العامة)' },
       { key: 'reports.componentWaste.create', label: 'إنشاء تقرير هالك مكونات' },
+      { key: 'reports.executive.export', label: 'التقرير التنفيذي الموحّد' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
@@ -173,6 +194,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
     label: 'المخازن',
     permissions: [
       { key: 'inventory.view', label: 'عرض المخازن' },
+      { key: 'inventory.analytics.view', label: 'تحليلات المخزون (ABC)' },
+      { key: 'inventory.exceptions.view', label: 'استثناءات المخزون' },
       { key: 'inventory.transactions.create', label: 'تسجيل حركات المخزون' },
       { key: 'inventory.transactions.edit', label: 'تعديل حركات المخزون' },
       { key: 'inventory.transactions.print', label: 'طباعة حركات المخزون' },
@@ -297,6 +320,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'activityLog.view', label: 'عرض سجل النشاط' },
       { key: 'settings.view', label: 'عرض الإعدادات' },
       { key: 'settings.edit', label: 'تعديل الإعدادات' },
+      { key: 'system.readiness.view', label: 'جاهزية المستأجر' },
     ],
   },
   {
@@ -386,6 +410,25 @@ export function checkPermission(
   }
   if (permission === 'users.manage') {
     return permissions['roles.manage'] === true;
+  }
+  if (permission === 'system.readiness.view') {
+    return permissions['settings.view'] === true || permissions['adminDashboard.view'] === true;
+  }
+  if (permission === 'operations.inbox.view') {
+    return (
+      permissions['factoryDashboard.view'] === true
+      || permissions['adminDashboard.view'] === true
+      || permissions['dashboard.view'] === true
+    );
+  }
+  if (permission === 'inventory.analytics.view' || permission === 'inventory.exceptions.view') {
+    return permissions['inventory.view'] === true;
+  }
+  if (permission === 'reports.executive.export') {
+    return permissions['reports.view'] === true && permissions['export'] === true;
+  }
+  if (permission === 'manufacturing.purchaseGap.view') {
+    return permissions['planning.materialRequirements.view'] === true;
   }
   if (permission === 'attendance.sync' || permission === 'attendance.process') {
     return permissions['attendance.import'] === true || permissions['attendance.edit'] === true;

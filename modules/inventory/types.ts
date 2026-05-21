@@ -1,13 +1,47 @@
-export type InventoryItemType = 'finished_good' | 'raw_material';
+export type InventoryItemType =
+  | 'finished_good'
+  | 'raw_material'
+  | 'material'
+  | 'semi_finished'
+  | 'consumable'
+  | 'packaging';
 
 export type StockMovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
+
+export type StockSourceModule =
+  | 'production_report'
+  | 'manual_movement'
+  | 'transfer_request'
+  | 'stock_count'
+  | 'packaging'
+  | 'work_order'
+  | 'legacy';
+
+export type StockAdjustmentReason =
+  | 'count_correction'
+  | 'damage'
+  | 'missing'
+  | 'extra'
+  | 'manual_correction';
+
+export type WarehouseRole =
+  | 'raw_material'
+  | 'decomposed'
+  | 'production_wip'
+  | 'finished_staging'
+  | 'final_product'
+  | 'packaging'
+  | 'waste'
+  | 'general';
 
 export interface Warehouse {
   id?: string;
   name: string;
   code: string;
   isActive: boolean;
+  warehouseRole?: WarehouseRole;
   createdAt: string;
+  tenantId?: string;
 }
 
 export interface RawMaterial {
@@ -26,13 +60,18 @@ export interface StockItemBalance {
   id?: string;
   warehouseId: string;
   warehouseName?: string;
+  warehouseRole?: WarehouseRole;
   itemType: InventoryItemType;
   itemId: string;
   itemName: string;
   itemCode: string;
   quantity: number;
+  reservedQty?: number;
+  availableQty?: number;
+  unit?: string;
   minStock: number;
   updatedAt: string;
+  lastMovementAt?: string;
 }
 
 export interface StockTransaction {
@@ -47,6 +86,7 @@ export interface StockTransaction {
   itemCode: string;
   movementType: StockMovementType;
   quantity: number;
+  unit?: string;
   requestQuantity?: number;
   requestUnit?: 'piece' | 'carton' | 'unit';
   unitsPerCarton?: number;
@@ -54,6 +94,9 @@ export interface StockTransaction {
   referenceNo?: string;
   relatedTransactionId?: string;
   transferDirection?: 'OUT' | 'IN';
+  sourceModule?: StockSourceModule;
+  sourceId?: string;
+  adjustmentReason?: StockAdjustmentReason;
   createdAt: string;
   createdBy: string;
 }
@@ -73,6 +116,7 @@ export interface StockCountSession {
   warehouseName: string;
   status: 'open' | 'counted' | 'approved';
   note?: string;
+  adjustmentReason?: StockAdjustmentReason;
   lines: StockCountLine[];
   createdAt: string;
   createdBy: string;
@@ -89,18 +133,29 @@ export interface CreateStockMovementInput {
   itemCode: string;
   movementType: StockMovementType;
   quantity: number;
+  unit?: string;
   requestQuantity?: number;
   requestUnit?: 'piece' | 'carton' | 'unit';
   unitsPerCarton?: number;
   minStock?: number;
   note?: string;
   referenceNo?: string;
+  sourceModule?: StockSourceModule;
+  sourceId?: string;
+  adjustmentReason?: StockAdjustmentReason;
   createdBy: string;
   allowNegative?: boolean;
 }
 
 export type TransferRequestStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
-export type TransferRequestType = 'transfer' | 'production_entry';
+
+export type TransferRequestType =
+  | 'transfer'
+  | 'manual_transfer'
+  | 'production_entry'
+  | 'production_auto_transfer'
+  | 'finished_to_final'
+  | 'packaging_transfer';
 
 export interface TransferRequestLine {
   itemType: InventoryItemType;
@@ -108,6 +163,7 @@ export interface TransferRequestLine {
   itemName: string;
   itemCode: string;
   quantity: number;
+  unit?: string;
   requestQuantity?: number;
   requestUnit?: 'piece' | 'carton' | 'unit';
   unitsPerCarton?: number;
@@ -123,12 +179,18 @@ export interface InventoryTransferRequest {
   toWarehouseName?: string;
   referenceNo: string;
   note?: string;
+  /** @deprecated Prefer sourceId */
   sourceReportId?: string;
+  sourceModule?: StockSourceModule;
+  sourceId?: string;
   lines: TransferRequestLine[];
   status: TransferRequestStatus;
   createdBy: string;
   createdByUserId?: string;
   createdAt: string;
+  submittedAt?: string;
+  firstReviewedAt?: string;
+  resolvedAt?: string;
   approvedBy?: string;
   approvedByUserId?: string;
   approvedAt?: string;
@@ -140,4 +202,37 @@ export interface InventoryTransferRequest {
   cancelledByUserId?: string;
   cancelledAt?: string;
   cancellationReason?: string;
+}
+
+export interface InventoryRoutingSettings {
+  rawMaterialWarehouseId?: string;
+  decomposedWarehouseId?: string;
+  productionWipWarehouseId?: string;
+  finishedStagingWarehouseId?: string;
+  finalProductWarehouseId?: string;
+  packagingSourceWarehouseId?: string;
+  packagingTargetWarehouseId?: string;
+  wasteWarehouseId?: string;
+  autoTransferProductionToFinished?: boolean;
+  autoTransferFinishedToFinal?: boolean;
+  requireApprovalForProductionEntry?: boolean;
+  requireApprovalForAutoTransfers?: boolean;
+}
+
+export interface ResolvedInventoryRouting {
+  rawMaterialWarehouseId: string;
+  decomposedWarehouseId: string;
+  productionWipWarehouseId: string;
+  finishedStagingWarehouseId: string;
+  finalProductWarehouseId: string;
+  packagingSourceWarehouseId: string;
+  packagingTargetWarehouseId: string;
+  wasteWarehouseId: string;
+  autoTransferProductionToFinished: boolean;
+  autoTransferFinishedToFinal: boolean;
+  requireApprovalForProductionEntry: boolean;
+  requireApprovalForAutoTransfers: boolean;
+  allowNegativeDecomposedStock: boolean;
+  allowNegativeFinishedTransferStock: boolean;
+  enablePackagingStockTransfer: boolean;
 }

@@ -1,10 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
+import { withTenantPath } from '@/lib/tenantPaths';
 import { Badge, Button, Card } from '../components/UI';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { warehouseService } from '../services/warehouseService';
 import type { InventoryTransferRequest, Warehouse } from '../types';
+import { transferRequestTypeLabel } from '../lib/stockLabels';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useManagedPrint } from '../../../utils/printManager';
 import { StockTransferPrint, type StockTransferPrintData } from '../components/StockTransferPrint';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
@@ -24,13 +29,17 @@ const STATUS_LABEL: Record<string, string> = {
   rejected: 'مرفوضة',
   cancelled: 'ملغاة',
 };
-const REQUEST_TYPE_LABEL: Record<string, string> = {
-  transfer: 'تحويل مخزني',
-  production_entry: 'دخول تم الصنع',
-};
+function transferAgeDays(row: InventoryTransferRequest): number {
+  const iso = row.submittedAt || row.createdAt;
+  const t = new Date(iso).getTime();
+  if (Number.isNaN(t)) return 0;
+  return Math.floor((Date.now() - t) / 86400000);
+}
 
 export const TransferApprovals: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
+  const { openModal } = useGlobalModalManager();
   const uid = useAppStore((s) => s.uid);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
@@ -60,10 +69,14 @@ export const TransferApprovals: React.FC = () => {
   const [requests, setRequests] = useState<InventoryTransferRequest[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'>('pending');
+  const [slaOnly, setSlaOnly] = useState(false);
+  const transferSlaDays = useAppStore((s) => Number(s.systemSettings.planSettings?.transferSlaWarningDays || 2));
+  const [typeTab, setTypeTab] = useState<
+    'all' | 'manual' | 'production_entry' | 'production_auto' | 'finished_final' | 'packaging'
+  >('all');
   const [loading, setLoading] = useState(false);
   const [bulkApproving, setBulkApproving] = useState(false);
   const [processingId, setProcessingId] = useState<string>('');
-  const [selectedRequest, setSelectedRequest] = useState<InventoryTransferRequest | null>(null);
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const transferPrintRef = useRef<HTMLDivElement>(null);
   const handleTransferPrint = useManagedPrint({
@@ -146,10 +159,24 @@ export const TransferApprovals: React.FC = () => {
     return { ...line, unitsPerCarton: resolved };
   };
 
+  const matchesTypeTab = (row: InventoryTransferRequest) => {
+    const t = row.requestType || 'manual_transfer';
+    if (typeTab === 'all') return true;
+    if (typeTab === 'manual') return t === 'transfer' || t === 'manual_transfer';
+    if (typeTab === 'production_entry') return t === 'production_entry';
+    if (typeTab === 'production_auto') return t === 'production_auto_transfer';
+    if (typeTab === 'finished_final') return t === 'finished_to_final';
+    if (typeTab === 'packaging') return t === 'packaging_transfer';
+    return true;
+  };
+
   const filtered = useMemo(() => {
-    if (statusFilter === 'all') return requests;
-    return requests.filter((row) => row.status === statusFilter);
-  }, [requests, statusFilter]);
+    return requests.filter((row) => {
+      const statusOk = statusFilter === 'all' || row.status === statusFilter;
+      const slaOk = !slaOnly || (row.status === 'pending' && transferAgeDays(row) >= transferSlaDays);
+      return statusOk && matchesTypeTab(row) && slaOk;
+    });
+  }, [requests, statusFilter, typeTab, slaOnly, transferSlaDays]);
 
   const bulkApproveEligible = useMemo(
     () => requests.filter((r) => r.status === 'pending' && r.id && !isSelfProductionEntryRequest(r)),
@@ -173,10 +200,6 @@ export const TransferApprovals: React.FC = () => {
       };
     }),
   });
-
-  const openRequest = (row: InventoryTransferRequest) => {
-    setSelectedRequest(row);
-  };
 
   const printRequest = async (row: InventoryTransferRequest) => {
     setPrintData(buildPrintData(row));
@@ -252,6 +275,32 @@ export const TransferApprovals: React.FC = () => {
     }
   };
 
+  const openRequest = (row: InventoryTransferRequest) => {
+    const rowIsSelfProductionEntry = isSelfProductionEntryRequest(row);
+    openModal(MODAL_KEYS.INVENTORY_APPROVE_TRANSFER, {
+      request: row,
+      warehouseMap,
+      canApprove,
+      canCancelMovement: row.status === 'approved',
+      approveDisabledReason: rowIsSelfProductionEntry
+        ? 'لا يمكن اعتماد طلب أنشأته بنفسك.'
+        : undefined,
+      onPrint: () => void printRequest(row),
+      onApprove: async () => {
+        if (!row.id) return;
+        await handleApprove(row.id);
+      },
+      onReject: async () => {
+        if (!row.id) return;
+        await handleReject(row.id);
+      },
+      onCancelMovement: async () => {
+        if (!row.id) return;
+        await handleCancelMovement(row.id);
+      },
+    });
+  };
+
   const handleApproveAll = async () => {
     if (!canApprove || bulkApproving || loading) return;
     const targets = bulkApproveEligible;
@@ -308,6 +357,10 @@ export const TransferApprovals: React.FC = () => {
           <p className="page-subtitle">التحويلات ودخول تم الصنع لا تؤثر على المخزون قبل الاعتماد.</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          <label className="flex items-center gap-2 text-xs font-bold px-2">
+            <input type="checkbox" checked={slaOnly} onChange={(e) => setSlaOnly(e.target.checked)} />
+            تجاوز SLA ({transferSlaDays}+ يوم)
+          </label>
           <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
             <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm">
               <SelectValue placeholder="كل الحالات" />
@@ -335,6 +388,28 @@ export const TransferApprovals: React.FC = () => {
             تحديث
           </Button>
         </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {([
+          ['all', 'الكل'],
+          ['manual', 'يدوي'],
+          ['production_entry', 'إدخال إنتاج'],
+          ['production_auto', 'تحويل إنتاج'],
+          ['finished_final', 'تام'],
+          ['packaging', 'تغليف'],
+        ] as const).map(([key, label]) => (
+          <button
+            key={key}
+            type="button"
+            onClick={() => setTypeTab(key)}
+            className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+              typeTab === key ? 'bg-primary text-white border-primary' : 'bg-white border-slate-200 text-slate-600'
+            }`}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
       {!canApprove && (
@@ -376,7 +451,7 @@ export const TransferApprovals: React.FC = () => {
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <p className="text-sm font-bold text-[var(--color-text)]">{row.referenceNo}</p>
-                        <p className="text-xs text-[var(--color-text-muted)]">{REQUEST_TYPE_LABEL[requestType] || requestType}</p>
+                        <p className="text-xs text-[var(--color-text-muted)]">{transferRequestTypeLabel(requestType)}</p>
                       </div>
                       <Badge variant={row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'}>
                         {STATUS_LABEL[row.status] || row.status}
@@ -411,6 +486,8 @@ export const TransferApprovals: React.FC = () => {
                   <th className="erp-th">إلى</th>
                   <th className="erp-th">الأصناف</th>
                   <th className="erp-th">الحالة</th>
+                  <th className="erp-th">العمر (يوم)</th>
+                  <th className="erp-th">تقرير المصدر</th>
                   <th className="erp-th">المنشئ</th>
                   <th className="erp-th text-center">إجراءات</th>
                 </tr>
@@ -429,7 +506,7 @@ export const TransferApprovals: React.FC = () => {
                       <td className="px-4 py-3 text-sm">
                         <div className="space-y-1">
                           <p className="font-bold">{row.referenceNo}</p>
-                          <p className="text-[11px] text-slate-500">{REQUEST_TYPE_LABEL[requestType] || requestType}</p>
+                          <p className="text-[11px] text-slate-500">{transferRequestTypeLabel(requestType)}</p>
                         </div>
                       </td>
                       <td className="px-4 py-3 text-sm">{fromName}</td>
@@ -458,6 +535,23 @@ export const TransferApprovals: React.FC = () => {
                         >
                           {STATUS_LABEL[row.status] || row.status}
                         </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-sm tabular-nums">
+                        <span className={transferAgeDays(row) >= transferSlaDays && row.status === 'pending' ? 'text-rose-600 font-bold' : ''}>
+                          {transferAgeDays(row)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-xs">
+                        {(row.sourceReportId || row.sourceId) ? (
+                          <Link
+                            to={withTenantPath(tenantSlug, '/reports')}
+                            className="text-primary font-bold hover:underline"
+                          >
+                            {row.sourceReportId || row.sourceId}
+                          </Link>
+                        ) : (
+                          '—'
+                        )}
                       </td>
                       <td className="px-4 py-3 text-sm">{row.createdBy}</td>
                       <td className="px-4 py-3">
@@ -526,93 +620,6 @@ export const TransferApprovals: React.FC = () => {
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
 
-      {selectedRequest && (
-        <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
-          role="presentation"
-          onClick={() => setSelectedRequest(null)}
-          onKeyDown={(e) => e.key === 'Escape' && setSelectedRequest(null)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="transfer-approval-detail-title"
-            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-3xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
-              <div>
-                <h3 id="transfer-approval-detail-title" className="text-lg font-bold">
-                  {selectedRequest.requestType === 'production_entry' ? 'تفاصيل طلب دخول تم الصنع' : 'تفاصيل طلب التحويل'}
-                </h3>
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">مرجع: {selectedRequest.referenceNo}</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setSelectedRequest(null)}
-                className="text-[var(--color-text-muted)] hover:text-slate-600 rounded-md p-1 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary"
-                aria-label="إغلاق النافذة"
-              >
-                <span className="material-icons-round" aria-hidden>
-                  close
-                </span>
-              </button>
-            </div>
-            <div className="p-6 overflow-auto flex-1 space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                  <p className="text-xs text-slate-500">من المخزن</p>
-                  <p className="text-sm font-black">
-                    {(selectedRequest.requestType || 'transfer') === 'production_entry'
-                      ? (selectedRequest.fromWarehouseName || 'تقارير الإنتاج')
-                      : (warehouseMap.get(selectedRequest.fromWarehouseId) || selectedRequest.fromWarehouseName || selectedRequest.fromWarehouseId)}
-                  </p>
-                </div>
-                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                  <p className="text-xs text-slate-500">إلى المخزن</p>
-                  <p className="text-sm font-black">
-                    {warehouseMap.get(selectedRequest.toWarehouseId) || selectedRequest.toWarehouseName || selectedRequest.toWarehouseId}
-                  </p>
-                </div>
-              </div>
-              <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-                <table className="erp-table w-full text-right border-collapse">
-                  <thead className="erp-thead">
-                    <tr>
-                      <th className="erp-th">الصنف</th>
-                      <th className="erp-th">النوع</th>
-                      <th className="erp-th text-center">الكمية</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-border)]">
-                    {selectedRequest.lines.map((line) => (
-                      <tr key={`${line.itemId}-${line.itemType}`}>
-                        <td className="px-3 py-2 text-sm font-bold">{line.itemName} <span className="text-xs text-slate-400">({line.itemCode})</span></td>
-                        <td className="px-3 py-2 text-sm">{line.itemType === 'finished_good' ? 'منتج نهائي' : 'مادة خام'}</td>
-                        <td className="px-3 py-2 text-sm text-center font-black">
-                          {(() => {
-                            const display = getTransferDisplay(withResolvedUnitsPerCarton(line), transferDisplayUnit);
-                            return `${display.quantity} ${display.unitLabel}`;
-                          })()}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
-              <Button variant="outline" onClick={() => setSelectedRequest(null)}>
-                إغلاق
-              </Button>
-              <Button variant="primary" onClick={() => void printRequest(selectedRequest)}>
-                <span className="material-icons-round text-sm">print</span>
-                طباعة التحويل
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

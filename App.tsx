@@ -20,11 +20,14 @@ import { AUTH_PUBLIC_ROUTES } from './modules/auth/routes';
 import { DASHBOARD_ROUTES } from './modules/dashboards/routes';
 import { CATALOG_ROUTES } from './modules/catalog/routes';
 import { PRODUCTION_ROUTES } from './modules/production/routes';
+import { MANUFACTURING_ROUTES } from './modules/manufacturing/routes';
 import { CUSTOMER_DEPOSIT_ROUTES } from './modules/customers/routes';
 import { QUALITY_ROUTES } from './modules/quality/routes';
 import { HR_ROUTES } from './modules/hr/routes';
 import { COST_ROUTES } from './modules/costs/routes';
 import { SYSTEM_ROUTES } from './modules/system/routes';
+import { OPERATIONS_ROUTES } from './modules/operations/routes';
+import { REPORTS_ROUTES } from './modules/reports/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import { REPAIR_ROUTES } from './modules/repair/routes';
 import type { AppRouteDef } from './modules/shared/routes';
@@ -205,10 +208,13 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...DASHBOARD_ROUTES,
   ...CATALOG_ROUTES,
   ...PRODUCTION_ROUTES,
+  ...MANUFACTURING_ROUTES,
   ...QUALITY_ROUTES,
   ...HR_ROUTES,
   ...COST_ROUTES,
   ...SYSTEM_ROUTES,
+  ...OPERATIONS_ROUTES,
+  ...REPORTS_ROUTES,
   ...INVENTORY_ROUTES,
   ...REPAIR_ROUTES,
   ...CUSTOMER_DEPOSIT_ROUTES,

@@ -18,6 +18,8 @@ import type {
   WorkOrder,
 } from '../types';
 import { effectiveStandardAssemblyMinutes } from './routingStandardAssembly';
+import type { ProductCategory } from '../modules/catalog/services/categoryService';
+import { resolveProductCategoryLabel } from '../modules/catalog/lib/resolveProductCategory';
 
 // ─── Core Metrics ───────────────────────────────────────────────────────────
 
@@ -294,6 +296,7 @@ export const buildProducts = (
   reports: ProductionReport[],
   configs: LineProductConfig[],
   routingTotalsByProduct?: Record<string, number>,
+  categories?: ProductCategory[],
 ): Product[] => {
   return raw.map((p) => {
     const prodReports = reports.filter((r) => r.productId === p.id);
@@ -328,7 +331,8 @@ export const buildProducts = (
       name: p.name,
       code: p.code,
       imageUrl: p.imageUrl,
-      category: p.model || '',
+      category: resolveProductCategoryLabel(p, categories),
+      categoryId: p.categoryId ?? null,
       stockLevel: balance,
       stockStatus:
         balance > 100 ? 'available' : balance > 0 ? 'low' : ('out' as const),

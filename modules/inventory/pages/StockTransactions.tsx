@@ -3,7 +3,7 @@ import { Card, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { warehouseService } from '../services/warehouseService';
-import type { InventoryTransferRequest, StockTransaction, TransferRequestLine, Warehouse } from '../types';
+import type { InventoryItemType, InventoryTransferRequest, StockTransaction, TransferRequestLine, Warehouse } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import { exportHRData } from '../../../utils/exportExcel';
 import { usePermission } from '../../../utils/permissions';
@@ -28,6 +28,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Filter } from 'lucide-react';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import type { StockSourceModule } from '../types';
+import { sourceModuleLabel } from '../lib/stockLabels';
 import { StockTransactionsTable } from './stockTransactions/StockTransactionsTable';
 import { StockTransactionsDialogs } from './stockTransactions/StockTransactionsDialogs';
 import { movementLabel } from './stockTransactions/types';
@@ -37,6 +41,10 @@ export const StockTransactions: React.FC = () => {
   const { can } = usePermission();
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const companyName = useAppStore((s) => s.systemSettings.branding?.factoryName ?? 'الشركة');
+  const uid = useAppStore((s) => s.uid);
+  const userEmail = useAppStore((s) => s.userEmail);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const actorName = userDisplayName || userEmail || 'Current User';
   const transferDisplayUnit = useAppStore(
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
@@ -44,8 +52,12 @@ export const StockTransactions: React.FC = () => {
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [pendingTransfers, setPendingTransfers] = useState<InventoryTransferRequest[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const { openModal } = useGlobalModalManager();
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [movementFilter, setMovementFilter] = useState('');
+  const [sourceModuleFilter, setSourceModuleFilter] = useState('');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<'export' | 'delete' | ''>('');
@@ -77,8 +89,17 @@ export const StockTransactions: React.FC = () => {
   const loadData = async () => {
     setLoading(true);
     try {
+      const useServerQuery = Boolean(sourceModuleFilter || dateFrom || dateTo);
+      const txsPromise = useServerQuery
+        ? stockService.getTransactionsPaged({
+            sourceModule: (sourceModuleFilter || undefined) as StockSourceModule | undefined,
+            startDate: dateFrom ? new Date(dateFrom).toISOString() : undefined,
+            endDate: dateTo ? `${dateTo}T23:59:59.999Z` : undefined,
+            limit: 500,
+          }).then((page) => page.items)
+        : stockService.getTransactions();
       const [txs, whs] = await Promise.all([
-        stockService.getTransactions(),
+        txsPromise,
         warehouseService.getWarehousesForReportingFilters(),
       ]);
       const pending = (await transferApprovalService.getAll()).filter((row) => row.status === 'pending');
@@ -93,14 +114,14 @@ export const StockTransactions: React.FC = () => {
 
   useEffect(() => {
     void loadData();
-  }, []);
+  }, [sourceModuleFilter, dateFrom, dateTo]);
 
   const warehouseMap = useMemo(() => new Map(warehouses.map((w) => [w.id, w.name])), [warehouses]);
   const unitsPerCartonByProductId = useMemo(
     () => new Map(rawProducts.map((p) => [p.id || '', Number(p.unitsPerCarton || 0)])),
     [rawProducts],
   );
-  const withResolvedUnitsPerCarton = <T extends { itemType: 'finished_good' | 'raw_material'; itemId: string; unitsPerCarton?: number }>(line: T): T => {
+  const withResolvedUnitsPerCarton = <T extends { itemType: InventoryItemType; itemId: string; unitsPerCarton?: number }>(line: T): T => {
     if (line.itemType !== 'finished_good') return line;
     const resolved = Number(line.unitsPerCarton || unitsPerCartonByProductId.get(line.itemId) || 0);
     return { ...line, unitsPerCarton: resolved };
@@ -110,8 +131,13 @@ export const StockTransactions: React.FC = () => {
     const matchesSearch = !q || tx.itemName.toLowerCase().includes(q) || tx.itemCode.toLowerCase().includes(q);
     const matchesWarehouse = !warehouseFilter || tx.warehouseId === warehouseFilter;
     const matchesMovement = !movementFilter || tx.movementType === movementFilter;
-    return matchesSearch && matchesWarehouse && matchesMovement;
-  }), [transactions, search, warehouseFilter, movementFilter]);
+    const matchesSource = !sourceModuleFilter
+      || (sourceModuleFilter === 'legacy' ? !tx.sourceModule : tx.sourceModule === sourceModuleFilter);
+    const createdMs = new Date(tx.createdAt).getTime();
+    const matchesFrom = !dateFrom || createdMs >= new Date(dateFrom).getTime();
+    const matchesTo = !dateTo || createdMs <= new Date(`${dateTo}T23:59:59`).getTime();
+    return matchesSearch && matchesWarehouse && matchesMovement && matchesSource && matchesFrom && matchesTo;
+  }), [transactions, search, warehouseFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedRows = useMemo(
     () => filtered.filter((row) => row.id && selectedSet.has(row.id)),
@@ -179,6 +205,8 @@ export const StockTransactions: React.FC = () => {
       'الكود': tx.itemCode,
       'نوع الصنف': tx.itemType === 'finished_good' ? 'منتج نهائي' : 'مادة خام',
       'نوع الحركة': movementLabel[tx.movementType] ?? tx.movementType,
+      'المصدر': sourceModuleLabel(tx.sourceModule),
+      'معرّف المصدر': tx.sourceId ?? '—',
       'الكمية':
         tx.movementType === 'TRANSFER'
           ? `${formatNumber(getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit).quantity)} ${getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit).unitLabel}`
@@ -578,14 +606,55 @@ export const StockTransactions: React.FC = () => {
               options: warehouses.map((warehouse) => ({ value: warehouse.id || '', label: warehouse.name })),
               width: 'w-[170px]',
             },
+            {
+              key: 'sourceModule',
+              label: 'المصدر',
+              placeholder: 'كل المصادر',
+              options: ([
+                'production_report',
+                'manual_movement',
+                'transfer_request',
+                'stock_count',
+                'packaging',
+                'work_order',
+                'legacy',
+              ] as StockSourceModule[]).map((value) => ({
+                value,
+                label: sourceModuleLabel(value),
+              })),
+              width: 'w-[170px]',
+            },
           ]}
-          advancedFilterValues={{ warehouse: warehouseFilter || 'all' }}
+          advancedFilterValues={{
+            warehouse: warehouseFilter || 'all',
+            sourceModule: sourceModuleFilter || 'all',
+          }}
           onAdvancedFilterChange={(key, value) => {
             if (key === 'warehouse') setWarehouseFilter(value === 'all' ? '' : value);
+            if (key === 'sourceModule') setSourceModuleFilter(value === 'all' ? '' : value);
           }}
           onApply={() => undefined}
           applyLabel="عرض"
           extra={(
+            <div className="flex flex-wrap items-center gap-2">
+              <label className="text-xs font-bold text-slate-600">
+                من
+                <input
+                  type="date"
+                  className="mr-1 border rounded-lg px-2 py-1 text-sm"
+                  value={dateFrom}
+                  onChange={(e) => setDateFrom(e.target.value)}
+                />
+              </label>
+              <label className="text-xs font-bold text-slate-600">
+                إلى
+                <input
+                  type="date"
+                  className="mr-1 border rounded-lg px-2 py-1 text-sm"
+                  value={dateTo}
+                  onChange={(e) => setDateTo(e.target.value)}
+                />
+              </label>
             <div className="inline-flex h-[34px] items-center gap-2">
               <Select
                 value={bulkAction || 'none'}
@@ -610,6 +679,7 @@ export const StockTransactions: React.FC = () => {
                 <Filter className="h-3.5 w-3.5" />
                 تنفيذ
               </Button>
+            </div>
             </div>
           )}
           className="mb-0 border-0"
@@ -640,7 +710,37 @@ export const StockTransactions: React.FC = () => {
           onEditRow={(tx) => void editRow(tx)}
           onDeleteRows={(rows) => void deleteRows(rows)}
           onOpenApproved={setSelectedApprovedTransfer}
-          onOpenPending={setSelectedPending}
+          onOpenPending={(row) => openModal(MODAL_KEYS.INVENTORY_APPROVE_TRANSFER, {
+            request: row,
+            warehouseMap,
+            canApprove: can('inventory.transfers.approve'),
+            onApprove: async () => {
+              if (!row.id) return;
+              setProcessing(true);
+              try {
+                await transferApprovalService.approveRequest(row.id, actorName, {
+                  approverUserId: uid || undefined,
+                });
+                await loadData();
+              } catch (error: unknown) {
+                toast.error(error instanceof Error ? error.message : 'تعذر الاعتماد.');
+              } finally {
+                setProcessing(false);
+              }
+            },
+            onReject: async () => {
+              if (!row.id) return;
+              setProcessing(true);
+              try {
+                await transferApprovalService.rejectRequest(row.id, actorName, '', uid || undefined);
+                await loadData();
+              } catch (error: unknown) {
+                toast.error(error instanceof Error ? error.message : 'تعذر الرفض.');
+              } finally {
+                setProcessing(false);
+              }
+            },
+          })}
           onPrintPending={(row) => void printPendingTransfer(row)}
           onSharePending={(row) => void sharePendingTransfer(row)}
           onOpenPendingEdit={openPendingForEdit}

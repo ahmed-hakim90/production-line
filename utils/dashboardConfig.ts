@@ -225,6 +225,24 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   rawMaterialCodePadding: 4,
   categoryCodePrefix: 'CAT',
   categoryCodePadding: 4,
+  autoGenerateMaterialRequirements: true,
+  opsNotifyRoleIds: [],
+  transferSlaWarningDays: 2,
+  inventoryExceptionManualThreshold: 500,
+  inventoryRouting: {
+    rawMaterialWarehouseId: '',
+    decomposedWarehouseId: '',
+    productionWipWarehouseId: '',
+    finishedStagingWarehouseId: '',
+    finalProductWarehouseId: '',
+    packagingSourceWarehouseId: '',
+    packagingTargetWarehouseId: '',
+    wasteWarehouseId: '',
+    autoTransferProductionToFinished: false,
+    autoTransferFinishedToFinal: false,
+    requireApprovalForProductionEntry: true,
+    requireApprovalForAutoTransfers: true,
+  },
 };
 
 export const DEFAULT_BRANDING: BrandingSettings = {

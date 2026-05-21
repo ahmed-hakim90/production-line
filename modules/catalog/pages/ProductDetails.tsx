@@ -27,10 +27,10 @@ import {
   YAxis,
 } from "recharts";
 import { useProductDetail } from "./hooks/useProductDetail";
+import { ProductBomSection } from "@/modules/manufacturing/components/ProductBomSection";
+import { useAppStore } from "@/store/useAppStore";
 import { IndirectCostCards } from "@/src/components/erp/IndirectCostCards";
 import { productMaterialService } from "../../production/services/productMaterialService";
-import { rawMaterialService } from "../../inventory/services/rawMaterialService";
-import type { RawMaterial } from "../../inventory/types";
 import type { ProductMaterial } from "../../../types";
 import { useGlobalModalManager } from "../../../components/modal-manager/GlobalModalManager";
 import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
@@ -188,33 +188,16 @@ export const ProductDetails: React.FC = () => {
     reports: false,
   });
 
+  const [detailTab, setDetailTab] = useState<"overview" | "bom">("overview");
+  const uid = useAppStore((s) => s.uid) || "";
   const [activePeriod, setActivePeriod] = useState("all");
   const [lineFilter, setLineFilter] = useState("كل الخطوط");
   const [supervisorFilter, setSupervisorFilter] = useState("كل المشرفين");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
-  const [rawMaterialOptions, setRawMaterialOptions] = useState<RawMaterial[]>([]);
   const [productMaterials, setProductMaterials] = useState<ProductMaterial[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
-  const [showMaterialModal, setShowMaterialModal] = useState(false);
-  const [savingMaterial, setSavingMaterial] = useState(false);
-  const [materialError, setMaterialError] = useState<string | null>(null);
-  const [editingMaterial, setEditingMaterial] = useState<ProductMaterial | null>(null);
-  const [materialForm, setMaterialForm] = useState({
-    materialId: "",
-    quantityUsed: 0,
-    unitCost: 0,
-  });
-
-  const loadRawMaterials = useCallback(async () => {
-    try {
-      const rows = await rawMaterialService.getAll();
-      setRawMaterialOptions(rows.filter((row) => row.isActive !== false));
-    } catch {
-      setRawMaterialOptions([]);
-    }
-  }, []);
 
   const loadProductMaterials = useCallback(async () => {
     if (!id) {
@@ -231,10 +214,6 @@ export const ProductDetails: React.FC = () => {
       setMaterialsLoading(false);
     }
   }, [id]);
-
-  useEffect(() => {
-    void loadRawMaterials();
-  }, [loadRawMaterials]);
 
   useEffect(() => {
     void loadProductMaterials();
@@ -416,99 +395,6 @@ export const ProductDetails: React.FC = () => {
   useEffect(() => {
     setPage(1);
   }, [lineFilter, supervisorFilter, fromDate, toDate, activePeriod]);
-
-  const openAddMaterialModal = useCallback(() => {
-    if (!canManageMaterials) return;
-    setMaterialError(null);
-    setEditingMaterial(null);
-    if (rawMaterialOptions.length === 0) {
-      const opened = openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE, {
-        mode: "create",
-        onSaved: async () => {
-          await loadRawMaterials();
-          setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
-          setEditingMaterial(null);
-          setShowMaterialModal(true);
-        },
-      });
-      if (opened) return;
-    }
-    setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
-    setShowMaterialModal(true);
-  }, [rawMaterialOptions.length, openModal, loadRawMaterials, canManageMaterials]);
-
-  const openEditMaterialModal = useCallback((row: ProductMaterial) => {
-    if (!canManageMaterials) return;
-    setMaterialError(null);
-    setEditingMaterial(row);
-    setMaterialForm({
-      materialId: row.materialId || "",
-      quantityUsed: Number(row.quantityUsed || 0),
-      unitCost: Number(row.unitCost || 0),
-    });
-    setShowMaterialModal(true);
-  }, [canManageMaterials]);
-
-  const closeMaterialModal = useCallback(() => {
-    if (savingMaterial) return;
-    setShowMaterialModal(false);
-    setMaterialError(null);
-  }, [savingMaterial]);
-
-  const handleSaveMaterial = useCallback(async () => {
-    if (!id || savingMaterial) return;
-    const selected = rawMaterialOptions.find((row) => row.id === materialForm.materialId);
-    if (!selected) {
-      setMaterialError("اختر مادة خام صحيحة من القائمة.");
-      return;
-    }
-    if (materialForm.quantityUsed <= 0) {
-      setMaterialError("أدخل كمية أكبر من صفر.");
-      return;
-    }
-    if (materialForm.unitCost < 0) {
-      setMaterialError("سعر الوحدة لا يمكن أن يكون أقل من صفر.");
-      return;
-    }
-    setSavingMaterial(true);
-    setMaterialError(null);
-    try {
-      const payload = {
-        materialId: selected.id,
-        materialName: selected.name,
-        quantityUsed: Number(materialForm.quantityUsed || 0),
-        unitCost: Number(materialForm.unitCost || 0),
-      };
-      if (editingMaterial?.id) {
-        await productMaterialService.update(editingMaterial.id, payload);
-      } else {
-        await productMaterialService.create({
-          productId: id,
-          ...payload,
-        });
-      }
-      await loadProductMaterials();
-      setShowMaterialModal(false);
-      setEditingMaterial(null);
-      setMaterialForm({ materialId: "", quantityUsed: 0, unitCost: 0 });
-    } catch {
-      setMaterialError("تعذر حفظ المادة الخام. حاول مرة أخرى.");
-    } finally {
-      setSavingMaterial(false);
-    }
-  }, [id, savingMaterial, rawMaterialOptions, materialForm, loadProductMaterials, editingMaterial]);
-
-  const handleDeleteMaterial = useCallback(async (row: ProductMaterial) => {
-    if (!canManageMaterials || !row.id) return;
-    const ok = window.confirm(`هل تريد حذف المادة الخام "${row.materialName}"طں`);
-    if (!ok) return;
-    try {
-      await productMaterialService.delete(row.id);
-      await loadProductMaterials();
-    } catch {
-      setMaterialError("تعذر حذف المادة الخام. حاول مرة أخرى.");
-    }
-  }, [canManageMaterials, loadProductMaterials]);
 
   const onExport = () => {
     if (!data) return;
@@ -693,8 +579,29 @@ export const ProductDetails: React.FC = () => {
           />
         )}
 
+        {data && !isLoading && sectionReady.header && (
+          <div className="flex gap-1 rounded-lg border border-border bg-muted/40 p-1">
+            <Button
+              type="button"
+              variant={detailTab === "overview" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setDetailTab("overview")}
+            >
+              نظرة عامة
+            </Button>
+            <Button
+              type="button"
+              variant={detailTab === "bom" ? "default" : "ghost"}
+              size="sm"
+              onClick={() => setDetailTab("bom")}
+            >
+              BOM والمواد
+            </Button>
+          </div>
+        )}
+
         <Card className={SURFACE_CARD}>
-          {isLoading || !sectionReady.filters || !data ? (
+          {detailTab === "bom" ? null : isLoading || !sectionReady.filters || !data ? (
             <SectionSkeleton rows={2} height={38} />
           ) : (
             <CardContent className="flex flex-wrap items-center gap-3 p-4">
@@ -758,6 +665,18 @@ export const ProductDetails: React.FC = () => {
         </Card>
       </DetailPageStickyHeader>
 
+      {detailTab === "bom" && id ? (
+        <DetailCollapsibleSection title="BOM والمواد" defaultOpen>
+          <ProductBomSection
+            productId={id}
+            canManage={canManageMaterials || can("bom.manage")}
+            userId={uid}
+          />
+        </DetailCollapsibleSection>
+      ) : null}
+
+      {detailTab === "overview" && (
+      <>
       <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
         {isLoading || !sectionReady.kpis || !data ? (
           <SectionSkeleton rows={3} height={68} />
@@ -892,79 +811,9 @@ export const ProductDetails: React.FC = () => {
               </div>
             </div>
 
-            <div className="mt-6 border-t border-border pt-6">
-              <div className="mb-3 flex items-center justify-between gap-2">
-                <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">المواد الخام المستخدمة</h3>
-                {canManageMaterials && (
-                  <Button type="button" variant="secondary" size="sm" className="gap-1" onClick={openAddMaterialModal}>
-                    <Plus size={16} />
-                    إضافة مادة
-                  </Button>
-                )}
-              </div>
-              {materialsLoading ? (
-                <SectionSkeleton rows={3} height={32} />
-              ) : productMaterials.length === 0 ? (
-                <div className="py-8 text-center">
-                  <Boxes size={32} className="mx-auto text-muted-foreground/50" />
-                  <p className="mt-2 text-sm text-muted-foreground">{data.rawMaterialsEmptyMessage}</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="erp-table w-full min-w-[660px] text-right">
-                    <thead>
-                      <tr className="border-b border-border bg-muted/50">
-                        <th className="px-3 py-2 text-xs font-medium text-muted-foreground">المادة الخام</th>
-                        <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الكمية</th>
-                        <th className="px-3 py-2 text-xs font-medium text-muted-foreground">سعر الوحدة</th>
-                        <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الإجمالي</th>
-                        {canManageMaterials && (
-                          <th className="px-3 py-2 text-xs font-medium text-muted-foreground">إجراء</th>
-                        )}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {productMaterials.map((row) => (
-                        <tr key={row.id || `${row.materialId}-${row.materialName}`} className="border-b border-border/80">
-                          <td className="px-3 py-2 text-sm text-foreground">{row.materialName}</td>
-                          <td className="px-3 py-2 text-sm text-foreground">{arDecimal(Number(row.quantityUsed || 0), 2)}</td>
-                          <td className="px-3 py-2 text-sm text-foreground">{arDecimal(Number(row.unitCost || 0), 2)} ج.م</td>
-                          <td className="px-3 py-2 text-sm font-medium text-foreground">
-                            {arDecimal(Number(row.quantityUsed || 0) * Number(row.unitCost || 0), 2)} ج.م
-                          </td>
-                          {canManageMaterials && (
-                            <td className="px-3 py-2">
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-primary"
-                                  onClick={() => openEditMaterialModal(row)}
-                                  title="تعديل"
-                                >
-                                  <Pencil size={15} />
-                                </Button>
-                                <Button
-                                  type="button"
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                                  onClick={() => void handleDeleteMaterial(row)}
-                                  title="حذف"
-                                >
-                                  <Trash2 size={15} />
-                                </Button>
-                              </div>
-                            </td>
-                          )}
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
+            <p className="mt-4 text-xs text-muted-foreground">
+              لإدارة مواد المنتج استخدم تبويب قائمة المواد (BOM) أعلاه.
+            </p>
 
             <div className="mt-6 border-t border-border pt-6">
               <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-foreground">ملخص التكلفة والتوقعات</h3>
@@ -981,84 +830,6 @@ export const ProductDetails: React.FC = () => {
           </>
         )}
       </DetailCollapsibleSection>
-
-      {showMaterialModal && canManageMaterials && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 backdrop-blur-sm"
-          onClick={closeMaterialModal}
-        >
-          <Card
-            className={cn(SURFACE_CARD, "w-full max-w-md shadow-2xl")}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="flex items-center justify-between border-b border-slate-200 px-4 py-3 dark:border-border">
-              <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">
-                {editingMaterial ? "تعديل مادة خام" : "إضافة مادة خام"}
-              </h3>
-              <Button type="button" variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={closeMaterialModal}>
-                <X size={16} />
-              </Button>
-            </div>
-            <div className="space-y-3 px-4 py-4">
-              {materialError && (
-                <div className="rounded-md bg-destructive/10 px-3 py-2 text-xs font-medium text-destructive">{materialError}</div>
-              )}
-              <div className="space-y-1">
-                <label className="text-xs font-medium text-muted-foreground">المادة الخام</label>
-                <select
-                  value={materialForm.materialId}
-                  onChange={(event) => setMaterialForm((prev) => ({ ...prev, materialId: event.target.value }))}
-                  className={cn("h-10 w-full rounded-md border px-3 text-sm text-foreground", FIELD_ON_PANEL)}
-                >
-                  <option value="">اختر مادة خام</option>
-                  {rawMaterialOptions.map((row) => (
-                    <option key={row.id} value={row.id}>
-                      {row.name} {row.code ? `(${row.code})` : ""}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">الكمية المستخدمة</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={materialForm.quantityUsed || ""}
-                    onChange={(event) =>
-                      setMaterialForm((prev) => ({ ...prev, quantityUsed: Number(event.target.value || 0) }))
-                    }
-                    className={cn("h-10 w-full rounded-md border px-3 text-sm text-foreground", FIELD_ON_PANEL)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <label className="text-xs font-medium text-muted-foreground">سعر الوحدة (ج.م)</label>
-                  <input
-                    type="number"
-                    min={0}
-                    step="any"
-                    value={materialForm.unitCost || ""}
-                    onChange={(event) =>
-                      setMaterialForm((prev) => ({ ...prev, unitCost: Number(event.target.value || 0) }))
-                    }
-                    className={cn("h-10 w-full rounded-md border px-3 text-sm text-foreground", FIELD_ON_PANEL)}
-                  />
-                </div>
-              </div>
-            </div>
-            <div className="flex items-center justify-end gap-2 border-t border-slate-200 px-4 py-3 dark:border-border">
-              <Button type="button" variant="outline" onClick={closeMaterialModal}>
-                إلغاء
-              </Button>
-              <Button type="button" onClick={() => void handleSaveMaterial()} disabled={savingMaterial}>
-                {savingMaterial ? <Loader2 size={15} className="animate-spin" /> : editingMaterial ? <Pencil size={15} /> : <Plus size={15} />}
-                {editingMaterial ? "حفظ التعديل" : "حفظ المادة"}
-              </Button>
-            </div>
-          </Card>
-        </div>
-      )}
 
       <DetailCollapsibleSection title="الإنتاج والرسوم البيانية" defaultOpen={false}>
         {isLoading || !sectionReady.lineTable || !sectionReady.costTrend || !sectionReady.prodLog || !data ? (
@@ -1258,6 +1029,8 @@ export const ProductDetails: React.FC = () => {
           </div>
         )}
       </DetailCollapsibleSection>
+      </>
+      )}
     </DetailPageShell>
   );
 };

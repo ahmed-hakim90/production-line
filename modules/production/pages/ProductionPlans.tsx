@@ -22,6 +22,9 @@ import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandard
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { productionPlanService } from '../services/productionPlanService';
+import { materialRequirementService } from '@/modules/manufacturing/services/materialRequirementService';
+import { computeLivePlanCostFromLines } from '@/modules/manufacturing/services/planLiveCostService';
+import type { ProductionPlanMaterialRequirements } from '@/modules/manufacturing/types';
 import { exportProductionPlans } from '../../../utils/exportExcel';
 import type { ProductionPlan, ProductionReport, PlanPriority, PlanStatus, SmartStatus } from '../../../types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
@@ -185,6 +188,12 @@ export const ProductionPlans: React.FC = () => {
   const [selectedPlanIds, setSelectedPlanIds] = useState<string[]>([]);
   const [bulkStartDate, setBulkStartDate] = useState('');
   const [bulkSaving, setBulkSaving] = useState(false);
+  const [drawerRequirements, setDrawerRequirements] = useState<ProductionPlanMaterialRequirements | null>(null);
+  const [requirementsLoading, setRequirementsLoading] = useState(false);
+  const [bulkReqLoading, setBulkReqLoading] = useState(false);
+
+  const canGenerateMaterialReq =
+    can('planning.materialRequirements.generate') || can('plans.edit');
 
   // â”€â”€ Reports for calculations â”€â”€
   const [productReports, setProductReports] = useState<ProductionReport[]>([]);
@@ -435,6 +444,53 @@ export const ProductionPlans: React.FC = () => {
     () => enrichedPlans.find((plan) => plan.id === activeDrawerPlanId) || null,
     [enrichedPlans, activeDrawerPlanId],
   );
+
+  useEffect(() => {
+    if (!activeDrawerPlan?.id) {
+      setDrawerRequirements(null);
+      return;
+    }
+    setRequirementsLoading(true);
+    materialRequirementService
+      .getByPlanId(activeDrawerPlan.id)
+      .then(setDrawerRequirements)
+      .catch(() => setDrawerRequirements(null))
+      .finally(() => setRequirementsLoading(false));
+  }, [activeDrawerPlan?.id]);
+
+  const handleGenerateRequirementsForSelected = async () => {
+    if (!canGenerateMaterialReq || !uid || selectedPlans.length === 0) return;
+    setBulkReqLoading(true);
+    try {
+      await materialRequirementService.generateForPlans(
+        selectedPlans.map((p) => p as ProductionPlan),
+        uid,
+        { useRemainingQty: true },
+      );
+      if (activeDrawerPlan?.id) {
+        const req = await materialRequirementService.getByPlanId(activeDrawerPlan.id);
+        setDrawerRequirements(req);
+      }
+    } finally {
+      setBulkReqLoading(false);
+    }
+  };
+
+  const handleGenerateDrawerRequirements = async () => {
+    if (!canGenerateMaterialReq || !uid || !activeDrawerPlan) return;
+    setRequirementsLoading(true);
+    try {
+      await materialRequirementService.generateForPlans([activeDrawerPlan], uid, {
+        useRemainingQty: true,
+      });
+      const req = activeDrawerPlan.id
+        ? await materialRequirementService.getByPlanId(activeDrawerPlan.id)
+        : null;
+      setDrawerRequirements(req);
+    } finally {
+      setRequirementsLoading(false);
+    }
+  };
 
   useEffect(() => {
     setSelectedPlanIds((prev) => {
@@ -1124,6 +1180,46 @@ export const ProductionPlans: React.FC = () => {
                     <p><span className="font-bold text-[var(--color-text-muted)]">تكلفة فعلية:</span> {formatCurrency(activeDrawerPlan.actualCost || 0)}</p>
                   </div>
                 )}
+
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-3 text-sm">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="font-bold text-[var(--color-text)]">احتياجات المواد</p>
+                    {canGenerateMaterialReq && (
+                      <Button variant="outline" size="sm" disabled={requirementsLoading} onClick={() => void handleGenerateDrawerRequirements()}>
+                        {requirementsLoading ? '...' : 'توليد'}
+                      </Button>
+                    )}
+                  </div>
+                  {requirementsLoading && !drawerRequirements ? (
+                    <p className="text-xs text-[var(--color-text-muted)]">جاري التحميل...</p>
+                  ) : !drawerRequirements?.lines?.length ? (
+                    <p className="text-xs text-[var(--color-text-muted)]">لا توجد احتياجات محسوبة بعد</p>
+                  ) : (
+                    <>
+                      <p className="text-xs font-bold text-primary">
+                        تكلفة حية ({drawerRequirements.generatedAt?.slice(0, 10) || '—'}):{' '}
+                        {formatCurrency(
+                          computeLivePlanCostFromLines(drawerRequirements.lines).totalEstimatedCost
+                          || drawerRequirements.totalEstimatedCost
+                          || 0,
+                        )}
+                      </p>
+                      <ul className="max-h-40 overflow-y-auto space-y-1 text-xs">
+                        {drawerRequirements.lines
+                          .filter((l) => l.shortageQty > 0)
+                          .slice(0, 8)
+                          .map((l) => (
+                            <li key={l.materialId} className="text-rose-600 font-medium">
+                              {l.materialName}: نقص {formatNumber(l.shortageQty)} {l.unit}
+                            </li>
+                          ))}
+                        {drawerRequirements.lines.every((l) => l.shortageQty <= 0) && (
+                          <li className="text-emerald-600">لا توجد نواقص في المواد</li>
+                        )}
+                      </ul>
+                    </>
+                  )}
+                </div>
               </div>
 
               <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-2">
@@ -1332,6 +1428,17 @@ export const ProductionPlans: React.FC = () => {
                 <span className="material-icons-round text-sm">event_repeat</span>
                 ترحيل التاريخ للمحدد
               </Button>
+              {canGenerateMaterialReq && (
+                <Button
+                  variant="outline"
+                  onClick={() => void handleGenerateRequirementsForSelected()}
+                  disabled={bulkReqLoading || selectedPlanIds.length === 0}
+                >
+                  {bulkReqLoading && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                  <span className="material-icons-round text-sm">inventory</span>
+                  توليد احتياجات المواد
+                </Button>
+              )}
             </div>
           )}
         </div>

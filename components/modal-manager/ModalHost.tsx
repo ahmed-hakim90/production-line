@@ -6,8 +6,12 @@ import { GlobalCreateWorkOrderModal } from './modals/GlobalCreateWorkOrderModal'
 import { GlobalCreateProductModal } from './modals/GlobalCreateProductModal';
 import { GlobalCreateLineModal } from './modals/GlobalCreateLineModal';
 import { GlobalCreateWarehouseModal } from './modals/GlobalCreateWarehouseModal';
-import { GlobalCreateRawMaterialModal } from './modals/GlobalCreateRawMaterialModal';
-import { GlobalImportRawMaterialsModal } from './modals/GlobalImportRawMaterialsModal';
+import { GlobalEditWarehouseModal } from './modals/GlobalEditWarehouseModal';
+import { GlobalApproveTransferModal } from './modals/GlobalApproveTransferModal';
+import { GlobalStockAdjustmentModal } from './modals/GlobalStockAdjustmentModal';
+import { GlobalProductionRoutingSettingsModal } from './modals/GlobalProductionRoutingSettingsModal';
+import { GlobalMaterialRequirementDetailsModal } from './modals/GlobalMaterialRequirementDetailsModal';
+import { GlobalStockCountSessionModal } from './modals/GlobalStockCountSessionModal';
 import { GlobalImportInventoryInByCodeModal } from './modals/GlobalImportInventoryInByCodeModal';
 import { GlobalImportProductionPlansModal } from './modals/GlobalImportProductionPlansModal';
 import { GlobalProductionPlanFollowUpModal } from './modals/GlobalProductionPlanFollowUpModal';
@@ -41,8 +45,12 @@ export const ModalHost: React.FC = () => {
       <GlobalImportInventoryInByCodeModal />
       <GlobalImportProductionPlansModal />
       <GlobalCreateWarehouseModal />
-      <GlobalCreateRawMaterialModal />
-      <GlobalImportRawMaterialsModal />
+      <GlobalEditWarehouseModal />
+      <GlobalApproveTransferModal />
+      <GlobalStockAdjustmentModal />
+      <GlobalProductionRoutingSettingsModal />
+      <GlobalMaterialRequirementDetailsModal />
+      <GlobalStockCountSessionModal />
       <GlobalProductionPlanFollowUpModal />
       <GlobalManageUserModal />
       <GlobalCreateSystemUserModal />

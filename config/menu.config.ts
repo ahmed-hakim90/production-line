@@ -80,6 +80,7 @@ export const MENU_CONFIG: MenuGroup[] = [
           'adminDashboard.view',
         ],
       },
+      { key: 'operations-inbox', label: 'مركز العمليات', icon: 'inbox', path: '/operations', permission: 'operations.inbox.view' },
     ],
   },
   {
@@ -89,8 +90,8 @@ export const MENU_CONFIG: MenuGroup[] = [
     children: [
       { key: 'catalog-products', label: 'المنتجات', icon: 'inventory_2', path: '/products', permission: 'products.view', activePatterns: ['/products/'] },
       { key: 'catalog-products-add', label: 'إضافة منتج', icon: 'add_circle', path: '/products?action=create', permission: 'products.create', activePatterns: ['/products'] },
-      { key: 'catalog-raw-materials', label: 'المواد الخام', icon: 'science', path: '/products/raw-materials', permission: 'products.rawMaterials.view' },
-      { key: 'catalog-raw-materials-add', label: 'إضافة مادة خام', icon: 'add_circle', path: '/products/raw-materials?action=create', permission: 'inventory.items.manage' },
+      { key: 'manufacturing-materials', label: 'المواد التصنيعية', icon: 'precision_manufacturing', path: '/manufacturing/materials', permission: 'materials.view' },
+      { key: 'manufacturing-material-categories', label: 'فئات المواد', icon: 'category', path: '/manufacturing/material-categories', permission: 'materials.manage' },
       { key: 'catalog-categories', label: 'الفئات', icon: 'category', path: '/catalog/categories', permission: 'catalog.categories.view' },
       { key: 'catalog-categories-add', label: 'إضافة فئة', icon: 'add_circle', path: '/catalog/categories?action=create', permission: 'catalog.categories.create' },
     ],
@@ -102,10 +103,13 @@ export const MENU_CONFIG: MenuGroup[] = [
     children: [
       { key: 'quick', label: 'إدخال سريع', icon: 'bolt', path: '/quick-action', permission: 'quickAction.view' },
       { key: 'reports', label: 'التقارير', icon: 'bar_chart', path: '/reports', permission: 'reports.view' },
+      { key: 'executive-report', label: 'التقرير التنفيذي', icon: 'summarize', path: '/reports/executive', permission: 'reports.executive.export' },
       { key: 'component-waste-reports', label: 'تقرير هالك المكونات', icon: 'report_problem', path: '/component-waste-reports', permission: 'reports.componentWaste.create' },
       { key: 'supply-cycles', label: 'دورات التوريد', icon: 'inventory', path: '/supply-cycles', permission: 'supplyCycles.view', activePatterns: ['/supply-cycles/'] },
       { key: 'lines', label: 'خطوط الإنتاج', icon: 'precision_manufacturing', path: '/lines', permission: 'lines.view', activePatterns: ['/lines/'] },
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
+      { key: 'material-planning-run', label: 'تخطيط احتياجات المواد', icon: 'checklist', path: '/manufacturing/planning-run', permission: 'planning.materialRequirements.view' },
+      { key: 'purchase-gap', label: 'فجوة الشراء', icon: 'shopping_cart', path: '/manufacturing/purchase-gap', permission: 'manufacturing.purchaseGap.view' },
       {
         key: 'routing-list',
         label: 'مسارات الإنتاج',
@@ -115,6 +119,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         activePathExcludePrefixes: ['/production/routing/analytics', '/production/routing/execution'],
       },
       { key: 'routing-analytics', label: 'تحليلات المسارات', icon: 'analytics', path: '/production/routing/analytics', permission: 'routing.analytics' },
+      { key: 'line-efficiency', label: 'كفاءة الخطوط', icon: 'speed', path: '/production/line-efficiency', permission: 'routing.analytics' },
 
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'supervisors.view', activePatterns: ['/supervisors/'] },
@@ -138,6 +143,8 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'inv-create-warehouse', label: 'إضافة مخزن جديد', icon: 'warehouse', path: '/inventory/movements?action=create-warehouse', permission: 'inventory.warehouses.manage' },
       { key: 'inv-create-raw-material', label: 'إضافة مادة خام', icon: 'inventory_2', path: '/inventory/movements?action=create-raw-material', permission: 'inventory.items.manage' },
       { key: 'inv-counts', label: 'الجرد', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
+      { key: 'inv-analytics', label: 'تحليلات المخزون', icon: 'analytics', path: '/inventory/analytics', permission: 'inventory.analytics.view' },
+      { key: 'inv-exceptions', label: 'استثناءات المخزون', icon: 'warning', path: '/inventory/exceptions', permission: 'inventory.exceptions.view' },
     ],
   },
   {
@@ -256,6 +263,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings', path: '/roles', permission: 'roles.manage' },
       { key: 'activity', label: 'سجل النشاط والعمليات', icon: 'monitoring', path: '/activity-log', permission: 'activityLog.view' },
       { key: 'settings', label: 'الإعدادات', icon: 'settings', path: '/settings', permission: 'settings.view' },
+      { key: 'tenant-readiness', label: 'جاهزية المستأجر', icon: 'verified', path: '/system/readiness', permission: 'system.readiness.view' },
     ],
   },
 ];

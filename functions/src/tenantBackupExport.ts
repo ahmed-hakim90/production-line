@@ -89,6 +89,7 @@ export const ALL_BACKUP_COLLECTIONS: readonly string[] = [
   'quality_print_logs',
   'production_report_uniques',
   'product_categories',
+  'material_categories',
   'user_devices',
   'user_presence',
   'automation_runs',

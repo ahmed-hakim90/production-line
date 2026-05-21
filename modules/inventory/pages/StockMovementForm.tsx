@@ -1,12 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
-import type { RawMaterial, Warehouse, StockItemBalance } from '../types';
+import type { RawMaterial, StockAdjustmentReason, Warehouse, StockItemBalance } from '../types';
+import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
+import { StockAvailabilityHint } from '../components/StockAvailabilityHint';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
 import {
@@ -45,6 +48,7 @@ const APP_VERSION = __APP_VERSION__;
 
 export const StockMovementForm: React.FC = () => {
   const location = useLocation();
+  const navigate = useTenantNavigate();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { openModal } = useGlobalModalManager();
   const products = useAppStore((s) => s.products);
@@ -53,9 +57,8 @@ export const StockMovementForm: React.FC = () => {
   const userEmail = useAppStore((s) => s.userEmail);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
-  const defaultProductionWarehouseId = useAppStore(
-    (s) => s.systemSettings.planSettings?.defaultProductionWarehouseId ?? '',
-  );
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const inventoryRouting = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
   const transferDisplayUnit = useAppStore(
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
@@ -71,6 +74,7 @@ export const StockMovementForm: React.FC = () => {
   const [warehouseId, setWarehouseId] = useState('');
   const [toWarehouseId, setToWarehouseId] = useState('');
   const [movementType, setMovementType] = useState<MovementType>('IN');
+  const [adjustmentReason, setAdjustmentReason] = useState<StockAdjustmentReason>('manual_correction');
   const [quantity, setQuantity] = useState<number>(0);
   const [transferItems, setTransferItems] = useState<TransferLine[]>([createTransferLine()]);
   const [nextReferenceSeq, setNextReferenceSeq] = useState(1);
@@ -122,15 +126,15 @@ export const StockMovementForm: React.FC = () => {
     if (action === 'create-warehouse' && can('inventory.warehouses.manage')) {
       openModal(MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE);
     }
-    if (action === 'create-raw-material' && can('inventory.items.manage')) {
-      openModal(MODAL_KEYS.INVENTORY_RAW_MATERIALS_CREATE);
+    if (action === 'create-raw-material' && can('materials.manage')) {
+      navigate('/manufacturing/materials?action=create');
     }
     if (action === 'import-in-by-code' && can('inventory.transactions.create')) {
       const itemTypeParam = new URLSearchParams(location.search).get('itemType');
       const importItemType = itemTypeParam === 'raw_material' ? 'raw_material' : 'finished_good';
       openImportInByCodeModal(importItemType);
     }
-  }, [location.search, can, openModal, openImportInByCodeModal]);
+  }, [location.search, can, openModal, openImportInByCodeModal, navigate]);
 
   const referenceNo = useMemo(() => formatInvReference(nextReferenceSeq), [nextReferenceSeq]);
 
@@ -172,7 +176,11 @@ export const StockMovementForm: React.FC = () => {
       }) ?? null,
     [warehouses],
   );
-  const autoTransferSourceWarehouseId = defaultProductionWarehouseId || tamAlsnaaWarehouse?.id || '';
+  const autoTransferSourceWarehouseId =
+    inventoryRouting.finishedStagingWarehouseId
+    || inventoryRouting.productionWipWarehouseId
+    || tamAlsnaaWarehouse?.id
+    || '';
   const isFinishedTransferFlow = movementType === 'TRANSFER' && itemType === 'finished_good';
   const hasAutoTransferSource = !!autoTransferSourceWarehouseId;
   const effectiveWarehouseId = isFinishedTransferFlow
@@ -320,6 +328,7 @@ export const StockMovementForm: React.FC = () => {
         }
 
         txId = await transferApprovalService.createRequest({
+          requestType: 'manual_transfer',
           fromWarehouseId: effectiveWarehouseId,
           fromWarehouseName: selectedFromWarehouse?.name || '',
           toWarehouseId,
@@ -327,6 +336,7 @@ export const StockMovementForm: React.FC = () => {
           referenceNo: resolvedReferenceNo,
           lines: requestLines,
           note: '',
+          sourceModule: 'manual_movement',
           createdBy: userDisplayName || userEmail || 'Current User',
           createdByUserId: uid || undefined,
         });
@@ -343,6 +353,18 @@ export const StockMovementForm: React.FC = () => {
           setMessage({ type: 'error', text: 'كمية التسوية لا يمكن أن تساوي صفر.' });
           return;
         }
+        const available = getAvailableForItem(selectedItem.id);
+        if (movementType === 'OUT' && quantity > available) {
+          setMessage({ type: 'error', text: `الكمية تتجاوز الرصيد المتاح (${available}).` });
+          return;
+        }
+        if (movementType === 'ADJUSTMENT') {
+          const nextBalance = available + Number(quantity || 0);
+          if (nextBalance < 0) {
+            setMessage({ type: 'error', text: `التسوية ستجعل الرصيد سالباً (الحالي ${available}).` });
+            return;
+          }
+        }
         const effectiveQuantity = Number(quantity || 0);
 
         txId = await stockService.createMovement({
@@ -356,6 +378,8 @@ export const StockMovementForm: React.FC = () => {
           quantity: effectiveQuantity,
           minStock: selectedItem.minStock,
           referenceNo: resolvedReferenceNo,
+          sourceModule: 'manual_movement',
+          adjustmentReason: movementType === 'ADJUSTMENT' ? adjustmentReason : undefined,
           createdBy: userDisplayName || 'Current User',
         });
       }
@@ -610,6 +634,31 @@ export const StockMovementForm: React.FC = () => {
                 value={quantity}
                 onChange={(e) => setQuantity(Number(e.target.value))}
               />
+              {itemId && effectiveWarehouseId && (
+                <StockAvailabilityHint
+                  warehouseId={effectiveWarehouseId}
+                  itemType={itemType}
+                  itemId={itemId}
+                  className="mt-1.5"
+                />
+              )}
+            </div>
+          )}
+
+          {movementType === 'ADJUSTMENT' && (
+            <div>
+              <label className={labelClass}>سبب التسوية</label>
+              <select
+                className={fieldClass}
+                value={adjustmentReason}
+                onChange={(e) => setAdjustmentReason(e.target.value as StockAdjustmentReason)}
+              >
+                <option value="count_correction">تصحيح جرد</option>
+                <option value="damage">تلف</option>
+                <option value="missing">نقص</option>
+                <option value="extra">زيادة</option>
+                <option value="manual_correction">تصحيح يدوي</option>
+              </select>
             </div>
           )}
 

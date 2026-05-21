@@ -4,8 +4,9 @@ import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
 import type { StockCountSession, StockItemBalance, Warehouse } from '../types';
 import { useAppStore } from '../../../store/useAppStore';
-import { formatNumber } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import {
   Select,
   SelectContent,
@@ -17,13 +18,13 @@ import {
 export const StockCounts: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const { can } = usePermission();
+  const { openModal } = useGlobalModalManager();
 
   const [sessions, setSessions] = useState<StockCountSession[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [warehouseId, setWarehouseId] = useState('');
   const [creating, setCreating] = useState(false);
-  const [activeSession, setActiveSession] = useState<StockCountSession | null>(null);
   const [msg, setMsg] = useState<string>('');
 
   const loadData = async () => {
@@ -46,7 +47,7 @@ export const StockCounts: React.FC = () => {
     [warehouses],
   );
 
-  const openSession = async () => {
+  const startCountSession = async () => {
     if (!warehouseId) return;
     setCreating(true);
     setMsg('');
@@ -77,19 +78,16 @@ export const StockCounts: React.FC = () => {
     }
   };
 
-  const saveLines = async () => {
-    if (!activeSession?.id) return;
-    await stockService.saveCountLines(activeSession.id, activeSession.lines);
-    await loadData();
-    setMsg('تم حفظ كميات الجرد.');
-  };
-
-  const approveSession = async () => {
-    if (!activeSession) return;
-    await stockService.approveCountSession(activeSession, userDisplayName || 'Current User');
-    setActiveSession(null);
-    await loadData();
-    setMsg('تم اعتماد الجرد وترحيل الفروقات.');
+  const viewCountSession = (session: StockCountSession) => {
+    openModal(MODAL_KEYS.INVENTORY_STOCK_COUNT_SESSION, {
+      session,
+      canManage: can('inventory.counts.manage'),
+      createdBy: userDisplayName || 'Current User',
+      onUpdated: () => {
+        void loadData();
+        setMsg('تم تحديث الجلسة.');
+      },
+    });
   };
 
   return (
@@ -110,7 +108,7 @@ export const StockCounts: React.FC = () => {
               {warehouses.map((w) => <SelectItem key={w.id} value={w.id!}>{w.name}</SelectItem>)}
             </SelectContent>
           </Select>
-          <Button variant="primary" onClick={() => void openSession()} disabled={!warehouseId || creating || !can('inventory.counts.manage')}>
+          <Button variant="primary" onClick={() => void startCountSession()} disabled={!warehouseId || creating || !can('inventory.counts.manage')}>
             <span className="material-icons-round text-sm">playlist_add_check</span>
             بدء الجرد
           </Button>
@@ -134,7 +132,7 @@ export const StockCounts: React.FC = () => {
                     <Badge variant={session.status === 'approved' ? 'success' : session.status === 'counted' ? 'warning' : 'info'}>
                       {session.status === 'approved' ? 'معتمد' : session.status === 'counted' ? 'معد للجرد' : 'مفتوح'}
                     </Badge>
-                    <Button variant="outline" onClick={() => setActiveSession(session)}>
+                    <Button variant="outline" onClick={() => viewCountSession(session)}>
                       <span className="material-icons-round text-sm">visibility</span>
                       فتح
                     </Button>
@@ -146,72 +144,6 @@ export const StockCounts: React.FC = () => {
         )}
       </Card>
 
-      {activeSession && (
-        <Card title={`جلسة جرد: ${activeSession.warehouseName}`}>
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full text-right border-collapse">
-              <thead className="erp-thead">
-                <tr>
-                  <th className="erp-th">الصنف</th>
-                  <th className="erp-th text-center">المتوقع</th>
-                  <th className="erp-th text-center">المعدود</th>
-                  <th className="erp-th text-center">الفرق</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--color-border)]">
-                {activeSession.lines.map((line, idx) => {
-                  const diff = Number(line.countedQty || 0) - Number(line.expectedQty || 0);
-                  return (
-                    <tr key={`${line.itemType}_${line.itemId}`}>
-                      <td className="px-3 py-2">
-                        <p className="text-sm font-bold">{line.itemName}</p>
-                        <p className="text-xs text-[var(--color-text-muted)] font-mono">{line.itemCode}</p>
-                      </td>
-                      <td className="px-3 py-2 text-center font-bold tabular-nums">{formatNumber(line.expectedQty)}</td>
-                      <td className="px-3 py-2 text-center">
-                        <input
-                          type="number"
-                          className="w-28 rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-2 py-1.5 bg-[#f8f9fa] text-center"
-                          value={line.countedQty}
-                          onChange={(e) => {
-                            const countedQty = Number(e.target.value);
-                            setActiveSession((prev) => {
-                              if (!prev) return prev;
-                              const lines = [...prev.lines];
-                              lines[idx] = { ...lines[idx], countedQty };
-                              return { ...prev, lines };
-                            });
-                          }}
-                          disabled={activeSession.status === 'approved'}
-                        />
-                      </td>
-                      <td className={`px-3 py-2 text-center font-bold tabular-nums ${diff === 0 ? 'text-slate-500' : diff > 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
-                        {diff > 0 ? '+' : ''}{formatNumber(diff)}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          <div className="mt-4 flex flex-wrap justify-end gap-2">
-            <Button variant="outline" onClick={() => setActiveSession(null)}>إغلاق</Button>
-            {activeSession.status !== 'approved' && (
-              <>
-                <Button variant="outline" onClick={() => void saveLines()} disabled={!can('inventory.counts.manage')}>
-                  <span className="material-icons-round text-sm">save</span>
-                  حفظ الجرد
-                </Button>
-                <Button variant="primary" onClick={() => void approveSession()} disabled={!can('inventory.counts.manage')}>
-                  <span className="material-icons-round text-sm">verified</span>
-                  اعتماد وترحيل الفروق
-                </Button>
-              </>
-            )}
-          </div>
-        </Card>
-      )}
     </div>
   );
 };

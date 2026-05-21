@@ -203,6 +203,16 @@ const downloadExcel = (rows: Record<string, any>[], sheetName: string, fileName:
 
 // ─── Public API ─────────────────────────────────────────────────────────────
 
+/** Generic keyed-row export (Arabic headers in row keys). */
+export const exportGenericRows = (
+  rows: Record<string, unknown>[],
+  fileName: string,
+  sheetName = 'تقرير',
+) => {
+  if (!rows.length) return;
+  downloadExcel(rows, sheetName, fileName);
+};
+
 /**
  * Export employee reports to Excel.
  */

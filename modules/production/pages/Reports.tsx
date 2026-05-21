@@ -77,7 +77,10 @@ import type { ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
-import { useLocation } from 'react-router-dom';
+import { Link, useLocation, useParams } from 'react-router-dom';
+import { transferApprovalService } from '@/modules/inventory/services/transferApprovalService';
+import type { InventoryTransferRequest } from '@/modules/inventory/types';
+import { withTenantPath } from '@/lib/tenantPaths';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import {
   ProductionReportPrint,
@@ -647,9 +650,25 @@ export const Reports: React.FC = () => {
   const [viewWOReport, setViewWOReport] = useState<ProductionReport | null>(null);
   const [viewQualityReport, setViewQualityReport] = useState<ProductionReport | null>(null);
   const [selectedReportDrawer, setSelectedReportDrawer] = useState<ProductionReport | null>(null);
+  const [linkedReportTransfers, setLinkedReportTransfers] = useState<InventoryTransferRequest[]>([]);
   const [reportDrawerTab, setReportDrawerTab] = useState<'summary' | 'cost' | 'notes'>('summary');
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [costDetailReport, setCostDetailReport] = useState<ProductionReport | null>(null);
 
+  useEffect(() => {
+    const reportId = selectedReportDrawer?.id;
+    if (!reportId) {
+      setLinkedReportTransfers([]);
+      return;
+    }
+    let cancelled = false;
+    void transferApprovalService.getBySourceReportId(reportId).then((rows) => {
+      if (!cancelled) setLinkedReportTransfers(rows);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedReportDrawer?.id]);
 
   // Date range filter
   const [startDate, setStartDate] = useState(getOperationalDateString(8));
@@ -3823,6 +3842,27 @@ export const Reports: React.FC = () => {
                         إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
                       </div>
                     )}
+                    <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+                      <span className="text-xs text-[var(--color-text-muted)] block mb-2 font-bold">تحويلات مرتبطة</span>
+                      {linkedReportTransfers.length === 0 ? (
+                        <p className="text-xs text-[var(--color-text-muted)]">لا توجد تحويلات مرتبطة بهذا التقرير.</p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {linkedReportTransfers.map((tr) => (
+                            <li key={tr.id} className="flex items-center justify-between gap-2 text-xs">
+                              <span className="font-mono font-bold">{tr.referenceNo}</span>
+                              <span>{tr.status === 'approved' ? 'معتمد' : tr.status === 'pending' ? 'معلق' : tr.status}</span>
+                              <Link
+                                to={withTenantPath(tenantSlug, '/inventory/transfer-approvals')}
+                                className="text-primary font-bold hover:underline"
+                              >
+                                عرض
+                              </Link>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
                   </div>
                 )}
 

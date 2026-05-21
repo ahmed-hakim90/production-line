@@ -270,6 +270,8 @@
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
         'work_orders', 'notifications', 'scan_events', 'product_materials',
+        'materials', 'boms', 'bom_items', 'material_requirement_runs',
+        'production_plan_material_requirements', 'purchase_orders',
         'cost_deviation_analysis',
         'line_worker_assignments', 'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
         'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',
@@ -282,7 +284,7 @@
         'hr_notifications', 'employee_performance', 'employee_bonuses', 'hr_config_modules',
         'hr_config_audit_logs', 'quality_settings', 'quality_reason_catalog', 'quality_workers_assignments',
         'quality_inspections', 'quality_defects', 'quality_rework_orders', 'quality_capa', 'quality_print_logs',
-        'production_report_uniques', 'product_categories', 'automation_runs', 'backups',
+        'production_report_uniques', 'product_categories', 'material_categories', 'automation_runs', 'backups',
         'production_routing_plans', 'production_routing_steps',
         'supply_cycles', 'supply_cycle_waste_lines',
         'entity_code_counters', 'inventory_counters'

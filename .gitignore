@@ -11,6 +11,8 @@ node_modules
 dist
 dist-ssr
 *.local
+docs/handover/.credentials
+docs/handover/_chrome-profile/
 
 # Editor directories and files
 .cursor/

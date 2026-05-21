@@ -7,7 +7,12 @@ import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreProduct } from '../../../types';
-import { categoryService } from '../../../modules/catalog/services/categoryService';
+import { CategoryTreeSelect } from '../../../modules/catalog/components/CategoryTreeSelect';
+import {
+  categoryService,
+  isProductCategoryRow,
+} from '../../../modules/catalog/services/categoryService';
+import { formatCategoryBreadcrumb, normalizeCategoryName } from '../../../modules/catalog/lib/categoryTree';
 import { useTranslation } from 'react-i18next';
 import {
   chineseUnitCostEgpFromYuanUnitPrice,
@@ -29,6 +34,8 @@ function isDuplicateEntityCodeError(e: unknown): boolean {
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
   name: '',
   model: '',
+  categoryId: null,
+  categoryName: '',
   code: '',
   openingBalance: 0,
   chineseUnitCost: 0,
@@ -39,20 +46,6 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
   autoDeductComponentScrapFromDecomposed: false,
 };
 
-async function ensureProductCategoryFromModel(model: string | undefined): Promise<void> {
-  const name = String(model || '').trim();
-  if (!name) return;
-  try {
-    const categories = await categoryService.getByType('product');
-    const exists = categories.some((c) => String(c.name || '').trim() === name);
-    if (!exists) {
-      await categoryService.create({ name, type: 'product', isActive: true });
-    }
-  } catch {
-    /* keep save resilient */
-  }
-}
-
 export const GlobalCreateProductModal: React.FC = () => {
   const { t } = useTranslation();
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.PRODUCTS_CREATE);
@@ -61,6 +54,7 @@ export const GlobalCreateProductModal: React.FC = () => {
   const canEditPerm = can('products.edit');
   const canViewCosts = can('costs.view');
   const createProduct = useAppStore((s) => s.createProduct);
+  const updateProduct = useAppStore((s) => s.updateProduct);
   const fetchProducts = useAppStore((s) => s.fetchProducts);
   const products = useAppStore((s) => s.products);
   const productsLoading = useAppStore((s) => s.productsLoading);
@@ -82,7 +76,8 @@ export const GlobalCreateProductModal: React.FC = () => {
 
   const [form, setForm] = useState(emptyForm);
   const [chineseUnitPriceYuan, setChineseUnitPriceYuan] = useState('');
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [categoryBreadcrumb, setCategoryBreadcrumb] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   /** بعد حفظ منتج جديد — لربط المواد الخام داخل نفس المودال */
@@ -103,47 +98,17 @@ export const GlobalCreateProductModal: React.FC = () => {
     peek: peekProduct,
   });
 
-  const fallbackCategoryOptions = useMemo(() => {
-    const unique = new Set<string>();
-    rawProducts.forEach((product) => {
-      const name = String(product.model || '').trim();
-      if (name) unique.add(name);
-    });
-    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
-  }, [rawProducts]);
-
-  const mergedCategoryOptions = useMemo(() => {
-    const unique = new Set<string>([...categoryOptions, ...fallbackCategoryOptions]);
-    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
-  }, [categoryOptions, fallbackCategoryOptions]);
-
   useEffect(() => {
     if (!isOpen) return;
-    let cancelled = false;
-    const loadCategoryOptions = async () => {
-      try {
-        await categoryService.seedFromProductsModel();
-        const rows = await categoryService.getByType('product');
-        if (cancelled) return;
-        const names = rows
-          .filter((row) => row.isActive !== false)
-          .map((row) => String(row.name || '').trim())
-          .filter(Boolean);
-        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
-      } catch {
-        if (cancelled) return;
-        setCategoryOptions([]);
-      }
-    };
-    void loadCategoryOptions();
-    return () => {
-      cancelled = true;
-    };
+    setSelectedCategoryId(null);
+    setCategoryBreadcrumb('');
   }, [isOpen]);
 
   useEffect(() => {
     if (!isOpen || isEditFlow) return;
     setForm(emptyForm);
+    setSelectedCategoryId(null);
+    setCategoryBreadcrumb('');
     setJustCreatedProductId(null);
     setMessage(null);
     setChineseUnitPriceYuan('');
@@ -151,9 +116,23 @@ export const GlobalCreateProductModal: React.FC = () => {
 
   useEffect(() => {
     if (!isOpen || !isEditFlow || !editProductId || !editingProduct || !editingRaw) return;
+    const resolveCategoryId = async (): Promise<string | null> => {
+      const fromDoc = editingRaw.categoryId?.trim();
+      if (fromDoc) return fromDoc;
+      const legacy = String(editingRaw.model || editingProduct.category || '').trim();
+      if (!legacy) return null;
+      const cats = (await categoryService.getAll()).filter(isProductCategoryRow);
+      const match = cats.find(
+        (c) => normalizeCategoryName(c.name) === normalizeCategoryName(legacy),
+      );
+      return match?.id ?? null;
+    };
+    void resolveCategoryId().then((resolved) => setSelectedCategoryId(resolved));
     setForm({
       name: editingProduct.name,
       model: editingProduct.category,
+      categoryId: editingRaw.categoryId ?? null,
+      categoryName: editingRaw.categoryName ?? editingProduct.category,
       code: editingProduct.code,
       openingBalance: editingProduct.openingStock,
       chineseUnitCost: editingRaw.chineseUnitCost ?? 0,
@@ -170,6 +149,19 @@ export const GlobalCreateProductModal: React.FC = () => {
     const rate = Number(laborSettings?.cnyToEgpRate ?? 0);
     setChineseUnitPriceYuan(yuanUnitPriceInputFromChineseUnitCostEgp(editingRaw.chineseUnitCost ?? 0, rate));
   }, [isOpen, isEditFlow, editProductId, editingProduct, editingRaw, laborSettings?.cnyToEgpRate]);
+
+  useEffect(() => {
+    if (!isOpen || !selectedCategoryId) return;
+    let cancelled = false;
+    (async () => {
+      const cats = await categoryService.getAll();
+      if (cancelled) return;
+      setCategoryBreadcrumb(formatCategoryBreadcrumb(cats, selectedCategoryId));
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, selectedCategoryId]);
 
   useEffect(() => {
     if (!isOpen) setJustCreatedProductId(null);
@@ -204,7 +196,7 @@ export const GlobalCreateProductModal: React.FC = () => {
   };
 
   const handleSave = async () => {
-    if (!form.name || !form.model) return;
+    if (!form.name || !selectedCategoryId) return;
     setSaving(true);
     setMessage(null);
     try {
@@ -219,13 +211,13 @@ export const GlobalCreateProductModal: React.FC = () => {
         const hasTarget = typeof tSec === 'number' && Number.isFinite(tSec) && tSec > 0;
         const payloadUpdate: Record<string, unknown> = {
           ...form,
+          categoryId: selectedCategoryId,
+          categoryName: categoryBreadcrumb.split(' > ').pop() || form.categoryName,
           code: codeForSave,
           chineseUnitCost: resolveChineseUnitCost(),
         };
         payloadUpdate.routingTargetUnitSeconds = hasTarget ? Math.round(tSec) : deleteField();
-        await ensureProductCategoryFromModel(form.model);
-        await productService.update(editProductId, payloadUpdate as Partial<FirestoreProduct>);
-        await fetchProducts();
+        await updateProduct(editProductId, payloadUpdate as Partial<FirestoreProduct>);
         setMessage({ type: 'success', text: t('modalManager.createProduct.editSuccess') });
       } else {
         const codeToSend = codeLocked ? '' : productCode.trim().toUpperCase();
@@ -234,7 +226,12 @@ export const GlobalCreateProductModal: React.FC = () => {
           setSaving(false);
           return;
         }
-        const createData: Omit<FirestoreProduct, 'id'> = { ...form, code: codeToSend };
+        const createData: Omit<FirestoreProduct, 'id'> = {
+          ...form,
+          categoryId: selectedCategoryId,
+          categoryName: categoryBreadcrumb.split(' > ').pop() || '',
+          code: codeToSend,
+        };
         if (canViewCosts) {
           if (cnyToEgpRate > 0) {
             const yuan = Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0;
@@ -357,20 +354,18 @@ export const GlobalCreateProductModal: React.FC = () => {
                 {codeLocked ? t('entityCode.lockHint') : t('entityCode.unlockedHint')}
               </p>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-2 sm:col-span-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.categoryModelRequired')}</label>
-              <input
-                list="global-products-category-options"
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
-                value={form.model}
-                onChange={(e) => setForm({ ...form, model: e.target.value })}
-                placeholder={t('modalManager.createProduct.categoryModelPlaceholder')}
+              <CategoryTreeSelect
+                value={selectedCategoryId}
+                required
+                onChange={(id, breadcrumb) => {
+                  setSelectedCategoryId(id);
+                  setCategoryBreadcrumb(breadcrumb);
+                  const leaf = breadcrumb.split(' > ').pop() || '';
+                  setForm({ ...form, categoryId: id, categoryName: leaf, model: leaf });
+                }}
               />
-              <datalist id="global-products-category-options">
-                {mergedCategoryOptions.map((category) => (
-                  <option key={category} value={category} />
-                ))}
-              </datalist>
             </div>
           </div>
 

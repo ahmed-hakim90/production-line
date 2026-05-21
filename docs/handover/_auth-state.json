@@ -1,0 +1,42 @@
+{
+  "cookies": [],
+  "origins": [
+    {
+      "origin": "http://localhost:3001",
+      "localStorage": [
+        {
+          "name": "erp_modal_workspace_cleared_v1",
+          "value": "1"
+        },
+        {
+          "name": "erp_language",
+          "value": "ar"
+        },
+        {
+          "name": "erp_ui_density_v1",
+          "value": "comfortable"
+        },
+        {
+          "name": "audit.logs.queue.v1",
+          "value": "[]"
+        },
+        {
+          "name": "daily_welcome_seen_hOxHikkw24f7H6dn9raHVElKwni1",
+          "value": "2026-05-21"
+        },
+        {
+          "name": "tenant_theme_cache_v1",
+          "value": "{\"preset\":\"custom\",\"primaryColor\":\"#1e40af\",\"colorBg\":\"#f0f2f5\",\"colorCard\":\"#ffffff\",\"colorBorder\":\"#e2e8f0\",\"colorText\":\"#1a1a1a\",\"colorSidebarBg\":\"#ffffff\",\"colorSidebarText\":\"#334155\"}"
+        },
+        {
+          "name": "hakim_erp_last_tenant_slug",
+          "value": "sokany-eg"
+        },
+        {
+          "name": "global-background-import-jobs-v1",
+          "value": "{\"state\":{\"jobs\":[],\"panelMinimized\":true,\"panelHidden\":false},\"version\":0}"
+        }
+      ]
+    }
+  ]
+}

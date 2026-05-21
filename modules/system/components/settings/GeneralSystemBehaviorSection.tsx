@@ -30,6 +30,7 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
           { key: 'allowReportWithoutPlan' as keyof PlanSettings, label: 'السماح بالتقارير بدون خطة', icon: 'assignment', desc: 'عند التعطيل لن يتمكن المشرفون من إنشاء تقارير إنتاج بدون خطة نشطة.' },
           { key: 'allowOverProduction' as keyof PlanSettings, label: 'السماح بالإنتاج الزائد', icon: 'trending_up', desc: 'عند التعطيل لن يُسمح بإضافة تقارير بعد الوصول إلى الكمية المخططة.' },
           { key: 'autoClosePlan' as keyof PlanSettings, label: 'إغلاق الخطة تلقائياً عند الاكتمال', icon: 'event_available', desc: 'عند التفعيل، يتم تغيير حالة الخطة إلى "مكتملة" تلقائياً عند الوصول للكمية المخططة.' },
+          { key: 'autoGenerateMaterialRequirements' as keyof PlanSettings, label: 'توليد احتياجات المواد تلقائياً', icon: 'checklist', desc: 'عند التفعيل، يُحدَّث احتياج المواد لكل خطة بعد الحفظ (يتطلب صلاحية توليد الاحتياجات).' },
           { key: 'requireFinishedStockApprovalForReports' as keyof PlanSettings, label: 'اعتماد دخول تم الصنع من التقارير', icon: 'approval', desc: 'عند التفعيل، لا تتم إضافة المنتج التام تلقائياً للمخزن بعد التقرير، بل يتطلب طلب اعتماد للمستخدم المخول.' },
           { key: 'allowNegativeDecomposedStock' as keyof PlanSettings, label: 'السماح بالسالب في مخزن المفكك', icon: 'remove_circle_outline', desc: 'عند التفعيل، يمكن خصم مواد خام من مخزن المفكك حتى لو الرصيد غير كافٍ في التقارير، واعتماد تحويلات صادرة من مخزن المفكك المحدد في الإعدادات بنفس الشرط (مع صلاحية الموافقة على التحويل بالسالب).' },
           { key: 'allowNegativeFinishedTransferStock' as keyof PlanSettings, label: 'السماح بتحويل تم الصنع بالسالب', icon: 'swap_horiz', desc: 'عند التفعيل، يمكن اعتماد تحويلات صادرة من مخزن "تم الصنع" حتى لو الرصيد أقل من الكمية (مع صلاحية الموافقة على التحويل بالسالب).' },
@@ -220,13 +221,17 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
           </div>
         </div>
 
+        <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
+          إعدادات المخازن أدناه للتوافق مع البيانات القديمة. التوجيه الرسمي للإنتاج (WIP، تم الصنع، التام، الهالك) من قسم «توجيه المخازن والإنتاج» أعلاه.
+        </p>
+
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">warehouse</span>
-            <p className="text-sm font-bold text-[var(--color-text)]">مخزن استقبال الإنتاج</p>
+            <p className="text-sm font-bold text-[var(--color-text)]">مخزن استقبال الإنتاج (قديم)</p>
           </div>
           <p className="text-xs text-[var(--color-text-muted)] mb-3">
-            أي تقرير إنتاج جديد أو إغلاق أمر شغل سيتم ترحيل الكمية المنتجة تلقائياً إلى هذا المخزن.
+            يُستخدم كاحتياط عند عدم تعبئة توجيه WIP. التقارير الجديدة تدخل أولاً إلى مخزن WIP حسب التوجيه الجديد.
           </p>
           <select
             className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"

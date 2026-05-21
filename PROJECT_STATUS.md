@@ -1,6 +1,30 @@
 # hakimo ERP — حالة المشروع
 
-> آخر تحديث: 2026-02-21
+> آخر تحديث: 2026-05-21
+
+### Operations & Analytics (2026-05)
+
+| المكون | الوصف |
+|--------|--------|
+| `/system/readiness` | لوحة جاهزية المستأجر (فحوصات إعداد) |
+| `/operations` | مركز العمليات (Ops Inbox) |
+| `/inventory/analytics` | تحليلات ABC ودوران مخزون |
+| `/inventory/exceptions` | استثناءات المخزون |
+| `/reports/executive` | تقرير تنفيذي موحّد شهري |
+| `/manufacturing/purchase-gap` | فجوة الشراء + مسودات `purchase_orders` |
+| `/production/line-efficiency` | كفاءة خطوط مبسّطة |
+| `autoGenerateMaterialRequirements` | توليد احتياجات مواد تلقائياً عند حفظ الخطة |
+| `npm run test:operations` | اختبارات الوحدات للميزات أعلاه |
+
+### Manufacturing Materials + BOM (2026-05)
+
+| المكون | الوصف |
+|--------|--------|
+| `modules/manufacturing/` | Material master، BOM متداخل، محركات تكلفة وتخطيط |
+| `materials`, `boms`, `bom_items` | مجموعات Firestore الجديدة |
+| `material_requirement_runs` | تخطيط ad-hoc لعدة منتجات |
+| `production_plan_material_requirements` | احتياجات مواد لكل خطة إنتاج |
+| `product_materials`, `raw_materials` | **قراءة فقط** — الكتابة موقوفة؛ الترحيل من صفحة المواد التصنيعية |
 
 ---
 

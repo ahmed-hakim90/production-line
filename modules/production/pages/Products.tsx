@@ -56,7 +56,8 @@ import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { Warehouse as InventoryWarehouse } from '../../inventory/types';
-import { categoryService } from '../../catalog/services/categoryService';
+import { categoryService, isProductCategoryRow } from '../../catalog/services/categoryService';
+import { flattenCategoryTree, formatCategoryBreadcrumb } from '../../catalog/lib/categoryTree';
 import { monthlyProductionCostService } from '../../costs/services/monthlyProductionCostService';
 import { reportService } from '../services/reportService';
 import {
@@ -286,7 +287,9 @@ export const Products: React.FC = () => {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState('');
-  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [categoryFilterOptions, setCategoryFilterOptions] = useState<
+    Array<{ value: string; label: string; leafName: string }>
+  >([]);
   const [inventoryBalances, setInventoryBalances] = useState<StockItemBalance[]>([]);
   const [todayReportsScoped, setTodayReportsScoped] = useState<ProductionReport[]>([]);
   const [monthlyReportsScoped, setMonthlyReportsScoped] = useState<ProductionReport[]>([]);
@@ -400,11 +403,20 @@ export const Products: React.FC = () => {
         !search ||
         p.name.includes(search) ||
         p.code.toLowerCase().includes(search.toLowerCase());
-      const matchCategory = !categoryFilter || p.category === categoryFilter;
+      const matchCategory = (() => {
+        if (!categoryFilter) return true;
+        if (categoryFilter.startsWith('name:')) {
+          return p.category === categoryFilter.slice(5);
+        }
+        if (p.categoryId === categoryFilter) return true;
+        const opt = categoryFilterOptions.find((o) => o.value === categoryFilter);
+        if (opt) return p.category === opt.leafName || p.category === opt.label;
+        return p.category === categoryFilter;
+      })();
       const matchStock = !stockFilter || p.stockStatus === stockFilter;
       return matchSearch && matchCategory && matchStock;
     });
-  }, [productsForTable, search, categoryFilter, stockFilter]);
+  }, [productsForTable, search, categoryFilter, stockFilter, categoryFilterOptions]);
 
   const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
   const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
@@ -759,26 +771,35 @@ export const Products: React.FC = () => {
     });
     return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
   }, [_rawProducts]);
-  const mergedCategoryOptions = useMemo(() => {
-    const unique = new Set<string>([...categoryOptions, ...fallbackCategoryOptions]);
-    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'ar'));
-  }, [categoryOptions, fallbackCategoryOptions]);
+  const mergedCategoryFilterOptions = useMemo(() => {
+    const byId = new Map(categoryFilterOptions.map((o) => [o.value, o]));
+    for (const name of fallbackCategoryOptions) {
+      if (![...byId.values()].some((o) => o.leafName === name)) {
+        byId.set(`name:${name}`, { value: `name:${name}`, label: name, leafName: name });
+      }
+    }
+    return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }, [categoryFilterOptions, fallbackCategoryOptions]);
 
   useEffect(() => {
     let cancelled = false;
     const loadCategoryOptions = async () => {
       try {
-        await categoryService.seedFromProductsModel();
-        const rows = await categoryService.getByType('product');
+        const tree = await categoryService.getCategoryTree(true);
+        const flat = await categoryService.getAll();
+        const productCats = flat.filter(isProductCategoryRow);
         if (cancelled) return;
-        const names = rows
-          .filter((row) => row.isActive !== false)
-          .map((row) => String(row.name || '').trim())
-          .filter(Boolean);
-        setCategoryOptions(Array.from(new Set(names)).sort((a, b) => a.localeCompare(b, 'ar')));
+        const opts = flattenCategoryTree(tree)
+          .filter(({ category }) => category.id)
+          .map(({ category }) => ({
+            value: category.id!,
+            label: formatCategoryBreadcrumb(productCats, category.id),
+            leafName: String(category.name || '').trim(),
+          }));
+        setCategoryFilterOptions(opts);
       } catch {
         if (cancelled) return;
-        setCategoryOptions([]);
+        setCategoryFilterOptions([]);
       }
     };
     void loadCategoryOptions();
@@ -824,20 +845,6 @@ export const Products: React.FC = () => {
     setImportResult(null);
     setImportFileName('');
 
-    const syncImportedMaterials = async (productId: string, rowMaterials: ProductImportResult['rows'][number]['materials']) => {
-      if (!rowMaterials || rowMaterials.length === 0) return;
-      const existing = await productMaterialService.getByProduct(productId);
-      await Promise.all(existing.map((m) => (m.id ? productMaterialService.delete(m.id) : Promise.resolve())));
-      for (const mat of rowMaterials) {
-        await productMaterialService.create({
-          productId,
-          materialName: mat.materialName,
-          quantityUsed: mat.quantityUsed,
-          unitCost: mat.unitCost,
-        });
-      }
-    };
-
     let done = 0;
     let failed = 0;
     for (const row of validRows) {
@@ -853,9 +860,7 @@ export const Products: React.FC = () => {
         } else {
           productId = await createProduct(toProductData(row));
         }
-        if (productId) {
-          await syncImportedMaterials(productId, row.materials);
-        }
+        // Materials/BOM: use manufacturing BOM import — legacy product_materials writes are disabled.
       } catch { failed++; }
       done++;
       setImportProgress({ done, total: validRows.length });
@@ -1240,7 +1245,7 @@ export const Products: React.FC = () => {
             key: 'category',
             label: 'الفئة',
             placeholder: 'كل الفئات',
-            options: mergedCategoryOptions.map((category) => ({ value: category, label: category })),
+            options: mergedCategoryFilterOptions.map((o) => ({ value: o.value, label: o.label })),
           },
         ]}
         advancedFilterValues={{ category: categoryFilter || 'all' }}

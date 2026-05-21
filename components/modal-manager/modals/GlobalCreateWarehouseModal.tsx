@@ -7,6 +7,18 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import { useTranslation } from 'react-i18next';
+import type { WarehouseRole } from '../../../modules/inventory/types';
+
+const WAREHOUSE_ROLES: { value: WarehouseRole; label: string }[] = [
+  { value: 'general', label: 'عام' },
+  { value: 'raw_material', label: 'مواد خام' },
+  { value: 'decomposed', label: 'مفكك' },
+  { value: 'production_wip', label: 'إنتاج WIP' },
+  { value: 'finished_staging', label: 'تم الصنع' },
+  { value: 'final_product', label: 'منتج تام' },
+  { value: 'packaging', label: 'تغليف' },
+  { value: 'waste', label: 'هالك' },
+];
 
 type Message = { type: 'success' | 'error'; text: string } | null;
 
@@ -17,6 +29,7 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
   const { can } = usePermission();
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
+  const [warehouseRole, setWarehouseRole] = useState<WarehouseRole>('general');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<Message>(null);
 
@@ -43,6 +56,7 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
         name: cleanName,
         code: cleanCode,
         isActive: true,
+        warehouseRole,
       });
       if (!id) throw new Error('create failed');
       setMessage({ type: 'success', text: t('modalManager.createWarehouse.createSuccess') });
@@ -89,6 +103,15 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />
+          <select
+            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] outline-none text-sm font-bold"
+            value={warehouseRole}
+            onChange={(e) => setWarehouseRole(e.target.value as WarehouseRole)}
+          >
+            {WAREHOUSE_ROLES.map((r) => (
+              <option key={r.value} value={r.value}>{r.label}</option>
+            ))}
+          </select>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
           <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>

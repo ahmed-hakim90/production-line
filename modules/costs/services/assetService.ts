@@ -13,6 +13,9 @@ import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { Asset, AssetDepreciationMethod } from '../../../types';
+import { calculateMonthlyDepreciation } from '../lib/depreciationCalc';
+
+export { calculateMonthlyDepreciation } from '../lib/depreciationCalc';
 
 const COLLECTION = 'assets';
 
@@ -23,24 +26,6 @@ const toNumber = (value: unknown, fallback = 0): number => {
 
 const clamp = (value: number, min = 0): number => (value < min ? min : value);
 
-export const calculateMonthlyDepreciation = (
-  purchaseCost: number,
-  salvageValue: number,
-  usefulLifeMonths: number,
-  method: AssetDepreciationMethod,
-): number => {
-  const safeCost = clamp(toNumber(purchaseCost));
-  const safeSalvage = clamp(toNumber(salvageValue));
-  const safeLife = Math.max(1, Math.floor(toNumber(usefulLifeMonths, 1)));
-  const depreciable = Math.max(0, safeCost - safeSalvage);
-
-  // MVP: declining balance is reserved for future iterations.
-  if (method === 'declining_balance') {
-    return depreciable / safeLife;
-  }
-  return depreciable / safeLife;
-};
-
 const buildComputedValues = (base: Partial<Asset>): Pick<Asset, 'monthlyDepreciation' | 'currentValue' | 'accumulatedDepreciation'> => {
   const purchaseCost = clamp(toNumber(base.purchaseCost));
   const salvageValue = clamp(toNumber(base.salvageValue));
@@ -48,7 +33,13 @@ const buildComputedValues = (base: Partial<Asset>): Pick<Asset, 'monthlyDeprecia
   const depreciationMethod = (base.depreciationMethod || 'straight_line') as AssetDepreciationMethod;
   const accumulatedDepreciation = clamp(toNumber(base.accumulatedDepreciation));
   const monthlyDepreciation = clamp(
-    calculateMonthlyDepreciation(purchaseCost, salvageValue, usefulLifeMonths, depreciationMethod),
+    calculateMonthlyDepreciation(
+      purchaseCost,
+      salvageValue,
+      usefulLifeMonths,
+      depreciationMethod,
+      accumulatedDepreciation,
+    ),
   );
   const currentValue = clamp(purchaseCost - accumulatedDepreciation, salvageValue);
 

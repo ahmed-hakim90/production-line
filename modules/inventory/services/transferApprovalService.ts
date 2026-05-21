@@ -21,6 +21,8 @@ import type {
   TransferRequestType,
 } from '../types';
 import { stockService } from './stockService';
+import { systemSettingsService } from '../../system/services/systemSettingsService';
+import { opsNotificationService } from '../../../services/opsNotificationService';
 import {
   allocateInvReferenceInTransaction,
   formatInvReference,
@@ -46,11 +48,18 @@ type CreateTransferRequestInput = {
   toWarehouseName?: string;
   referenceNo?: string;
   note?: string;
+  /** @deprecated Use sourceId */
   sourceReportId?: string;
+  sourceModule?: InventoryTransferRequest['sourceModule'];
+  sourceId?: string;
   lines: TransferRequestLine[];
   createdBy: string;
   createdByUserId?: string;
 };
+
+import { isTransferLikeType, normalizeTransferRequestType } from '../lib/transferRequestTypes';
+
+const normalizeRequestType = normalizeTransferRequestType;
 
 type UpdateTransferRequestInput = {
   note?: string;
@@ -161,11 +170,11 @@ export const transferApprovalService = {
     if (!input.toWarehouseId) {
       throw new Error('يجب تحديد المخزن المصدر والوجهة.');
     }
-    const requestType: TransferRequestType = input.requestType || 'transfer';
-    if (requestType === 'transfer' && !input.fromWarehouseId) {
+    const requestType = normalizeRequestType(input.requestType);
+    if (requestType !== 'production_entry' && !input.fromWarehouseId) {
       throw new Error('يجب تحديد المخزن المصدر والوجهة.');
     }
-    if (requestType === 'transfer' && input.fromWarehouseId === input.toWarehouseId) {
+    if (isTransferLikeType(requestType) && input.fromWarehouseId === input.toWarehouseId) {
       throw new Error('المخزن المصدر يجب أن يكون مختلفا عن مخزن الوجهة.');
     }
     const lines = input.lines
@@ -175,7 +184,7 @@ export const transferApprovalService = {
       throw new Error('لا توجد أصناف صالحة في طلب التحويل.');
     }
 
-    return runTransaction(db, async (t) => {
+    const createdId = await runTransaction(db, async (t) => {
       const resolvedReferenceNo =
         input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
       const now = toIsoNow();
@@ -188,6 +197,7 @@ export const transferApprovalService = {
         status: 'pending',
         createdBy: input.createdBy,
         createdAt: now,
+        submittedAt: now,
       };
       const fromWarehouseName = String(input.fromWarehouseName || '').trim();
       if (fromWarehouseName) payload.fromWarehouseName = fromWarehouseName;
@@ -195,8 +205,13 @@ export const transferApprovalService = {
       if (toWarehouseName) payload.toWarehouseName = toWarehouseName;
       const note = String(input.note || '').trim();
       if (note) payload.note = note;
-      const sourceReportId = String(input.sourceReportId || '').trim();
-      if (sourceReportId) payload.sourceReportId = sourceReportId;
+      const sourceId = String(input.sourceId || input.sourceReportId || '').trim();
+      if (sourceId) {
+        payload.sourceId = sourceId;
+        payload.sourceReportId = sourceId;
+      }
+      const sourceModule = input.sourceModule;
+      if (sourceModule) payload.sourceModule = sourceModule;
       const createdByUserId = String(input.createdByUserId || '').trim();
       if (createdByUserId) payload.createdByUserId = createdByUserId;
 
@@ -207,6 +222,21 @@ export const transferApprovalService = {
       });
       return ref.id;
     });
+
+    if (createdId) {
+      try {
+        const [settings, row] = await Promise.all([
+          systemSettingsService.get(),
+          this.getById(createdId),
+        ]);
+        if (row?.status === 'pending') {
+          void opsNotificationService.notifyPendingTransfer(settings, row.referenceNo, createdId);
+        }
+      } catch {
+        // notifications are best-effort
+      }
+    }
+    return createdId;
   },
 
   async approveRequest(id: string, approvedBy: string, options?: ApproveRequestOptions): Promise<void> {
@@ -217,7 +247,7 @@ export const transferApprovalService = {
       throw new Error('لا يمكن اعتماد طلب غير معلق.');
     }
 
-    const requestType: TransferRequestType = request.requestType || 'transfer';
+    const requestType = normalizeRequestType(request.requestType);
     if (requestType === 'production_entry') {
       const sameUserById = Boolean(
         options?.approverUserId &&
@@ -242,14 +272,16 @@ export const transferApprovalService = {
           itemCode: line.itemCode,
           movementType: 'IN',
           quantity: Number(line.quantity || 0),
+          unit: line.unit,
           minStock: line.minStock,
           note: request.note || `Approved production entry ${id}`,
           referenceNo: request.referenceNo,
+          sourceModule: request.sourceModule ?? 'production_report',
+          sourceId: request.sourceId ?? request.sourceReportId,
           createdBy: approvedBy,
-          // يسمح بإتمام الإدخال إذا كان الرصيد الحالي سالباً بحيث تبقى النتيجة سالبة مؤقتاً (بيانات قديمة أو تسويات)
           allowNegative: true,
         });
-      } else {
+      } else if (isTransferLikeType(requestType)) {
         await stockService.createMovement({
           warehouseId: request.fromWarehouseId,
           toWarehouseId: request.toWarehouseId,
@@ -259,23 +291,29 @@ export const transferApprovalService = {
           itemCode: line.itemCode,
           movementType: 'TRANSFER',
           quantity: Number(line.quantity || 0),
+          unit: line.unit,
           requestQuantity: Number(line.requestQuantity ?? line.quantity ?? 0),
           requestUnit: line.requestUnit || (line.itemType === 'finished_good' ? 'piece' : 'unit'),
           unitsPerCarton: Number(line.unitsPerCarton || 0) || undefined,
           minStock: line.minStock,
           note: request.note,
           referenceNo: request.referenceNo,
+          sourceModule: request.sourceModule ?? 'transfer_request',
+          sourceId: request.sourceId ?? request.sourceReportId ?? id,
           createdBy: approvedBy,
           allowNegative: Boolean(options?.allowNegativeFromSource),
         });
       }
     }
 
+    const resolvedAt = toIsoNow();
     const approvePatch: Record<string, any> = {
       status: 'approved',
       approvedBy,
-      approvedAt: toIsoNow(),
+      approvedAt: resolvedAt,
+      resolvedAt,
     };
+    if (!request.firstReviewedAt) approvePatch.firstReviewedAt = resolvedAt;
     const approvedByUserId = options?.approverUserId?.trim();
     if (approvedByUserId) approvePatch.approvedByUserId = approvedByUserId;
     await updateDoc(doc(db, COLLECTION, id), approvePatch);
@@ -288,12 +326,15 @@ export const transferApprovalService = {
     if (request.status !== 'pending') {
       throw new Error('لا يمكن رفض طلب غير معلق.');
     }
+    const resolvedAt = toIsoNow();
     const rejectPatch: Record<string, any> = {
       status: 'rejected',
       rejectedBy,
-      rejectedAt: toIsoNow(),
+      rejectedAt: resolvedAt,
+      resolvedAt,
       rejectionReason: rejectionReason?.trim() || '',
     };
+    if (!request.firstReviewedAt) rejectPatch.firstReviewedAt = resolvedAt;
     const rejectedByUserIdClean = rejectedByUserId?.trim();
     if (rejectedByUserIdClean) rejectPatch.rejectedByUserId = rejectedByUserIdClean;
     await updateDoc(doc(db, COLLECTION, id), rejectPatch);
@@ -309,7 +350,7 @@ export const transferApprovalService = {
     if (!request.referenceNo?.trim()) {
       throw new Error('لا يمكن إلغاء الحركة بدون رقم مرجع.');
     }
-    const requestType: TransferRequestType = request.requestType || 'transfer';
+    const requestType = normalizeRequestType(request.requestType);
     if (requestType === 'production_entry') {
       const rows = await stockService.getTransactionsByReferenceNo(request.referenceNo.trim());
       const approvedRows = rows.filter(

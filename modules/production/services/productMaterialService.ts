@@ -11,6 +11,7 @@ import {
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantIdOrNull } from '../../../lib/currentTenant';
 import { ProductMaterial } from '../../../types';
+import { assertManufacturingWriteAllowed } from '../../manufacturing/lib/legacyGuard';
 
 const COLLECTION = 'product_materials';
 
@@ -48,6 +49,7 @@ export const productMaterialService = {
   },
 
   async create(data: Omit<ProductMaterial, 'id'>): Promise<string | null> {
+    assertManufacturingWriteAllowed();
     if (!isConfigured) return null;
     const tenantId = getCurrentTenantIdOrNull();
     if (!tenantId) return null;
@@ -61,6 +63,7 @@ export const productMaterialService = {
   },
 
   async update(id: string, data: Partial<ProductMaterial>): Promise<void> {
+    assertManufacturingWriteAllowed();
     if (!isConfigured) return;
     try {
       const { id: _id, ...fields } = data as any;
@@ -72,6 +75,7 @@ export const productMaterialService = {
   },
 
   async delete(id: string): Promise<void> {
+    assertManufacturingWriteAllowed();
     if (!isConfigured) return;
     try {
       await deleteDoc(doc(db, COLLECTION, id));

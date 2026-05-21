@@ -27,6 +27,7 @@ import { calculateProductCostBreakdown } from "@/utils/productCostBreakdown";
 import { effectiveStandardAssemblyMinutes } from "@/utils/routingStandardAssembly";
 import type { ProductionReport } from "@/types";
 import { countsTowardProductManufacturingVolume } from "@/modules/production/utils/reportTypes";
+import { resolveProductCategoryLabel } from "../../lib/resolveProductCategory";
 
 const toMonthLabel = (month: string) => month;
 
@@ -52,6 +53,7 @@ const parseEmployeeName = (employeeId: string, employeeNameMap: Map<string, stri
 export const useProductDetail = (id?: string) => {
   const tenantId = useAppStore((s) => s.userProfile?.tenantId ?? '');
   const rawProducts = useAppStore((s) => s._rawProducts);
+  const productCategories = useAppStore((s) => s._productCategories);
   const productRow = useAppStore((s) => (id ? s._rawProducts.find((p) => p.id === id) : undefined));
   const rawLines = useAppStore((s) => s._rawLines);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -136,7 +138,12 @@ export const useProductDetail = (id?: string) => {
 
       const lineNameMap = new Map(rawLines.map((line) => [String(line.id || ""), line.name]));
       const employeeNameMap = new Map(rawEmployees.map((employee) => [String(employee.id || ""), employee.name]));
-      const productCategoryById = new Map(rawProducts.map((row) => [String(row.id || ""), String(row.model || "")]));
+      const productCategoryById = new Map(
+        rawProducts.map((row) => [
+          String(row.id || ""),
+          resolveProductCategoryLabel(row, productCategories),
+        ]),
+      );
       const supervisorHourlyRates = buildSupervisorHourlyRatesMap(rawEmployees);
       const payrollNetByEmployee = new Map<string, number>();
       const payrollNetByDepartment = new Map<string, number>();
@@ -494,7 +501,7 @@ export const useProductDetail = (id?: string) => {
           breadcrumb: `الكتالوج › المنتجات › ${product.code || id}`,
           name: product.name,
           code: product.code || id,
-          category: product.model || "غير مصنف",
+          category: resolveProductCategoryLabel(product, productCategories) || "غير مصنف",
           status: finalBalance <= 0 ? "out_of_stock" : "available",
         },
         activePeriod: "all",

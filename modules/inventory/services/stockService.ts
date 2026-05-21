@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   runTransaction,
@@ -35,6 +36,15 @@ const COUNTS_COLLECTION = 'stock_counts';
 const TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
 const DELETE_BATCH = 500;
 const MAX_PAGE_SIZE = 100;
+const KPI_MAX_PAGES = 200;
+
+export type InventoryKpiSummary = {
+  totalLines: number;
+  totalQty: number;
+  lowStockCount: number;
+  pagesScanned: number;
+  truncated: boolean;
+};
 
 type FirestoreCursor = QueryDocumentSnapshot | null;
 interface StockPageResult<T> {
@@ -80,6 +90,7 @@ export const stockService = {
     limit?: number;
     cursor?: FirestoreCursor;
     movementType?: StockTransaction['movementType'];
+    sourceModule?: StockTransaction['sourceModule'];
     startDate?: string;
     endDate?: string;
   }): Promise<StockPageResult<StockTransaction>> {
@@ -88,6 +99,7 @@ export const stockService = {
     const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
     if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
     if (params?.movementType) constraints.unshift(where('movementType', '==', params.movementType));
+    if (params?.sourceModule) constraints.unshift(where('sourceModule', '==', params.sourceModule));
     if (params?.startDate) constraints.unshift(where('createdAt', '>=', params.startDate));
     if (params?.endDate) constraints.unshift(where('createdAt', '<=', params.endDate));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
@@ -108,6 +120,38 @@ export const stockService = {
    * Loads balances in pages of up to `MAX_PAGE_SIZE` each, at most 10 pages (1000 rows max per tenant scope).
    * Heavy for very large catalogs; callers that only need KPIs should use `getBalancesPaged` instead.
    */
+  /**
+   * Scans all balance pages for tenant-wide KPIs (not capped at dashboard sample size).
+   */
+  async getInventoryKpiSummary(warehouseId?: string): Promise<InventoryKpiSummary> {
+    if (!isConfigured) {
+      return { totalLines: 0, totalQty: 0, lowStockCount: 0, pagesScanned: 0, truncated: false };
+    }
+    let totalLines = 0;
+    let totalQty = 0;
+    let lowStockCount = 0;
+    let cursor: FirestoreCursor = null;
+    let pagesScanned = 0;
+    let truncated = false;
+
+    for (let page = 0; page < KPI_MAX_PAGES; page += 1) {
+      const res = await this.getBalancesPaged({ warehouseId, limit: MAX_PAGE_SIZE, cursor });
+      pagesScanned += 1;
+      for (const row of res.items) {
+        totalLines += 1;
+        const qty = Number(row.quantity || 0);
+        totalQty += qty;
+        const min = Number(row.minStock || 0);
+        if (min > 0 && qty < min) lowStockCount += 1;
+      }
+      if (!res.hasMore || !res.nextCursor) break;
+      cursor = res.nextCursor;
+      if (page === KPI_MAX_PAGES - 1 && res.hasMore) truncated = true;
+    }
+
+    return { totalLines, totalQty, lowStockCount, pagesScanned, truncated };
+  },
+
   async getBalances(warehouseId?: string): Promise<StockItemBalance[]> {
     if (!isConfigured) return [];
     const rows: StockItemBalance[] = [];
@@ -188,6 +232,47 @@ export const stockService = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
   },
 
+  async getTransactionsBySource(params: {
+    sourceModule: StockTransaction['sourceModule'];
+    sourceId: string;
+  }): Promise<StockTransaction[]> {
+    if (!isConfigured || !params.sourceId.trim() || !params.sourceModule) return [];
+    try {
+      const q = tenantQuery(
+        db,
+        TRANSACTIONS_COLLECTION,
+        where('sourceModule', '==', params.sourceModule),
+        where('sourceId', '==', params.sourceId.trim()),
+        orderBy('createdAt', 'desc'),
+        limit(500),
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
+    } catch {
+      const q = tenantQuery(
+        db,
+        TRANSACTIONS_COLLECTION,
+        where('sourceId', '==', params.sourceId.trim()),
+        limit(500),
+      );
+      const snap = await getDocs(q);
+      return snap.docs
+        .map((d) => ({ id: d.id, ...d.data() } as StockTransaction))
+        .filter((tx) => tx.sourceModule === params.sourceModule || !tx.sourceModule);
+    }
+  },
+
+  async getBalance(
+    warehouseId: string,
+    itemType: InventoryItemType,
+    itemId: string,
+  ): Promise<number> {
+    if (!isConfigured) return 0;
+    const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(warehouseId, itemType, itemId));
+    const direct = await getDoc(balRef);
+    return direct.exists() ? Number(direct.data().quantity || 0) : 0;
+  },
+
   async createMovement(input: CreateStockMovementInput): Promise<string | null> {
     if (!isConfigured) return null;
     if (input.movementType === 'ADJUSTMENT') {
@@ -231,6 +316,12 @@ export const stockService = {
         const nextTarget = targetQty + input.quantity;
         const now = toIsoNow();
 
+        const lineage = {
+          unit: input.unit,
+          sourceModule: input.sourceModule,
+          sourceId: input.sourceId,
+          adjustmentReason: input.adjustmentReason,
+        };
         const outPayload: StockTransaction = {
           warehouseId: input.warehouseId,
           toWarehouseId: input.toWarehouseId,
@@ -249,6 +340,7 @@ export const stockService = {
           transferDirection: 'OUT',
           createdBy: input.createdBy,
           createdAt: now,
+          ...lineage,
         };
         const inPayload: StockTransaction = {
           ...outPayload,
@@ -312,8 +404,12 @@ export const stockService = {
         itemCode: input.itemCode,
         movementType: input.movementType,
         quantity: delta,
+        unit: input.unit,
         note: input.note,
         referenceNo: resolvedReferenceNo,
+        sourceModule: input.sourceModule,
+        sourceId: input.sourceId,
+        adjustmentReason: input.adjustmentReason,
         createdBy: input.createdBy,
         createdAt: now,
       };
@@ -600,6 +696,7 @@ export const stockService = {
       }))
       .filter((line) => line.diff !== 0);
 
+    const adjustmentReason = session.adjustmentReason ?? 'count_correction';
     for (const line of diffs) {
       await this.createMovement({
         warehouseId: session.warehouseId,
@@ -609,6 +706,9 @@ export const stockService = {
         itemCode: line.itemCode,
         movementType: 'ADJUSTMENT',
         quantity: line.diff,
+        adjustmentReason,
+        sourceModule: 'stock_count',
+        sourceId: session.id,
         note: `Count adjustment from session ${session.id}`,
         createdBy: approvedBy,
       });
@@ -618,6 +718,7 @@ export const stockService = {
       status: 'approved',
       approvedAt: toIsoNow(),
       approvedBy,
+      adjustmentReason,
     });
   },
 };

@@ -18,8 +18,8 @@ export function getTransferDisplay(
   const requestQty = Number(line.requestQuantity ?? qtyPieces);
   const unitsPerCarton = Number(line.unitsPerCarton || 0);
 
-  // Raw materials always stay in their basic unit.
-  if (line.itemType === 'raw_material') {
+  // Raw / manufacturing materials stay in their basic unit.
+  if (line.itemType === 'raw_material' || line.itemType === 'material') {
     return { quantity: requestQty, unitLabel: 'وحدة' };
   }
 

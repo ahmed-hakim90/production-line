@@ -27,7 +27,7 @@ export interface StockTransactionsDialogsProps {
   onSaveEdit: () => void;
   warehouseMap: Map<string, string>;
   transferDisplayUnit: TransferDisplayUnitMode;
-  withResolvedUnitsPerCarton: <T extends { itemType: 'finished_good' | 'raw_material'; itemId: string; unitsPerCarton?: number }>(
+  withResolvedUnitsPerCarton: <T extends { itemType: import('../../types').InventoryItemType; itemId: string; unitsPerCarton?: number }>(
     line: T,
   ) => T;
   processing: boolean;

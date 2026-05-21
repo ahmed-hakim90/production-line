@@ -41,6 +41,7 @@ import { GeneralSettingsHeader } from '../components/settings/GeneralSettingsHea
 import { GeneralBrandingSection } from '../components/settings/GeneralBrandingSection';
 import { GeneralThemeSection } from '../components/settings/GeneralThemeSection';
 import { GeneralSystemBehaviorSection } from '../components/settings/GeneralSystemBehaviorSection';
+import { InventoryRoutingSettingsSection } from '../components/settings/InventoryRoutingSettingsSection';
 import { GeneralDashboardDisplaySection } from '../components/settings/GeneralDashboardDisplaySection';
 import { GeneralAlertsSection } from '../components/settings/GeneralAlertsSection';
 import { KPIThresholdsSection } from '../components/settings/KPIThresholdsSection';
@@ -972,6 +973,12 @@ export const Settings: React.FC = () => {
             })).filter((item) => item.id)}
           />
 
+          <InventoryRoutingSettingsSection
+            isAdmin={isAdmin}
+            localPlanSettings={localPlanSettings}
+            setLocalPlanSettings={setLocalPlanSettings}
+            inventoryWarehouses={inventoryWarehouses}
+          />
 
           <GeneralDashboardDisplaySection
             isAdmin={isAdmin}

@@ -30,6 +30,8 @@ export interface Product {
   name: string;
   code: string;
   category: string;
+  /** FK to product_categories when set. */
+  categoryId?: string | null;
   stockLevel: number;
   stockStatus: 'available' | 'low' | 'out';
   openingStock: number;
@@ -77,6 +79,10 @@ export interface FirestoreProduct {
   name: string;
   model: string;
   category?: string;
+  /** FK to product_categories (preferred). */
+  categoryId?: string | null;
+  /** Denormalized leaf category name for display. */
+  categoryName?: string;
   code: string;
   openingBalance: number;
   avgDailyProduction?: number;
@@ -635,7 +641,8 @@ export type NotificationType =
   | 'quality_report_updated'
   | 'report_compliance_daily'
   | 'manual_broadcast'
-  | 'daily_report_missing';
+  | 'daily_report_missing'
+  | 'inventory_transfer_pending';
 
 export interface AppNotification {
   id?: string;
@@ -866,17 +873,43 @@ export interface PrintTemplateSettings {
   showSellingPrice: boolean;
 }
 
+/** Nested inventory warehouse routing (canonical after migrateInventoryRoutingV1). */
+export interface InventoryRoutingSettings {
+  rawMaterialWarehouseId?: string;
+  decomposedWarehouseId?: string;
+  productionWipWarehouseId?: string;
+  finishedStagingWarehouseId?: string;
+  finalProductWarehouseId?: string;
+  packagingSourceWarehouseId?: string;
+  packagingTargetWarehouseId?: string;
+  wasteWarehouseId?: string;
+  autoTransferProductionToFinished?: boolean;
+  autoTransferFinishedToFinal?: boolean;
+  requireApprovalForProductionEntry?: boolean;
+  requireApprovalForAutoTransfers?: boolean;
+}
+
 export interface PlanSettings {
   allowMultipleActivePlans: boolean;
   allowReportWithoutPlan: boolean;
   allowOverProduction: boolean;
   autoClosePlan: boolean;
+  /** @deprecated Use planSettings.inventoryRouting — kept for fallback reads */
   defaultProductionWarehouseId?: string;
+  /** @deprecated Use planSettings.inventoryRouting */
   rawMaterialWarehouseId?: string;
+  /** @deprecated Use planSettings.inventoryRouting.decomposedWarehouseId */
   decomposedSourceWarehouseId?: string;
+  /** @deprecated Use planSettings.inventoryRouting.finishedStagingWarehouseId */
   finishedReceiveWarehouseId?: string;
+  /** @deprecated Use planSettings.inventoryRouting.wasteWarehouseId */
   wasteReceiveWarehouseId?: string;
+  /** @deprecated Use planSettings.inventoryRouting.finalProductWarehouseId */
   finalProductWarehouseId?: string;
+  /** Canonical warehouse routing configuration */
+  inventoryRouting?: InventoryRoutingSettings;
+  /** ISO timestamp when inventoryRouting V1 migration completed */
+  inventoryRoutingMigratedAt?: string;
   enablePackagingStockTransfer?: boolean;
   packagingSourceWarehouseId?: string;
   packagingTargetWarehouseId?: string;
@@ -892,6 +925,20 @@ export interface PlanSettings {
   injectionRawMaterialCategoryKeywords: string;
   /** بادئة كود دورة التوريد (مثال SC) — الصيغة PREFIX-YYYY-NNNN */
   supplyCycleBatchCodePrefix?: string;
+  /** ISO timestamp when manufacturing materials/BOM migration completed for this tenant */
+  manufacturingMigratedAt?: string;
+  /** ISO timestamp when product categoryId backfill (v1) completed for this tenant */
+  categoryMigrationV1At?: string;
+  /** When true, material requirements for plans use planned − produced qty */
+  materialRequirementsUseRemainingQty?: boolean;
+  /** Auto-run material requirement explosion after plan create/update */
+  autoGenerateMaterialRequirements?: boolean;
+  /** Role IDs that receive operational notifications (transfers, missing reports, etc.) */
+  opsNotifyRoleIds?: string[];
+  /** Pending transfer age (days) before SLA warning in Ops Inbox */
+  transferSlaWarningDays?: number;
+  /** Manual stock movement qty threshold for exception board */
+  inventoryExceptionManualThreshold?: number;
 
   /** بادئة وأطوال الأكواد التلقائية للمنتجات / المواد الخام / التصنيفات */
   productCodePrefix?: string;

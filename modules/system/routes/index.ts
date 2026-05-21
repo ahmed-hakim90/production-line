@@ -6,6 +6,7 @@ const ActivityLogPage = lazyNamed(() => import('../pages/ActivityLog'), 'Activit
 const Settings = lazyNamed(() => import('../pages/Settings'), 'Settings');
 const UsersManagement = lazyNamed(() => import('../pages/UsersManagement'), 'UsersManagement');
 const ImageExportShowcase = lazyNamed(() => import('../pages/ImageExportShowcase'), 'ImageExportShowcase');
+const TenantReadiness = lazyNamed(() => import('../pages/TenantReadiness'), 'TenantReadiness');
 
 export const SYSTEM_ROUTES: AppRouteDef[] = [
   { path: '/system/users', permission: 'users.manage', component: UsersManagement },
@@ -13,6 +14,7 @@ export const SYSTEM_ROUTES: AppRouteDef[] = [
   { path: '/activity-log', permission: 'activityLog.view', component: ActivityLogPage },
   { path: '/operations-monitor', redirectTo: '/activity-log' },
   { path: '/settings', permission: 'settings.view', component: Settings },
+  { path: '/system/readiness', permission: 'system.readiness.view', component: TenantReadiness },
   // Keep as developer utility deep-link; intentionally hidden from sidebar menu.
   { path: '/dev/image-export', permission: 'dashboard.view', component: ImageExportShowcase },
 ];
