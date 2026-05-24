@@ -7,7 +7,7 @@ from reportlab.lib.units import inch
 from reportlab.platypus import HRFlowable, Paragraph, SimpleDocTemplate, Spacer
 
 
-ROOT = Path("/Users/hakimo/Documents/Projects/production-line")
+ROOT = Path("/Users/Factory/Documents/Projects/production-line")
 OUTPUT = ROOT / "output" / "pdf" / "app-summary-one-pager.pdf"
 
 
@@ -127,7 +127,7 @@ def build_pdf():
     ]
 
     story = [
-        Paragraph("HAKIMO Production Line App", styles["TitleCompact"]),
+        Paragraph("Factory Production Line App", styles["TitleCompact"]),
         Paragraph(
             "Repo-based one-page summary generated from README, PROJECT_DOC, App.tsx, architecture docs, package.json, and Firebase setup files.",
             styles["Meta"],

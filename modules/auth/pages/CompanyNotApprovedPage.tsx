@@ -23,7 +23,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
               domain
             </span>
           </div>
-          <div className="erp-auth-app-name">HAKIMO ERP</div>
+          <div className="erp-auth-app-name">Factory ERP</div>
           <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 

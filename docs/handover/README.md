@@ -4,7 +4,7 @@
 
 | الملف | الغرض |
 |-------|--------|
-| [Hakimo-ERP-Handover-2026-05.pdf](Hakimo-ERP-Handover-2026-05.pdf) | دليل تسليم وتدريب كامل (فصول 1–12) |
+| [Factory-ERP-Handover-2026-05.pdf](Factory-ERP-Handover-2026-05.pdf) | دليل تسليم وتدريب كامل (فصول 1–12) |
 | [TENANT_READINESS_CHECKLIST.md](TENANT_READINESS_CHECKLIST.md) | قائمة جاهزية التشغيل (مرحلة A) |
 | [OPS_DAILY_ROUTINE.md](OPS_DAILY_ROUTINE.md) | روتين المراقبة والمتابعة اليومي |
 | [OPS_MONTHLY_ROUTINE.md](OPS_MONTHLY_ROUTINE.md) | روتين التحليلات الشهرية |

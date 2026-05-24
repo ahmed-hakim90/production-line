@@ -107,7 +107,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
                 <span className="text-[11px] text-[var(--color-text-muted)]">
                   {t('layout.developedBy')}{' '}
                   <a
-                    href="https://hakimo-cv.vercel.app/hakimo"
+                    href="https://Factory-cv.vercel.app/Factory"
                     target="_blank"
                     rel="noopener noreferrer"
                     className="text-primary font-semibold hover:underline underline-offset-2"

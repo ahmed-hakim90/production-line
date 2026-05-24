@@ -121,7 +121,7 @@ export const Setup: React.FC = () => {
           <div className="erp-auth-logo">
             <span className="material-icons-round" style={{ fontSize: 28 }}>factory</span>
           </div>
-          <div className="erp-auth-app-name">HAKIMO ERP</div>
+          <div className="erp-auth-app-name">Factory ERP</div>
           <div className="erp-auth-app-subtitle">إعداد النظام</div>
         </div>
 

@@ -16,7 +16,7 @@ export const AuthShell: React.FC<{ children: React.ReactNode; panelClassName?: s
           factory
         </span>
       </div>
-      <div className="erp-auth-panel-name">HAKIMO ERP</div>
+      <div className="erp-auth-panel-name">Factory ERP</div>
       <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
       <div className="erp-auth-panel-features">
         {[
@@ -40,7 +40,7 @@ export const AuthShell: React.FC<{ children: React.ReactNode; panelClassName?: s
             factory
           </span>
         </div>
-        <div className="erp-auth-app-name">HAKIMO ERP</div>
+        <div className="erp-auth-app-name">Factory ERP</div>
         <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
       </div>
       {children}

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { renderAuthIcon } from './authIcons';
 
 export type AuthLoadingStateProps = {
-  /** Main heading under the icon (default: Hakimo ERP) */
+  /** Main heading under the icon (default: Factory ERP) */
   title?: string;
   /** Status line below the title */
   subtitle: string;
@@ -12,7 +12,7 @@ export type AuthLoadingStateProps = {
 /**
  * Centered spinner + progress using `erp-auth-loading-*` classes from App.css.
  */
-export function AuthLoadingState({ title = 'Hakimo ERP', subtitle }: AuthLoadingStateProps) {
+export function AuthLoadingState({ title = 'Factory ERP', subtitle }: AuthLoadingStateProps) {
   return (
     <div className="erp-auth-container erp-auth-loading-wrap">
       <div className="erp-auth-loading-content">
@@ -56,7 +56,7 @@ export function AuthBrandedLoadingPage({ title, subtitle }: AuthBrandedLoadingPa
     <div className="erp-auth-page has-panel">
       <div className="erp-auth-panel">
         <div className="erp-auth-panel-logo">{renderAuthIcon('factory', undefined, 26)}</div>
-        <h1 className="erp-auth-panel-name">Hakimo ERP</h1>
+        <h1 className="erp-auth-panel-name">Factory ERP</h1>
         <p className="erp-auth-panel-desc">{t('authLoading.panelDescription')}</p>
         <div className="erp-auth-panel-features">
           {panelFeatures.map(({ icon, text }) => (

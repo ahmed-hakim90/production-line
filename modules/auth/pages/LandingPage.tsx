@@ -60,7 +60,7 @@ export const LandingPage: React.FC = () => {
             </div>
             <div className="min-w-0">
               <p className="text-sm font-extrabold text-[var(--color-text)] tracking-tight truncate">
-                Hakimo ERP
+                Factory ERP
               </p>
               <p className="text-[11px] text-[var(--color-text-muted)] hidden sm:block">
                 إدارة تشغيلية متكاملة
@@ -112,7 +112,7 @@ export const LandingPage: React.FC = () => {
                   تحكّم في الإنتاج والمخزون والموارد من لوحة واحدة
                 </h1>
                 <p className="text-base sm:text-lg text-[var(--color-text-muted)] leading-relaxed max-w-xl mx-auto lg:mx-0 mb-8">
-                  Hakimo ERP يجمع التخطيط، المخزون، الموارد البشرية والتكاليف في منظومة واحدة
+                  Factory ERP يجمع التخطيط، المخزون، الموارد البشرية والتكاليف في منظومة واحدة
                   قابلة للتوسع — لتقليل التشتت وتسريع القرار التشغيلي.
                 </p>
                 <div className="flex flex-col sm:flex-row gap-3 justify-center lg:justify-start">
@@ -205,7 +205,7 @@ export const LandingPage: React.FC = () => {
             <div className="rounded-3xl border border-[var(--color-border)] bg-gradient-to-br from-white via-[#fafbff] to-[#eef2ff] p-8 md:p-12 shadow-sm">
               <div className="text-center mb-10 md:mb-12">
                 <h2 className="text-2xl md:text-3xl font-extrabold text-[var(--color-text)] mb-3">
-                  لماذا Hakimo ERP؟
+                  لماذا Factory ERP؟
                 </h2>
                 <p className="text-[var(--color-text-muted)] text-sm md:text-base max-w-2xl mx-auto">
                   صممنا التجربة لتكون واضحة للفرق التشغيلية — أقل تعقيداً في اليومي، وأكثر وضوحاً للإدارة.
@@ -246,10 +246,10 @@ export const LandingPage: React.FC = () => {
                   <div>
                     <h3 className="font-bold text-[var(--color-text)] mb-1">البريد الإلكتروني</h3>
                     <a
-                      href="mailto:support@hakimoerp.com"
+                      href="mailto:support@Factoryerp.com"
                       className="text-sm font-semibold text-[rgb(var(--color-primary))] hover:underline break-all"
                     >
-                      support@hakimoerp.com
+                      support@Factoryerp.com
                     </a>
                     <p className="text-xs text-[var(--color-text-muted)] mt-2 leading-relaxed">
                       يُفضّل إرفاق اسم الشركة ووصف مختصر للمشكلة لتسريع المعالجة.
@@ -274,7 +274,7 @@ export const LandingPage: React.FC = () => {
             </div>
             <div className="mt-10 flex flex-col sm:flex-row gap-3 justify-center items-center">
               <a
-                href="mailto:support@hakimoerp.com?subject=%D8%AF%D8%B9%D9%85%20Hakimo%20ERP"
+                href="mailto:support@Factoryerp.com?subject=%D8%AF%D8%B9%D9%85%20Factory%20ERP"
                 className="inline-flex items-center justify-center gap-2 rounded-xl px-6 py-3 text-sm font-bold text-white shadow-md hover:opacity-95 transition-opacity"
                 style={{ background: 'rgb(var(--color-primary))' }}
               >
@@ -295,7 +295,7 @@ export const LandingPage: React.FC = () => {
       <footer className="border-t border-[var(--color-border)] bg-[#f8fafc] py-8">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 flex flex-col sm:flex-row items-center justify-between gap-4 text-center sm:text-right">
           <p className="text-xs text-[var(--color-text-muted)]">
-            © {new Date().getFullYear()} Hakimo ERP — منصة إدارة تشغيلية موحدة.
+            © {new Date().getFullYear()} Factory ERP — منصة إدارة تشغيلية موحدة.
           </p>
           <div className="flex flex-wrap items-center justify-center gap-4 text-xs font-semibold">
             <Link to={loginPath} className="text-[rgb(var(--color-primary))] hover:underline">
@@ -306,7 +306,7 @@ export const LandingPage: React.FC = () => {
               تسجيل شركة
             </Link>
             <span className="text-[var(--color-border)] hidden sm:inline">|</span>
-            <a href="mailto:support@hakimoerp.com" className="text-[rgb(var(--color-primary))] hover:underline">
+            <a href="mailto:support@Factoryerp.com" className="text-[rgb(var(--color-primary))] hover:underline">
               الدعم
             </a>
           </div>

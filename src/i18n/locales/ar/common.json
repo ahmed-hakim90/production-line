@@ -905,7 +905,7 @@
     "dailyWelcome": {
       "morningGreeting": "صباح الخير",
       "eveningGreeting": "مساء الخير",
-      "subtitle": "أهلا بك في نظام Hakimo ERP.",
+      "subtitle": "أهلا بك في نظام Factory ERP.",
       "message": "نتمنى لك يوم عمل موفق. يمكنك الآن متابعة التقارير والمهام والإشعارات اليومية بسهولة.",
       "continue": "متابعة",
       "notification": {

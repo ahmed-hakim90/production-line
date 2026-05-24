@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Generate Hakimo ERP handover PDF with screenshots from local dev.
+ * Generate Factory ERP handover PDF with screenshots from local dev.
  * Usage: node scripts/handover/generate-handover.mjs
  *
  * Env (optional):
@@ -18,7 +18,7 @@ const ROOT = path.resolve(__dirname, '../..');
 const OUT_DIR = path.join(ROOT, 'docs/handover');
 const SCREEN_DIR = path.join(OUT_DIR, '_screenshots');
 const BUILD_DIR = path.join(OUT_DIR, '_build');
-const PDF_PATH = path.join(OUT_DIR, 'Hakimo-ERP-Handover-2026-05.pdf');
+const PDF_PATH = path.join(OUT_DIR, 'Factory-ERP-Handover-2026-05.pdf');
 const HTML_PATH = path.join(BUILD_DIR, 'handover.html');
 
 const BASE_URL = process.env.HANDOVER_BASE_URL || 'http://localhost:3001';
@@ -202,7 +202,7 @@ async function signInWithPassword(page, slug) {
 }
 
 async function detectTenantSlug(page) {
-  for (const slug of [TENANT, 'sokany', 'default', 'hakimo']) {
+  for (const slug of [TENANT, 'sokany', 'default', 'Factory']) {
     await page.goto(`${BASE_URL}/t/${slug}/`, { waitUntil: 'domcontentloaded', timeout: 60000 });
     await page.waitForTimeout(2500);
     const url = page.url();
@@ -315,7 +315,7 @@ function buildHtml(slug) {
 <html lang="ar" dir="rtl">
 <head>
   <meta charset="UTF-8" />
-  <title>دليل تسليم Hakimo ERP — الإنتاج والمخازن والتكاليف</title>
+  <title>دليل تسليم Factory ERP — الإنتاج والمخازن والتكاليف</title>
   <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@400;600;700&display=swap" rel="stylesheet" />
   <style>
     @page { size: A4; margin: 18mm 16mm; }
@@ -346,7 +346,7 @@ function buildHtml(slug) {
 <body>
 
 <section class="cover">
-  <h1>Hakimo ERP</h1>
+  <h1>Factory ERP</h1>
   <p>دليل تسليم وتدريب — موديولات الإنتاج، المواد التصنيعية، المخازن، والتكاليف</p>
   <p class="meta">الإصدار ${PKG.version} · ${today}<br/>المستأجر (Tenant): <strong>${slug}</strong> · البيئة: تطوير محلي (${BASE_URL})</p>
 </section>
@@ -370,7 +370,7 @@ function buildHtml(slug) {
 </nav>
 
 <h2 id="ch1">1. مقدمة ونطاق النظام</h2>
-<p><strong>Hakimo ERP</strong> نظام ويب متعدد المستأجرين (Multi-tenant) لإدارة المصنع: كل شركة لها مسار URL خاص <code>/t/{slug}/</code> وبيانات معزولة في Firestore.</p>
+<p><strong>Factory ERP</strong> نظام ويب متعدد المستأجرين (Multi-tenant) لإدارة المصنع: كل شركة لها مسار URL خاص <code>/t/{slug}/</code> وبيانات معزولة في Firestore.</p>
 <p>هذا الدليل يغطي:</p>
 <ul>
   <li><strong>الإنتاج</strong> — تقارير يومية، خطط، أوامر شغل، خطوط، مسارات، دورات توريد.</li>
@@ -579,7 +579,7 @@ ${figCap('50-roles.png', 'الأدوار والصلاحيات')}
   <li>تحليلات مخزون متقدمة.</li>
 </ul>
 
-<footer class="doc-footer">Hakimo ERP v${PKG.version} — مستند تسليم داخلي — ${today}</footer>
+<footer class="doc-footer">Factory ERP v${PKG.version} — مستند تسليم داخلي — ${today}</footer>
 </body>
 </html>`;
 }

@@ -905,7 +905,7 @@
     "dailyWelcome": {
       "morningGreeting": "Good morning",
       "eveningGreeting": "Good evening",
-      "subtitle": "Welcome to Hakimo ERP.",
+      "subtitle": "Welcome to Factory ERP.",
       "message": "Have a productive day. You can now track reports, tasks, and daily notifications with ease.",
       "continue": "Continue",
       "notification": {

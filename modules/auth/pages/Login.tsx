@@ -63,7 +63,7 @@ export const Login: React.FC = () => {
         <div className="erp-auth-panel-logo">
           <span className="material-icons-round" style={{ fontSize: 26, color: '#fff' }}>factory</span>
         </div>
-        <div className="erp-auth-panel-name">HAKIMO ERP</div>
+        <div className="erp-auth-panel-name">Factory ERP</div>
         <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
         <div className="erp-auth-panel-features">
           {[
@@ -88,7 +88,7 @@ export const Login: React.FC = () => {
           <div className="erp-auth-logo">
             <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
           </div>
-          <div className="erp-auth-app-name">HAKIMO ERP</div>
+          <div className="erp-auth-app-name">Factory ERP</div>
           <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 
