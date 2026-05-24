@@ -104,7 +104,7 @@ import {
   isInjectionCategory,
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
-import { effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
+import { countsTowardFinishedGoodsProduction, effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
 import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -138,9 +138,7 @@ function matchesReportKindFilter(
   if (kind === 'all') return true;
   if (kind === 'packaging') return isPackagingThroughputReport(report, lines);
   if (kind === 'injection') return resolveReportType(report.reportType) === 'component_injection';
-  if (isPackagingThroughputReport(report, lines)) return false;
-  if (resolveReportType(report.reportType) === 'component_injection') return false;
-  return true;
+  return countsTowardFinishedGoodsProduction(report, lines);
 }
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({

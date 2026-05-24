@@ -282,22 +282,23 @@ export const exportFactoryGeneralReport = (
  * Export product summary table (from admin dashboard).
  */
 export const exportProductSummary = (
-  data: { name: string; code: string; qty: number; avgCost: number }[],
-  includeCosts: boolean
+  data: { id?: string; name: string; code: string; qty: number; avgCost: number }[],
+  includeCosts: boolean,
+  prevUnitCostByProductId?: Map<string, number>,
 ) => {
   if (data.length === 0) return;
   const totalQty = data.reduce((s, p) => s + p.qty, 0);
-  const weightedAvgCost = includeCosts && totalQty > 0
-    ? data.reduce((s, p) => s + p.avgCost * p.qty, 0) / totalQty
-    : 0;
 
-  const getCostTrendLabel = (avgCost: number) => {
-    if (!includeCosts || weightedAvgCost <= 0) return '—';
-    const delta = avgCost - weightedAvgCost;
+  const getCostTrendLabel = (productId: string | undefined, avgCost: number) => {
+    if (!includeCosts || avgCost <= 0) return '—';
+    if (!productId || !prevUnitCostByProductId) return '—';
+    const prevCost = prevUnitCostByProductId.get(productId);
+    if (prevCost === undefined) return 'لا بيانات للشهر السابق';
+    const delta = avgCost - prevCost;
     const absDelta = Math.abs(delta);
-    if (absDelta < 0.01) return 'مطابق للمتوسط';
-    if (delta > 0) return `أعلى ${absDelta.toFixed(2)} ج.م`;
-    return `أقل ${absDelta.toFixed(2)} ج.م`;
+    if (absDelta < 0.01) return 'مطابق للشهر السابق';
+    if (delta > 0) return `أعلى ${absDelta.toFixed(2)} ج.م عن الشهر السابق`;
+    return `أقل ${absDelta.toFixed(2)} ج.م عن الشهر السابق`;
   };
 
   const rows = data.map((p, i) => {
@@ -309,7 +310,7 @@ export const exportProductSummary = (
     };
     if (includeCosts) {
       base['متوسط تكلفة الوحدة'] = p.avgCost > 0 ? Number(p.avgCost.toFixed(2)) : 0;
-      base['الاتجاه'] = getCostTrendLabel(p.avgCost);
+      base['الاتجاه'] = getCostTrendLabel(p.id, p.avgCost);
     }
     return base;
   });

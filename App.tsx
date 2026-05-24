@@ -1012,6 +1012,7 @@ const App: React.FC = () => {
         <ForcedClientUpdateGate />
         <NotificationPopupOverlay />
         <ToastContainer />
+        <div id="erp-modal-root" />
       </BrowserRouter>
     </GlobalModalManagerProvider>
   );

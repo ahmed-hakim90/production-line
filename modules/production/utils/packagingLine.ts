@@ -29,6 +29,16 @@ export function isPackagingThroughputReport(
   return isPackagingLineId(report.lineId, lines);
 }
 
+/** Finished-goods assembly production only — excludes injection, packaging, and scrap reports. */
+export function countsTowardFinishedGoodsProduction(
+  report: Pick<ProductionReport, 'lineId' | 'reportType'>,
+  lines: Pick<FirestoreProductionLine, 'id' | 'isPackagingLine'>[],
+): boolean {
+  if (isPackagingThroughputReport(report, lines)) return false;
+  const reportType = resolveReportType(report.reportType);
+  return reportType !== 'component_injection' && reportType !== 'component_waste';
+}
+
 export function excludePackagingLineReportsForWorkOrderProduction(
   reports: ProductionReport[],
   lines: Pick<FirestoreProductionLine, 'id' | 'isPackagingLine'>[],

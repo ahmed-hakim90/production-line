@@ -23,6 +23,7 @@ import {
   getTodayDateString,
 } from '../../../utils/calculations';
 import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
+import { countsTowardFinishedGoodsProduction } from '../../production/utils/packagingLine';
 import { exportProductionPlanShortages } from '../../../utils/exportExcel';
 import {
   formatCost,
@@ -362,14 +363,16 @@ export const FactoryManagerDashboard: React.FC = () => {
     ]
   );
   const monthlyCostMode = Boolean(fullMonthKey && monthlyCostSummary);
+  const productionReports = useMemo(
+    () => reports.filter((r) => countsTowardFinishedGoodsProduction(r, _rawLines)),
+    [reports, _rawLines],
+  );
 
   // â”€â”€ KPI Calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const kpis = useMemo(() => {
-    const totalProduction = monthlyCostMode
-      ? Number(monthlyCostSummary?.totals.producedQty || 0)
-      : reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-    const totalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
+    const totalProduction = productionReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+    const totalWaste = productionReports.reduce((s, r) => s + getReportWaste(r), 0);
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
@@ -430,13 +433,13 @@ export const FactoryManagerDashboard: React.FC = () => {
       totalLaborCost,
       totalIndirectCost,
     };
-  }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
+  }, [productionReports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
   // â”€â”€ Chart 1: Production vs Cost Per Unit (daily) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const dailyChartData = useMemo(() => {
     const byDate = new Map<string, { production: number; laborCost: number }>();
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       const prev = byDate.get(r.date) || { production: 0, laborCost: 0 };
       prev.production += r.quantityProduced || 0;
       prev.laborCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
@@ -465,13 +468,13 @@ export const FactoryManagerDashboard: React.FC = () => {
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [reports, hourlyRate, liveCostComputation.reportUnitCost]);
+  }, [productionReports, hourlyRate, liveCostComputation.reportUnitCost]);
 
   // â”€â”€ Chart 3: Top 5 Lines by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const topLines = useMemo(() => {
     const lineMap = new Map<string, number>();
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       lineMap.set(r.lineId, (lineMap.get(r.lineId) || 0) + (r.quantityProduced || 0));
     });
     return Array.from(lineMap.entries())
@@ -481,13 +484,13 @@ export const FactoryManagerDashboard: React.FC = () => {
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawLines]);
+  }, [productionReports, _rawLines]);
 
   // â”€â”€ Chart 4: Top 5 Products by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const topProducts = useMemo(() => {
     const prodMap = new Map<string, number>();
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       prodMap.set(r.productId, (prodMap.get(r.productId) || 0) + (r.quantityProduced || 0));
     });
     return Array.from(prodMap.entries())
@@ -498,7 +501,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, manufacturingNameMap]);
+  }, [productionReports, manufacturingNameMap]);
 
   // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

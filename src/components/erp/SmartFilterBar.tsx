@@ -139,13 +139,14 @@ export function SmartFilterBar({
     >
       <div className="flex flex-wrap items-center gap-2 p-3">
         {onSearchChange != null && (
-          <div className="relative min-w-[160px] flex-1">
-            <Search className="pointer-events-none absolute right-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
+          <div className="relative min-w-[160px] max-w-sm flex-1">
+            <Search className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-slate-400" />
             <input
+              type="text"
               value={searchValue}
               onChange={(event) => onSearchChange(event.target.value)}
               placeholder={resolvedSearchPlaceholder}
-              className="h-[34px] w-full rounded-lg border border-slate-200 bg-white pl-3 pr-9 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
+              className="h-[34px] w-full rounded-lg border border-slate-200 bg-white ps-9 pe-3 text-sm text-slate-800 placeholder:text-slate-400 focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
             />
           </div>
         )}
@@ -213,12 +214,11 @@ export function SmartFilterBar({
         )}
 
         {extra}
-        <div className="min-w-0 flex-1" />
 
         <button
           type="button"
           onClick={onApply}
-          className="flex h-[34px] flex-shrink-0 items-center gap-1.5 rounded-lg bg-[#4F46E5] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4338CA]"
+          className="ms-auto flex h-[34px] flex-shrink-0 items-center gap-1.5 rounded-lg bg-[#4F46E5] px-4 text-sm font-medium text-white transition-colors hover:bg-[#4338CA]"
         >
           <Search className="h-3.5 w-3.5" />
           {resolvedApplyLabel}

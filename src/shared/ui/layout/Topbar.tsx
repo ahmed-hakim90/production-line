@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { useLocation, useNavigate, useParams } from 'react-router-dom';
+import { useLocation, useNavigate, useParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
   ArrowLeft,
@@ -26,11 +26,7 @@ import { resolveMenuIcon } from './menuIconMap';
 import { usePageBackRegistration } from './PageBackContext';
 import { tenantHomePath } from '@/lib/tenantPaths';
 import { useAppDirection } from './useAppDirection';
-
-interface BeforeInstallPromptEvent extends Event {
-  prompt: () => Promise<void>;
-  userChoice: Promise<{ outcome: 'accepted' | 'dismissed'; platform: string }>;
-}
+import { usePwaInstall } from '@/hooks/usePwaInstall';
 
 export interface TopbarProps {
   onMenuToggle: () => void;
@@ -67,9 +63,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
   const uid = useAppStore((s) => s.uid);
   const userProfile = useAppStore((s) => s.userProfile);
 
-  const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
-  const [isInstalled,    setIsInstalled]    = useState(false);
-  const [refreshing,     setRefreshing]     = useState(false);
+  const { isInstalled, canPromptInstall, promptInstall } = usePwaInstall();
+  const [refreshing, setRefreshing] = useState(false);
 
   const { isActiveItem } = useSidebarActiveRoute();
   const { open: cmdOpen, setOpen: setCmdOpen } = useCommandPalette();
@@ -88,33 +83,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
   }, [location.pathname, location.search]);
 
   useEffect(() => {
-    const isStandalone = () =>
-      window.matchMedia('(display-mode: standalone)').matches ||
-      ((window.navigator as Navigator & { standalone?: boolean }).standalone === true);
-    setIsInstalled(isStandalone());
-
-    const onBefore = (e: Event) => { e.preventDefault(); setDeferredPrompt(e as BeforeInstallPromptEvent); };
-    const onInstalled = () => { setIsInstalled(true); setDeferredPrompt(null); };
-    window.addEventListener('beforeinstallprompt', onBefore);
-    window.addEventListener('appinstalled', onInstalled);
-    return () => {
-      window.removeEventListener('beforeinstallprompt', onBefore);
-      window.removeEventListener('appinstalled', onInstalled);
-    };
-  }, []);
-
-  useEffect(() => {
     // Keep palette from persisting as an invisible full-screen blocker across route changes.
     setCmdOpen(false);
   }, [location.pathname, location.search, setCmdOpen]);
 
   const handleInstall = useCallback(async () => {
-    if (!deferredPrompt) return;
-    await deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    if (outcome === 'accepted') setIsInstalled(true);
-    setDeferredPrompt(null);
-  }, [deferredPrompt]);
+    await promptInstall();
+  }, [promptInstall]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -155,7 +130,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
         ].join(' ')}
       >
         {/* ── LEFT: toggle + breadcrumb ── */}
-        <div className="flex items-center gap-1 min-w-0 flex-1">
+        <div className="flex items-center gap-1 min-w-0 flex-1 overflow-hidden">
 
           {/* Mobile hamburger */}
           <button
@@ -223,13 +198,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
         </div>
 
         {/* ── CENTER: Awesomebar / Global Search ── */}
-        <div className="flex-1 max-w-[320px] hidden md:flex">
+        <div className="hidden md:flex shrink-0 w-[min(100%,280px)] max-w-[320px] min-w-[160px] mx-1">
           <button
             onClick={() => setCmdOpen(true)}
-            className="w-full flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group"
+            className="w-full min-w-0 flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group"
           >
             <Search size={15} className="group-hover:text-primary transition-colors" />
-            <span className="flex-1 text-start">{t('topbar.globalSearchPlaceholder')}</span>
+            <span className="flex-1 min-w-0 truncate text-start">{t('topbar.globalSearchPlaceholder')}</span>
             <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
               Ctrl K
             </kbd>
@@ -249,7 +224,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           </button>
 
           {/* Install PWA */}
-          {!isInstalled && deferredPrompt && (
+          {!isInstalled && canPromptInstall && (
             <button
               onClick={handleInstall}
               className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[11.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
@@ -257,6 +232,15 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               <Download size={14} />
               {t('topbar.install')}
             </button>
+          )}
+          {!isInstalled && !canPromptInstall && (
+            <Link
+              to="/download"
+              className="sm:hidden inline-flex items-center gap-1 p-1.5 rounded-[var(--border-radius-sm)] text-emerald-700 hover:bg-emerald-50 transition-colors"
+              title={t('topbar.install')}
+            >
+              <Download size={18} />
+            </Link>
           )}
 
           {/* Read-only badge */}

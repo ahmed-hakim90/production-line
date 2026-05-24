@@ -8,6 +8,7 @@ import { productMaterialService } from '../../../modules/production/services/pro
 import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
 import { useAppStore } from '../../../store/useAppStore';
 import { useTranslation } from 'react-i18next';
+import { getPortalContainer } from '@/lib/portalRoot';
 
 type ModalPayload = {
   planId?: string;
@@ -233,8 +234,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
     </div>
   );
 
-  return typeof document !== 'undefined'
-    ? createPortal(modalContent, document.body)
-    : modalContent;
+  const portalContainer = typeof document !== 'undefined' ? getPortalContainer() : null;
+  return portalContainer ? createPortal(modalContent, portalContainer) : modalContent;
 };
 

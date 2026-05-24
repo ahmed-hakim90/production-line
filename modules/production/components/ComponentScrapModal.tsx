@@ -11,6 +11,7 @@ import type { ProductMaterial, ReportComponentScrapItem } from '../../../types';
 import type { RawMaterial, StockItemBalance } from '../../inventory/types';
 import { formatNumber } from '../../../utils/calculations';
 import { useTranslation } from 'react-i18next';
+import { getPortalContainer } from '@/lib/portalRoot';
 
 export type ComponentScrapModalProps = {
   open: boolean;
@@ -30,7 +31,7 @@ type MaterialOption = {
 
 const getModalPortalContainer = (): HTMLElement | null => {
   if (typeof document === 'undefined') return null;
-  return document.getElementById('erp-modal-root') ?? document.body;
+  return document.getElementById('erp-modal-root') ?? getPortalContainer();
 };
 
 const normalizeText = (value: string) =>

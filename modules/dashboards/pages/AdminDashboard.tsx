@@ -73,6 +73,7 @@ import {
   getTodayDateString,
 } from '../../../utils/calculations';
 import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
+import { countsTowardFinishedGoodsProduction } from '../../production/utils/packagingLine';
 import { exportProductSummary, exportProductionPlanShortages } from '../../../utils/exportExcel';
 import {
   formatCost,
@@ -168,6 +169,14 @@ const formatDateISO = (d: Date): string => {
   const m = String(d.getMonth() + 1).padStart(2, '0');
   const day = String(d.getDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
+};
+
+const getPreviousMonth = (month: string): string => {
+  const [year, mon] = month.split('-').map(Number);
+  if (!year || !mon) return month;
+  const date = new Date(year, mon - 1, 1);
+  date.setMonth(date.getMonth() - 1);
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 };
 
 const getComplianceDefaultDate = (nowMs: number): string => {
@@ -442,6 +451,8 @@ export const AdminDashboard: React.FC = () => {
   const [reportsError, setReportsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [monthlyCostSummary, setMonthlyCostSummary] = useState<MonthlyDashboardCostSummary | null>(null);
+  const [previousMonthlyCostSummary, setPreviousMonthlyCostSummary] = useState<MonthlyDashboardCostSummary | null>(null);
+  const [prevMonthReports, setPrevMonthReports] = useState<ProductionReport[]>([]);
 
   // â”€â”€ System metrics state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [productSearch, setProductSearch] = useState('');
@@ -466,15 +477,14 @@ export const AdminDashboard: React.FC = () => {
     }
     return getPresetRange(preset);
   }, [preset, customStart, customEnd]);
-  const fullMonthKey = useMemo(() => {
+  /** شهر تقويمي (من 1 إلى أي يوم داخل نفس الشهر) — فلتر «هذا الشهر» لا ينتهي بآخر يوم */
+  const calendarMonthKey = useMemo(() => {
     const { start, end } = dateRange;
     if (!start || !end || start.length < 10 || end.length < 10) return null;
     const monthKey = start.slice(0, 7);
     if (end.slice(0, 7) !== monthKey) return null;
     if (start.slice(8, 10) !== '01') return null;
-    const [y, m] = monthKey.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    return end === `${monthKey}-${String(lastDay).padStart(2, '0')}` ? monthKey : null;
+    return monthKey;
   }, [dateRange]);
   const yesterdayOperationalDate = useMemo(() => {
     const d = new Date(clockNow);
@@ -563,11 +573,11 @@ export const AdminDashboard: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    if (!fullMonthKey) {
+    if (!calendarMonthKey) {
       setMonthlyCostSummary(null);
       return () => { cancelled = true; };
     }
-    monthlyProductionCostService.getDashboardMonthlySummary(fullMonthKey)
+    monthlyProductionCostService.getDashboardMonthlySummary(calendarMonthKey)
       .then((summary) => {
         if (!cancelled) setMonthlyCostSummary(summary);
       })
@@ -575,7 +585,44 @@ export const AdminDashboard: React.FC = () => {
         if (!cancelled) setMonthlyCostSummary(null);
       });
     return () => { cancelled = true; };
-  }, [fullMonthKey]);
+  }, [calendarMonthKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!calendarMonthKey) {
+      setPreviousMonthlyCostSummary(null);
+      return () => { cancelled = true; };
+    }
+    monthlyProductionCostService.getDashboardMonthlySummary(getPreviousMonth(calendarMonthKey))
+      .then((summary) => {
+        if (!cancelled) setPreviousMonthlyCostSummary(summary);
+      })
+      .catch(() => {
+        if (!cancelled) setPreviousMonthlyCostSummary(null);
+      });
+    return () => { cancelled = true; };
+  }, [calendarMonthKey]);
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!calendarMonthKey) {
+      setPrevMonthReports([]);
+      return () => { cancelled = true; };
+    }
+    const prevMonth = getPreviousMonth(calendarMonthKey);
+    const [y, m] = prevMonth.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    const start = `${prevMonth}-01`;
+    const end = `${prevMonth}-${String(lastDay).padStart(2, '0')}`;
+    ensureProductionReportsForRange(start, end, { maxAgeMs: 5 * 60 * 1000 })
+      .then((rows) => {
+        if (!cancelled) setPrevMonthReports(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setPrevMonthReports([]);
+      });
+    return () => { cancelled = true; };
+  }, [calendarMonthKey, ensureProductionReportsForRange]);
 
   // Fetch system metrics (tenant-aware)
   useEffect(() => {
@@ -695,18 +742,17 @@ export const AdminDashboard: React.FC = () => {
       systemSettings.costMonthlyWorkingDays,
     ]
   );
-  const monthlyCostMode = Boolean(fullMonthKey && monthlyCostSummary);
+  const monthlyCostMode = Boolean(calendarMonthKey && monthlyCostSummary);
+  const productionReports = useMemo(
+    () => reports.filter((r) => countsTowardFinishedGoodsProduction(r, _rawLines)),
+    [reports, _rawLines],
+  );
 
   // â”€â”€ KPI Calculations â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const kpis = useMemo(() => {
-    const reportsTotalProduction = reports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-    const reportsTotalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
-    // Same source as FactoryManagerDashboard: sum loaded reports (not dashboardStats) so KPI matches raw data.
-    const totalProduction = monthlyCostMode
-      ? Number(monthlyCostSummary?.totals.producedQty || 0)
-      : reportsTotalProduction;
-    const totalWaste = reportsTotalWaste;
+    const totalProduction = productionReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+    const totalWaste = productionReports.reduce((s, r) => s + getReportWaste(r), 0);
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
     const efficiency = totalProduction + totalWaste > 0
       ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
@@ -769,7 +815,7 @@ export const AdminDashboard: React.FC = () => {
       totalIndirectCost,
       totalCost,
     };
-  }, [reports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
+  }, [productionReports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
 
   // â”€â”€ Cost Allocation Completion % â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -815,7 +861,7 @@ export const AdminDashboard: React.FC = () => {
 
   const dailyChartData = useMemo(() => {
     const byDate = new Map<string, { production: number; laborCost: number }>();
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       const prev = byDate.get(r.date) || { production: 0, laborCost: 0 };
       prev.production += r.quantityProduced || 0;
       prev.laborCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
@@ -844,11 +890,11 @@ export const AdminDashboard: React.FC = () => {
         };
       })
       .sort((a, b) => a.date.localeCompare(b.date));
-  }, [reports, hourlyRate, liveCostComputation.reportUnitCost]);
+  }, [productionReports, hourlyRate, liveCostComputation.reportUnitCost]);
 
   const topLines = useMemo(() => {
     const lineMap = new Map<string, number>();
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       lineMap.set(r.lineId, (lineMap.get(r.lineId) || 0) + (r.quantityProduced || 0));
     });
     return Array.from(lineMap.entries())
@@ -858,11 +904,11 @@ export const AdminDashboard: React.FC = () => {
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawLines]);
+  }, [productionReports, _rawLines]);
 
   const topProducts = useMemo(() => {
     const prodMap = new Map<string, number>();
-    reports.forEach((r) => {
+    productionReports.forEach((r) => {
       prodMap.set(r.productId, (prodMap.get(r.productId) || 0) + (r.quantityProduced || 0));
     });
     return Array.from(prodMap.entries())
@@ -873,11 +919,11 @@ export const AdminDashboard: React.FC = () => {
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, manufacturingNameMap]);
+  }, [productionReports, manufacturingNameMap]);
 
   const topSupervisors = useMemo(() => {
     const map = new Map<string, { production: number; reports: number }>();
-    reports.forEach((report) => {
+    productionReports.forEach((report) => {
       const key = report.employeeId;
       const prev = map.get(key) || { production: 0, reports: 0 };
       prev.production += Number(report.quantityProduced || 0);
@@ -893,7 +939,7 @@ export const AdminDashboard: React.FC = () => {
       }))
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
-  }, [reports, _rawEmployees]);
+  }, [productionReports, _rawEmployees]);
 
   // â”€â”€ Roles chart data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1148,43 +1194,98 @@ export const AdminDashboard: React.FC = () => {
       : byCategory;
   }, [productSummary, productSearch, productCategoryFilter]);
 
-  const weightedAvgProductCost = useMemo(() => {
-    const totalQty = filteredProductSummary.reduce((sum, product) => sum + product.qty, 0);
-    if (totalQty <= 0) return 0;
-    const weightedTotal = filteredProductSummary.reduce((sum, product) => sum + (product.avgCost * product.qty), 0);
-    return weightedTotal / totalQty;
-  }, [filteredProductSummary]);
+  const prevMonthLiveCosts = useMemo(
+    () => computeLiveProductCosts(
+      prevMonthReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        payrollNetByEmployee,
+        payrollNetByDepartment,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      },
+    ),
+    [
+      prevMonthReports,
+      hourlyRate,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      assets,
+      assetDepreciations,
+      productCategoryById,
+      supervisorHourlyRates,
+      payrollNetByEmployee,
+      payrollNetByDepartment,
+      systemSettings.costMonthlyWorkingDays,
+    ],
+  );
 
-  const getProductCostTrend = useCallback((avgCost: number) => {
-    if (!canViewCosts || weightedAvgProductCost <= 0) {
+  const prevUnitCostByProductId = useMemo(() => {
+    const map = new Map<string, number>();
+    Object.entries(previousMonthlyCostSummary?.perProduct || {}).forEach(([productId, row]) => {
+      const prevAvg = Number(row.averageUnitCost || 0);
+      if (prevAvg > 0) map.set(productId, prevAvg);
+    });
+    Object.entries(prevMonthLiveCosts.byProduct).forEach(([productId, row]) => {
+      if (map.has(productId)) return;
+      const unit = Number(row.costPerUnit || 0);
+      if (unit > 0) map.set(productId, unit);
+    });
+    return map;
+  }, [previousMonthlyCostSummary, prevMonthLiveCosts]);
+
+  const getProductCostTrend = useCallback((productId: string, avgCost: number) => {
+    if (!canViewCosts || avgCost <= 0) {
       return {
         label: '—',
         direction: 'flat' as 'up' | 'down' | 'flat',
         delta: 0,
       };
     }
-    const delta = avgCost - weightedAvgProductCost;
+    if (!calendarMonthKey) {
+      return {
+        label: '—',
+        direction: 'flat' as 'up' | 'down' | 'flat',
+        delta: 0,
+      };
+    }
+    const prevCost = prevUnitCostByProductId.get(productId);
+    if (prevCost === undefined) {
+      return {
+        label: 'لا بيانات للشهر السابق',
+        direction: 'flat' as 'up' | 'down' | 'flat',
+        delta: 0,
+      };
+    }
+    const delta = avgCost - prevCost;
     const absDelta = Math.abs(delta);
     if (absDelta < 0.01) {
       return {
-        label: 'مطابق للمتوسط',
+        label: 'مطابق للشهر السابق',
         direction: 'flat' as 'up' | 'down' | 'flat',
         delta: 0,
       };
     }
     if (delta > 0) {
       return {
-        label: `أعلى ${formatCost(absDelta)} ج.م`,
+        label: `أعلى ${formatCost(absDelta)} ج.م عن الشهر السابق`,
         direction: 'up' as 'up' | 'down' | 'flat',
         delta,
       };
     }
     return {
-      label: `أقل ${formatCost(absDelta)} ج.م`,
+      label: `أقل ${formatCost(absDelta)} ج.م عن الشهر السابق`,
       direction: 'down' as 'up' | 'down' | 'flat',
       delta,
     };
-  }, [canViewCosts, weightedAvgProductCost]);
+  }, [canViewCosts, calendarMonthKey, prevUnitCostByProductId]);
 
   const quickActions = useMemo(() => {
     const configured = (systemSettings?.quickActions ?? [])
@@ -1219,9 +1320,9 @@ export const AdminDashboard: React.FC = () => {
       return;
     }
     if (action.actionType === 'export_excel' && canExportFromPage) {
-      exportProductSummary(filteredProductSummary, canViewCosts);
+      exportProductSummary(filteredProductSummary, canViewCosts, prevUnitCostByProductId);
     }
-  }, [navigate, filteredProductSummary, canViewCosts, canExportFromPage]);
+  }, [navigate, filteredProductSummary, canViewCosts, canExportFromPage, prevUnitCostByProductId]);
 
   // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1625,7 +1726,7 @@ export const AdminDashboard: React.FC = () => {
                 extra={canExportFromPage ? (
                   <button
                     type="button"
-                    onClick={() => exportProductSummary(filteredProductSummary, canViewCosts)}
+                    onClick={() => exportProductSummary(filteredProductSummary, canViewCosts, prevUnitCostByProductId)}
                     className="inline-flex h-[34px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50"
                     title="تصدير Excel"
                   >
@@ -1677,7 +1778,7 @@ export const AdminDashboard: React.FC = () => {
                         </div>
                       </div>
                       {canViewCosts && (() => {
-                        const trend = getProductCostTrend(p.avgCost);
+                        const trend = getProductCostTrend(p.id, p.avgCost);
                         return (
                           <div className="flex items-center justify-between text-[11px]">
                             <span className="text-[var(--color-text-muted)] font-bold">الاتجاه</span>
@@ -1741,7 +1842,7 @@ export const AdminDashboard: React.FC = () => {
                           <td className="py-3 px-4 font-mono font-bold text-[var(--color-text)]">{formatCost(p.avgCost)} ج.م</td>
                         )}
                         {canViewCosts && (() => {
-                          const trend = getProductCostTrend(p.avgCost);
+                          const trend = getProductCostTrend(p.id, p.avgCost);
                           return (
                             <td className="py-3 px-4">
                               <span className={`inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] text-[11px] font-bold ${

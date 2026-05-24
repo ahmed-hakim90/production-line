@@ -25,6 +25,7 @@ import {
 import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { usePermission } from '@/utils/permissions';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { getPortalContainer } from '@/lib/portalRoot';
 
 interface PaletteItem {
   key: string;
@@ -134,6 +135,9 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
 
   if (!open) return null;
 
+  const portalContainer = getPortalContainer();
+  if (!portalContainer) return null;
+
   return createPortal(
     <div className="fixed inset-0 z-[200] flex items-start justify-center pt-[10vh] px-4">
       {/* Backdrop */}
@@ -217,7 +221,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
         </div>
       </div>
     </div>,
-    document.body,
+    portalContainer,
   );
 };
 
