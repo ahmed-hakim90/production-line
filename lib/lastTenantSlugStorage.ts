@@ -2,7 +2,7 @@
  * Remember last visited tenant slug so PWA / root `/` can open `/t/{slug}/…`
  * instead of the marketing landing (manifest start_url is `/`).
  */
-const KEY = 'hakim_erp_last_tenant_slug';
+const KEY = 'Factory_erp_last_tenant_slug';
 
 function isSafeTenantSlugSegment(s: string): boolean {
   const t = s.trim();

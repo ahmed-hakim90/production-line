@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#8f2424" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="HAKIM ERP" />
-    <title>HAKIM PRODUCTION SYSTEM</title>
+    <meta name="apple-mobile-web-app-title" content="Factory ERP" />
+    <title>Factory PRODUCTION SYSTEM</title>
     <link rel="icon" type="image/svg+xml" href="/icons/pwa-icon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/pwa-icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icons/pwa-icon-512.png" />
@@ -19,8 +19,59 @@
     <!-- Single stylesheet: theme font options (Settings) + Cairo weights for charts/print -->
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
+    <style>
+      #html-splash {
+        position: fixed;
+        inset: 0;
+        z-index: 99999;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 20px;
+        background: linear-gradient(165deg, #8f2424 0%, #6d1b1b 100%);
+        color: #fff;
+      }
+      #html-splash img {
+        width: 80px;
+        height: 80px;
+        border-radius: 20px;
+        box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+      }
+      #html-splash p {
+        margin: 0;
+        font-family: 'Cairo', system-ui, sans-serif;
+        font-size: 15px;
+        font-weight: 600;
+        opacity: 0.9;
+      }
+      #html-splash .html-splash-bar {
+        width: 160px;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.22);
+        border-radius: 99px;
+        overflow: hidden;
+      }
+      #html-splash .html-splash-bar span {
+        display: block;
+        height: 100%;
+        width: 40%;
+        background: #fff;
+        border-radius: 99px;
+        animation: html-splash-slide 1.4s ease-in-out infinite;
+      }
+      @keyframes html-splash-slide {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(350%); }
+      }
+    </style>
 </head>
   <body>
+    <div id="html-splash" role="status" aria-live="polite" aria-busy="true" aria-label="جاري التحميل">
+      <img src="/icons/pwa-icon.svg" alt="" width="80" height="80" decoding="async" />
+      <p>جاري تحميل النظام...</p>
+      <div class="html-splash-bar" aria-hidden="true"><span></span></div>
+    </div>
     <div id="root"></div>
   <script type="module" src="/index.tsx"></script>
 </body>

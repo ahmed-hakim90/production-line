@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════
-   HAKIM ERP — ERPNext Espresso Design System
+   Factory ERP — ERPNext Espresso Design System
    Global styles applied across ALL pages & components
    ═══════════════════════════════════════════════════════ */
 
@@ -960,6 +960,342 @@ button {
   0%   { width: 0%;    margin-left: 0;    }
   50%  { width: 70%;   margin-left: 0;    }
   100% { width: 0%;    margin-left: 100%; }
+}
+
+/* ══════════════════════════════════════════════════════════
+   APP SPLASH SCREEN (boot / PWA open)
+   ══════════════════════════════════════════════════════════ */
+
+.app-splash {
+  --splash-brand: #8f2424;
+  --splash-brand-dark: #6d1b1b;
+  --splash-brand-light: #a83232;
+
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: linear-gradient(165deg, var(--splash-brand) 0%, var(--splash-brand-dark) 100%);
+  color: #fff;
+  overflow: hidden;
+  position: relative;
+}
+
+@media (min-width: 900px) {
+  .app-splash {
+    flex-direction: row;
+    background: #f8f4f4;
+    color: var(--color-text, #1e1b4b);
+  }
+}
+
+.app-splash__panel {
+  display: none;
+}
+
+@media (min-width: 900px) {
+  .app-splash__panel {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: flex-start;
+    padding: 48px;
+    min-width: 360px;
+    max-width: 420px;
+    flex: 1;
+    position: relative;
+    background: linear-gradient(155deg, var(--splash-brand-light) 0%, var(--splash-brand-dark) 100%);
+    color: #fff;
+    overflow: hidden;
+  }
+}
+
+.app-splash__panel-glow {
+  position: absolute;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.06);
+  pointer-events: none;
+}
+
+.app-splash__panel-glow--top {
+  top: -80px;
+  left: -80px;
+  width: 340px;
+  height: 340px;
+}
+
+.app-splash__panel-glow--bottom {
+  bottom: -60px;
+  right: -60px;
+  width: 240px;
+  height: 240px;
+}
+
+.app-splash__panel-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+  margin-bottom: 28px;
+  position: relative;
+  z-index: 1;
+}
+
+.app-splash__panel-title {
+  font-size: 26px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+  line-height: 1.1;
+  margin: 0;
+  position: relative;
+  z-index: 1;
+}
+
+.app-splash__panel-desc {
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.78);
+  margin: 10px 0 0;
+  line-height: 1.6;
+  position: relative;
+  z-index: 1;
+}
+
+.app-splash__features {
+  margin: 36px 0 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: relative;
+  z-index: 1;
+}
+
+.app-splash__feature {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: rgba(255, 255, 255, 0.9);
+  font-size: 12.5px;
+  font-weight: 500;
+}
+
+.app-splash__feature .material-icons-round {
+  font-size: 17px;
+  color: rgba(255, 255, 255, 0.65);
+  flex-shrink: 0;
+}
+
+.app-splash__main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: max(24px, env(safe-area-inset-top)) 24px max(24px, env(safe-area-inset-bottom));
+  position: relative;
+  z-index: 1;
+}
+
+@media (min-width: 900px) {
+  .app-splash__main {
+    background: #fff;
+    min-height: 100vh;
+    min-height: 100dvh;
+  }
+}
+
+.app-splash__mobile-brand {
+  text-align: center;
+  margin-bottom: 40px;
+}
+
+@media (min-width: 900px) {
+  .app-splash__mobile-brand {
+    display: none;
+  }
+}
+
+.app-splash__mobile-logo {
+  width: 72px;
+  height: 72px;
+  border-radius: 18px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  animation: app-splash-logo-pulse 2.4s ease-in-out infinite;
+}
+
+.app-splash__mobile-title {
+  font-size: 22px;
+  font-weight: 800;
+  margin: 16px 0 0;
+  letter-spacing: -0.3px;
+}
+
+.app-splash__loader {
+  text-align: center;
+  width: 100%;
+  max-width: 320px;
+}
+
+.app-splash__icon-shell {
+  position: relative;
+  display: none;
+  justify-content: center;
+  margin-bottom: 28px;
+}
+
+@media (min-width: 900px) {
+  .app-splash__icon-shell {
+    display: inline-flex;
+  }
+}
+
+.app-splash__icon {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  box-shadow: 0 10px 28px rgba(143, 36, 36, 0.35);
+}
+
+.app-splash__ring {
+  position: absolute;
+  inset: -8px;
+  border: 2.5px solid rgba(143, 36, 36, 0.15);
+  border-top-color: var(--splash-brand);
+  border-radius: 50%;
+  animation: erp-spin 1s linear infinite;
+}
+
+.app-splash__status {
+  font-size: 15px;
+  font-weight: 600;
+  margin: 0 0 24px;
+  color: rgba(255, 255, 255, 0.92);
+}
+
+@media (min-width: 900px) {
+  .app-splash__status {
+    color: var(--color-text-muted, #6b7280);
+    font-weight: 500;
+  }
+}
+
+.app-splash__dots {
+  justify-content: center;
+  margin-bottom: 24px;
+}
+
+.app-splash__dots span {
+  background: rgba(255, 255, 255, 0.95);
+}
+
+@media (min-width: 900px) {
+  .app-splash__dots span {
+    background: var(--splash-brand);
+  }
+}
+
+.app-splash__progress {
+  width: min(220px, 70vw);
+  height: 3px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 99px;
+  overflow: hidden;
+  margin: 0 auto;
+}
+
+@media (min-width: 900px) {
+  .app-splash__progress {
+    background: rgba(143, 36, 36, 0.12);
+  }
+}
+
+.app-splash__progress-bar {
+  height: 100%;
+  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0.55));
+  border-radius: 99px;
+  animation: erp-loading-bar 1.6s ease-in-out infinite;
+}
+
+@media (min-width: 900px) {
+  .app-splash__progress-bar {
+    background: linear-gradient(90deg, var(--splash-brand), rgba(143, 36, 36, 0.55));
+  }
+}
+
+.app-splash__footer {
+  position: absolute;
+  bottom: max(20px, env(safe-area-inset-bottom));
+  left: 0;
+  right: 0;
+  text-align: center;
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.55);
+  margin: 0;
+}
+
+@media (min-width: 900px) {
+  .app-splash__footer {
+    color: var(--color-text-muted, #9ca3af);
+  }
+}
+
+@keyframes app-splash-logo-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.04); }
+}
+
+/* Static HTML splash (index.html) — shown before JS bundle loads */
+#html-splash {
+  position: fixed;
+  inset: 0;
+  z-index: 99999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 20px;
+  background: linear-gradient(165deg, #8f2424 0%, #6d1b1b 100%);
+  color: #fff;
+  transition: opacity 0.35s ease, visibility 0.35s ease;
+}
+
+#html-splash.html-splash--exit {
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+}
+
+#html-splash img {
+  width: 80px;
+  height: 80px;
+  border-radius: 20px;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.28);
+  animation: app-splash-logo-pulse 2.4s ease-in-out infinite;
+}
+
+#html-splash p {
+  margin: 0;
+  font-family: 'Cairo', system-ui, sans-serif;
+  font-size: 15px;
+  font-weight: 600;
+  opacity: 0.9;
+}
+
+#html-splash .html-splash-bar {
+  width: 160px;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.22);
+  border-radius: 99px;
+  overflow: hidden;
+}
+
+#html-splash .html-splash-bar span {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, #fff, rgba(255, 255, 255, 0.55));
+  border-radius: 99px;
+  animation: erp-loading-bar 1.6s ease-in-out infinite;
 }
 
 .erp-auth-meta {

@@ -29,7 +29,7 @@
           "value": "{\"preset\":\"custom\",\"primaryColor\":\"#1e40af\",\"colorBg\":\"#f0f2f5\",\"colorCard\":\"#ffffff\",\"colorBorder\":\"#e2e8f0\",\"colorText\":\"#1a1a1a\",\"colorSidebarBg\":\"#ffffff\",\"colorSidebarText\":\"#334155\"}"
         },
         {
-          "name": "hakim_erp_last_tenant_slug",
+          "name": "Factory_erp_last_tenant_slug",
           "value": "sokany-eg"
         },
         {

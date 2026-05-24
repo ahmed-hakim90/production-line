@@ -101,7 +101,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             >
               <div className="flex flex-col sm:flex-row sm:items-center gap-2 text-center sm:text-start">
                 <p className="text-[11px] text-[var(--color-text-muted)] font-mono">
-                  © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM —{' '}
+                  © {new Date().getFullYear()} Factory PRODUCTION SYSTEM —{' '}
                   <span className="text-primary font-semibold">v{APP_VERSION}</span>
                 </p>
                 <span className="text-[11px] text-[var(--color-text-muted)]">
@@ -113,7 +113,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
                     className="text-primary font-semibold hover:underline underline-offset-2"
                     dir="ltr"
                   >
-                    Ahmed Abdulhakim
+                    Ahmed AbdulFactory
                   </a>
                 </span>
               </div>

@@ -120,14 +120,14 @@ const ensureCairoLoaded = async () => {
   }
 };
 
-/** Fixed capture width for standard Hakim report cards (image output is 1280px at scale 2). */
+/** Fixed capture width for standard Factory report cards (image output is 1280px at scale 2). */
 const STANDARD_REPORT_CAPTURE_WIDTH = 640;
 
 const isStandardReportCardRoot = (node: HTMLElement): boolean =>
   node.matches('.print-report') || !!node.querySelector('.print-report');
 
 /**
- * Prefer the Hakim report card root for capture. When the ref sits on an outer
+ * Prefer the Factory report card root for capture. When the ref sits on an outer
  * share wrapper (variance banner + nested PrintReportLayout), keep the outer node
  * so the full share image is captured.
  */

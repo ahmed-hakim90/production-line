@@ -3,7 +3,7 @@ import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
 import { PrintReportLayout } from '@/src/components/erp/PrintReportLayout';
-import { HAKIM_IMAGE_PRIMARY, HAKIM_TRANSFER_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
+import { Factory_IMAGE_PRIMARY, Factory_TRANSFER_FOOTER_TAGLINE } from '@/utils/imageExportTheme';
 
 export interface StockTransferPrintData {
   transferNo: string;
@@ -263,8 +263,8 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
         companyName={companyName}
         reportType="إذن تحويل مخزون"
         printDate={printNow}
-        brandAccent={HAKIM_IMAGE_PRIMARY}
-        footerTagline={HAKIM_TRANSFER_FOOTER_TAGLINE}
+        brandAccent={Factory_IMAGE_PRIMARY}
+        footerTagline={Factory_TRANSFER_FOOTER_TAGLINE}
         version={version}
         meta={{
           reportNumber: data.transferNo,

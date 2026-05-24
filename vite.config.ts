@@ -35,8 +35,8 @@ export default defineConfig(({ mode }) => {
             'icons/pwa-icon-512.png',
           ],
           manifest: {
-            name: 'HAKIM PRODUCTION SYSTEM',
-            short_name: 'HAKIM ERP',
+            name: 'Factory PRODUCTION SYSTEM',
+            short_name: 'Factory ERP',
             description: 'Production management and tracking system',
             theme_color: '#8f2424',
             background_color: '#f6f7f8',

@@ -61,9 +61,10 @@ import { setAppLanguage, type SupportedLanguage } from './src/i18n';
 import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugResolveContext';
 import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
 import { SuperAdminGuard } from './modules/super-admin/SuperAdminGuard';
-import { AuthBrandedLoadingPage } from './components/system-ui/AuthLoadingState';
+import { AppSplashScreen } from './components/system-ui/AppSplashScreen';
 import { useAppInitialization } from './hooks/useAppInitialization';
 import { useAuthStore } from './store/useAuthStore';
+import { dismissHtmlSplash } from './lib/dismissHtmlSplash';
 
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
 const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
@@ -612,7 +613,7 @@ const TenantLayout: React.FC = () => {
   }, [gate, tenantSlug]);
 
   if (gate === 'loading') {
-    return <AuthBrandedLoadingPage subtitle="جاري تحميل بيانات الشركة..." />;
+    return <AppSplashScreen subtitle="جاري تحميل بيانات الشركة..." />;
   }
 
   if (gate === 'missing') {
@@ -728,6 +729,7 @@ const App: React.FC = () => {
 
   useEffect(() => {
     if (!authResolved) return;
+    dismissHtmlSplash();
     const lang = userLanguage ?? 'ar';
     void setAppLanguage(lang);
   }, [authResolved, userLanguage]);
@@ -875,7 +877,7 @@ const App: React.FC = () => {
   }, []);
 
   if (!authResolved) {
-    return <AuthBrandedLoadingPage subtitle="جاري تهيئة النظام..." />;
+    return <AppSplashScreen subtitle="جاري تهيئة النظام..." />;
   }
 
   return (

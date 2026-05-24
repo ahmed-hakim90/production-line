@@ -333,7 +333,7 @@ export const Login: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          © {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM
+          © {new Date().getFullYear()} Factory PRODUCTION SYSTEM
         </p>
       </div>
     </div>

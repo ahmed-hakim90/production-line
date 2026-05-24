@@ -1,5 +1,5 @@
 {
-  "appName": "Hakim ERP",
+  "appName": "Factory ERP",
   "language": {
     "ar": "Arabic",
     "en": "English",
@@ -300,6 +300,18 @@
   },
   "authLoading": {
     "panelDescription": "An integrated system for production, inventory, and HR management",
+    "features": {
+      "production": "Manage production lines and plans",
+      "inventory": "Track inventory and raw materials",
+      "hr": "Manage HR and attendance",
+      "analytics": "Advanced reports and analytics"
+    }
+  },
+  "splash": {
+    "appName": "Factory ERP",
+    "tagline": "Integrated production, inventory, and HR management",
+    "loading": "Loading the system...",
+    "footer": "Factory Production System",
     "features": {
       "production": "Manage production lines and plans",
       "inventory": "Track inventory and raw materials",

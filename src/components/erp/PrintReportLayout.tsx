@@ -1,12 +1,12 @@
 import { forwardRef, type CSSProperties, type ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import {
-  HAKIM_DEFAULT_FOOTER_TAGLINE,
-  HAKIM_IMAGE_PRIMARY,
-  HAKIM_IMAGE_PRIMARY_BADGE_BG,
-  HAKIM_IMAGE_PRIMARY_BADGE_TEXT,
-  HAKIM_IMAGE_PROGRESS_TRACK,
-  HAKIM_IMAGE_WORKERS_STRIP,
+  Factory_DEFAULT_FOOTER_TAGLINE,
+  Factory_IMAGE_PRIMARY,
+  Factory_IMAGE_PRIMARY_BADGE_BG,
+  Factory_IMAGE_PRIMARY_BADGE_TEXT,
+  Factory_IMAGE_PROGRESS_TRACK,
+  Factory_IMAGE_WORKERS_STRIP,
 } from "@/utils/imageExportTheme"
 
 export interface ReportMetaCard {
@@ -93,8 +93,8 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       version = __APP_VERSION__,
       exportRootId = "print-root",
       logoUrl,
-      brandAccent = HAKIM_IMAGE_PRIMARY,
-      footerTagline = HAKIM_DEFAULT_FOOTER_TAGLINE,
+      brandAccent = Factory_IMAGE_PRIMARY,
+      footerTagline = Factory_DEFAULT_FOOTER_TAGLINE,
       nestedInShareWrapper = false,
     },
     ref,
@@ -117,7 +117,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
       if (kpi.color === "indigo") return accent
       if (kpi.color === "green") return "#059669"
       if (kpi.color === "red") return "#dc2626"
-      if (kpi.color === "sky") return HAKIM_IMAGE_WORKERS_STRIP
+      if (kpi.color === "sky") return Factory_IMAGE_WORKERS_STRIP
       return "#cbd5e1"
     }
 
@@ -160,7 +160,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                 {companyName}
               </h1>
               <p className="text-[10px] font-semibold mt-0.5" style={{ color: accent, letterSpacing: "normal" }}>
-                HAKIM PRODUCTION SYSTEM
+                Factory PRODUCTION SYSTEM
               </p>
             </div>
           </div>
@@ -171,8 +171,8 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                 fontSize: "14px",
                 lineHeight: 1.3,
                 padding: "5px 10px",
-                background: HAKIM_IMAGE_PRIMARY_BADGE_BG,
-                color: HAKIM_IMAGE_PRIMARY_BADGE_TEXT,
+                background: Factory_IMAGE_PRIMARY_BADGE_BG,
+                color: Factory_IMAGE_PRIMARY_BADGE_TEXT,
                 letterSpacing: "normal",
                 maxWidth: "220px",
                 textAlign: "center",
@@ -307,7 +307,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                       <div className="flex items-center gap-2">
                         <div
                           className="flex-1 h-1.5 rounded-full overflow-hidden"
-                          style={{ background: HAKIM_IMAGE_PROGRESS_TRACK }}
+                          style={{ background: Factory_IMAGE_PROGRESS_TRACK }}
                         >
                           <div
                             className="h-full rounded-full"
@@ -355,7 +355,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
             {footerTagline} — {printDate}
           </p>
           <p className="text-[10px] font-bold" style={{ color: accent, letterSpacing: "normal" }}>
-            HAKIM {version}
+            Factory {version}
           </p>
         </div>
       </div>

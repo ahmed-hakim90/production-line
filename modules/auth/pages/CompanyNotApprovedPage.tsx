@@ -84,7 +84,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
           </div>
         </div>
 
-        <p className="erp-auth-copyright">&copy; {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM</p>
+        <p className="erp-auth-copyright">&copy; {new Date().getFullYear()} Factory PRODUCTION SYSTEM</p>
       </div>
     </div>
   );

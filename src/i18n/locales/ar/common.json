@@ -307,6 +307,18 @@
       "analytics": "تقارير وتحليلات متقدمة"
     }
   },
+  "splash": {
+    "appName": "Factory ERP",
+    "tagline": "نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية",
+    "loading": "جاري تحميل النظام...",
+    "footer": "Factory Production System",
+    "features": {
+      "production": "إدارة خطوط وخطط الإنتاج",
+      "inventory": "متابعة المخزون والمواد الخام",
+      "hr": "إدارة الموارد البشرية والحضور",
+      "analytics": "تقارير وتحليلات متقدمة"
+    }
+  },
   "modalManager": {
     "createWorkOrder": {
       "noPlan": "بدون خطة",

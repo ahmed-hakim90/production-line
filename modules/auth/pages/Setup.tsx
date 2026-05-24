@@ -282,7 +282,7 @@ export const Setup: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          آ© {new Date().getFullYear()} HAKIM PRODUCTION SYSTEM
+          آ© {new Date().getFullYear()} Factory PRODUCTION SYSTEM
         </p>
       </div>
     </div>
