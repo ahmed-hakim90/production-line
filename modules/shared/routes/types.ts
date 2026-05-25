@@ -1,5 +1,6 @@
 import type { ComponentType, ReactElement } from 'react';
 import type { Permission } from '../../../utils/permissions';
+import type { PageSkeletonVariant } from '@/src/shared/ui/skeletons';
 
 export interface AppRouteDef {
   path: string;
@@ -8,6 +9,8 @@ export interface AppRouteDef {
   permissionsAny?: Permission[];
   component?: ComponentType;
   redirectTo?: string;
+  /** Loading skeleton layout for lazy route fallback and page-level loading hints. */
+  skeleton?: PageSkeletonVariant;
 }
 
 export interface PublicRouteContext {

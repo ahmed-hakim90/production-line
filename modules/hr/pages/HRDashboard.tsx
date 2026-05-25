@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, KPIBox, LoadingSkeleton, Badge, Button, SearchableSelect } from '../components/UI';
+import { Card, KPIBox, Badge, Button, SearchableSelect } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { getDocs } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { useAppStore } from '@/store/useAppStore';
@@ -880,11 +881,7 @@ export const HRDashboard: React.FC = () => {
   ];
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <LoadingSkeleton rows={3} />
-      </div>
-    );
+    return <PageContentSkeleton variant="dashboard" kpiCount={6} />;
   }
 
   const inputCls = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2.5 text-sm font-medium bg-[var(--color-card)] outline-none focus:ring-2 focus:ring-primary/20 transition-shadow';

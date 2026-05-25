@@ -1,5 +1,6 @@
 import { ReactNode } from "react"
 import { cn } from "@/lib/utils"
+import { PageHeaderSkeleton } from "@/src/shared/ui/skeletons"
 
 interface BreadcrumbItem {
   label: string
@@ -13,6 +14,7 @@ interface PageHeaderProps {
   actions?: ReactNode
   breadcrumbs?: BreadcrumbItem[]
   className?: string
+  loading?: boolean
 }
 
 export function PageHeader({
@@ -22,7 +24,12 @@ export function PageHeader({
   actions,
   breadcrumbs,
   className,
+  loading = false,
 }: PageHeaderProps) {
+  if (loading) {
+    return <PageHeaderSkeleton className={className} />
+  }
+
   return (
     <header
       className={cn(

@@ -220,6 +220,14 @@ const { can, canCreateReport, canEditReport, canDeleteReport, canManageUsers } =
 
 ---
 
+## 🧱 Skeleton Loading
+
+- دليل الأنماط والاستخدام: [`docs/ui-skeletons.md`](docs/ui-skeletons.md)
+- Route fallback الموحد: `components/PageRouteFallback.tsx`
+- Page-level skeletons: `src/shared/ui/skeletons/`
+
+---
+
 ## 🔥 Firestore Collections
 
 | Collection | الوصف | الحقول الرئيسية |

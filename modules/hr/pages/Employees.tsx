@@ -45,6 +45,7 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -859,6 +860,10 @@ export const Employees: React.FC = () => {
         <div className="h-96 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] animate-pulse" />
       </div>
     );
+  }
+
+  if (listLoading && listEmployees.length === 0) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={10} />;
   }
 
   return (

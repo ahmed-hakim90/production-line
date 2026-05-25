@@ -13,6 +13,7 @@ import { formatDepositTitleWithDate } from '../utils/depositSerialLabel';
 import { CustomerDepositStatusBadge } from '../components/CustomerDepositStatusBadge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
@@ -135,11 +136,7 @@ export const CustomerDepositDetailPage: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="erp-page space-y-6">
-        <p className="text-center text-muted-foreground">جاري التحميل…</p>
-      </div>
-    );
+    return <PageContentSkeleton variant="detail" />;
   }
 
   if (!row) {

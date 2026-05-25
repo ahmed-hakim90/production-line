@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button, Badge } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { getDocs, deleteDoc, doc } from 'firebase/firestore';
@@ -137,15 +138,7 @@ export const Organization: React.FC = () => {
     penalties: 'إضافة جزاء', lateRules: 'إضافة قاعدة', allowances: 'إضافة بدل',
   };
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="h-10 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse w-48" />
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />)}
-        </div>
-        <div className="h-64 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />
-      </div>
-    );
+    return <PageContentSkeleton variant="list" showFilters tableRows={6} />;
   }
 
   return (

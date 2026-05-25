@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { Card, Badge, Button } from '../components/UI';
+import { PageContentSkeleton, TableSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import {
@@ -917,7 +918,7 @@ const AuditLogPanel: React.FC<{ module: HRConfigModuleName }> = ({ module }) => 
     return () => { cancelled = true; };
   }, [module]);
 
-  if (loading) return <LoadingSkeleton type="table" rows={3} />;
+  if (loading) return <TableSkeleton rows={3} showHeader={false} />;
   if (logs.length === 0) return <p className="text-sm text-[var(--color-text-muted)] text-center py-4">لا توجد سجلات تغييرات</p>;
 
   return (
@@ -1111,20 +1112,7 @@ export const HRSettings: React.FC = () => {
   }, [updateSystemSettings, systemSettings, attendanceIntegrationDraft]);
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-            <span className="material-icons-round text-primary text-2xl">tune</span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">إعدادات الموارد البشرية</h1>
-            <p className="text-sm text-slate-400">مركز التحكم المتقدم</p>
-          </div>
-        </div>
-        <LoadingSkeleton type="detail" />
-      </div>
-    );
+    return <PageContentSkeleton variant="form" />;
   }
 
   if (!configs || !draft) {

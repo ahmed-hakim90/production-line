@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
+import { Card, Button, Badge } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
@@ -147,20 +148,7 @@ export const DelegationManagement: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-            <span className="material-icons-round text-primary text-2xl">swap_horiz</span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">إدارة التفويضات</h1>
-            <p className="text-sm text-slate-400">تفويض صلاحيات الموافقة لموظف آخر</p>
-          </div>
-        </div>
-        <LoadingSkeleton type="table" rows={4} />
-      </div>
-    );
+    return <PageContentSkeleton variant="list" showFilters tableRows={6} />;
   }
 
   return (

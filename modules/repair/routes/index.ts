@@ -18,13 +18,18 @@ const RepairSalesInvoice = lazyNamed(() => import('../pages/RepairSalesInvoice')
 const RepairSettings = lazyNamed(() => import('../pages/RepairSettings'), 'RepairSettings');
 
 export const REPAIR_ROUTES: AppRouteDef[] = [
-  { path: '/repair', permission: 'repair.dashboard.view', component: RepairDashboard },
-  { path: '/repair/admin-dashboard', permission: 'repair.adminDashboard.view', component: RepairAdminDashboard },
+  { path: '/repair', permission: 'repair.dashboard.view', component: RepairDashboard, skeleton: 'dashboard' },
+  {
+    path: '/repair/admin-dashboard',
+    permission: 'repair.adminDashboard.view',
+    component: RepairAdminDashboard,
+    skeleton: 'dashboard',
+  },
   // Keep as internal admin flow; intentionally hidden from sidebar menu.
   { path: '/repair/admin-orders', permission: 'repair.adminDashboard.view', component: RepairAdminOrders },
   { path: '/repair/jobs', permission: 'repair.view', component: RepairJobs },
   { path: '/repair/call-center', permission: 'repair.view', component: RepairCallCenter },
-  { path: '/repair/jobs/new', permission: 'repair.jobs.create', component: NewRepairJob },
+  { path: '/repair/jobs/new', permission: 'repair.jobs.create', component: NewRepairJob, skeleton: 'form' },
   { path: '/repair/jobs/:jobId', permission: 'repair.view', component: RepairJobDetail },
   { path: '/repair/jobs/:jobId/workspace', permission: 'repair.view', component: RepairJobWorkspace },
   { path: '/repair/parts', permission: 'repair.parts.view', component: SparePartsInventory },

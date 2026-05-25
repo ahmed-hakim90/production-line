@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
 import { getDocs } from 'firebase/firestore';
 import { employeeService } from '../employeeService';
@@ -494,14 +495,7 @@ export const EmployeeFinancials: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-slate-200 rounded w-1/3" />
-        <div className="grid grid-cols-1 sm:grid-cols-5 gap-4">
-          {[...Array(5)].map((_, i) => <div key={i} className="h-16 bg-slate-200 rounded-[var(--border-radius-lg)]" />)}
-        </div>
-      </div>
-    );
+    return <PageContentSkeleton variant="dashboard" kpiCount={5} />;
   }
 
   const dataCount = activeTab === 'allowances' ? filteredAllowances.length

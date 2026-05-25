@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, LoadingSkeleton } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '../../../src/components/erp/StatusBadge';
@@ -374,6 +375,10 @@ export const UsersManagement: React.FC = () => {
       },
     });
   };
+
+  if (loading && rows.length === 0) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
 
   return (
     <div className="space-y-4 erp-ds-clean">

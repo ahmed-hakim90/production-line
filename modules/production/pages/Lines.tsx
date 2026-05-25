@@ -12,6 +12,7 @@ import { supervisorLineAssignmentService } from '../services/supervisorLineAssig
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
   Select,
@@ -55,6 +56,7 @@ export const Lines: React.FC = () => {
 
   const { can } = usePermission();
   const navigate = useTenantNavigate();
+  const appLoading = useAppStore((s) => s.loading);
 
   const [todayAssignments, setTodayAssignments] = useState<LineWorkerAssignment[]>([]);
   const [supervisorNameByLineId, setSupervisorNameByLineId] = useState<Record<string, string>>({});
@@ -280,6 +282,10 @@ export const Lines: React.FC = () => {
       return matchesStatus && matchesSearch;
     });
   }, [sortedLines, searchTerm, statusFilter]);
+
+  if (appLoading && productionLines.length === 0) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  }
 
   return (
     <div className="erp-ds-clean space-y-6">

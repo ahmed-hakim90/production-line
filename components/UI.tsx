@@ -29,6 +29,7 @@ import {
 import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
+import { LegacyLoadingSkeleton } from '@/src/shared/ui/skeletons';
 import { cn } from '@/lib/utils';
 
 const KPI_ICON_MAP: Record<string, LucideIcon> = {
@@ -143,58 +144,9 @@ export const Badge: React.FC<BadgeProps> = ({ children, variant, color, pulse })
   );
 };
 
-export const LoadingSkeleton: React.FC<{ rows?: number; type?: 'card' | 'table' | 'detail' }> = ({ rows = 4, type = 'card' }) => {
-  if (type === 'detail') {
-    return (
-      <div className="space-y-4 animate-pulse">
-        <div className="flex items-center gap-3">
-          <Skeleton className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-[var(--color-border)]/60" />
-          <div className="flex-1 space-y-2">
-            <Skeleton className="h-4 w-1/3 bg-[var(--color-border)]/60" />
-            <Skeleton className="h-3 w-1/4 bg-[var(--color-border)]/60" />
-          </div>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-              <Skeleton className="h-3 w-2/3 mb-2 bg-[var(--color-border)]/60" />
-              <Skeleton className="h-6 w-1/2 bg-[var(--color-border)]/60" />
-            </div>
-          ))}
-        </div>
-        <div className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] h-48">
-          <Skeleton className="h-3 w-1/4 mb-3 bg-[var(--color-border)]/60" />
-          <Skeleton className="h-full opacity-50 bg-[var(--color-border)]/60" />
-        </div>
-      </div>
-    );
-  }
-  if (type === 'table') {
-    return (
-      <div className="animate-pulse space-y-2 p-4">
-        {[...Array(rows)].map((_, i) => (
-          <div key={i} className="flex gap-3">
-            <Skeleton className="h-4 flex-1 bg-[var(--color-border)]/60" />
-            <Skeleton className="h-4 w-16 bg-[var(--color-border)]/60" />
-            <Skeleton className="h-4 w-12 bg-[var(--color-border)]/60" />
-          </div>
-        ))}
-      </div>
-    );
-  }
-  return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 animate-pulse">
-      {[...Array(rows)].map((_, i) => (
-        <div key={i} className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-          <Skeleton className="h-4 w-2/3 mb-3 bg-[var(--color-border)]/60" />
-          <Skeleton className="h-3 w-1/2 mb-2 bg-[var(--color-border)]/60" />
-          <Skeleton className="h-3 w-full mb-1.5 bg-[var(--color-border)]/60" />
-          <Skeleton className="h-3 w-4/5 bg-[var(--color-border)]/60" />
-        </div>
-      ))}
-    </div>
-  );
-};
+export const LoadingSkeleton: React.FC<{ rows?: number; type?: 'card' | 'table' | 'detail' }> = (props) => (
+  <LegacyLoadingSkeleton {...props} />
+);
 
 type LegacyButtonVariant = 'primary' | 'secondary' | 'outline' | 'ghost' | 'danger' | 'default';
 type LegacyButtonSize = 'sm' | 'default' | 'lg' | 'icon';

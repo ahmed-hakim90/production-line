@@ -499,7 +499,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         : [{
           label: 'العمال',
           value: totalWorkersForPrintRow(report),
-          color: (hideWasteUi ? 'sky' : 'default') as const,
+          color: hideWasteUi ? 'sky' as const : 'default' as const,
         }]),
       {
         label: 'تكلفة الوحدة',
@@ -580,6 +580,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
           letterSpacing: 'normal',
           wordSpacing: 'normal',
           padding: 0,
+          overflow: 'visible',
         }}
       >
         {v ? (

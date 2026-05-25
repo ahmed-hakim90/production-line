@@ -4,6 +4,7 @@ import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import type { WorkOrderGroupBy } from './hooks/useWorkOrderFilters';
 import { WorkOrderRow, type WorkOrderRowView } from './WorkOrderRow';
 import styles from './WorkOrders.module.css';
+import { TableSkeleton } from '@/src/shared/ui/skeletons';
 
 interface WorkOrdersTableProps {
   rows: WorkOrderRowView[];
@@ -97,7 +98,11 @@ export function WorkOrdersTable({
   }, [hasMore, loadingMore, onLoadMore]);
 
   if (loading) {
-    return <div className={styles.emptyState}>جاري تحميل أوامر الشغل...</div>;
+    return (
+      <div className={styles.tableWrap}>
+        <TableSkeleton rows={10} columns={6} />
+      </div>
+    );
   }
 
   if (rows.length === 0) {

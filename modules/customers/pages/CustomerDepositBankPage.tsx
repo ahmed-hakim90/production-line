@@ -10,6 +10,7 @@ import { companyBankCashBalance } from '../utils/balances';
 import type { CustomerDepositCompanyBankAccount } from '../types';
 import { CustomerDepositStatusBadge } from '../components/CustomerDepositStatusBadge';
 import { CUSTOMER_DEPOSITS_TABLE_PAGE_SIZE, useClientTablePagination } from '../hooks/useClientTablePagination';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -65,11 +66,7 @@ export const CustomerDepositBankPage: React.FC = () => {
   const adjustmentsPg = useClientTablePagination(adjustments, CUSTOMER_DEPOSITS_TABLE_PAGE_SIZE, accountId);
 
   if (loading) {
-    return (
-      <div className="erp-page space-y-6">
-        <p className="text-center text-muted-foreground">جاري التحميل…</p>
-      </div>
-    );
+    return <PageContentSkeleton variant="detail" />;
   }
 
   if (!account) {

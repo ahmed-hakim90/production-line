@@ -5,6 +5,7 @@ import { usePermission } from '../../../utils/permissions';
 import { Card, Badge } from '../components/UI';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
@@ -696,16 +697,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   };
 
   if (loading && reports.length === 0) {
-    return (
-      <div className="erp-dashboard-theme space-y-6">
-        <PageHeader title="لوحة مدير المصنع" subtitle="جاري تحميل البيانات..." />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {Array.from({ length: 4 }).map((_, idx) => (
-            <KPICard key={`factory-loading-kpi-${idx}`} label="" value="" loading />
-          ))}
-        </div>
-      </div>
-    );
+    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
   return (

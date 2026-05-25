@@ -8,6 +8,7 @@
   },
   "ui": {
     "loading": "Loading…",
+    "loadingPageContent": "Loading page…",
     "save": "Save",
     "cancel": "Cancel",
     "close": "Close"

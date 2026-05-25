@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
@@ -160,16 +161,7 @@ export const Vehicles: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="space-y-6 animate-pulse">
-        <div className="h-8 bg-slate-200 rounded w-1/3" />
-        <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => (
-            <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)]" />
-          ))}
-        </div>
-      </div>
-    );
+    return <PageContentSkeleton variant="list" showFilters tableRows={6} />;
   }
 
   return (

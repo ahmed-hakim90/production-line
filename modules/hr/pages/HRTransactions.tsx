@@ -1,6 +1,7 @@
 ﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button, SearchableSelect, LoadingSkeleton } from '../components/UI';
+import { Card, Badge, Button, SearchableSelect } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
@@ -427,11 +428,7 @@ export const HRTransactions: React.FC = () => {
   }, [transactions]);
 
   if (loading) {
-    return (
-      <div className="space-y-4">
-        <LoadingSkeleton count={6} />
-      </div>
-    );
+    return <PageContentSkeleton variant="list" showFilters tableRows={6} />;
   }
 
   return (

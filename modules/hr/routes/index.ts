@@ -57,7 +57,7 @@ const HR_LEGACY_PARAM_ROUTES: AppRouteDef[] = [
 ];
 
 const HR_CANONICAL_ROUTES: AppRouteDef[] = [
-  { path: '/hr/dashboard', permission: 'hrDashboard.view', component: HRDashboard },
+  { path: '/hr/dashboard', permission: 'hrDashboard.view', component: HRDashboard, skeleton: 'dashboard' },
   { path: '/hr/employees', permission: 'employees.view', component: Employees },
   { path: '/hr/employees/import', permission: 'employees.create', component: HRImport },
   { path: '/hr/employees/:id', permission: 'employees.viewDetails', component: EmployeeProfile },

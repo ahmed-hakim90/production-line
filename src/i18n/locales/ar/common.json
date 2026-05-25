@@ -8,6 +8,7 @@
   },
   "ui": {
     "loading": "جاري التحميل…",
+    "loadingPageContent": "جاري تحميل الصفحة…",
     "save": "حفظ",
     "cancel": "إلغاء",
     "close": "إغلاق"

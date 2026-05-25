@@ -31,6 +31,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TableSkeleton } from '@/src/shared/ui/skeletons';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import type { DataTableProps } from './DataTable.types';
 
@@ -285,16 +286,8 @@ export function DataTable<T>({
     </Popover>
   ) : null;
 
-  /* ── Loading skeleton ── */
   if (loading) {
-    return (
-      <div className="animate-pulse space-y-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4"
-        style={{ boxShadow: 'var(--shadow-card)' }}>
-        {[...Array(6)].map((_, idx) => (
-          <Skeleton key={idx} className="h-9 rounded-[var(--border-radius-sm)] bg-[#e8eaed]" />
-        ))}
-      </div>
-    );
+    return <TableSkeleton rows={6} columns={Math.min(columnDefs.length || 5, 6)} className={className} />;
   }
 
   return (

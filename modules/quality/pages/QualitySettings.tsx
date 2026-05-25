@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
+import { Badge, Button, Card } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { qualitySettingsService } from '../services/qualitySettingsService';
@@ -281,7 +282,7 @@ export const QualitySettings: React.FC = () => {
     setMessage('تم حفظ قوالب الطباعة');
   };
 
-  if (loading) return <LoadingSkeleton type="card" rows={6} />;
+  if (loading) return <PageContentSkeleton variant="form" />;
 
   return (
     <div className="space-y-6">

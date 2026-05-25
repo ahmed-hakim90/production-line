@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button, KPIBox, LoadingSkeleton } from '../components/UI';
+import { Card, Badge, Button, KPIBox } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import {
   formatNumber,
@@ -714,12 +715,7 @@ export const ProductionPlans: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="erp-ds-clean space-y-8">
-        <h2 className="text-2xl sm:text-3xl font-extrabold text-[var(--color-text)]">خطط الإنتاج</h2>
-        <LoadingSkeleton type="table" rows={6} />
-      </div>
-    );
+    return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
 
   return (

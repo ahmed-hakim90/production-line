@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
+import { Badge, Button, Card } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { qualityWorkersService } from '../services/qualityWorkersService';
@@ -141,7 +142,7 @@ export const QualityWorkers: React.FC = () => {
     }
   };
 
-  if (loading) return <LoadingSkeleton type="table" rows={8} />;
+  if (loading) return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
 
   return (
     <div className="space-y-6">

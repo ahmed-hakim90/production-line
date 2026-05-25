@@ -3,6 +3,7 @@ import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -852,25 +853,7 @@ export const EmployeeProfile: React.FC = () => {
   }, [employee, empAllowances, empDeductions, loans, currentMonth]);
 
   if (loading) {
-    return (
-      <div className="p-6 max-w-5xl mx-auto">
-        <div className="h-10 w-48 bg-slate-200 rounded-[var(--border-radius-base)] animate-pulse mb-6" />
-        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-8">
-          <div className="flex items-center gap-4 mb-6">
-            <div className="w-16 h-16 bg-slate-200 rounded-[var(--border-radius-lg)] animate-pulse" />
-            <div className="space-y-2 flex-1">
-              <div className="h-6 bg-slate-200 rounded w-1/3 animate-pulse" />
-              <div className="h-4 bg-[#f0f2f5] rounded w-1/4 animate-pulse" />
-            </div>
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            {[...Array(8)].map((_, i) => (
-              <div key={i} className="h-20 bg-[#f0f2f5] rounded-[var(--border-radius-base)] animate-pulse" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <PageContentSkeleton variant="detail" />;
   }
 
   if (!employee) {

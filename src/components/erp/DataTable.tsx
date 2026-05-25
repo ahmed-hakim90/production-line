@@ -9,6 +9,7 @@ import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Skeleton } from "@/components/ui/skeleton"
+import { skeletonBlockClass } from "@/src/shared/ui/skeletons"
 import {
   Table,
   TableBody,
@@ -127,12 +128,12 @@ export function DataTable<T>({
               <TableRow key={`loading-${i}`} className="hover:bg-transparent">
                 {columns.map((col) => (
                   <TableCell key={`${col.key}-${i}`}>
-                    <Skeleton className="h-4 w-full rounded-md" />
+                    <Skeleton className={cn("h-4 w-full rounded-md", skeletonBlockClass)} />
                   </TableCell>
                 ))}
                 {hasActions && (
                   <TableCell className="text-left">
-                    <Skeleton className="ms-auto h-7 w-7 rounded-md" />
+                    <Skeleton className={cn("ms-auto h-7 w-7 rounded-md", skeletonBlockClass)} />
                   </TableCell>
                 )}
               </TableRow>

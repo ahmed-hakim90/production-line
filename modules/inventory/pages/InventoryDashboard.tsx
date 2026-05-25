@@ -17,6 +17,7 @@ import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { withTenantPath } from '@/lib/tenantPaths';
 
 export const InventoryDashboard: React.FC = () => {
@@ -119,6 +120,10 @@ export const InventoryDashboard: React.FC = () => {
   const routingReady = Boolean(
     routing.productionWipWarehouseId && routing.finishedStagingWarehouseId,
   );
+
+  if (loading && warehouses.length === 0) {
+    return <PageContentSkeleton variant="dashboard" kpiCount={8} />;
+  }
 
   return (
     <div className="erp-ds-clean erp-dashboard-theme space-y-6">

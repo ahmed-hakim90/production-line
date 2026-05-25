@@ -20,7 +20,8 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { KPIBox, Card, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { KPIBox, Card, Badge, Button } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
 import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
@@ -582,16 +583,7 @@ export const Dashboard: React.FC = () => {
   };
 
   if (loading) {
-    return (
-      <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
-        <PageHeader
-          title="لوحة التشغيل"
-          subtitle="جاري تحميل البيانات..."
-          icon={<CalendarDays className="h-4 w-4" strokeWidth={2} />}
-        />
-        <LoadingSkeleton type="card" rows={6} />
-      </div>
-    );
+    return <PageContentSkeleton variant="dashboard" kpiCount={6} />;
   }
 
   return (

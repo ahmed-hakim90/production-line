@@ -27,6 +27,7 @@ import { useWorkOrdersRealtime } from './hooks/useWorkOrdersRealtime';
 import { useWorkOrderStore } from './store/workOrderStore';
 import type { WorkOrderRowView } from './WorkOrderRow';
 import styles from './WorkOrders.module.css';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 
 const dayDiff = (value: string): number => {
   const target = new Date(value);
@@ -584,6 +585,10 @@ export const WorkOrders: React.FC = () => {
   const handleImport = () => {
     toast.info('ميزة استيراد أوامر الشغل ستتوفر قريباً.');
   };
+
+  if (loading && liveOrders.length === 0) {
+    return <PageContentSkeleton variant="list" showFilters tableRows={10} />;
+  }
 
   return (
     <div className={`erp-ds-clean ${styles.page}`}>

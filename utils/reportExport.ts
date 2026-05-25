@@ -162,58 +162,6 @@ const measureExportElement = (node: HTMLElement) => {
 
 const stablePixelWidth = (value: number) => `${Math.ceil(Math.max(1, value))}px`;
 
-const LIVE_CAPTURE_PROPS = [
-  'position',
-  'left',
-  'top',
-  'width',
-  'min-width',
-  'max-width',
-  'z-index',
-  'visibility',
-  'opacity',
-  'margin',
-  'transform',
-  'box-sizing',
-] as const;
-
-/** Pins the live DOM node at 640px width so html2canvas keeps Tailwind computed styles. */
-const prepareLiveCaptureViewport = async (
-  source: HTMLElement,
-  targetWidth: number,
-): Promise<{ cleanup: () => void }> => {
-  const saved = new Map<string, string>();
-  for (const prop of LIVE_CAPTURE_PROPS) {
-    saved.set(prop, source.style.getPropertyValue(prop));
-  }
-
-  source.style.setProperty('position', 'fixed');
-  source.style.setProperty('left', '0');
-  source.style.setProperty('top', '0');
-  source.style.setProperty('z-index', '2147483647');
-  source.style.setProperty('width', stablePixelWidth(targetWidth));
-  source.style.setProperty('min-width', stablePixelWidth(targetWidth));
-  source.style.setProperty('max-width', stablePixelWidth(targetWidth));
-  source.style.setProperty('margin', '0');
-  source.style.setProperty('transform', 'none');
-  source.style.setProperty('visibility', 'visible');
-  source.style.setProperty('opacity', '1');
-  source.style.setProperty('box-sizing', 'border-box');
-
-  await waitForImagesInElement(source);
-  await waitForExportPaint(50);
-
-  return {
-    cleanup: () => {
-      for (const prop of LIVE_CAPTURE_PROPS) {
-        const prev = saved.get(prop);
-        if (prev) source.style.setProperty(prop, prev);
-        else source.style.removeProperty(prop);
-      }
-    },
-  };
-};
-
 const prepareStableCaptureTarget = async (
   source: HTMLElement,
   targetWidth: number,
@@ -230,10 +178,13 @@ const prepareStableCaptureTarget = async (
   host.style.overflow = 'visible';
   host.style.width = stablePixelWidth(targetWidth);
   host.style.maxWidth = 'none';
+  host.style.minWidth = stablePixelWidth(targetWidth);
   host.style.background = '#fff';
   host.style.direction = 'ltr';
   host.style.display = 'block';
   host.style.boxSizing = 'border-box';
+  host.style.visibility = 'visible';
+  host.style.opacity = '1';
 
   clone.style.display = 'block';
   clone.style.margin = '0';
@@ -241,8 +192,11 @@ const prepareStableCaptureTarget = async (
   clone.style.minWidth = stablePixelWidth(targetWidth);
   clone.style.maxWidth = stablePixelWidth(targetWidth);
   clone.style.boxSizing = 'border-box';
+  clone.style.overflow = 'visible';
   clone.style.transform = 'none';
   clone.style.direction = 'rtl';
+  clone.style.visibility = 'visible';
+  clone.style.opacity = '1';
   clone.setAttribute('dir', 'rtl');
   clone.setAttribute('lang', 'ar');
 
@@ -347,22 +301,6 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
       : {}),
   };
 
-  if (isStandardCard) {
-    const live = await prepareLiveCaptureViewport(captureRoot, captureW);
-    const { height: liveH } = measureExportElement(captureRoot);
-    const winH = windowHeight ?? Math.max(measuredH, liveH);
-    try {
-      return await html2canvas(captureRoot, {
-        ...canvasOptions,
-        width: captureW,
-        height: liveH,
-        windowHeight: winH,
-      });
-    } finally {
-      live.cleanup();
-    }
-  }
-
   const stableCapture = await prepareStableCaptureTarget(captureRoot, captureW);
   const { height: stableH } = measureExportElement(stableCapture.heightTarget);
   const winH = windowHeight ?? Math.max(measuredH, stableH);
@@ -370,6 +308,8 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
   try {
     return await html2canvas(stableCapture.target, {
       ...canvasOptions,
+      x: 0,
+      y: 0,
       width: captureW,
       height: stableH,
       windowHeight: winH,

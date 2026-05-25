@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge } from '../components/UI';
+import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { syncLeaveApprovalDecision } from '../leaveService';
@@ -381,18 +382,7 @@ export const ApprovalCenter: React.FC = () => {
   }), [requests]);
 
   if (loading) {
-    return (
-      <div className="space-y-6">
-        <div className="animate-pulse space-y-4">
-          <div className="h-8 bg-slate-200 rounded w-1/3" />
-          <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-            {[...Array(4)].map((_, i) => (
-              <div key={i} className="h-24 bg-slate-200 rounded-[var(--border-radius-lg)]" />
-            ))}
-          </div>
-        </div>
-      </div>
-    );
+    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
   return (
