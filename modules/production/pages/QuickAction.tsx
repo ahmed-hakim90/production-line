@@ -8,10 +8,10 @@ import {
   exportAsImage,
   exportToPDF,
   getShareResultFeedbackMessage,
-  shareToWhatsApp,
   waitForExportPaint,
   ShareResult,
 } from '../../../utils/reportExport';
+import { exportNodeToPng } from '@/src/shared/utils/exportNodeToImage';
 import { formatProductionReportShareCaption } from '../../../utils/productionReportShareCaption';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
@@ -30,6 +30,7 @@ import {
   ReportPrintRow,
   buildPackagingPrintLinesFromReport,
 } from '../components/ProductionReportPrint';
+import { ProductionReportShareCard } from '../components/ProductionReportShareCard';
 import { reportService } from '../services/reportService';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
@@ -93,6 +94,8 @@ export const QuickAction: React.FC = () => {
   const [exporting, setExporting] = useState(false);
   const [shareToast, setShareToast] = useState<string | null>(null);
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
+  const [shareCardRow, setShareCardRow] = useState<ReportPrintRow | null>(null);
+  const [sharingImage, setSharingImage] = useState(false);
   const [lineWorkers, setLineWorkers] = useState<LineWorkerAssignment[]>([]);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
   const [showLineWorkers, setShowLineWorkers] = useState(false);
@@ -104,7 +107,8 @@ export const QuickAction: React.FC = () => {
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
 
   const printRef = useRef<HTMLDivElement>(null);
-  /** Prevents double shareToWhatsApp from rapid taps before React re-disables the button. */
+  const shareCardRef = useRef<HTMLDivElement>(null);
+  /** Prevents duplicate WhatsApp image sharing from rapid taps before React re-disables the button. */
   const shareWhatsAppLockRef = useRef(false);
 
   const [today, setToday] = useState(() => getOperationalDateString(8));
@@ -610,8 +614,85 @@ export const QuickAction: React.FC = () => {
     setTimeout(() => setShareToast(null), 8000);
   };
 
+  const downloadShareImage = (blob: Blob, fileName: string) => {
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = fileName;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+    URL.revokeObjectURL(url);
+  };
+
+  const openWhatsAppTextFallback = async (caption: string) => {
+    const text = caption.trim();
+    if (text) {
+      try {
+        await navigator.clipboard?.writeText(text);
+      } catch {
+        /* Opening WhatsApp with encoded text is still a useful fallback. */
+      }
+    }
+    const encoded = encodeURIComponent(text);
+    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    if (mobile) {
+      window.location.href = encoded ? `whatsapp://send?text=${encoded}` : 'whatsapp://send';
+      return;
+    }
+    window.open(encoded ? `https://web.whatsapp.com/send?text=${encoded}` : 'https://web.whatsapp.com/', '_blank');
+  };
+
+  const reportNumberOf = (report: ReportPrintRow) =>
+    report.reportCode?.trim()
+      || (report.reportId ? `RPT-${report.reportId.slice(-6).toUpperCase()}` : 'RPT-NA');
+
+  const shareProductionReportImage = async (
+    blob: Blob,
+    reportNumber: string,
+    caption: string,
+  ): Promise<ShareResult> => {
+    const safeReportNumber = (reportNumber || 'RPT-NA')
+      .trim()
+      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
+      .replace(/\s+/g, '-')
+      || 'RPT-NA';
+    const fileName = `production-report-${safeReportNumber}.png`;
+    const file = new File([blob], fileName, { type: 'image/png' });
+    const shareData: ShareData = { files: [file], title: reportNumber };
+    if (caption.trim()) shareData.text = caption.trim();
+
+    if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      try {
+        await navigator.share(shareData);
+        return { method: 'native_share', copied: false };
+      } catch (error: unknown) {
+        if (error instanceof DOMException && error.name === 'AbortError') {
+          return { method: 'cancelled', copied: false };
+        }
+        if (caption.trim()) {
+          try {
+            await navigator.share({ files: [file], title: reportNumber });
+            try {
+              await navigator.clipboard?.writeText(caption.trim());
+            } catch {
+              /* ignore */
+            }
+            return { method: 'native_share', copied: true, captionCopied: true };
+          } catch {
+            /* Fall through to the download + WhatsApp text fallback. */
+          }
+        }
+      }
+    }
+
+    downloadShareImage(blob, fileName);
+    await openWhatsAppTextFallback(caption);
+    return { method: 'download_only', copied: false };
+  };
+
   const handleShareWhatsApp = async () => {
-    if (!printRef.current || !printReport) return;
+    if (!printReport) return;
     if (shareWhatsAppLockRef.current) return;
     shareWhatsAppLockRef.current = true;
     const packagingShareMulti = printReport.sourceReportType === 'packaging'
@@ -636,23 +717,31 @@ export const QuickAction: React.FC = () => {
     };
     const caption = formatProductionReportShareCaption(rowForShare, printTemplate);
     flushSync(() => {
-      setPrintReport(rowForShare);
+      setShareCardRow(rowForShare);
     });
     await waitForExportPaint(150);
+    if (!shareCardRef.current) {
+      setShareCardRow(null);
+      shareWhatsAppLockRef.current = false;
+      return;
+    }
     setExporting(true);
+    setSharingImage(true);
     try {
-      const result = await shareToWhatsApp(
-        printRef.current,
-        `تقرير إنتاج - ${getLineName(lineId)} - ${today}`,
-        { caption },
-      );
+      const blob = await exportNodeToPng(shareCardRef.current);
+      const result = await shareProductionReportImage(blob, reportNumberOf(rowForShare), caption);
       showShareFeedback(result);
+    } catch (error: unknown) {
+      const err = error as { name?: string };
+      if (err?.name !== 'AbortError') {
+        setShareToast('تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.');
+        setTimeout(() => setShareToast(null), 8000);
+      }
     } finally {
       shareWhatsAppLockRef.current = false;
       setExporting(false);
-      setPrintReport((prev) => (prev
-        ? { ...prev, shareStandardVariance: undefined, packagingShareImage: undefined }
-        : null));
+      setSharingImage(false);
+      setShareCardRow(null);
     }
   };
 
@@ -1292,9 +1381,9 @@ export const QuickAction: React.FC = () => {
               <span className="material-icons-round text-lg">image</span>
               تصدير كصورة
             </Button>
-            <Button variant="outline" disabled={exporting} onClick={handleShareWhatsApp} className="w-full sm:w-auto">
+            <Button variant="outline" disabled={exporting || sharingImage} onClick={handleShareWhatsApp} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">share</span>
-              مشاركة عبر WhatsApp
+              {sharingImage ? 'جاري تجهيز الصورة...' : 'مشاركة عبر WhatsApp'}
             </Button>
             <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">add</span>
@@ -1444,6 +1533,25 @@ export const QuickAction: React.FC = () => {
                 ))
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Fixed-size WhatsApp share image render target */}
+      {shareCardRow && (
+        <div
+          style={{
+            position: 'fixed',
+            left: '-99999px',
+            top: 0,
+            width: 1080,
+            background: 'white',
+            zIndex: -1,
+            pointerEvents: 'none',
+          }}
+        >
+          <div ref={shareCardRef} style={{ width: 1080, background: 'white' }}>
+            <ProductionReportShareCard report={shareCardRow} printSettings={printTemplate} />
           </div>
         </div>
       )}
