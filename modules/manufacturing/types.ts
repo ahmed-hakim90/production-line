@@ -37,6 +37,8 @@ export interface Material {
   purchaseCost?: number;
   wastePercent?: number;
   isManufacturedInternally?: boolean;
+  /** Optional explicit link to finished/semi-finished product used for dynamic manufacturing average rollup. */
+  manufacturedProductId?: string;
   linkedCostCenterIds?: string[];
   legacyRawMaterialId?: string;
   minStock?: number;

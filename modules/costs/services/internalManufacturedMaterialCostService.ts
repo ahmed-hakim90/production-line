@@ -1,9 +1,12 @@
 import type { FirestoreProduct, ProductMaterial } from '../../../types';
+import type { Material } from '../../manufacturing/types';
 
 export type InternalMaterialLinkContext = {
   productIds: Set<string>;
   productIdByCode: Map<string, string>;
   productIdByName: Map<string, string>;
+  materialById: Map<string, Material>;
+  materialIdByLegacyRawMaterialId: Map<string, string>;
 };
 
 export type ResolvedProductMaterialCostLine = {
@@ -20,6 +23,7 @@ const normalizeToken = (value: string): string => value.trim().toLowerCase();
 
 export function buildInternalMaterialLinkContext(
   products: Array<Pick<FirestoreProduct, 'id' | 'code' | 'name'>>,
+  materials: Material[] = [],
 ): InternalMaterialLinkContext {
   const productIds = new Set<string>();
   const productIdByCode = new Map<string, string>();
@@ -33,7 +37,22 @@ export function buildInternalMaterialLinkContext(
     const name = normalizeToken(String(product.name || ''));
     if (name) productIdByName.set(name, id);
   });
-  return { productIds, productIdByCode, productIdByName };
+  const materialById = new Map<string, Material>();
+  const materialIdByLegacyRawMaterialId = new Map<string, string>();
+  materials.forEach((material) => {
+    const id = String(material.id || '').trim();
+    if (!id) return;
+    materialById.set(id, material);
+    const legacyId = String(material.legacyRawMaterialId || '').trim();
+    if (legacyId) materialIdByLegacyRawMaterialId.set(legacyId, id);
+  });
+  return {
+    productIds,
+    productIdByCode,
+    productIdByName,
+    materialById,
+    materialIdByLegacyRawMaterialId,
+  };
 }
 
 export function resolveLinkedProductIdForMaterial(
@@ -45,6 +64,22 @@ export function resolveLinkedProductIdForMaterial(
   const codeToken = rawId.toUpperCase();
   if (codeToken && context.productIdByCode.has(codeToken)) {
     return context.productIdByCode.get(codeToken) || null;
+  }
+  const materialEntityId = context.materialById.has(rawId)
+    ? rawId
+    : (context.materialIdByLegacyRawMaterialId.get(rawId) || '');
+  const materialEntity = materialEntityId ? context.materialById.get(materialEntityId) : null;
+  if (materialEntity?.isManufacturedInternally) {
+    const explicitProductId = String(materialEntity.manufacturedProductId || '').trim();
+    if (explicitProductId && context.productIds.has(explicitProductId)) return explicitProductId;
+    const materialCode = String(materialEntity.code || '').trim().toUpperCase();
+    if (materialCode && context.productIdByCode.has(materialCode)) {
+      return context.productIdByCode.get(materialCode) || null;
+    }
+    const materialName = normalizeToken(String(materialEntity.name || ''));
+    if (materialName && context.productIdByName.has(materialName)) {
+      return context.productIdByName.get(materialName) || null;
+    }
   }
   const name = normalizeToken(String(material.materialName || ''));
   if (name && context.productIdByName.has(name)) {

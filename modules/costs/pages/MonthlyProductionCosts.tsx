@@ -12,6 +12,7 @@ import {
   computeLiveProductCosts,
 } from '../../../utils/costCalculations';
 import { productMaterialService } from '../../production/services/productMaterialService';
+import { materialService } from '../../manufacturing/services/materialService';
 import type { MonthlyProductionCost, ProductMaterial } from '../../../types';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import {
@@ -450,7 +451,8 @@ export const MonthlyProductionCosts: React.FC = () => {
       if (missingProductIds.length > 0) {
         try {
           const allMaterials = await productMaterialService.getAll();
-          const linkContext = buildInternalMaterialLinkContext(_rawProducts);
+          const manufacturingMaterials = await materialService.getAll();
+          const linkContext = buildInternalMaterialLinkContext(_rawProducts, manufacturingMaterials);
           const linkedProductIds = new Set<string>();
           allMaterials.forEach((material) => {
             const linkedProductId = resolveLinkedProductIdForMaterial(material, linkContext);

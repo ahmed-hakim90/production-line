@@ -6,6 +6,7 @@ import { reportService } from "@/modules/production/services/reportService";
 import { monthlyProductionCostService } from "@/modules/production/services/monthlyProductionCostService";
 import { stockService } from "@/modules/inventory/services/stockService";
 import { productMaterialService } from "@/modules/production/services/productMaterialService";
+import { materialService } from "@/modules/manufacturing/services/materialService";
 import {
   calculateAvgAssemblyTime,
   calculateWasteRatio,
@@ -129,11 +130,13 @@ export const useProductDetail = (id?: string) => {
         monthReportsAll,
         stockBalances,
         productMaterials,
+        manufacturingMaterials,
       ] = await Promise.all([
         reportService.getByProduct(id),
         reportService.getByDateRange(`${currentMonth}-01`, `${currentMonth}-31`),
         stockService.getBalances(),
         productMaterialService.getByProduct(id),
+        materialService.getAll(),
       ]);
 
       const reports = [...reportsDesc].sort((a, b) => a.date.localeCompare(b.date));
@@ -257,7 +260,7 @@ export const useProductDetail = (id?: string) => {
         currentMonthCost && Number(currentMonthCost.totalProducedQty || 0) > 0
           ? Number(currentMonthCost.averageUnitCost || 0)
           : Number(currentMonthLiveCost?.costPerUnit || 0);
-      const linkContext = buildInternalMaterialLinkContext(rawProducts);
+      const linkContext = buildInternalMaterialLinkContext(rawProducts, manufacturingMaterials);
       const linkedMaterialProductIds = new Set<string>();
       productMaterials.forEach((material) => {
         const linkedProductId = resolveLinkedProductIdForMaterial(material, linkContext);
