@@ -28,6 +28,12 @@ import { effectiveStandardAssemblyMinutes } from "@/utils/routingStandardAssembl
 import type { ProductionReport } from "@/types";
 import { countsTowardProductManufacturingVolume } from "@/modules/production/utils/reportTypes";
 import { resolveProductCategoryLabel } from "../../lib/resolveProductCategory";
+import {
+  buildInternalMaterialLinkContext,
+  loadLatestManufacturingAverageByProduct,
+  resolveLinkedProductIdForMaterial,
+  resolveProductMaterialCosts,
+} from "@/modules/costs/services/internalManufacturedMaterialCostService";
 
 const toMonthLabel = (month: string) => month;
 
@@ -251,7 +257,30 @@ export const useProductDetail = (id?: string) => {
         currentMonthCost && Number(currentMonthCost.totalProducedQty || 0) > 0
           ? Number(currentMonthCost.averageUnitCost || 0)
           : Number(currentMonthLiveCost?.costPerUnit || 0);
-      const breakdown = calculateProductCostBreakdown(product, productMaterials, effectiveCurrentUnitCost);
+      const linkContext = buildInternalMaterialLinkContext(rawProducts);
+      const linkedMaterialProductIds = new Set<string>();
+      productMaterials.forEach((material) => {
+        const linkedProductId = resolveLinkedProductIdForMaterial(material, linkContext);
+        if (linkedProductId) linkedMaterialProductIds.add(linkedProductId);
+      });
+      const manufacturingAverageByProductId = await loadLatestManufacturingAverageByProduct(linkedMaterialProductIds);
+      const resolvedMaterialLines = resolveProductMaterialCosts(
+        productMaterials,
+        linkContext,
+        manufacturingAverageByProductId,
+      );
+      const resolvedUnitCostByKey = new Map<string, number>();
+      resolvedMaterialLines.lines.forEach((line, index) => {
+        const key = String(line.material.id || `${line.material.materialId || ''}::${line.material.materialName || ''}::${index}`);
+        resolvedUnitCostByKey.set(key, Number(line.resolvedUnitCost || 0));
+      });
+      const breakdown = calculateProductCostBreakdown(
+        product,
+        productMaterials,
+        effectiveCurrentUnitCost,
+        (material) => resolvedUnitCostByKey.get(String(material.id || `${material.materialId || ''}::${material.materialName || ''}::${productMaterials.indexOf(material)}`))
+          ?? Number(material.unitCost || 0),
+      );
       const cnyRate = Number(laborSettings?.cnyToEgpRate || 0);
       const cnyUnit = cnyRate > 0 ? breakdown.chineseUnitCost / cnyRate : null;
       const monthlyUnitDirect =

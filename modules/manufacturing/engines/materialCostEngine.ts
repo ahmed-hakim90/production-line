@@ -8,7 +8,22 @@ export type MaterialLineCostInput = {
     BomItem,
     'wastePercent' | 'costBehavior' | 'directCostPerUnit' | 'indirectCostPerUnit'
   >;
+  resolveEffectiveUnitCost?: MaterialUnitCostResolver;
 };
+
+export type MaterialUnitCostResolverArgs = {
+  material: Material;
+  requiredQty: number;
+  bomItem?: Pick<
+    BomItem,
+    'wastePercent' | 'costBehavior' | 'directCostPerUnit' | 'indirectCostPerUnit'
+  >;
+  purchaseCostPerBaseUnit: number;
+};
+
+export type MaterialUnitCostResolver = (
+  args: MaterialUnitCostResolverArgs,
+) => number | null | undefined;
 
 export type MaterialLineCostBreakdown = {
   purchaseComponent: number;
@@ -21,7 +36,16 @@ export type MaterialLineCostBreakdown = {
 export function calculateMaterialLineCost(input: MaterialLineCostInput): MaterialLineCostBreakdown {
   const qty = Math.max(0, Number(input.requiredQty || 0));
   const purchasePerBase = materialPurchaseCostPerBaseUnit(input.material);
-  const purchaseComponent = purchasePerBase * qty;
+  const resolvedPerBaseRaw = input.resolveEffectiveUnitCost?.({
+    material: input.material,
+    requiredQty: qty,
+    bomItem: input.bomItem,
+    purchaseCostPerBaseUnit: purchasePerBase,
+  });
+  const resolvedPerBase = Number.isFinite(Number(resolvedPerBaseRaw))
+    ? Number(resolvedPerBaseRaw)
+    : purchasePerBase;
+  const purchaseComponent = resolvedPerBase * qty;
 
   const itemWaste = input.bomItem?.wastePercent;
   const wastePct = Number(itemWaste ?? input.material.wastePercent ?? 0);

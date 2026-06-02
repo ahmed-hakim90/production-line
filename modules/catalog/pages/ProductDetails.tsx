@@ -30,8 +30,6 @@ import { useProductDetail } from "./hooks/useProductDetail";
 import { ProductBomSection } from "@/modules/manufacturing/components/ProductBomSection";
 import { useAppStore } from "@/store/useAppStore";
 import { IndirectCostCards } from "@/src/components/erp/IndirectCostCards";
-import { productMaterialService } from "../../production/services/productMaterialService";
-import type { ProductMaterial } from "../../../types";
 import { useGlobalModalManager } from "../../../components/modal-manager/GlobalModalManager";
 import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
 import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
@@ -196,28 +194,6 @@ export const ProductDetails: React.FC = () => {
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
   const [page, setPage] = useState(1);
-  const [productMaterials, setProductMaterials] = useState<ProductMaterial[]>([]);
-  const [materialsLoading, setMaterialsLoading] = useState(false);
-
-  const loadProductMaterials = useCallback(async () => {
-    if (!id) {
-      setProductMaterials([]);
-      return;
-    }
-    setMaterialsLoading(true);
-    try {
-      const rows = await productMaterialService.getByProduct(id);
-      setProductMaterials(rows);
-    } catch {
-      setProductMaterials([]);
-    } finally {
-      setMaterialsLoading(false);
-    }
-  }, [id]);
-
-  useEffect(() => {
-    void loadProductMaterials();
-  }, [loadProductMaterials]);
 
   useEffect(() => {
     if (!data) return;
@@ -342,35 +318,6 @@ export const ProductDetails: React.FC = () => {
   }, [data?.performanceCards, filteredReports, filteredUniqueDays]);
 
   const totalPages = Math.max(1, Math.ceil(filteredReports.length / pageSize));
-  const rawMaterialCost = useMemo(
-    () => productMaterials.reduce((sum, row) => sum + Number(row.quantityUsed || 0) * Number(row.unitCost || 0), 0),
-    [productMaterials],
-  );
-  const displayCostBreakdownRows = useMemo(() => {
-    if (!data) return [];
-    return data.costBreakdownRows.map((row) => {
-      if (row.id !== "r3") return row;
-      return {
-        ...row,
-        label: `تكلفة المواد الخام (${productMaterials.length} مادة)`,
-        value: `${arDecimal(rawMaterialCost)} ج.م`,
-      };
-    });
-  }, [data, productMaterials.length, rawMaterialCost]);
-  const displayGrandTotal = useMemo(() => {
-    if (!data) return "0.00";
-    const rowValueById = new Map(
-      displayCostBreakdownRows.map((row) => [row.id, parseMoneyValue(row.value)]),
-    );
-    const nextTotal =
-      Number(rowValueById.get("r1") || 0)
-      + Number(rowValueById.get("r3") || 0)
-      + Number(rowValueById.get("r4") || 0)
-      + Number(rowValueById.get("r5") || 0)
-      + Number(rowValueById.get("r6") || 0)
-      + Number(rowValueById.get("r7") || 0);
-    return arDecimal(Number.isFinite(nextTotal) ? Math.max(0, nextTotal) : 0);
-  }, [data, displayCostBreakdownRows]);
   const paginatedReports = useMemo(() => {
     const start = (page - 1) * pageSize;
     return filteredReports.slice(start, start + pageSize);
@@ -767,7 +714,7 @@ export const ProductDetails: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {displayCostBreakdownRows.map((row) => {
+                    {data.costBreakdownRows.map((row) => {
                       if (row.type === "section") {
                         return (
                           <tr key={row.id}>
@@ -804,7 +751,7 @@ export const ProductDetails: React.FC = () => {
 
               <div className="mt-3 rounded-lg bg-primary/10 p-3">
                 <p className="text-sm font-medium text-primary">إجمالي التكلفة المحسوبة (/قطعة)</p>
-                <p className="text-xl font-medium text-primary">{displayGrandTotal} ج.م</p>
+                <p className="text-xl font-medium text-primary">{data.grandTotal}</p>
                 <p className="mt-1 text-xs text-primary/90">
                   المعادلة: تكلفة الوحدة الصينية + المواد الخام + العلبة الداخلية + نصيب الكرتونة + التكاليف الصناعية المباشرة + التكاليف الصناعية غير المباشرة (بدون تحويل سعر اليوان).
                 </p>

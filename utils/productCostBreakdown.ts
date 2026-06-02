@@ -21,6 +21,8 @@ export interface ProductCostBreakdown {
   totalCalculatedCost: number;
 }
 
+export type ResolveProductMaterialUnitCost = (material: ProductMaterial) => number;
+
 /**
  * @param monthlyAvgUnitCost — the average unit cost from monthly_production_costs.
  *        This is used as productionOverheadShare automatically.
@@ -28,7 +30,8 @@ export interface ProductCostBreakdown {
 export function calculateProductCostBreakdown(
   product: FirestoreProduct,
   materials: ProductMaterial[],
-  monthlyAvgUnitCost: number = 0
+  monthlyAvgUnitCost: number = 0,
+  resolveMaterialUnitCost?: ResolveProductMaterialUnitCost,
 ): ProductCostBreakdown {
   const chineseUnitCost = product.chineseUnitCost ?? 0;
   const innerBoxCost = product.innerBoxCost ?? 0;
@@ -38,9 +41,11 @@ export function calculateProductCostBreakdown(
 
   const rawMaterialCost = materials.reduce((sum, m) => {
     const quantityUsed = Number(m.quantityUsed ?? 0);
-    const unitCost = Number(m.unitCost ?? 0);
+    const resolvedUnitCost = resolveMaterialUnitCost
+      ? Number(resolveMaterialUnitCost(m))
+      : Number(m.unitCost ?? 0);
     const safeQuantity = Number.isFinite(quantityUsed) ? quantityUsed : 0;
-    const safeUnitCost = Number.isFinite(unitCost) ? unitCost : 0;
+    const safeUnitCost = Number.isFinite(resolvedUnitCost) ? resolvedUnitCost : 0;
     return sum + (safeQuantity * safeUnitCost);
   }, 0);
 

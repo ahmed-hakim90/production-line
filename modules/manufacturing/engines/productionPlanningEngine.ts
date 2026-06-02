@@ -15,7 +15,7 @@ import {
   type BomExplosionContext,
   type ExplodedLeafLine,
 } from './bomExplosionEngine';
-import { calculateMaterialLineCost } from './materialCostEngine';
+import { calculateMaterialLineCost, type MaterialUnitCostResolver } from './materialCostEngine';
 import {
   resolveMaterialCategoryLabel,
   type MaterialRequirementDetailExportRow,
@@ -32,6 +32,7 @@ export type ProductionPlanningInput = {
   materialsById: Map<string, Material>;
   stockLookup: StockAvailabilityLookup;
   materialCategories?: MaterialCategory[];
+  resolveEffectiveUnitCost?: MaterialUnitCostResolver;
 };
 
 export type ProductionPlanningDetailInput = ProductionPlanningInput & {
@@ -61,6 +62,7 @@ export function generateMaterialRequirements(
     const cost = calculateMaterialLineCost({
       material,
       requiredQty: leaf.requiredQty,
+      resolveEffectiveUnitCost: args.resolveEffectiveUnitCost,
     });
 
     const requiredQty = leaf.requiredQty;
@@ -100,10 +102,24 @@ function detailRowFromLeaf(args: {
   productCategories: ProductCategory[];
   materialCategories?: MaterialCategory[];
   stockLookup: StockAvailabilityLookup;
+  resolveEffectiveUnitCost?: MaterialUnitCostResolver;
 }): MaterialRequirementDetailExportRow {
-  const { material, leaf, input, product, productCategories, materialCategories, stockLookup } = args;
+  const {
+    material,
+    leaf,
+    input,
+    product,
+    productCategories,
+    materialCategories,
+    stockLookup,
+    resolveEffectiveUnitCost,
+  } = args;
   const stock = stockLookup(leaf.materialId, material.legacyRawMaterialId);
-  const cost = calculateMaterialLineCost({ material, requiredQty: leaf.requiredQty });
+  const cost = calculateMaterialLineCost({
+    material,
+    requiredQty: leaf.requiredQty,
+    resolveEffectiveUnitCost,
+  });
   const requiredQty = leaf.requiredQty;
   const availableQty = stock.availableQty;
   const reservedQty = stock.reservedQty;
@@ -154,6 +170,7 @@ export function generateMaterialRequirementDetailRows(
           productCategories: args.productCategories,
           materialCategories: args.materialCategories,
           stockLookup: args.stockLookup,
+          resolveEffectiveUnitCost: args.resolveEffectiveUnitCost,
         }),
       );
     }

@@ -71,6 +71,17 @@ function ctxFromMaps(
   assert.equal(Math.round(breakdown.total), 26);
 }
 
+// Effective unit resolver: 10 base + 2 manufacturing = 12
+{
+  const breakdown = calculateMaterialLineCost({
+    material: makeMaterial('inject-part', { purchaseCost: 10, baseUnit: 'piece' }),
+    requiredQty: 1,
+    resolveEffectiveUnitCost: ({ purchaseCostPerBaseUnit }) => purchaseCostPerBaseUnit + 2,
+  });
+  assert.equal(Math.round(breakdown.purchaseComponent), 12);
+  assert.equal(Math.round(breakdown.total), 12);
+}
+
 // Nested semi-finished
 {
   const resin = makeMaterial('resin');
@@ -137,6 +148,28 @@ function ctxFromMaps(
   assert.equal(screw?.requiredQty, 4000);
   assert.equal(cable?.requiredQty, 250);
   assert.ok(totalEstimatedCost(lines) > 0);
+}
+
+// Resolver fallback in planning path
+{
+  const mat = makeMaterial('m-1', { baseUnit: 'piece', purchaseCost: 10 });
+  const bom: Bom = { id: 'b-main', ownerType: 'product', ownerId: 'p-main', version: 1, status: 'active' };
+  const ctx = ctxFromMaps(
+    [bom],
+    {
+      'b-main': [{ bomId: 'b-main', itemId: 'm-1', itemType: 'material', qtyPerUnit: 1, unit: 'piece' }],
+    },
+    [mat],
+  );
+  const lines = generateMaterialRequirements({
+    inputs: [{ ownerType: 'product', ownerId: 'p-main', quantity: 1 }],
+    explosionCtx: ctx,
+    materialsById: new Map([['m-1', mat]]),
+    stockLookup: () => ({ availableQty: 0, reservedQty: 0 }),
+    resolveEffectiveUnitCost: ({ purchaseCostPerBaseUnit }) => purchaseCostPerBaseUnit + 2,
+  });
+  assert.equal(lines.length, 1);
+  assert.equal(Math.round(lines[0].estimatedCost), 12);
 }
 
 console.log('manufacturing-engines.test.ts: all assertions passed');

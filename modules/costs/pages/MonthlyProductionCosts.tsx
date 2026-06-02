@@ -15,6 +15,12 @@ import { productMaterialService } from '../../production/services/productMateria
 import type { MonthlyProductionCost, ProductMaterial } from '../../../types';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import {
+  buildInternalMaterialLinkContext,
+  loadLatestManufacturingAverageByProduct,
+  resolveLinkedProductIdForMaterial,
+  resolveProductMaterialCosts,
+} from '../services/internalManufacturedMaterialCostService';
+import {
   buildManufacturingItemCodeMap,
   buildManufacturingItemNameMap,
   resolveManufacturingItemName,
@@ -274,6 +280,7 @@ export const MonthlyProductionCosts: React.FC = () => {
   const fetchRequestRef = useRef(0);
   const materialTotalCacheRef = useRef<Record<string, number>>({});
   const materialsListByProductCacheRef = useRef<Record<string, ProductMaterial[]>>({});
+  const manufacturingAvgCacheRef = useRef<Record<string, number>>({});
 
   useEffect(() => {
     mountedRef.current = true;
@@ -443,17 +450,47 @@ export const MonthlyProductionCosts: React.FC = () => {
       if (missingProductIds.length > 0) {
         try {
           const allMaterials = await productMaterialService.getAll();
+          const linkContext = buildInternalMaterialLinkContext(_rawProducts);
+          const linkedProductIds = new Set<string>();
+          allMaterials.forEach((material) => {
+            const linkedProductId = resolveLinkedProductIdForMaterial(material, linkContext);
+            if (linkedProductId) linkedProductIds.add(linkedProductId);
+          });
+
+          const missingLinkedProductIds = Array.from(linkedProductIds).filter(
+            (productId) => manufacturingAvgCacheRef.current[productId] === undefined,
+          );
+          if (missingLinkedProductIds.length > 0) {
+            const latestAvg = await loadLatestManufacturingAverageByProduct(missingLinkedProductIds);
+            latestAvg.forEach((avg, productId) => {
+              manufacturingAvgCacheRef.current[productId] = Number(avg || 0);
+            });
+          }
+
           const aggregated: Record<string, number> = {};
           const lists: Record<string, ProductMaterial[]> = {};
           allMaterials.forEach((material) => {
             const pid = String(material.productId || '');
             if (!pid) return;
-            aggregated[pid] = (aggregated[pid] || 0) + Number(material.quantityUsed || 0) * Number(material.unitCost || 0);
             if (!lists[pid]) lists[pid] = [];
             lists[pid].push(material);
           });
-          materialTotalCacheRef.current = aggregated;
-          materialsListByProductCacheRef.current = lists;
+          const manufacturingAvgByProductId = new Map<string, number>();
+          Object.entries(manufacturingAvgCacheRef.current).forEach(([productId, avg]) => {
+            manufacturingAvgByProductId.set(productId, Number(avg || 0));
+          });
+          const resolvedAggregated: Record<string, number> = {};
+          const resolvedLists: Record<string, ProductMaterial[]> = {};
+          Object.entries(lists).forEach(([pid, materials]) => {
+            const resolved = resolveProductMaterialCosts(materials, linkContext, manufacturingAvgByProductId);
+            resolvedAggregated[pid] = resolved.total;
+            resolvedLists[pid] = resolved.lines.map((line) => ({
+              ...line.material,
+              unitCost: line.resolvedUnitCost,
+            }));
+          });
+          materialTotalCacheRef.current = resolvedAggregated;
+          materialsListByProductCacheRef.current = resolvedLists;
         } catch {
           missingProductIds.forEach((pid) => {
             materialTotalCacheRef.current[pid] = materialTotalCacheRef.current[pid] ?? 0;
@@ -473,7 +510,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     };
     void loadMaterialTotals();
     return () => { cancelled = true; };
-  }, [records, month]);
+  }, [records, month, _rawProducts]);
 
   const handleCalculateAll = async () => {
     if (!laborSettings || allClosed) return;
@@ -1025,6 +1062,11 @@ export const MonthlyProductionCosts: React.FC = () => {
                 )}
               </>
             )}
+          </div>
+        )}
+        {records.length > 0 && (
+          <div className="px-4 pb-3 text-xs text-[var(--color-text-muted)]">
+            المواد المصنّعة داخليًا تُسعّر تلقائيًا كـ (سعر الأساس + آخر متوسط تكلفة تصنيع متاح).
           </div>
         )}
         <div className="overflow-x-auto erp-table-scroll">
