@@ -527,6 +527,19 @@ export const useProductDetail = (id?: string) => {
           hours: Number(row.workHours || 0),
         }));
 
+      const manufacturingCostReports = manufacturingReports.map((row: ProductionReport, idx) => ({
+        id: String(row.id || `${row.date}-${row.lineId}-${row.employeeId}-${idx}`),
+        date: row.date,
+        lineId: String(row.lineId || ""),
+        lineName: parseLineName(row.lineId, lineNameMap),
+        employeeId: String(row.employeeId || ""),
+        employeeName: parseEmployeeName(row.employeeId, employeeNameMap),
+        quantityProduced: Number(row.quantityProduced || 0),
+        workersCount: Number(row.workersCount || 0),
+        workHours: Number(row.workHours || 0),
+        reportType: row.reportType,
+      }));
+
       return {
         id,
         header: {
@@ -650,6 +663,7 @@ export const useProductDetail = (id?: string) => {
           waste: Number(row.waste || 0),
         })),
         detailedReports,
+        manufacturingCostReports,
       };
     },
     staleTime: 1000 * 30,

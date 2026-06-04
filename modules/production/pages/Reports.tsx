@@ -1527,6 +1527,35 @@ export const Reports: React.FC = () => {
     URL.revokeObjectURL(url);
   }, []);
 
+  const convertImageBlobToJpeg = useCallback(
+    async (blob: Blob, quality = 0.97): Promise<Blob | null> => {
+      const url = URL.createObjectURL(blob);
+      try {
+        const image = new Image();
+        image.decoding = 'async';
+        image.src = url;
+        await new Promise<void>((resolve, reject) => {
+          image.onload = () => resolve();
+          image.onerror = () => reject(new Error('Failed to decode report image.'));
+        });
+        const canvas = document.createElement('canvas');
+        canvas.width = image.naturalWidth || image.width;
+        canvas.height = image.naturalHeight || image.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return null;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(image, 0, 0);
+        return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
+      } catch {
+        return null;
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    },
+    [],
+  );
+
   const openWhatsAppTextFallback = useCallback(async (caption: string) => {
     const text = caption.trim();
     if (text) {
@@ -1552,40 +1581,52 @@ export const Reports: React.FC = () => {
         .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
         .replace(/\s+/g, '-')
         || 'RPT-NA';
+      const trimmedCaption = caption.trim();
       const fileName = `production-report-${safeReportNumber}.png`;
       const file = new File([blob], fileName, { type: 'image/png' });
-      const shareData: ShareData = { files: [file], title: reportNumber };
-      if (caption.trim()) shareData.text = caption.trim();
-
-      if (navigator.share && navigator.canShare?.({ files: [file] })) {
+      const copyCaption = async () => {
+        if (!trimmedCaption) return;
         try {
-          await navigator.share(shareData);
-          return { method: 'native_share', copied: false };
+          await navigator.clipboard?.writeText(trimmedCaption);
+        } catch {
+          /* The image share is the important part; caption can be copied manually. */
+        }
+      };
+      const shareFileOnly = async (shareFile: File): Promise<ShareResult | null> => {
+        if (!navigator.share || !navigator.canShare?.({ files: [shareFile] })) return null;
+        await copyCaption();
+        try {
+          await navigator.share({ files: [shareFile], title: reportNumber });
+          return {
+            method: 'native_share',
+            copied: false,
+            ...(trimmedCaption ? { captionCopied: true } : {}),
+          };
         } catch (error: unknown) {
           if (error instanceof DOMException && error.name === 'AbortError') {
             return { method: 'cancelled', copied: false };
           }
-          if (caption.trim()) {
-            try {
-              await navigator.share({ files: [file], title: reportNumber });
-              try {
-                await navigator.clipboard?.writeText(caption.trim());
-              } catch {
-                /* ignore */
-              }
-              return { method: 'native_share', copied: true, captionCopied: true };
-            } catch {
-              /* Fall through to the download + WhatsApp text fallback. */
-            }
-          }
+          return null;
         }
+      };
+
+      const pngResult = await shareFileOnly(file);
+      if (pngResult) return pngResult;
+
+      const jpgBlob = await convertImageBlobToJpeg(blob);
+      const jpgFile = jpgBlob
+        ? new File([jpgBlob], `production-report-${safeReportNumber}.jpg`, { type: 'image/jpeg' })
+        : null;
+      if (jpgFile) {
+        const jpgResult = await shareFileOnly(jpgFile);
+        if (jpgResult) return jpgResult;
       }
 
       downloadShareImage(blob, fileName);
       await openWhatsAppTextFallback(caption);
       return { method: 'download_only', copied: false };
     },
-    [downloadShareImage, openWhatsAppTextFallback],
+    [convertImageBlobToJpeg, downloadShareImage, openWhatsAppTextFallback],
   );
 
   const triggerSingleShare = useCallback(

@@ -91,6 +91,20 @@ export interface DetailedReportRow {
   hours: number;
 }
 
+/** Manufacturing reports for this product (used for period cost filters on the page). */
+export interface ManufacturingCostReportRow {
+  id: string;
+  date: string;
+  lineId: string;
+  lineName: string;
+  employeeId: string;
+  employeeName: string;
+  quantityProduced: number;
+  workersCount: number;
+  workHours: number;
+  reportType?: string;
+}
+
 export interface ProductDetailData {
   id: string;
   header: ProductHeaderData;
@@ -114,4 +128,5 @@ export interface ProductDetailData {
   unitCostTrend: UnitCostPoint[];
   productionLog: ProductionLogPoint[];
   detailedReports: DetailedReportRow[];
+  manufacturingCostReports: ManufacturingCostReportRow[];
 }

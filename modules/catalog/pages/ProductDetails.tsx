@@ -28,7 +28,13 @@ import {
 } from "recharts";
 import { useProductDetail } from "./hooks/useProductDetail";
 import { ProductBomSection } from "@/modules/manufacturing/components/ProductBomSection";
-import { useAppStore } from "@/store/useAppStore";
+import { useAppStore, useShallowStore } from "@/store/useAppStore";
+import type { ProductionReport } from "@/types";
+import {
+  buildProductCostByLine,
+  computeLiveProductCosts,
+  formatCost,
+} from "@/utils/costCalculations";
 import { IndirectCostCards } from "@/src/components/erp/IndirectCostCards";
 import { useGlobalModalManager } from "../../../components/modal-manager/GlobalModalManager";
 import { MODAL_KEYS } from "../../../components/modal-manager/modalKeys";
@@ -172,6 +178,27 @@ export const ProductDetails: React.FC = () => {
   const { can } = usePermission();
   const canManageMaterials = can("costs.manage") || can("products.edit");
   const { data, isLoading, isError } = useProductDetail(id);
+  const {
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    laborSettings,
+    assets,
+    assetDepreciations,
+    systemSettings,
+    _rawProducts,
+    _rawEmployees,
+  } = useShallowStore((s) => ({
+    costCenters: s.costCenters,
+    costCenterValues: s.costCenterValues,
+    costAllocations: s.costAllocations,
+    laborSettings: s.laborSettings,
+    assets: s.assets,
+    assetDepreciations: s.assetDepreciations,
+    systemSettings: s.systemSettings,
+    _rawProducts: s._rawProducts,
+    _rawEmployees: s._rawEmployees,
+  }));
   const [sectionReady, setSectionReady] = useState<Record<SectionKey, boolean>>({
     header: false,
     filters: false,
@@ -252,13 +279,136 @@ export const ProductDetails: React.FC = () => {
     });
   }, [data?.productionLog, fromDate, toDate, allowedDatesByFilters]);
 
-  const filteredProductionByLine = useMemo(() => {
-    const lines = data?.productionByLine ?? [];
-    if (lineFilter === "كل الخطوط") {
-      return lines;
+  const filteredManufacturingReports = useMemo((): ProductionReport[] => {
+    if (!id || !data?.manufacturingCostReports) return [];
+    return data.manufacturingCostReports
+      .filter((row) => {
+        const matchesLine = lineFilter === "كل الخطوط" || row.lineName === lineFilter;
+        const matchesSupervisor =
+          supervisorFilter === "كل المشرفين" || row.employeeName === supervisorFilter;
+        const matchesFrom = !fromDate || row.date >= fromDate;
+        const matchesTo = !toDate || row.date <= toDate;
+        return matchesLine && matchesSupervisor && matchesFrom && matchesTo;
+      })
+      .map((row) => ({
+        id: row.id,
+        employeeId: row.employeeId,
+        productId: id,
+        lineId: row.lineId,
+        date: row.date,
+        quantityProduced: row.quantityProduced,
+        workersCount: row.workersCount,
+        workHours: row.workHours,
+        reportType: row.reportType as ProductionReport["reportType"],
+      }));
+  }, [data?.manufacturingCostReports, id, lineFilter, supervisorFilter, fromDate, toDate]);
+
+  const periodCostStats = useMemo(() => {
+    if (!id || filteredManufacturingReports.length === 0) {
+      return { quantity: 0, totalCost: 0, unitCost: 0, directCost: 0, indirectCost: 0 };
     }
-    return lines.filter((line) => line.lineName === lineFilter);
-  }, [data?.productionByLine, lineFilter]);
+    const productCategoryById = new Map(
+      _rawProducts.map((row) => [
+        String(row.id || ""),
+        String(row.model || row.categoryName || ""),
+      ]),
+    );
+    const supervisorHourlyRates = new Map<string, number>();
+    _rawEmployees.forEach((employee) => {
+      if (!employee.id) return;
+      supervisorHourlyRates.set(String(employee.id), Number(employee.hourlyRate || 0));
+    });
+    const live = computeLiveProductCosts(
+      filteredManufacturingReports,
+      laborSettings?.hourlyRate ?? 0,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      {
+        assets,
+        assetDepreciations,
+        productCategoryById,
+        supervisorHourlyRates,
+        workingDaysByMonth: systemSettings.costMonthlyWorkingDays,
+      },
+    );
+    const productCost = live.byProduct[id] || {
+      laborCost: 0,
+      indirectCost: 0,
+      totalCost: 0,
+      quantityProduced: 0,
+      costPerUnit: 0,
+    };
+    const qty = Number(productCost.quantityProduced || 0);
+    return {
+      quantity: qty,
+      totalCost: Number(productCost.totalCost || 0),
+      unitCost: qty > 0 ? Number(productCost.totalCost || 0) / qty : 0,
+      directCost: Number(productCost.laborCost || 0),
+      indirectCost: Number(productCost.indirectCost || 0),
+    };
+  }, [
+    id,
+    filteredManufacturingReports,
+    laborSettings,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    assets,
+    assetDepreciations,
+    systemSettings.costMonthlyWorkingDays,
+    _rawProducts,
+    _rawEmployees,
+  ]);
+
+  const periodCostLabel = useMemo(() => {
+    if (fromDate && toDate) return `${fromDate} → ${toDate}`;
+    if (fromDate) return `من ${fromDate}`;
+    if (toDate) return `حتى ${toDate}`;
+    return data?.monthlyCostDate || "الفترة المحددة";
+  }, [fromDate, toDate, data?.monthlyCostDate]);
+
+  const filteredProductionByLine = useMemo(() => {
+    if (!id || filteredManufacturingReports.length === 0) return [];
+    const rows = buildProductCostByLine(
+      id,
+      filteredManufacturingReports,
+      laborSettings?.hourlyRate ?? 0,
+      costCenters,
+      costCenterValues,
+      costAllocations,
+      (lineId) =>
+        data?.manufacturingCostReports.find((r) => r.lineId === lineId)?.lineName || lineId,
+    );
+    let bestLineId: string | null = null;
+    let bestUnit = Number.POSITIVE_INFINITY;
+    rows.forEach((row) => {
+      if (row.totalProduced > 0 && row.costPerUnit < bestUnit) {
+        bestUnit = row.costPerUnit;
+        bestLineId = row.lineId;
+      }
+    });
+    return rows
+      .filter((row) => lineFilter === "كل الخطوط" || row.lineName === lineFilter)
+      .sort((a, b) => b.totalProduced - a.totalProduced)
+      .map((row) => ({
+        id: row.lineId,
+        lineName: row.lineName,
+        producedQty: Number(row.totalProduced || 0),
+        totalCost: Number(row.totalCost || 0),
+        unitCost: Number(row.costPerUnit || 0),
+        isBest: bestLineId != null && row.lineId === bestLineId,
+      }));
+  }, [
+    id,
+    filteredManufacturingReports,
+    laborSettings,
+    costCenters,
+    costCenterValues,
+    costAllocations,
+    data?.manufacturingCostReports,
+    lineFilter,
+  ]);
 
   const pageSize = 10;
   const filteredUniqueDays = useMemo(() => new Set(filteredReports.map((row) => row.date)).size, [filteredReports]);
@@ -670,10 +820,32 @@ export const ProductDetails: React.FC = () => {
             <Card className={cn("overflow-hidden p-0 shadow-none", NESTED_TILE)}>
               <CardContent className="p-4">
                 <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">متوسط تكلفة الإنتاج الشهري</h3>
-                  <span className="text-xs font-medium text-slate-600 dark:text-muted-foreground">{data.monthlyCostDate}</span>
+                  <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">متوسط تكلفة الإنتاج للفترة</h3>
+                  <span className="text-xs font-medium text-slate-600 dark:text-muted-foreground">{periodCostLabel}</span>
                 </div>
                 <div className="grid grid-cols-1 gap-2">
+                  <div className="space-y-1 rounded-lg p-3" style={{ background: "rgb(var(--color-primary) / 0.12)" }}>
+                    <p className="text-xs font-medium text-foreground">الفترة المحددة (من الفلاتر)</p>
+                    {periodCostStats.quantity > 0 ? (
+                      <>
+                        <p className="text-sm font-medium text-foreground">
+                          {arDecimal(periodCostStats.unitCost)} ج.م/وحدة
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          إجمالي {arNumber(periodCostStats.totalCost)} ج.م
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          {arNumber(periodCostStats.quantity)} وحدة منتجة
+                        </p>
+                        <p className="text-xs text-muted-foreground">
+                          مباشر {formatCost(periodCostStats.quantity > 0 ? periodCostStats.directCost / periodCostStats.quantity : 0)} / غ.مباشر{" "}
+                          {formatCost(periodCostStats.quantity > 0 ? periodCostStats.indirectCost / periodCostStats.quantity : 0)} ج.م للوحدة
+                        </p>
+                      </>
+                    ) : (
+                      <p className="text-sm text-muted-foreground">لا يوجد إنتاج في الفترة المحددة</p>
+                    )}
+                  </div>
                   {data.monthlyCostColumns.map((column) => (
                     <div key={column.id} className="space-y-1 rounded-lg p-3" style={{ background: column.bgColor }}>
                       <p className="text-xs font-medium text-foreground">{column.title}</p>
@@ -765,13 +937,25 @@ export const ProductDetails: React.FC = () => {
             <div className="mt-6 border-t border-border pt-6">
               <h3 className="mb-3 text-sm font-semibold text-slate-900 dark:text-foreground">ملخص التكلفة والتوقعات</h3>
               <div className="grid grid-cols-1 gap-3 md:grid-cols-2 lg:grid-cols-4">
-                {data.costSummaryItems.map((item) => (
+                {data.costSummaryItems.map((item) => {
+                  const value =
+                    item.id === "cs1" && periodCostStats.quantity > 0
+                      ? `${formatCost(periodCostStats.unitCost)} ج.م/وحدة`
+                      : item.id === "cs2" && periodCostStats.quantity > 0
+                        ? `${formatCost(periodCostStats.totalCost)} ج.م`
+                        : item.value;
+                  const subtitle =
+                    item.id === "cs1" && periodCostStats.quantity > 0
+                      ? `للفترة ${periodCostLabel}`
+                      : item.subtitle;
+                  return (
                   <div key={item.id} className="rounded-lg border border-border p-3" style={{ background: item.bgColor }}>
                     <p className="text-xs text-muted-foreground">{item.title}</p>
-                    <p className="text-lg font-medium text-foreground">{item.value}</p>
-                    {item.subtitle && <p className="text-xs text-muted-foreground">{item.subtitle}</p>}
+                    <p className="text-lg font-medium text-foreground">{value}</p>
+                    {subtitle && <p className="text-xs text-muted-foreground">{subtitle}</p>}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           </>

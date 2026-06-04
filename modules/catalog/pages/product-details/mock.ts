@@ -154,6 +154,7 @@ export const PRODUCT_DETAIL_MOCK: ProductDetailData = {
     { id: "d11", date: "2026-03-04", line: "خط انتاج 5", employee: "رامى ابراهيم اسكندر ابراهيم", quantity: 355, waste: 0, workers: 20, hours: 6 },
     { id: "d12", date: "2026-03-03", line: "خط انتاج 6", employee: "محمد السيد جوده", quantity: 390, waste: 0, workers: 17, hours: 6 },
   ],
+  manufacturingCostReports: [],
 };
 
 export const getMockProductDetail = async (id?: string): Promise<ProductDetailData> => {
