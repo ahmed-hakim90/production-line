@@ -527,77 +527,125 @@ export function getShareResultFeedbackMessage(
 
 const MOBILE_SHARE_JPEG_QUALITY = 0.97;
 
-export const shareToWhatsApp = async (
-  el: HTMLElement,
+const convertImageBlobToJpeg = async (
+  blob: Blob,
+  quality = MOBILE_SHARE_JPEG_QUALITY,
+): Promise<Blob | null> => {
+  const url = URL.createObjectURL(blob);
+  try {
+    const image = new Image();
+    image.decoding = 'async';
+    image.src = url;
+    await new Promise<void>((resolve, reject) => {
+      image.onload = () => resolve();
+      image.onerror = () => reject(new Error('Failed to decode report image.'));
+    });
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth || image.width;
+    canvas.height = image.naturalHeight || image.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return null;
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(image, 0, 0);
+    return await canvasToBlob(canvas, 'image/jpeg', quality);
+  } catch {
+    return null;
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+};
+
+/**
+ * Share a ready-made image blob via the OS sheet (WhatsApp, etc.).
+ * Falls back to download + open WhatsApp without a text-only deep link (avoids caption-without-image).
+ */
+export const shareImageBlobToWhatsApp = async (
+  imageBlob: Blob,
   title: string,
-  options?: ShareToWhatsAppOptions,
+  options?: { caption?: string },
 ): Promise<ShareResult> => {
-  const { caption, ...captureOptions } = options ?? {};
-  const canvas = await capture(el, captureOptions);
-  const pngBlob = await canvasToBlob(canvas, 'image/png');
   const fileBaseName = toSafeFileBaseName(title);
+  const trimmedCaption = options?.caption?.trim();
 
   const tryNativeShare = async (file: File): Promise<ShareResult | null> => {
     if (!navigator.share) return null;
-    const trimmedCaption = caption?.trim();
-    const shareData: ShareData = { files: [file], title };
-    if (trimmedCaption) shareData.text = trimmedCaption;
 
-    const shareFilesOnly = (): ShareData => ({ files: [file], title });
+    const shareWithCaption: ShareData = { files: [file], title };
+    if (trimmedCaption) shareWithCaption.text = trimmedCaption;
+    const shareFilesOnly: ShareData = { files: [file], title };
+
+    const attemptShare = async (shareData: ShareData): Promise<boolean> => {
+      try {
+        /**
+         * Android Chrome often reports `canShare({ files })` as false even when `share()` works.
+         * On mobile always attempt; on desktop skip only when canShare explicitly rejects files.
+         */
+        if (
+          navigator.canShare &&
+          !navigator.canShare(shareData) &&
+          !isMobile()
+        ) {
+          return false;
+        }
+        await navigator.share(shareData);
+        return true;
+      } catch (err: unknown) {
+        if (err instanceof DOMException && err.name === 'AbortError') {
+          throw err;
+        }
+        return false;
+      }
+    };
 
     try {
-      /**
-       * Android Chrome often reports `canShare({ files, text })` as false even when
-       * `share()` succeeds — only bail out when there is no caption to justify a blind try.
-       */
-      if (navigator.canShare && !navigator.canShare(shareData) && !trimmedCaption) {
+      if (await attemptShare(shareWithCaption)) {
+        return { method: 'native_share', copied: false };
+      }
+      if (trimmedCaption) {
+        if (await attemptShare(shareFilesOnly)) {
+          try {
+            await navigator.clipboard?.writeText(trimmedCaption);
+          } catch {
+            /* ignore */
+          }
+          return { method: 'native_share', copied: true, captionCopied: true };
+        }
         return null;
       }
-      await navigator.share(shareData);
-      return { method: 'native_share', copied: false };
+      if (await attemptShare(shareFilesOnly)) {
+        return { method: 'native_share', copied: false };
+      }
+      return null;
     } catch (err: unknown) {
       if (err instanceof DOMException && err.name === 'AbortError') {
         return { method: 'cancelled', copied: false };
       }
-      if (!trimmedCaption) return null;
-      try {
-        const filesOnly = shareFilesOnly();
-        if (navigator.canShare && !navigator.canShare(filesOnly)) return null;
-        await navigator.share(filesOnly);
-        try {
-          await navigator.clipboard?.writeText(trimmedCaption);
-        } catch {
-          /* ignore */
-        }
-        return { method: 'native_share', copied: true, captionCopied: true };
-      } catch {
-        return null;
-      }
+      return null;
     }
   };
 
-  const pngFile = new File([pngBlob], `${fileBaseName}.png`, { type: 'image/png' });
+  const pngFile = new File([imageBlob], `${fileBaseName}.png`, { type: 'image/png' });
 
-  // Mobile: prefer PNG for sharp borders/text; fall back to high-quality JPEG if share target rejects PNG
   if (isMobile()) {
     const pngShare = await tryNativeShare(pngFile);
     if (pngShare) return pngShare;
-    const jpgBlob = await canvasToBlob(canvas, 'image/jpeg', MOBILE_SHARE_JPEG_QUALITY);
-    const jpgFile = new File([jpgBlob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
-    const jpgShare = await tryNativeShare(jpgFile);
-    if (jpgShare) return jpgShare;
+    const jpgBlob = await convertImageBlobToJpeg(imageBlob);
+    if (jpgBlob) {
+      const jpgFile = new File([jpgBlob], `${fileBaseName}.jpg`, { type: 'image/jpeg' });
+      const jpgShare = await tryNativeShare(jpgFile);
+      if (jpgShare) return jpgShare;
+    }
   } else {
     const desktopResult = await tryNativeShare(pngFile);
     if (desktopResult) return desktopResult;
   }
 
   const isMobileDevice = isMobile();
-  downloadBlob(pngBlob, `${fileBaseName}.png`);
+  downloadBlob(imageBlob, `${fileBaseName}.png`);
 
   let copied = false;
-  const trimmedCaption = caption?.trim();
-
-  if (isMobileDevice && trimmedCaption) {
+  if (trimmedCaption) {
     try {
       await navigator.clipboard?.writeText(trimmedCaption);
       copied = true;
@@ -614,12 +662,12 @@ export const shareToWhatsApp = async (
     try {
       if (navigator.clipboard?.write) {
         await navigator.clipboard.write([
-          new ClipboardItem({ 'image/png': pngBlob }),
+          new ClipboardItem({ 'image/png': imageBlob }),
         ]);
         copied = true;
       }
     } catch {
-      // Clipboard write not supported
+      /* Clipboard write not supported */
     }
     window.open('https://web.whatsapp.com/', '_blank');
   }
@@ -627,6 +675,17 @@ export const shareToWhatsApp = async (
   return {
     method: copied ? 'clipboard_and_download' : 'download_only',
     copied,
-    ...(isMobileDevice && trimmedCaption && copied ? { captionCopied: true } : {}),
+    ...(trimmedCaption && copied ? { captionCopied: true } : {}),
   };
+};
+
+export const shareToWhatsApp = async (
+  el: HTMLElement,
+  title: string,
+  options?: ShareToWhatsAppOptions,
+): Promise<ShareResult> => {
+  const { caption, ...captureOptions } = options ?? {};
+  const canvas = await capture(el, captureOptions);
+  const pngBlob = await canvasToBlob(canvas, 'image/png');
+  return shareImageBlobToWhatsApp(pngBlob, title, { caption });
 };

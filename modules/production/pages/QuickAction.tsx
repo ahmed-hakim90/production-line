@@ -8,6 +8,7 @@ import {
   exportAsImage,
   exportToPDF,
   getShareResultFeedbackMessage,
+  shareImageBlobToWhatsApp,
   waitForExportPaint,
   ShareResult,
 } from '../../../utils/reportExport';
@@ -614,125 +615,16 @@ export const QuickAction: React.FC = () => {
     setTimeout(() => setShareToast(null), 8000);
   };
 
-  const downloadShareImage = (blob: Blob, fileName: string) => {
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement('a');
-    anchor.href = url;
-    anchor.download = fileName;
-    document.body.appendChild(anchor);
-    anchor.click();
-    anchor.remove();
-    URL.revokeObjectURL(url);
-  };
-
-  const convertImageBlobToJpeg = async (blob: Blob, quality = 0.97): Promise<Blob | null> => {
-    const url = URL.createObjectURL(blob);
-    try {
-      const image = new Image();
-      image.decoding = 'async';
-      image.src = url;
-      await new Promise<void>((resolve, reject) => {
-        image.onload = () => resolve();
-        image.onerror = () => reject(new Error('Failed to decode report image.'));
-      });
-      const canvas = document.createElement('canvas');
-      canvas.width = image.naturalWidth || image.width;
-      canvas.height = image.naturalHeight || image.height;
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return null;
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(image, 0, 0);
-      return await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/jpeg', quality));
-    } catch {
-      return null;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  };
-
-  const openWhatsAppTextFallback = async (caption: string) => {
-    const text = caption.trim();
-    if (text) {
-      try {
-        await navigator.clipboard?.writeText(text);
-      } catch {
-        /* Opening WhatsApp with encoded text is still a useful fallback. */
-      }
-    }
-    const encoded = encodeURIComponent(text);
-    const mobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    if (mobile) {
-      window.location.href = encoded ? `whatsapp://send?text=${encoded}` : 'whatsapp://send';
-      return;
-    }
-    window.open(encoded ? `https://web.whatsapp.com/send?text=${encoded}` : 'https://web.whatsapp.com/', '_blank');
-  };
-
   const reportNumberOf = (report: ReportPrintRow) =>
     report.reportCode?.trim()
       || (report.reportId ? `RPT-${report.reportId.slice(-6).toUpperCase()}` : 'RPT-NA');
-
-  const shareProductionReportImage = async (
-    blob: Blob,
-    reportNumber: string,
-    caption: string,
-  ): Promise<ShareResult> => {
-    const safeReportNumber = (reportNumber || 'RPT-NA')
-      .trim()
-      .replace(/[<>:"/\\|?*\u0000-\u001F]/g, '')
-      .replace(/\s+/g, '-')
-      || 'RPT-NA';
-    const fileName = `production-report-${safeReportNumber}.png`;
-    const file = new File([blob], fileName, { type: 'image/png' });
-    const trimmedCaption = caption.trim();
-    const copyCaption = async () => {
-      if (!trimmedCaption) return;
-      try {
-        await navigator.clipboard?.writeText(trimmedCaption);
-      } catch {
-        /* The image share is the important part; caption can be copied manually. */
-      }
-    };
-    const shareFileOnly = async (shareFile: File): Promise<ShareResult | null> => {
-      if (!navigator.share || !navigator.canShare?.({ files: [shareFile] })) return null;
-      await copyCaption();
-      try {
-        await navigator.share({ files: [shareFile], title: reportNumber });
-        return {
-          method: 'native_share',
-          copied: false,
-          ...(trimmedCaption ? { captionCopied: true } : {}),
-        };
-      } catch (error: unknown) {
-        if (error instanceof DOMException && error.name === 'AbortError') {
-          return { method: 'cancelled', copied: false };
-        }
-        return null;
-      }
-    };
-
-    const pngResult = await shareFileOnly(file);
-    if (pngResult) return pngResult;
-
-    const jpgBlob = await convertImageBlobToJpeg(blob);
-    const jpgFile = jpgBlob
-      ? new File([jpgBlob], `production-report-${safeReportNumber}.jpg`, { type: 'image/jpeg' })
-      : null;
-    if (jpgFile) {
-      const jpgResult = await shareFileOnly(jpgFile);
-      if (jpgResult) return jpgResult;
-    }
-
-    downloadShareImage(blob, fileName);
-    await openWhatsAppTextFallback(caption);
-    return { method: 'download_only', copied: false };
-  };
 
   const handleShareWhatsApp = async () => {
     if (!printReport) return;
     if (shareWhatsAppLockRef.current) return;
     shareWhatsAppLockRef.current = true;
+    setExporting(true);
+    setSharingImage(true);
     const packagingShareMulti = printReport.sourceReportType === 'packaging'
       && (printReport.packagingPrintLines?.length ?? 0) > 1;
     const variance = computeProductionReportStandardQtyVariance({
@@ -754,25 +646,33 @@ export const QuickAction: React.FC = () => {
         : {}),
     };
     const caption = formatProductionReportShareCaption(rowForShare, printTemplate);
+    const reportNumber = reportNumberOf(rowForShare);
     flushSync(() => {
       setShareCardRow(rowForShare);
     });
-    await waitForExportPaint(150);
-    if (!shareCardRef.current) {
-      setShareCardRow(null);
-      shareWhatsAppLockRef.current = false;
-      return;
-    }
-    setExporting(true);
-    setSharingImage(true);
     try {
-      const blob = await exportNodeToPng(shareCardRef.current);
-      const result = await shareProductionReportImage(blob, reportNumberOf(rowForShare), caption);
+      await waitForExportPaint(250);
+      if (!shareCardRef.current) {
+        setShareToast('تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.');
+        setTimeout(() => setShareToast(null), 8000);
+        return;
+      }
+      const blob = await Promise.race([
+        exportNodeToPng(shareCardRef.current),
+        new Promise<never>((_, reject) => {
+          setTimeout(() => reject(new Error('capture_timeout')), 20000);
+        }),
+      ]);
+      const result = await shareImageBlobToWhatsApp(blob, `production-report-${reportNumber}`, { caption });
       showShareFeedback(result);
     } catch (error: unknown) {
-      const err = error as { name?: string };
+      const err = error as { name?: string; message?: string };
       if (err?.name !== 'AbortError') {
-        setShareToast('تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.');
+        setShareToast(
+          err?.message === 'capture_timeout'
+            ? 'استغرق تجهيز الصورة وقتاً طويلاً. حاول مرة أخرى.'
+            : 'تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.',
+        );
         setTimeout(() => setShareToast(null), 8000);
       }
     } finally {
