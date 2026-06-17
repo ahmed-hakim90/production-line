@@ -132,7 +132,11 @@ import {
 import { eventBus, SystemEvents } from '../shared/events';
 import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
-import { REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
+import { REPORT_DUPLICATE_MESSAGE, INJECTION_REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
+import {
+  isDuplicateProductionReport,
+  normalizeInjectionShift,
+} from '../modules/production/utils/injectionReportShift';
 import {
   buildProductionReportCostSnapshotPatch,
   buildSupervisorHourlyRatesMap,
@@ -3120,6 +3124,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         { ...data, componentScrapItems } as Omit<ProductionReport, 'id' | 'createdAt'>,
         getUnitsPerCarton,
       );
+      if (reportType === 'component_injection') {
+        savePayload.shift = normalizeInjectionShift((data as ProductionReport).shift);
+      } else {
+        delete savePayload.shift;
+      }
 
       if (Number(savePayload.quantityProduced || 0) <= 0 || Number(savePayload.workHours || 0) <= 0) {
         const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة وساعات عمل.';
@@ -3147,15 +3156,20 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (reportType !== 'packaging') {
         const sameDayReports = await reportService.getByDateRange(savePayload.date, savePayload.date);
-        const hasDuplicate = sameDayReports.some(
-          (r) =>
-            r.lineId === savePayload.lineId &&
-            r.employeeId === savePayload.employeeId &&
-            r.productId === savePayload.productId &&
-            resolveReportType(r.reportType) === reportType,
-        );
+        const duplicateCandidate = {
+          ...savePayload,
+          reportType,
+          shift: reportType === 'component_injection'
+            ? normalizeInjectionShift((data as ProductionReport).shift)
+            : undefined,
+        };
+        const hasDuplicate = sameDayReports.some((r) => isDuplicateProductionReport(r, duplicateCandidate));
         if (hasDuplicate) {
-          set({ error: REPORT_DUPLICATE_MESSAGE });
+          set({
+            error: reportType === 'component_injection'
+              ? INJECTION_REPORT_DUPLICATE_MESSAGE
+              : REPORT_DUPLICATE_MESSAGE,
+          });
           return null;
         }
       }
@@ -3533,6 +3547,13 @@ export const useAppStore = create<AppState>((set, get) => ({
         throw new Error(msg);
       }
       let updatePayload: Partial<ProductionReport> = { ...data };
+      if (nextReportType === 'component_injection') {
+        updatePayload.shift = normalizeInjectionShift(
+          (data.shift ?? existingReport?.shift) as ProductionReport['shift'],
+        );
+      } else {
+        delete updatePayload.shift;
+      }
       if (nextReportType === 'packaging') {
         updatePayload.componentScrapItems = [];
         const { id: _rid, createdAt: _rca, ...existingBody } = (existingReport || {}) as ProductionReport;

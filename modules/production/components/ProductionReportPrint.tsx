@@ -14,6 +14,7 @@ import { cn } from '@/lib/utils';
 import type { ShareStandardVarianceTone } from '../../../utils/productionReportStandardVariance';
 import { shareVarianceTailwindToneClass } from '../../../utils/productionReportStandardVariance';
 import { resolveReportType } from '../utils/reportTypes';
+import { getInjectionShiftLabel } from '../utils/injectionReportShift';
 
 export type { ShareStandardVarianceTone };
 
@@ -22,6 +23,8 @@ export interface ReportPrintRow {
   reportCode?: string;
   /** When set, drives print headings (production / injection / packaging). */
   sourceReportType?: ProductionReport['reportType'];
+  /** Injection reports only. */
+  shift?: ProductionReport['shift'];
   date: string;
   lineName: string;
   productName: string;
@@ -125,6 +128,7 @@ export const mapReportsToPrintRows = (
       reportId: r.id,
       reportCode: r.reportCode,
       sourceReportType: r.reportType,
+      shift: r.shift,
       lineName: lookups.getLineName(r.lineId),
       productName: lookups.getProductName(r.productId, r.reportType),
       employeeName: lookups.getEmployeeName(r.employeeId),
@@ -475,6 +479,9 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
     const laborDistributionValue = `إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`;
     const detailSectionRows = [
       { label: 'ساعات العمل', value: `${fmtNum(report.workHours, dp)} ساعات` },
+      ...(rt === 'component_injection'
+        ? [{ label: 'الوردية', value: getInjectionShiftLabel(report.shift) }]
+        : []),
       ...(hideWasteUi ? [] : [{ label: 'نسبة الهالك', value: `${wasteRatio}%` }]),
       ...(rt === 'packaging'
         ? []

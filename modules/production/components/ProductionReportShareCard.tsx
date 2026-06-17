@@ -5,6 +5,7 @@ import {
   totalWorkersForPrintRow,
   type ReportPrintRow,
 } from './ProductionReportPrint';
+import { getInjectionShiftLabel } from '../utils/injectionReportShift';
 
 export interface ProductionReportShareCardProps {
   report: ReportPrintRow;
@@ -267,6 +268,9 @@ export function ProductionReportShareCard({
         </h2>
         <div style={{ ...baseText, borderTop: '1px solid #e5e7eb' }}>
           <DetailRow label="ساعات العمل" value={`${formatNumber(report.workHours, 2)} ساعة`} ltr />
+          {report.sourceReportType === 'component_injection' ? (
+            <DetailRow label="الوردية" value={getInjectionShiftLabel(report.shift)} />
+          ) : null}
           <DetailRow label="توزيع العمالة" value={`إنتاج ${report.workersProductionCount ?? 0} | تغليف ${report.workersPackagingCount ?? 0} | جودة ${report.workersQualityCount ?? 0} | صيانة ${report.workersMaintenanceCount ?? 0} | خارجية ${report.workersExternalCount ?? 0}`} ltr />
           {report.sourceReportType !== 'packaging' && report.sourceReportType !== 'component_injection' ? (
             <DetailRow label="الهالك" value={`${formatNumber(report.wasteQuantity)} وحدة`} ltr />

@@ -22,8 +22,13 @@ import {
   buildShareStandardVarianceBanner,
   computeProductionReportStandardQtyVariance,
 } from '../../../utils/productionReportStandardVariance';
-import type { LineWorkerAssignment, PackagingReportLine, ProductionReport, ReportComponentScrapItem } from '../../../types';
+import type { LineWorkerAssignment, PackagingReportLine, ProductionReport, ProductionReportShift, ReportComponentScrapItem } from '../../../types';
 import { resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
+import {
+  DEFAULT_INJECTION_SHIFT,
+  INJECTION_SHIFT_OPTIONS,
+  normalizeInjectionShift,
+} from '../utils/injectionReportShift';
 import { canonicalPackagingLine, effectivePackagingPieces, isPackagingLineId } from '../utils/packagingLine';
 import { ProductionLineStatus } from '../../../types';
 import {
@@ -84,6 +89,7 @@ export const QuickAction: React.FC = () => {
   const [workersMaintenance, setWorkersMaintenance] = useState('');
   const [workersExternal, setWorkersExternal] = useState('');
   const [injectionWorkersCount, setInjectionWorkersCount] = useState('');
+  const [injectionShift, setInjectionShift] = useState<ProductionReportShift>(DEFAULT_INJECTION_SHIFT);
   const [packagingWorkersCount, setPackagingWorkersCount] = useState('');
   const [packagingLines, setPackagingLines] = useState<PackagingReportLine[]>([]);
   const [hours, setHours] = useState('');
@@ -506,6 +512,7 @@ export const QuickAction: React.FC = () => {
       workHours: Number(hours),
       notes: notes.trim(),
       componentScrapItems: reportType === 'packaging' ? [] : componentScrapItems,
+      ...(reportType === 'component_injection' ? { shift: normalizeInjectionShift(injectionShift) } : {}),
     };
 
     const id = await createReport(data);
@@ -530,6 +537,7 @@ export const QuickAction: React.FC = () => {
         reportCode: saved?.reportCode,
         date: today,
         sourceReportType: resolveReportType(reportType),
+        shift: reportType === 'component_injection' ? normalizeInjectionShift(injectionShift) : undefined,
         lineName: getLineName(lineId),
         productName: getProductName(reportType === 'packaging' ? validPackagingLines[0].productId : productId),
         employeeName: getEmployeeName(employeeId),
@@ -572,6 +580,7 @@ export const QuickAction: React.FC = () => {
     setWorkersMaintenance('');
     setWorkersExternal('');
     setInjectionWorkersCount('');
+    setInjectionShift(DEFAULT_INJECTION_SHIFT);
     setPackagingWorkersCount('');
     setPackagingLines(forcePackagingOnly ? [newEmptyPackagingLine()] : []);
     setHours('');
@@ -900,6 +909,26 @@ export const QuickAction: React.FC = () => {
                 onChange={setLineId}
               />
             </div>
+            {reportType === 'component_injection' && (
+              <div>
+                <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الوردية *</label>
+                <Select
+                  value={normalizeInjectionShift(injectionShift)}
+                  onValueChange={(value) => setInjectionShift(value as ProductionReportShift)}
+                >
+                  <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
+                    <SelectValue placeholder="اختر الوردية" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {INJECTION_SHIFT_OPTIONS.map((option) => (
+                      <SelectItem key={option.value} value={option.value}>
+                        {option.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
             {reportType === 'packaging' ? (
               <div className="sm:col-span-2 space-y-3">
                 <div className="flex flex-wrap items-start justify-between gap-3">
