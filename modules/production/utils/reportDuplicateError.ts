@@ -1,5 +1,7 @@
 export const REPORT_DUPLICATE_ERROR_CODE = 'report/duplicate';
 export const REPORT_DUPLICATE_MESSAGE = 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف والمنتج';
+export const INJECTION_REPORT_DUPLICATE_MESSAGE =
+  'هذا التقرير مسجل من قبل لنفس اليوم والخط والمكون والوردية';
 
 /** Shown when Firestore returns permission-denied (e.g. tenant/rules mismatch). */
 export const REPORT_FIRESTORE_PERMISSION_DENIED_AR =
@@ -35,7 +37,7 @@ export function isReportDuplicateError(error: unknown): boolean {
   const code = (error as MaybeCodeError | undefined)?.code || '';
   if (code === REPORT_DUPLICATE_ERROR_CODE) return true;
   const message = extractMessage(error);
-  return message === REPORT_DUPLICATE_MESSAGE;
+  return message === REPORT_DUPLICATE_MESSAGE || message === INJECTION_REPORT_DUPLICATE_MESSAGE;
 }
 
 export function getReportDuplicateMessage(error: unknown, fallbackMessage: string): string {

@@ -12,12 +12,17 @@ import { canonicalPackagingLine } from '../../../modules/production/utils/packag
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
 import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
-import { ProductionLineStatus, type PackagingReportLine, type ReportComponentScrapItem } from '../../../types';
+import { ProductionLineStatus, type PackagingReportLine, type ProductionReportShift, type ReportComponentScrapItem } from '../../../types';
 import { useTranslation } from 'react-i18next';
 import {
   isInjectionCategory,
   parseInjectionCategoryTokens,
 } from '@/modules/production/utils/injectionMaterialFilter';
+import {
+  DEFAULT_INJECTION_SHIFT,
+  INJECTION_SHIFT_OPTIONS,
+  normalizeInjectionShift,
+} from '@/modules/production/utils/injectionReportShift';
 
 type ReportFormState = {
   reportType: 'finished_product' | 'component_injection' | 'packaging';
@@ -26,6 +31,7 @@ type ReportFormState = {
   lineId: string;
   workOrderId: string;
   date: string;
+  shift: ProductionReportShift;
   quantityProduced: number;
   workersCount: number;
   workersProductionCount: number;
@@ -58,6 +64,7 @@ const emptyForm = (): ReportFormState => ({
   lineId: '',
   workOrderId: '',
   date: getOperationalDateString(8),
+  shift: DEFAULT_INJECTION_SHIFT,
   quantityProduced: 0,
   workersCount: 0,
   workersProductionCount: 0,
@@ -386,7 +393,13 @@ export const GlobalCreateReportModal: React.FC = () => {
           productId: validPackagingLines[0].productId,
           quantityProduced: validPackagingLines.reduce((s, l) => s + l.quantityPieces, 0),
         }
-        : { ...form, workersCount: effectiveWorkersCount };
+        : {
+          ...form,
+          workersCount: effectiveWorkersCount,
+          ...(form.reportType === 'component_injection'
+            ? { shift: normalizeInjectionShift(form.shift) }
+            : {}),
+        };
       const created = await createReport(payload);
       if (!created) {
         const storeError = useAppStore.getState().error;
@@ -541,6 +554,23 @@ export const GlobalCreateReportModal: React.FC = () => {
                 onChange={(e) => setForm((prev) => ({ ...prev, date: e.target.value }))}
               />
             </div>
+            {form.reportType === 'component_injection' ? (
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الوردية *</label>
+                <select
+                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                  value={normalizeInjectionShift(form.shift)}
+                  onChange={(e) => setForm((prev) => ({
+                    ...prev,
+                    shift: e.target.value as ProductionReportShift,
+                  }))}
+                >
+                  {INJECTION_SHIFT_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+              </div>
+            ) : (
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                 {form.reportType === 'packaging'
@@ -563,7 +593,28 @@ export const GlobalCreateReportModal: React.FC = () => {
                 />
               )}
             </div>
+            )}
           </div>
+          {form.reportType === 'component_injection' && (
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.supervisorRequired')}</label>
+              {shouldLockEmployeeToCurrent && currentEmployee ? (
+                <input
+                  type="text"
+                  readOnly
+                  value={currentEmployee.name}
+                  className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
+                />
+              ) : (
+                <SearchableSelect
+                  placeholder={t('modalManager.createReport.selectSupervisor')}
+                  options={employees.filter((s) => s.level === 2).map((s) => ({ value: s.id, label: s.name }))}
+                  value={form.employeeId}
+                  onChange={(v) => setForm((prev) => ({ ...prev, employeeId: v }))}
+                />
+              )}
+            </div>
+          )}
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className={`space-y-2 ${form.reportType === 'packaging' ? 'sm:col-span-2' : ''}`}>

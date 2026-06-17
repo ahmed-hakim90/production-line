@@ -61,6 +61,7 @@ import {
   ProductionLineStatus,
   type FirestoreProductionLine,
   type PackagingReportLine,
+  type ProductionReportShift,
 } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import {
@@ -106,6 +107,13 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
+import {
+  DEFAULT_INJECTION_SHIFT,
+  getInjectionShiftLabel,
+  INJECTION_SHIFT_OPTIONS,
+  isDuplicateProductionReport,
+  normalizeInjectionShift,
+} from '../utils/injectionReportShift';
 import {
   isInjectionCategory,
   parseInjectionCategoryTokens,
@@ -161,6 +169,7 @@ const emptyForm = {
   lineId: '',
   workOrderId: '',
   date: getOperationalDateString(8),
+  shift: DEFAULT_INJECTION_SHIFT as ProductionReportShift,
   quantityProduced: 0,
   workersCount: 0,
   workersProductionCount: 0,
@@ -1446,6 +1455,7 @@ export const Reports: React.FC = () => {
         reportId: rid,
         reportCode: asSaved.reportCode,
         sourceReportType: resolveReportType(asSaved.reportType),
+        shift: asSaved.shift,
         date: report.date,
         lineName: getLineName(report.lineId),
         productName: getProductName(report.productId, report.reportType),
@@ -1866,6 +1876,9 @@ export const Reports: React.FC = () => {
       lineId: report.lineId,
       workOrderId: report.workOrderId ?? '',
       date: report.date,
+      shift: rt === 'component_injection'
+        ? normalizeInjectionShift(report.shift)
+        : DEFAULT_INJECTION_SHIFT,
       quantityProduced: report.quantityProduced,
       workersCount: report.workersCount,
       workersProductionCount: report.workersProductionCount || 0,
@@ -1992,19 +2005,19 @@ export const Reports: React.FC = () => {
 
   const hasDuplicateLineSupervisorReport = useCallback(
     async (
-      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType'>,
+      payload: Pick<typeof emptyForm, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift'>,
       excludeReportId?: string | null,
     ) => {
       if (resolveReportType(payload.reportType) === 'packaging') return false;
       const sameDayReports = await reportService.getByDateRange(payload.date, payload.date);
-      return sameDayReports.some(
-        (r) =>
-          r.lineId === payload.lineId &&
-          r.employeeId === payload.employeeId &&
-          r.productId === payload.productId &&
-          resolveReportType(r.reportType) === resolveReportType(payload.reportType) &&
-          r.id !== excludeReportId,
-      );
+      const candidate = {
+        ...payload,
+        reportType: resolveReportType(payload.reportType),
+        shift: resolveReportType(payload.reportType) === 'component_injection'
+          ? normalizeInjectionShift(payload.shift)
+          : undefined,
+      };
+      return sameDayReports.some((r) => isDuplicateProductionReport(r, candidate, excludeReportId));
     },
     [],
   );
@@ -2088,6 +2101,9 @@ export const Reports: React.FC = () => {
         : form.reportType === 'packaging'
           ? { packagingLines: [] as PackagingReportLine[] }
           : {}),
+      ...(resolveReportType(form.reportType) === 'component_injection'
+        ? { shift: normalizeInjectionShift(form.shift) }
+        : { shift: undefined }),
       workersCount: effectiveFormWorkersCount,
     } as typeof form & { workersCount: number; supplyCycleId?: string };
     if (editId) {
@@ -2100,12 +2116,19 @@ export const Reports: React.FC = () => {
         employeeId: payload.employeeId,
         productId: payload.productId,
         reportType: resolveReportType(payload.reportType),
+        shift: resolveReportType(payload.reportType) === 'component_injection'
+          ? normalizeInjectionShift(payload.shift)
+          : undefined,
       },
       editId,
     );
     if (duplicated) {
       setSaveToastType('error');
-      setSaveToast('هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف');
+      setSaveToast(
+        resolveReportType(payload.reportType) === 'component_injection'
+          ? 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمكون والوردية'
+          : 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف',
+      );
       setTimeout(() => setSaveToast(null), 3500);
       return;
     }
@@ -2679,7 +2702,7 @@ export const Reports: React.FC = () => {
 
   const reportColumns = useMemo<TableColumn<ProductionReport>[]>(() => {
     const getNoteRowKey = (r: ProductionReport) =>
-      r.id ?? `${r.date}-${r.lineId}-${r.productId}-${r.employeeId}`;
+      r.id ?? `${r.date}-${r.lineId}-${r.productId}-${r.employeeId}-${normalizeInjectionShift(r.shift)}`;
 
     const cols: TableColumn<ProductionReport>[] = [
       {
@@ -2710,6 +2733,20 @@ export const Reports: React.FC = () => {
         },
       },
       { header: 'التاريخ', render: (r) => <span className="font-bold text-[var(--color-text)]">{r.date}</span> },
+      {
+        header: 'الوردية',
+        headerClassName: 'text-center',
+        className: 'text-center',
+        render: (r) => (
+          resolveReportType(r.reportType) === 'component_injection'
+            ? (
+              <span className="px-2 py-0.5 rounded-[var(--border-radius-base)] bg-sky-50 text-sky-700 text-xs font-bold ring-1 ring-sky-500/20">
+                {getInjectionShiftLabel(r.shift)}
+              </span>
+            )
+            : <span className="text-[var(--color-text-muted)]">—</span>
+        ),
+      },
       {
         header: 'خط الإنتاج',
         render: (r) => {
@@ -3789,6 +3826,12 @@ export const Reports: React.FC = () => {
                     </span>
                     <span className="font-bold">{getEmployeeName(row.employeeId)}</span>
                   </div>
+                  {row.reportType === 'component_injection' && (
+                    <div>
+                      <span className="text-xs text-[var(--color-text-muted)] block mb-1">الوردية</span>
+                      <span className="font-bold">{getInjectionShiftLabel(row.shift)}</span>
+                    </div>
+                  )}
                 </div>
                 {row.reportType === 'packaging' && isMultiPackaging ? (
                   <div className="mt-3">
@@ -4118,6 +4161,29 @@ export const Reports: React.FC = () => {
                     onChange={(e) => setForm({ ...form, date: e.target.value })}
                   />
                 </div>
+                {form.reportType === 'component_injection' ? (
+                  <div className="space-y-2">
+                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">الوردية *</label>
+                    <Select
+                      value={normalizeInjectionShift(form.shift)}
+                      onValueChange={(value) => setForm({
+                        ...form,
+                        shift: value as ProductionReportShift,
+                      })}
+                    >
+                      <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
+                        <SelectValue placeholder="اختر الوردية" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {INJECTION_SHIFT_OPTIONS.map((option) => (
+                          <SelectItem key={option.value} value={option.value}>
+                            {option.label}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                ) : (
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">
                     {form.reportType === 'packaging' ? 'مشرف التغليف *' : 'المشرف *'}
@@ -4138,7 +4204,28 @@ export const Reports: React.FC = () => {
                     />
                   )}
                 </div>
+                )}
               </div>
+              {form.reportType === 'component_injection' && (
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">المشرف *</label>
+                  {shouldLockEmployeeToCurrent && currentEmployee ? (
+                    <input
+                      type="text"
+                      readOnly
+                      value={currentEmployee.name}
+                      className="w-full border border-[var(--color-border)] bg-[#f0f2f5]/70 rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-bold text-[var(--color-text-muted)]"
+                    />
+                  ) : (
+                    <SearchableSelect
+                      placeholder="اختر المشرف"
+                      options={employees.filter((s) => s.level === 2).map((s) => ({ value: s.id, label: s.name }))}
+                      value={form.employeeId}
+                      onChange={(v) => setForm({ ...form, employeeId: v })}
+                    />
+                  )}
+                </div>
+              )}
               <div className={`grid gap-4 ${form.reportType === 'packaging' ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}>
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">

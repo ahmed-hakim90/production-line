@@ -218,6 +218,9 @@ export interface PackagingReportLine {
   remainderPieces?: number;
 }
 
+/** Injection reports: morning (صباحي) or evening (مسائي) shift on the same line/day. */
+export type ProductionReportShift = 'morning' | 'evening';
+
 export interface ProductionReport {
   id?: string;
   reportCode?: string;
@@ -225,6 +228,8 @@ export interface ProductionReport {
   productId: string;
   lineId: string;
   date: string;
+  /** Required for component_injection reports; legacy rows without shift are treated as morning. */
+  shift?: ProductionReportShift;
   quantityProduced: number;
   workersCount: number;
   workersProductionCount?: number;
