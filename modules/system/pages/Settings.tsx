@@ -272,6 +272,19 @@ const SAMPLE_ROWS: ReportPrintRow[] = [
   { date: '2026-02-21', lineName: 'خط 3', productName: 'منتج C', employeeName: 'خالد حسن', quantityProduced: 800, wasteQuantity: 15, workersCount: 8, workHours: 7.5 },
 ];
 
+const resolveProductionWorkerSettings = (
+  settings?: ProductionWorkerSettings,
+): ProductionWorkerSettings => ({
+  performance: {
+    ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
+    ...(settings?.performance ?? {}),
+  },
+  bonus: {
+    ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
+    ...(settings?.bonus ?? {}),
+  },
+});
+
 const ALERT_FIELDS: { key: keyof AlertSettings; label: string; icon: string; unit: string; description: string }[] = [
   { key: 'wasteThreshold', label: 'حد الهدر', icon: 'delete_sweep', unit: '%', description: 'نسبة الهدر المقبولة — تنبيه عند تجاوزها' },
   { key: 'costVarianceThreshold', label: 'حد انحراف التكلفة', icon: 'compare_arrows', unit: '%', description: 'نسبة الانحراف المقبولة عن التكلفة المعيارية' },
@@ -295,21 +308,16 @@ export const Settings: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
   const [localProductionWorkerSettings, setLocalProductionWorkerSettings] = useState<ProductionWorkerSettings>(
-    () => ({
-      performance: {
-        ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
-        ...(systemSettings.productionWorkerSettings?.performance ?? {}),
-      },
-      bonus: {
-        ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
-        ...(systemSettings.productionWorkerSettings?.bonus ?? {}),
-      },
-    }),
+    () => resolveProductionWorkerSettings(systemSettings.productionWorkerSettings),
   );
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
   const enabledCount = Object.values(userPermissions).filter(Boolean).length;
+
+  useEffect(() => {
+    setLocalProductionWorkerSettings(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings));
+  }, [systemSettings.productionWorkerSettings]);
 
   // ── Local editable draft state ─────────────────────────────────────────────
   const {
@@ -808,7 +816,8 @@ export const Settings: React.FC = () => {
         serialize({ ...DEFAULT_BRANDING, ...systemSettings.branding }) !== serialize(localBranding) ||
         serialize({ ...DEFAULT_THEME, ...systemSettings.theme }) !== serialize(localTheme) ||
         serialize({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay }) !== serialize(localDashboardDisplay) ||
-        serialize({ ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles }) !== serialize(localAlertToggles),
+        serialize({ ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles }) !== serialize(localAlertToggles) ||
+        serialize(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings)) !== serialize(localProductionWorkerSettings),
       quickActions:
         serialize(normalizeQuickActions(savedQuickActionsSorted)) !== serialize(normalizeQuickActions(localQuickActions)),
       widgets:
@@ -835,6 +844,7 @@ export const Settings: React.FC = () => {
     localTheme,
     localDashboardDisplay,
     localAlertToggles,
+    localProductionWorkerSettings,
     localQuickActions,
     localWidgets,
     localCustomWidgets,

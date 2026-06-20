@@ -35,6 +35,11 @@ const ToggleRow: React.FC<{
 export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChange, disabled }) => {
   const perf = { ...DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS, ...value.performance };
   const bonus = { ...DEFAULT_PRODUCTION_BONUS_SETTINGS, ...value.bonus };
+  const showExtraUnitValue = bonus.method === 'per_extra_unit'
+    || (bonus.method === 'target_plus_extra' && (bonus.extraBonusMethod ?? 'per_extra_unit') === 'per_extra_unit');
+  const showPercentValue = bonus.method === 'per_achievement_percent'
+    || bonus.method === 'fixed_tier'
+    || (bonus.method === 'target_plus_extra' && bonus.extraBonusMethod === 'per_extra_achievement_percent');
 
   const setPerf = (patch: Partial<typeof perf>) =>
     onChange({ ...value, performance: { ...perf, ...patch } });
@@ -110,7 +115,7 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
           <p className="text-sm font-bold text-[var(--color-text)]">مكافآت الإنتاج</p>
           <ToggleRow
             label="تفعيل حساب المكافآت"
-            desc="عند التفعيل يُحسب تقدير المكافأة الشهرية تلقائياً"
+            desc="عند التفعيل يُحسب تقدير المكافأة من إجمالي إنتاج الشهر مقابل هدف الشهر"
             checked={bonus.enabled}
             onChange={(v) => setBonus({ enabled: v })}
             disabled={disabled}
@@ -122,15 +127,22 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
                 className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
                 value={bonus.method}
                 disabled={disabled}
-                onChange={(e) => setBonus({ method: e.target.value as typeof bonus.method })}
+                onChange={(e) => {
+                  const method = e.target.value as typeof bonus.method;
+                  setBonus({
+                    method,
+                    ...(method === 'target_plus_extra' ? { extraBonusMethod: bonus.extraBonusMethod ?? 'per_extra_unit' } : {}),
+                  });
+                }}
               >
-                <option value="per_extra_unit">لكل وحدة زائدة</option>
-                <option value="per_achievement_percent">نسبة الإنجاز</option>
-                <option value="fixed_tier">مكافأة ثابتة</option>
+                <option value="target_plus_extra">عند 100% من هدف الشهر + زيادة</option>
+                <option value="per_extra_unit">لكل قطعة زيادة فوق هدف الشهر</option>
+                <option value="per_achievement_percent">نسبة تحقيق الشهر</option>
+                <option value="fixed_tier">مكافأة شهرية ثابتة</option>
               </select>
             </label>
             <label className="block text-sm">
-              <span className="font-bold">الحد الأدنى للإنجاز %</span>
+              <span className="font-bold">الحد الأدنى لتحقيق الشهر %</span>
               <input
                 type="number"
                 min={0}
@@ -140,28 +152,68 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
                 onChange={(e) => setBonus({ minimumAchievementPercent: Number(e.target.value) || 0 })}
               />
             </label>
-            <label className="block text-sm">
-              <span className="font-bold">مكافأة/وحدة زائدة</span>
-              <input
-                type="number"
-                min={0}
-                className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
-                value={bonus.bonusPerExtraUnit}
-                disabled={disabled}
-                onChange={(e) => setBonus({ bonusPerExtraUnit: Number(e.target.value) || 0 })}
-              />
-            </label>
-            <label className="block text-sm">
-              <span className="font-bold">مكافأة/نسبة إنجاز</span>
-              <input
-                type="number"
-                min={0}
-                className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
-                value={bonus.bonusPerAchievementPercent}
-                disabled={disabled}
-                onChange={(e) => setBonus({ bonusPerAchievementPercent: Number(e.target.value) || 0 })}
-              />
-            </label>
+            {bonus.method === 'target_plus_extra' && (
+              <>
+                <label className="block text-sm">
+                  <span className="font-bold">مكافأة تحقيق 100% من هدف الشهر</span>
+                  <input
+                    type="number"
+                    min={0}
+                    className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                    value={bonus.targetBonusAmount ?? 0}
+                    disabled={disabled}
+                    onChange={(e) => setBonus({ targetBonusAmount: Number(e.target.value) || 0 })}
+                  />
+                </label>
+                <label className="block text-sm">
+                  <span className="font-bold">زيادة ما بعد هدف الشهر</span>
+                  <select
+                    className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                    value={bonus.extraBonusMethod ?? 'per_extra_unit'}
+                    disabled={disabled}
+                    onChange={(e) => setBonus({ extraBonusMethod: e.target.value as typeof bonus.extraBonusMethod })}
+                  >
+                    <option value="none">بدون زيادة</option>
+                    <option value="per_extra_unit">قيمة لكل قطعة زيادة فوق هدف الشهر</option>
+                    <option value="per_extra_achievement_percent">قيمة لكل 1% زيادة فوق تحقيق الشهر</option>
+                  </select>
+                </label>
+              </>
+            )}
+            {showExtraUnitValue && (
+              <label className="block text-sm">
+                <span className="font-bold">
+                  {bonus.method === 'target_plus_extra' ? 'قيمة كل قطعة زيادة فوق هدف الشهر' : 'مكافأة/قطعة زيادة فوق هدف الشهر'}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                  value={bonus.bonusPerExtraUnit}
+                  disabled={disabled}
+                  onChange={(e) => setBonus({ bonusPerExtraUnit: Number(e.target.value) || 0 })}
+                />
+              </label>
+            )}
+            {showPercentValue && (
+              <label className="block text-sm">
+                <span className="font-bold">
+                  {bonus.method === 'target_plus_extra'
+                    ? 'قيمة كل 1% زيادة فوق تحقيق الشهر'
+                    : bonus.method === 'fixed_tier'
+                      ? 'قيمة المكافأة الشهرية الثابتة'
+                      : 'مكافأة/نسبة تحقيق الشهر'}
+                </span>
+                <input
+                  type="number"
+                  min={0}
+                  className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                  value={bonus.bonusPerAchievementPercent}
+                  disabled={disabled}
+                  onChange={(e) => setBonus({ bonusPerAchievementPercent: Number(e.target.value) || 0 })}
+                />
+              </label>
+            )}
             <label className="block text-sm sm:col-span-2">
               <span className="font-bold">الحد الأقصى للمكافأة</span>
               <input
@@ -173,6 +225,12 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
                 onChange={(e) => setBonus({ maxBonus: Number(e.target.value) || 0 })}
               />
             </label>
+            {bonus.method === 'target_plus_extra' && (
+              <div className="sm:col-span-2 rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+                الحساب شهري: لو «مكافأة تحقيق 100% من هدف الشهر» = 200، و«قيمة كل قطعة زيادة فوق هدف الشهر» = 0.10،
+                والعامل حقق هدف الشهر يأخذ 200. لو زاد 500 قطعة عن هدف الشهر يأخذ 200 + 50 = 250.
+              </div>
+            )}
           </div>
         </div>
       </div>

@@ -12,6 +12,21 @@ export function calculateBonusEstimate(params: {
 
   let raw = 0;
   switch (settings.method) {
+    case 'target_plus_extra': {
+      const threshold = Number(settings.minimumAchievementPercent || 100);
+      const base = Number(settings.targetBonusAmount || 0);
+      const extraOutput = Math.max(0, monthlyOutput - monthlyTarget);
+      const extraAchievementPercent = Math.max(0, monthlyAchievement - threshold);
+      const extraMethod = settings.extraBonusMethod ?? 'per_extra_unit';
+      const extra =
+        extraMethod === 'per_extra_unit'
+          ? extraOutput * Number(settings.bonusPerExtraUnit || 0)
+          : extraMethod === 'per_extra_achievement_percent'
+            ? extraAchievementPercent * Number(settings.bonusPerAchievementPercent || 0)
+            : 0;
+      raw = base + extra;
+      break;
+    }
     case 'per_extra_unit': {
       const extra = Math.max(0, monthlyOutput - monthlyTarget);
       raw = extra * Number(settings.bonusPerExtraUnit || 0);

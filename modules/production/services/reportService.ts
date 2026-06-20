@@ -57,6 +57,28 @@ const skipsReportUniqueConstraint = (rt: ProductionReport['reportType'] | undefi
   return reportType === 'packaging' || reportType === 'component_waste';
 };
 
+const isPlainObject = (value: unknown): value is Record<string, unknown> => {
+  if (!value || typeof value !== 'object') return false;
+  const proto = Object.getPrototypeOf(value);
+  return proto === Object.prototype || proto === null;
+};
+
+const stripUndefinedDeep = <T>(value: T): T => {
+  if (value === undefined) return undefined as T;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => stripUndefinedDeep(item))
+      .filter((item) => item !== undefined) as T;
+  }
+  if (!isPlainObject(value)) return value;
+
+  return Object.entries(value).reduce<Record<string, unknown>>((acc, [key, item]) => {
+    const cleaned = stripUndefinedDeep(item);
+    if (cleaned !== undefined) acc[key] = cleaned;
+    return acc;
+  }, {}) as T;
+};
+
 export type FirestoreCursor = QueryDocumentSnapshot | null;
 export interface FirestorePageResult<T> {
   items: T[];
@@ -276,7 +298,7 @@ export const reportService = {
             ? data.supplyCycleId.trim()
             : undefined;
         const { supplyCycleId: _sc, ...dataWithoutCycle } = data as typeof data & { supplyCycleId?: string };
-        tx.set(reportRef, {
+        const payload = stripUndefinedDeep({
           ...dataWithoutCycle,
           ...(supplyCycleId ? { supplyCycleId } : {}),
           tenantId: getCurrentTenantId(),
@@ -289,6 +311,7 @@ export const reportService = {
           workersExternalCount: data.workersExternalCount ?? 0,
           createdAt: serverTimestamp(),
         });
+        tx.set(reportRef, payload);
         if (!skipUnique) {
           tx.set(uniqueRef, {
             tenantId: getCurrentTenantId(),
@@ -324,6 +347,8 @@ export const reportService = {
       if (Object.prototype.hasOwnProperty.call(fields, 'reportType')) {
         fields.reportType = resolveReportType(fields.reportType);
       }
+      const cleanedFields = stripUndefinedDeep(fields);
+      if (Object.keys(cleanedFields).length === 0) return;
 
       const reportRef = doc(db, COLLECTION, id);
       await runTransaction(db, async (tx) => {
@@ -333,7 +358,7 @@ export const reportService = {
         }
 
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
-        const next = { ...current, ...fields } as ProductionReport;
+        const next = { ...current, ...cleanedFields } as ProductionReport;
         const oldSkipsUnique = skipsReportUniqueConstraint(current.reportType);
         const nextSkipsUnique = skipsReportUniqueConstraint(next.reportType);
 
@@ -409,7 +434,7 @@ export const reportService = {
           }
         }
 
-        tx.update(reportRef, fields);
+        tx.update(reportRef, cleanedFields);
       });
     } catch (error) {
       console.error('reportService.update error:', error);

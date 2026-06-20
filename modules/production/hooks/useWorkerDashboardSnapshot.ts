@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { productionWorkerService } from '@/modules/production/services/productionWorkerService';
 import { productionWorkerTargetService } from '@/modules/production/services/productionWorkerTargetService';
 import { productionWorkerPerformanceService } from '@/modules/production/services/productionWorkerPerformanceService';
@@ -24,7 +24,17 @@ const currentMonth = (): string => {
 export function useWorkerDashboardSnapshot(): WorkerDashboardSnapshot {
   const products = useAppStore((s) => s.products);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
-  const workerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS);
+  const rawWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
+  const workerSettings = useMemo(() => ({
+    performance: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
+      ...(rawWorkerSettings?.performance ?? {}),
+    },
+    bonus: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
+      ...(rawWorkerSettings?.bonus ?? {}),
+    },
+  }), [rawWorkerSettings]);
   const [snapshot, setSnapshot] = useState<WorkerDashboardSnapshot>({
     topWorkers: [],
     belowTarget: [],

@@ -44,7 +44,17 @@ export const ProductionWorkers: React.FC = () => {
   const products = useAppStore((s) => s.products);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
-  const workerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS);
+  const rawWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
+  const workerSettings = useMemo(() => ({
+    performance: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
+      ...(rawWorkerSettings?.performance ?? {}),
+    },
+    bonus: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
+      ...(rawWorkerSettings?.bonus ?? {}),
+    },
+  }), [rawWorkerSettings]);
 
   const [loading, setLoading] = useState(true);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -316,6 +326,46 @@ export const ProductionWorkers: React.FC = () => {
   };
 
   const statPlaceholder = statsLoading ? '…' : '0';
+  const getBonusReason = useCallback((stats: WorkerMonthlyAchievement | null): string => {
+    const bonus = workerSettings.bonus;
+    if (!bonus.enabled) return 'المكافأة غير مفعلة من الإعدادات';
+    if (!stats) return 'لم يتم حساب أداء الشهر بعد';
+    if (stats.monthlyTarget <= 0) return 'لا يوجد هدف شهري محسوب';
+    if (stats.monthlyAchievement < bonus.minimumAchievementPercent) {
+      return `أقل من الحد الأدنى ${bonus.minimumAchievementPercent}%`;
+    }
+    if (stats.bonusEstimate > 0) return '';
+
+    if (bonus.method === 'target_plus_extra') {
+      const base = Number(bonus.targetBonusAmount || 0);
+      const extra = Math.max(0, stats.monthlyOutput - stats.monthlyTarget);
+      const extraMethod = bonus.extraBonusMethod ?? 'per_extra_unit';
+      if (base <= 0 && extraMethod === 'none') return 'مكافأة الهدف = 0 ولا توجد زيادة بعد الهدف';
+      if (base <= 0 && extra <= 0) return 'مكافأة الهدف = 0 ولا توجد كمية زائدة';
+      if (base <= 0 && extraMethod === 'per_extra_unit' && Number(bonus.bonusPerExtraUnit || 0) <= 0) {
+        return 'مكافأة الهدف وقيمة قطعة الزيادة = 0';
+      }
+      if (base <= 0 && extraMethod === 'per_extra_achievement_percent' && Number(bonus.bonusPerAchievementPercent || 0) <= 0) {
+        return 'مكافأة الهدف وقيمة نسبة الزيادة = 0';
+      }
+      return 'راجع إعدادات الزيادة فوق الهدف';
+    }
+    if (bonus.method === 'per_extra_unit') {
+      const extra = Math.max(0, stats.monthlyOutput - stats.monthlyTarget);
+      if (extra <= 0) return 'لا توجد كمية زائدة فوق الهدف';
+      if (Number(bonus.bonusPerExtraUnit || 0) <= 0) return 'قيمة مكافأة الوحدة الزائدة = 0';
+      return 'الحد الأقصى للمكافأة مضبوط على 0';
+    }
+    if (bonus.method === 'per_achievement_percent') {
+      if (Number(bonus.bonusPerAchievementPercent || 0) <= 0) return 'قيمة مكافأة نسبة الإنجاز = 0';
+      return 'الحد الأقصى للمكافأة مضبوط على 0';
+    }
+    if (bonus.method === 'fixed_tier') {
+      if (Number(bonus.bonusPerAchievementPercent || 0) <= 0) return 'قيمة المكافأة الثابتة = 0';
+      return 'الحد الأقصى للمكافأة مضبوط على 0';
+    }
+    return 'راجع إعدادات المكافأة';
+  }, [workerSettings.bonus]);
 
   const columns: TableColumn<WorkerRow>[] = [
     { header: 'العامل', render: (row) => row.name },
@@ -371,7 +421,20 @@ export const ProductionWorkers: React.FC = () => {
     },
     {
       header: 'تقدير المكافأة',
-      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.monthStats?.bonusEstimate ?? 0)),
+      render: (row) => {
+        if (statsLoading && !monthStatsMap.has(row.id ?? '')) return statPlaceholder;
+        const reason = getBonusReason(row.monthStats);
+        return (
+          <div className="space-y-1">
+            <p className="font-bold tabular-nums">{formatNumber(row.monthStats?.bonusEstimate ?? 0)}</p>
+            {reason && (
+              <p className="text-[10px] leading-snug text-[var(--color-text-muted)]">
+                {reason}
+              </p>
+            )}
+          </div>
+        );
+      },
       className: 'text-center',
     },
     {

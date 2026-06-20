@@ -369,12 +369,17 @@ export interface WorkerPerformanceSummary extends WorkerMonthlyAchievement {
   updatedAt?: unknown;
 }
 
-export type ProductionBonusMethod = 'per_extra_unit' | 'per_achievement_percent' | 'fixed_tier';
+export type ProductionBonusMethod = 'per_extra_unit' | 'per_achievement_percent' | 'fixed_tier' | 'target_plus_extra';
+export type ProductionBonusExtraMethod = 'none' | 'per_extra_unit' | 'per_extra_achievement_percent';
 
 export interface ProductionBonusSettings {
   enabled: boolean;
   method: ProductionBonusMethod;
   minimumAchievementPercent: number;
+  /** Fixed amount paid once the worker reaches the minimum achievement threshold (typically 100%). */
+  targetBonusAmount?: number;
+  /** Used by target_plus_extra for amounts above the threshold. */
+  extraBonusMethod?: ProductionBonusExtraMethod;
   bonusPerExtraUnit: number;
   bonusPerAchievementPercent: number;
   maxBonus: number;
@@ -1109,8 +1114,10 @@ export const DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS: ProductionWorkerPer
 
 export const DEFAULT_PRODUCTION_BONUS_SETTINGS: ProductionBonusSettings = {
   enabled: false,
-  method: 'per_extra_unit',
+  method: 'target_plus_extra',
   minimumAchievementPercent: 100,
+  targetBonusAmount: 0,
+  extraBonusMethod: 'per_extra_unit',
   bonusPerExtraUnit: 0,
   bonusPerAchievementPercent: 0,
   maxBonus: 0,

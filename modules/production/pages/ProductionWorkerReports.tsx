@@ -24,7 +24,17 @@ export const ProductionWorkerReports: React.FC = () => {
   const canView = can('production.workerReports.view') || can('productionWorkers.view');
   const products = useAppStore((s) => s.products);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
-  const workerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS);
+  const rawWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
+  const workerSettings = useMemo(() => ({
+    performance: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
+      ...(rawWorkerSettings?.performance ?? {}),
+    },
+    bonus: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
+      ...(rawWorkerSettings?.bonus ?? {}),
+    },
+  }), [rawWorkerSettings]);
 
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
