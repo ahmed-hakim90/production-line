@@ -1,5 +1,5 @@
 ﻿export const defaultTenantSlug = (): string =>
-  import.meta.env.VITE_DEFAULT_TENANT_SLUG || 'default';
+  import.meta.env.VITE_DEFAULT_TENANT_SLUG || 'sokany-eg';
 
 export const tenantLoginPath = (tenantSlug?: string): string =>
   `/t/${tenantSlug || defaultTenantSlug()}/login`;

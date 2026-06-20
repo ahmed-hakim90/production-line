@@ -613,15 +613,20 @@ export const Lines: React.FC = () => {
                 </Select>
               </div>
               <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الهدف اليومي (كمية) *</label>
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">إجمالي الخط اليومي (كمية) *</label>
                 <input
                   type="number"
                   min={0}
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                   value={targetForm.targetTodayQty || ''}
                   onChange={(e) => setTargetForm({ ...targetForm, targetTodayQty: Number(e.target.value) })}
-                  placeholder="مثال: 500"
+                  placeholder="مثال: 500 (إجمالي الخط — ليس لكل عامل)"
                 />
+                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                  هذا الحقل <strong>إجمالي إنتاج الخط</strong> لمتابعة الخط على اللوحة — وليس هدف العامل.
+                  لضبط <strong>كمية كل عامل</strong> (مثلاً 50 قطعة/عامل) وقياس الإنجاز في تقرير الإنتاج،
+                  افتح <strong>تفاصيل الخط</strong> ← «كمية إنتاج العامل (منتج × خط)».
+                </p>
               </div>
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">إعدادات خط الحقن</label>

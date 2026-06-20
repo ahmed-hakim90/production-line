@@ -26,6 +26,10 @@ export type Permission =
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
+  | 'production.workers.view' | 'production.workers.manage'
+  | 'production.workerTargets.manage'
+  | 'production.workerReports.view'
+  | 'production.workerBonus.view' | 'production.workerBonus.manage'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
   | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.executive.export' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
@@ -143,6 +147,12 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'lines.delete', label: 'حذف خطوط الإنتاج' },
       { key: 'supervisors.view', label: 'عرض المشرفين' },
       { key: 'productionWorkers.view', label: 'عرض عمال الإنتاج' },
+      { key: 'production.workers.view', label: 'عرض عمال الإنتاج (جديد)' },
+      { key: 'production.workers.manage', label: 'إدارة عمال الإنتاج' },
+      { key: 'production.workerTargets.manage', label: 'إدارة أهداف عمال الإنتاج' },
+      { key: 'production.workerReports.view', label: 'عرض تقارير عمال الإنتاج' },
+      { key: 'production.workerBonus.view', label: 'عرض مكافآت عمال الإنتاج' },
+      { key: 'production.workerBonus.manage', label: 'إدارة مكافآت عمال الإنتاج' },
       { key: 'lineWorkers.view', label: 'عرض وإدارة ربط العمالة' },
       { key: 'supervisorAssignments.manage', label: 'إدارة توزيع المشرفين على الخطوط' },
       { key: 'plans.view', label: 'عرض خطط الإنتاج' },

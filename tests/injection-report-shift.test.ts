@@ -3,6 +3,7 @@ import {
   DEFAULT_INJECTION_SHIFT,
   getInjectionShiftLabel,
   isDuplicateProductionReport,
+  isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift.ts';
 
@@ -18,6 +19,12 @@ assert.equal(normalizeInjectionShift(undefined), DEFAULT_INJECTION_SHIFT);
 assert.equal(normalizeInjectionShift('evening'), 'evening');
 assert.equal(getInjectionShiftLabel('evening'), 'مسائي');
 assert.equal(getInjectionShiftLabel(undefined), 'صباحي');
+
+assert.equal(isInjectionShiftSelected('morning'), true);
+assert.equal(isInjectionShiftSelected('evening'), true);
+assert.equal(isInjectionShiftSelected(undefined), false);
+assert.equal(isInjectionShiftSelected(''), false);
+assert.equal(isInjectionShiftSelected('invalid'), false);
 
 assert.equal(
   isDuplicateProductionReport(

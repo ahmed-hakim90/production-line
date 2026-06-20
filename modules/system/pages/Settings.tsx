@@ -40,7 +40,9 @@ import type { ReportPrintRow } from '../../production/components/ProductionRepor
 import { GeneralSettingsHeader } from '../components/settings/GeneralSettingsHeader';
 import { GeneralBrandingSection } from '../components/settings/GeneralBrandingSection';
 import { GeneralThemeSection } from '../components/settings/GeneralThemeSection';
+import { ProductionWorkerSettingsSection } from '@/modules/production/components/ProductionWorkerSettingsSection';
 import { GeneralSystemBehaviorSection } from '../components/settings/GeneralSystemBehaviorSection';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionWorkerSettings } from '@/types';
 import { InventoryRoutingSettingsSection } from '../components/settings/InventoryRoutingSettingsSection';
 import { GeneralDashboardDisplaySection } from '../components/settings/GeneralDashboardDisplaySection';
 import { GeneralAlertsSection } from '../components/settings/GeneralAlertsSection';
@@ -292,6 +294,18 @@ export const Settings: React.FC = () => {
   const isAdmin = can('roles.manage');
 
   const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const [localProductionWorkerSettings, setLocalProductionWorkerSettings] = useState<ProductionWorkerSettings>(
+    () => ({
+      performance: {
+        ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
+        ...(systemSettings.productionWorkerSettings?.performance ?? {}),
+      },
+      bonus: {
+        ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
+        ...(systemSettings.productionWorkerSettings?.bonus ?? {}),
+      },
+    }),
+  );
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState('');
 
@@ -490,6 +504,10 @@ export const Settings: React.FC = () => {
           section === 'clientVersion' ? localClientUpdateMessageAr.trim() : systemSettings.clientUpdateMessageAr,
         defaultHomeLogicalPath:
           section === 'general' ? localDefaultHomePath.trim() : systemSettings.defaultHomeLogicalPath,
+        productionWorkerSettings:
+          section === 'general'
+            ? localProductionWorkerSettings
+            : (systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS),
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم الحفظ بنجاح');
@@ -498,7 +516,7 @@ export const Settings: React.FC = () => {
       setSaveMessage('فشل الحفظ');
     }
     setSaving(false);
-  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, localMinimumClientVersion, localForceClientUpdate, localClientUpdateMessageAr, localDefaultHomePath, updateSystemSettings]);
+  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, localMinimumClientVersion, localForceClientUpdate, localClientUpdateMessageAr, localDefaultHomePath, localProductionWorkerSettings, updateSystemSettings]);
   const handleSaveAll = useCallback(async () => {
     setSaving(true);
     setSaveMessage('');
@@ -521,6 +539,7 @@ export const Settings: React.FC = () => {
         forceClientUpdate: localForceClientUpdate,
         clientUpdateMessageAr: localClientUpdateMessageAr.trim(),
         defaultHomeLogicalPath: localDefaultHomePath.trim(),
+        productionWorkerSettings: localProductionWorkerSettings,
       };
       await updateSystemSettings(updated);
       setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
@@ -548,6 +567,7 @@ export const Settings: React.FC = () => {
     localForceClientUpdate,
     localClientUpdateMessageAr,
     localDefaultHomePath,
+    localProductionWorkerSettings,
     normalizeCustomWidgets,
     normalizeQuickActions,
     updateSystemSettings,
@@ -971,6 +991,12 @@ export const Settings: React.FC = () => {
               id: user.id || '',
               label: `${user.displayName || 'مستخدم'}${user.email ? ` (${user.email})` : ''}`,
             })).filter((item) => item.id)}
+          />
+
+          <ProductionWorkerSettingsSection
+            value={localProductionWorkerSettings}
+            onChange={setLocalProductionWorkerSettings}
+            disabled={!isAdmin}
           />
 
           <InventoryRoutingSettingsSection

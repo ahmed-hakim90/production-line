@@ -52,7 +52,6 @@ import { setCurrentTenant } from './lib/currentTenant';
 import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
 import {
   clearLastVisitedTenantSlugIfMatches,
-  getLastVisitedTenantSlug,
   setLastVisitedTenantSlug,
 } from './lib/lastTenantSlugStorage';
 import { tenantService } from './services/tenantService';
@@ -65,21 +64,13 @@ import { AppSplashScreen } from './components/system-ui/AppSplashScreen';
 import { useAppInitialization } from './hooks/useAppInitialization';
 import { useAuthStore } from './store/useAuthStore';
 import { dismissHtmlSplash } from './lib/dismissHtmlSplash';
+import { clearCachedAppSession } from './lib/appSessionCache';
 
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
-const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
 
-/** PWA manifest uses `start_url: /`; redirect to last `/t/{slug}/` when known. */
+/** Temporary: force root visits to Sokany tenant instead of the public landing page. */
 const RootEntryOrLanding: React.FC = () => {
-  const last = getLastVisitedTenantSlug();
-  if (last) {
-    return <Navigate to={`/t/${encodeURIComponent(last)}/`} replace />;
-  }
-  return (
-    <Suspense fallback={<PageRouteFallback />}>
-      <LandingPage />
-    </Suspense>
-  );
+  return <Navigate to={tenantHomePath('sokany-eg')} replace />;
 };
 const TenantLoginGateway = lazyNamed(
   () => import('./modules/auth/pages/TenantLoginGateway'),
@@ -276,9 +267,10 @@ const WrongCompanyLinkScreen: React.FC<{ forceLogout?: boolean }> = ({ forceLogo
   );
 };
 
-const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean }> = ({
+const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApproval: boolean; loading: boolean }> = ({
   isAuthenticated,
   isPendingApproval,
+  loading,
 }) => {
   const location = useLocation();
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -289,6 +281,10 @@ const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApprov
 
   if (wrongCompanyLink) {
     return <WrongCompanyLinkScreen />;
+  }
+
+  if (loading) {
+    return <AppSplashScreen subtitle="جاري استعادة الجلسة..." />;
   }
 
   if (!isAuthenticated) {
@@ -308,17 +304,18 @@ const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApprov
 };
 
 const AuthUiStateGuard: React.FC = () => {
-  const { isAuthenticated, isPendingApproval } = useAuthUiSlice();
+  const { isAuthenticated, isPendingApproval, loading } = useAuthUiSlice();
   const { resetAllModals } = useGlobalModalManager();
   const resetJobsUiState = useJobsStore((s) => s.resetUiState);
 
   useEffect(() => {
+    if (loading) return;
     // On any exit from protected app state, clear global overlays/stateful UI.
     if (!isAuthenticated || isPendingApproval) {
       resetAllModals();
       resetJobsUiState();
     }
-  }, [isAuthenticated, isPendingApproval, resetAllModals, resetJobsUiState]);
+  }, [isAuthenticated, isPendingApproval, loading, resetAllModals, resetJobsUiState]);
 
   return null;
 };
@@ -505,7 +502,7 @@ const TenantLayout: React.FC = () => {
   const [tenantResolve, setTenantResolve] = useState<TenantSlugResolveValue>(defaultTenantResolve);
   const [forbiddenRequiresLogout, setForbiddenRequiresLogout] = useState(false);
   const [forbiddenRedirectPath, setForbiddenRedirectPath] = useState<string | null>(null);
-  const { isAuthenticated } = useAuthUiSlice();
+  const { isAuthenticated, loading } = useAuthUiSlice();
   const userProfile = useAppStore((s) => s.userProfile);
 
   useEffect(() => {
@@ -618,6 +615,9 @@ const TenantLayout: React.FC = () => {
 
   if (gate === 'missing') {
     const tenantLoginPath = `/t/${encodeURIComponent(tenantSlug)}/login`;
+    if (loading) {
+      return <AppSplashScreen subtitle="جاري استعادة الجلسة..." />;
+    }
     if (!isAuthenticated && location.pathname !== tenantLoginPath) {
       return <Navigate to={tenantLoginPath} replace />;
     }
@@ -750,6 +750,7 @@ const App: React.FC = () => {
       setAuthResolved(true);
       if (!user) {
         setCurrentTenant(null);
+        clearCachedAppSession();
         sessionTrackerService.stop('auth_logout');
         activeSessionUidRef.current = null;
         clearSubscriptions();
@@ -763,6 +764,9 @@ const App: React.FC = () => {
 
       // Skip duplicate bootstraps for same authenticated session.
       if (activeSessionUidRef.current === user.uid && useAppStore.getState().isAuthenticated) return;
+
+      useAppStore.setState({ loading: true });
+      useAuthStore.setState({ loading: true });
 
       clearSubscriptions();
       try {
@@ -971,6 +975,7 @@ const App: React.FC = () => {
                 <ProtectedTenantShell
                   isAuthenticated={isAuthenticated}
                   isPendingApproval={isPendingApproval}
+                  loading={loading}
                 />
               }
             >

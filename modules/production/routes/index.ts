@@ -9,6 +9,7 @@ const WorkOrderScanner = lazyNamed(() => import('../pages/WorkOrderScanner'), 'W
 const Supervisors = lazyNamed(() => import('../pages/Supervisors'), 'Supervisors');
 const SupervisorDetails = lazyNamed(() => import('../pages/SupervisorDetails'), 'SupervisorDetails');
 const SupervisorLineAssignment = lazyNamed(() => import('../pages/SupervisorLineAssignment'), 'SupervisorLineAssignment');
+const ProductionWorkerReports = lazyNamed(() => import('../pages/ProductionWorkerReports'), 'ProductionWorkerReports');
 const ProductionWorkers = lazyNamed(() => import('../pages/ProductionWorkers'), 'ProductionWorkers');
 const ProductionWorkerDetails = lazyNamed(() => import('../pages/ProductionWorkerDetails'), 'ProductionWorkerDetails');
 const Reports = lazyNamed(() => import('../pages/Reports'), 'Reports');
@@ -38,8 +39,11 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/supervisors', permission: 'supervisors.view', component: Supervisors },
   { path: '/supervisors/:id', permission: 'supervisors.view', component: SupervisorDetails },
   { path: '/supervisor-line-assignments', permission: 'supervisorAssignments.manage', component: SupervisorLineAssignment },
-  { path: '/production-workers', permission: 'productionWorkers.view', component: ProductionWorkers },
-  { path: '/production-workers/:id', permission: 'productionWorkers.view', component: ProductionWorkerDetails },
+  { path: '/production-workers', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkers },
+  { path: '/production/workers', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkers },
+  { path: '/production-workers/:id', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkerDetails },
+  { path: '/production/workers/:id', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkerDetails },
+  { path: '/production/worker-reports', permissionsAny: ['production.workerReports.view', 'productionWorkers.view'], component: ProductionWorkerReports },
   { path: '/reports', permission: 'reports.view', component: Reports },
   { path: '/component-waste-reports', permission: 'reports.componentWaste.create', component: ComponentWasteReports },
   { path: '/supply-cycles', permission: 'supplyCycles.view', component: SupplyCyclesList },

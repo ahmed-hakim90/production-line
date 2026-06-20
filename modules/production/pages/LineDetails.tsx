@@ -14,6 +14,7 @@ import {
   SURFACE_CARD,
 } from '@/src/components/erp/DetailPageChrome';
 import { Card as ErpCard, KPIBox, Badge } from '../components/UI';
+import { LineProductWorkerTargetsSection } from '../components/LineProductWorkerTargetsSection';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
@@ -1160,6 +1161,16 @@ export const LineDetails: React.FC = () => {
             </div>
           </div>
         )}
+      </ErpCard>
+      </DetailCollapsibleSection>
+
+      <DetailCollapsibleSection title="كمية إنتاج العامل (منتج × خط)" defaultOpen={false}>
+      <ErpCard>
+        <div className="flex items-center gap-2 mb-4">
+          <span className="material-icons-round text-primary">flag</span>
+          <h3 className="text-lg font-bold">كمية إنتاج العامل اليومية</h3>
+        </div>
+        {id ? <LineProductWorkerTargetsSection lineId={id} /> : null}
       </ErpCard>
       </DetailCollapsibleSection>
 

@@ -4,6 +4,7 @@ import type {
   QuickActionColor, QuickActionType, CustomWidgetType, CustomWidgetConfig,
   ExportImportSettings, ExportImportPageControl, SidebarIconStyle, AttendanceIntegrationSettings,
 } from '../types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../types';
 
 // ─── Widget Registry ─────────────────────────────────────────────────────────
 
@@ -57,6 +58,13 @@ export const DASHBOARD_WIDGETS: Record<string, WidgetDefinition[]> = {
     { id: 'top_lines', label: 'أعلى 5 خطوط إنتاج', icon: 'precision_manufacturing' },
     { id: 'top_products', label: 'أعلى 5 منتجات', icon: 'inventory_2' },
     { id: 'product_performance', label: 'ملخص أداء المنتجات', icon: 'table_chart' },
+    { id: 'top_workers', label: 'أفضل 10 عمال', icon: 'engineering' },
+    { id: 'workers_below_target', label: 'عمال تحت الهدف', icon: 'trending_down' },
+    { id: 'today_avg_worker_achievement', label: 'متوسط إنجاز اليوم', icon: 'speed' },
+    { id: 'month_avg_worker_achievement', label: 'متوسط إنجاز الشهر', icon: 'calendar_month' },
+    { id: 'absent_workers_today', label: 'الغائبون اليوم', icon: 'person_off' },
+    { id: 'total_bonus_estimate', label: 'تقدير المكافآت', icon: 'payments' },
+    { id: 'missing_worker_targets_warning', label: 'تحذير أهداف مفقودة', icon: 'warning' },
   ],
 };
 
@@ -84,7 +92,15 @@ export const ALL_DASHBOARD_WIDGET_DEFS: Record<string, WidgetDefinition> = (() =
 export const DASHBOARD_BUILTIN_WIDGET_MIGRATIONS: Record<string, readonly string[]> = {
   dashboard: [],
   adminDashboard: [],
-  factoryDashboard: [],
+  factoryDashboard: [
+    'top_workers',
+    'workers_below_target',
+    'today_avg_worker_achievement',
+    'month_avg_worker_achievement',
+    'absent_workers_today',
+    'total_bonus_estimate',
+    'missing_worker_targets_warning',
+  ],
 };
 
 // ─── Quick Actions Registry ─────────────────────────────────────────────────
@@ -343,6 +359,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   quickActions: [],
   exportImport: DEFAULT_EXPORT_IMPORT_SETTINGS,
   attendanceIntegration: DEFAULT_ATTENDANCE_INTEGRATION,
+  productionWorkerSettings: DEFAULT_PRODUCTION_WORKER_SETTINGS,
   repairSettings: {
     access: { managerScope: 'branch' },
     workflow: {

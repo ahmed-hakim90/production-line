@@ -7,6 +7,7 @@ import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
+import { EmployeeProductionTab } from '@/modules/production/components/EmployeeProductionTab';
 import { employeeService } from '../employeeService';
 import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
@@ -39,7 +40,7 @@ import { formatNumber } from '../../../utils/calculations';
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 
-type ProfileTab = 'overview' | 'hierarchy' | 'attendance' | 'payroll' | 'financials' | 'leaves' | 'loans';
+type ProfileTab = 'overview' | 'hierarchy' | 'attendance' | 'payroll' | 'financials' | 'leaves' | 'loans' | 'production';
 
 const TABS: { id: ProfileTab; label: string; icon: string }[] = [
   { id: 'overview', label: 'نظرة عامة', icon: 'dashboard' },
@@ -49,6 +50,7 @@ const TABS: { id: ProfileTab; label: string; icon: string }[] = [
   { id: 'payroll', label: 'الرواتب', icon: 'receipt_long' },
   { id: 'leaves', label: 'الإجازات', icon: 'beach_access' },
   { id: 'loans', label: 'السُلف', icon: 'payments' },
+  { id: 'production', label: 'الإنتاج', icon: 'precision_manufacturing' },
 ];
 
 function formatTime(ts: any): string {
@@ -1328,6 +1330,10 @@ export const EmployeeProfile: React.FC = () => {
             </div>
           </Card>
         </div>
+      )}
+
+      {activeTab === 'production' && id && (
+        <EmployeeProductionTab employeeId={id} />
       )}
     </div>
   );

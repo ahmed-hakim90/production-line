@@ -3,6 +3,7 @@ import {
   doc,
   getDocs,
   addDoc,
+  updateDoc,
   deleteDoc,
   query,
   where,
@@ -12,7 +13,9 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
-import type { LineWorkerAssignment } from '../../../types';
+import type { LineWorkerAssignment, LineWorkerLaborRole } from '../../../types';
+import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
+import { lineAssignmentWorkerBridge } from './lineAssignmentWorkerBridge';
 
 const COLLECTION = 'line_worker_assignments';
 
@@ -53,14 +56,33 @@ export const lineAssignmentService = {
     try {
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
+        laborRole: data.laborRole || DEFAULT_LINE_WORKER_LABOR_ROLE,
         tenantId: getCurrentTenantId(),
         assignedAt: serverTimestamp(),
       });
+      void lineAssignmentWorkerBridge.syncFromLineAssignment(data).catch(() => {});
       return ref.id;
     } catch (error) {
       console.error('lineAssignmentService.create error:', error);
       throw error;
     }
+  },
+
+  async update(id: string, data: Partial<Pick<LineWorkerAssignment, 'laborRole'>>): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      await updateDoc(doc(db, COLLECTION, id), {
+        ...data,
+        updatedAt: serverTimestamp(),
+      });
+    } catch (error) {
+      console.error('lineAssignmentService.update error:', error);
+      throw error;
+    }
+  },
+
+  async updateLaborRole(id: string, laborRole: LineWorkerLaborRole): Promise<void> {
+    return this.update(id, { laborRole });
   },
 
   async delete(id: string): Promise<void> {
@@ -112,16 +134,19 @@ export const lineAssignmentService = {
         if (existingKeys.has(key)) continue;
         if (activeEmployeeIds && !activeEmployeeIds.has(a.employeeId)) continue;
 
-        await addDoc(collection(db, COLLECTION), {
+        const copiedAssignment = {
           lineId: a.lineId,
           employeeId: a.employeeId,
           employeeCode: String(a.employeeCode || employeeDirectory?.get(a.employeeId)?.code || '').trim(),
           employeeName: String(a.employeeName || employeeDirectory?.get(a.employeeId)?.name || '').trim(),
+          laborRole: a.laborRole || DEFAULT_LINE_WORKER_LABOR_ROLE,
           date: targetDate,
           tenantId: getCurrentTenantId(),
           assignedAt: serverTimestamp(),
           assignedBy: assignedBy || '',
-        });
+        };
+        await addDoc(collection(db, COLLECTION), copiedAssignment);
+        void lineAssignmentWorkerBridge.syncFromLineAssignment(copiedAssignment).catch(() => {});
         count++;
       }
       return count;

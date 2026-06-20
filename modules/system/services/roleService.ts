@@ -86,6 +86,14 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'operations.inbox.view',
           'reports.executive.export',
           'manufacturing.purchaseGap.view',
+          'productionWorkers.view',
+          'production.workers.view',
+          'production.workers.manage',
+          'production.workerTargets.manage',
+          'production.workerReports.view',
+          'production.workerBonus.view',
+          'production.workerBonus.manage',
+          'lineWorkers.view',
           'print',
           'export',
         ]),
@@ -126,6 +134,9 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'planning.materialRequirements.view',
           'planning.materialRequirements.generate',
           'products.rawMaterials.view',
+          'productionWorkers.view',
+          'production.workers.view',
+          'production.workerReports.view',
           'print',
           'export',
         ]),
@@ -217,6 +228,32 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
 }
 
 let seedIfEmptyInFlight: Promise<FirestoreRole[]> | null = null;
+let productionWorkerPermsMigrationInFlight: Promise<number> | null = null;
+/** Session guard — migration is idempotent; skip re-runs after first successful pass. */
+let productionWorkerPermsMigrationDone = false;
+
+/** Production worker permissions to merge onto built-in roles (does not revoke custom perms). */
+const FACTORY_MANAGER_PRODUCTION_WORKER_PERMS: Permission[] = [
+  'productionWorkers.view',
+  'production.workers.view',
+  'production.workers.manage',
+  'production.workerTargets.manage',
+  'production.workerReports.view',
+  'production.workerBonus.view',
+  'production.workerBonus.manage',
+  'lineWorkers.view',
+];
+
+const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [
+  'productionWorkers.view',
+  'production.workers.view',
+  'production.workerReports.view',
+];
+
+const PRODUCTION_WORKER_PERMS_BY_ROLE_KEY: Record<string, readonly Permission[]> = {
+  factory_manager: FACTORY_MANAGER_PRODUCTION_WORKER_PERMS,
+  hall_supervisor: HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS,
+};
 
 function rolesCollectionQuery() {
   return query(collection(db, COLLECTION), where('tenantId', '==', getCurrentTenantId()));
@@ -330,6 +367,49 @@ export const roleService = {
       return await seedIfEmptyInFlight;
     } finally {
       seedIfEmptyInFlight = null;
+    }
+  },
+
+  /**
+   * One-time idempotent merge: grant production worker permissions on built-in roles.
+   * Existing custom permissions are preserved; only missing keys are set to true.
+   */
+  async ensureProductionWorkerPermissionsOnRoles(): Promise<number> {
+    if (!isConfigured) return 0;
+    if (productionWorkerPermsMigrationDone) return 0;
+    if (productionWorkerPermsMigrationInFlight) return productionWorkerPermsMigrationInFlight;
+
+    productionWorkerPermsMigrationInFlight = (async () => {
+      const roles = await this.getAll();
+      let patched = 0;
+      for (const role of roles) {
+        if (!role.id || !role.roleKey) continue;
+        const toGrant = PRODUCTION_WORKER_PERMS_BY_ROLE_KEY[role.roleKey];
+        if (!toGrant?.length) continue;
+
+        const current = role.permissions ?? {};
+        const next = { ...current };
+        let changed = false;
+        for (const perm of toGrant) {
+          if (!next[perm]) {
+            next[perm] = true;
+            changed = true;
+          }
+        }
+        if (changed) {
+          await this.update(role.id, { permissions: next });
+          patched += 1;
+        }
+      }
+      return patched;
+    })();
+
+    try {
+      const patched = await productionWorkerPermsMigrationInFlight;
+      productionWorkerPermsMigrationDone = true;
+      return patched;
+    } finally {
+      productionWorkerPermsMigrationInFlight = null;
     }
   },
 };

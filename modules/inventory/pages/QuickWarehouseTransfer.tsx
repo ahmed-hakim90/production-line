@@ -39,6 +39,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { FormField } from '@/components/ui/form-field';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 type ItemType = 'finished_good' | 'raw_material';
 const APP_VERSION = __APP_VERSION__;
@@ -69,9 +70,13 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+  const setSaveError = useCallback((message: string | null) => {
+    if (message) showAppToast('error', message);
+  }, []);
   const [exporting, setExporting] = useState(false);
-  const [shareToast, setShareToast] = useState<string | null>(null);
+  const setShareToast = useCallback((message: string | null) => {
+    if (message) showAppToast('info', message, { duration: 8000 });
+  }, []);
   const [savedPrintData, setSavedPrintData] = useState<StockTransferPrintData | null>(null);
   /** يغذي مكوّن المخفي و المشاركة في واتساب */
   const [hiddenPrintData, setHiddenPrintData] = useState<StockTransferPrintData | null>(null);
@@ -372,34 +377,6 @@ export const QuickWarehouseTransfer: React.FC = () => {
         subtitle="تسجيل مرجعي تحويل بين المخازن بسرعة — حفظ، مشاركة وتصدير."
         icon="swap_horiz"
       />
-
-      {shareToast && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3 animate-in fade-in duration-300">
-          <span className="material-icons-round text-emerald-500">image</span>
-          <p className="text-sm font-medium text-emerald-700 flex-1">{shareToast}</p>
-          <button
-            type="button"
-            onClick={() => setShareToast(null)}
-            className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0"
-          >
-            <span className="material-icons-round text-sm">close</span>
-          </button>
-        </div>
-      )}
-
-      {saveError && (
-        <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-rose-500">error</span>
-          <p className="text-sm font-bold text-rose-700 flex-1">{saveError}</p>
-          <button
-            type="button"
-            onClick={() => setSaveError(null)}
-            className="p-1 text-rose-400 hover:text-rose-600 transition-colors shrink-0"
-          >
-            <span className="material-icons-round text-sm">close</span>
-          </button>
-        </div>
-      )}
 
       {!saved ? (
         <Card title="بيانات التحويل">

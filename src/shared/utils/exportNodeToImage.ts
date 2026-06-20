@@ -1,4 +1,15 @@
 import { toBlob } from 'html-to-image';
+import {
+  shareImageBlobToWhatsApp,
+  waitForExportPaint,
+  type ShareResult,
+} from '../../../utils/reportExport';
+
+export type CaptureAndShareToWhatsAppOptions = {
+  caption?: string;
+  paintDelayMs?: number;
+  captureTimeoutMs?: number;
+};
 
 const waitForFonts = async () => {
   if (typeof document === 'undefined' || !('fonts' in document)) return;
@@ -70,4 +81,20 @@ export async function exportNodeToPng(node: HTMLElement): Promise<Blob> {
   }
 
   return blob;
+}
+
+export async function captureNodeAndShareToWhatsApp(
+  node: HTMLElement,
+  title: string,
+  options?: CaptureAndShareToWhatsAppOptions,
+): Promise<ShareResult> {
+  const { caption, paintDelayMs = 250, captureTimeoutMs = 20000 } = options ?? {};
+  await waitForExportPaint(paintDelayMs);
+  const blob = await Promise.race([
+    exportNodeToPng(node),
+    new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('capture_timeout')), captureTimeoutMs);
+    }),
+  ]);
+  return shareImageBlobToWhatsApp(blob, title, { caption });
 }

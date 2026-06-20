@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Info, Loader2, Plus, Trash2, X } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Loader2, Plus, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { getOperationalDateString } from '../../../utils/calculations';
@@ -19,10 +19,17 @@ import {
   parseInjectionCategoryTokens,
 } from '@/modules/production/utils/injectionMaterialFilter';
 import {
-  DEFAULT_INJECTION_SHIFT,
   INJECTION_SHIFT_OPTIONS,
-  normalizeInjectionShift,
+  isInjectionShiftSelected,
 } from '@/modules/production/utils/injectionReportShift';
+import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import type { LineWorkerAssignment } from '../../../types';
+import {
+  buildWorkersCountAutoFillFromAssignments,
+  shouldApplyWorkersCountAutoFill,
+  sumWorkersCountPatch,
+} from '@/modules/production/utils/lineAssignmentWorkersCount';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 type ReportFormState = {
   reportType: 'finished_product' | 'component_injection' | 'packaging';
@@ -31,7 +38,7 @@ type ReportFormState = {
   lineId: string;
   workOrderId: string;
   date: string;
-  shift: ProductionReportShift;
+  shift: ProductionReportShift | '';
   quantityProduced: number;
   workersCount: number;
   workersProductionCount: number;
@@ -43,11 +50,6 @@ type ReportFormState = {
   workHours: number;
   notes: string;
   packagingLines: PackagingReportLine[];
-};
-
-type FeedbackState = {
-  text: string;
-  type: 'success' | 'error';
 };
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
@@ -64,7 +66,7 @@ const emptyForm = (): ReportFormState => ({
   lineId: '',
   workOrderId: '',
   date: getOperationalDateString(8),
-  shift: DEFAULT_INJECTION_SHIFT,
+  shift: '',
   quantityProduced: 0,
   workersCount: 0,
   workersProductionCount: 0,
@@ -94,8 +96,8 @@ export const GlobalCreateReportModal: React.FC = () => {
   const [form, setForm] = useState<ReportFormState>(emptyForm());
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [saving, setSaving] = useState(false);
-  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
-  const [showErrorOverlay, setShowErrorOverlay] = useState(false);
+  const [formLineWorkers, setFormLineWorkers] = useState<LineWorkerAssignment[]>([]);
+  const lastAutoFilledWorkersCountRef = useRef<number | null>(null);
   const injectionCategoryTokens = useMemo(
     () => parseInjectionCategoryTokens(injectionCategoryKeywords),
     [injectionCategoryKeywords],
@@ -284,6 +286,58 @@ export const GlobalCreateReportModal: React.FC = () => {
   }, [isOpen, form.reportType, form.lineId, selectableLines]);
 
   useEffect(() => {
+    if (!isOpen || !form.lineId || !form.date) {
+      setFormLineWorkers([]);
+      return;
+    }
+    lineAssignmentService.getByLineAndDate(form.lineId, form.date)
+      .then((list) => setFormLineWorkers(list))
+      .catch(() => setFormLineWorkers([]));
+  }, [isOpen, form.lineId, form.date]);
+
+  useEffect(() => {
+    lastAutoFilledWorkersCountRef.current = null;
+  }, [form.lineId, form.date]);
+
+  useEffect(() => {
+    if (!isOpen || !form.lineId || !form.date) return;
+
+    const patch = buildWorkersCountAutoFillFromAssignments(
+      formLineWorkers,
+      { reportType: form.reportType, isPackagingLine: isPackagingLineForm },
+      form.employeeId,
+    );
+    if (Object.keys(patch).length === 0) return;
+
+    setForm((prev) => {
+      const currentTotal = prev.reportType === 'component_injection' || prev.reportType === 'packaging'
+        ? Number(prev.workersCount || 0)
+        : (
+          (prev.workersProductionCount || 0)
+          + (prev.workersPackagingCount || 0)
+          + (prev.workersQualityCount || 0)
+          + (prev.workersMaintenanceCount || 0)
+          + (prev.workersExternalCount || 0)
+        );
+
+      if (!shouldApplyWorkersCountAutoFill(currentTotal, lastAutoFilledWorkersCountRef.current)) {
+        return prev;
+      }
+
+      lastAutoFilledWorkersCountRef.current = sumWorkersCountPatch(patch);
+      return { ...prev, ...patch };
+    });
+  }, [
+    isOpen,
+    form.lineId,
+    form.date,
+    form.employeeId,
+    form.reportType,
+    formLineWorkers,
+    isPackagingLineForm,
+  ]);
+
+  useEffect(() => {
     if (!isOpen) return;
     const requestedType: ReportFormState['reportType'] =
       payload?.reportType === 'component_injection'
@@ -304,6 +358,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           reportType: initialType,
           workOrderId: '',
           lineId: '',
+          shift: initialType === 'component_injection' ? '' : prev.shift,
           packagingLines: initialType === 'packaging' ? [newEmptyPackagingLine()] : [],
         }
     ));
@@ -322,23 +377,11 @@ export const GlobalCreateReportModal: React.FC = () => {
   if (!canCreateFinishedReports && !can('reports.edit') && !canManageComponentInjectionReports && !can('reports.packaging.create')) return null;
 
   const closeModal = () => {
-    setFeedback(null);
-    setShowErrorOverlay(false);
     close();
   };
 
   const openErrorOverlay = (text: string) => {
-    setFeedback({ text, type: 'error' });
-    setShowErrorOverlay(true);
-  };
-
-  const closeErrorOverlay = () => {
-    setShowErrorOverlay(false);
-  };
-
-  const clearFormAndCloseError = () => {
-    setForm(emptyForm());
-    setShowErrorOverlay(false);
+    showAppToast('error', text);
   };
 
   const handleSave = async () => {
@@ -358,6 +401,10 @@ export const GlobalCreateReportModal: React.FC = () => {
     }
     if (form.reportType === 'component_injection' && !canManageComponentInjectionReports) {
       openErrorOverlay(t('modalManager.createReport.injectionPermissionDenied'));
+      return;
+    }
+    if (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift)) {
+      openErrorOverlay('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
       return;
     }
     const workersRequired = requiresWorkers && effectiveWorkersCount <= 0 && !packagingLaborOptional;
@@ -382,8 +429,6 @@ export const GlobalCreateReportModal: React.FC = () => {
       return;
     }
     setSaving(true);
-    setFeedback(null);
-    setShowErrorOverlay(false);
     try {
       const payload = form.reportType === 'packaging' && validPackagingLines.length > 0
         ? {
@@ -396,8 +441,8 @@ export const GlobalCreateReportModal: React.FC = () => {
         : {
           ...form,
           workersCount: effectiveWorkersCount,
-          ...(form.reportType === 'component_injection'
-            ? { shift: normalizeInjectionShift(form.shift) }
+          ...(form.reportType === 'component_injection' && isInjectionShiftSelected(form.shift)
+            ? { shift: form.shift }
             : {}),
         };
       const created = await createReport(payload);
@@ -406,7 +451,7 @@ export const GlobalCreateReportModal: React.FC = () => {
         openErrorOverlay(getReportDuplicateMessage(storeError, t('modalManager.createReport.saveError')));
         return;
       }
-      setFeedback({ text: t('modalManager.createReport.saveSuccess'), type: 'success' });
+      showAppToast('success', t('modalManager.createReport.saveSuccess'));
       setForm(emptyForm());
     } catch (error) {
       const errorMessage = getReportDuplicateMessage(error, t('modalManager.createReport.saveError'));
@@ -426,25 +471,6 @@ export const GlobalCreateReportModal: React.FC = () => {
         className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
-        {showErrorOverlay && feedback?.type === 'error' && (
-          <div className="absolute inset-0 z-30 bg-black/45 backdrop-blur-[2px] flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-[var(--color-card)] border border-rose-200 rounded-[var(--border-radius-xl)] shadow-2xl p-5 space-y-4">
-              <div className="flex items-center gap-2">
-                <AlertCircle size={18} className="text-rose-500" />
-                <h4 className="text-base font-extrabold text-rose-700">{t('modalManager.createReport.saveFailedTitle')}</h4>
-              </div>
-              <p className="text-sm font-bold text-[var(--color-text)]">{feedback.text}</p>
-              <div className="flex items-center justify-end gap-2">
-                <Button variant="outline" onClick={closeErrorOverlay}>{t('modalManager.createReport.closeAlert')}</Button>
-                <Button variant="danger" onClick={clearFormAndCloseError}>
-                  <Trash2 size={14} />
-                  {t('modalManager.createReport.clearData')}
-                </Button>
-              </div>
-            </div>
-          </div>
-        )}
-
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
           <h3 className="text-lg font-bold">
             {form.reportType === 'component_injection'
@@ -459,22 +485,6 @@ export const GlobalCreateReportModal: React.FC = () => {
         </div>
 
         <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
-          {feedback?.type === 'success' && (
-            <div
-              className={`rounded-[var(--border-radius-lg)] p-3 flex items-center gap-2 border ${
-                'bg-emerald-50 border-emerald-200'
-              }`}
-            >
-              <Info size={18} className="text-emerald-500" />
-              <p
-                className={`text-sm font-bold flex-1 ${
-                  'text-emerald-700'
-                }`}
-              >
-                {feedback.text}
-              </p>
-            </div>
-          )}
           {canChooseReportType && (
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.reportType')}</label>
@@ -494,6 +504,7 @@ export const GlobalCreateReportModal: React.FC = () => {
                     reportType: nextType,
                     workOrderId: '',
                     lineId: '',
+                    shift: nextType === 'component_injection' ? '' : prev.shift,
                     packagingLines: nextType === 'packaging' ? [newEmptyPackagingLine()] : [],
                   }));
                 }}
@@ -559,12 +570,13 @@ export const GlobalCreateReportModal: React.FC = () => {
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">الوردية *</label>
                 <select
                   className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={normalizeInjectionShift(form.shift)}
+                  value={form.shift}
                   onChange={(e) => setForm((prev) => ({
                     ...prev,
-                    shift: e.target.value as ProductionReportShift,
+                    shift: e.target.value as ProductionReportShift | '',
                   }))}
                 >
+                  <option value="">اختر الوردية</option>
                   {INJECTION_SHIFT_OPTIONS.map((option) => (
                     <option key={option.value} value={option.value}>{option.label}</option>
                   ))}
@@ -1035,6 +1047,7 @@ export const GlobalCreateReportModal: React.FC = () => {
               || !form.employeeId
               || !form.quantityProduced
               || !form.workHours
+              || (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
               || (
                 form.reportType !== 'component_injection'
                 && effectiveWorkersCount <= 0

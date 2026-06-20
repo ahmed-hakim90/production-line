@@ -113,7 +113,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
                     className="text-primary font-semibold hover:underline underline-offset-2"
                     dir="ltr"
                   >
-                    Ahmed AbdulFactory
+                    Ahmed AbdulHakim
                   </a>
                 </span>
               </div>

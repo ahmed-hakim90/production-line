@@ -8,6 +8,10 @@ export const INJECTION_SHIFT_OPTIONS: Array<{ value: ProductionReportShift; labe
   { value: 'evening', label: 'مسائي' },
 ];
 
+export function isInjectionShiftSelected(value?: string | null): value is ProductionReportShift {
+  return value === 'morning' || value === 'evening';
+}
+
 export function normalizeInjectionShift(value?: string | null): ProductionReportShift {
   return value === 'evening' ? 'evening' : 'morning';
 }

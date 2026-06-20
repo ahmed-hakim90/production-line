@@ -6,8 +6,14 @@ import { supervisorLineAssignmentService } from '../services/supervisorLineAssig
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import { getTodayDateString } from '../../../utils/calculations';
-import type { LineWorkerAssignment as LWA } from '../../../types';
+import type { LineWorkerAssignment as LWA, LineWorkerLaborRole } from '../../../types';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
+import {
+  DEFAULT_LINE_WORKER_LABOR_ROLE,
+  LINE_WORKER_LABOR_ROLE_LABELS,
+  LINE_WORKER_LABOR_ROLES,
+  resolveLineWorkerLaborRole,
+} from '../utils/lineWorkerLaborRoles';
 import {
   Select,
   SelectContent,
@@ -15,6 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 const WORKER_POSITION_KEYWORDS = ['عامل انتاج', 'عامل إنتاج', 'عامل الانتاج', 'عامل الإنتاج'];
 
@@ -22,6 +29,8 @@ export const LineWorkerAssignment: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
+  const storeCurrentEmployee = useAppStore((s) => s.currentEmployee);
+  const userRoleName = useAppStore((s) => s.userRoleName);
 
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [selectedLineId, setSelectedLineId] = useState('');
@@ -31,16 +40,16 @@ export const LineWorkerAssignment: React.FC = () => {
   const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanInput, setScanInput] = useState('');
-  const [feedback, setFeedback] = useState<{ type: 'success' | 'error' | 'warning'; message: string } | null>(null);
   const [copying, setCopying] = useState(false);
   const [showCopyConfirm, setShowCopyConfirm] = useState(false);
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
+  const [selectedLaborRole, setSelectedLaborRole] = useState<LineWorkerLaborRole>(DEFAULT_LINE_WORKER_LABOR_ROLE);
+  const [updatingLaborRoleId, setUpdatingLaborRoleId] = useState<string | null>(null);
 
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
 
   const inputRef = useRef<HTMLInputElement>(null);
-  const feedbackTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -56,10 +65,13 @@ export const LineWorkerAssignment: React.FC = () => {
   }, []);
 
   const currentEmployee = useMemo(
-    () => _rawEmployees.find((e) => e.userId === uid) ?? null,
-    [_rawEmployees, uid],
+    () => (storeCurrentEmployee?.id ? storeCurrentEmployee : _rawEmployees.find((e) => e.userId === uid)) ?? null,
+    [storeCurrentEmployee, _rawEmployees, uid],
   );
-  const isSupervisorReporter = currentEmployee?.level === 2;
+  const isSupervisorReporter = useMemo(
+    () => String(userRoleName || '').trim().includes('مشرف') || currentEmployee?.level === 2,
+    [userRoleName, currentEmployee?.level],
+  );
 
   useEffect(() => {
     let mounted = true;
@@ -103,6 +115,10 @@ export const LineWorkerAssignment: React.FC = () => {
     () => new Set(visibleLines.map((line) => String(line.id || '')).filter(Boolean)),
     [visibleLines],
   );
+  const visibleLineIdList = useMemo(
+    () => visibleLines.map((line) => String(line.id || '')).filter(Boolean),
+    [visibleLines],
+  );
 
   const loadAssignments = useCallback(async () => {
     setLoading(true);
@@ -141,9 +157,7 @@ export const LineWorkerAssignment: React.FC = () => {
   }, [selectedLineId, assignments]);
 
   const showFeedback = (type: 'success' | 'error' | 'warning', message: string) => {
-    if (feedbackTimer.current) clearTimeout(feedbackTimer.current);
-    setFeedback({ type, message });
-    feedbackTimer.current = setTimeout(() => setFeedback(null), 3500);
+    showAppToast(type, message);
   };
 
   const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name ?? '';
@@ -153,6 +167,11 @@ export const LineWorkerAssignment: React.FC = () => {
   const handleScan = useCallback(async (code: string) => {
     const trimmed = code.trim();
     if (!trimmed || !selectedLineId) return;
+    if (isSupervisorReporter && !visibleLineIds.has(selectedLineId)) {
+      showFeedback('error', 'لا يمكنك تسجيل عمالة على خط غير مربوط بك');
+      setScanInput('');
+      return;
+    }
 
     const employee = _rawEmployees.find((e) => e.code === trimmed);
     if (!employee) {
@@ -196,6 +215,7 @@ export const LineWorkerAssignment: React.FC = () => {
         employeeId: employee.id!,
         employeeCode: employee.code || trimmed,
         employeeName: employee.name,
+        laborRole: selectedLaborRole,
         date: selectedDate,
         assignedBy: uid || '',
       });
@@ -206,7 +226,44 @@ export const LineWorkerAssignment: React.FC = () => {
       showFeedback('error', 'حدث خطأ أثناء الحفظ');
     }
     inputRef.current?.focus();
-  }, [selectedLineId, selectedDate, _rawEmployees, allDayAssignments, uid, loadAssignments]);
+  }, [selectedLineId, selectedDate, selectedLaborRole, isSupervisorReporter, visibleLineIds, _rawEmployees, allDayAssignments, uid, loadAssignments]);
+
+  const handleLaborRoleChange = async (assignmentId: string, laborRole: LineWorkerLaborRole) => {
+    setUpdatingLaborRoleId(assignmentId);
+    try {
+      await lineAssignmentService.updateLaborRole(assignmentId, laborRole);
+      await loadAssignments();
+      showFeedback('success', 'تم تحديث نوع العامل');
+    } catch {
+      showFeedback('error', 'حدث خطأ أثناء تحديث نوع العامل');
+    } finally {
+      setUpdatingLaborRoleId(null);
+    }
+  };
+
+  const renderLaborRoleSelect = (
+    assignment: LWA,
+    compact = false,
+  ) => (
+    <Select
+      value={resolveLineWorkerLaborRole(assignment.laborRole)}
+      disabled={!assignment.id || updatingLaborRoleId === assignment.id}
+      onValueChange={(value) => {
+        if (assignment.id) void handleLaborRoleChange(assignment.id, value as LineWorkerLaborRole);
+      }}
+    >
+      <SelectTrigger className={`${compact ? 'h-8 min-w-[96px] text-xs' : 'h-9 min-w-[120px] text-sm'} border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-2`}>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {LINE_WORKER_LABOR_ROLES.map((role) => (
+          <SelectItem key={role} value={role}>
+            {LINE_WORKER_LABOR_ROLE_LABELS[role]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
@@ -264,14 +321,6 @@ export const LineWorkerAssignment: React.FC = () => {
     setCopying(true);
     setShowCopyConfirm(false);
     try {
-      const sourceDate = await lineAssignmentService.getLatestSourceDateBefore(
-        selectedDate,
-        selectedLineId || undefined,
-      );
-      if (!sourceDate) {
-        showFeedback('warning', 'لا يوجد يوم سابق مسجل فيه عمالة للنسخ');
-        return;
-      }
       const activeIds = new Set(
         _rawEmployees.filter((e) => e.isActive !== false).map((e) => e.id!)
       );
@@ -280,18 +329,49 @@ export const LineWorkerAssignment: React.FC = () => {
           .filter((e) => Boolean(e.id))
           .map((e) => [String(e.id), { name: e.name, code: e.code }])
       );
-      const count = await lineAssignmentService.copyFromDate(
-        sourceDate,
-        selectedDate,
-        selectedLineId || undefined,
-        uid || '',
-        activeIds,
-        employeeDirectory,
-      );
-      if (count > 0) {
-        showFeedback('success', `تم نسخ ${count} عامل من ${sourceDate}`);
+
+      const copyLine = async (lineId?: string) => {
+        const sourceDate = await lineAssignmentService.getLatestSourceDateBefore(selectedDate, lineId);
+        if (!sourceDate) return { count: 0, sourceDate: null as string | null };
+        const count = await lineAssignmentService.copyFromDate(
+          sourceDate,
+          selectedDate,
+          lineId,
+          uid || '',
+          activeIds,
+          employeeDirectory,
+        );
+        return { count, sourceDate };
+      };
+
+      let count = 0;
+      const sourceDates = new Set<string>();
+      if (isSupervisorReporter) {
+        const lineIdsToCopy = selectedLineId ? [selectedLineId] : visibleLineIdList;
+        if (lineIdsToCopy.length === 0 || lineIdsToCopy.some((lineId) => !visibleLineIds.has(lineId))) {
+          showFeedback('warning', 'لا توجد خطوط مربوطة بك للنسخ');
+          return;
+        }
+        for (const lineId of lineIdsToCopy) {
+          const result = await copyLine(lineId);
+          count += result.count;
+          if (result.sourceDate) sourceDates.add(result.sourceDate);
+        }
       } else {
-        showFeedback('warning', `لا يوجد عمالة جديدة لنسخها من ${sourceDate}`);
+        const result = await copyLine(selectedLineId || undefined);
+        count = result.count;
+        if (result.sourceDate) sourceDates.add(result.sourceDate);
+      }
+
+      const sourceDateLabel = Array.from(sourceDates).sort().pop();
+      if (!sourceDateLabel) {
+        showFeedback('warning', 'لا يوجد يوم سابق مسجل فيه عمالة للنسخ');
+        return;
+      }
+      if (count > 0) {
+        showFeedback('success', `تم نسخ ${count} عامل من ${sourceDateLabel}`);
+      } else {
+        showFeedback('warning', `لا يوجد عمالة جديدة لنسخها من ${sourceDateLabel}`);
       }
       await loadAssignments();
     } catch {
@@ -438,12 +518,32 @@ export const LineWorkerAssignment: React.FC = () => {
               <span className="material-icons-round text-primary text-xl">qr_code_scanner</span>
               <h3 className="font-bold text-base">اسم / إدخال كود العامل</h3>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+              <div className="w-full sm:w-[132px] shrink-0">
+                <Select
+                  value={selectedLaborRole}
+                  onValueChange={(value) => setSelectedLaborRole(value as LineWorkerLaborRole)}
+                >
+                  <SelectTrigger
+                    aria-label="نوع العامل"
+                    className="w-full h-[46px] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 text-sm"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LINE_WORKER_LABOR_ROLES.map((role) => (
+                      <SelectItem key={role} value={role}>
+                        {LINE_WORKER_LABOR_ROLE_LABELS[role]}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="flex-1 relative">
                 <input
                   ref={inputRef}
                   type="text"
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium pr-10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
+                  className="w-full h-[46px] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 text-sm font-medium pr-10 focus:border-primary focus:ring-2 focus:ring-primary/20 outline-none transition-all"
                   placeholder="ابحث باسم / كود العامل..."
                   value={scanInput}
                   onChange={(e) => { setScanInput(e.target.value); setShowSuggestions(true); }}
@@ -502,26 +602,13 @@ export const LineWorkerAssignment: React.FC = () => {
               <button
                 onClick={() => handleScan(scanInput)}
                 disabled={!scanInput.trim()}
-                className="px-4 py-3 bg-primary text-white rounded-[var(--border-radius-lg)] hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                className="h-[46px] px-4 bg-primary text-white rounded-[var(--border-radius-lg)] hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               >
                 <span className="material-icons-round text-xl">add_circle</span>
                 <span className="text-sm font-bold hidden sm:inline">إضافة</span>
               </button>
             </div>
 
-            {/* Feedback */}
-            {feedback && (
-              <div className={`flex items-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold animate-in fade-in duration-200 ${
-                feedback.type === 'success' ? 'bg-emerald-50 text-emerald-700' :
-                feedback.type === 'error' ? 'bg-rose-50 text-rose-700' :
-                'bg-amber-50 text-amber-700'
-              }`}>
-                <span className="material-icons-round text-lg">
-                  {feedback.type === 'success' ? 'check_circle' : feedback.type === 'error' ? 'error' : 'warning'}
-                </span>
-                {feedback.message}
-              </div>
-            )}
           </div>
         </Card>
       )}
@@ -558,6 +645,7 @@ export const LineWorkerAssignment: React.FC = () => {
                   <tr>
                     <th className="erp-th">الكود</th>
                     <th className="erp-th">الاسم</th>
+                    <th className="erp-th">النوع</th>
                     <th className="erp-th hidden sm:table-cell">القسم</th>
                     <th className="erp-th hidden sm:table-cell">المنصب</th>
                     <th className="erp-th">وقت التسجيل</th>
@@ -578,6 +666,7 @@ export const LineWorkerAssignment: React.FC = () => {
                           </span>
                         </td>
                         <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{getAssignmentEmployeeName(a)}</td>
+                        <td className="py-2.5 px-3">{renderLaborRoleSelect(a, true)}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getDeptName(emp.departmentId) : '—'}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getPositionTitle(emp.jobPositionId) : '—'}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] text-xs">{formatTime(a.assignedAt)}</td>
@@ -661,6 +750,7 @@ export const LineWorkerAssignment: React.FC = () => {
                                   {getAssignmentEmployeeCode(w)}
                                 </span>
                                 <span className="font-medium">{getAssignmentEmployeeName(w)}</span>
+                                {renderLaborRoleSelect(w, true)}
                                 {emp && (
                                   <span className="text-xs text-[var(--color-text-muted)] hidden sm:inline">
                                     {getDeptName(emp.departmentId)}

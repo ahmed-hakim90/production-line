@@ -61,13 +61,14 @@ import {
   ProductionLineStatus,
   type FirestoreProductionLine,
   type PackagingReportLine,
+  type ProductionReportWorkerOutput,
   type ProductionReportShift,
 } from '../../../types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../../../types';
+import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import { usePermission } from '../../../utils/permissions';
 import {
   getShareResultFeedbackMessage,
-  shareImageBlobToWhatsApp,
-  waitForExportPaint,
   type ShareResult,
 } from '../../../utils/reportExport';
 import {
@@ -81,6 +82,12 @@ import type {
 } from '../../../utils/importExcel';
 import type { ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import {
+  buildWorkersCountAutoFillFromAssignments,
+  countOperatorsFromAssignments,
+  shouldApplyWorkersCountAutoFill,
+  sumWorkersCountPatch,
+} from '../utils/lineAssignmentWorkersCount';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
 import { Link, useLocation, useParams } from 'react-router-dom';
@@ -108,10 +115,10 @@ import { PageHeader } from '../../../components/PageHeader';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import {
-  DEFAULT_INJECTION_SHIFT,
   getInjectionShiftLabel,
   INJECTION_SHIFT_OPTIONS,
   isDuplicateProductionReport,
+  isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../utils/injectionReportShift';
 import {
@@ -141,6 +148,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 type ReportKindFilter = 'production' | 'packaging' | 'injection' | 'all';
 
@@ -169,7 +177,7 @@ const emptyForm = {
   lineId: '',
   workOrderId: '',
   date: getOperationalDateString(8),
-  shift: DEFAULT_INJECTION_SHIFT as ProductionReportShift,
+  shift: '' as ProductionReportShift | '',
   quantityProduced: 0,
   workersCount: 0,
   workersProductionCount: 0,
@@ -181,6 +189,7 @@ const emptyForm = {
   notes: '',
   componentScrapItems: [] as ReportComponentScrapItem[],
   packagingLines: [] as PackagingReportLine[],
+  workerOutputs: [] as ProductionReportWorkerOutput[],
 };
 
 const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>): number =>
@@ -505,6 +514,9 @@ export const Reports: React.FC = () => {
   const productionPlans = useAppStore((s) => s.productionPlans);
   const workOrders = useAppStore((s) => s.workOrders);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
+  const productionWorkerSettings = useAppStore(
+    (s) => s.systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS,
+  );
   const costMonthlyWorkingDays = useAppStore((s) => s.systemSettings.costMonthlyWorkingDays);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
@@ -596,9 +608,19 @@ export const Reports: React.FC = () => {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [shareToast, setShareToast] = useState<string | null>(null);
-  const [saveToast, setSaveToast] = useState<string | null>(null);
-  const [saveToastType, setSaveToastType] = useState<'success' | 'error'>('success');
+  const setShareToast = useCallback((message: string | null) => {
+    if (message) showAppToast('info', message, { duration: 8000 });
+  }, []);
+  const saveToastTypeRef = useRef<'success' | 'error'>('success');
+  const setSaveToastType = useCallback((type: 'success' | 'error') => {
+    saveToastTypeRef.current = type;
+  }, []);
+  const setSaveToast = useCallback((message: string | null) => {
+    if (!message) return;
+    showAppToast(saveToastTypeRef.current, message, {
+      duration: saveToastTypeRef.current === 'error' ? 5000 : 3500,
+    });
+  }, []);
   const [syncingMissingTransfers, setSyncingMissingTransfers] = useState(false);
   const [backfillingUnlinkedReports, setBackfillingUnlinkedReports] = useState(false);
   const [unlinkingReportWorkOrders, setUnlinkingReportWorkOrders] = useState(false);
@@ -656,9 +678,10 @@ export const Reports: React.FC = () => {
   const [viewWorkersError, setViewWorkersError] = useState<string | null>(null);
   const getOperatorsCount = useCallback(
     (workers: LineWorkerAssignment[], supervisorId?: string) =>
-      workers.filter((w) => w.employeeId !== supervisorId).length,
+      countOperatorsFromAssignments(workers, supervisorId),
     [],
   );
+  const lastAutoFilledWorkersCountRef = useRef<number | null>(null);
 
   // Work order detail popup
   const [viewWOReport, setViewWOReport] = useState<ProductionReport | null>(null);
@@ -767,6 +790,54 @@ export const Reports: React.FC = () => {
       setFormLineWorkers(list);
     }).catch(() => setFormLineWorkers([]));
   }, [showModal, form.lineId, form.date, editId]);
+
+  useEffect(() => {
+    lastAutoFilledWorkersCountRef.current = null;
+  }, [form.lineId, form.date, editId]);
+
+  useEffect(() => {
+    if (!showModal || editId || !form.lineId || !form.date) return;
+
+    const reportType = form.reportType === 'packaging'
+      ? 'packaging'
+      : form.reportType === 'component_injection'
+        ? 'component_injection'
+        : 'finished_product';
+    const patch = buildWorkersCountAutoFillFromAssignments(
+      formLineWorkers,
+      { reportType, isPackagingLine: isPackagingLineForm },
+      form.employeeId,
+    );
+    if (Object.keys(patch).length === 0) return;
+
+    setForm((prev) => {
+      const currentTotal = prev.reportType === 'component_injection' || prev.reportType === 'packaging'
+        ? Number(prev.workersCount || 0)
+        : (
+          (prev.workersProductionCount || 0)
+          + (prev.workersPackagingCount || 0)
+          + (prev.workersQualityCount || 0)
+          + (prev.workersMaintenanceCount || 0)
+          + (prev.workersExternalCount || 0)
+        );
+
+      if (!shouldApplyWorkersCountAutoFill(currentTotal, lastAutoFilledWorkersCountRef.current)) {
+        return prev;
+      }
+
+      lastAutoFilledWorkersCountRef.current = sumWorkersCountPatch(patch);
+      return { ...prev, ...patch };
+    });
+  }, [
+    showModal,
+    editId,
+    form.lineId,
+    form.date,
+    form.employeeId,
+    form.reportType,
+    formLineWorkers,
+    isPackagingLineForm,
+  ]);
 
   useEffect(() => {
     if (!showModal || !shouldLockEmployeeToCurrent || !currentEmployee?.id) return;
@@ -1568,23 +1639,19 @@ export const Reports: React.FC = () => {
         setShareCardRow(row);
       });
       try {
-        await waitForExportPaint(250);
         if (!shareCardRef.current) {
           toast.error('تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.');
           return;
         }
-        const { exportNodeToPng } = await import('@/src/shared/utils/exportNodeToImage');
+        const { captureNodeAndShareToWhatsApp } = await import('@/src/shared/utils/exportNodeToImage');
         const caption = formatProductionReportShareCaption(row, printTemplate);
         const reportNumber = row.reportCode?.trim()
           || (row.reportId ? `RPT-${row.reportId.slice(-6).toUpperCase()}` : 'RPT-NA');
-        const shareTitle = `production-report-${reportNumber}`;
-        const blob = await Promise.race([
-          exportNodeToPng(shareCardRef.current),
-          new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('capture_timeout')), 20000);
-          }),
-        ]);
-        const result = await shareImageBlobToWhatsApp(blob, shareTitle, { caption });
+        const result = await captureNodeAndShareToWhatsApp(
+          shareCardRef.current,
+          `production-report-${reportNumber}`,
+          { caption },
+        );
         showShareFeedback(result);
       } catch (error: unknown) {
         const err = error as { name?: string; message?: string };
@@ -1878,7 +1945,7 @@ export const Reports: React.FC = () => {
       date: report.date,
       shift: rt === 'component_injection'
         ? normalizeInjectionShift(report.shift)
-        : DEFAULT_INJECTION_SHIFT,
+        : '',
       quantityProduced: report.quantityProduced,
       workersCount: report.workersCount,
       workersProductionCount: report.workersProductionCount || 0,
@@ -1920,6 +1987,7 @@ export const Reports: React.FC = () => {
             return [{ productId: pid, quantityPieces: q }];
           })()
           : [],
+      workerOutputs: Array.isArray(report.workerOutputs) ? report.workerOutputs : [],
     });
     setShowModal(true);
   };
@@ -2013,8 +2081,8 @@ export const Reports: React.FC = () => {
       const candidate = {
         ...payload,
         reportType: resolveReportType(payload.reportType),
-        shift: resolveReportType(payload.reportType) === 'component_injection'
-          ? normalizeInjectionShift(payload.shift)
+        shift: resolveReportType(payload.reportType) === 'component_injection' && isInjectionShiftSelected(payload.shift)
+          ? payload.shift
           : undefined,
       };
       return sameDayReports.some((r) => isDuplicateProductionReport(r, candidate, excludeReportId));
@@ -2036,6 +2104,12 @@ export const Reports: React.FC = () => {
     const productQtyOk = form.reportType === 'packaging'
       ? packagingQtyOk
       : Boolean(form.productId && form.quantityProduced);
+    if (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift)) {
+      setSaveToastType('error');
+      setSaveToast('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
     if (!form.lineId || !form.employeeId || !productQtyOk || !form.workHours || workersRequired) {
       setSaveToastType('error');
       setSaveToast(requiresWorkers
@@ -2101,8 +2175,8 @@ export const Reports: React.FC = () => {
         : form.reportType === 'packaging'
           ? { packagingLines: [] as PackagingReportLine[] }
           : {}),
-      ...(resolveReportType(form.reportType) === 'component_injection'
-        ? { shift: normalizeInjectionShift(form.shift) }
+      ...(resolveReportType(form.reportType) === 'component_injection' && isInjectionShiftSelected(form.shift)
+        ? { shift: form.shift }
         : { shift: undefined }),
       workersCount: effectiveFormWorkersCount,
     } as typeof form & { workersCount: number; supplyCycleId?: string };
@@ -2116,8 +2190,8 @@ export const Reports: React.FC = () => {
         employeeId: payload.employeeId,
         productId: payload.productId,
         reportType: resolveReportType(payload.reportType),
-        shift: resolveReportType(payload.reportType) === 'component_injection'
-          ? normalizeInjectionShift(payload.shift)
+        shift: resolveReportType(payload.reportType) === 'component_injection' && isInjectionShiftSelected(payload.shift)
+          ? payload.shift
           : undefined,
       },
       editId,
@@ -2129,6 +2203,19 @@ export const Reports: React.FC = () => {
           ? 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمكون والوردية'
           : 'هذا التقرير مسجل من قبل لنفس اليوم والخط والمشرف',
       );
+      setTimeout(() => setSaveToast(null), 3500);
+      return;
+    }
+    const workerOutputTotal = (form.workerOutputs || []).reduce((sum, row) => sum + Number(row.outputQty || 0), 0);
+    if (
+      productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
+      && form.reportType === 'finished_product'
+      && form.quantityProduced > 0
+      && (form.workerOutputs || []).length > 0
+      && workerOutputTotal !== Number(form.quantityProduced)
+    ) {
+      setSaveToastType('error');
+      setSaveToast('مجموع إنتاج العمال يجب أن يطابق كمية التقرير');
       setTimeout(() => setSaveToast(null), 3500);
       return;
     }
@@ -3478,17 +3565,6 @@ export const Reports: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* WhatsApp Share Feedback */}
-      {shareToast && (
-        <div className="erp-alert erp-alert-success erp-animate-in">
-          <ReportIcon name="share" className="text-[18px] shrink-0" />
-          <p className="flex-1">{shareToast}</p>
-          <button onClick={() => setShareToast(null)} className="shrink-0 opacity-60 hover:opacity-100 transition-opacity" style={{ background: 'none', border: 'none', cursor: 'pointer' }}>
-            <ReportIcon name="close" className="text-[16px]" />
-          </button>
-        </div>
-      )}
-
       {/* Reports Table */}
       {rangeError && (viewMode === 'range' || viewMode === 'general') && (
         <div className="erp-alert erp-alert-warning">
@@ -4044,15 +4120,6 @@ export const Reports: React.FC = () => {
               </button>
             </div>
             <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
-              {saveToast && saveToastType === 'success' && (
-                <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-2 animate-in fade-in duration-300">
-                  <ReportIcon name="check_circle" className="text-emerald-500 text-lg" />
-                  <p className="text-sm font-bold text-emerald-700 flex-1">{saveToast}</p>
-                  <button onClick={() => setSaveToast(null)} className="text-emerald-400 hover:text-emerald-600 transition-colors">
-                    <ReportIcon name="close" className="text-sm" />
-                  </button>
-                </div>
-              )}
               {canChooseReportType && (
                 <div className="space-y-2">
                   <label className="block text-sm font-bold text-[var(--color-text-muted)]">نوع التقرير</label>
@@ -4068,6 +4135,7 @@ export const Reports: React.FC = () => {
                         reportType: nextType,
                         workOrderId: '',
                         lineId: '',
+                        ...(nextType === 'component_injection' ? { shift: '' as ProductionReportShift | '' } : {}),
                         ...(nextType === 'packaging'
                           ? {
                             packagingLines: form.packagingLines?.length
@@ -4165,7 +4233,7 @@ export const Reports: React.FC = () => {
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">الوردية *</label>
                     <Select
-                      value={normalizeInjectionShift(form.shift)}
+                      value={form.shift || undefined}
                       onValueChange={(value) => setForm({
                         ...form,
                         shift: value as ProductionReportShift,
@@ -4476,6 +4544,11 @@ export const Reports: React.FC = () => {
                       onChange={(e) => setForm({ ...form, workersCount: Number(e.target.value) })}
                       placeholder="0"
                     />
+                    {formLineWorkers.length > 0 && (
+                      <p className="text-xs text-primary font-bold">
+                        {getOperatorsCount(formLineWorkers, form.employeeId)} عامل مسجل على الخط — تم تعبئة العدد تلقائياً
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <label className="block text-sm font-bold text-[var(--color-text-muted)]">ساعات العمل *</label>
@@ -4543,7 +4616,7 @@ export const Reports: React.FC = () => {
                           className="text-xs text-primary font-bold hover:underline flex items-center gap-1"
                         >
                           <ReportIcon name="groups" className="text-xs" />
-                          تم جلب {getOperatorsCount(formLineWorkers, form.employeeId)} عامل تشغيل مسجل — اضغط للعرض
+                          {getOperatorsCount(formLineWorkers, form.employeeId)} عامل مسجل على الخط — تم تعبئة العدد تلقائياً
                         </button>
                       )}
                     </div>
@@ -4619,6 +4692,42 @@ export const Reports: React.FC = () => {
                   </div>
                 </>
               )}
+              {form.reportType === 'finished_product'
+                && form.lineId && form.productId && form.date
+                && productionWorkerSettings.performance.productionWorkerOutputEnabled ? (
+                <ReportWorkerOutputsSection
+                  lineId={form.lineId}
+                  productId={form.productId}
+                  date={form.date}
+                  lineName={_rawLines.find((l) => l.id === form.lineId)?.name ?? form.lineId}
+                  productName={_rawProducts.find((p) => p.id === form.productId)?.name ?? form.productId}
+                  products={_rawProducts}
+                  reportQty={Number(form.quantityProduced || 0)}
+                  settings={productionWorkerSettings}
+                  value={form.workerOutputs || []}
+                  onChange={(workerOutputs) => setForm((prev) => ({ ...prev, workerOutputs }))}
+                  disabled={saving}
+                />
+              ) : form.reportType === 'finished_product'
+                && form.lineId && form.productId && form.date ? (
+                <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 p-4 space-y-2">
+                  <p className="text-sm font-bold text-amber-800 dark:text-amber-300">إنتاج العمال غير مفعّل</p>
+                  <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                    لإظهار قائمة العمال وإدخال إنتاج كل عامل وقياس الإنجاز على الهدف، فعّل
+                    {' '}
+                    <strong>«تفعيل إدخال إنتاج العمال في تقرير الإنتاج»</strong>
+                    {' '}
+                    من الإعدادات ← إعدادات عمال الإنتاج.
+                  </p>
+                  <button
+                    type="button"
+                    className="text-xs font-bold text-primary"
+                    onClick={() => navigate('/settings')}
+                  >
+                    فتح الإعدادات
+                  </button>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">ملاحظات</label>
                 <textarea
@@ -4731,6 +4840,7 @@ export const Reports: React.FC = () => {
                   || !form.employeeId
                   || !form.quantityProduced
                   || !form.workHours
+                  || (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
                   || (
                     form.reportType !== 'component_injection'
                     && formWorkersTotal <= 0
@@ -4743,19 +4853,6 @@ export const Reports: React.FC = () => {
                 {editId ? 'حفظ التعديلات' : 'حفظ التقرير'}
               </Button>
             </div>
-            {saveToast && saveToastType === 'error' && (
-              <div className="absolute inset-0 z-20 bg-black/35 backdrop-blur-[1px] flex items-center justify-center p-6">
-                <div className="w-full max-w-md bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-start gap-3">
-                  <ReportIcon name="error" className="text-rose-500 text-xl shrink-0" />
-                  <p className="text-sm font-bold text-rose-700 flex-1 text-center">
-                    {saveToast}
-                  </p>
-                  <button onClick={() => setSaveToast(null)} className="text-rose-400 hover:text-rose-600 transition-colors shrink-0">
-                    <ReportIcon name="close" className="text-sm" />
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
         </div>
       )}

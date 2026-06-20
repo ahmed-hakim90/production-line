@@ -45,10 +45,10 @@ export interface Product {
 export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'daily';
 
 export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
-  full_time: 'ط¯ظˆط§ظ… ظƒط§ظ…ظ„',
-  part_time: 'ط¯ظˆط§ظ… ط¬ط²ط¦ظٹ',
-  contract: 'ط¹ظ‚ط¯',
-  daily: 'ظٹظˆظ…ظٹ',
+  full_time: 'دوام كامل',
+  part_time: 'دوام جزئي',
+  contract: 'عقد',
+  daily: 'يومي',
 };
 
 export interface Employee {
@@ -100,6 +100,8 @@ export interface FirestoreProduct {
    * or the plan has no positive step total. Overridden when an active plan supplies its own basis.
    */
   routingTargetUnitSeconds?: number;
+  /** Default daily worker target (pieces) when no worker-specific target exists. */
+  defaultWorkerTargetQty?: number;
 }
 
 export interface ProductMaterial {
@@ -206,6 +208,8 @@ export interface LineProductConfig {
   productId: string;
   lineId: string;
   standardAssemblyTime: number;
+  /** Per-worker daily output target (pieces/worker/day) for this product on this line — not line total. */
+  dailyWorkerTargetQty?: number;
 }
 
 /** One line in a multi-product packaging report. `quantityPieces` is canonical on save. */
@@ -257,7 +261,138 @@ export interface ProductionReport {
   /** When set for packaging reports, quantities come from lines; productId/quantityProduced are derived for legacy fields. */
   packagingLines?: PackagingReportLine[];
   componentScrapItems?: ReportComponentScrapItem[];
+  /** Per-worker output lines; optional for backward compatibility. */
+  workerOutputs?: ProductionReportWorkerOutput[];
   createdAt?: any;
+}
+
+export interface ProductionReportWorkerOutput {
+  workerId: string;
+  workerName: string;
+  productId: string;
+  productName: string;
+  lineId: string;
+  lineName: string;
+  dailyTargetQty: number;
+  outputQty: number;
+  achievementPercent: number;
+  notes?: string;
+}
+
+export type ProductionWorkerType = 'production';
+
+export interface ProductionWorker {
+  id?: string;
+  tenantId?: string;
+  employeeId?: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  workerType: ProductionWorkerType;
+  defaultLineId?: string;
+  lineIds: string[];
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface ProductionLineWorkerAssignment {
+  id?: string;
+  tenantId?: string;
+  lineId: string;
+  workerId: string;
+  isActive: boolean;
+  startDate: string;
+  endDate?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export interface ProductionWorkerTarget {
+  id?: string;
+  tenantId?: string;
+  workerId: string;
+  productId: string;
+  lineId?: string;
+  dailyTargetQty: number;
+  unit: 'piece';
+  isActive: boolean;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
+export type WorkerDailyAchievementStatus =
+  | 'achieved'
+  | 'below_target'
+  | 'over_target'
+  | 'absent'
+  | 'no_output'
+  | 'leave';
+
+export interface WorkerDailyAchievement {
+  workerId: string;
+  date: string;
+  lineId?: string;
+  productId?: string;
+  targetQty: number;
+  outputQty: number;
+  achievementPercent: number;
+  status: WorkerDailyAchievementStatus;
+}
+
+export interface WorkerMonthlyAchievement {
+  workerId: string;
+  month: string;
+  workingDays: number;
+  presentDays: number;
+  absentDays: number;
+  leaveDays: number;
+  noOutputDays: number;
+  achievedDays: number;
+  belowTargetDays: number;
+  overTargetDays: number;
+  monthlyTarget: number;
+  monthlyOutput: number;
+  monthlyAchievement: number;
+  attendanceRate: number;
+  performanceScore: number;
+  bonusEstimate: number;
+}
+
+export interface WorkerPerformanceSummary extends WorkerMonthlyAchievement {
+  id?: string;
+  tenantId?: string;
+  workerName?: string;
+  workerCode?: string;
+  employeeId?: string;
+  updatedAt?: unknown;
+}
+
+export type ProductionBonusMethod = 'per_extra_unit' | 'per_achievement_percent' | 'fixed_tier';
+
+export interface ProductionBonusSettings {
+  enabled: boolean;
+  method: ProductionBonusMethod;
+  minimumAchievementPercent: number;
+  bonusPerExtraUnit: number;
+  bonusPerAchievementPercent: number;
+  maxBonus: number;
+}
+
+export interface ProductionWorkerPerformanceSettings {
+  productionWorkerOutputEnabled: boolean;
+  excludeWeeklyOff: boolean;
+  excludeApprovedLeave: boolean;
+  countAbsentAsZero: boolean;
+  countNoReportAsZero: boolean;
+  productionWorkerOutputMustMatchReportQty: boolean;
+  achievementWarningThreshold: number;
+}
+
+export interface ProductionWorkerSettings {
+  performance: ProductionWorkerPerformanceSettings;
+  bonus: ProductionBonusSettings;
 }
 
 export interface ReportComponentScrapItem {
@@ -319,6 +454,13 @@ export interface LineStatus {
   updatedAt?: any;
 }
 
+export type LineWorkerLaborRole =
+  | 'production'
+  | 'packaging'
+  | 'quality'
+  | 'maintenance'
+  | 'external';
+
 export interface LineWorkerAssignment {
   id?: string;
   lineId: string;
@@ -326,6 +468,7 @@ export interface LineWorkerAssignment {
   employeeCode: string;
   employeeName: string;
   date: string;
+  laborRole?: LineWorkerLaborRole;
   assignedAt?: any;
   assignedBy?: string;
 }
@@ -954,6 +1097,30 @@ export interface PlanSettings {
   categoryCodePadding?: number;
 }
 
+export const DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS: ProductionWorkerPerformanceSettings = {
+  productionWorkerOutputEnabled: false,
+  excludeWeeklyOff: true,
+  excludeApprovedLeave: true,
+  countAbsentAsZero: true,
+  countNoReportAsZero: true,
+  productionWorkerOutputMustMatchReportQty: false,
+  achievementWarningThreshold: 80,
+};
+
+export const DEFAULT_PRODUCTION_BONUS_SETTINGS: ProductionBonusSettings = {
+  enabled: false,
+  method: 'per_extra_unit',
+  minimumAchievementPercent: 100,
+  bonusPerExtraUnit: 0,
+  bonusPerAchievementPercent: 0,
+  maxBonus: 0,
+};
+
+export const DEFAULT_PRODUCTION_WORKER_SETTINGS: ProductionWorkerSettings = {
+  performance: DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS,
+  bonus: DEFAULT_PRODUCTION_BONUS_SETTINGS,
+};
+
 // â”€â”€â”€ General Settings (Branding, Theme, Dashboard Display, Alert Toggles) â”€â”€â”€â”€
 
 export interface BrandingSettings {
@@ -1115,6 +1282,7 @@ export interface SystemSettings {
   quickActions?: QuickActionItem[];
   exportImport?: ExportImportSettings;
   attendanceIntegration?: AttendanceIntegrationSettings;
+  productionWorkerSettings?: ProductionWorkerSettings;
   /** ط£ظ‚ظ„ ط¥طµط¯ط§ط± ط¹ظ…ظٹظ„ ظ…ط³ظ…ظˆط­ (طµظٹط؛ط© x.y.z) ط¹ظ†ط¯ طھظپط¹ظٹظ„ forceClientUpdate */
   minimumClientVersion?: string;
   /** ط¹ظ†ط¯ true ظ…ط¹ minimumClientVersion ط£ظ‚ظ„ ظ…ظ† ط¥طµط¯ط§ط± ط§ظ„ط¨ظ†ط§ط،طŒ ظٹظڈظ…ظ†ط¹ ط§ط³طھط®ط¯ط§ظ… ط§ظ„طھط·ط¨ظٹظ‚ ط­طھظ‰ ط§ظ„طھط­ط¯ظٹط« */

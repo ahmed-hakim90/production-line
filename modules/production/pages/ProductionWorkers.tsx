@@ -1,833 +1,600 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { X } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { useAppStore } from '../../../store/useAppStore';
-import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
-import { useManagedPrint } from '@/utils/printManager';
-import { SelectableTable, type TableColumn, type TableBulkAction } from '../components/SelectableTable';
-import { ProductionReportPrint, mapReportsToPrintRows, computePrintTotals } from '../components/ProductionReportPrint';
-import type { FirestoreEmployee, ProductionReport } from '../../../types';
-import { getDocs, query, where } from 'firebase/firestore';
-import { getCurrentTenantId } from '@/lib/currentTenant';
-import { departmentsRef, jobPositionsRef } from '../../hr/collections';
-import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
-import { formatNumber, calculateWasteRatio, getTodayDateString, getReportWaste } from '../../../utils/calculations';
-import { usePermission } from '../../../utils/permissions';
-import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import { PageHeader } from '@/components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { useAppStore } from '@/store/useAppStore';
+import { usePermission } from '@/utils/permissions';
+import { formatNumber, getTodayDateString } from '@/utils/calculations';
+import { Badge, Button, Card, KPIBox, LoadingSkeleton, SearchableSelect } from '../components/UI';
+import { SelectableTable, type TableColumn } from '../components/SelectableTable';
+import type {
+  ProductionLineWorkerAssignment,
+  ProductionWorker,
+  ProductionWorkerTarget,
+  WorkerMonthlyAchievement,
+} from '@/types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
+import { productionWorkerService, resolveWorkerCodeFromEmployee } from '../services/productionWorkerService';
+import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
+import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
+import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { PageHeader } from '../../../components/PageHeader';
-import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
-import { cn } from '@/lib/utils';
 
-function clamp(v: number, min: number, max: number) { return Math.max(min, Math.min(max, v)); }
+type WorkerRow = ProductionWorker & {
+  assignedLineIds: string[];
+  activeTargetsCount: number;
+  todayOutput: number;
+  todayAchievement: number;
+  monthStats: WorkerMonthlyAchievement | null;
+};
 
-function computePerformanceScore(
-  produced: number,
-  target: number,
-  wasteRatio: number,
-  activeDays: number,
-  totalDays: number,
-): number {
-  const productionScore = target > 0 ? (produced / target) * 100 : (produced > 0 ? 75 : 0);
-  const wastePenalty = wasteRatio;
-  const consistencyBonus = totalDays > 0 ? (activeDays / totalDays) * 10 : 0;
-  return clamp(Math.round(productionScore - wastePenalty + consistencyBonus), 0, 100);
-}
-
-function getScoreBadge(score: number): { variant: 'success' | 'warning' | 'danger'; label: string } {
-  if (score >= 85) return { variant: 'success', label: 'ممتاز' };
-  if (score >= 70) return { variant: 'warning', label: 'جيد' };
-  return { variant: 'danger', label: 'ضعيف' };
-}
-
-function getWeekStart(): string {
+const currentMonth = (): string => {
   const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const monday = new Date(d.setDate(diff));
-  const y = monday.getFullYear();
-  const m = String(monday.getMonth() + 1).padStart(2, '0');
-  const dd = String(monday.getDate()).padStart(2, '0');
-  return `${y}-${m}-${dd}`;
-}
-
-function getLastWeekRange(): { start: string; end: string } {
-  const d = new Date();
-  const day = d.getDay();
-  const diff = d.getDate() - day + (day === 0 ? -6 : 1);
-  const thisMonday = new Date(d);
-  thisMonday.setDate(diff);
-  const lastSunday = new Date(thisMonday);
-  lastSunday.setDate(thisMonday.getDate() - 1);
-  const lastMonday = new Date(lastSunday);
-  lastMonday.setDate(lastSunday.getDate() - 6);
-  const fmt = (dt: Date) => {
-    const yy = dt.getFullYear();
-    const mm = String(dt.getMonth() + 1).padStart(2, '0');
-    const dd = String(dt.getDate()).padStart(2, '0');
-    return `${yy}-${mm}-${dd}`;
-  };
-  return { start: fmt(lastMonday), end: fmt(lastSunday) };
-}
-
-function toDateInputValue(date: Date): string {
-  const y = date.getFullYear();
-  const m = String(date.getMonth() + 1).padStart(2, '0');
-  const d = String(date.getDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-function countUniqueDaysInRange(reports: ProductionReport[], start: string, end: string): number {
-  const dates = new Set<string>();
-  for (const r of reports) {
-    if (r.date >= start && r.date <= end) dates.add(r.date);
-  }
-  return dates.size;
-}
-
-interface WorkerRow extends FirestoreEmployee {
-  reports: ProductionReport[];
-  reportCount: number;
-  totalProduced: number;
-  totalWaste: number;
-  todayProduced: number;
-  weekProduced: number;
-  scrapRate: number;
-  performanceScore: number;
-  assignedLines: string[];
-  lastActivity: string;
-}
-
-type StatFilter = '' | 'today' | 'week' | 'highScrap' | 'lowScore' | 'active';
-
-const WORKER_POSITION_KEYWORDS = ['عامل انتاج', 'عامل إنتاج', 'عامل الانتاج', 'عامل الإنتاج'];
-
-const getWorkerDisplayName = (worker: Pick<WorkerRow, 'name' | 'code' | 'id'>): string => {
-  const name = String(worker.name || '').trim();
-  if (name) return name;
-  const code = String(worker.code || '').trim();
-  if (code) return `(${code})`;
-  return String(worker.id || '—');
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
 export const ProductionWorkers: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
-
-  const _rawEmployees = useAppStore((s) => s._rawEmployees);
-  const productionReports = useAppStore((s) => s.productionReports);
-  const todayReports = useAppStore((s) => s.todayReports);
+  const canManage = can('production.workers.manage') || can('productionWorkers.view');
+  const canManageTargets = can('production.workerTargets.manage') || canManage;
   const productionLines = useAppStore((s) => s.productionLines);
   const products = useAppStore((s) => s.products);
-  const employees = useAppStore((s) => s.employees);
-  const productionPlans = useAppStore((s) => s.productionPlans);
-  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
-  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const _rawEmployees = useAppStore((s) => s._rawEmployees);
+  const workerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS);
 
-  const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
-  const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
-  const [dataLoading, setDataLoading] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [statsLoading, setStatsLoading] = useState(false);
+  const [workers, setWorkers] = useState<ProductionWorker[]>([]);
+  const [assignments, setAssignments] = useState<ProductionLineWorkerAssignment[]>([]);
+  const [targets, setTargets] = useState<ProductionWorkerTarget[]>([]);
+  const [monthStatsMap, setMonthStatsMap] = useState<Map<string, WorkerMonthlyAchievement>>(new Map());
+  const [todayStatsMap, setTodayStatsMap] = useState<Map<string, { output: number; achievement: number }>>(new Map());
 
   const [search, setSearch] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('');
   const [filterLine, setFilterLine] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'' | 'active' | 'inactive'>('');
-  const [filterScoreRange, setFilterScoreRange] = useState<'' | 'high' | 'mid' | 'low'>('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
-  const [statFilter, setStatFilter] = useState<StatFilter>('');
-  const [assignmentMapByWorker, setAssignmentMapByWorker] = useState<Map<string, string[]>>(new Map());
-  const [hoveredWorker, setHoveredWorker] = useState<string | null>(null);
-  const hoverTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
-  const [bulkPrintReports, setBulkPrintReports] = useState<ProductionReport[] | null>(null);
-  const bulkPrintRef = useRef<HTMLDivElement>(null);
-  const handleBulkPrint = useManagedPrint({ contentRef: bulkPrintRef, printSettings: printTemplate });
-  const today = getTodayDateString();
-  const pageControl = useMemo(
-    () => getExportImportPageControl(exportImportSettings, 'productionWorkers'),
-    [exportImportSettings]
-  );
-  const canExportFromPage = can('export') && pageControl.exportEnabled;
+  const [filterProduct, setFilterProduct] = useState('');
+  const [filterMonth, setFilterMonth] = useState(currentMonth());
+  const [filterDate, setFilterDate] = useState(getTodayDateString());
+  const [filterActive, setFilterActive] = useState<'' | 'active' | 'inactive'>('');
+  const [filterPerformance, setFilterPerformance] = useState<'' | 'below' | 'above' | 'missing_target'>('');
 
-  const loadRefData = useCallback(async () => {
-    setDataLoading(true);
+  const [showForm, setShowForm] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [linkProgress, setLinkProgress] = useState<{ current: number; total: number } | null>(null);
+  const [saveSummary, setSaveSummary] = useState<string | null>(null);
+  const [saveErrors, setSaveErrors] = useState<{ employeeId: string; name: string; message: string }[]>([]);
+  const [form, setForm] = useState({
+    selectedEmployeeIds: [] as string[],
+    isActive: true,
+    defaultLineId: '',
+  });
+
+  const linkedEmployeeIds = useMemo(
+    () => new Set(workers.map((w) => w.employeeId).filter((id): id is string => Boolean(id))),
+    [workers],
+  );
+
+  const linkableEmployees = useMemo(
+    () => _rawEmployees.filter((e) => e.id && e.isActive !== false && !linkedEmployeeIds.has(e.id)),
+    [_rawEmployees, linkedEmployeeIds],
+  );
+
+  const employeeNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    _rawEmployees.forEach((e) => {
+      if (e.id) map.set(e.id, e.name);
+    });
+    return map;
+  }, [_rawEmployees]);
+
+  const loadData = useCallback(async () => {
+    setLoading(true);
     try {
-      const tid = getCurrentTenantId();
-      const [deptSnap, posSnap] = await Promise.all([
-        getDocs(query(departmentsRef(), where('tenantId', '==', tid))),
-        getDocs(query(jobPositionsRef(), where('tenantId', '==', tid))),
+      const [w, a, t] = await Promise.all([
+        productionWorkerService.getAll(),
+        productionLineWorkerAssignmentService.getAll(),
+        productionWorkerTargetService.getAll(),
       ]);
-      setDepartments(deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)));
-      setJobPositions(posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)));
-    } catch (e) {
-      console.error('loadRefData error:', e);
+      setWorkers(w);
+      setAssignments(a);
+      setTargets(t);
     } finally {
-      setDataLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  useEffect(() => { loadRefData(); }, [loadRefData]);
-
-  const assignmentReferenceDate = useMemo(
-    () => filterDateTo || filterDateFrom || today,
-    [filterDateFrom, filterDateTo, today]
-  );
-
-  const loadAssignmentsForDate = useCallback(async (date: string) => {
-    try {
-      const dayAssignments = await lineAssignmentService.getByDate(date);
-      const byWorker = new Map<string, Set<string>>();
-      dayAssignments.forEach((row) => {
-        const workerId = String(row.employeeId || '').trim();
-        const lineId = String(row.lineId || '').trim();
-        if (!workerId || !lineId) return;
-        const lines = byWorker.get(workerId) || new Set<string>();
-        lines.add(lineId);
-        byWorker.set(workerId, lines);
-      });
-      const normalized = new Map<string, string[]>();
-      byWorker.forEach((lineIds, workerId) => normalized.set(workerId, Array.from(lineIds)));
-      setAssignmentMapByWorker(normalized);
-    } catch (error) {
-      console.error('loadAssignmentsForDate workers error:', error);
-      setAssignmentMapByWorker(new Map());
-    }
-  }, []);
+  useEffect(() => { void loadData(); }, [loadData]);
 
   useEffect(() => {
-    void loadAssignmentsForDate(assignmentReferenceDate);
-  }, [assignmentReferenceDate, loadAssignmentsForDate]);
-
-  const getDepartmentName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
-  const getJobPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '—';
-  const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? '—';
-
-  const workerPositionIds = useMemo(() => {
-    return new Set(
-      jobPositions
-        .filter((jp) => WORKER_POSITION_KEYWORDS.some((kw) => jp.title.includes(kw)))
-        .map((jp) => jp.id!)
-    );
-  }, [jobPositions]);
-
-  const lookups = useMemo(() => ({
-    getLineName: (id: string) => productionLines.find((l) => l.id === id)?.name ?? '—',
-    getProductName: (id: string) => products.find((p) => p.id === id)?.name ?? '—',
-    getEmployeeName: (id: string) => employees.find((e) => e.id === id)?.name ?? '—',
-    getUnitsPerCarton: (id: string) => {
-      const n = Number((products.find((p) => p.id === id) as { unitsPerCarton?: number } | undefined)?.unitsPerCarton ?? 0);
-      return n > 0 ? n : undefined;
-    },
-  }), [productionLines, products, employees]);
-
-  const printRows = useMemo(
-    () => mapReportsToPrintRows(bulkPrintReports ?? [], lookups),
-    [bulkPrintReports, lookups]
-  );
-  const printTotals = useMemo(() => computePrintTotals(printRows), [printRows]);
-
-  const weekStart = useMemo(() => getWeekStart(), []);
-  const lastWeek = useMemo(() => getLastWeekRange(), []);
-
-  const allReports = productionReports.length > 0 ? productionReports : todayReports;
-
-  const reportsByEmployee = useMemo(() => {
-    const map = new Map<string, ProductionReport[]>();
-    for (const r of allReports) {
-      const list = map.get(r.employeeId) ?? [];
-      list.push(r);
-      map.set(r.employeeId, list);
+    if (workers.length === 0) {
+      setMonthStatsMap(new Map());
+      setTodayStatsMap(new Map());
+      return;
     }
-    return map;
-  }, [allReports]);
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void (async () => {
+        setStatsLoading(true);
+        try {
+          const { monthlyByWorkerId, dailyByWorkerId } =
+            await productionWorkerPerformanceService.getWorkersListPerformanceSnapshot({
+              workers,
+              targets,
+              month: filterMonth,
+              date: filterDate,
+              settings: workerSettings,
+              products: products as never[],
+              lineProductConfigs,
+            });
+          if (!cancelled) {
+            setMonthStatsMap(monthlyByWorkerId);
+            setTodayStatsMap(dailyByWorkerId);
+          }
+        } finally {
+          if (!cancelled) setStatsLoading(false);
+        }
+      })();
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [workers, filterMonth, filterDate, targets, products, lineProductConfigs, workerSettings]);
 
-  const targetByEmployee = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const plan of productionPlans) {
-      if (plan.status === 'in_progress' || plan.status === 'planned') {
-        const lineReports = allReports.filter((r) => r.lineId === plan.lineId);
-        const empIds = new Set(lineReports.map((r) => r.employeeId));
-        empIds.forEach((empId) => {
-          map.set(empId, (map.get(empId) ?? 0) + (plan.plannedQuantity ?? 0));
-        });
-      }
-    }
-    return map;
-  }, [productionPlans, allReports]);
+  const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? id;
 
-  const workers = useMemo<WorkerRow[]>(() => {
-    const totalDaysInRange = Math.max(1, Math.ceil((new Date().getTime() - new Date(weekStart).getTime()) / (1000 * 60 * 60 * 24)) + 1);
-
-    const assignedWorkerIds = new Set(Array.from(assignmentMapByWorker.keys()));
-    return _rawEmployees
-      .filter((e) => workerPositionIds.has(e.jobPositionId) && assignedWorkerIds.has(String(e.id || '').trim()))
-      .map((e) => {
-        const reports = reportsByEmployee.get(e.id!) ?? [];
-        const totalProduced = reports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
-        const totalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
-        const todayProduced = reports
-          .filter((r) => r.date === today)
-          .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
-        const weekProduced = reports
-          .filter((r) => r.date >= weekStart && r.date <= today)
-          .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
-        const scrapRate = calculateWasteRatio(totalWaste, totalProduced + totalWaste);
-        const target = targetByEmployee.get(e.id!) ?? 0;
-        const activeDays = countUniqueDaysInRange(reports, weekStart, today);
-        const performanceScore = computePerformanceScore(totalProduced, target, scrapRate, activeDays, totalDaysInRange);
-        const assignedLines = assignmentMapByWorker.get(String(e.id || '').trim())
-          || [...new Set(reports.map((r) => r.lineId))];
-        const lastActivity = reports.length > 0
-          ? reports.reduce((latest, r) => (r.date > latest ? r.date : latest), reports[0].date)
-          : '—';
-
-        return {
-          ...e,
-          reports,
-          reportCount: reports.length,
-          totalProduced,
-          totalWaste,
-          todayProduced,
-          weekProduced,
-          scrapRate,
-          performanceScore,
-          assignedLines,
-          lastActivity,
-        };
-      });
-  }, [_rawEmployees, workerPositionIds, reportsByEmployee, targetByEmployee, today, weekStart, assignmentMapByWorker]);
+  const rows: WorkerRow[] = useMemo(() => {
+    return workers.map((worker) => {
+      const workerAssignments = assignments.filter((a) => a.workerId === worker.id && a.isActive);
+      const lineIds = [...new Set([
+        ...worker.lineIds,
+        ...workerAssignments.map((a) => a.lineId),
+      ])];
+      const activeTargetsCount = targets.filter(
+        (t) => t.workerId === worker.id && t.isActive,
+      ).length;
+      const monthStats = worker.id ? monthStatsMap.get(worker.id) ?? null : null;
+      const today = worker.id ? todayStatsMap.get(worker.id) : undefined;
+      return {
+        ...worker,
+        assignedLineIds: lineIds,
+        activeTargetsCount,
+        todayOutput: today?.output ?? 0,
+        todayAchievement: today?.achievement ?? 0,
+        monthStats,
+      };
+    });
+  }, [workers, assignments, targets, monthStatsMap, todayStatsMap]);
 
   const filtered = useMemo(() => {
-    let list = workers;
-
-    if (statFilter === 'today') list = list.filter((s) => s.todayProduced > 0);
-    else if (statFilter === 'week') list = list.filter((s) => s.weekProduced > 0);
-    else if (statFilter === 'highScrap') list = list.filter((s) => s.scrapRate > 5);
-    else if (statFilter === 'lowScore') list = list.filter((s) => s.performanceScore < 70);
-    else if (statFilter === 'active') list = list.filter((s) => s.isActive !== false);
-
     const q = search.trim().toLowerCase();
-    if (q) {
-      list = list.filter(
-        (e) => e.name?.toLowerCase().includes(q) || (e.code && e.code.toLowerCase().includes(q))
-      );
-    }
-    if (filterDepartment) list = list.filter((e) => e.departmentId === filterDepartment);
-    if (filterLine) list = list.filter((e) => e.assignedLines.includes(filterLine));
-    if (filterStatus === 'active') list = list.filter((e) => e.isActive !== false);
-    if (filterStatus === 'inactive') list = list.filter((e) => e.isActive === false);
-    if (filterScoreRange === 'high') list = list.filter((e) => e.performanceScore >= 85);
-    if (filterScoreRange === 'mid') list = list.filter((e) => e.performanceScore >= 70 && e.performanceScore < 85);
-    if (filterScoreRange === 'low') list = list.filter((e) => e.performanceScore < 70);
+    return rows.filter((row) => {
+      if (filterActive === 'active' && row.isActive === false) return false;
+      if (filterActive === 'inactive' && row.isActive !== false) return false;
+      if (filterLine && !row.assignedLineIds.includes(filterLine)) return false;
+      if (filterProduct && !targets.some((t) => t.workerId === row.id && t.productId === filterProduct)) return false;
+      if (filterPerformance === 'below' && (row.monthStats?.monthlyAchievement ?? 0) >= 100) return false;
+      if (filterPerformance === 'above' && (row.monthStats?.monthlyAchievement ?? 0) <= 100) return false;
+      if (filterPerformance === 'missing_target' && row.activeTargetsCount > 0) return false;
+      if (!q) return true;
+      const employeeName = row.employeeId ? employeeNameById.get(row.employeeId) ?? '' : '';
+      return row.name.toLowerCase().includes(q)
+        || row.code.toLowerCase().includes(q)
+        || employeeName.toLowerCase().includes(q);
+    });
+  }, [rows, search, filterActive, filterLine, filterProduct, filterPerformance, targets, employeeNameById]);
 
-    if (filterDateFrom || filterDateTo) {
-      list = list.filter((s) => {
-        const hasReportsInRange = s.reports.some((r) => {
-          if (filterDateFrom && r.date < filterDateFrom) return false;
-          if (filterDateTo && r.date > filterDateTo) return false;
-          return true;
-        });
-        return hasReportsInRange;
-      });
-    }
+  const linkableEmployeeOptions = useMemo(
+    () => linkableEmployees
+      .filter((e) => e.id && !form.selectedEmployeeIds.includes(e.id))
+      .map((e) => ({
+        value: e.id!,
+        label: `${e.name}${e.code ? ` (${e.code})` : ''}`,
+      })),
+    [linkableEmployees, form.selectedEmployeeIds],
+  );
 
-    return list;
-  }, [workers, search, filterDepartment, filterLine, filterStatus, filterScoreRange, filterDateFrom, filterDateTo, statFilter]);
+  const selectedEmployees = useMemo(
+    () => form.selectedEmployeeIds
+      .map((id) => _rawEmployees.find((e) => e.id === id))
+      .filter((e): e is NonNullable<typeof e> => Boolean(e)),
+    [form.selectedEmployeeIds, _rawEmployees],
+  );
 
-  const stats = useMemo(() => {
-    const activeWorkers = workers.filter((s) => s.isActive !== false).length;
-    const todayTotal = workers.reduce((s, e) => s + e.todayProduced, 0);
-    const weekTotal = workers.reduce((s, e) => s + e.weekProduced, 0);
-    const overallWaste = workers.reduce((s, e) => s + e.totalWaste, 0);
-    const overallProduced = workers.reduce((s, e) => s + e.totalProduced, 0);
-    const overallScrapRate = calculateWasteRatio(overallWaste, overallProduced + overallWaste);
-    const avgScore = workers.length > 0
-      ? Math.round(workers.reduce((s, e) => s + e.performanceScore, 0) / workers.length)
-      : 0;
-
-    const yesterdayStr = (() => {
-      const d = new Date(); d.setDate(d.getDate() - 1);
-      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    })();
-    const yesterdayTotal = allReports
-      .filter((r) => r.date === yesterdayStr && workers.some((s) => s.id === r.employeeId))
-      .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
-    const todayChange = yesterdayTotal > 0 ? Math.round(((todayTotal - yesterdayTotal) / yesterdayTotal) * 100) : 0;
-
-    const lastWeekTotal = allReports
-      .filter((r) => r.date >= lastWeek.start && r.date <= lastWeek.end && workers.some((s) => s.id === r.employeeId))
-      .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
-    const weekChange = lastWeekTotal > 0 ? Math.round(((weekTotal - lastWeekTotal) / lastWeekTotal) * 100) : 0;
-
-    return { activeWorkers, todayTotal, weekTotal, overallScrapRate, avgScore, todayChange, weekChange };
-  }, [workers, allReports, lastWeek]);
-
-  const handleMouseEnter = (id: string) => {
-    clearTimeout(hoverTimeout.current);
-    hoverTimeout.current = setTimeout(() => setHoveredWorker(id), 400);
-  };
-  const handleMouseLeave = () => {
-    clearTimeout(hoverTimeout.current);
-    setHoveredWorker(null);
+  const resetForm = () => {
+    setForm({ selectedEmployeeIds: [], isActive: true, defaultLineId: '' });
+    setLinkProgress(null);
+    setSaveSummary(null);
+    setSaveErrors([]);
+    setShowForm(false);
   };
 
-  const exportSelectedCSV = useCallback((items: WorkerRow[]) => {
-    const rows = items.map((s) => ({
-      'الاسم': getWorkerDisplayName(s),
-      'الرمز': s.code ?? '',
-      'القسم': getDepartmentName(s.departmentId ?? ''),
-      'المنصب': getJobPositionTitle(s.jobPositionId ?? ''),
-      'عدد التقارير': s.reportCount,
-      'إجمالي الإنتاج': s.totalProduced,
-      'إجمالي الهالك': s.totalWaste,
-      'نسبة الهالك %': s.scrapRate,
-      'درجة الأداء': s.performanceScore,
-      'إنتاج اليوم': s.todayProduced,
-      'إنتاج الأسبوع': s.weekProduced,
-      'آخر نشاط': s.lastActivity,
+  const openLinkForm = (employeeId = '') => {
+    setForm({
+      selectedEmployeeIds: employeeId ? [employeeId] : [],
+      isActive: true,
+      defaultLineId: '',
+    });
+    setLinkProgress(null);
+    setSaveSummary(null);
+    setSaveErrors([]);
+    setShowForm(true);
+  };
+
+  const addEmployeeToSelection = (employeeId: string) => {
+    if (!employeeId || form.selectedEmployeeIds.includes(employeeId)) return;
+    if (!linkableEmployees.some((e) => e.id === employeeId)) return;
+    setForm((prev) => ({
+      ...prev,
+      selectedEmployeeIds: [...prev.selectedEmployeeIds, employeeId],
     }));
-    const ws = XLSX.utils.json_to_sheet(rows);
+    setSaveSummary(null);
+    setSaveErrors([]);
+  };
+
+  const removeEmployeeFromSelection = (employeeId: string) => {
+    setForm((prev) => ({
+      ...prev,
+      selectedEmployeeIds: prev.selectedEmployeeIds.filter((id) => id !== employeeId),
+    }));
+    setSaveSummary(null);
+    setSaveErrors([]);
+  };
+
+  const formatLinkSummary = (linked: number, skipped: number, failed: number, total: number) => {
+    const parts: string[] = [];
+    if (linked > 0) parts.push(`تم ربط ${linked}`);
+    if (skipped > 0) parts.push(`تم تخطي ${skipped} (مرتبط مسبقاً)`);
+    if (failed > 0) parts.push(`فشل ${failed}`);
+    const headline = parts.length > 0 ? parts.join('، ') : 'لم يتم الربط';
+    return `${headline} من ${total}`;
+  };
+
+  const handleSaveWorker = async () => {
+    if (saving || form.selectedEmployeeIds.length === 0) return;
+    setSaving(true);
+    setSaveSummary(null);
+    setSaveErrors([]);
+    const total = form.selectedEmployeeIds.length;
+    setLinkProgress({ current: 0, total });
+    try {
+      const employees = selectedEmployees.map((employee) => ({
+        employeeId: employee.id!,
+        name: employee.name,
+        code: resolveWorkerCodeFromEmployee(employee),
+      }));
+      const result = await productionWorkerService.linkEmployees(employees, {
+        isActive: form.isActive,
+        defaultLineId: form.defaultLineId || undefined,
+      }, (current, total) => {
+        setLinkProgress({ current, total });
+      });
+      setSaveSummary(formatLinkSummary(result.linked, result.skipped, result.failed, total));
+      setSaveErrors(result.errors);
+      await loadData();
+      if (result.failed === 0) {
+        resetForm();
+      } else {
+        setForm((prev) => ({
+          ...prev,
+          selectedEmployeeIds: prev.selectedEmployeeIds.filter(
+            (id) => result.errors.some((err) => err.employeeId === id),
+          ),
+        }));
+      }
+    } finally {
+      setSaving(false);
+      setLinkProgress(null);
+    }
+  };
+
+  const exportExcel = () => {
+    const data = filtered.map((row) => ({
+      العامل: row.name,
+      الكود: row.code,
+      الخطوط: row.assignedLineIds.map(getLineName).join('، '),
+      'أهداف نشطة': row.activeTargetsCount,
+      'إنتاج اليوم': row.todayOutput,
+      'إنجاز اليوم %': row.todayAchievement,
+      'إنتاج الشهر': row.monthStats?.monthlyOutput ?? 0,
+      'هدف الشهر': row.monthStats?.monthlyTarget ?? 0,
+      'إنجاز الشهر %': row.monthStats?.monthlyAchievement ?? 0,
+      'نسبة الحضور': row.monthStats?.attendanceRate ?? 0,
+      الدرجة: row.monthStats?.performanceScore ?? 0,
+      'تقدير المكافأة': row.monthStats?.bonusEstimate ?? 0,
+      الحالة: row.isActive === false ? 'غير نشط' : 'نشط',
+    }));
+    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'عمال الإنتاج');
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([buf], { type: 'application/octet-stream' }), `production_workers_${today}.xlsx`);
-  }, [departments, jobPositions, today]);
+    saveAs(new Blob([buf]), `production_workers_${filterMonth}.xlsx`);
+  };
 
-  const printSelected = useCallback((items: WorkerRow[]) => {
-    const allSelectedReports = items.flatMap((s) => s.reports);
-    setBulkPrintReports(allSelectedReports);
-    setTimeout(() => handleBulkPrint(), 100);
-  }, [handleBulkPrint]);
+  const statPlaceholder = statsLoading ? '…' : '0';
 
-  const bulkActions = useMemo<TableBulkAction<WorkerRow>[]>(() => {
-    const actions: TableBulkAction<WorkerRow>[] = [
-      { label: 'تقرير العمال', icon: 'print', action: printSelected, variant: 'default' },
-    ];
-    if (canExportFromPage) {
-      actions.unshift({
-        label: 'تصدير Excel',
-        icon: 'download',
-        action: exportSelectedCSV,
-        variant: pageControl.exportVariant === 'primary' ? 'primary' : 'default',
-        permission: 'export',
-      });
-    }
-    return actions;
-  }, [exportSelectedCSV, printSelected, canExportFromPage, pageControl.exportVariant]);
-
-  const columns = useMemo<TableColumn<WorkerRow>[]>(() => [
+  const columns: TableColumn<WorkerRow>[] = [
+    { header: 'العامل', render: (row) => row.name },
+    { header: 'الكود', render: (row) => row.code },
     {
-      header: 'العامل',
-      render: (w) => (
-        <div
-          className="flex items-center gap-3 relative"
-          onMouseEnter={() => handleMouseEnter(w.id!)}
-          onMouseLeave={handleMouseLeave}
-        >
-          <div className="w-10 h-10 rounded-full flex items-center justify-center shrink-0 bg-gradient-to-br from-teal-500/20 to-teal-500/5 ring-2 ring-teal-500/10">
-            <span className="material-icons-round text-lg text-teal-600">construction</span>
-          </div>
-          <div className="min-w-0">
-            <span className="font-bold text-[var(--color-text)] block truncate">{getWorkerDisplayName(w)}</span>
-            {w.code && (
-              <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-sm)] bg-[#f0f2f5] text-[var(--color-text-muted)] text-[10px] font-mono font-bold mt-0.5">{w.code}</span>
-            )}
-          </div>
-          {hoveredWorker === w.id && (
-            <div className="absolute top-full right-0 mt-2 z-50 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] shadow-2xl p-4 w-64 animate-in fade-in zoom-in-95 duration-150">
-              <div className="flex items-center gap-2 mb-3 pb-3 border-b border-[var(--color-border)]">
-                <div className="w-8 h-8 rounded-full bg-teal-500/10 flex items-center justify-center">
-                  <span className="material-icons-round text-teal-600 text-sm">construction</span>
-                </div>
-                <div>
-                  <p className="font-bold text-sm text-[var(--color-text)]">{getWorkerDisplayName(w)}</p>
-                  <p className="text-[10px] text-slate-400">{getDepartmentName(w.departmentId ?? '')}</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-xs">
-                <div className="bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
-                  <p className="text-emerald-500 font-medium">إنتاج اليوم</p>
-                  <p className="font-bold text-emerald-700 text-sm">{formatNumber(w.todayProduced)}</p>
-                </div>
-                <div className="bg-blue-50 dark:bg-blue-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
-                  <p className="text-blue-500 font-medium">الأسبوع</p>
-                  <p className="font-bold text-blue-700 dark:text-blue-300 text-sm">{formatNumber(w.weekProduced)}</p>
-                </div>
-                <div className="bg-rose-50 dark:bg-rose-900/10 rounded-[var(--border-radius-base)] p-2 text-center">
-                  <p className="text-rose-500 font-medium">الهالك</p>
-                  <p className="font-bold text-rose-700 text-sm">{w.scrapRate}%</p>
-                </div>
-                <div className={`rounded-[var(--border-radius-base)] p-2 text-center ${w.performanceScore >= 85 ? 'bg-emerald-50 dark:bg-emerald-900/10' : w.performanceScore >= 70 ? 'bg-amber-50 dark:bg-amber-900/10' : 'bg-rose-50 dark:bg-rose-900/10'}`}>
-                  <p className={`font-medium ${w.performanceScore >= 85 ? 'text-emerald-500' : w.performanceScore >= 70 ? 'text-amber-500' : 'text-rose-500'}`}>الأداء</p>
-                  <p className={`font-black text-sm ${w.performanceScore >= 85 ? 'text-emerald-700' : w.performanceScore >= 70 ? 'text-amber-700' : 'text-rose-700'}`}>{w.performanceScore}</p>
-                </div>
-              </div>
-              <div className="mt-2 text-[10px] text-[var(--color-text-muted)] flex items-center gap-1">
-                <span className="material-icons-round text-[10px]">precision_manufacturing</span>
-                {w.assignedLines.length} خط إنتاج
-              </div>
-            </div>
-          )}
-        </div>
-      ),
+      header: 'الموظف',
+      render: (row) => {
+        if (!row.employeeId) {
+          return <Badge variant="warning">يدوي</Badge>;
+        }
+        return employeeNameById.get(row.employeeId) ?? '—';
+      },
     },
     {
-      header: 'القسم',
-      render: (w) => <span className="text-sm text-[var(--color-text-muted)]">{getDepartmentName(w.departmentId ?? '')}</span>,
+      header: 'الخطوط',
+      render: (row) => row.assignedLineIds.map(getLineName).join('، ') || '—',
+    },
+    { header: 'أهداف نشطة', render: (row) => row.activeTargetsCount, className: 'text-center' },
+    {
+      header: 'إنتاج اليوم',
+      render: (row) => (statsLoading && !todayStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.todayOutput)),
+      className: 'text-center',
+    },
+    {
+      header: 'إنجاز اليوم %',
+      render: (row) => (statsLoading && !todayStatsMap.has(row.id ?? '') ? statPlaceholder : `${row.todayAchievement}%`),
+      className: 'text-center',
+    },
+    {
+      header: 'إنتاج الشهر',
+      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.monthStats?.monthlyOutput ?? 0)),
+      className: 'text-center',
+    },
+    {
+      header: 'هدف الشهر',
+      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.monthStats?.monthlyTarget ?? 0)),
+      className: 'text-center',
+    },
+    {
+      header: 'إنجاز الشهر %',
+      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : `${row.monthStats?.monthlyAchievement ?? 0}%`),
+      className: 'text-center',
+    },
+    {
+      header: 'الحضور %',
+      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : `${row.monthStats?.attendanceRate ?? 0}%`),
+      className: 'text-center',
+    },
+    {
+      header: 'الدرجة',
+      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : (row.monthStats?.performanceScore ?? 0)),
+      className: 'text-center',
+    },
+    {
+      header: 'تقدير المكافأة',
+      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.monthStats?.bonusEstimate ?? 0)),
+      className: 'text-center',
     },
     {
       header: 'الحالة',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      render: (w) => (
-        <Badge variant={w.isActive !== false ? 'success' : 'danger'}>
-          {w.isActive !== false ? 'نشط' : 'غير نشط'}
+      render: (row) => (
+        <Badge variant={row.isActive === false ? 'danger' : 'success'}>
+          {row.isActive === false ? 'غير نشط' : 'نشط'}
         </Badge>
       ),
     },
-    {
-      header: 'عدد الخطوط',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      render: (w) => (
-        <span className="inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-base)] bg-[#f0f2f5] text-[var(--color-text-muted)] text-sm font-bold">
-          <span className="material-icons-round text-xs">precision_manufacturing</span>
-          {w.assignedLines.length}
-        </span>
-      ),
-    },
-    {
-      header: 'إنتاج اليوم',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      render: (w) => (
-        <span className={`text-sm font-bold ${w.todayProduced > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>
-          {formatNumber(w.todayProduced)}
-        </span>
-      ),
-    },
-    {
-      header: 'إنتاج الأسبوع',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      render: (w) => (
-        <span className={`text-sm font-bold ${w.weekProduced > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
-          {formatNumber(w.weekProduced)}
-        </span>
-      ),
-    },
-    {
-      header: 'الهالك %',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      render: (w) => {
-        const pct = w.scrapRate;
-        return (
-          <div className="flex items-center gap-2 justify-center">
-            <div className="w-16 h-2 bg-[#f0f2f5] rounded-full overflow-hidden">
-              <div
-                className={`h-full rounded-full transition-all ${pct > 5 ? 'bg-rose-500' : pct > 2 ? 'bg-amber-500' : 'bg-emerald-500'}`}
-                style={{ width: `${Math.min(pct * 5, 100)}%` }}
-              />
-            </div>
-            <span className={`text-xs font-bold min-w-[32px] ${pct > 5 ? 'text-rose-500' : pct > 2 ? 'text-amber-500' : 'text-emerald-500'}`}>
-              {pct}%
-            </span>
-          </div>
-        );
-      },
-    },
-    {
-      header: 'الأداء',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      render: (w) => {
-        const { variant } = getScoreBadge(w.performanceScore);
-        const colorMap = { success: 'text-emerald-600', warning: 'text-amber-600', danger: 'text-rose-600' };
-        const bgMap = { success: 'bg-emerald-500', warning: 'bg-amber-500', danger: 'bg-rose-500' };
-        return (
-          <div className="flex flex-col items-center gap-1">
-            <span className={`text-lg font-bold ${colorMap[variant]}`}>{w.performanceScore}</span>
-            <div className="w-12 h-1.5 bg-[#f0f2f5] rounded-full overflow-hidden">
-              <div className={`h-full rounded-full ${bgMap[variant]}`} style={{ width: `${w.performanceScore}%` }} />
-            </div>
-          </div>
-        );
-      },
-    },
-    {
-      header: 'آخر نشاط',
-      headerClassName: 'text-center',
-      className: 'text-center',
-      render: (w) => (
-        <span className="text-xs text-[var(--color-text-muted)] font-medium">
-          {w.lastActivity === '—' ? '—' : w.lastActivity.slice(5)}
-        </span>
-      ),
-    },
-  ], [departments, jobPositions, hoveredWorker, productionLines]);
+  ];
 
-  const renderActions = useCallback((w: WorkerRow) => (
-    <div className="flex items-center gap-1 justify-end sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-      <button
-        onClick={() => navigate(`/production-workers/${w.id}`)}
-        className="p-2 text-[var(--color-text-muted)] hover:text-teal-600 hover:bg-teal-50 dark:hover:bg-teal-900/20 rounded-[var(--border-radius-base)] transition-all"
-        title="عرض التفاصيل"
-      >
-        <span className="material-icons-round text-lg">visibility</span>
-      </button>
-      <button
-        onClick={() => navigate(`/hr/employees/${w.id}`)}
-        className="p-2 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-[var(--border-radius-base)] transition-all"
-        title="الملف الشخصي"
-      >
-        <span className="material-icons-round text-lg">person</span>
-      </button>
-    </div>
-  ), [navigate]);
-
-  const uniqueDepartments = useMemo(
-    () => [...new Set(workers.map((s) => s.departmentId).filter(Boolean))],
-    [workers]
-  );
-  const uniqueLines = useMemo(() => {
-    const set = new Set<string>();
-    workers.forEach((s) => s.assignedLines.forEach((l) => set.add(l)));
-    return [...set];
-  }, [workers]);
-
-  const clearAllFilters = () => {
-    setSearch('');
-    setFilterDepartment('');
-    setFilterLine('');
-    setFilterStatus('');
-    setFilterScoreRange('');
-    setFilterDateFrom('');
-    setFilterDateTo('');
-    setStatFilter('');
-  };
-
-  const handleShowToday = () => {
-    setFilterDateFrom(today);
-    setFilterDateTo(today);
-  };
-
-  const handleShowYesterday = () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const yesterday = toDateInputValue(d);
-    setFilterDateFrom(yesterday);
-    setFilterDateTo(yesterday);
-  };
-
-  const handleShowWeekly = () => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(start.getDate() - 6);
-    setFilterDateFrom(toDateInputValue(start));
-    setFilterDateTo(toDateInputValue(end));
-  };
-
-  const handleShowMonthly = () => {
-    const end = new Date();
-    const start = new Date(end.getFullYear(), end.getMonth(), 1);
-    setFilterDateFrom(toDateInputValue(start));
-    setFilterDateTo(toDateInputValue(end));
-  };
-
-  const hasActiveFilters = search || filterDepartment || filterLine || filterStatus || filterScoreRange || filterDateFrom || filterDateTo || statFilter;
-  const periodValue = useMemo(() => {
-    if (filterDateFrom === today && filterDateTo === today) return 'today';
-    if (filterDateFrom === filterDateTo && filterDateFrom !== '' && filterDateFrom !== today) return 'yesterday';
-    if (filterDateFrom.endsWith('-01') && filterDateTo !== '') return 'month';
-    return 'week';
-  }, [filterDateFrom, filterDateTo, today]);
-
-  if (dataLoading) {
-    return <div className="erp-ds-clean space-y-6"><LoadingSkeleton type="detail" /></div>;
-  }
-
-  const toggleStatFilter = (f: StatFilter) => setStatFilter((prev) => prev === f ? '' : f);
+  if (loading) return <LoadingSkeleton rows={8} />;
 
   return (
-    <div className="erp-ds-clean space-y-6">
-      {/* Header */}
+    <div className="space-y-4">
       <PageHeader
         title="عمال الإنتاج"
-        subtitle="لوحة إدارة عمال الإنتاج وتحليل الأداء"
-        icon="construction"
-        secondaryAction={hasActiveFilters ? {
-          label: 'مسح الفلاتر',
-          icon: 'filter_alt_off',
-          onClick: clearAllFilters,
-        } : undefined}
+        subtitle="ربط موظفي الموارد البشرية بملفات عمال الإنتاج والأهداف والأداء"
+        primaryAction={canManage ? { label: 'ربط موظفين كعمال إنتاج', onClick: () => openLinkForm() } : undefined}
       />
 
-      {/* Stat Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
-        <button className="text-right" onClick={() => toggleStatFilter('today')}>
-          <KPIBox
-            label="إنتاج اليوم"
-            value={formatNumber(stats.todayTotal)}
-            icon="today"
-            colorClass={statFilter === 'today' ? 'bg-teal-600 text-white' : 'bg-emerald-50 text-emerald-600'}
-            trend={stats.todayChange !== 0 ? `${Math.abs(stats.todayChange)}% عن أمس` : undefined}
-            trendUp={stats.todayChange >= 0}
-          />
-        </button>
-        <button className="text-right" onClick={() => toggleStatFilter('week')}>
-          <KPIBox
-            label="إنتاج الأسبوع"
-            value={formatNumber(stats.weekTotal)}
-            icon="date_range"
-            colorClass={statFilter === 'week' ? 'bg-teal-600 text-white' : 'bg-blue-50 text-blue-600 dark:bg-blue-900/20'}
-            trend={stats.weekChange !== 0 ? `${Math.abs(stats.weekChange)}% عن الأسبوع الماضي` : undefined}
-            trendUp={stats.weekChange >= 0}
-          />
-        </button>
-        <button className="text-right" onClick={() => toggleStatFilter('highScrap')}>
-          <KPIBox
-            label="نسبة الهالك الكلية"
-            value={`${stats.overallScrapRate}%`}
-            icon="delete_sweep"
-            colorClass={statFilter === 'highScrap' ? 'bg-teal-600 text-white' : stats.overallScrapRate > 5 ? 'bg-rose-50 text-rose-600' : 'bg-amber-50 text-amber-600'}
-          />
-        </button>
-        <button className="text-right" onClick={() => toggleStatFilter('lowScore')}>
-          <KPIBox
-            label="متوسط درجة الأداء"
-            value={stats.avgScore}
-            icon="speed"
-            colorClass={statFilter === 'lowScore' ? 'bg-teal-600 text-white' : stats.avgScore >= 85 ? 'bg-emerald-50 text-emerald-600' : stats.avgScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
-          />
-        </button>
-        <button className="text-right" onClick={() => toggleStatFilter('active')}>
-          <KPIBox
-            label="العمال النشطون"
-            value={stats.activeWorkers}
-            icon="construction"
-            unit={`/ ${workers.length}`}
-            colorClass={statFilter === 'active' ? 'bg-teal-600 text-white' : 'bg-teal-50 text-teal-600 dark:bg-teal-900/20 dark:text-teal-400'}
-          />
-        </button>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <KPIBox label="إجمالي العمال" value={String(workers.length)} icon="groups" />
+        <KPIBox label="نشطون" value={String(workers.filter((w) => w.isActive !== false).length)} icon="check_circle" />
+        <KPIBox
+          label="متوسط إنجاز الشهر"
+          value={statsLoading ? '…' : `${filtered.length > 0 ? Math.round(filtered.reduce((s, r) => s + (r.monthStats?.monthlyAchievement ?? 0), 0) / filtered.length) : 0}%`}
+          icon="speed"
+        />
+        <KPIBox
+          label="تقدير المكافآت"
+          value={statsLoading ? '…' : formatNumber(filtered.reduce((s, r) => s + (r.monthStats?.bonusEstimate ?? 0), 0))}
+          icon="payments"
+        />
       </div>
 
-      {/* Advanced Filters */}
-      <Card>
-        <SmartFilterBar
-          searchPlaceholder="ابحث بالاسم أو الرمز..."
-          searchValue={search}
-          onSearchChange={setSearch}
-          periods={[
-            { label: 'اليوم', value: 'today' },
-            { label: 'أمس', value: 'yesterday' },
-            { label: 'أسبوعي', value: 'week' },
-            { label: 'شهري', value: 'month' },
-          ]}
-          activePeriod={periodValue}
-          onPeriodChange={(value) => {
-            if (value === 'today') handleShowToday();
-            if (value === 'yesterday') handleShowYesterday();
-            if (value === 'week') handleShowWeekly();
-            if (value === 'month') handleShowMonthly();
-          }}
-          quickFilters={[
-            {
-              key: 'line',
-              placeholder: 'كل الخطوط',
-              options: uniqueLines.map((lineId) => ({ value: lineId, label: getLineName(lineId) })),
-              width: 'w-[130px]',
-            },
-          ]}
-          quickFilterValues={{ line: filterLine || 'all' }}
-          onQuickFilterChange={(_, value) => setFilterLine(value === 'all' ? '' : value)}
-          advancedFilters={[
-            {
-              key: 'department',
-              label: 'القسم',
-              placeholder: 'كل الأقسام',
-              options: uniqueDepartments.map((departmentId) => ({ value: departmentId, label: getDepartmentName(departmentId) })),
-              width: 'w-[160px]',
-            },
-            {
-              key: 'status',
-              label: 'الحالة',
-              placeholder: 'كل الحالات',
-              options: [
-                { value: 'active', label: 'نشط' },
-                { value: 'inactive', label: 'غير نشط' },
-              ],
-            },
-            {
-              key: 'scoreRange',
-              label: 'مستوى الأداء',
-              placeholder: 'كل المستويات',
-              options: [
-                { value: 'high', label: 'ممتاز (85+)' },
-                { value: 'mid', label: 'جيد (70-84)' },
-                { value: 'low', label: 'ضعيف (<70)' },
-              ],
-              width: 'w-[160px]',
-            },
-            { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
-            { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
-          ]}
-          advancedFilterValues={{
-            department: filterDepartment || 'all',
-            status: filterStatus || 'all',
-            scoreRange: filterScoreRange || 'all',
-            dateFrom: filterDateFrom,
-            dateTo: filterDateTo,
-          }}
-          onAdvancedFilterChange={(key, value) => {
-            if (key === 'department') setFilterDepartment(value === 'all' ? '' : value);
-            if (key === 'status') setFilterStatus(value === 'all' ? '' : (value as 'active' | 'inactive'));
-            if (key === 'scoreRange') setFilterScoreRange(value === 'all' ? '' : (value as 'high' | 'mid' | 'low'));
-            if (key === 'dateFrom') setFilterDateFrom(value);
-            if (key === 'dateTo') setFilterDateTo(value);
-          }}
-          onApply={() => undefined}
-          applyLabel="عرض"
-          className="mb-4"
-        />
+      <SmartFilterBar
+        searchValue={search}
+        onSearchChange={setSearch}
+        searchPlaceholder="بحث بالاسم أو الكود..."
+        quickFilters={[
+          {
+            key: 'line',
+            placeholder: 'كل الخطوط',
+            options: productionLines.map((l) => ({ value: l.id, label: l.name })),
+          },
+          {
+            key: 'product',
+            placeholder: 'كل المنتجات',
+            options: products.map((p) => ({ value: p.id, label: p.name })),
+          },
+          {
+            key: 'active',
+            placeholder: 'الحالة',
+            options: [
+              { value: 'active', label: 'نشط' },
+              { value: 'inactive', label: 'غير نشط' },
+            ],
+          },
+          {
+            key: 'perf',
+            placeholder: 'الأداء',
+            options: [
+              { value: 'below', label: 'أقل من الهدف' },
+              { value: 'above', label: 'أعلى من الهدف' },
+              { value: 'missing_target', label: 'بدون هدف' },
+            ],
+          },
+        ]}
+        quickFilterValues={{
+          line: filterLine,
+          product: filterProduct,
+          active: filterActive,
+          perf: filterPerformance,
+        }}
+        onQuickFilterChange={(key, value) => {
+          if (key === 'line') setFilterLine(value);
+          if (key === 'product') setFilterProduct(value);
+          if (key === 'active') setFilterActive(value as typeof filterActive);
+          if (key === 'perf') setFilterPerformance(value as typeof filterPerformance);
+        }}
+        advancedFilters={[
+          { key: 'month', label: 'الشهر', placeholder: 'الشهر', type: 'date', options: [] },
+          { key: 'date', label: 'اليوم', placeholder: 'اليوم', type: 'date', options: [] },
+        ]}
+        advancedFilterValues={{ month: filterMonth, date: filterDate }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'month') setFilterMonth(value.slice(0, 7));
+          if (key === 'date') setFilterDate(value);
+        }}
+        extra={(
+          <div className="flex gap-2">
+            {canManage ? (
+              <Button variant="outline" onClick={() => openLinkForm()}>ربط من الموظفين</Button>
+            ) : null}
+            <Button variant="outline" onClick={exportExcel}>تصدير Excel</Button>
+          </div>
+        )}
+      />
 
-        <SelectableTable<WorkerRow>
+      <Card>
+        <SelectableTable
           data={filtered}
           columns={columns}
-          getId={(w) => w.id!}
-          bulkActions={bulkActions}
-          renderActions={renderActions}
-          emptyIcon="construction"
-          emptyTitle="لا يوجد عمال إنتاج"
-          emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لا يوجد عمال مرتبطون بخط إنتاج في تاريخ العرض'}
-          pageSize={15}
+          getId={(row) => row.id ?? row.code}
+          onRowClick={(row) => row.id && navigate(`/production-workers/${row.id}`)}
+          renderActions={(row) => (
+            <div className="flex gap-2">
+              <Button variant="outline" onClick={() => row.id && navigate(`/production-workers/${row.id}`)}>التفاصيل</Button>
+              {canManageTargets && row.id ? (
+                <Button variant="outline" onClick={() => navigate(`/production-workers/${row.id}?tab=targets`)}>الأهداف</Button>
+              ) : null}
+            </div>
+          )}
         />
       </Card>
 
-      {/* Hidden print template */}
-      <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
-        <ProductionReportPrint
-          ref={bulkPrintRef}
-          title="تقرير عمال الإنتاج"
-          subtitle={`${filtered.length} عامل — ${today}`}
-          rows={printRows}
-          totals={printTotals}
-          printSettings={printTemplate}
-        />
-      </div>
+      {showForm && canManage && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
+          <div className="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
+            <h3 className="text-lg font-bold">ربط موظفين كعمال إنتاج</h3>
+            <div>
+              <label className="block text-sm font-bold mb-2">اختر موظفين *</label>
+              <SearchableSelect
+                options={linkableEmployeeOptions}
+                value=""
+                onChange={(employeeId) => addEmployeeToSelection(employeeId)}
+                placeholder="ابحث وأضف موظفاً..."
+              />
+              {linkableEmployees.length === 0 ? (
+                <p className="text-sm text-[var(--color-text-muted)] mt-2">
+                  جميع الموظفين النشطين مرتبطون بملفات عمال إنتاج.
+                </p>
+              ) : null}
+              {selectedEmployees.length > 0 ? (
+                <div className="mt-3 space-y-2">
+                  <p className="text-xs text-[var(--color-text-muted)]">
+                    الموظفون المختارون ({selectedEmployees.length})
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    {selectedEmployees.map((employee) => (
+                      <span
+                        key={employee.id}
+                        className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium px-3 py-1.5 rounded-[var(--border-radius-base)] border border-indigo-200 dark:border-indigo-800"
+                      >
+                        {employee.name}
+                        {employee.code ? ` (${employee.code})` : ''}
+                        <button
+                          type="button"
+                          onClick={() => removeEmployeeFromSelection(employee.id!)}
+                          className="text-indigo-400 hover:text-rose-500 transition-colors"
+                          aria-label={`إزالة ${employee.name}`}
+                        >
+                          <X size={14} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm text-[var(--color-text-muted)] mt-2">
+                  لم يتم اختيار موظفين بعد.
+                </p>
+              )}
+            </div>
+            <div>
+              <label className="block text-sm font-bold mb-2">الخط الافتراضي (اختياري)</label>
+              <select
+                className="w-full border rounded-lg p-3"
+                value={form.defaultLineId}
+                onChange={(e) => setForm({ ...form, defaultLineId: e.target.value })}
+              >
+                <option value="">بدون خط افتراضي</option>
+                {productionLines.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                يُطبَّق على جميع الموظفين المختارين عند الربط.
+              </p>
+            </div>
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={form.isActive}
+                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+              />
+              نشط
+            </label>
+            {linkProgress ? (
+              <p className="text-sm text-[var(--color-text-muted)]">
+                جاري الربط... ({linkProgress.current}/{linkProgress.total})
+              </p>
+            ) : null}
+            {saveSummary ? (
+              <p className={`text-sm font-medium ${saveErrors.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                {saveSummary}
+              </p>
+            ) : null}
+            {saveErrors.length > 0 ? (
+              <ul className="text-sm text-rose-600 space-y-1">
+                {saveErrors.map((err) => (
+                  <li key={err.employeeId}>
+                    {err.name}: {err.message}
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+            <div className="flex gap-2 justify-end">
+              <Button variant="outline" onClick={resetForm} disabled={saving}>إلغاء</Button>
+              <Button
+                disabled={saving || form.selectedEmployeeIds.length === 0}
+                onClick={() => void handleSaveWorker()}
+              >
+                {saving
+                  ? (linkProgress ? `جاري الربط (${linkProgress.current}/${linkProgress.total})...` : 'جاري الحفظ...')
+                  : `ربط (${form.selectedEmployeeIds.length})`}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
-
-
-
-

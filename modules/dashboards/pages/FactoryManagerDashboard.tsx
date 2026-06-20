@@ -11,6 +11,7 @@ import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
 import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
+import { useWorkerDashboardSnapshot } from '@/modules/production/hooks/useWorkerDashboardSnapshot';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
   calculateProgressRatio,
@@ -139,6 +140,7 @@ export const FactoryManagerDashboard: React.FC = () => {
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const routingTotalTimeSecondsByProduct = useAppStore((s) => s.routingTotalTimeSecondsByProduct);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const workerDashboard = useWorkerDashboardSnapshot();
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   useEffect(() => {
@@ -1024,6 +1026,54 @@ export const FactoryManagerDashboard: React.FC = () => {
             <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
           )}
         </Card>
+              );
+            case 'top_workers':
+              return (
+                <Card>
+                  <h3 className="text-lg font-bold mb-3">أفضل 10 عمال</h3>
+                  <ul className="space-y-2 text-sm">
+                    {workerDashboard.topWorkers.map((row) => (
+                      <li key={row.name} className="flex justify-between border-b border-[var(--color-border)] py-2">
+                        <span>{row.name}</span>
+                        <span className="font-bold">{row.achievement}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              );
+            case 'workers_below_target':
+              return (
+                <Card>
+                  <h3 className="text-lg font-bold mb-3">عمال تحت الهدف</h3>
+                  <ul className="space-y-2 text-sm">
+                    {workerDashboard.belowTarget.slice(0, 10).map((row) => (
+                      <li key={row.name} className="flex justify-between border-b border-[var(--color-border)] py-2">
+                        <span>{row.name}</span>
+                        <span className="font-bold text-amber-600">{row.achievement}%</span>
+                      </li>
+                    ))}
+                  </ul>
+                </Card>
+              );
+            case 'today_avg_worker_achievement':
+              return <KPICard label="متوسط إنجاز العمال اليوم" value={`${workerDashboard.todayAvgAchievement}%`} iconType="metric" color="indigo" />;
+            case 'month_avg_worker_achievement':
+              return <KPICard label="متوسط إنجاز العمال الشهري" value={`${workerDashboard.monthAvgAchievement}%`} iconType="metric" color="green" />;
+            case 'absent_workers_today':
+              return (
+                <Card>
+                  <h3 className="text-lg font-bold mb-3">الغائبون اليوم ({workerDashboard.absentToday.length})</h3>
+                  <p className="text-sm text-[var(--color-text-muted)]">{workerDashboard.absentToday.join('، ') || 'لا يوجد'}</p>
+                </Card>
+              );
+            case 'total_bonus_estimate':
+              return <KPICard label="تقدير المكافآت" value={formatCost(workerDashboard.totalBonusEstimate)} unit="ج.م" iconType="money" color="amber" />;
+            case 'missing_worker_targets_warning':
+              return (
+                <Card>
+                  <h3 className="text-lg font-bold mb-2 text-amber-700">تحذير أهداف مفقودة</h3>
+                  <p className="text-sm">{workerDashboard.missingTargetsCount} عامل بدون أهداف نشطة</p>
+                </Card>
               );
             default:
               return null;

@@ -8,13 +8,17 @@ import {
   exportAsImage,
   exportToPDF,
   getShareResultFeedbackMessage,
-  shareImageBlobToWhatsApp,
   waitForExportPaint,
   ShareResult,
 } from '../../../utils/reportExport';
-import { exportNodeToPng } from '@/src/shared/utils/exportNodeToImage';
 import { formatProductionReportShareCaption } from '../../../utils/productionReportShareCaption';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import {
+  buildWorkersCountAutoFillFromAssignments,
+  countOperatorsFromAssignments,
+  shouldApplyWorkersCountAutoFill,
+  sumWorkersCountPatch,
+} from '../utils/lineAssignmentWorkersCount';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
@@ -22,22 +26,23 @@ import {
   buildShareStandardVarianceBanner,
   computeProductionReportStandardQtyVariance,
 } from '../../../utils/productionReportStandardVariance';
-import type { LineWorkerAssignment, PackagingReportLine, ProductionReport, ProductionReportShift, ReportComponentScrapItem } from '../../../types';
+import type { LineWorkerAssignment, PackagingReportLine, ProductionReport, ProductionReportShift, ProductionReportWorkerOutput, ReportComponentScrapItem } from '../../../types';
 import { resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import {
-  DEFAULT_INJECTION_SHIFT,
   INJECTION_SHIFT_OPTIONS,
-  normalizeInjectionShift,
+  isInjectionShiftSelected,
 } from '../utils/injectionReportShift';
 import { canonicalPackagingLine, effectivePackagingPieces, isPackagingLineId } from '../utils/packagingLine';
-import { ProductionLineStatus } from '../../../types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS, ProductionLineStatus } from '../../../types';
 import {
   SingleReportPrint,
   ReportPrintRow,
   buildPackagingPrintLinesFromReport,
 } from '../components/ProductionReportPrint';
 import { ProductionReportShareCard } from '../components/ProductionReportShareCard';
+import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import { reportService } from '../services/reportService';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
 import {
@@ -53,6 +58,7 @@ import {
   isInjectionCategory,
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
   productId: '',
@@ -61,7 +67,97 @@ const newEmptyPackagingLine = (): PackagingReportLine => ({
   remainderPieces: 0,
 });
 
+const QUICK_ACTION_DRAFT_VERSION = 1;
+const quickActionStorageKey = (tenantId?: string, uid?: string | null) =>
+  `production.quickAction.v${QUICK_ACTION_DRAFT_VERSION}.${tenantId || 'tenant'}.${uid || 'user'}`;
+
+type QuickActionFormDraft = {
+  employeeId: string;
+  lineId: string;
+  productId: string;
+  reportType: NonNullable<ProductionReport['reportType']>;
+  quantity: string;
+  workersProduction: string;
+  workersPackaging: string;
+  workersQuality: string;
+  workersMaintenance: string;
+  workersExternal: string;
+  injectionWorkersCount: string;
+  injectionShift: ProductionReportShift | '';
+  packagingWorkersCount: string;
+  packagingLines: PackagingReportLine[];
+  hours: string;
+  notes: string;
+  componentScrapItems: ReportComponentScrapItem[];
+  selectedWorkOrderId: string;
+  workerOutputs: ProductionReportWorkerOutput[];
+};
+
+type QuickActionSavedShareDraft = {
+  printReport: ReportPrintRow;
+  productId: string;
+  lineId: string;
+  reportType: NonNullable<ProductionReport['reportType']>;
+  savedAt: number;
+};
+
+type QuickActionStoredState = {
+  form?: QuickActionFormDraft;
+  savedShare?: QuickActionSavedShareDraft;
+};
+
+const readQuickActionStoredState = (key: string): QuickActionStoredState => {
+  if (typeof window === 'undefined') return {};
+  try {
+    const raw = window.localStorage.getItem(key);
+    if (!raw) return {};
+    const parsed = JSON.parse(raw) as QuickActionStoredState;
+    return parsed && typeof parsed === 'object' ? parsed : {};
+  } catch {
+    return {};
+  }
+};
+
+const writeQuickActionStoredState = (key: string, state: QuickActionStoredState) => {
+  if (typeof window === 'undefined') return;
+  try {
+    if (!state.form && !state.savedShare) {
+      window.localStorage.removeItem(key);
+      return;
+    }
+    window.localStorage.setItem(key, JSON.stringify(state));
+  } catch {
+    // Storage can be unavailable in private mode; never block report entry.
+  }
+};
+
+const isQuickActionFormDraftEmpty = (draft: QuickActionFormDraft) => (
+  !draft.lineId
+  && !draft.productId
+  && !draft.quantity
+  && !draft.workersProduction
+  && !draft.workersPackaging
+  && !draft.workersQuality
+  && !draft.workersMaintenance
+  && !draft.workersExternal
+  && !draft.injectionWorkersCount
+  && !draft.injectionShift
+  && !draft.packagingWorkersCount
+  && draft.packagingLines.every((line) => (
+    !String(line.productId || '').trim()
+    && Number(line.quantityPieces || 0) <= 0
+    && Number(line.quantityCartons || 0) <= 0
+    && Number(line.remainderPieces || 0) <= 0
+  ))
+  && !draft.hours
+  && !draft.notes.trim()
+  && draft.componentScrapItems.length === 0
+  && !draft.selectedWorkOrderId
+  && draft.workerOutputs.every((row) => Number(row.outputQty || 0) <= 0 && !row.notes?.trim())
+);
+
 export const QuickAction: React.FC = () => {
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const _rawLines = useAppStore((s) => s._rawLines);
@@ -70,6 +166,7 @@ export const QuickAction: React.FC = () => {
   const employees = useAppStore((s) => s.employees);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
+  const tenantId = useAppStore((s) => s.userProfile?.tenantId);
   const saveErrorFromStore = useAppStore((s) => s.error);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
@@ -77,6 +174,9 @@ export const QuickAction: React.FC = () => {
   const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
   const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
   const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
+  const productionWorkerSettings = useAppStore(
+    (s) => s.systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS,
+  );
 
   const [employeeId, setEmployeeId] = useState('');
   const [lineId, setLineId] = useState('');
@@ -89,7 +189,7 @@ export const QuickAction: React.FC = () => {
   const [workersMaintenance, setWorkersMaintenance] = useState('');
   const [workersExternal, setWorkersExternal] = useState('');
   const [injectionWorkersCount, setInjectionWorkersCount] = useState('');
-  const [injectionShift, setInjectionShift] = useState<ProductionReportShift>(DEFAULT_INJECTION_SHIFT);
+  const [injectionShift, setInjectionShift] = useState<ProductionReportShift | ''>('');
   const [packagingWorkersCount, setPackagingWorkersCount] = useState('');
   const [packagingLines, setPackagingLines] = useState<PackagingReportLine[]>([]);
   const [hours, setHours] = useState('');
@@ -97,14 +197,13 @@ export const QuickAction: React.FC = () => {
   const [componentScrapItems, setComponentScrapItems] = useState<ReportComponentScrapItem[]>([]);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
-  const [shareToast, setShareToast] = useState<string | null>(null);
   const [printReport, setPrintReport] = useState<ReportPrintRow | null>(null);
   const [shareCardRow, setShareCardRow] = useState<ReportPrintRow | null>(null);
   const [sharingImage, setSharingImage] = useState(false);
   const [lineWorkers, setLineWorkers] = useState<LineWorkerAssignment[]>([]);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
+  const [supervisorLinesLoaded, setSupervisorLinesLoaded] = useState(false);
   const [showLineWorkers, setShowLineWorkers] = useState(false);
   const [loadingWorkersCount, setLoadingWorkersCount] = useState(false);
   const [workerPickerId, setWorkerPickerId] = useState('');
@@ -112,13 +211,18 @@ export const QuickAction: React.FC = () => {
   const [workerActionError, setWorkerActionError] = useState<string | null>(null);
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
+  const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
 
   const printRef = useRef<HTMLDivElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
   /** Prevents duplicate WhatsApp image sharing from rapid taps before React re-disables the button. */
   const shareWhatsAppLockRef = useRef(false);
+  const lastAutoFilledWorkersCountRef = useRef<number | null>(null);
+  const restoredStorageKeyRef = useRef<string | null>(null);
+  const didShowDraftToastRef = useRef(false);
 
   const [today, setToday] = useState(() => getOperationalDateString(8));
+  const storageKey = useMemo(() => quickActionStorageKey(tenantId, uid), [tenantId, uid]);
   const canCreateFinishedReportsBase = can('reports.create');
   const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
   const forcePackagingOnly = can('reports.packaging.only');
@@ -139,6 +243,127 @@ export const QuickAction: React.FC = () => {
     return list;
   }, [forcePackagingOnly, canCreateFinishedReports, canManageComponentInjectionReports, canCreatePackagingReports]);
   const canChooseReportType = availableReportTypes.length > 1;
+
+  const applyFormDraft = useCallback((draft: QuickActionFormDraft) => {
+    const nextReportType = availableReportTypes.includes(draft.reportType)
+      ? draft.reportType
+      : (availableReportTypes[0] ?? 'finished_product');
+    setEmployeeId(draft.employeeId);
+    setLineId(draft.lineId);
+    setProductId(draft.productId);
+    setReportType(nextReportType);
+    setQuantity(draft.quantity);
+    setWorkersProduction(draft.workersProduction);
+    setWorkersPackaging(draft.workersPackaging);
+    setWorkersQuality(draft.workersQuality);
+    setWorkersMaintenance(draft.workersMaintenance);
+    setWorkersExternal(draft.workersExternal);
+    setInjectionWorkersCount(draft.injectionWorkersCount);
+    setInjectionShift(draft.injectionShift);
+    setPackagingWorkersCount(draft.packagingWorkersCount);
+    setPackagingLines(draft.packagingLines);
+    setHours(draft.hours);
+    setNotes(draft.notes);
+    setComponentScrapItems(draft.componentScrapItems);
+    setSelectedWorkOrderId(draft.selectedWorkOrderId);
+    setWorkerOutputs(draft.workerOutputs);
+  }, [availableReportTypes]);
+
+  const clearQuickActionStorage = useCallback(() => {
+    writeQuickActionStoredState(storageKey, {});
+  }, [storageKey]);
+
+  useEffect(() => {
+    if (restoredStorageKeyRef.current === storageKey) return;
+    if (availableReportTypes.length === 0) return;
+
+    const stored = readQuickActionStoredState(storageKey);
+    const savedShare = stored.savedShare;
+    if (savedShare?.printReport && availableReportTypes.includes(savedShare.reportType)) {
+      setProductId(savedShare.productId);
+      setLineId(savedShare.lineId);
+      setReportType(savedShare.reportType);
+      setPrintReport(savedShare.printReport);
+      setSaved(true);
+      restoredStorageKeyRef.current = storageKey;
+      return;
+    }
+
+    if (stored.form && !isQuickActionFormDraftEmpty(stored.form)) {
+      applyFormDraft(stored.form);
+      restoredStorageKeyRef.current = storageKey;
+      if (!didShowDraftToastRef.current) {
+        didShowDraftToastRef.current = true;
+        showAppToast('info', 'تم استعادة آخر مسودة في الإدخال السريع', { duration: 5000 });
+      }
+      return;
+    }
+
+    restoredStorageKeyRef.current = storageKey;
+  }, [applyFormDraft, availableReportTypes, storageKey]);
+
+  useEffect(() => {
+    if (restoredStorageKeyRef.current !== storageKey) return;
+
+    const draft: QuickActionFormDraft = {
+      employeeId,
+      lineId,
+      productId,
+      reportType,
+      quantity,
+      workersProduction,
+      workersPackaging,
+      workersQuality,
+      workersMaintenance,
+      workersExternal,
+      injectionWorkersCount,
+      injectionShift,
+      packagingWorkersCount,
+      packagingLines,
+      hours,
+      notes,
+      componentScrapItems,
+      selectedWorkOrderId,
+      workerOutputs,
+    };
+
+    const nextState: QuickActionStoredState = {};
+    if (saved && printReport) {
+      nextState.savedShare = {
+        printReport,
+        productId,
+        lineId,
+        reportType,
+        savedAt: Date.now(),
+      };
+    } else if (!isQuickActionFormDraftEmpty(draft)) {
+      nextState.form = draft;
+    }
+    writeQuickActionStoredState(storageKey, nextState);
+  }, [
+    storageKey,
+    saved,
+    printReport,
+    employeeId,
+    lineId,
+    productId,
+    reportType,
+    quantity,
+    workersProduction,
+    workersPackaging,
+    workersQuality,
+    workersMaintenance,
+    workersExternal,
+    injectionWorkersCount,
+    injectionShift,
+    packagingWorkersCount,
+    packagingLines,
+    hours,
+    notes,
+    componentScrapItems,
+    selectedWorkOrderId,
+    workerOutputs,
+  ]);
 
   useEffect(() => {
     if (availableReportTypes.length === 0) return;
@@ -216,8 +441,9 @@ export const QuickAction: React.FC = () => {
 
   useEffect(() => {
     if (reportType !== 'component_injection') return;
+    if (_rawLines.length === 0 && lineStatuses.length === 0) return;
     if (lineId && !injectionLineIds.has(lineId)) setLineId('');
-  }, [reportType, lineId, injectionLineIds]);
+  }, [reportType, lineId, injectionLineIds, _rawLines.length, lineStatuses.length]);
 
   useEffect(() => {
     if (reportType !== 'component_injection' || !productId) return;
@@ -256,6 +482,10 @@ export const QuickAction: React.FC = () => {
     fetchWorkersFromLineAssignments();
   }, [fetchWorkersFromLineAssignments]);
 
+  useEffect(() => {
+    lastAutoFilledWorkersCountRef.current = null;
+  }, [lineId, today, reportType]);
+
   const workersTotal = useMemo(() => (
     (Number(workersProduction) || 0)
     + (Number(workersPackaging) || 0)
@@ -263,6 +493,61 @@ export const QuickAction: React.FC = () => {
     + (Number(workersMaintenance) || 0)
     + (Number(workersExternal) || 0)
   ), [workersProduction, workersPackaging, workersQuality, workersMaintenance, workersExternal]);
+
+  useEffect(() => {
+    if (!lineId) return;
+
+    const patch = buildWorkersCountAutoFillFromAssignments(
+      lineWorkers,
+      {
+        reportType: reportType === 'packaging'
+          ? 'packaging'
+          : reportType === 'component_injection'
+            ? 'component_injection'
+            : 'finished_product',
+        isPackagingLine: isPackagingLineId(lineId, _rawLines),
+      },
+      employeeId,
+    );
+    if (Object.keys(patch).length === 0) return;
+
+    const currentTotal = reportType === 'component_injection'
+      ? Number(injectionWorkersCount || 0)
+      : reportType === 'packaging'
+        ? Number(packagingWorkersCount || 0)
+        : workersTotal;
+
+    if (!shouldApplyWorkersCountAutoFill(currentTotal, lastAutoFilledWorkersCountRef.current)) {
+      return;
+    }
+
+    lastAutoFilledWorkersCountRef.current = sumWorkersCountPatch(patch);
+
+    if (patch.workersCount !== undefined) {
+      const value = String(patch.workersCount);
+      if (reportType === 'component_injection') setInjectionWorkersCount(value);
+      else if (reportType === 'packaging') setPackagingWorkersCount(value);
+    }
+    if (patch.workersProductionCount !== undefined) {
+      setWorkersProduction(String(patch.workersProductionCount));
+      setWorkersPackaging(String(patch.workersPackagingCount || 0));
+      setWorkersQuality(String(patch.workersQualityCount || 0));
+      setWorkersMaintenance(String(patch.workersMaintenanceCount || 0));
+      setWorkersExternal(String(patch.workersExternalCount || 0));
+    } else if (patch.workersPackagingCount !== undefined) {
+      setWorkersPackaging(String(patch.workersPackagingCount));
+    }
+  }, [
+    lineId,
+    today,
+    reportType,
+    lineWorkers,
+    employeeId,
+    _rawLines,
+    workersTotal,
+    injectionWorkersCount,
+    packagingWorkersCount,
+  ]);
 
   const packagingLaborOptionalQuick = useMemo(
     () => reportType === 'packaging' || (reportType === 'finished_product' && isPackagingLineId(lineId, _rawLines)),
@@ -328,8 +613,10 @@ export const QuickAction: React.FC = () => {
     let mounted = true;
     if (!isSupervisorReporter || !currentEmployee?.id) {
       setAssignedLineIds(new Set());
+      setSupervisorLinesLoaded(true);
       return () => { mounted = false; };
     }
+    setSupervisorLinesLoaded(false);
     supervisorLineAssignmentService.getActiveByDate(today)
       .then((rows) => {
         if (!mounted) return;
@@ -340,10 +627,12 @@ export const QuickAction: React.FC = () => {
             .filter(Boolean),
         );
         setAssignedLineIds(ids);
+        setSupervisorLinesLoaded(true);
       })
       .catch(() => {
         if (!mounted) return;
         setAssignedLineIds(new Set());
+        setSupervisorLinesLoaded(true);
       });
     return () => { mounted = false; };
   }, [isSupervisorReporter, currentEmployee?.id, today]);
@@ -369,6 +658,7 @@ export const QuickAction: React.FC = () => {
 
   useEffect(() => {
     if (reportType !== 'packaging') return;
+    if (_rawLines.length === 0) return;
     if (lineId && !isPackagingLineId(lineId, _rawLines)) {
       setLineId('');
       setSelectedWorkOrderId('');
@@ -392,10 +682,12 @@ export const QuickAction: React.FC = () => {
 
   useEffect(() => {
     if (!lineId) return;
+    if (_rawLines.length === 0) return;
+    if (isSupervisorReporter && !supervisorLinesLoaded) return;
     if (allowedLinesForUser.some((line) => line.id === lineId)) return;
     setLineId('');
     setSelectedWorkOrderId('');
-  }, [lineId, allowedLinesForUser]);
+  }, [lineId, allowedLinesForUser, _rawLines.length, isSupervisorReporter, supervisorLinesLoaded]);
 
   const handleQuickAddWorker = useCallback(async () => {
     if (!lineId || !workerPickerId) return;
@@ -461,32 +753,46 @@ export const QuickAction: React.FC = () => {
       .map(({ productId, quantityPieces }) => ({ productId, quantityPieces }))
       .filter((l) => l.productId && l.quantityPieces > 0);
     if (!lineId || !employeeId) {
-      setSaveError('أكمل بيانات الخط والمشرف أولاً.');
+      showAppToast('error', 'أكمل بيانات الخط والمشرف أولاً.');
       return;
     }
     if (reportType === 'packaging') {
       if (validPackagingLines.length === 0) {
-        setSaveError('أضف سطر منتج واحد على الأقل بكمية صحيحة (كراتين إن وُجد حجم كرتونة للمنتج، وإلا قطع).');
+        showAppToast('error', 'أضف سطر منتج واحد على الأقل بكمية صحيحة (كراتين إن وُجد حجم كرتونة للمنتج، وإلا قطع).');
         return;
       }
     } else if (!productId) {
-      setSaveError('أكمل بيانات الخط والمنتج والمشرف أولاً.');
+      showAppToast('error', 'أكمل بيانات الخط والمنتج والمشرف أولاً.');
+      return;
+    }
+    if (reportType === 'component_injection' && !isInjectionShiftSelected(injectionShift)) {
+      showAppToast('error', 'اختر الوردية (صباحي أو مسائي) قبل الحفظ');
       return;
     }
     if (Number(hours || 0) <= 0) {
-      setSaveError('أكمل ساعات العمل.');
+      showAppToast('error', 'أكمل ساعات العمل.');
       return;
     }
     if (reportType !== 'packaging' && Number(quantity || 0) <= 0) {
-      setSaveError('أكمل الحقول الإلزامية أولاً (الكمية وساعات العمل).');
+      showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية وساعات العمل).');
       return;
     }
     if (requiresWorkers && workersTotal <= 0 && !packagingLaborOptionalQuick) {
-      setSaveError('أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
+      showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
+      return;
+    }
+    const workerOutputTotal = workerOutputs.reduce((sum, row) => sum + Number(row.outputQty || 0), 0);
+    if (
+      productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
+      && reportType === 'finished_product'
+      && Number(quantity || 0) > 0
+      && workerOutputs.length > 0
+      && workerOutputTotal !== Number(quantity)
+    ) {
+      showAppToast('error', 'مجموع إنتاج العمال يجب أن يطابق كمية التقرير');
       return;
     }
     setSaving(true);
-    setSaveError(null);
 
     const data = {
       employeeId,
@@ -512,7 +818,10 @@ export const QuickAction: React.FC = () => {
       workHours: Number(hours),
       notes: notes.trim(),
       componentScrapItems: reportType === 'packaging' ? [] : componentScrapItems,
-      ...(reportType === 'component_injection' ? { shift: normalizeInjectionShift(injectionShift) } : {}),
+      ...(reportType === 'component_injection' && isInjectionShiftSelected(injectionShift)
+        ? { shift: injectionShift }
+        : {}),
+      ...(reportType === 'finished_product' && workerOutputs.length > 0 ? { workerOutputs } : {}),
     };
 
     const id = await createReport(data);
@@ -537,7 +846,9 @@ export const QuickAction: React.FC = () => {
         reportCode: saved?.reportCode,
         date: today,
         sourceReportType: resolveReportType(reportType),
-        shift: reportType === 'component_injection' ? normalizeInjectionShift(injectionShift) : undefined,
+        shift: reportType === 'component_injection' && isInjectionShiftSelected(injectionShift)
+          ? injectionShift
+          : undefined,
         lineName: getLineName(lineId),
         productName: getProductName(reportType === 'packaging' ? validPackagingLines[0].productId : productId),
         employeeName: getEmployeeName(employeeId),
@@ -555,9 +866,18 @@ export const QuickAction: React.FC = () => {
       };
       setPrintReport(row);
       setSaved(true);
-      setSaveError(null);
+      writeQuickActionStoredState(storageKey, {
+        savedShare: {
+          printReport: row,
+          productId: reportType === 'packaging' ? validPackagingLines[0].productId : productId,
+          lineId,
+          reportType,
+          savedAt: Date.now(),
+        },
+      });
+      showAppToast('success', 'تم حفظ التقرير بنجاح');
     } else {
-      setSaveError(getReportDuplicateMessage(saveErrorFromStore, 'تعذر حفظ التقرير'));
+      showAppToast('error', getReportDuplicateMessage(saveErrorFromStore, 'تعذر حفظ التقرير'));
     }
     setSaving(false);
   };
@@ -580,15 +900,17 @@ export const QuickAction: React.FC = () => {
     setWorkersMaintenance('');
     setWorkersExternal('');
     setInjectionWorkersCount('');
-    setInjectionShift(DEFAULT_INJECTION_SHIFT);
+    setInjectionShift('');
     setPackagingWorkersCount('');
     setPackagingLines(forcePackagingOnly ? [newEmptyPackagingLine()] : []);
     setHours('');
     setNotes('');
     setComponentScrapItems([]);
+    setWorkerOutputs([]);
     setSaved(false);
-    setSaveError(null);
     setPrintReport(null);
+    setShareCardRow(null);
+    clearQuickActionStorage();
   };
 
   const handleExportPDF = async () => {
@@ -620,8 +942,7 @@ export const QuickAction: React.FC = () => {
   const showShareFeedback = (result: ShareResult) => {
     const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
     if (!msg) return;
-    setShareToast(msg);
-    setTimeout(() => setShareToast(null), 8000);
+    showAppToast('info', msg, { duration: 8000 });
   };
 
   const reportNumberOf = (report: ReportPrintRow) =>
@@ -656,33 +977,39 @@ export const QuickAction: React.FC = () => {
     };
     const caption = formatProductionReportShareCaption(rowForShare, printTemplate);
     const reportNumber = reportNumberOf(rowForShare);
+    writeQuickActionStoredState(storageKey, {
+      savedShare: {
+        printReport,
+        productId,
+        lineId,
+        reportType,
+        savedAt: Date.now(),
+      },
+    });
     flushSync(() => {
       setShareCardRow(rowForShare);
     });
     try {
-      await waitForExportPaint(250);
       if (!shareCardRef.current) {
-        setShareToast('تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.');
-        setTimeout(() => setShareToast(null), 8000);
+        showAppToast('error', 'تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.', { duration: 8000 });
         return;
       }
-      const blob = await Promise.race([
-        exportNodeToPng(shareCardRef.current),
-        new Promise<never>((_, reject) => {
-          setTimeout(() => reject(new Error('capture_timeout')), 20000);
-        }),
-      ]);
-      const result = await shareImageBlobToWhatsApp(blob, `production-report-${reportNumber}`, { caption });
+      const { captureNodeAndShareToWhatsApp } = await import('@/src/shared/utils/exportNodeToImage');
+      const result = await captureNodeAndShareToWhatsApp(
+        shareCardRef.current,
+        `production-report-${reportNumber}`,
+        { caption },
+      );
       showShareFeedback(result);
     } catch (error: unknown) {
       const err = error as { name?: string; message?: string };
       if (err?.name !== 'AbortError') {
-        setShareToast(
+        showAppToast('error',
           err?.message === 'capture_timeout'
             ? 'استغرق تجهيز الصورة وقتاً طويلاً. حاول مرة أخرى.'
             : 'تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.',
+          { duration: 8000 },
         );
-        setTimeout(() => setShareToast(null), 8000);
       }
     } finally {
       shareWhatsAppLockRef.current = false;
@@ -762,26 +1089,6 @@ export const QuickAction: React.FC = () => {
         icon="bolt"
       />
 
-      {/* WhatsApp Share Feedback Toast */}
-      {shareToast && (
-        <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3 animate-in fade-in duration-300">
-          <span className="material-icons-round text-emerald-500">image</span>
-          <p className="text-sm font-medium text-emerald-700 flex-1">{shareToast}</p>
-          <button onClick={() => setShareToast(null)} className="p-1 text-emerald-400 hover:text-emerald-600 transition-colors shrink-0">
-            <span className="material-icons-round text-sm">close</span>
-          </button>
-        </div>
-      )}
-
-      {saveError && (
-        <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
-          <span className="material-icons-round text-rose-500">error</span>
-          <p className="text-sm font-bold text-rose-700 flex-1">{saveError}</p>
-          <button onClick={() => setSaveError(null)} className="p-1 text-rose-400 hover:text-rose-600 transition-colors shrink-0">
-            <span className="material-icons-round text-sm">close</span>
-          </button>
-        </div>
-      )}
       {forceInjectionOnly && (
         <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
           <span className="material-icons-round text-amber-500">warning</span>
@@ -859,6 +1166,9 @@ export const QuickAction: React.FC = () => {
                     setLineId('');
                     setProductId('');
                     setSelectedWorkOrderId('');
+                    if (nextType === 'component_injection') {
+                      setInjectionShift('');
+                    }
                     if (nextType !== 'packaging') {
                       setPackagingWorkersCount('');
                       setPackagingLines([]);
@@ -913,7 +1223,7 @@ export const QuickAction: React.FC = () => {
               <div>
                 <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الوردية *</label>
                 <Select
-                  value={normalizeInjectionShift(injectionShift)}
+                  value={injectionShift || undefined}
                   onValueChange={(value) => setInjectionShift(value as ProductionReportShift)}
                 >
                   <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
@@ -1262,7 +1572,7 @@ export const QuickAction: React.FC = () => {
                   className="mt-1.5 text-xs text-primary font-bold hover:underline flex items-center gap-1"
                 >
                   <span className="material-icons-round text-xs">groups</span>
-                  تم جلب {lineWorkers.length} عامل مسجل — اضغط للعرض
+                  {countOperatorsFromAssignments(lineWorkers, employeeId)} عامل مسجل على الخط — تم تعبئة العدد تلقائياً
                 </button>
               )}
               {lineId && lineWorkers.length === 0 && (
@@ -1270,6 +1580,43 @@ export const QuickAction: React.FC = () => {
               )}
             </div>
             )}
+            {reportType === 'finished_product'
+              && lineId && productId
+              && productionWorkerSettings.performance.productionWorkerOutputEnabled ? (
+              <div className="md:col-span-2">
+                <ReportWorkerOutputsSection
+                  lineId={lineId}
+                  productId={productId}
+                  date={today}
+                  lineName={getLineName(lineId)}
+                  productName={getProductName(productId)}
+                  products={_rawProducts}
+                  reportQty={Number(quantity || 0)}
+                  settings={productionWorkerSettings}
+                  value={workerOutputs}
+                  onChange={setWorkerOutputs}
+                  disabled={saving}
+                />
+              </div>
+            ) : reportType === 'finished_product' && lineId && productId ? (
+              <div className="md:col-span-2 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 p-4 space-y-2">
+                <p className="text-sm font-bold text-amber-800 dark:text-amber-300">إنتاج العمال غير مفعّل</p>
+                <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
+                  لإظهار أسماء العمال وإدخال إنتاج كل عامل، فعّل
+                  {' '}
+                  <strong>«تفعيل إدخال إنتاج العمال في تقرير الإنتاج»</strong>
+                  {' '}
+                  من الإعدادات.
+                </p>
+                <button
+                  type="button"
+                  className="text-xs font-bold text-primary"
+                  onClick={() => navigate('/settings')}
+                >
+                  فتح الإعدادات
+                </button>
+              </div>
+            ) : null}
             <div className="md:col-span-2">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">ملاحظات</label>
               <textarea
@@ -1294,6 +1641,7 @@ export const QuickAction: React.FC = () => {
                 || (reportType === 'packaging' && !packagingFormValid)
                 || (reportType !== 'component_injection' && !packagingLaborOptionalQuick && workersTotal <= 0)
                 || !hours
+                || (reportType === 'component_injection' && !isInjectionShiftSelected(injectionShift))
                 || (reportType === 'component_injection'
                   ? !canManageComponentInjectionReports
                   : reportType === 'packaging'

@@ -48,6 +48,11 @@ import {
   runAssetDepreciationCallable,
 } from '../services/firebase';
 import { getCurrentTenantId, setCurrentTenant } from '../lib/currentTenant';
+import {
+  clearCachedAppSession,
+  readCachedAppSession,
+  writeCachedAppSession,
+} from '../lib/appSessionCache';
 import { catalogProductService as productService } from '../modules/catalog/services/catalogProductService';
 import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
@@ -135,6 +140,7 @@ import { useJobsStore } from '../components/background-jobs/useJobsStore';
 import { REPORT_DUPLICATE_MESSAGE, INJECTION_REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
 import {
   isDuplicateProductionReport,
+  isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift';
 import {
@@ -1091,6 +1097,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const roles = await roleService.seedIfEmpty();
       set({ roles });
+      const patched = await roleService.ensureProductionWorkerPermissionsOnRoles();
+      if (patched > 0) {
+        const fresh = await roleService.getAll();
+        set({ roles: fresh });
+      }
 
       const defaultRole = roles[roles.length - 1] ?? roles[0];
       if (!defaultRole) throw new Error('Failed to seed roles');
@@ -1157,6 +1168,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   logout: async () => {
     setCurrentTenant(null);
     const { uid, userEmail } = get();
+    clearCachedAppSession(uid);
     if (uid && userEmail) {
       activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج');
     }
@@ -1259,9 +1271,25 @@ export const useAppStore = create<AppState>((set, get) => ({
     set({ loading: true, error: null, authError: null });
     try {
       const uid = currentUser.uid;
+      const cachedSession = readCachedAppSession(uid);
+      if (cachedSession?.userProfile?.isActive) {
+        setCurrentTenant(cachedSession.userProfile.tenantId);
+        set({
+          isAuthenticated: true,
+          isPendingApproval: false,
+          uid,
+          userEmail: cachedSession.userEmail,
+          userDisplayName: cachedSession.userDisplayName,
+          userProfile: cachedSession.userProfile,
+          tenantCompanyName: cachedSession.tenantCompanyName ?? '',
+          loading: false,
+        });
+        get()._applyRole(cachedSession.role);
+      }
 
       const userDoc = await userService.get(uid);
       if (!userDoc) {
+        clearCachedAppSession(uid);
         await signOut();
         setCurrentTenant(null);
         set({
@@ -1275,6 +1303,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       setCurrentTenant(userDoc.tenantId);
 
       if (!userDoc.isActive) {
+        clearCachedAppSession(uid);
         set({
           isAuthenticated: true,
           isPendingApproval: true,
@@ -1289,6 +1318,11 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const roles = await roleService.seedIfEmpty();
       set({ roles });
+      const patched = await roleService.ensureProductionWorkerPermissionsOnRoles();
+      if (patched > 0) {
+        const fresh = await roleService.getAll();
+        set({ roles: fresh });
+      }
 
       const role = roles.find((r) => r.id === userDoc.roleId) ?? roles[0];
 
@@ -1299,10 +1333,27 @@ export const useAppStore = create<AppState>((set, get) => ({
         userEmail: userDoc.email,
         userDisplayName: userDoc.displayName,
         userProfile: userDoc,
+        loading: false,
       });
 
       get()._applyRole(role);
+      writeCachedAppSession({
+        uid,
+        userEmail: userDoc.email,
+        userDisplayName: userDoc.displayName,
+        userProfile: userDoc,
+        role,
+        tenantCompanyName: get().tenantCompanyName,
+      });
       await get()._loadAppData();
+      writeCachedAppSession({
+        uid,
+        userEmail: userDoc.email,
+        userDisplayName: userDoc.displayName,
+        userProfile: userDoc,
+        role,
+        tenantCompanyName: get().tenantCompanyName,
+      });
       set({ loading: false });
     } catch (error) {
       console.error('initializeApp error:', error);
@@ -3125,7 +3176,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         getUnitsPerCarton,
       );
       if (reportType === 'component_injection') {
-        savePayload.shift = normalizeInjectionShift((data as ProductionReport).shift);
+        if (!isInjectionShiftSelected((data as ProductionReport).shift)) {
+          const msg = 'يجب اختيار الوردية (صباحي أو مسائي) قبل حفظ تقرير الحقن.';
+          set({ error: msg });
+          return null;
+        }
+        savePayload.shift = (data as ProductionReport).shift;
       } else {
         delete savePayload.shift;
       }
@@ -3159,8 +3215,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         const duplicateCandidate = {
           ...savePayload,
           reportType,
-          shift: reportType === 'component_injection'
-            ? normalizeInjectionShift((data as ProductionReport).shift)
+          shift: reportType === 'component_injection' && isInjectionShiftSelected((data as ProductionReport).shift)
+            ? (data as ProductionReport).shift
             : undefined,
         };
         const hasDuplicate = sameDayReports.some((r) => isDuplicateProductionReport(r, duplicateCandidate));
@@ -3548,9 +3604,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       let updatePayload: Partial<ProductionReport> = { ...data };
       if (nextReportType === 'component_injection') {
-        updatePayload.shift = normalizeInjectionShift(
-          (data.shift ?? existingReport?.shift) as ProductionReport['shift'],
-        );
+        const rawShift = data.shift !== undefined ? data.shift : existingReport?.shift;
+        if (!isInjectionShiftSelected(rawShift)) {
+          const msg = 'يجب اختيار الوردية (صباحي أو مسائي) قبل حفظ تقرير الحقن.';
+          set({ error: msg });
+          throw new Error(msg);
+        }
+        updatePayload.shift = rawShift;
       } else {
         delete updatePayload.shift;
       }

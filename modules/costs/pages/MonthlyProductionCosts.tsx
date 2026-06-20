@@ -469,7 +469,6 @@ export const MonthlyProductionCosts: React.FC = () => {
             });
           }
 
-          const aggregated: Record<string, number> = {};
           const lists: Record<string, ProductMaterial[]> = {};
           allMaterials.forEach((material) => {
             const pid = String(material.productId || '');

@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, Loader2, PackageX, Share2 } from 'lucide-react';
+import { Loader2, PackageX, Share2 } from 'lucide-react';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { Card, Button, SearchableSelect, Badge } from '../components/UI';
 import { productMaterialService } from '../services/productMaterialService';
@@ -7,6 +7,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import type { ProductionReport, ProductMaterial, ReportComponentScrapItem } from '../../../types';
 import { formatNumber, getMonthDateRange, getOperationalDateString } from '../../../utils/calculations';
 import { getShareResultFeedbackMessage } from '../../../utils/reportExport';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 type MaterialOption = {
   materialId: string;
@@ -54,7 +55,6 @@ export const ComponentWasteReports: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
-  const saveErrorFromStore = useAppStore((s) => s.error);
 
   const [date, setDate] = useState(() => getOperationalDateString(8));
   const [employeeId, setEmployeeId] = useState('');
@@ -66,12 +66,9 @@ export const ComponentWasteReports: React.FC = () => {
   const [materialOptions, setMaterialOptions] = useState<MaterialOption[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const [saveError, setSaveError] = useState<string | null>(null);
   const [recentReports, setRecentReports] = useState<ProductionReport[]>([]);
   const [reportsLoading, setReportsLoading] = useState(false);
   const [shareReport, setShareReport] = useState<ProductionReport | null>(null);
-  const [shareToast, setShareToast] = useState<string | null>(null);
   const [exportingId, setExportingId] = useState<string | null>(null);
   const shareRef = useRef<HTMLDivElement>(null);
 
@@ -194,13 +191,11 @@ export const ComponentWasteReports: React.FC = () => {
 
   const handleSave = async () => {
     if (!canSave || !selectedMaterial) {
-      setSaveError('اختر المنتج والمكون والخط وأدخل كمية أكبر من صفر.');
+      showAppToast('error', 'اختر المنتج والمكون والخط وأدخل كمية أكبر من صفر.');
       return;
     }
 
     setSaving(true);
-    setSaveError(null);
-    setSaveMessage(null);
     try {
       const id = await createComponentWasteReport({
         employeeId,
@@ -217,11 +212,11 @@ export const ComponentWasteReports: React.FC = () => {
 
       const currentStoreError = useAppStore.getState().error;
       if (!id) {
-        setSaveError(currentStoreError || 'تعذر حفظ تقرير الهالك.');
+        showAppToast('error', currentStoreError || 'تعذر حفظ تقرير الهالك.');
         return;
       }
 
-      setSaveMessage(currentStoreError || 'تم حفظ تقرير الهالك وتنفيذ حركة المخزون.');
+      showAppToast('success', currentStoreError || 'تم حفظ تقرير الهالك وتنفيذ حركة المخزون.');
       setMaterialId('');
       setQuantity('');
       setNotes('');
@@ -253,7 +248,8 @@ export const ComponentWasteReports: React.FC = () => {
           }),
         },
       );
-      setShareToast(getShareResultFeedbackMessage(result));
+      const message = getShareResultFeedbackMessage(result);
+      if (message) showAppToast('info', message, { duration: 8000 });
     } finally {
       setShareReport(null);
       setExportingId(null);
@@ -261,7 +257,6 @@ export const ComponentWasteReports: React.FC = () => {
   };
 
   const shareItem = shareReport ? getReportComponent(shareReport) : null;
-  const visibleError = saveError || (saveErrorFromStore && !saveMessage ? saveErrorFromStore : null);
 
   return (
     <div className="erp-dashboard-theme space-y-5">
@@ -270,28 +265,6 @@ export const ComponentWasteReports: React.FC = () => {
         subtitle="اختيار منتج ومكون وتسجيل كمية الهالك مع حركة مخزون تلقائية"
         icon={<PackageX size={18} />}
       />
-
-      {visibleError && (
-        <div className="erp-alert erp-alert-danger">
-          <AlertTriangle size={18} />
-          <p className="flex-1">{visibleError}</p>
-        </div>
-      )}
-      {saveMessage && (
-        <div className="erp-alert erp-alert-success">
-          <PackageX size={18} />
-          <p className="flex-1">{saveMessage}</p>
-        </div>
-      )}
-      {shareToast && (
-        <div className="erp-alert erp-alert-success">
-          <Share2 size={18} />
-          <p className="flex-1">{shareToast}</p>
-          <button type="button" onClick={() => setShareToast(null)} className="text-sm font-bold opacity-70 hover:opacity-100">
-            إغلاق
-          </button>
-        </div>
-      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-4">
         <Card title="تسجيل هالك مكون">
