@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { SidebarProvider, useSidebar } from './useSidebar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
+import { MobileBottomBar } from './MobileBottomBar';
 import { PageBackProvider } from './PageBackContext';
 import { GlobalBackgroundJobs } from '@/components/background-jobs/GlobalBackgroundJobs';
 import { usePermission } from '@/utils/permissions';
@@ -76,6 +77,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             className={[
               'flex-1',
               online ? 'pt-[52px]' : 'pt-[calc(52px+2.75rem)]',
+              'pb-[72px] lg:pb-0',
             ].join(' ')}
             tabIndex={-1}
           >
@@ -94,7 +96,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             </div>
           </main>
 
-          <footer className="border-t border-[var(--color-border)] bg-[var(--color-card)]">
+          <footer className="mb-[72px] border-t border-[var(--color-border)] bg-[var(--color-card)] lg:mb-0">
             <div
               className="mx-auto w-full px-4 sm:px-5 py-3 flex flex-col sm:flex-row justify-between items-center gap-3"
               style={{ maxWidth: `min(100%, ${contentMaxWidth})` }}
@@ -132,6 +134,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
 
           {/* Global jobs panel/history mounted once for the full app layout */}
           {canViewActivityLog && <GlobalBackgroundJobs />}
+          <MobileBottomBar onMoreClick={() => setSidebarOpen(true)} />
         </PageBackProvider>
       </div>
     </div>

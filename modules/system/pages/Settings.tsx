@@ -1,25 +1,17 @@
 
-import React, { useState, useCallback, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { storage, isConfigured } from '../../../services/firebase';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Badge, Button } from '../components/UI';
 import {
   usePermission,
-  useCurrentRole,
   ALL_PERMISSIONS,
 } from '../../../utils/permissions';
 import {
   DASHBOARD_LABELS,
   AVAILABLE_QUICK_ACTIONS,
-  DEFAULT_ALERT_SETTINGS,
-  DEFAULT_KPI_THRESHOLDS,
   DEFAULT_PRINT_TEMPLATE,
-  DEFAULT_PLAN_SETTINGS,
-  DEFAULT_BRANDING,
   DEFAULT_THEME,
-  DEFAULT_DASHBOARD_DISPLAY,
-  DEFAULT_ALERT_TOGGLES,
   DEFAULT_EXPORT_IMPORT_PAGE_CONTROL,
 } from '../../../utils/dashboardConfig';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
@@ -32,7 +24,7 @@ import {
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { userService } from '../../../services/userService';
 import type {
-  SystemSettings, AlertSettings, ThemeSettings,
+  AlertSettings, ThemeSettings,
   QuickActionItem, QuickActionColor, CustomWidgetConfig, FirestoreUser,
 } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
@@ -55,25 +47,13 @@ import { AlertRulesSection } from '../components/settings/AlertRulesSection';
 import { QuickActionsSection } from '../components/settings/QuickActionsSection';
 import { DashboardWidgetsSection } from '../components/settings/DashboardWidgetsSection';
 import { useSettingsDraft } from '../hooks/useSettingsDraft';
+import { useSystemSettingsController, type SettingsSectionKey } from '../hooks/useSystemSettingsController';
 import { useBackupRestore } from '../hooks/useBackupRestore';
+import { getSettingsSection } from '../settings/settingsSections';
 import { PageHeader } from '../../../components/PageHeader';
 import { CompanyTenantSection } from '../components/settings/CompanyTenantSection';
 import { UiDensitySection } from '../components/settings/UiDensitySection';
 import { DefaultHomePathSection } from '../components/settings/DefaultHomePathSection';
-
-type SettingsTab = 'general' | 'quickActions' | 'dashboardWidgets' | 'alertRules' | 'kpiThresholds' | 'printTemplate' | 'exportImport' | 'clientVersion' | 'backup';
-
-const TABS: { key: SettingsTab; label: string; icon: string; adminOnly: boolean }[] = [
-  { key: 'general', label: 'الإعدادات العامة', icon: 'settings', adminOnly: false },
-  { key: 'quickActions', label: 'الإجراءات السريعة', icon: 'bolt', adminOnly: true },
-  { key: 'dashboardWidgets', label: 'إعدادات لوحات التحكم', icon: 'dashboard_customize', adminOnly: true },
-  { key: 'alertRules', label: 'قواعد التنبيهات', icon: 'notifications_active', adminOnly: true },
-  { key: 'kpiThresholds', label: 'حدود المؤشرات', icon: 'tune', adminOnly: true },
-  { key: 'printTemplate', label: 'إعدادات الطباعة', icon: 'print', adminOnly: true },
-  { key: 'exportImport', label: 'التصدير والاستيراد', icon: 'import_export', adminOnly: true },
-  { key: 'clientVersion', label: 'إصدار التطبيق', icon: 'system_update', adminOnly: true },
-  { key: 'backup', label: 'النسخ الاحتياطي', icon: 'backup', adminOnly: true },
-];
 
 const CURRENCIES = [
   { value: 'SAR', label: 'ريال سعودي (SAR)' },
@@ -283,6 +263,13 @@ const resolveProductionWorkerSettings = (
     ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
     ...(settings?.bonus ?? {}),
   },
+  supervisorBonus: {
+    ...DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus,
+    ...(settings?.supervisorBonus ?? {}),
+    tiers: settings?.supervisorBonus?.tiers?.length
+      ? settings.supervisorBonus.tiers
+      : DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus.tiers,
+  },
 });
 
 const ALERT_FIELDS: { key: keyof AlertSettings; label: string; icon: string; unit: string; description: string }[] = [
@@ -293,28 +280,22 @@ const ALERT_FIELDS: { key: keyof AlertSettings; label: string; icon: string; uni
   { key: 'overProductionThreshold', label: 'حد الإنتاج الزائد', icon: 'trending_up', unit: '%', description: 'نسبة تجاوز الهدف المسموحة — تنبيه عند التجاوز' },
 ];
 
-export const Settings: React.FC = () => {
-  const isAuthenticated = useAppStore((s) => s.isAuthenticated);
-  const products = useAppStore((s) => s.products);
-  const productionLines = useAppStore((s) => s.productionLines);
-  const employees = useAppStore((s) => s.employees);
-  const userPermissions = useAppStore((s) => s.userPermissions);
+type SettingsProps = {
+  section?: SettingsSectionKey;
+};
+
+export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
   const systemSettings = useAppStore((s) => s.systemSettings);
   const updateSystemSettings = useAppStore((s) => s.updateSystemSettings);
 
   const { can } = usePermission();
-  const { roleName, roleColor } = useCurrentRole();
   const isAdmin = can('roles.manage');
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  const activeSection = section;
+  const sectionMeta = getSettingsSection(activeSection);
   const [localProductionWorkerSettings, setLocalProductionWorkerSettings] = useState<ProductionWorkerSettings>(
     () => resolveProductionWorkerSettings(systemSettings.productionWorkerSettings),
   );
-  const [saving, setSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState('');
-
-  const enabledCount = Object.values(userPermissions).filter(Boolean).length;
-
   useEffect(() => {
     setLocalProductionWorkerSettings(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings));
   }, [systemSettings.productionWorkerSettings]);
@@ -362,6 +343,36 @@ export const Settings: React.FC = () => {
     normalizeCustomWidgets,
     selectedWidgetDefs,
   } = useSettingsDraft(systemSettings);
+  const {
+    saving,
+    saveMessage,
+    setSaveMessage,
+    hasUnsavedChanges,
+    handleSave,
+  } = useSystemSettingsController({
+    systemSettings,
+    updateSystemSettings,
+    localWidgets,
+    localCustomWidgets,
+    localAlerts,
+    localKPIs,
+    localPrint,
+    localPlanSettings,
+    localBranding,
+    localTheme,
+    localDashboardDisplay,
+    localAlertToggles,
+    localQuickActions,
+    localExportImport,
+    localMinimumClientVersion,
+    localForceClientUpdate,
+    localClientUpdateMessageAr,
+    localDefaultHomePath,
+    localProductionWorkerSettings,
+    normalizeQuickActions,
+    normalizeCustomWidgets,
+    resolveProductionWorkerSettings,
+  });
   const [inventoryWarehouses, setInventoryWarehouses] = useState<Warehouse[]>([]);
   const [systemUsers, setSystemUsers] = useState<FirestoreUser[]>([]);
   const [editingQuickActionId, setEditingQuickActionId] = useState<string | null>(null);
@@ -372,19 +383,19 @@ export const Settings: React.FC = () => {
 
   // Instant theme preview (merges with cached tenant logo / styles).
   useEffect(() => {
-    if (activeTab === 'general') {
+    if (activeSection === 'appearance') {
       const base = readCachedTenantTheme() ?? resolveTheme();
       applyAppTheme(mergeTenantThemeForApply(base, localTheme), localTheme);
     }
-  }, [localTheme, activeTab]);
+  }, [localTheme, activeSection]);
 
-  // Revert preview when leaving the General tab (back to last saved theme from store).
+  // Revert preview when leaving the appearance page (back to last saved theme from store).
   useEffect(() => {
-    if (activeTab === 'general') return;
+    if (activeSection === 'appearance') return;
     const saved = systemSettings.theme ?? DEFAULT_THEME;
     const base = readCachedTenantTheme() ?? resolveTheme();
     applyAppTheme(mergeTenantThemeForApply(base, saved), saved);
-  }, [activeTab, systemSettings.theme]);
+  }, [activeSection, systemSettings.theme]);
 
   useEffect(() => {
     if (!isAdmin) return;
@@ -448,7 +459,7 @@ export const Settings: React.FC = () => {
     useServerImport,
     setUseServerImport,
     isSuperAdmin,
-  } = useBackupRestore({ activeTab, isAdmin });
+  } = useBackupRestore({ activeTab: activeSection, isAdmin });
 
   const handleLogoUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -483,103 +494,6 @@ export const Settings: React.FC = () => {
     setUploadingLogo(false);
     if (brandingLogoRef.current) brandingLogoRef.current.value = '';
   }, []);
-
-  const handleSave = useCallback(async (section: 'general' | 'quickActions' | 'widgets' | 'alerts' | 'kpis' | 'print' | 'exportImport' | 'clientVersion' | 'repair') => {
-    setSaving(true);
-    setSaveMessage('');
-    try {
-      const updated: SystemSettings = {
-        ...systemSettings,
-        dashboardWidgets: section === 'widgets' ? localWidgets : systemSettings.dashboardWidgets,
-        customDashboardWidgets: section === 'widgets'
-          ? normalizeCustomWidgets(localCustomWidgets)
-          : (systemSettings.customDashboardWidgets ?? []),
-        alertSettings: section === 'alerts' ? localAlerts : systemSettings.alertSettings,
-        kpiThresholds: section === 'kpis' ? localKPIs : systemSettings.kpiThresholds,
-        printTemplate: section === 'print' ? localPrint : systemSettings.printTemplate,
-        planSettings: section === 'general' ? localPlanSettings : (systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS),
-        branding: section === 'general' ? localBranding : (systemSettings.branding ?? DEFAULT_BRANDING),
-        theme: section === 'general' ? localTheme : (systemSettings.theme ?? DEFAULT_THEME),
-        dashboardDisplay: section === 'general' ? localDashboardDisplay : (systemSettings.dashboardDisplay ?? DEFAULT_DASHBOARD_DISPLAY),
-        alertToggles: section === 'general' ? localAlertToggles : (systemSettings.alertToggles ?? DEFAULT_ALERT_TOGGLES),
-        quickActions: section === 'quickActions' ? normalizeQuickActions(localQuickActions) : (systemSettings.quickActions ?? []),
-        exportImport: section === 'exportImport' ? localExportImport : (systemSettings.exportImport ?? { pages: {} }),
-        minimumClientVersion:
-          section === 'clientVersion' ? localMinimumClientVersion.trim() : systemSettings.minimumClientVersion,
-        forceClientUpdate:
-          section === 'clientVersion' ? localForceClientUpdate : systemSettings.forceClientUpdate,
-        clientUpdateMessageAr:
-          section === 'clientVersion' ? localClientUpdateMessageAr.trim() : systemSettings.clientUpdateMessageAr,
-        defaultHomeLogicalPath:
-          section === 'general' ? localDefaultHomePath.trim() : systemSettings.defaultHomeLogicalPath,
-        productionWorkerSettings:
-          section === 'general'
-            ? localProductionWorkerSettings
-            : (systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS),
-      };
-      await updateSystemSettings(updated);
-      setSaveMessage('تم الحفظ بنجاح');
-      setTimeout(() => setSaveMessage(''), 3000);
-    } catch {
-      setSaveMessage('فشل الحفظ');
-    }
-    setSaving(false);
-  }, [systemSettings, localWidgets, localCustomWidgets, localAlerts, localKPIs, localPrint, localPlanSettings, localBranding, localTheme, localDashboardDisplay, localAlertToggles, normalizeQuickActions, normalizeCustomWidgets, localQuickActions, localExportImport, localMinimumClientVersion, localForceClientUpdate, localClientUpdateMessageAr, localDefaultHomePath, localProductionWorkerSettings, updateSystemSettings]);
-  const handleSaveAll = useCallback(async () => {
-    setSaving(true);
-    setSaveMessage('');
-    try {
-      const updated: SystemSettings = {
-        ...systemSettings,
-        dashboardWidgets: localWidgets,
-        customDashboardWidgets: normalizeCustomWidgets(localCustomWidgets),
-        alertSettings: localAlerts,
-        kpiThresholds: localKPIs,
-        printTemplate: localPrint,
-        planSettings: localPlanSettings,
-        branding: localBranding,
-        theme: localTheme,
-        dashboardDisplay: localDashboardDisplay,
-        alertToggles: localAlertToggles,
-        quickActions: normalizeQuickActions(localQuickActions),
-        exportImport: localExportImport,
-        minimumClientVersion: localMinimumClientVersion.trim(),
-        forceClientUpdate: localForceClientUpdate,
-        clientUpdateMessageAr: localClientUpdateMessageAr.trim(),
-        defaultHomeLogicalPath: localDefaultHomePath.trim(),
-        productionWorkerSettings: localProductionWorkerSettings,
-      };
-      await updateSystemSettings(updated);
-      setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
-      setTimeout(() => setSaveMessage(''), 3000);
-    } catch {
-      setSaveMessage('فشل حفظ جميع الإعدادات');
-    } finally {
-      setSaving(false);
-    }
-  }, [
-    systemSettings,
-    localWidgets,
-    localCustomWidgets,
-    localAlerts,
-    localKPIs,
-    localPrint,
-    localPlanSettings,
-    localBranding,
-    localTheme,
-    localDashboardDisplay,
-    localAlertToggles,
-    localQuickActions,
-    localExportImport,
-    localMinimumClientVersion,
-    localForceClientUpdate,
-    localClientUpdateMessageAr,
-    localDefaultHomePath,
-    localProductionWorkerSettings,
-    normalizeCustomWidgets,
-    normalizeQuickActions,
-    updateSystemSettings,
-  ]);
 
   // ── Widget drag & drop ─────────────────────────────────────────────────────
 
@@ -802,89 +716,6 @@ export const Settings: React.FC = () => {
     [],
   );
 
-  // ── Visible tabs ───────────────────────────────────────────────────────────
-
-  const visibleTabs = TABS.filter((t) => !t.adminOnly || isAdmin);
-  const serialize = useCallback((value: unknown) => JSON.stringify(value), []);
-  const dirtyBySection = useMemo(() => {
-    const savedQuickActionsSorted = (systemSettings.quickActions ?? [])
-      .slice()
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
-    return {
-      general:
-        serialize({ ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings }) !== serialize(localPlanSettings) ||
-        serialize({ ...DEFAULT_BRANDING, ...systemSettings.branding }) !== serialize(localBranding) ||
-        serialize({ ...DEFAULT_THEME, ...systemSettings.theme }) !== serialize(localTheme) ||
-        serialize({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay }) !== serialize(localDashboardDisplay) ||
-        serialize({ ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles }) !== serialize(localAlertToggles) ||
-        serialize(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings)) !== serialize(localProductionWorkerSettings),
-      quickActions:
-        serialize(normalizeQuickActions(savedQuickActionsSorted)) !== serialize(normalizeQuickActions(localQuickActions)),
-      widgets:
-        serialize(systemSettings.dashboardWidgets) !== serialize(localWidgets) ||
-        serialize(normalizeCustomWidgets(systemSettings.customDashboardWidgets ?? [])) !== serialize(normalizeCustomWidgets(localCustomWidgets)),
-      alerts:
-        serialize(systemSettings.alertSettings) !== serialize(localAlerts),
-      kpis:
-        serialize(systemSettings.kpiThresholds) !== serialize(localKPIs),
-      print:
-        serialize(systemSettings.printTemplate) !== serialize(localPrint),
-      exportImport:
-        serialize(systemSettings.exportImport ?? { pages: {} }) !== serialize(localExportImport),
-      clientVersion:
-        (systemSettings.minimumClientVersion ?? '') !== localMinimumClientVersion ||
-        (systemSettings.forceClientUpdate === true) !== localForceClientUpdate ||
-        (systemSettings.clientUpdateMessageAr ?? '') !== localClientUpdateMessageAr,
-    } as const;
-  }, [
-    serialize,
-    systemSettings,
-    localPlanSettings,
-    localBranding,
-    localTheme,
-    localDashboardDisplay,
-    localAlertToggles,
-    localProductionWorkerSettings,
-    localQuickActions,
-    localWidgets,
-    localCustomWidgets,
-    localAlerts,
-    localKPIs,
-    localPrint,
-    localExportImport,
-    localMinimumClientVersion,
-    localForceClientUpdate,
-    localClientUpdateMessageAr,
-    normalizeQuickActions,
-    normalizeCustomWidgets,
-  ]);
-  const hasUnsavedChanges = useMemo(
-    () => Object.values(dirtyBySection).some(Boolean),
-    [dirtyBySection],
-  );
-  const tabToSection: Partial<Record<SettingsTab, keyof typeof dirtyBySection>> = {
-    general: 'general',
-    quickActions: 'quickActions',
-    dashboardWidgets: 'widgets',
-    alertRules: 'alerts',
-    kpiThresholds: 'kpis',
-    printTemplate: 'print',
-    exportImport: 'exportImport',
-    clientVersion: 'clientVersion',
-  };
-  const handleTabChange = useCallback((nextTab: SettingsTab) => {
-    if (nextTab === activeTab) return;
-    const currentSection = tabToSection[activeTab];
-    if (currentSection && dirtyBySection[currentSection]) {
-      const ok = window.confirm('لديك تغييرات غير محفوظة في هذا التبويب. هل تريد المتابعة بدون حفظ؟');
-      if (!ok) return;
-    }
-    setActiveTab(nextTab);
-  }, [activeTab, dirtyBySection]);
-  const getTabDirty = useCallback((tab: SettingsTab) => {
-    const section = tabToSection[tab];
-    return section ? Boolean(dirtyBySection[section]) : false;
-  }, [dirtyBySection]);
   useEffect(() => {
     const onBeforeUnload = (event: BeforeUnloadEvent) => {
       if (!hasUnsavedChanges) return;
@@ -898,13 +729,13 @@ export const Settings: React.FC = () => {
   return (
     <div className="space-y-6 erp-ds-clean">
       <PageHeader
-        title="الإعدادات"
-        subtitle="إعدادات المصنع وحالة الاتصال والصلاحيات."
+        title={sectionMeta.label}
+        subtitle={sectionMeta.subtitle}
         backAction={false}
-        primaryAction={{
-          label: 'حفظ جميع الإعدادات',
+        primaryAction={activeSection === 'backup' ? undefined : {
+          label: 'حفظ الصفحة',
           icon: 'save',
-          onClick: handleSaveAll,
+          onClick: () => handleSave(activeSection),
           disabled: saving || !hasUnsavedChanges,
         }}
         loading={saving}
@@ -916,29 +747,6 @@ export const Settings: React.FC = () => {
           لديك تعديلات غير محفوظة. احفظ التغييرات قبل مغادرة الصفحة.
         </div>
       )}
-
-      {/* ── Tab Bar ──────────────────────────────────────────────────────────── */}
-      <div className="flex gap-1 border-b border-[var(--color-border)] overflow-x-auto">
-        {visibleTabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => handleTabChange(tab.key)}
-            className={`relative flex items-center gap-2 px-3 py-2.5 text-sm font-medium transition-colors shrink-0 border-b-2 ${
-              activeTab === tab.key
-                ? 'text-primary border-primary'
-                : 'text-[var(--color-text-muted)] border-transparent hover:text-primary'
-            }`}
-          >
-            <span className="material-icons-round text-lg">{tab.icon}</span>
-            {tab.label}
-            {getTabDirty(tab.key) && (
-              <span className={`inline-block w-2 h-2 rounded-full ${
-                activeTab === tab.key ? 'bg-primary' : 'bg-muted-foreground'
-              }`} />
-            )}
-          </button>
-        ))}
-      </div>
 
       {/* ── Save feedback ─────────────────────────────────────────────────── */}
       {saveMessage && (
@@ -953,9 +761,9 @@ export const Settings: React.FC = () => {
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: General Settings ─────────────────────────────────────────── */}
+      {/* ── PAGE: General Settings ────────────────────────────────────────── */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'general' && (
+      {activeSection === 'general' && (
         <>
           <GeneralSettingsHeader
             isAdmin={isAdmin}
@@ -967,9 +775,28 @@ export const Settings: React.FC = () => {
             <DefaultHomePathSection value={localDefaultHomePath} onChange={setLocalDefaultHomePath} />
           )}
 
-          <UiDensitySection />
-
           <CompanyTenantSection isAdmin={isAdmin} />
+
+          <GeneralSystemBehaviorSection
+            isAdmin={isAdmin}
+            localPlanSettings={localPlanSettings}
+            setLocalPlanSettings={setLocalPlanSettings}
+            inventoryWarehouses={inventoryWarehouses}
+            allPermissions={ALL_PERMISSIONS}
+            hrUsers={systemUsers.map((user) => ({
+              id: user.id || '',
+              label: `${user.displayName || 'مستخدم'}${user.email ? ` (${user.email})` : ''}`,
+            })).filter((item) => item.id)}
+          />
+        </>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* ── PAGE: Appearance Settings ─────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeSection === 'appearance' && (
+        <>
+          <UiDensitySection />
 
           <GeneralBrandingSection
             isAdmin={isAdmin}
@@ -990,19 +817,14 @@ export const Settings: React.FC = () => {
             fontFamilies={FONT_FAMILIES}
             defaultTheme={DEFAULT_THEME}
           />
+        </>
+      )}
 
-          <GeneralSystemBehaviorSection
-            isAdmin={isAdmin}
-            localPlanSettings={localPlanSettings}
-            setLocalPlanSettings={setLocalPlanSettings}
-            inventoryWarehouses={inventoryWarehouses}
-            allPermissions={ALL_PERMISSIONS}
-            hrUsers={systemUsers.map((user) => ({
-              id: user.id || '',
-              label: `${user.displayName || 'مستخدم'}${user.email ? ` (${user.email})` : ''}`,
-            })).filter((item) => item.id)}
-          />
-
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* ── PAGE: Production Settings ─────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeSection === 'production' && isAdmin && (
+        <>
           <ProductionWorkerSettingsSection
             value={localProductionWorkerSettings}
             onChange={setLocalProductionWorkerSettings}
@@ -1015,146 +837,94 @@ export const Settings: React.FC = () => {
             setLocalPlanSettings={setLocalPlanSettings}
             inventoryWarehouses={inventoryWarehouses}
           />
+        </>
+      )}
 
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* ── PAGE: Dashboards ──────────────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeSection === 'dashboards' && isAdmin && (
+        <>
           <GeneralDashboardDisplaySection
             isAdmin={isAdmin}
             localDashboardDisplay={localDashboardDisplay}
             setLocalDashboardDisplay={setLocalDashboardDisplay}
           />
 
+          <QuickActionsSection
+            isAdmin={isAdmin}
+            saving={saving}
+            localQuickActions={localQuickActions}
+            editingQuickActionId={editingQuickActionId}
+            setEditingQuickActionId={setEditingQuickActionId}
+            moveQuickAction={moveQuickAction}
+            removeQuickAction={removeQuickAction}
+            getQuickActionMatch={getQuickActionMatch}
+            updateQuickAction={updateQuickAction}
+            addQuickAction={addQuickAction}
+            onSave={() => handleSave('dashboards')}
+            availableQuickActions={AVAILABLE_QUICK_ACTIONS}
+            quickActionIcons={QUICK_ACTION_ICONS}
+            quickActionColors={QUICK_ACTION_COLORS}
+          />
+
+          <DashboardWidgetsSection
+            isAdmin={isAdmin}
+            saving={saving}
+            dashboardLabels={DASHBOARD_LABELS}
+            selectedDashboardKey={selectedDashboardKey}
+            handleSelectDashboard={handleSelectDashboard}
+            localWidgets={localWidgets}
+            selectedWidgetDefs={selectedWidgetDefs}
+            localCustomWidgets={localCustomWidgets}
+            handleDragStart={handleDragStart}
+            handleDragEnter={handleDragEnter}
+            handleDragEnd={handleDragEnd}
+            toggleWidget={toggleWidget}
+            removeCustomWidget={removeCustomWidget}
+            widgetForm={widgetForm}
+            setWidgetForm={setWidgetForm}
+            addCustomWidget={addCustomWidget}
+            onSave={() => handleSave('dashboards')}
+            onMoveWidgetToDashboard={moveWidgetToDashboard}
+          />
+        </>
+      )}
+
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {/* ── PAGE: Alerts ─────────────────────────────────────────────────── */}
+      {/* ════════════════════════════════════════════════════════════════════ */}
+      {activeSection === 'alerts' && isAdmin && (
+        <>
           <GeneralAlertsSection
             isAdmin={isAdmin}
             localAlertToggles={localAlertToggles}
             setLocalAlertToggles={setLocalAlertToggles}
           />
 
-          {/* ── System Status (for all users) ─────────────────────────────── */}
-          <Card title="حالة النظام" className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
-              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
-                <span className="material-icons-round text-primary text-3xl mb-2 block">cloud_done</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">اتصال Firebase</p>
-                <Badge variant={isAuthenticated ? 'success' : 'danger'}>
-                  {isAuthenticated ? 'متصل' : 'غير متصل'}
-                </Badge>
-              </div>
-              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
-                <span className="material-icons-round text-primary text-3xl mb-2 block">inventory_2</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المنتجات</p>
-                <p className="text-2xl font-medium text-[var(--color-text)]">{products.length}</p>
-              </div>
-              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
-                <span className="material-icons-round text-primary text-3xl mb-2 block">precision_manufacturing</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">خطوط الإنتاج</p>
-                <p className="text-2xl font-medium text-[var(--color-text)]">{productionLines.length}</p>
-              </div>
-              <div className="bg-[var(--color-bg)] rounded-xl p-5 text-center border border-[var(--color-border)]">
-                <span className="material-icons-round text-primary text-3xl mb-2 block">groups</span>
-                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">المشرفين</p>
-                <p className="text-2xl font-medium text-[var(--color-text)]">{employees.length}</p>
-              </div>
-            </div>
-          </Card>
+          <AlertRulesSection
+            isAdmin={isAdmin}
+            saving={saving}
+            localAlerts={localAlerts}
+            setLocalAlerts={setLocalAlerts}
+            onSave={() => handleSave('alerts')}
+            alertFields={ALERT_FIELDS}
+          />
 
-          {/* Current Role Info (for all users) */}
-          <Card title="الدور الحالي والصلاحيات" className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
-            <div className="flex items-center gap-4 mb-4">
-              <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center">
-                <span className="material-icons-round text-primary text-2xl">shield</span>
-              </div>
-              <div>
-                <p className="text-xs text-[var(--color-text-muted)] font-medium mb-1">الدور الحالي</p>
-                <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium ${roleColor}`}>
-                  {roleName}
-                </span>
-              </div>
-              <div className="mr-auto text-xs text-[var(--color-text-muted)] font-medium">
-                {enabledCount} / {ALL_PERMISSIONS.length} صلاحية مفعلة
-              </div>
-            </div>
-          </Card>
+          <KPIThresholdsSection
+            isAdmin={isAdmin}
+            saving={saving}
+            localKPIs={localKPIs}
+            setLocalKPIs={setLocalKPIs}
+            onSave={() => handleSave('alerts')}
+          />
         </>
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: Quick Actions ────────────────────────────────────────────── */}
+      {/* ── PAGE: Reports ───────────────────────────────────────────────── */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'quickActions' && isAdmin && (
-        <QuickActionsSection
-          isAdmin={isAdmin}
-          saving={saving}
-          localQuickActions={localQuickActions}
-          editingQuickActionId={editingQuickActionId}
-          setEditingQuickActionId={setEditingQuickActionId}
-          moveQuickAction={moveQuickAction}
-          removeQuickAction={removeQuickAction}
-          getQuickActionMatch={getQuickActionMatch}
-          updateQuickAction={updateQuickAction}
-          addQuickAction={addQuickAction}
-          onSave={() => handleSave('quickActions')}
-          availableQuickActions={AVAILABLE_QUICK_ACTIONS}
-          quickActionIcons={QUICK_ACTION_ICONS}
-          quickActionColors={QUICK_ACTION_COLORS}
-        />
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: Dashboard Widget Settings ────────────────────────────────── */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'dashboardWidgets' && isAdmin && (
-        <DashboardWidgetsSection
-          isAdmin={isAdmin}
-          saving={saving}
-          dashboardLabels={DASHBOARD_LABELS}
-          selectedDashboardKey={selectedDashboardKey}
-          handleSelectDashboard={handleSelectDashboard}
-          localWidgets={localWidgets}
-          selectedWidgetDefs={selectedWidgetDefs}
-          localCustomWidgets={localCustomWidgets}
-          handleDragStart={handleDragStart}
-          handleDragEnter={handleDragEnter}
-          handleDragEnd={handleDragEnd}
-          toggleWidget={toggleWidget}
-          removeCustomWidget={removeCustomWidget}
-          widgetForm={widgetForm}
-          setWidgetForm={setWidgetForm}
-          addCustomWidget={addCustomWidget}
-          onSave={() => handleSave('widgets')}
-          onMoveWidgetToDashboard={moveWidgetToDashboard}
-        />
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: Alert Rules ──────────────────────────────────────────────── */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'alertRules' && isAdmin && (
-        <AlertRulesSection
-          isAdmin={isAdmin}
-          saving={saving}
-          localAlerts={localAlerts}
-          setLocalAlerts={setLocalAlerts}
-          onSave={() => handleSave('alerts')}
-          alertFields={ALERT_FIELDS}
-        />
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: KPI Thresholds ───────────────────────────────────────────── */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'kpiThresholds' && isAdmin && (
-        <KPIThresholdsSection
-          isAdmin={isAdmin}
-          saving={saving}
-          localKPIs={localKPIs}
-          setLocalKPIs={setLocalKPIs}
-          onSave={() => handleSave('kpis')}
-        />
-      )}
-
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: Print Template Settings ───────────────────────────────── */}
-      {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'printTemplate' && isAdmin && (
+      {activeSection === 'reports' && isAdmin && (
         <PrintTemplateSettingsSection
           isAdmin={isAdmin}
           saving={saving}
@@ -1165,29 +935,29 @@ export const Settings: React.FC = () => {
           localPrint={localPrint}
           setLocalPrint={setLocalPrint}
           handleLogoUpload={handleLogoUpload}
-          onSave={() => handleSave('print')}
+          onSave={() => handleSave('reports')}
           onReset={() => setLocalPrint({ ...DEFAULT_PRINT_TEMPLATE })}
           sampleRows={SAMPLE_ROWS}
         />
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: Export & Import ─────────────────────────────────────────  */}
+      {/* ── PAGE: Export & Import ───────────────────────────────────────── */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'exportImport' && isAdmin && (
+      {activeSection === 'data' && isAdmin && (
         <ExportImportSettingsSection
           isAdmin={isAdmin}
           saving={saving}
           localExportImport={localExportImport}
           updateExportImportControl={updateExportImportControl}
-          onSave={() => handleSave('exportImport')}
+          onSave={() => handleSave('data')}
         />
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: Client version / forced update ─────────────────────────── */}
+      {/* ── PAGE: Client version / forced update ────────────────────────── */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'clientVersion' && isAdmin && (
+      {activeSection === 'clientVersion' && isAdmin && (
         <ClientVersionSettingsSection
           isAdmin={isAdmin}
           saving={saving}
@@ -1205,9 +975,9 @@ export const Settings: React.FC = () => {
       )}
 
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {/* ── TAB: Backup & Restore ──────────────────────────────────────── */}
+      {/* ── PAGE: Backup & Restore ─────────────────────────────────────── */}
       {/* ════════════════════════════════════════════════════════════════════ */}
-      {activeTab === 'backup' && isAdmin && (
+      {activeSection === 'backup' && isAdmin && (
         <BackupRestoreSection
           isAdmin={isAdmin}
           backupMessage={backupMessage}

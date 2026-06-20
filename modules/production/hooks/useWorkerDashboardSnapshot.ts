@@ -34,6 +34,13 @@ export function useWorkerDashboardSnapshot(): WorkerDashboardSnapshot {
       ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
       ...(rawWorkerSettings?.bonus ?? {}),
     },
+    supervisorBonus: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus,
+      ...(rawWorkerSettings?.supervisorBonus ?? {}),
+      tiers: rawWorkerSettings?.supervisorBonus?.tiers?.length
+        ? rawWorkerSettings.supervisorBonus.tiers
+        : DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus.tiers,
+    },
   }), [rawWorkerSettings]);
   const [snapshot, setSnapshot] = useState<WorkerDashboardSnapshot>({
     topWorkers: [],

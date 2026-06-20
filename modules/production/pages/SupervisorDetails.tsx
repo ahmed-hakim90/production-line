@@ -30,7 +30,8 @@ import {
 } from '../../../utils/calculations';
 import { JOB_LEVEL_LABELS, type JobLevel } from '../../hr/types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
-import type { ProductionReport, FirestoreEmployee, WorkOrder } from '../../../types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionReport, type FirestoreEmployee, type WorkOrder } from '../../../types';
+import { calculateSupervisorTeamBonusEstimate } from '../services/productionBonusEngine';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift } from '../../hr/types';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef, shiftsRef } from '../../hr/collections';
@@ -402,6 +403,20 @@ export const SupervisorDetails: React.FC = () => {
     () => computeSupervisorLikePerformanceScore(periodReports, periodRange.start, periodRange.end, productAvgDailyById),
     [periodReports, periodRange.start, periodRange.end, productAvgDailyById],
   );
+  const supervisorBonusSettings = useMemo(() => ({
+    ...DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus,
+    ...(systemSettings.productionWorkerSettings?.supervisorBonus ?? {}),
+    tiers: systemSettings.productionWorkerSettings?.supervisorBonus?.tiers?.length
+      ? systemSettings.productionWorkerSettings.supervisorBonus.tiers
+      : DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus.tiers,
+  }), [systemSettings.productionWorkerSettings?.supervisorBonus]);
+  const supervisorBonus = useMemo(
+    () => calculateSupervisorTeamBonusEstimate({
+      settings: supervisorBonusSettings,
+      reports: periodReports,
+    }),
+    [periodReports, supervisorBonusSettings],
+  );
 
   const periodWorkOrders = useMemo(() => (
     workOrders.filter((wo) => {
@@ -706,6 +721,23 @@ export const SupervisorDetails: React.FC = () => {
           trendUp={performanceScore >= 70}
         />
         <KPIBox
+          label="تحقيق الفريق"
+          value={`${supervisorBonus.cappedAchievementPercent}%`}
+          unit={supervisorBonus.achievementPercent !== supervisorBonus.cappedAchievementPercent ? `قبل السقف ${supervisorBonus.achievementPercent}%` : undefined}
+          icon="groups"
+          colorClass={supervisorBonus.cappedAchievementPercent >= 95 ? 'bg-emerald-50 text-emerald-600' : supervisorBonus.cappedAchievementPercent >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
+          trend={`${formatNumber(supervisorBonus.totalAchieved)} / ${formatNumber(supervisorBonus.totalTarget)}`}
+          trendUp={supervisorBonus.cappedAchievementPercent >= 70}
+        />
+        <KPIBox
+          label="تقدير المكافأة"
+          value={formatNumber(supervisorBonus.bonusEstimate)}
+          icon="payments"
+          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+          trend={`معامل ${supervisorBonus.supervisorMultiplier}x · شريحة ${supervisorBonus.tierMultiplier}x`}
+          trendUp={supervisorBonus.bonusEstimate > 0}
+        />
+        <KPIBox
           label="متوسط الإنتاج/يوم (أوامر)"
           value={formatNumber(Number(executionSummary.avgDailyActual.toFixed(1)))}
           unit="وحدة"
@@ -737,6 +769,61 @@ export const SupervisorDetails: React.FC = () => {
           trendUp={executionSummary.weightedDeviation !== null && executionSummary.weightedDeviation >= 0}
         />
       </div>
+      </DetailCollapsibleSection>
+
+      <DetailCollapsibleSection title="تقييم الفريق والمكافأة" defaultOpen>
+      <ErpCard title="حساب المكافأة من أهداف العمال">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي أهداف الفريق</p>
+            <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(supervisorBonus.totalTarget)}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي المحقق</p>
+            <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(supervisorBonus.totalAchieved)}</p>
+          </div>
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">النسبة المعتمدة</p>
+            <p className="text-lg font-black text-primary">{supervisorBonus.cappedAchievementPercent}%</p>
+          </div>
+          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
+            <p className="text-xs font-bold text-[var(--color-text-muted)]">مكافأة المشرف</p>
+            <p className="text-lg font-black text-primary">{formatNumber(supervisorBonus.bonusEstimate)}</p>
+          </div>
+        </div>
+
+        {supervisorBonus.workerContributions.length === 0 ? (
+          <div className="text-center py-8 text-[var(--color-text-muted)]">
+            <span className="material-icons-round text-4xl mb-2 block opacity-40">groups</span>
+            لا توجد أهداف عمال مسجلة داخل تقارير هذه الفترة.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table w-full text-sm">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">العامل</th>
+                  <th className="erp-th text-center">الهدف</th>
+                  <th className="erp-th text-center">المحقق</th>
+                  <th className="erp-th text-center">المعتمد بعد السقف</th>
+                  <th className="erp-th text-center">نسبة العامل</th>
+                </tr>
+              </thead>
+              <tbody>
+                {supervisorBonus.workerContributions.slice(0, 20).map((row) => (
+                  <tr key={row.workerId} className="border-b border-[var(--color-border)]">
+                    <td className="px-4 py-3 font-bold text-[var(--color-text)]">{row.workerName}</td>
+                    <td className="px-4 py-3 text-center font-bold">{formatNumber(row.targetQty)}</td>
+                    <td className="px-4 py-3 text-center font-bold">{formatNumber(row.outputQty)}</td>
+                    <td className="px-4 py-3 text-center font-bold text-primary">{formatNumber(row.cappedOutputQty)}</td>
+                    <td className="px-4 py-3 text-center font-bold">{row.achievementPercent}%</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </ErpCard>
       </DetailCollapsibleSection>
 
       <DetailCollapsibleSection title="تفصيل العمالة" defaultOpen>

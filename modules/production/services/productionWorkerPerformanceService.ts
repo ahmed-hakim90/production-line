@@ -100,6 +100,13 @@ export const productionWorkerPerformanceService = {
         ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
         ...(settings?.bonus ?? {}),
       },
+      supervisorBonus: {
+        ...DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus,
+        ...(settings?.supervisorBonus ?? {}),
+        tiers: settings?.supervisorBonus?.tiers?.length
+          ? settings.supervisorBonus.tiers
+          : DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus.tiers,
+      },
     };
   },
 

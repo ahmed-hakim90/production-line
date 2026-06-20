@@ -1,6 +1,10 @@
 import React from 'react';
 import type { ProductionWorkerSettings } from '@/types';
-import { DEFAULT_PRODUCTION_BONUS_SETTINGS, DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS } from '@/types';
+import {
+  DEFAULT_PRODUCTION_BONUS_SETTINGS,
+  DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS,
+  DEFAULT_SUPERVISOR_BONUS_SETTINGS,
+} from '@/types';
 import { Card } from './UI';
 
 type Props = {
@@ -35,6 +39,13 @@ const ToggleRow: React.FC<{
 export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChange, disabled }) => {
   const perf = { ...DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS, ...value.performance };
   const bonus = { ...DEFAULT_PRODUCTION_BONUS_SETTINGS, ...value.bonus };
+  const supervisorBonus = {
+    ...DEFAULT_SUPERVISOR_BONUS_SETTINGS,
+    ...(value.supervisorBonus ?? {}),
+    tiers: value.supervisorBonus?.tiers?.length
+      ? value.supervisorBonus.tiers
+      : DEFAULT_SUPERVISOR_BONUS_SETTINGS.tiers,
+  };
   const showExtraUnitValue = bonus.method === 'per_extra_unit'
     || (bonus.method === 'target_plus_extra' && (bonus.extraBonusMethod ?? 'per_extra_unit') === 'per_extra_unit');
   const showPercentValue = bonus.method === 'per_achievement_percent'
@@ -45,6 +56,17 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
     onChange({ ...value, performance: { ...perf, ...patch } });
   const setBonus = (patch: Partial<typeof bonus>) =>
     onChange({ ...value, bonus: { ...bonus, ...patch } });
+  const setSupervisorBonus = (patch: Partial<typeof supervisorBonus>) =>
+    onChange({ ...value, supervisorBonus: { ...supervisorBonus, ...patch } });
+  const updateSupervisorTier = (
+    index: number,
+    patch: Partial<(typeof supervisorBonus.tiers)[number]>,
+  ) => {
+    const tiers = supervisorBonus.tiers.map((tier, tierIndex) => (
+      tierIndex === index ? { ...tier, ...patch } : tier
+    ));
+    setSupervisorBonus({ tiers });
+  };
 
   return (
     <Card title="إعدادات عمال الإنتاج">
@@ -231,6 +253,120 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
                 والعامل حقق هدف الشهر يأخذ 200. لو زاد 500 قطعة عن هدف الشهر يأخذ 200 + 50 = 250.
               </div>
             )}
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <p className="text-sm font-bold text-[var(--color-text)]">تقييم ومكافآت المشرفين</p>
+          <ToggleRow
+            label="تفعيل حساب مكافأة المشرفين"
+            desc="يحسب نسبة المشرف من إجمالي أهداف العمال وما تحقق داخل تقارير الإنتاج المرتبطة به"
+            checked={supervisorBonus.enabled}
+            onChange={(v) => setSupervisorBonus({ enabled: v })}
+            disabled={disabled}
+          />
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="block text-sm">
+              <span className="font-bold">المكافأة الأساسية للمشرف</span>
+              <input
+                type="number"
+                min={0}
+                className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                value={supervisorBonus.baseBonusAmount}
+                disabled={disabled}
+                onChange={(e) => setSupervisorBonus({ baseBonusAmount: Number(e.target.value) || 0 })}
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="font-bold">معامل المشرف</span>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                value={supervisorBonus.supervisorMultiplier}
+                disabled={disabled}
+                onChange={(e) => setSupervisorBonus({ supervisorMultiplier: Number(e.target.value) || 0 })}
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="font-bold">سقف مساهمة كل عامل %</span>
+              <input
+                type="number"
+                min={0}
+                className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                value={supervisorBonus.workerContributionCapPercent}
+                disabled={disabled}
+                onChange={(e) => setSupervisorBonus({ workerContributionCapPercent: Number(e.target.value) || 0 })}
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="font-bold">الحد الأدنى لصرف المكافأة %</span>
+              <input
+                type="number"
+                min={0}
+                className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                value={supervisorBonus.minimumAchievementPercent}
+                disabled={disabled}
+                onChange={(e) => setSupervisorBonus({ minimumAchievementPercent: Number(e.target.value) || 0 })}
+              />
+            </label>
+            <label className="block text-sm sm:col-span-2">
+              <span className="font-bold">الحد الأقصى لمكافأة المشرف</span>
+              <input
+                type="number"
+                min={0}
+                className="mt-1 w-full border border-[var(--color-border)] rounded-lg p-2.5"
+                value={supervisorBonus.maxBonus}
+                disabled={disabled}
+                onChange={(e) => setSupervisorBonus({ maxBonus: Number(e.target.value) || 0 })}
+              />
+            </label>
+          </div>
+
+          <div className="rounded-lg border border-[var(--color-border)] overflow-hidden">
+            <div className="grid grid-cols-3 gap-2 bg-[#f8f9fa] px-3 py-2 text-xs font-bold text-[var(--color-text-muted)]">
+              <span>من %</span>
+              <span>إلى %</span>
+              <span>معامل الشريحة</span>
+            </div>
+            {supervisorBonus.tiers.map((tier, index) => (
+              <div key={`${tier.fromPercent}_${index}`} className="grid grid-cols-3 gap-2 px-3 py-2 border-t border-[var(--color-border)]">
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full border border-[var(--color-border)] rounded-lg p-2 text-sm"
+                  value={tier.fromPercent}
+                  disabled={disabled}
+                  onChange={(e) => updateSupervisorTier(index, { fromPercent: Number(e.target.value) || 0 })}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  className="w-full border border-[var(--color-border)] rounded-lg p-2 text-sm"
+                  value={tier.toPercent ?? ''}
+                  placeholder="مفتوح"
+                  disabled={disabled}
+                  onChange={(e) => updateSupervisorTier(index, {
+                    toPercent: e.target.value === '' ? undefined : Number(e.target.value) || 0,
+                  })}
+                />
+                <input
+                  type="number"
+                  min={0}
+                  step={0.05}
+                  className="w-full border border-[var(--color-border)] rounded-lg p-2 text-sm"
+                  value={tier.payoutMultiplier}
+                  disabled={disabled}
+                  onChange={(e) => updateSupervisorTier(index, { payoutMultiplier: Number(e.target.value) || 0 })}
+                />
+              </div>
+            ))}
+          </div>
+
+          <div className="rounded-lg border border-blue-100 bg-blue-50 p-3 text-xs leading-relaxed text-blue-800">
+            الحساب: إجمالي المحقق للعمال ÷ إجمالي أهدافهم × 100، ثم المكافأة الأساسية × النسبة × معامل المشرف × معامل الشريحة.
+            سقف مساهمة العامل يمنع عامل واحد من رفع نتيجة الفريق بالكامل.
           </div>
         </div>
       </div>

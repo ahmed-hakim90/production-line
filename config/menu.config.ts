@@ -278,7 +278,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'users', label: 'المستخدمون', icon: 'manage_accounts', path: '/system/users', permission: 'users.manage' },
       { key: 'roles', label: 'الأدوار والصلاحيات', icon: 'admin_panel_settings', path: '/roles', permission: 'roles.manage' },
       { key: 'activity', label: 'سجل النشاط والعمليات', icon: 'monitoring', path: '/activity-log', permission: 'activityLog.view' },
-      { key: 'settings', label: 'الإعدادات', icon: 'settings', path: '/settings', permission: 'settings.view' },
+      { key: 'settings', label: 'الإعدادات', icon: 'settings', path: '/settings', permission: 'settings.view', activePatterns: ['/settings/'] },
       { key: 'tenant-readiness', label: 'جاهزية المستأجر', icon: 'verified', path: '/system/readiness', permission: 'system.readiness.view' },
     ],
   },

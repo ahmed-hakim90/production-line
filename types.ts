@@ -385,6 +385,22 @@ export interface ProductionBonusSettings {
   maxBonus: number;
 }
 
+export interface SupervisorBonusTier {
+  fromPercent: number;
+  toPercent?: number;
+  payoutMultiplier: number;
+}
+
+export interface SupervisorBonusSettings {
+  enabled: boolean;
+  baseBonusAmount: number;
+  supervisorMultiplier: number;
+  workerContributionCapPercent: number;
+  minimumAchievementPercent: number;
+  maxBonus: number;
+  tiers: SupervisorBonusTier[];
+}
+
 export interface ProductionWorkerPerformanceSettings {
   productionWorkerOutputEnabled: boolean;
   excludeWeeklyOff: boolean;
@@ -398,6 +414,7 @@ export interface ProductionWorkerPerformanceSettings {
 export interface ProductionWorkerSettings {
   performance: ProductionWorkerPerformanceSettings;
   bonus: ProductionBonusSettings;
+  supervisorBonus: SupervisorBonusSettings;
 }
 
 export interface ReportComponentScrapItem {
@@ -1123,9 +1140,25 @@ export const DEFAULT_PRODUCTION_BONUS_SETTINGS: ProductionBonusSettings = {
   maxBonus: 0,
 };
 
+export const DEFAULT_SUPERVISOR_BONUS_SETTINGS: SupervisorBonusSettings = {
+  enabled: false,
+  baseBonusAmount: 0,
+  supervisorMultiplier: 1.5,
+  workerContributionCapPercent: 120,
+  minimumAchievementPercent: 70,
+  maxBonus: 0,
+  tiers: [
+    { fromPercent: 70, toPercent: 84.99, payoutMultiplier: 0.75 },
+    { fromPercent: 85, toPercent: 94.99, payoutMultiplier: 1 },
+    { fromPercent: 95, toPercent: 109.99, payoutMultiplier: 1.2 },
+    { fromPercent: 110, payoutMultiplier: 1.5 },
+  ],
+};
+
 export const DEFAULT_PRODUCTION_WORKER_SETTINGS: ProductionWorkerSettings = {
   performance: DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS,
   bonus: DEFAULT_PRODUCTION_BONUS_SETTINGS,
+  supervisorBonus: DEFAULT_SUPERVISOR_BONUS_SETTINGS,
 };
 
 // â”€â”€â”€ General Settings (Branding, Theme, Dashboard Display, Alert Toggles) â”€â”€â”€â”€

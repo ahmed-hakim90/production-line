@@ -11,7 +11,8 @@ import {
   type SupervisorProductPerformancePrintRow,
   type SupervisorLinePerformancePrintRow,
 } from '../components/SupervisorPerformancePrint';
-import type { FirestoreEmployee, ProductionReport } from '../../../types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type FirestoreEmployee, type ProductionReport } from '../../../types';
+import { calculateSupervisorTeamBonusEstimate, type SupervisorTeamBonusEstimate } from '../services/productionBonusEngine';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
@@ -115,6 +116,12 @@ interface SupervisorRow extends FirestoreEmployee {
   }>;
   assignedLines: string[];
   totalWorkers: number;
+  teamTarget: number;
+  teamAchieved: number;
+  teamAchievementPercent: number;
+  teamCappedAchievementPercent: number;
+  supervisorBonusEstimate: number;
+  supervisorBonus: SupervisorTeamBonusEstimate;
   lastActivity: string;
 }
 
@@ -144,6 +151,7 @@ export const Supervisors: React.FC = () => {
   const reportsLoading = useAppStore((s) => s.reportsLoading);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const productionWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
 
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
   const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
@@ -176,6 +184,13 @@ export const Supervisors: React.FC = () => {
     [exportImportSettings]
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
+  const supervisorBonusSettings = useMemo(() => ({
+    ...DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus,
+    ...(productionWorkerSettings?.supervisorBonus ?? {}),
+    tiers: productionWorkerSettings?.supervisorBonus?.tiers?.length
+      ? productionWorkerSettings.supervisorBonus.tiers
+      : DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus.tiers,
+  }), [productionWorkerSettings?.supervisorBonus]);
 
   const loadRefData = useCallback(async () => {
     setDataLoading(true);
@@ -342,6 +357,10 @@ export const Supervisors: React.FC = () => {
       .filter((e) => e.level === 2)
       .map((e) => {
         const reports = reportsBySupervisor.get(e.id!) ?? [];
+        const supervisorBonus = calculateSupervisorTeamBonusEstimate({
+          settings: supervisorBonusSettings,
+          reports,
+        });
         const totalProduced = reports.reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
         const totalWaste = reports.reduce((s, r) => s + getReportWaste(r), 0);
         const todayProduced = reports
@@ -443,10 +462,16 @@ export const Supervisors: React.FC = () => {
           performanceByLine,
           assignedLines,
           totalWorkers,
+          teamTarget: supervisorBonus.totalTarget,
+          teamAchieved: supervisorBonus.totalAchieved,
+          teamAchievementPercent: supervisorBonus.achievementPercent,
+          teamCappedAchievementPercent: supervisorBonus.cappedAchievementPercent,
+          supervisorBonusEstimate: supervisorBonus.bonusEstimate,
+          supervisorBonus,
           lastActivity,
         };
       });
-  }, [_rawEmployees, reportsBySupervisor, today, rangeStart, rangeEnd, totalDaysInRange, productAvgDailyById, assignmentMapBySupervisor]);
+  }, [_rawEmployees, reportsBySupervisor, today, rangeStart, rangeEnd, totalDaysInRange, productAvgDailyById, assignmentMapBySupervisor, supervisorBonusSettings]);
 
   const detailDrawerSupervisor = useMemo(
     () =>
@@ -492,6 +517,7 @@ export const Supervisors: React.FC = () => {
     const weekTotal = supervisors.reduce((s, e) => s + e.weekProduced, 0);
     const overallWaste = supervisors.reduce((s, e) => s + e.totalWaste, 0);
     const overallProduced = supervisors.reduce((s, e) => s + e.totalProduced, 0);
+    const totalSupervisorBonus = supervisors.reduce((s, e) => s + e.supervisorBonusEstimate, 0);
     const overallScrapRate = calculateWasteRatio(overallWaste, overallProduced + overallWaste);
     const avgScore = supervisors.length > 0
       ? Math.round(supervisors.reduce((s, e) => s + e.performanceScore, 0) / supervisors.length)
@@ -520,7 +546,7 @@ export const Supervisors: React.FC = () => {
       .reduce((s, r) => s + (r.quantityProduced ?? 0), 0);
     const weekChange = lastWeekTotal > 0 ? Math.round(((weekTotal - lastWeekTotal) / lastWeekTotal) * 100) : 0;
 
-    return { activeSupervisors, todayTotal, weekTotal, overallScrapRate, avgScore, todayChange, weekChange };
+    return { activeSupervisors, todayTotal, weekTotal, overallScrapRate, avgScore, todayChange, weekChange, totalSupervisorBonus };
   }, [supervisors, allReports, lastWeek, resolveSupervisorIdForReport]);
 
   // Hover card
@@ -550,6 +576,11 @@ export const Supervisors: React.FC = () => {
       'الإنتاج اليومي الفعلي': Number(s.avgDailyActual.toFixed(1)),
       'الانحراف %': s.deviationPct ?? '—',
       'أيام النشاط': `${s.activeDays}/${s.totalDaysInRange}`,
+      'هدف الفريق': s.teamTarget,
+      'محقق الفريق': s.teamAchieved,
+      'نسبة تحقيق الفريق %': s.teamAchievementPercent,
+      'النسبة بعد سقف العامل %': s.teamCappedAchievementPercent,
+      'تقدير مكافأة المشرف': s.supervisorBonusEstimate,
       'نسبة الأداء %': s.performanceScore,
       'تقييم': getScoreBadge(s.performanceScore).label,
       'الأداء لكل خط': s.performanceByLine.map((line) => `${line.lineName}: ${line.performanceScore}%`).join(' | '),
@@ -734,6 +765,11 @@ export const Supervisors: React.FC = () => {
       { 'البند': 'المنصب', 'القيمة': getJobPositionTitle(sup.jobPositionId ?? '') },
       { 'البند': 'الفترة', 'القيمة': periodLabel },
       { 'البند': 'درجة الأداء', 'القيمة': sup.performanceScore },
+      { 'البند': 'هدف الفريق', 'القيمة': sup.teamTarget },
+      { 'البند': 'محقق الفريق', 'القيمة': sup.teamAchieved },
+      { 'البند': 'نسبة تحقيق الفريق', 'القيمة': `${sup.teamAchievementPercent}%` },
+      { 'البند': 'النسبة بعد سقف العامل', 'القيمة': `${sup.teamCappedAchievementPercent}%` },
+      { 'البند': 'تقدير مكافأة المشرف', 'القيمة': sup.supervisorBonusEstimate },
       { 'البند': 'إجمالي الإنتاج', 'القيمة': sup.totalProduced },
       { 'البند': 'إجمالي الهالك', 'القيمة': sup.totalWaste },
       { 'البند': 'نسبة الهالك %', 'القيمة': sup.scrapRate },
@@ -913,6 +949,27 @@ export const Supervisors: React.FC = () => {
       render: (sup) => <span className="text-sm font-bold text-[var(--color-text-muted)]">{sup.totalWorkers}</span>,
     },
     {
+      header: 'تحقيق الفريق',
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (sup) => {
+        const pct = sup.teamCappedAchievementPercent;
+        const rawPct = sup.teamAchievementPercent;
+        const tone = pct >= 95 ? 'text-emerald-600' : pct >= 70 ? 'text-amber-600' : 'text-rose-600';
+        return (
+          <div className="flex flex-col items-center gap-1">
+            <span className={`text-sm font-black tabular-nums ${tone}`}>{pct}%</span>
+            <span className="text-[10px] text-[var(--color-text-muted)]">
+              {formatNumber(sup.teamAchieved)} / {formatNumber(sup.teamTarget)}
+            </span>
+            {rawPct !== pct && (
+              <span className="text-[10px] text-amber-600">قبل السقف {rawPct}%</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       header: 'إنتاج اليوم',
       headerClassName: 'text-center',
       className: 'text-center',
@@ -1002,6 +1059,17 @@ export const Supervisors: React.FC = () => {
           </div>
         );
       },
+    },
+    {
+      header: 'مكافأة المشرف',
+      headerClassName: 'text-center',
+      className: 'text-center',
+      render: (sup) => (
+        <div className="flex flex-col items-center gap-1">
+          <span className="text-sm font-black tabular-nums text-primary">{formatNumber(sup.supervisorBonusEstimate)}</span>
+          <span className="text-[10px] text-[var(--color-text-muted)]">معامل {sup.supervisorBonus.supervisorMultiplier}x</span>
+        </div>
+      ),
     },
     {
       header: 'آخر نشاط',
@@ -1100,7 +1168,7 @@ export const Supervisors: React.FC = () => {
       />
 
       {/* Stat Cards (clickable) */}
-      <div className="erpnext-kpi-grid grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+      <div className="erpnext-kpi-grid grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('today')}>
           <KPIBox
             label="إنتاج اليوم"
@@ -1137,6 +1205,12 @@ export const Supervisors: React.FC = () => {
             colorClass={statFilter === 'lowScore' ? 'bg-primary text-white' : stats.avgScore >= 85 ? 'bg-emerald-50 text-emerald-600' : stats.avgScore >= 70 ? 'bg-amber-50 text-amber-600' : 'bg-rose-50 text-rose-600'}
           />
         </button>
+        <KPIBox
+          label="إجمالي مكافآت المشرفين"
+          value={formatNumber(stats.totalSupervisorBonus)}
+          icon="payments"
+          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+        />
         <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('active')}>
           <KPIBox
             label="المشرفين النشطين"
@@ -1301,6 +1375,22 @@ export const Supervisors: React.FC = () => {
                     <div>
                       <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">إجمالي الإنتاج (الفترة)</span>
                       <span className="font-black tabular-nums text-[var(--color-text)]">{formatNumber(sup.totalProduced)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">تحقيق الفريق</span>
+                      <span className="font-black tabular-nums text-primary">{sup.teamCappedAchievementPercent}%</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">هدف الفريق</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{formatNumber(sup.teamTarget)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">محقق الفريق</span>
+                      <span className="font-black tabular-nums text-[var(--color-text)]">{formatNumber(sup.teamAchieved)}</span>
+                    </div>
+                    <div>
+                      <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">تقدير المكافأة</span>
+                      <span className="font-black tabular-nums text-primary">{formatNumber(sup.supervisorBonusEstimate)}</span>
                     </div>
                     <div>
                       <span className="text-[11px] text-[var(--color-text-muted)] block mb-0.5">نسبة الهالك</span>
