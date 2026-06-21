@@ -1400,6 +1400,92 @@ export const AdminDashboard: React.FC = () => {
     return result;
   }, [kpis, productionPlans, planReports, systemUsers, alertCfg]);
 
+  const reportAnalysis = useMemo(() => {
+    const productionDays = new Set(productionReports.map((report) => report.date)).size;
+    const avgDailyProduction = productionDays > 0 ? Math.round(kpis.totalProduction / productionDays) : 0;
+    const topProduct = topProducts[0];
+    const topLine = topLines[0];
+    const topSupervisor = topSupervisors[0];
+    const warningAlerts = alerts.filter((alert) => alert.type !== 'info').length;
+    const assignedSupervisors = yesterdayCompliance?.assignedSupervisorsCount ?? 0;
+    const complianceRate = assignedSupervisors > 0
+      ? Math.round(((yesterdayCompliance?.submittedCount ?? 0) / assignedSupervisors) * 100)
+      : null;
+
+    const insights = [
+      {
+        title: 'قراءة الأداء',
+        icon: kpis.efficiency >= 85 ? 'check_circle' : 'speed',
+        tone: kpis.efficiency >= 85 ? 'success' : kpis.efficiency >= 70 ? 'warning' : 'danger',
+        body: kpis.totalProduction > 0
+          ? `الكفاءة الحالية ${kpis.efficiency}% مع متوسط إنتاج يومي ${formatNumber(avgDailyProduction)} وحدة.`
+          : 'لا توجد بيانات إنتاج كافية لبناء قراءة أداء دقيقة لهذه الفترة.',
+      },
+      {
+        title: 'التركيز الإنتاجي',
+        icon: 'inventory_2',
+        tone: topProduct ? 'info' : 'warning',
+        body: topProduct
+          ? `أعلى منتج في الفترة هو ${topProduct.name} بإجمالي ${formatNumber(topProduct.production)} وحدة.`
+          : 'لم يظهر منتج رئيسي خلال الفترة المحددة.',
+      },
+      {
+        title: 'التكلفة والهدر',
+        icon: canViewCosts ? 'payments' : 'delete_sweep',
+        tone: kpis.wastePercent > alertCfg.wasteThreshold || kpis.costVariance > alertCfg.costVarianceThreshold ? 'danger' : 'success',
+        body: canViewCosts
+          ? `تكلفة الوحدة ${formatCost(kpis.avgCostPerUnit)} ج.م، والهدر ${kpis.wastePercent}%، وانحراف التكلفة ${kpis.costVariance}%.`
+          : `الهدر الحالي ${kpis.wastePercent}% مع إخفاء تفاصيل التكلفة حسب الصلاحيات.`,
+      },
+      {
+        title: 'الالتزام والتنبيهات',
+        icon: warningAlerts > 0 ? 'warning' : 'fact_check',
+        tone: warningAlerts > 0 ? 'warning' : 'success',
+        body: complianceRate !== null
+          ? `التزام التقارير ${complianceRate}%، مع ${warningAlerts} تنبيه يحتاج متابعة.`
+          : `${warningAlerts} تنبيه يحتاج متابعة، ولا توجد بيانات التزام مكتملة للتاريخ المختار.`,
+      },
+    ];
+
+    const recommendations = [
+      kpis.wastePercent > alertCfg.wasteThreshold
+        ? 'مراجعة أسباب الهدر مع أعلى خط إنتاج وربطها بتقارير المشرفين اليومية.'
+        : 'الاستمرار في متابعة الهدر يومياً للحفاظ على المستوى الحالي.',
+      canViewCosts && kpis.costVariance > alertCfg.costVarianceThreshold
+        ? 'تحليل المنتجات الأعلى تكلفة ومقارنة العمالة الفعلية بالمعيار قبل اعتماد الشهر.'
+        : 'تثبيت مراجعة أسبوعية لتكلفة الوحدة على المنتجات الأعلى إنتاجاً.',
+      warningAlerts > 0
+        ? 'إغلاق التنبيهات المفتوحة حسب الأولوية قبل نهاية الوردية.'
+        : 'لا توجد تنبيهات حرجة حالياً؛ ركز على توثيق أفضل الممارسات المتكررة.',
+      shortageRows.length > 0
+        ? 'متابعة نواقص المكونات مع المخزن لتجنب تعطيل أوامر الشغل النشطة.'
+        : 'لا توجد نواقص مكونات مسجلة حالياً؛ راقب التغير مع خطط الإنتاج الجديدة.',
+    ].filter(Boolean);
+
+    return {
+      productionDays,
+      avgDailyProduction,
+      topProduct,
+      topLine,
+      topSupervisor,
+      warningAlerts,
+      complianceRate,
+      insights,
+      recommendations,
+    };
+  }, [
+    productionReports,
+    kpis,
+    topProducts,
+    topLines,
+    topSupervisors,
+    alerts,
+    yesterdayCompliance,
+    canViewCosts,
+    alertCfg,
+    shortageRows.length,
+  ]);
+
   // â”€â”€ Tooltips â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const ChartTooltip = useCallback(({ active, payload, label }: any) => {
@@ -1673,6 +1759,124 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </div>
       )}
+
+      <Card>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                {renderDashboardIcon('bar_chart', 'text-[20px]')}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[var(--color-text)]">تحليل التقرير الإداري</h3>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  قراءة عملية للفترة من {dateRange.start} إلى {dateRange.end} اعتماداً على تقارير الإنتاج الحالية.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant="info">{reports.length} تقرير</Badge>
+              <Badge variant={reportAnalysis.warningAlerts > 0 ? 'warning' : 'success'}>
+                {reportAnalysis.warningAlerts > 0 ? `${reportAnalysis.warningAlerts} تنبيه` : 'بدون تنبيهات حرجة'}
+              </Badge>
+              {reportAnalysis.complianceRate !== null && (
+                <Badge variant={reportAnalysis.complianceRate >= 90 ? 'success' : 'warning'}>
+                  الالتزام {reportAnalysis.complianceRate}%
+                </Badge>
+              )}
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+            <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+              <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">أيام إنتاج فعلية</p>
+              <p className="text-2xl font-medium text-[var(--color-text)]">{reportAnalysis.productionDays}</p>
+            </div>
+            <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+              <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">متوسط الإنتاج اليومي</p>
+              <p className="text-2xl font-medium text-primary">{formatNumber(reportAnalysis.avgDailyProduction)}</p>
+            </div>
+            <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+              <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">أعلى خط</p>
+              <p className="text-sm font-bold text-[var(--color-text)] truncate">{reportAnalysis.topLine?.name ?? '—'}</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">{formatNumber(reportAnalysis.topLine?.production ?? 0)} وحدة</p>
+            </div>
+            <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+              <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">أبرز مشرف</p>
+              <p className="text-sm font-bold text-[var(--color-text)] truncate">{reportAnalysis.topSupervisor?.name ?? '—'}</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">{reportAnalysis.topSupervisor?.reports ?? 0} تقرير</p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+            <div className="xl:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-3">
+              {reportAnalysis.insights.map((insight) => {
+                const toneClass = insight.tone === 'danger'
+                  ? 'border-rose-200 bg-rose-50/70 text-rose-600'
+                  : insight.tone === 'warning'
+                    ? 'border-amber-200 bg-amber-50/70 text-amber-600'
+                    : insight.tone === 'success'
+                      ? 'border-emerald-200 bg-emerald-50/70 text-emerald-600'
+                      : 'border-blue-200 bg-blue-50/70 text-blue-600';
+                return (
+                  <div key={insight.title} className={`rounded-[var(--border-radius-lg)] border p-3 ${toneClass}`}>
+                    <div className="flex items-center gap-2 mb-2">
+                      {renderDashboardIcon(insight.icon, 'text-[16px] shrink-0')}
+                      <p className="text-sm font-bold">{insight.title}</p>
+                    </div>
+                    <p className="text-xs leading-6 text-[var(--color-text)]">{insight.body}</p>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
+              <div className="flex items-center gap-2 mb-3">
+                {renderDashboardIcon('show_chart', 'text-primary text-[16px]')}
+                <p className="text-sm font-bold text-[var(--color-text)]">أعلى المنتجات إنتاجاً</p>
+              </div>
+              {topProducts.length === 0 ? (
+                <p className="text-xs text-[var(--color-text-muted)]">لا توجد بيانات منتجات في الفترة.</p>
+              ) : (() => {
+                const maxProduction = Math.max(...topProducts.slice(0, 4).map((product) => product.production), 1);
+                return (
+                  <div className="space-y-3">
+                    {topProducts.slice(0, 4).map((product) => (
+                      <div key={product.id} className="space-y-1">
+                        <div className="flex items-center justify-between gap-2 text-xs">
+                          <span className="font-bold text-[var(--color-text)] truncate">{product.name}</span>
+                          <span className="font-mono text-primary">{formatNumber(product.production)}</span>
+                        </div>
+                        <div className="h-2 rounded-full bg-[var(--color-bg)] overflow-hidden">
+                          <div
+                            className="h-full rounded-full bg-primary"
+                            style={{ width: `${Math.max(8, Math.round((product.production / maxProduction) * 100))}%` }}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+            </div>
+          </div>
+
+          <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
+            <div className="flex items-center gap-2 mb-3">
+              {renderDashboardIcon('calculate', 'text-amber-600 text-[16px]')}
+              <p className="text-sm font-bold text-[var(--color-text)]">توصيات إدارية</p>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              {reportAnalysis.recommendations.map((recommendation, index) => (
+                <div key={`${recommendation}-${index}`} className="flex items-start gap-2 text-xs leading-6 text-[var(--color-text-muted)]">
+                  {renderDashboardIcon('check_circle', 'text-emerald-500 text-[14px] shrink-0 mt-1')}
+                  <span>{recommendation}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </Card>
 
       {/* <Card>
         <div className="flex items-center gap-2 mb-4">
