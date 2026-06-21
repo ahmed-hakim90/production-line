@@ -211,6 +211,14 @@ export const GlobalCreateReportModal: React.FC = () => {
     return n > 0 ? n : undefined;
   }, [products]);
 
+  const hasValidPackagingReportLine = useMemo(
+    () => form.reportType !== 'packaging' || (form.packagingLines || []).some((line) => {
+      const { productId, quantityPieces } = canonicalPackagingLine(line, getUnitsPerCarton);
+      return Boolean(productId && quantityPieces > 0);
+    }),
+    [form.reportType, form.packagingLines, getUnitsPerCarton],
+  );
+
   const productNameById = useMemo(() => {
     const map = new Map<string, string>();
     products.forEach((product) => {
@@ -1043,9 +1051,10 @@ export const GlobalCreateReportModal: React.FC = () => {
             disabled={
               saving
               || !form.lineId
-              || !form.productId
               || !form.employeeId
-              || !form.quantityProduced
+              || (form.reportType === 'packaging'
+                ? !hasValidPackagingReportLine
+                : (!form.productId || !form.quantityProduced))
               || !form.workHours
               || (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
               || (

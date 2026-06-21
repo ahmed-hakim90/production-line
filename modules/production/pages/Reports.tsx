@@ -1246,6 +1246,13 @@ export const Reports: React.FC = () => {
     return n > 0 ? n : undefined;
   }, [_rawProducts]);
 
+  const hasValidPackagingReportLine = useMemo(
+    () => form.reportType !== 'packaging' || (form.packagingLines || []).some(
+      (line) => String(line.productId || '').trim() && effectivePackagingPieces(line, getUnitsPerCarton) > 0,
+    ),
+    [form.reportType, form.packagingLines, getUnitsPerCarton],
+  );
+
   const normalizeSearchText = useCallback((s: string) => {
     return String(s || '')
       .trim()
@@ -4836,9 +4843,10 @@ export const Reports: React.FC = () => {
                 disabled={
                   saving
                   || !form.lineId
-                  || !form.productId
                   || !form.employeeId
-                  || !form.quantityProduced
+                  || (form.reportType === 'packaging'
+                    ? !hasValidPackagingReportLine
+                    : (!form.productId || !form.quantityProduced))
                   || !form.workHours
                   || (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
                   || (
