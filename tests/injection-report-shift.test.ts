@@ -6,6 +6,8 @@ import {
   isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift.ts';
+import type { ReportPrintRow } from '../modules/production/components/ProductionReportPrint.tsx';
+import { formatProductionReportShareCaption } from '../utils/productionReportShareCaption.ts';
 
 const baseInjection = {
   date: '2026-06-15',
@@ -73,6 +75,22 @@ assert.equal(
     { date: '2026-06-15', lineId: 'line-1', employeeId: 'emp-1', productId: 'prod-1', reportType: 'finished_product' },
   ),
   true,
+);
+
+assert.match(
+  formatProductionReportShareCaption({
+    sourceReportType: 'component_injection',
+    shift: 'evening',
+    date: '2026-06-15',
+    lineName: 'خط 1',
+    productName: 'مكون حقن',
+    employeeName: 'مشرف',
+    quantityProduced: 1200,
+    wasteQuantity: 0,
+    workersCount: 4,
+    workHours: 8,
+  } satisfies ReportPrintRow),
+  /الوردية: مسائي/,
 );
 
 console.log('injection-report-shift.test.ts: ok');

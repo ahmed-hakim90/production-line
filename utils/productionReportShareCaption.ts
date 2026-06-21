@@ -4,6 +4,7 @@
  */
 import type { PrintTemplateSettings } from '../types';
 import type { ReportPrintRow } from '../modules/production/components/ProductionReportPrint';
+import { getInjectionShiftLabel } from '../modules/production/utils/injectionReportShift';
 
 function packagingQuantityAndLabel(report: ReportPrintRow): { qty: number; unit: string } {
   const rt = report.sourceReportType;
@@ -42,9 +43,13 @@ export function formatProductionReportShareCaption(
   const { qty, unit } = packagingQuantityAndLabel(report);
   const qtyText = Number.isFinite(qty) ? qty.toLocaleString('ar-EG') : String(qty);
   const date = report.date?.trim() || '—';
+  const shiftLine = report.sourceReportType === 'component_injection'
+    ? [`الوردية: ${getInjectionShiftLabel(report.shift)}`]
+    : [];
   return [
     `المنتج: ${productLabelForCaption(report)}`,
     `الكمية: ${qtyText} ${unit}`,
+    ...shiftLine,
     `التاريخ: ${date}`,
   ].join('\n');
 }
