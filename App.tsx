@@ -749,11 +749,11 @@ const App: React.FC = () => {
       window.clearTimeout(resolveTimer);
       setAuthResolved(true);
       if (!user) {
-        setCurrentTenant(null);
         clearCachedAppSession();
         sessionTrackerService.stop('auth_logout');
         activeSessionUidRef.current = null;
         clearSubscriptions();
+        setCurrentTenant(null);
         useAppStore.setState({
           loading: false,
           isAuthenticated: false,

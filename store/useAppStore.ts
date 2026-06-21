@@ -47,7 +47,7 @@ import {
   auth,
   runAssetDepreciationCallable,
 } from '../services/firebase';
-import { getCurrentTenantId, setCurrentTenant } from '../lib/currentTenant';
+import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
 import {
   clearCachedAppSession,
   readCachedAppSession,
@@ -1166,13 +1166,14 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Auth: Logout ──────────────────────────────────────────────────────────
 
   logout: async () => {
-    setCurrentTenant(null);
+    const tenantId = getCurrentTenantIdOrNull();
     const { uid, userEmail } = get();
     clearCachedAppSession(uid);
-    if (uid && userEmail) {
-      activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج');
+    if (uid && userEmail && tenantId) {
+      void activityLogService.log(uid, userEmail, 'LOGOUT', 'تسجيل خروج').catch(() => {});
     }
     await signOut();
+    setCurrentTenant(null);
     useJobsStore.getState().resetUiState();
     _productionReportsRangeInFlight.clear();
     _reportsUiReferenceInFlight = null;
