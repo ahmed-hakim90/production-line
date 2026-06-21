@@ -199,6 +199,10 @@ const PRESET_LABELS: Record<PeriodPreset, string> = {
   custom: 'مخصص',
 };
 
+const LABOR_GOAL_DAILY_TARGET_HOURS = 64;
+const LABOR_GOAL_WEEKLY_TARGET_HOURS = LABOR_GOAL_DAILY_TARGET_HOURS * 6;
+const LABOR_GOAL_MONTHLY_WORKING_DAYS = 26;
+
 const QUICK_ACTION_COLOR_CLASSES: Record<QuickActionColor, string> = {
   primary: 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15',
   emerald: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/20',
@@ -941,6 +945,134 @@ export const AdminDashboard: React.FC = () => {
       .sort((a, b) => b.production - a.production)
       .slice(0, 5);
   }, [productionReports, _rawEmployees]);
+
+  const laborGoalsAnalysis = useMemo(() => {
+    const parseDate = (date: string) => new Date(`${date}T00:00:00`);
+    const addDays = (date: string, days: number) => {
+      const d = parseDate(date);
+      d.setDate(d.getDate() + days);
+      return formatDateISO(d);
+    };
+    const filterBetween = (rows: ProductionReport[], start: string, end: string) => rows.filter((row) => {
+      const rowDate = String(row.date || '');
+      return rowDate >= start && rowDate <= end;
+    });
+    const sumLaborHours = (rows: ProductionReport[]) => rows.reduce(
+      (sum, report) => sum + (Number(report.workersCount || 0) * Number(report.workHours || 0)),
+      0,
+    );
+    const sumProduction = (rows: ProductionReport[]) => rows.reduce(
+      (sum, report) => sum + Number(report.quantityProduced || 0),
+      0,
+    );
+
+    const endDate = dateRange.end || formatDateISO(new Date());
+    const monthStart = `${endDate.slice(0, 7)}-01`;
+    const elapsedMonthDays = Math.max(1, Math.min(parseDate(endDate).getDate(), LABOR_GOAL_MONTHLY_WORKING_DAYS));
+    const currentMonthTarget = LABOR_GOAL_DAILY_TARGET_HOURS * elapsedMonthDays;
+    const previousMonthProductionReports = prevMonthReports.filter((report) => countsTowardFinishedGoodsProduction(report, _rawLines));
+
+    const buildPeriod = (
+      key: 'day' | 'week' | 'month',
+      label: string,
+      targetHours: number,
+      currentRows: ProductionReport[],
+      previousRows: ProductionReport[],
+    ) => {
+      const actualHours = sumLaborHours(currentRows);
+      const previousHours = sumLaborHours(previousRows);
+      const production = sumProduction(currentRows);
+      const achievement = targetHours > 0 ? Math.round((actualHours / targetHours) * 100) : 0;
+      const remainingHours = Math.max(0, targetHours - actualHours);
+      const deltaPercent = previousHours > 0
+        ? Math.round(((actualHours - previousHours) / previousHours) * 100)
+        : null;
+      const productivity = actualHours > 0 ? Number((production / actualHours).toFixed(1)) : 0;
+      const activeDays = new Set(currentRows.map((report) => report.date)).size;
+      const status = achievement >= 100
+        ? { label: 'مكتمل', variant: 'success' as const }
+        : achievement >= 85
+          ? { label: 'قريب من الهدف', variant: 'warning' as const }
+          : { label: 'يحتاج متابعة', variant: 'danger' as const };
+      const comparisonLabel = deltaPercent === null
+        ? 'لا توجد بيانات كافية للمقارنة السابقة'
+        : deltaPercent === 0
+          ? 'مطابق للفترة السابقة'
+          : `${deltaPercent > 0 ? 'أعلى' : 'أقل'} ${Math.abs(deltaPercent)}% من الفترة السابقة`;
+      const recommendation = achievement >= 100
+        ? 'حافظ على نفس توزيع العمالة وراقب الإنتاجية لكل ساعة.'
+        : achievement >= 85
+          ? 'الفجوة بسيطة؛ عالج الغياب أو نقص الساعات قبل نهاية الفترة.'
+          : 'أعد توزيع العمالة على الخطوط النشطة وراجع أسباب انخفاض ساعات التشغيل.';
+
+      return {
+        key,
+        label,
+        targetHours,
+        actualHours,
+        previousHours,
+        achievement,
+        remainingHours,
+        deltaPercent,
+        production,
+        productivity,
+        activeDays,
+        status,
+        comparisonLabel,
+        recommendation,
+      };
+    };
+
+    const dayStart = endDate;
+    const dayPrevious = addDays(endDate, -1);
+    const weekStart = addDays(endDate, -6);
+    const previousWeekStart = addDays(endDate, -13);
+    const previousWeekEnd = addDays(endDate, -7);
+    const monthPreviousRows = previousMonthProductionReports.length > 0
+      ? previousMonthProductionReports
+      : filterBetween(productionReports, addDays(monthStart, -LABOR_GOAL_MONTHLY_WORKING_DAYS), addDays(monthStart, -1));
+
+    const periods = [
+      buildPeriod(
+        'day',
+        'اليوم',
+        LABOR_GOAL_DAILY_TARGET_HOURS,
+        filterBetween(productionReports, dayStart, endDate),
+        filterBetween(productionReports, dayPrevious, dayPrevious),
+      ),
+      buildPeriod(
+        'week',
+        'الأسبوع',
+        LABOR_GOAL_WEEKLY_TARGET_HOURS,
+        filterBetween(productionReports, weekStart, endDate),
+        filterBetween(productionReports, previousWeekStart, previousWeekEnd),
+      ),
+      buildPeriod(
+        'month',
+        'الشهر حتى الآن',
+        currentMonthTarget,
+        filterBetween(productionReports, monthStart, endDate),
+        monthPreviousRows,
+      ),
+    ];
+
+    const averageAchievement = periods.length > 0
+      ? Math.round(periods.reduce((sum, period) => sum + period.achievement, 0) / periods.length)
+      : 0;
+    const weakestPeriod = periods.slice().sort((a, b) => a.achievement - b.achievement)[0];
+    const totalRemainingHours = periods.reduce((sum, period) => sum + period.remainingHours, 0);
+    const summary = weakestPeriod && weakestPeriod.achievement < 85
+      ? `أضعف نقطة حالياً في ${weakestPeriod.label} بنسبة ${weakestPeriod.achievement}%؛ الأولوية لتعويض ${formatNumber(Math.round(weakestPeriod.remainingHours))} ساعة عامل.`
+      : `متوسط تحقيق أهداف العمالة ${averageAchievement}%، والأداء قريب من الخطة التشغيلية.`;
+
+    return {
+      periods,
+      averageAchievement,
+      weakestPeriod,
+      totalRemainingHours,
+      summary,
+    };
+  }, [productionReports, prevMonthReports, _rawLines, dateRange.end]);
 
   // â”€â”€ Roles chart data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1874,6 +2006,107 @@ export const AdminDashboard: React.FC = () => {
                 </div>
               ))}
             </div>
+          </div>
+        </div>
+      </Card>
+
+      <Card>
+        <div className="flex flex-col gap-4">
+          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                {renderDashboardIcon('groups', 'text-[20px]')}
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-[var(--color-text)]">تحقيق أهداف العمالة</h3>
+                <p className="text-sm text-[var(--color-text-muted)]">
+                  متابعة ساعات العمالة الفعلية مقابل هدف التشغيل لليوم والأسبوع والشهر حتى الآن.
+                </p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  الهدف الافتراضي: 64 ساعة عامل يومياً، 6 أيام أسبوعياً، و26 يوم عمل شهرياً.
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 text-xs">
+              <Badge variant={laborGoalsAnalysis.averageAchievement >= 85 ? 'success' : 'warning'}>
+                متوسط الإنجاز {laborGoalsAnalysis.averageAchievement}%
+              </Badge>
+              <Badge variant={laborGoalsAnalysis.totalRemainingHours > 0 ? 'warning' : 'success'}>
+                المتبقي {formatNumber(Math.round(laborGoalsAnalysis.totalRemainingHours))} ساعة عامل
+              </Badge>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
+            {laborGoalsAnalysis.periods.map((period) => {
+              const progressWidth = Math.min(100, Math.max(4, period.achievement));
+              const trendClass = period.deltaPercent === null || period.deltaPercent === 0
+                ? 'text-[var(--color-text-muted)]'
+                : period.deltaPercent > 0
+                  ? 'text-emerald-600'
+                  : 'text-rose-600';
+              return (
+                <div key={period.key} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-4 space-y-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-bold text-[var(--color-text)]">{period.label}</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">
+                        الهدف {formatNumber(Math.round(period.targetHours))} ساعة عامل
+                      </p>
+                    </div>
+                    <Badge variant={period.status.variant}>{period.status.label}</Badge>
+                  </div>
+
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <p className="text-3xl font-bold text-primary">{period.achievement}%</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">
+                        فعلي {formatNumber(Math.round(period.actualHours))} ساعة عامل
+                      </p>
+                    </div>
+                    <div className="text-left">
+                      <p className="text-xs font-bold text-[var(--color-text-muted)]">الإنتاجية</p>
+                      <p className="text-sm font-bold text-[var(--color-text)]">
+                        {formatNumber(period.productivity)} وحدة/ساعة
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="h-2.5 rounded-full bg-white dark:bg-slate-900 overflow-hidden border border-[var(--color-border)]">
+                    <div
+                      className={`h-full rounded-full ${period.achievement >= 100 ? 'bg-emerald-500' : period.achievement >= 85 ? 'bg-amber-500' : 'bg-rose-500'}`}
+                      style={{ width: `${progressWidth}%` }}
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
+                      <p className="font-bold text-[var(--color-text-muted)]">الفجوة</p>
+                      <p className="font-bold text-[var(--color-text)]">
+                        {period.remainingHours > 0 ? `${formatNumber(Math.round(period.remainingHours))} ساعة` : 'تم تجاوز الهدف'}
+                      </p>
+                    </div>
+                    <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
+                      <p className="font-bold text-[var(--color-text-muted)]">أيام نشطة</p>
+                      <p className="font-bold text-[var(--color-text)]">{period.activeDays}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2 text-xs leading-6">
+                    <div className={`flex items-center gap-1 font-bold ${trendClass}`}>
+                      {renderDashboardIcon(period.deltaPercent !== null && period.deltaPercent < 0 ? 'trending_down' : 'trending_up', 'text-[14px] shrink-0')}
+                      <span>{period.comparisonLabel}</span>
+                    </div>
+                    <p className="text-[var(--color-text-muted)]">{period.recommendation}</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/70 p-3 text-sm leading-7 text-emerald-700">
+            {renderDashboardIcon('info', 'text-[16px] inline-block ml-1 align-middle')}
+            <span>{laborGoalsAnalysis.summary}</span>
           </div>
         </div>
       </Card>

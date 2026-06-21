@@ -692,7 +692,7 @@ export const EmployeeDashboard: React.FC = () => {
         <>
           {/* â”€â”€ ROW 3: KPI Strip — all KPIs in one unified row â”€â”€ */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-            <KPICard label="ساعات الإنتاج" value={todayProductionHours} unit="ساعة" iconType="metric" color="green" />
+           {/* <KPICard label="ساعات الإنتاج" value={todayProductionHours} unit="ساعة" iconType="metric" color="green" /> */}
             <KPICard label="متوسط/ساعة" value={formatNumber(performance.avgPerHour)} unit="وحدة/ساعة" iconType="trend" color="indigo" />
             <KPICard label="عدد التقارير" value={performance.reportsCount} unit="تقرير" iconType="metric" color="indigo" />
             <KPICard label="إجمالي الإنتاج" value={formatNumber(kpis.totalProduction)} unit="وحدة" iconType="metric" color="indigo" />
