@@ -80,6 +80,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const { roleName, roleColor, isReadOnly } = useCurrentRole();
   const userDisplayName    = useAppStore((s) => s.userDisplayName);
   const userEmail          = useAppStore((s) => s.userEmail);
+  const currentEmployee    = useAppStore((s) => s.currentEmployee);
   const logout             = useAppStore((s) => s.logout);
   const sidebarIconStyle   = useAppStore((s) => (s.systemSettings?.theme?.sidebarIconStyle ?? 'colorful') as SidebarIconStyle);
   const sidebarCompanyTitleRaw = useAppStore((s) => {
@@ -108,9 +109,14 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const visibleGroups = useMemo(
     () =>
       MENU_CONFIG
-        .map((g) => ({ ...g, children: g.children.filter((i) => canAccessMenuItem(can, i)) }))
+        .map((g) => ({
+          ...g,
+          children: g.children.filter((i) => (
+            canAccessMenuItem(can, i) && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
+          )),
+        }))
         .filter((g) => g.children.length > 0),
-    [can],
+    [can, currentEmployee?.level],
   );
 
   /** مجموعات الأكورديون فقط (غير flat). لو 1 أو 2 يبقوا مفتوحين دائماً في الشريط الموسّع */

@@ -12,6 +12,8 @@ export interface MenuItem {
   permission: Permission;
   /** If set, the item is visible when the user has any of these permissions (OR). */
   anyOfPermissions?: Permission[];
+  /** Visible only when the logged-in employee is a supervisor self-service user. */
+  selfSupervisorOnly?: boolean;
   activePatterns?: string[];
   /**
    * When `activePatterns` or the default `path/` prefix matches, skip if the logical path
@@ -102,6 +104,15 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'precision_manufacturing',
     children: [
       { key: 'quick', label: 'إدخال سريع', icon: 'bolt', path: '/quick-action', permission: 'quickAction.view' },
+      {
+        key: 'my-workers-evaluation',
+        label: 'تقييم العمالة',
+        icon: 'assignment_ind',
+        path: '/my-workers/evaluation',
+        permission: 'employeeDashboard.view',
+        anyOfPermissions: ['employeeDashboard.view', 'quickAction.view'],
+        selfSupervisorOnly: true,
+      },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
       {

@@ -318,6 +318,9 @@ export interface ProductionWorkerRatingRecord {
   tenantId?: string;
   workerId: string;
   workerName?: string;
+  workerCode?: string;
+  employeeId?: string;
+  laborRole?: LineWorkerLaborRole;
   supervisorId: string;
   supervisorName?: string;
   date: string;

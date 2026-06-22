@@ -4,12 +4,17 @@ import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { getTodayDateString } from '@/utils/calculations';
+import { Star } from 'lucide-react';
 import type {
   ProductionWorkerManagementReview,
   ProductionWorkerRatingRecord,
   ProductionWorkerRatingReviewStatus,
 } from '@/types';
 import { productionWorkerRatingService } from '../services/productionWorkerRatingService';
+import {
+  LINE_WORKER_LABOR_ROLE_LABELS,
+  resolveLineWorkerLaborRole,
+} from '../utils/lineWorkerLaborRoles';
 
 const REVIEW_STATUS_LABELS: Record<ProductionWorkerRatingReviewStatus | 'all', string> = {
   all: 'كل الحالات',
@@ -33,22 +38,37 @@ function StarRating({
   onChange: (value: number) => void;
   disabled?: boolean;
 }) {
+  const normalizedValue = Math.max(0, Math.min(5, Number.isFinite(value) ? value : 0));
+  const label = `التقييم ${normalizedValue} من 5`;
+
   return (
-    <div className="inline-flex flex-row-reverse items-center gap-0.5" aria-label={`${value} من 5`}>
-      {[1, 2, 3, 4, 5].map((star) => (
-        <button
-          key={star}
-          type="button"
-          disabled={disabled}
-          onClick={() => onChange(star)}
-          className={`material-icons-round text-lg leading-none transition-colors ${
-            star <= value ? 'text-amber-400' : 'text-slate-300'
-          } ${disabled ? 'cursor-default opacity-70' : 'hover:text-amber-500'}`}
-          aria-label={`تقييم ${star} من 5`}
-        >
-          star
-        </button>
-      ))}
+    <div className="inline-flex flex-row-reverse items-center gap-1 sm:gap-0.5" aria-label={label} title={label}>
+      {[1, 2, 3, 4, 5].map((star) => {
+        const fillPercent = Math.max(0, Math.min(100, (normalizedValue - (star - 1)) * 100));
+
+        return (
+          <button
+            key={star}
+            type="button"
+            disabled={disabled}
+            onClick={() => onChange(star)}
+            className={`relative inline-flex h-9 w-9 items-center justify-center rounded-lg transition-colors sm:h-5 sm:w-5 sm:rounded-none ${
+              disabled ? 'cursor-default opacity-80' : 'hover:text-amber-500'
+            }`}
+            aria-label={`تقييم ${star} من 5`}
+            title={`تقييم ${star} من 5`}
+          >
+            <Star aria-hidden="true" className="h-5 w-5 text-slate-300 sm:h-4 sm:w-4" strokeWidth={2.2} />
+            <span
+              aria-hidden="true"
+              className="absolute inset-0 inline-flex items-center justify-center overflow-hidden text-amber-400"
+              style={{ clipPath: `inset(0 0 0 ${100 - fillPercent}%)` }}
+            >
+              <Star className="h-5 w-5 fill-current sm:h-4 sm:w-4" strokeWidth={2.2} />
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -182,11 +202,99 @@ export const ProductionWorkerRatingsReview: React.FC = () => {
         </div>
 
         {loading ? <LoadingSkeleton rows={6} /> : (
-          <div className="overflow-x-auto p-4">
-            <table className="erp-table w-full text-sm">
+          <div className="space-y-4 p-4">
+            <div className="space-y-3 md:hidden">
+              {filteredRows.map((row) => {
+                const rowId = row.id || '';
+                const draft = drafts[rowId] ?? row.managementReview ?? emptyReview();
+                const reviewStatus = row.managementReview?.status ?? 'pending';
+                const disabled = !canReview || savingId === row.id;
+                return (
+                  <div key={row.id} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-sm">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <h4 className="truncate text-base font-bold text-[var(--color-text)]">{row.workerName || row.workerId}</h4>
+                        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-[var(--color-text-muted)]">
+                          {row.workerCode && <span className="rounded-full bg-slate-100 px-2 py-1">{row.workerCode}</span>}
+                          {row.laborRole && (
+                            <Badge variant="neutral">
+                              {LINE_WORKER_LABOR_ROLE_LABELS[resolveLineWorkerLaborRole(row.laborRole)]}
+                            </Badge>
+                          )}
+                        </div>
+                      </div>
+                      <Badge variant={reviewStatus === 'approved' ? 'success' : reviewStatus === 'rejected' ? 'danger' : 'warning'}>
+                        {REVIEW_STATUS_LABELS[reviewStatus]}
+                      </Badge>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2 text-sm">
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="text-xs font-bold text-[var(--color-text-muted)]">المشرف</div>
+                        <div className="mt-1 font-bold text-[var(--color-text)]">{row.supervisorName || row.supervisorId}</div>
+                      </div>
+                      <div className="rounded-xl bg-slate-50 p-3">
+                        <div className="text-xs font-bold text-[var(--color-text-muted)]">التاريخ</div>
+                        <div className="mt-1 font-bold text-[var(--color-text)]">{row.date}</div>
+                      </div>
+                    </div>
+                    <div className="mt-4 space-y-3 rounded-xl border border-[var(--color-border)] p-3">
+                      <div className="text-sm font-bold text-[var(--color-text)]">تقييم المشرف</div>
+                      {RATING_FIELDS.map((field) => (
+                        <div key={field.key} className="flex flex-col gap-2">
+                          <span className="text-xs font-bold text-[var(--color-text-muted)]">{field.label}</span>
+                          <StarRating value={Number(row[field.key] || 0)} disabled onChange={() => undefined} />
+                        </div>
+                      ))}
+                    </div>
+                    <div className="mt-3 rounded-xl bg-slate-50 p-3 text-xs font-medium text-[var(--color-text-muted)]">
+                      <div className="mb-1 font-bold text-[var(--color-text)]">ملاحظات المشرف</div>
+                      {row.notes || '—'}
+                    </div>
+                    <div className="mt-4 space-y-3 rounded-xl border border-[var(--color-border)] p-3">
+                      <div className="text-sm font-bold text-[var(--color-text)]">تقييم الإدارة</div>
+                      {RATING_FIELDS.map((field) => (
+                        <div key={field.key} className="flex flex-col gap-2">
+                          <span className="text-xs font-bold text-[var(--color-text-muted)]">{field.label}</span>
+                          <StarRating
+                            value={Number(draft[field.key] || 0)}
+                            disabled={disabled}
+                            onChange={(value) => updateDraft(rowId, { [field.key]: value })}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                    <label className="mt-4 block text-xs font-bold text-[var(--color-text-muted)]">
+                      ملاحظة الإدارة
+                      <textarea
+                        rows={3}
+                        disabled={disabled}
+                        className="mt-2 w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm"
+                        placeholder="ملاحظة الإدارة"
+                        value={draft.notes ?? ''}
+                        onChange={(event) => updateDraft(rowId, { notes: event.target.value })}
+                      />
+                    </label>
+                    <div className="mt-4 grid grid-cols-1 gap-2">
+                      <Button type="button" size="sm" className="h-10 w-full" disabled={disabled} onClick={() => void saveReview(row, 'approved')}>
+                        اعتماد
+                      </Button>
+                      <Button type="button" size="sm" className="h-10 w-full" variant="outline" disabled={disabled} onClick={() => void saveReview(row, 'rejected')}>
+                        رفض
+                      </Button>
+                      <Button type="button" size="sm" className="h-10 w-full" variant="outline" disabled={disabled} onClick={() => void saveReview(row)}>
+                        حفظ فقط
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="hidden overflow-x-auto md:block">
+              <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">العامل</th>
+                  <th className="erp-th text-center">الدور</th>
                   <th className="erp-th">المشرف</th>
                   <th className="erp-th text-center">التاريخ</th>
                   {RATING_FIELDS.map((field) => (
@@ -207,7 +315,19 @@ export const ProductionWorkerRatingsReview: React.FC = () => {
                   const disabled = !canReview || savingId === row.id;
                   return (
                     <tr key={row.id} className="border-b border-[var(--color-border)] align-top">
-                      <td className="px-4 py-3 font-bold text-[var(--color-text)]">{row.workerName || row.workerId}</td>
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-[var(--color-text)]">{row.workerName || row.workerId}</div>
+                        {row.workerCode && <div className="text-xs text-[var(--color-text-muted)]">{row.workerCode}</div>}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {row.laborRole ? (
+                          <Badge variant="neutral">
+                            {LINE_WORKER_LABOR_ROLE_LABELS[resolveLineWorkerLaborRole(row.laborRole)]}
+                          </Badge>
+                        ) : (
+                          <span className="text-xs font-bold text-[var(--color-text-muted)]">—</span>
+                        )}
+                      </td>
                       <td className="px-4 py-3">{row.supervisorName || row.supervisorId}</td>
                       <td className="px-4 py-3 text-center font-bold">{row.date}</td>
                       {RATING_FIELDS.map((field) => (
@@ -262,7 +382,8 @@ export const ProductionWorkerRatingsReview: React.FC = () => {
                   );
                 })}
               </tbody>
-            </table>
+              </table>
+            </div>
             {filteredRows.length === 0 && (
               <p className="py-8 text-center text-sm font-medium text-[var(--color-text-muted)]">
                 لا توجد تقييمات مطابقة للفلاتر الحالية.

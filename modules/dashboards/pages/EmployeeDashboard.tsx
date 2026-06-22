@@ -519,14 +519,24 @@ export const EmployeeDashboard: React.FC = () => {
           </PrimaryButton>
         )}
         {employee?.level === 2 && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/my-workers')}
-            className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
-          >
-            <span className="material-icons-round text-base">groups</span>
-            عمالتي وتقييماتهم
-          </GhostButton>
+          <>
+            <GhostButton
+              type="button"
+              onClick={() => navigate('/my-workers')}
+              className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+            >
+              <span className="material-icons-round text-base">supervisor_account</span>
+              تفاصيل المشرف
+            </GhostButton>
+            <GhostButton
+              type="button"
+              onClick={() => navigate('/my-workers/evaluation')}
+              className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+            >
+              <span className="material-icons-round text-base">assignment_ind</span>
+              تقييم العمالة
+            </GhostButton>
+          </>
         )}
         {can('inventory.transactions.create') && (
           <GhostButton
