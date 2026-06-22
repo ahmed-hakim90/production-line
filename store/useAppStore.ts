@@ -33,6 +33,7 @@ import {
   WorkOrderLiveSummary,
   ReportComponentScrapItem,
   ProductionPlanFollowUp,
+  PlanStatus,
   Asset,
   AssetDepreciation,
   AssetDepreciationRunResult,
@@ -143,6 +144,10 @@ import {
   isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift';
+import {
+  getProductAssemblyMode,
+  hasLineSpecificWorkerTarget,
+} from '../modules/production/selectors/workerTargetSelector';
 import {
   buildProductionReportCostSnapshotPatch,
   buildSupervisorHourlyRatesMap,
@@ -459,6 +464,10 @@ function deriveProductionPlanAutoPatch(
 ): Partial<ProductionPlan> | null {
   const plannedQty = Number(plan.plannedQuantity || 0);
   const producedQty = Number(plan.producedQuantity || 0);
+  const remainingQty = Math.max(0, plannedQty - producedQty);
+  const achievementPercent = plannedQty > 0
+    ? Math.round((producedQty / plannedQty) * 1000) / 10
+    : 0;
   const hasReportProgress = reports.some((report) => Number(report.quantityProduced || 0) > 0);
   const hasProgress = producedQty > 0 || hasReportProgress;
 
@@ -477,6 +486,12 @@ function deriveProductionPlanAutoPatch(
   const patch: Partial<ProductionPlan> = {};
   if (nextStatus !== plan.status) {
     patch.status = nextStatus;
+  }
+  if (Number(plan.remainingQuantity ?? -1) !== remainingQty) {
+    patch.remainingQuantity = remainingQty;
+  }
+  if (Number(plan.achievementPercent ?? -1) !== achievementPercent) {
+    patch.achievementPercent = achievementPercent;
   }
   if (hasProgress && firstReportDate) {
     const currentStart = String(plan.startDate || '');
@@ -3156,6 +3171,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         costCenterValues,
         costAllocations,
         _rawEmployees,
+        _rawProducts,
+        lineProductConfigs,
       } = get();
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
       const componentScrapItems = reportType === 'packaging'
@@ -3231,12 +3248,19 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
+      const explicitPlanId = String((savePayload as ProductionReport).productionPlanId || '').trim();
+      const explicitPlan = explicitPlanId ? await productionPlanService.getById(explicitPlanId) : null;
       const activePlans = await productionPlanService.getActiveByLineAndProduct(savePayload.lineId, savePayload.productId);
       const planMatchType = effectivePlanReportType(reportType);
-      const activePlan = activePlans.find((plan) => {
+      const planMatchesReport = (plan: ProductionPlan | null) => {
+        if (!plan) return false;
+        if (plan.lineId !== savePayload.lineId || plan.productId !== savePayload.productId) return false;
         const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
         return planType === planMatchType;
-      }) ?? activePlans[0] ?? null;
+      };
+      const activePlan = planMatchesReport(explicitPlan)
+        ? explicitPlan
+        : activePlans.find(planMatchesReport) ?? activePlans[0] ?? null;
 
       if (!planSettings.allowReportWithoutPlan && !activePlan) {
         set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
@@ -3293,11 +3317,31 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       }
 
+      const reportProduct = _rawProducts.find((p) => p.id === savePayload.productId) ?? null;
+      const assemblyModeSnapshot = getProductAssemblyMode(reportProduct);
+      const workerTargetsApplied = reportType === 'finished_product'
+        && assemblyModeSnapshot === 'individual'
+        && hasLineSpecificWorkerTarget(lineProductConfigs, savePayload.lineId, savePayload.productId);
+      const workerOutputs = workerTargetsApplied
+        ? (savePayload.workerOutputs || []).filter((row) => (
+          row.productId === savePayload.productId && row.lineId === savePayload.lineId
+        ))
+        : [];
+
       let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
         ...savePayload,
         reportType,
         componentScrapItems,
         workOrderId: activeWO?.id || savePayload.workOrderId || '',
+        productionPlanId: activePlan?.id || undefined,
+        productionPlanLinkMode: activePlan?.id ? (explicitPlanId ? 'manual' : 'auto') : undefined,
+        assemblyModeSnapshot,
+        workerTargetsApplied,
+        workerTargetSource: workerTargetsApplied ? 'line_product' : 'none',
+        laborAssignmentSource: Number(savePayload.workersCount || 0) > 0 || detailedWorkersTotal > 0
+          ? 'line_worker_assignments'
+          : 'none',
+        workerOutputs,
       };
       const rawCycleId =
         typeof (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId === 'string'
@@ -3447,9 +3491,17 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
           await productionPlanService.incrementProduced(activePlan.id, reportData.quantityProduced, reportIndustrialCost);
           const newProduced = (activePlan.producedQuantity ?? 0) + reportData.quantityProduced;
-          if (newProduced >= activePlan.plannedQuantity) {
-            await productionPlanService.update(activePlan.id, { status: 'completed' });
-          }
+          const plannedQty = Number(activePlan.plannedQuantity || 0);
+          const nextStatus: PlanStatus = plannedQty > 0 && newProduced >= plannedQty
+            ? 'completed'
+            : 'in_progress';
+          await productionPlanService.update(activePlan.id, {
+            remainingQuantity: Math.max(0, plannedQty - newProduced),
+            achievementPercent: plannedQty > 0
+              ? Math.round((newProduced / plannedQty) * 1000) / 10
+              : 0,
+            status: nextStatus,
+          });
         }
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث أمر الشغل أو خطة الإنتاج';

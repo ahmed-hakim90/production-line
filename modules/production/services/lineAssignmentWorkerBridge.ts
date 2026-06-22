@@ -90,7 +90,8 @@ export const lineAssignmentWorkerBridge = {
   },
 
   async resolveWorkerIdsForReport(lineId: string, date: string): Promise<{ workerId: string }[]> {
-    const resolved = filterProductionLaborWorkers(await this.resolveWorkersForLineDate(lineId, date));
+    const allResolved = await this.resolveWorkersForLineDate(lineId, date);
+    const resolved = filterProductionLaborWorkers<ResolvedLineWorker>(allResolved);
     return resolved.map((row) => ({ workerId: row.workerId }));
   },
 };

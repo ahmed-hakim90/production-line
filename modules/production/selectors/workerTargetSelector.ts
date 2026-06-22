@@ -1,4 +1,9 @@
-import type { FirestoreProduct, LineProductConfig, ProductionWorkerTarget } from '@/types';
+import type {
+  FirestoreProduct,
+  LineProductConfig,
+  ProductAssemblyMode,
+  ProductionWorkerTarget,
+} from '@/types';
 
 export interface ResolvedWorkerTarget {
   dailyTargetQty: number;
@@ -25,6 +30,21 @@ export function findLineProductConfig(
 ): LineProductConfig | null {
   if (!lineId || !productId || !configs?.length) return null;
   return configs.find((c) => c.lineId === lineId && c.productId === productId) ?? null;
+}
+
+export function getProductAssemblyMode(
+  product?: Pick<FirestoreProduct, 'assemblyMode'> | null,
+): ProductAssemblyMode {
+  return product?.assemblyMode === 'team' ? 'team' : 'individual';
+}
+
+export function hasLineSpecificWorkerTarget(
+  configs: LineProductConfig[] | undefined,
+  lineId?: string,
+  productId?: string,
+): boolean {
+  const lineProduct = findLineProductConfig(configs, lineId, productId);
+  return Number(lineProduct?.dailyWorkerTargetQty || 0) > 0;
 }
 
 export function resolveWorkerTarget(params: {
@@ -75,6 +95,28 @@ export function resolveWorkerTarget(params: {
     return {
       dailyTargetQty: productDefault,
       source: 'product_default',
+    };
+  }
+
+  return {
+    dailyTargetQty: 0,
+    source: 'missing',
+    warning: 'لا يوجد هدف يومي لهذا المنتج/الخط',
+  };
+}
+
+export function resolveReportWorkerTarget(params: {
+  lineId?: string;
+  productId: string;
+  lineProductConfigs?: LineProductConfig[];
+}): ResolvedWorkerTarget {
+  const { lineId, productId, lineProductConfigs } = params;
+  const lineProduct = findLineProductConfig(lineProductConfigs, lineId, productId);
+  const lineProductTarget = Number(lineProduct?.dailyWorkerTargetQty || 0);
+  if (lineProductTarget > 0) {
+    return {
+      dailyTargetQty: lineProductTarget,
+      source: 'line_product',
     };
   }
 

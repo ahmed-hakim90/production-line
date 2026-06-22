@@ -91,6 +91,8 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'production.workers.manage',
           'production.workerTargets.manage',
           'production.workerReports.view',
+          'production.workerRatings.view',
+          'production.workerRatings.manage',
           'production.workerBonus.view',
           'production.workerBonus.manage',
           'lineWorkers.view',
@@ -137,6 +139,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'productionWorkers.view',
           'production.workers.view',
           'production.workerReports.view',
+          'production.workerRatings.view',
           'print',
           'export',
         ]),
@@ -239,6 +242,8 @@ const FACTORY_MANAGER_PRODUCTION_WORKER_PERMS: Permission[] = [
   'production.workers.manage',
   'production.workerTargets.manage',
   'production.workerReports.view',
+  'production.workerRatings.view',
+  'production.workerRatings.manage',
   'production.workerBonus.view',
   'production.workerBonus.manage',
   'lineWorkers.view',
@@ -248,6 +253,7 @@ const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [
   'productionWorkers.view',
   'production.workers.view',
   'production.workerReports.view',
+  'production.workerRatings.view',
 ];
 
 const PRODUCTION_WORKER_PERMS_BY_ROLE_KEY: Record<string, readonly Permission[]> = {

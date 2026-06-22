@@ -133,6 +133,7 @@ export const ProductionPlans: React.FC = () => {
   const canViewCosts = can('costs.view');
   const canExport = can('export');
   const canImport = can('import');
+  const canCreateReport = can('reports.create') || can('reports.componentInjection.manage');
   const planSettings = systemSettings.planSettings ?? { allowMultipleActivePlans: true, allowReportWithoutPlan: true, allowOverProduction: true };
 
   // â”€â”€ View / Filter state â”€â”€
@@ -714,6 +715,22 @@ export const ProductionPlans: React.FC = () => {
     setActiveDrawerPlanId(planId);
   };
 
+  const openCreateReportForPlan = (plan: ProductionPlan) => {
+    if (!plan.id) return;
+    const reportType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
+    openModal(MODAL_KEYS.REPORTS_CREATE, {
+      source: 'productionPlans',
+      reportType,
+      productionPlanId: plan.id,
+      productId: plan.productId,
+      lineId: plan.lineId,
+      supervisorId: plan.supervisorId,
+      date: plan.startDate || plan.plannedStartDate || getTodayDateString(),
+      shift: plan.shift,
+      workOrderId: plan.workOrderId,
+    });
+  };
+
   if (loading) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
@@ -1234,6 +1251,11 @@ export const ProductionPlans: React.FC = () => {
                     أمر شغل
                   </Button>
                 )}
+                {canCreateReport && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
+                  <Button variant="primary" onClick={() => { openCreateReportForPlan(activeDrawerPlan); setActiveDrawerPlanId(null); }}>
+                    تقرير إنتاج
+                  </Button>
+                )}
                 {canAddFollowUp && activeDrawerPlan.id && (
                   <button
                     type="button"
@@ -1386,7 +1408,7 @@ export const ProductionPlans: React.FC = () => {
 
   function TableView({ groups }: { groups: PlanGroupSection[] }) {
     const totalPlans = groups.reduce((sum, group) => sum + group.plans.length, 0);
-    const hasActionColumn = canEdit || canDelete;
+    const hasActionColumn = canEdit || canDelete || canCreateReport;
     const columnCount = (canEdit ? 1 : 0) + 8 + (canViewCosts ? 1 : 0) + (hasActionColumn ? 1 : 0);
 
     return (
@@ -1663,6 +1685,11 @@ export const ProductionPlans: React.FC = () => {
                                   {(can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
                                     <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
                                       <span className="material-icons-round text-sm">assignment</span>
+                                    </button>
+                                  )}
+                                  {canCreateReport && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
+                                    <button onClick={() => openCreateReportForPlan(plan)} className="p-1.5 text-[var(--color-text-muted)] hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء تقرير من الخطة">
+                                      <span className="material-icons-round text-sm">post_add</span>
                                     </button>
                                   )}
                                   {canAddFollowUp && plan.id && (

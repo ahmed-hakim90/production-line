@@ -8,6 +8,11 @@ import {
   sumWorkersCountPatch,
 } from '../modules/production/utils/lineAssignmentWorkersCount.ts';
 import { filterProductionLaborWorkers } from '../modules/production/utils/lineWorkerLaborRoles.ts';
+import {
+  inheritLineAssignmentsForDate,
+  resolveEffectiveLineAssignmentsForDate,
+} from '../modules/production/utils/effectiveLineAssignments.ts';
+import type { LineWorkerAssignment } from '../types';
 
 assert.equal(
   countOperatorsFromAssignments(
@@ -110,6 +115,56 @@ assert.deepEqual(
     { workerId: 'w4', laborRole: 'packaging' as const },
   ]).map((row) => row.workerId),
   ['w1', 'w3'],
+);
+
+const priorAssignments: LineWorkerAssignment[] = [
+  {
+    id: 'source-row',
+    lineId: 'line-1',
+    employeeId: 'emp-1',
+    employeeCode: 'E001',
+    employeeName: 'Worker One',
+    laborRole: 'quality',
+    date: '2026-06-21',
+  },
+];
+
+assert.deepEqual(
+  inheritLineAssignmentsForDate(priorAssignments, '2026-06-22'),
+  [
+    {
+      lineId: 'line-1',
+      employeeId: 'emp-1',
+      employeeCode: 'E001',
+      employeeName: 'Worker One',
+      laborRole: 'quality',
+      date: '2026-06-22',
+    },
+  ],
+);
+
+assert.equal(
+  resolveEffectiveLineAssignmentsForDate(
+    [
+      {
+        id: 'today-row',
+        lineId: 'line-1',
+        employeeId: 'emp-2',
+        employeeCode: 'E002',
+        employeeName: 'Worker Two',
+        laborRole: 'production',
+        date: '2026-06-22',
+      },
+    ],
+    priorAssignments,
+    '2026-06-22',
+  )[0].employeeId,
+  'emp-2',
+);
+
+assert.equal(
+  resolveEffectiveLineAssignmentsForDate([], priorAssignments, '2026-06-22')[0].employeeId,
+  'emp-1',
 );
 
 console.log('line-assignment-worker-bridge.test.ts: ok');

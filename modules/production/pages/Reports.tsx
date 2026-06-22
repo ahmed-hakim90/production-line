@@ -66,10 +66,15 @@ import {
 } from '../../../types';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../../../types';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
+import {
+  getProductAssemblyMode,
+  hasLineSpecificWorkerTarget,
+} from '../selectors/workerTargetSelector';
 import { usePermission } from '../../../utils/permissions';
 import {
   getShareResultFeedbackMessage,
   type ShareResult,
+  waitForExportPaint,
 } from '../../../utils/reportExport';
 import {
   formatBulkProductionReportsShareCaption,
@@ -573,16 +578,38 @@ export const Reports: React.FC = () => {
     () => _rawLines.some((l) => l.id === form.lineId && l.isPackagingLine),
     [_rawLines, form.lineId],
   );
+  const selectedFormProduct = useMemo(
+    () => _rawProducts.find((p) => p.id === form.productId) ?? null,
+    [_rawProducts, form.productId],
+  );
+  const formAssemblyMode = getProductAssemblyMode(selectedFormProduct);
+  const formWorkerOutputsEnabled = form.reportType === 'finished_product'
+    && formAssemblyMode === 'individual'
+    && hasLineSpecificWorkerTarget(lineProductConfigs, form.lineId, form.productId);
+  const formWorkerOutputEntryEnabled = formWorkerOutputsEnabled
+    && productionWorkerSettings.performance.productionWorkerOutputEnabled;
+  const formWorkerOutputTotal = useMemo(
+    () => (form.workerOutputs || [])
+      .filter((row) => row.productId === form.productId && row.lineId === form.lineId)
+      .reduce((sum, row) => sum + Number(row.outputQty || 0), 0),
+    [form.workerOutputs, form.productId, form.lineId],
+  );
+  const formQuantityDerivedFromWorkerOutputs = form.reportType === 'finished_product' && formWorkerOutputEntryEnabled;
+  const effectiveFormQuantityProduced = formQuantityDerivedFromWorkerOutputs
+    ? formWorkerOutputTotal
+    : Number(form.quantityProduced || 0);
+  const formWorkerOutputsContextKey = `${form.reportType}|${form.productId}|${form.lineId}|${form.date}|${formAssemblyMode}|${formWorkerOutputsEnabled}`;
+  const lastFormWorkerOutputsContextRef = useRef(formWorkerOutputsContextKey);
 
   const formStandardVariancePreview = useMemo(() => {
     if (!showModal) return null;
     if (!form.lineId?.trim() || !form.productId?.trim()) return null;
     if (!form.workHours || form.workHours <= 0) return null;
-    if (!form.quantityProduced || form.quantityProduced <= 0) return null;
+    if (!effectiveFormQuantityProduced || effectiveFormQuantityProduced <= 0) return null;
     const variance = computeProductionReportStandardQtyVariance({
       productId: form.productId,
       lineId: form.lineId,
-      quantityProduced: form.quantityProduced,
+      quantityProduced: effectiveFormQuantityProduced,
       workersCount: effectiveFormWorkersCount,
       workHours: form.workHours,
       lineProductConfigs,
@@ -596,7 +623,7 @@ export const Reports: React.FC = () => {
     form.lineId,
     form.productId,
     form.workHours,
-    form.quantityProduced,
+    effectiveFormQuantityProduced,
     lineProductConfigs,
     routingVarianceBasisSecondsByProduct,
     routingPlanTargetUnitSecondsByProduct,
@@ -837,6 +864,33 @@ export const Reports: React.FC = () => {
     form.reportType,
     formLineWorkers,
     isPackagingLineForm,
+  ]);
+
+  useEffect(() => {
+    if (!showModal) return;
+    setForm((prev) => {
+      const rows = prev.workerOutputs || [];
+      const contextChanged = lastFormWorkerOutputsContextRef.current !== formWorkerOutputsContextKey;
+      lastFormWorkerOutputsContextRef.current = formWorkerOutputsContextKey;
+      if (contextChanged) {
+        return rows.length === 0 ? prev : { ...prev, workerOutputs: [] };
+      }
+      if (
+        formWorkerOutputsEnabled
+        && rows.every((row) => row.productId === prev.productId && row.lineId === prev.lineId)
+      ) {
+        return prev;
+      }
+      return rows.length === 0 ? prev : { ...prev, workerOutputs: [] };
+    });
+  }, [
+    showModal,
+    form.productId,
+    form.lineId,
+    form.date,
+    formAssemblyMode,
+    formWorkerOutputsEnabled,
+    formWorkerOutputsContextKey,
   ]);
 
   useEffect(() => {
@@ -2110,7 +2164,7 @@ export const Reports: React.FC = () => {
       || packagingLinesValid.length > 0;
     const productQtyOk = form.reportType === 'packaging'
       ? packagingQtyOk
-      : Boolean(form.productId && form.quantityProduced);
+      : Boolean(form.productId && effectiveFormQuantityProduced);
     if (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift)) {
       setSaveToastType('error');
       setSaveToast('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
@@ -2181,12 +2235,17 @@ export const Reports: React.FC = () => {
         }
         : form.reportType === 'packaging'
           ? { packagingLines: [] as PackagingReportLine[] }
-          : {}),
+          : formQuantityDerivedFromWorkerOutputs
+            ? { quantityProduced: effectiveFormQuantityProduced }
+            : {}),
       ...(resolveReportType(form.reportType) === 'component_injection' && isInjectionShiftSelected(form.shift)
         ? { shift: form.shift }
         : { shift: undefined }),
       workersCount: effectiveFormWorkersCount,
-    } as typeof form & { workersCount: number; supplyCycleId?: string };
+    } as Omit<ProductionReport, 'id' | 'createdAt'> & { supplyCycleId?: string };
+    payload.workerOutputs = formWorkerOutputsEnabled
+      ? (form.workerOutputs || []).filter((row) => row.productId === payload.productId && row.lineId === payload.lineId)
+      : [];
     if (editId) {
       payload.supplyCycleId = autoSupplyCycleId || '';
     }
@@ -2213,13 +2272,14 @@ export const Reports: React.FC = () => {
       setTimeout(() => setSaveToast(null), 3500);
       return;
     }
-    const workerOutputTotal = (form.workerOutputs || []).reduce((sum, row) => sum + Number(row.outputQty || 0), 0);
     if (
       productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
       && form.reportType === 'finished_product'
+      && formWorkerOutputsEnabled
+      && !formQuantityDerivedFromWorkerOutputs
       && form.quantityProduced > 0
       && (form.workerOutputs || []).length > 0
-      && workerOutputTotal !== Number(form.quantityProduced)
+      && formWorkerOutputTotal !== Number(form.quantityProduced)
     ) {
       setSaveToastType('error');
       setSaveToast('مجموع إنتاج العمال يجب أن يطابق كمية التقرير');
@@ -4503,11 +4563,20 @@ export const Reports: React.FC = () => {
                   <input
                     type="number"
                     min={0}
-                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                    value={form.quantityProduced || ''}
+                    value={formQuantityDerivedFromWorkerOutputs ? formWorkerOutputTotal || '' : form.quantityProduced || ''}
                     onChange={(e) => setForm({ ...form, quantityProduced: Number(e.target.value) })}
+                    readOnly={formQuantityDerivedFromWorkerOutputs}
+                    className={cn(
+                      'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none transition-all',
+                      formQuantityDerivedFromWorkerOutputs ? 'bg-[#f0f2f5]/70 font-black text-primary' : 'font-medium',
+                    )}
                     placeholder="0"
                   />
+                  {formQuantityDerivedFromWorkerOutputs ? (
+                    <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
+                      تُحسب الكمية تلقائيًا من إجمالي إنتاج العمالة أدناه ولا تُدخل يدويًا لهذا المنتج الفردي.
+                    </p>
+                  ) : null}
                   {isPackagingLineForm && form.reportType === 'finished_product' ? (
                     <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
                       خط تغليف: الكمية للتتبع فقط ولا تُحسب في إنجاز أمر الشغل عند الربط. لا يلزم إدخال تفاصيل العمالة.
@@ -4701,6 +4770,7 @@ export const Reports: React.FC = () => {
               )}
               {form.reportType === 'finished_product'
                 && form.lineId && form.productId && form.date
+                && formWorkerOutputsEnabled
                 && productionWorkerSettings.performance.productionWorkerOutputEnabled ? (
                 <ReportWorkerOutputsSection
                   lineId={form.lineId}
@@ -4709,14 +4779,15 @@ export const Reports: React.FC = () => {
                   lineName={_rawLines.find((l) => l.id === form.lineId)?.name ?? form.lineId}
                   productName={_rawProducts.find((p) => p.id === form.productId)?.name ?? form.productId}
                   products={_rawProducts}
-                  reportQty={Number(form.quantityProduced || 0)}
+                  reportQty={effectiveFormQuantityProduced}
                   settings={productionWorkerSettings}
                   value={form.workerOutputs || []}
                   onChange={(workerOutputs) => setForm((prev) => ({ ...prev, workerOutputs }))}
                   disabled={saving}
                 />
               ) : form.reportType === 'finished_product'
-                && form.lineId && form.productId && form.date ? (
+                && form.lineId && form.productId && form.date
+                && formWorkerOutputsEnabled ? (
                 <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 p-4 space-y-2">
                   <p className="text-sm font-bold text-amber-800 dark:text-amber-300">إنتاج العمال غير مفعّل</p>
                   <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
@@ -4761,11 +4832,11 @@ export const Reports: React.FC = () => {
                 ))}
               </div>
             )}
-            {canViewCosts && effectiveFormWorkersCount > 0 && form.workHours > 0 && form.quantityProduced > 0 && form.lineId && (
+            {canViewCosts && effectiveFormWorkersCount > 0 && form.workHours > 0 && effectiveFormQuantityProduced > 0 && form.lineId && (
               (() => {
                 const selectedSupervisorRate = supervisorHourlyRates.get(form.employeeId) ?? 0;
                 const est = estimateReportCost(
-                  effectiveFormWorkersCount, form.workHours, form.quantityProduced,
+                  effectiveFormWorkersCount, form.workHours, effectiveFormQuantityProduced,
                   laborSettings?.hourlyRate ?? 0,
                   selectedSupervisorRate > 0 ? selectedSupervisorRate : (laborSettings?.hourlyRate ?? 0),
                   form.lineId,
@@ -4846,7 +4917,7 @@ export const Reports: React.FC = () => {
                   || !form.employeeId
                   || (form.reportType === 'packaging'
                     ? !hasValidPackagingReportLine
-                    : (!form.productId || !form.quantityProduced))
+                    : (!form.productId || !effectiveFormQuantityProduced))
                   || !form.workHours
                   || (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
                   || (
@@ -5635,9 +5706,9 @@ export const Reports: React.FC = () => {
                         <button
                           type="button"
                           onClick={() => removeWorkerFromLineDate(w.id)}
-                          disabled={viewWorkersBusy}
+                          disabled={viewWorkersBusy || !w.id}
                           className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50"
-                          title="حذف العامل من هذا الخط"
+                          title={w.id ? 'حذف العامل من هذا الخط' : 'عامل موروث من آخر توزيع؛ عدّل التوزيع من صفحة ربط العمالة'}
                         >
                           <ReportIcon name="delete" className="text-base" />
                         </button>

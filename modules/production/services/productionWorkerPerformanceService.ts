@@ -19,7 +19,12 @@ import { reportService } from './reportService';
 import { productionWorkerService } from './productionWorkerService';
 import { productionWorkerTargetService } from './productionWorkerTargetService';
 import { workerPerformanceSummaryService } from './workerPerformanceSummaryService';
-import { computeAchievementPercent, resolveWorkerTarget } from '../selectors/workerTargetSelector';
+import {
+  computeAchievementPercent,
+  hasLineSpecificWorkerTarget,
+  resolveReportWorkerTarget,
+  resolveWorkerTarget,
+} from '../selectors/workerTargetSelector';
 import { calculateBonusEstimate, computePerformanceScore } from './productionBonusEngine';
 
 const monthRange = (month: string): { start: string; end: string } => {
@@ -332,28 +337,24 @@ export const productionWorkerPerformanceService = {
     const {
       lineId,
       productId,
-      date,
-      products,
       workers,
-      targets,
       assignments,
       lineName,
       productName,
       lineProductConfigs,
     } = params;
-    const product = products.find((p) => p.id === productId) ?? null;
+    if (!hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId)) {
+      return [];
+    }
+
     const workerMap = new Map(workers.map((w) => [String(w.id), w]));
     const activeWorkerIds = assignments.map((a) => a.workerId);
 
     return activeWorkerIds.map((workerId) => {
       const worker = workerMap.get(workerId);
-      const resolved = resolveWorkerTarget({
-        workerId,
+      const resolved = resolveReportWorkerTarget({
         productId,
         lineId,
-        date,
-        targets: targets.filter((t) => t.workerId === workerId),
-        product,
         lineProductConfigs,
       });
       return {

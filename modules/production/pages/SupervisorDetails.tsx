@@ -17,6 +17,8 @@ import { useManagedPrint } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { workOrderService } from '@/modules/production/services/workOrderService';
+import { productionWorkerService } from '@/modules/production/services/productionWorkerService';
+import { productionWorkerRatingService } from '@/modules/production/services/productionWorkerRatingService';
 import { employeeService } from '../../hr/employeeService';
 import {
   calculateWorkOrderExecutionMetrics,
@@ -30,12 +32,30 @@ import {
 } from '../../../utils/calculations';
 import { JOB_LEVEL_LABELS, type JobLevel } from '../../hr/types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
-import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionReport, type FirestoreEmployee, type WorkOrder } from '../../../types';
+import {
+  DEFAULT_PRODUCTION_WORKER_SETTINGS,
+  type LineWorkerAssignment,
+  type LineWorkerLaborRole,
+  type ProductionReport,
+  type ProductionPlan,
+  type FirestoreEmployee,
+  type WorkOrder,
+  type ProductionWorker,
+  type ProductionWorkerStarRating,
+  type ProductionWorkerRatingRecord,
+} from '../../../types';
 import { calculateSupervisorTeamBonusEstimate } from '../services/productionBonusEngine';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift } from '../../hr/types';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef, shiftsRef } from '../../hr/collections';
 import { ProductionReportPrint, mapReportsToPrintRows, computePrintTotals } from '../components/ProductionReportPrint';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import {
+  LINE_WORKER_LABOR_ROLE_LABELS,
+  resolveLineWorkerLaborRole,
+} from '../utils/lineWorkerLaborRoles';
 import {
   AreaChart,
   Area,
@@ -140,6 +160,36 @@ type ChartTab = 'production' | 'efficiency' | 'hours';
 type DetailTab = 'production' | 'lines' | 'info';
 type Period = 'all' | 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
+type SupervisorWorkerRow = {
+  workerId: string;
+  workerName: string;
+  targetQty: number;
+  outputQty: number;
+  cappedOutputQty: number;
+  achievementPercent: number;
+  achieved: boolean;
+  rating?: ProductionWorkerStarRating;
+  ratingRecord?: ProductionWorkerRatingRecord;
+  worker?: ProductionWorker;
+};
+
+type SupervisorPlanRow = ProductionPlan & {
+  producedSoFar: number;
+  remainingQty: number;
+  achievementPct: number;
+  planDate: string;
+  workOrderNumber?: string;
+};
+
+type SupervisorLaborRow = {
+  key: string;
+  lineId: string;
+  lineName: string;
+  date: string;
+  total: number;
+  roles: Record<LineWorkerLaborRole, number>;
+};
+
 const CHART_TABS: { key: ChartTab; label: string; icon: string }[] = [
   { key: 'production', label: 'الإنتاج', icon: 'inventory' },
   { key: 'efficiency', label: 'الكفاءة', icon: 'speed' },
@@ -160,6 +210,41 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
   { value: 'monthly', label: 'شهري' },
 ];
 
+const RATING_FIELDS: { key: keyof Pick<ProductionWorkerStarRating, 'behavior' | 'ethics' | 'work'>; label: string }[] = [
+  { key: 'behavior', label: 'سلوكياً' },
+  { key: 'ethics', label: 'أخلاقياً' },
+  { key: 'work', label: 'عملياً' },
+];
+
+const PLAN_STATUS_LABELS: Record<ProductionPlan['status'], { label: string; variant: 'success' | 'warning' | 'info' | 'neutral' | 'danger' }> = {
+  planned: { label: 'مخطط', variant: 'info' },
+  in_progress: { label: 'قيد التنفيذ', variant: 'warning' },
+  completed: { label: 'مكتمل', variant: 'success' },
+  paused: { label: 'متوقف', variant: 'neutral' },
+  cancelled: { label: 'ملغي', variant: 'danger' },
+};
+
+const LABOR_ROLE_ORDER: LineWorkerLaborRole[] = ['production', 'packaging', 'quality', 'maintenance', 'external'];
+
+const emptyRating = (): ProductionWorkerStarRating => ({
+  behavior: 0,
+  ethics: 0,
+  work: 0,
+});
+
+const ratingRecordToStarRating = (record?: ProductionWorkerRatingRecord): ProductionWorkerStarRating | undefined => {
+  if (!record) return undefined;
+  return {
+    behavior: record.behavioralRating,
+    ethics: record.ethicalRating,
+    work: record.practicalRating,
+    notes: record.notes,
+    ratedBySupervisorId: record.supervisorId,
+    ratedBySupervisorName: record.supervisorName,
+    updatedAt: record.updatedAt,
+  };
+};
+
 // â”€â”€â”€ Helpers â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function getWeekStart(): string {
@@ -170,11 +255,43 @@ function getWeekStart(): string {
   return `${monday.getFullYear()}-${String(monday.getMonth() + 1).padStart(2, '0')}-${String(monday.getDate()).padStart(2, '0')}`;
 }
 
+function StarRating({
+  value,
+  onChange,
+  disabled,
+}: {
+  value: number;
+  onChange: (value: number) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="inline-flex flex-row-reverse items-center gap-0.5" aria-label={`${value} من 5`}>
+      {[1, 2, 3, 4, 5].map((star) => (
+        <button
+          key={star}
+          type="button"
+          disabled={disabled}
+          onClick={() => onChange(star)}
+          className={`material-icons-round text-lg leading-none transition-colors ${
+            star <= value ? 'text-amber-400' : 'text-slate-300'
+          } ${disabled ? 'cursor-default opacity-70' : 'hover:text-amber-500'}`}
+          aria-label={`تقييم ${star} من 5`}
+        >
+          star
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export const SupervisorDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
   const { can } = usePermission();
+  const { openModal } = useGlobalModalManager();
+  const isSelfSupervisorPage = !id;
 
+  const uid = useAppStore((s) => s.uid);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const employees = useAppStore((s) => s.employees);
   const productionLines = useAppStore((s) => s.productionLines);
@@ -189,32 +306,47 @@ export const SupervisorDetails: React.FC = () => {
   const [shifts, setShifts] = useState<FirestoreShift[]>([]);
   const [reports, setReports] = useState<ProductionReport[]>([]);
   const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
+  const [productionWorkers, setProductionWorkers] = useState<ProductionWorker[]>([]);
+  const [workerRatings, setWorkerRatings] = useState<ProductionWorkerRatingRecord[]>([]);
+  const [ratingDrafts, setRatingDrafts] = useState<Record<string, ProductionWorkerStarRating>>({});
+  const [lineAssignments, setLineAssignments] = useState<LineWorkerAssignment[]>([]);
+  const [lineAssignmentsLoading, setLineAssignmentsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [ratingsLoading, setRatingsLoading] = useState(false);
+  const [savingRatingWorkerId, setSavingRatingWorkerId] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<DetailTab>('production');
   const [chartTab, setChartTab] = useState<ChartTab>('production');
   const [period, setPeriod] = useState<Period>('all');
+  const [ratingDate, setRatingDate] = useState(getTodayDateString());
 
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
 
   useEffect(() => {
-    if (!id) { setLoading(false); return; }
-    const normalizedId = decodeURIComponent(String(id)).trim();
+    const lookupId = id ? decodeURIComponent(String(id)).trim() : String(uid || '').trim();
+    if (!lookupId) { setLoading(false); return; }
+    const normalizedId = lookupId;
     if (!normalizedId) { setLoading(false); return; }
     let cancelled = false;
     setLoading(true);
     (async () => {
       try {
-        const [empById, empByUserId, deptSnap, posSnap, shiftSnap] = await Promise.all([
+        const [empById, empByUserId, deptSnap, posSnap, shiftSnap, workerRows] = await Promise.all([
           employeeService.getById(normalizedId),
           employeeService.getByUserId(normalizedId),
           getDocs(departmentsRef()),
           getDocs(jobPositionsRef()),
           getDocs(shiftsRef()),
+          productionWorkerService.getAll().catch(() => [] as ProductionWorker[]),
         ]);
         if (cancelled) return;
         const employeeFromStore = _rawEmployees.find((e) => e.id === normalizedId || e.userId === normalizedId || e.code === normalizedId) ?? null;
         const resolvedEmployee = empById ?? empByUserId ?? employeeFromStore;
+        if (isSelfSupervisorPage && resolvedEmployee?.level !== 2) {
+          setEmployee(null);
+          setLoading(false);
+          return;
+        }
         const resolvedEmployeeId = resolvedEmployee?.id ?? normalizedId;
         const supervisorIdsToTry = Array.from(new Set([normalizedId, resolvedEmployeeId].filter(Boolean)));
 
@@ -238,6 +370,7 @@ export const SupervisorDetails: React.FC = () => {
         setDepartments(deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)));
         setJobPositions(posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)));
         setShifts(shiftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift)));
+        setProductionWorkers(workerRows);
         setWorkOrders(supervisorOrders);
 
         let reportsByWorkOrder: ProductionReport[][] = [];
@@ -275,7 +408,7 @@ export const SupervisorDetails: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [id, _rawEmployees]);
+  }, [id, isSelfSupervisorPage, uid, _rawEmployees]);
 
   const getDepartmentName = (dId: string) => departments.find((d) => d.id === dId)?.name ?? '—';
   const getJobPositionTitle = (pId: string) => jobPositions.find((j) => j.id === pId)?.title ?? '—';
@@ -417,6 +550,156 @@ export const SupervisorDetails: React.FC = () => {
     }),
     [periodReports, supervisorBonusSettings],
   );
+  const workerById = useMemo(
+    () => new Map(productionWorkers.filter((worker) => worker.id).map((worker) => [worker.id!, worker])),
+    [productionWorkers],
+  );
+  const supervisorRatingKey = employee?.id || id || '';
+  const workerRatingByWorkerId = useMemo(
+    () => new Map(workerRatings.map((rating) => [rating.workerId, rating])),
+    [workerRatings],
+  );
+  const teamWorkerRows = useMemo<SupervisorWorkerRow[]>(() => (
+    supervisorBonus.workerContributions.map((row) => {
+      const worker = workerById.get(row.workerId);
+      const ratingRecord = workerRatingByWorkerId.get(row.workerId);
+      const historicalRating = ratingRecordToStarRating(ratingRecord);
+      return {
+        ...row,
+        workerName: worker?.name || row.workerName,
+        achieved: row.achievementPercent >= 100,
+        rating: ratingDrafts[row.workerId]
+          ?? historicalRating
+          ?? (supervisorRatingKey ? worker?.supervisorRatings?.[supervisorRatingKey] : undefined),
+        ratingRecord,
+        worker,
+      };
+    })
+  ), [supervisorBonus.workerContributions, workerById, workerRatingByWorkerId, ratingDrafts, supervisorRatingKey]);
+  const achievedWorkerRows = useMemo(
+    () => teamWorkerRows.filter((row) => row.achieved),
+    [teamWorkerRows],
+  );
+  const belowTargetWorkerRows = useMemo(
+    () => teamWorkerRows.filter((row) => !row.achieved),
+    [teamWorkerRows],
+  );
+  const topWorkerRows = useMemo(
+    () => [...teamWorkerRows].sort((a, b) => b.achievementPercent - a.achievementPercent).slice(0, 5),
+    [teamWorkerRows],
+  );
+  const bottomWorkerRows = useMemo(
+    () => [...teamWorkerRows].sort((a, b) => a.achievementPercent - b.achievementPercent).slice(0, 5),
+    [teamWorkerRows],
+  );
+  const canRateWorkers = can('production.workers.manage') || can('hr.evaluation.create') || (isSelfSupervisorPage && employee?.level === 2);
+  const canCreateReport = can('reports.create') || can('reports.componentInjection.manage');
+
+  useEffect(() => {
+    if (!supervisorRatingKey || !ratingDate) {
+      setWorkerRatings([]);
+      setRatingDrafts({});
+      return;
+    }
+    let cancelled = false;
+    setRatingsLoading(true);
+    productionWorkerRatingService.getBySupervisorAndDate(supervisorRatingKey, ratingDate)
+      .then((rows) => {
+        if (cancelled) return;
+        setWorkerRatings(rows);
+        setRatingDrafts(Object.fromEntries(
+          rows.map((row) => [row.workerId, ratingRecordToStarRating(row) ?? emptyRating()]),
+        ));
+      })
+      .finally(() => {
+        if (!cancelled) setRatingsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [supervisorRatingKey, ratingDate]);
+
+  const saveWorkerRating = useCallback(async (
+    row: SupervisorWorkerRow,
+    ratingInput: ProductionWorkerStarRating,
+  ) => {
+    if (!canRateWorkers || !row.worker?.id || !supervisorRatingKey) return;
+    const nextRating: ProductionWorkerStarRating = {
+      ...emptyRating(),
+      ...ratingInput,
+      ratedBySupervisorId: supervisorRatingKey,
+      ratedBySupervisorName: employee?.name,
+      updatedAt: new Date().toISOString(),
+    };
+    setSavingRatingWorkerId(row.worker.id);
+    try {
+      const ratingId = await productionWorkerRatingService.upsertSupervisorRating({
+        workerId: row.worker.id,
+        workerName: row.worker.name || row.workerName,
+        supervisorId: supervisorRatingKey,
+        supervisorName: employee?.name,
+        date: ratingDate,
+        period: ratingDate,
+        behavioralRating: Number(nextRating.behavior || 0),
+        ethicalRating: Number(nextRating.ethics || 0),
+        practicalRating: Number(nextRating.work || 0),
+        notes: nextRating.notes,
+      });
+      const supervisorRatings = {
+        ...(row.worker.supervisorRatings ?? {}),
+        [supervisorRatingKey]: nextRating,
+      };
+      await productionWorkerService.update(row.worker.id, { supervisorRatings });
+      const nextRecord: ProductionWorkerRatingRecord = {
+        id: ratingId || row.ratingRecord?.id,
+        workerId: row.worker.id,
+        workerName: row.worker.name || row.workerName,
+        supervisorId: supervisorRatingKey,
+        supervisorName: employee?.name,
+        date: ratingDate,
+        period: ratingDate,
+        behavioralRating: nextRating.behavior,
+        ethicalRating: nextRating.ethics,
+        practicalRating: nextRating.work,
+        notes: nextRating.notes,
+        managementReview: row.ratingRecord?.managementReview ?? { status: 'pending' },
+        updatedAt: nextRating.updatedAt,
+      };
+      setWorkerRatings((prev) => {
+        const withoutCurrent = prev.filter((rating) => rating.workerId !== row.worker?.id);
+        return [...withoutCurrent, nextRecord];
+      });
+      setRatingDrafts((prev) => ({ ...prev, [row.worker!.id!]: nextRating }));
+      setProductionWorkers((prev) => prev.map((worker) => (
+        worker.id === row.worker?.id ? { ...worker, supervisorRatings } : worker
+      )));
+    } finally {
+      setSavingRatingWorkerId(null);
+    }
+  }, [canRateWorkers, employee?.name, ratingDate, supervisorRatingKey]);
+
+  const handleWorkerRatingChange = useCallback((
+    row: SupervisorWorkerRow,
+    field: keyof Pick<ProductionWorkerStarRating, 'behavior' | 'ethics' | 'work'>,
+    value: number,
+  ) => {
+    const nextRating = {
+      ...emptyRating(),
+      ...(row.rating ?? {}),
+      [field]: value,
+    };
+    setRatingDrafts((prev) => ({ ...prev, [row.workerId]: nextRating }));
+    void saveWorkerRating(row, nextRating);
+  }, [saveWorkerRating]);
+
+  const handleWorkerRatingNotesChange = useCallback((workerId: string, notes: string) => {
+    setRatingDrafts((prev) => ({
+      ...prev,
+      [workerId]: {
+        ...emptyRating(),
+        ...(prev[workerId] ?? {}),
+        notes,
+      },
+    }));
+  }, []);
 
   const periodWorkOrders = useMemo(() => (
     workOrders.filter((wo) => {
@@ -478,6 +761,138 @@ export const SupervisorDetails: React.FC = () => {
       latestForecast,
     };
   }, [activeExecutionRows]);
+
+  const supervisorIdentityIds = useMemo(() => (
+    Array.from(new Set([
+      id ? decodeURIComponent(String(id)).trim() : '',
+      employee?.id ?? '',
+      employee?.userId ?? '',
+      employee?.code ?? '',
+    ].filter(Boolean)))
+  ), [id, employee?.id, employee?.userId, employee?.code]);
+
+  const workOrderByPlanKey = useMemo(() => {
+    const map = new Map<string, WorkOrder>();
+    workOrders.forEach((wo) => {
+      if (wo.planId) map.set(`plan:${wo.planId}`, wo);
+      if (wo.id) map.set(`wo:${wo.id}`, wo);
+    });
+    return map;
+  }, [workOrders]);
+
+  const supervisorPlanRows = useMemo<SupervisorPlanRow[]>(() => {
+    const supervisorIdSet = new Set(supervisorIdentityIds);
+    return productionPlans
+      .filter((plan) => {
+        const linkedWorkOrder = (plan.id ? workOrderByPlanKey.get(`plan:${plan.id}`) : undefined)
+          ?? (plan.workOrderId ? workOrderByPlanKey.get(`wo:${plan.workOrderId}`) : undefined);
+        return Boolean(
+          (plan.supervisorId && supervisorIdSet.has(plan.supervisorId))
+          || (linkedWorkOrder?.supervisorId && supervisorIdSet.has(linkedWorkOrder.supervisorId)),
+        );
+      })
+      .map((plan) => {
+        const linkedWorkOrder = (plan.id ? workOrderByPlanKey.get(`plan:${plan.id}`) : undefined)
+          ?? (plan.workOrderId ? workOrderByPlanKey.get(`wo:${plan.workOrderId}`) : undefined);
+        const linkedReports = reports.filter((report) => (
+          (plan.id && report.productionPlanId === plan.id)
+          || (linkedWorkOrder?.id && report.workOrderId === linkedWorkOrder.id)
+          || (plan.workOrderId && report.workOrderId === plan.workOrderId)
+        ));
+        const reportedProduced = linkedReports.reduce((sum, report) => sum + Math.max(0, Number(report.quantityProduced || 0)), 0);
+        const producedSoFar = Math.max(
+          Math.max(0, Number(plan.producedQuantity || 0)),
+          linkedWorkOrder ? Math.max(0, Number(linkedWorkOrder.actualProducedFromScans ?? linkedWorkOrder.producedQuantity ?? 0)) : 0,
+          reportedProduced,
+        );
+        const plannedQuantity = Math.max(0, Number(plan.plannedQuantity || 0));
+        const remainingQty = Math.max(0, plannedQuantity - producedSoFar);
+        const achievementPct = plannedQuantity > 0 ? Math.round((producedSoFar / plannedQuantity) * 100) : 0;
+        const planDate = plan.startDate || plan.plannedStartDate || linkedWorkOrder?.startDate || linkedWorkOrder?.targetDate || today;
+        return {
+          ...plan,
+          workOrderId: plan.workOrderId || linkedWorkOrder?.id,
+          supervisorId: plan.supervisorId || linkedWorkOrder?.supervisorId,
+          producedSoFar,
+          remainingQty,
+          achievementPct,
+          planDate,
+          workOrderNumber: linkedWorkOrder?.workOrderNumber,
+        };
+      })
+      .filter((plan) => (
+        period === 'all'
+        || (plan.planDate >= periodRange.start && plan.planDate <= periodRange.end)
+        || plan.status === 'planned'
+        || plan.status === 'in_progress'
+      ))
+      .sort((a, b) => {
+        const statusRank = (status: ProductionPlan['status']) => (
+          status === 'in_progress' ? 0 : status === 'planned' ? 1 : status === 'paused' ? 2 : status === 'completed' ? 3 : 4
+        );
+        return statusRank(a.status) - statusRank(b.status) || b.planDate.localeCompare(a.planDate);
+      });
+  }, [productionPlans, reports, supervisorIdentityIds, workOrderByPlanKey, period, periodRange.start, periodRange.end, today]);
+
+  const visibleSupervisorPlanRows = useMemo(() => supervisorPlanRows.slice(0, 20), [supervisorPlanRows]);
+
+  useEffect(() => {
+    const dates = Array.from(new Set(visibleSupervisorPlanRows.map((plan) => plan.planDate).filter(Boolean)));
+    if (dates.length === 0) {
+      setLineAssignments([]);
+      setLineAssignmentsLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setLineAssignmentsLoading(true);
+    Promise.all(dates.map((date) => lineAssignmentService.getByDate(date).catch(() => [] as LineWorkerAssignment[])))
+      .then((buckets) => {
+        if (cancelled) return;
+        setLineAssignments(buckets.flat());
+      })
+      .finally(() => {
+        if (!cancelled) setLineAssignmentsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [visibleSupervisorPlanRows]);
+
+  const supervisorLaborRows = useMemo<SupervisorLaborRow[]>(() => {
+    const planLineDateKeys = new Set(visibleSupervisorPlanRows.map((plan) => `${plan.lineId}__${plan.planDate}`));
+    const rows = new Map<string, SupervisorLaborRow>();
+    lineAssignments.forEach((assignment) => {
+      const key = `${assignment.lineId}__${assignment.date}`;
+      if (!planLineDateKeys.has(key)) return;
+      const role = resolveLineWorkerLaborRole(assignment.laborRole);
+      const row = rows.get(key) ?? {
+        key,
+        lineId: assignment.lineId,
+        lineName: getLineName(assignment.lineId),
+        date: assignment.date,
+        total: 0,
+        roles: { production: 0, packaging: 0, quality: 0, maintenance: 0, external: 0 },
+      };
+      row.total += 1;
+      row.roles[role] += 1;
+      rows.set(key, row);
+    });
+    return Array.from(rows.values()).sort((a, b) => b.date.localeCompare(a.date) || a.lineName.localeCompare(b.lineName));
+  }, [lineAssignments, visibleSupervisorPlanRows, productionLines]);
+
+  const openCreateReportForSupervisorPlan = useCallback((plan: SupervisorPlanRow) => {
+    if (!plan.id) return;
+    openModal(MODAL_KEYS.REPORTS_CREATE, {
+      source: 'supervisorDetails',
+      reportType: plan.planType === 'component_injection' ? 'component_injection' : 'finished_product',
+      productionPlanId: plan.id,
+      productId: plan.productId,
+      lineId: plan.lineId,
+      supervisorId: plan.supervisorId || employee?.id,
+      employeeId: plan.supervisorId || employee?.id,
+      date: plan.planDate || today,
+      shift: plan.shift,
+      workOrderId: plan.workOrderId,
+    });
+  }, [employee?.id, openModal, today]);
 
   // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -604,6 +1019,12 @@ export const SupervisorDetails: React.FC = () => {
     if (!employee?.managerId) return '—';
     return employees.find((e) => e.id === employee.managerId)?.name ?? '—';
   }, [employee, employees]);
+  const pageBackAction = isSelfSupervisorPage
+    ? { to: '/', label: 'رجوع للوحة' }
+    : { to: '/supervisors', label: 'رجوع' };
+  const notFoundMessage = isSelfSupervisorPage
+    ? 'لا توجد بيانات مشرف مرتبطة بحسابك الحالي'
+    : 'المشرف غير موجود';
 
   // â”€â”€ Loading / Not Found â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -611,7 +1032,7 @@ export const SupervisorDetails: React.FC = () => {
     return (
       <DetailPageShell>
         <DetailPageStickyHeader>
-          <PageHeader title="تفاصيل المشرف" backAction={{ to: '/supervisors', label: 'رجوع' }} loading />
+          <PageHeader title={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} backAction={pageBackAction} loading />
           <Card className={SURFACE_CARD}>
             <SectionSkeleton rows={2} height={38} />
           </Card>
@@ -626,13 +1047,13 @@ export const SupervisorDetails: React.FC = () => {
   if (!employee) {
     return (
       <DetailPageShell>
-        <PageHeader title="تفاصيل المشرف" backAction={{ to: '/supervisors', label: 'رجوع' }} />
+        <PageHeader title={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} backAction={pageBackAction} />
         <Card className="border-destructive/30 bg-destructive/5">
           <CardContent className="space-y-4 p-6 text-center">
             <span className="material-icons-round block text-6xl opacity-30 text-muted-foreground">person_off</span>
-            <p className="text-lg font-bold text-destructive">المشرف غير موجود</p>
-            <Button type="button" variant="outline" onClick={() => navigate('/supervisors')}>
-              العودة للمشرفين
+            <p className="text-lg font-bold text-destructive">{notFoundMessage}</p>
+            <Button type="button" variant="outline" onClick={() => navigate(pageBackAction.to)}>
+              {pageBackAction.label}
             </Button>
           </CardContent>
         </Card>
@@ -650,8 +1071,8 @@ export const SupervisorDetails: React.FC = () => {
           title={employee.name}
           subtitle={`${supervisorPageSubtitle} آ· متوسط ${avgWorkersPerReport} عامل`}
           icon="user"
-          backAction={{ to: '/supervisors', label: 'رجوع' }}
-          secondaryAction={{ label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/hr/employees/${id}`) }}
+          backAction={pageBackAction}
+          secondaryAction={!isSelfSupervisorPage ? { label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/hr/employees/${employee.id || id}`) } : undefined}
           moreActions={can('print') ? [{ label: 'طباعة', icon: 'print', onClick: () => { handlePrint(); }, group: 'تصدير' }] : undefined}
           extra={(
             <div className="flex flex-wrap items-center gap-2">
@@ -771,7 +1192,296 @@ export const SupervisorDetails: React.FC = () => {
       </div>
       </DetailCollapsibleSection>
 
+      <DetailCollapsibleSection title="خطط إنتاج المشرف" defaultOpen>
+      <ErpCard title="خطط إنتاج المشرف">
+        {visibleSupervisorPlanRows.length === 0 ? (
+          <div className="text-center py-8 text-[var(--color-text-muted)]">
+            <span className="material-icons-round text-4xl mb-2 block opacity-40">event_note</span>
+            لا توجد خطط إنتاج مرتبطة بهذا المشرف في الفترة المختارة.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table w-full text-sm">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">المنتج</th>
+                  <th className="erp-th">الخط</th>
+                  <th className="erp-th text-center">التاريخ / الوردية</th>
+                  <th className="erp-th text-center">المخطط</th>
+                  <th className="erp-th text-center">المنتج</th>
+                  <th className="erp-th text-center">المتبقي</th>
+                  <th className="erp-th text-center">الإنجاز</th>
+                  <th className="erp-th text-center">الحالة</th>
+                  <th className="erp-th text-center">إجراء</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleSupervisorPlanRows.map((plan) => {
+                  const statusConfig = PLAN_STATUS_LABELS[plan.status] ?? PLAN_STATUS_LABELS.planned;
+                  const product = products.find((p) => p.id === plan.productId) as ({ assemblyMode?: 'individual' | 'team' } & typeof products[number]) | undefined;
+                  const assemblyMode = product?.assemblyMode === 'team' ? 'team' : 'individual';
+                  const canReportForPlan = canCreateReport && (plan.status === 'planned' || plan.status === 'in_progress');
+                  return (
+                    <tr key={plan.id || `${plan.productId}_${plan.lineId}_${plan.planDate}`} className="border-b border-[var(--color-border)]">
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-[var(--color-text)]">{getProductName(plan.productId)}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-1.5 text-[11px] font-bold text-[var(--color-text-muted)]">
+                          <span className={`rounded-full px-2 py-0.5 ${assemblyMode === 'team' ? 'bg-indigo-50 text-indigo-600' : 'bg-emerald-50 text-emerald-600'}`}>
+                            {assemblyMode === 'team' ? 'تجميع جماعي' : 'تجميع فردي'}
+                          </span>
+                          {plan.workOrderNumber && <span>أمر {plan.workOrderNumber}</span>}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 font-bold">{getLineName(plan.lineId)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <div className="font-bold">{plan.planDate}</div>
+                        <div className="text-xs text-[var(--color-text-muted)]">
+                          {plan.shift === 'morning' ? 'صباحي' : plan.shift === 'evening' ? 'مسائي' : '—'}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-center font-bold">{formatNumber(plan.plannedQuantity)}</td>
+                      <td className="px-4 py-3 text-center font-bold text-emerald-600">{formatNumber(plan.producedSoFar)}</td>
+                      <td className="px-4 py-3 text-center font-bold text-[var(--color-text-muted)]">{formatNumber(plan.remainingQty)}</td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`font-black ${plan.achievementPct >= 100 ? 'text-emerald-600' : plan.achievementPct >= 70 ? 'text-amber-600' : 'text-rose-600'}`}>
+                          {plan.achievementPct}%
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={statusConfig.variant}>{statusConfig.label}</Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        {canReportForPlan ? (
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-8 gap-1.5 text-xs"
+                            onClick={() => openCreateReportForSupervisorPlan(plan)}
+                          >
+                            <span className="material-icons-round text-sm">post_add</span>
+                            إنشاء تقرير إنتاج
+                          </Button>
+                        ) : (
+                          <span className="text-xs font-bold text-[var(--color-text-muted)]">غير متاح</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {supervisorPlanRows.length > visibleSupervisorPlanRows.length && (
+              <div className="px-4 py-3 text-xs font-bold text-[var(--color-text-muted)]">
+                عرض أحدث {visibleSupervisorPlanRows.length} خطة من إجمالي {supervisorPlanRows.length}.
+              </div>
+            )}
+          </div>
+        )}
+      </ErpCard>
+      </DetailCollapsibleSection>
+
       <DetailCollapsibleSection title="تقييم الفريق والمكافأة" defaultOpen>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+        <KPIBox
+          label="عمالة مرتبطة"
+          value={formatNumber(teamWorkerRows.length)}
+          icon="groups"
+          colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20"
+          trend={`${formatNumber(achievedWorkerRows.length)} حققوا الهدف`}
+          trendUp={achievedWorkerRows.length >= belowTargetWorkerRows.length}
+        />
+        <KPIBox
+          label="حققوا الأهداف"
+          value={formatNumber(achievedWorkerRows.length)}
+          icon="check_circle"
+          colorClass="bg-emerald-50 text-emerald-600"
+          trend={teamWorkerRows.length > 0 ? `${Math.round((achievedWorkerRows.length / teamWorkerRows.length) * 100)}% من الفريق` : undefined}
+          trendUp
+        />
+        <KPIBox
+          label="لم يحققوا الأهداف"
+          value={formatNumber(belowTargetWorkerRows.length)}
+          icon="warning"
+          colorClass="bg-amber-50 text-amber-600"
+          trend={teamWorkerRows.length > 0 ? `${Math.round((belowTargetWorkerRows.length / teamWorkerRows.length) * 100)}% من الفريق` : undefined}
+          trendUp={belowTargetWorkerRows.length === 0}
+        />
+        <KPIBox
+          label="متوسط تحقيق العمال"
+          value={`${teamWorkerRows.length > 0 ? Math.round(teamWorkerRows.reduce((sum, row) => sum + row.achievementPercent, 0) / teamWorkerRows.length) : 0}%`}
+          icon="speed"
+          colorClass="bg-indigo-50 text-indigo-600 dark:bg-indigo-900/20 dark:text-indigo-400"
+          trend={`${formatNumber(supervisorBonus.totalAchieved)} / ${formatNumber(supervisorBonus.totalTarget)}`}
+          trendUp={supervisorBonus.achievementPercent >= 100}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
+        <ErpCard title="أعلى 5 عمال">
+          {topWorkerRows.length === 0 ? (
+            <p className="py-6 text-center text-sm font-medium text-[var(--color-text-muted)]">لا توجد بيانات أهداف عمال في الفترة.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="erp-table w-full text-sm">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">العامل</th>
+                    <th className="erp-th text-center">الهدف</th>
+                    <th className="erp-th text-center">المحقق</th>
+                    <th className="erp-th text-center">النسبة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topWorkerRows.map((row) => (
+                    <tr key={row.workerId} className="border-b border-[var(--color-border)]">
+                      <td className="px-4 py-3 font-bold text-[var(--color-text)]">{row.workerName}</td>
+                      <td className="px-4 py-3 text-center">{formatNumber(row.targetQty)}</td>
+                      <td className="px-4 py-3 text-center">{formatNumber(row.outputQty)}</td>
+                      <td className="px-4 py-3 text-center font-bold text-emerald-600">{row.achievementPercent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </ErpCard>
+
+        <ErpCard title="أقل 5 عمال">
+          {bottomWorkerRows.length === 0 ? (
+            <p className="py-6 text-center text-sm font-medium text-[var(--color-text-muted)]">لا توجد بيانات أهداف عمال في الفترة.</p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="erp-table w-full text-sm">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">العامل</th>
+                    <th className="erp-th text-center">الهدف</th>
+                    <th className="erp-th text-center">المحقق</th>
+                    <th className="erp-th text-center">النسبة</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {bottomWorkerRows.map((row) => (
+                    <tr key={row.workerId} className="border-b border-[var(--color-border)]">
+                      <td className="px-4 py-3 font-bold text-[var(--color-text)]">{row.workerName}</td>
+                      <td className="px-4 py-3 text-center">{formatNumber(row.targetQty)}</td>
+                      <td className="px-4 py-3 text-center">{formatNumber(row.outputQty)}</td>
+                      <td className={`px-4 py-3 text-center font-bold ${row.achievementPercent >= 100 ? 'text-emerald-600' : 'text-rose-600'}`}>{row.achievementPercent}%</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </ErpCard>
+      </div>
+
+      <ErpCard title="تقييم عمال المشرف">
+        <div className="mb-4 flex flex-col gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/70 p-4 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <h4 className="font-bold text-[var(--color-text)]">تقييم يومي / دوري</h4>
+            <p className="mt-1 text-xs font-medium text-[var(--color-text-muted)]">
+              اختر تاريخ التقييم. عند حفظ نفس العامل في نفس اليوم من نفس المشرف يتم تحديث السجل الحالي.
+            </p>
+          </div>
+          <label className="text-sm font-bold text-[var(--color-text-muted)]">
+            تاريخ التقييم
+            <input
+              type="date"
+              className="mt-1 block rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm font-bold text-[var(--color-text)]"
+              value={ratingDate}
+              onChange={(event) => setRatingDate(event.target.value)}
+            />
+          </label>
+        </div>
+        {teamWorkerRows.length === 0 ? (
+          <div className="text-center py-8 text-[var(--color-text-muted)]">
+            <span className="material-icons-round text-4xl mb-2 block opacity-40">groups</span>
+            لا توجد عمالة مرتبطة بتقارير هذا المشرف في الفترة المختارة.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="erp-table w-full text-sm">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">العامل</th>
+                  <th className="erp-th text-center">الحالة</th>
+                  <th className="erp-th text-center">نسبة الهدف</th>
+                  {RATING_FIELDS.map((field) => (
+                    <th key={field.key} className="erp-th text-center">{field.label}</th>
+                  ))}
+                  <th className="erp-th">ملاحظات المشرف</th>
+                  <th className="erp-th text-center">مراجعة الإدارة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {teamWorkerRows.map((row) => {
+                  const rating = row.rating ?? emptyRating();
+                  const disabled = !canRateWorkers || !row.worker?.id || savingRatingWorkerId === row.worker.id;
+                  const reviewStatus = row.ratingRecord?.managementReview?.status ?? 'pending';
+                  return (
+                    <tr key={row.workerId} className="border-b border-[var(--color-border)]">
+                      <td className="px-4 py-3">
+                        <div className="font-bold text-[var(--color-text)]">{row.workerName}</div>
+                        {!row.worker?.id && <div className="text-xs text-amber-600">غير مربوط بسجل عامل إنتاج</div>}
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={row.achieved ? 'success' : 'warning'}>
+                          {row.achieved ? 'حقق الهدف' : 'لم يحقق'}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-3 text-center font-bold">{row.achievementPercent}%</td>
+                      {RATING_FIELDS.map((field) => (
+                        <td key={field.key} className="px-4 py-3 text-center">
+                          <StarRating
+                            value={Number(rating[field.key] || 0)}
+                            disabled={disabled}
+                            onChange={(value) => void handleWorkerRatingChange(row, field.key, value)}
+                          />
+                        </td>
+                      ))}
+                      <td className="min-w-[220px] px-4 py-3">
+                        <textarea
+                          rows={2}
+                          disabled={disabled}
+                          className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-xs font-medium text-[var(--color-text)] disabled:opacity-60"
+                          placeholder="ملاحظة اختيارية"
+                          value={rating.notes ?? ''}
+                          onChange={(event) => handleWorkerRatingNotesChange(row.workerId, event.target.value)}
+                        />
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="mt-2 h-8 text-xs"
+                          disabled={disabled}
+                          onClick={() => void saveWorkerRating(row, rating)}
+                        >
+                          حفظ الملاحظة
+                        </Button>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <Badge variant={reviewStatus === 'approved' ? 'success' : reviewStatus === 'rejected' ? 'danger' : 'warning'}>
+                          {reviewStatus === 'approved' ? 'معتمد' : reviewStatus === 'rejected' ? 'مرفوض' : 'بانتظار المراجعة'}
+                        </Badge>
+                        {ratingsLoading && (
+                          <div className="mt-1 text-[10px] font-bold text-primary">تحميل...</div>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+            {!canRateWorkers && (
+              <p className="mt-3 text-xs font-medium text-[var(--color-text-muted)]">
+                تحتاج صلاحية إدارة عمال الإنتاج أو إنشاء تقييم موظف لتعديل النجوم.
+              </p>
+            )}
+          </div>
+        )}
+      </ErpCard>
+
       <ErpCard title="حساب المكافأة من أهداف العمال">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
@@ -849,6 +1559,56 @@ export const SupervisorDetails: React.FC = () => {
             <p className="text-xs font-bold text-[var(--color-text-muted)]">خارجية</p>
             <p className="text-lg font-black text-[var(--color-text)]">{formatNumber(laborBreakdownTotals.external)}</p>
           </div>
+        </div>
+
+        <div className="mt-5 border-t border-[var(--color-border)] pt-4">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <h4 className="font-bold text-[var(--color-text)]">عمالة الخطوط حسب خطط المشرف</h4>
+              <p className="text-xs font-medium text-[var(--color-text-muted)]">
+                البيانات من ربط العمالة اليومي للخط والتاريخ. لا توجد بيانات استدعاء منفصلة في الربط الحالي.
+              </p>
+            </div>
+            {lineAssignmentsLoading && (
+              <span className="text-xs font-bold text-primary">جاري تحميل العمالة...</span>
+            )}
+          </div>
+
+          {supervisorLaborRows.length === 0 ? (
+            <div className="text-center py-8 text-[var(--color-text-muted)]">
+              <span className="material-icons-round text-4xl mb-2 block opacity-40">groups</span>
+              لا توجد عمالة يومية مسجلة على خطوط خطط هذا المشرف في الفترة المختارة.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="erp-table w-full text-sm">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">الخط</th>
+                    <th className="erp-th text-center">التاريخ</th>
+                    <th className="erp-th text-center">إجمالي العمالة</th>
+                    {LABOR_ROLE_ORDER.map((role) => (
+                      <th key={role} className="erp-th text-center">{LINE_WORKER_LABOR_ROLE_LABELS[role]}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {supervisorLaborRows.map((row) => (
+                    <tr key={row.key} className="border-b border-[var(--color-border)]">
+                      <td className="px-4 py-3 font-bold">{row.lineName}</td>
+                      <td className="px-4 py-3 text-center font-bold">{row.date}</td>
+                      <td className="px-4 py-3 text-center font-black text-primary">{formatNumber(row.total)}</td>
+                      {LABOR_ROLE_ORDER.map((role) => (
+                        <td key={role} className="px-4 py-3 text-center font-bold text-[var(--color-text-muted)]">
+                          {formatNumber(row.roles[role])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </div>
       </ErpCard>
       </DetailCollapsibleSection>

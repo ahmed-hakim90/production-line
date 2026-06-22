@@ -102,6 +102,8 @@ export interface FirestoreProduct {
   routingTargetUnitSeconds?: number;
   /** Default daily worker target (pieces) when no worker-specific target exists. */
   defaultWorkerTargetQty?: number;
+  /** Individual products use per-worker output targets; team products are reported as collective output. */
+  assemblyMode?: ProductAssemblyMode;
 }
 
 export interface ProductMaterial {
@@ -224,6 +226,7 @@ export interface PackagingReportLine {
 
 /** Injection reports: morning (صباحي) or evening (مسائي) shift on the same line/day. */
 export type ProductionReportShift = 'morning' | 'evening';
+export type ProductAssemblyMode = 'individual' | 'team';
 
 export interface ProductionReport {
   id?: string;
@@ -258,6 +261,12 @@ export interface ProductionReport {
   /** اختياري: ربط التقرير بدورة توريد (باتش) لاحتساب الهالك والتتبع */
   supplyCycleId?: string;
   reportType?: 'finished_product' | 'component_injection' | 'packaging' | 'component_waste';
+  productionPlanId?: string;
+  productionPlanLinkMode?: 'manual' | 'auto';
+  assemblyModeSnapshot?: ProductAssemblyMode;
+  workerTargetsApplied?: boolean;
+  workerTargetSource?: 'line_product' | 'none';
+  laborAssignmentSource?: 'line_worker_assignments' | 'manual' | 'none';
   /** When set for packaging reports, quantities come from lines; productId/quantityProduced are derived for legacy fields. */
   packagingLines?: PackagingReportLine[];
   componentScrapItems?: ReportComponentScrapItem[];
@@ -281,6 +290,47 @@ export interface ProductionReportWorkerOutput {
 
 export type ProductionWorkerType = 'production';
 
+export interface ProductionWorkerStarRating {
+  behavior: number;
+  ethics: number;
+  work: number;
+  notes?: string;
+  ratedBySupervisorId?: string;
+  ratedBySupervisorName?: string;
+  updatedAt?: unknown;
+}
+
+export type ProductionWorkerRatingReviewStatus = 'pending' | 'approved' | 'rejected';
+
+export interface ProductionWorkerManagementReview {
+  status: ProductionWorkerRatingReviewStatus;
+  reviewedById?: string;
+  reviewedByName?: string;
+  behavioralRating?: number;
+  ethicalRating?: number;
+  practicalRating?: number;
+  notes?: string;
+  reviewedAt?: unknown;
+}
+
+export interface ProductionWorkerRatingRecord {
+  id?: string;
+  tenantId?: string;
+  workerId: string;
+  workerName?: string;
+  supervisorId: string;
+  supervisorName?: string;
+  date: string;
+  period?: string;
+  behavioralRating: number;
+  ethicalRating: number;
+  practicalRating: number;
+  notes?: string;
+  managementReview?: ProductionWorkerManagementReview;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+}
+
 export interface ProductionWorker {
   id?: string;
   tenantId?: string;
@@ -291,6 +341,8 @@ export interface ProductionWorker {
   workerType: ProductionWorkerType;
   defaultLineId?: string;
   lineIds: string[];
+  supervisorRatings?: Record<string, ProductionWorkerStarRating>;
+  ratingRecords?: Record<string, ProductionWorkerRatingRecord>;
   createdAt?: unknown;
   updatedAt?: unknown;
 }
@@ -531,6 +583,15 @@ export interface ProductionPlan {
   estimatedCost: number;
   actualCost: number;
   planType?: 'finished_product' | 'component_injection';
+  supervisorId?: string;
+  shift?: ProductionReportShift;
+  workOrderId?: string;
+  remainingQuantity?: number;
+  achievementPercent?: number;
+  achievementExcluded?: boolean;
+  achievementExclusionReason?: string;
+  stopReason?: string;
+  stoppedAt?: string;
   status: PlanStatus;
   createdBy: string;
   createdAt?: any;

@@ -26,7 +26,7 @@ import {
   buildShareStandardVarianceBanner,
   computeProductionReportStandardQtyVariance,
 } from '../../../utils/productionReportStandardVariance';
-import type { LineWorkerAssignment, PackagingReportLine, ProductionReport, ProductionReportShift, ProductionReportWorkerOutput, ReportComponentScrapItem } from '../../../types';
+import type { LineWorkerAssignment, LineWorkerLaborRole, PackagingReportLine, ProductionReport, ProductionReportShift, ProductionReportWorkerOutput, ReportComponentScrapItem } from '../../../types';
 import { resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import {
   INJECTION_SHIFT_OPTIONS,
@@ -41,6 +41,15 @@ import {
 } from '../components/ProductionReportPrint';
 import { ProductionReportShareCard } from '../components/ProductionReportShareCard';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
+import {
+  getProductAssemblyMode,
+  hasLineSpecificWorkerTarget,
+} from '../selectors/workerTargetSelector';
+import {
+  LINE_WORKER_LABOR_ROLES,
+  LINE_WORKER_LABOR_ROLE_LABELS,
+  resolveLineWorkerLaborRole,
+} from '../utils/lineWorkerLaborRoles';
 import { reportService } from '../services/reportService';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
@@ -209,19 +218,41 @@ export const QuickAction: React.FC = () => {
   const [workerPickerId, setWorkerPickerId] = useState('');
   const [workerActionBusy, setWorkerActionBusy] = useState(false);
   const [workerActionError, setWorkerActionError] = useState<string | null>(null);
+  const [updatingWorkerRoleId, setUpdatingWorkerRoleId] = useState<string | null>(null);
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
   const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
+  const [today, setToday] = useState(() => getOperationalDateString(8));
+  const selectedProduct = useMemo(
+    () => _rawProducts.find((p) => p.id === productId) ?? null,
+    [_rawProducts, productId],
+  );
+  const workerOutputTargetsEligible = reportType === 'finished_product'
+    && getProductAssemblyMode(selectedProduct) === 'individual'
+    && hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId);
+  const workerOutputEntryEnabled = workerOutputTargetsEligible
+    && productionWorkerSettings.performance.productionWorkerOutputEnabled;
+  const workerOutputTotal = useMemo(
+    () => workerOutputs
+      .filter((row) => row.productId === productId && row.lineId === lineId)
+      .reduce((sum, row) => sum + Number(row.outputQty || 0), 0),
+    [workerOutputs, productId, lineId],
+  );
+  const quantityDerivedFromWorkerOutputs = reportType === 'finished_product' && workerOutputEntryEnabled;
+  const effectiveQuantityProduced = quantityDerivedFromWorkerOutputs
+    ? workerOutputTotal
+    : Number(quantity || 0);
+  const workerOutputContextKey = `${reportType}|${productId}|${lineId}|${today}|${workerOutputTargetsEligible}`;
 
   const printRef = useRef<HTMLDivElement>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
   /** Prevents duplicate WhatsApp image sharing from rapid taps before React re-disables the button. */
   const shareWhatsAppLockRef = useRef(false);
   const lastAutoFilledWorkersCountRef = useRef<number | null>(null);
+  const lastWorkerOutputContextRef = useRef(workerOutputContextKey);
   const restoredStorageKeyRef = useRef<string | null>(null);
   const didShowDraftToastRef = useRef(false);
 
-  const [today, setToday] = useState(() => getOperationalDateString(8));
   const storageKey = useMemo(() => quickActionStorageKey(tenantId, uid), [tenantId, uid]);
   const canCreateFinishedReportsBase = can('reports.create');
   const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
@@ -268,6 +299,21 @@ export const QuickAction: React.FC = () => {
     setSelectedWorkOrderId(draft.selectedWorkOrderId);
     setWorkerOutputs(draft.workerOutputs);
   }, [availableReportTypes]);
+
+  useEffect(() => {
+    setWorkerOutputs((prev) => {
+      const contextChanged = lastWorkerOutputContextRef.current !== workerOutputContextKey;
+      lastWorkerOutputContextRef.current = workerOutputContextKey;
+      if (contextChanged) return prev.length === 0 ? prev : [];
+      if (
+        workerOutputTargetsEligible
+        && prev.every((row) => row.productId === productId && row.lineId === lineId)
+      ) {
+        return prev;
+      }
+      return prev.length === 0 ? prev : [];
+    });
+  }, [reportType, productId, lineId, today, workerOutputTargetsEligible, workerOutputContextKey]);
 
   const clearQuickActionStorage = useCallback(() => {
     writeQuickActionStoredState(storageKey, {});
@@ -478,6 +524,15 @@ export const QuickAction: React.FC = () => {
     }
   }, [lineId, today]);
 
+  const openLineWorkersModal = useCallback(async () => {
+    setShowLineWorkers(true);
+    if (!lineId) {
+      setLineWorkers([]);
+      return;
+    }
+    await fetchWorkersFromLineAssignments();
+  }, [fetchWorkersFromLineAssignments, lineId]);
+
   useEffect(() => {
     fetchWorkersFromLineAssignments();
   }, [fetchWorkersFromLineAssignments]);
@@ -553,6 +608,14 @@ export const QuickAction: React.FC = () => {
     () => reportType === 'packaging' || (reportType === 'finished_product' && isPackagingLineId(lineId, _rawLines)),
     [reportType, lineId, _rawLines],
   );
+  const lineWorkerRoleCounts = useMemo(() => {
+    const counts = new Map<LineWorkerAssignment['laborRole'], number>();
+    lineWorkers.forEach((worker) => {
+      const role = resolveLineWorkerLaborRole(worker.laborRole);
+      counts.set(role, (counts.get(role) || 0) + 1);
+    });
+    return counts;
+  }, [lineWorkers]);
   const getUnitsPerCarton = useCallback((productId: string) => {
     const n = Number(_rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0);
     return n > 0 ? n : undefined;
@@ -740,6 +803,34 @@ export const QuickAction: React.FC = () => {
     }
   }, [fetchWorkersFromLineAssignments]);
 
+  const handleQuickWorkerRoleChange = useCallback(async (
+    assignment: LineWorkerAssignment,
+    laborRole: LineWorkerLaborRole,
+  ) => {
+    if (!assignment.id) return;
+
+    const previousRole = resolveLineWorkerLaborRole(assignment.laborRole);
+    if (previousRole === laborRole) return;
+
+    setUpdatingWorkerRoleId(assignment.id);
+    setWorkerActionError(null);
+    setLineWorkers((current) => current.map((worker) => (
+      worker.id === assignment.id ? { ...worker, laborRole } : worker
+    )));
+
+    try {
+      await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
+      await fetchWorkersFromLineAssignments();
+    } catch {
+      setLineWorkers((current) => current.map((worker) => (
+        worker.id === assignment.id ? { ...worker, laborRole: previousRole } : worker
+      )));
+      setWorkerActionError('تعذر تحديث وظيفة العامل الآن. حاول مرة أخرى.');
+    } finally {
+      setUpdatingWorkerRoleId(null);
+    }
+  }, [fetchWorkersFromLineAssignments]);
+
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
     const canSaveCurrentType = reportType === 'component_injection'
@@ -773,7 +864,7 @@ export const QuickAction: React.FC = () => {
       showAppToast('error', 'أكمل ساعات العمل.');
       return;
     }
-    if (reportType !== 'packaging' && Number(quantity || 0) <= 0) {
+    if (reportType !== 'packaging' && effectiveQuantityProduced <= 0) {
       showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية وساعات العمل).');
       return;
     }
@@ -781,10 +872,11 @@ export const QuickAction: React.FC = () => {
       showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
       return;
     }
-    const workerOutputTotal = workerOutputs.reduce((sum, row) => sum + Number(row.outputQty || 0), 0);
     if (
       productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
       && reportType === 'finished_product'
+      && workerOutputTargetsEligible
+      && !quantityDerivedFromWorkerOutputs
       && Number(quantity || 0) > 0
       && workerOutputs.length > 0
       && workerOutputTotal !== Number(quantity)
@@ -802,7 +894,7 @@ export const QuickAction: React.FC = () => {
       date: today,
       quantityProduced: reportType === 'packaging'
         ? validPackagingLines.reduce((s, l) => s + l.quantityPieces, 0)
-        : Number(quantity),
+        : effectiveQuantityProduced,
       ...(reportType === 'packaging' ? { packagingLines: validPackagingLines } : {}),
       workersCount:
         reportType === 'component_injection'
@@ -821,7 +913,9 @@ export const QuickAction: React.FC = () => {
       ...(reportType === 'component_injection' && isInjectionShiftSelected(injectionShift)
         ? { shift: injectionShift }
         : {}),
-      ...(reportType === 'finished_product' && workerOutputs.length > 0 ? { workerOutputs } : {}),
+      ...(reportType === 'finished_product' && workerOutputTargetsEligible && workerOutputs.length > 0
+        ? { workerOutputs: workerOutputs.filter((row) => row.productId === productId && row.lineId === lineId) }
+        : {}),
     };
 
     const id = await createReport(data);
@@ -1417,12 +1511,21 @@ export const QuickAction: React.FC = () => {
                   <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">الكمية المنتجة *</label>
                   <input
                     type="number"
-                    value={quantity}
+                    value={quantityDerivedFromWorkerOutputs ? workerOutputTotal || '' : quantity}
                     onChange={(e) => setQuantity(e.target.value)}
-                    className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12"
+                    readOnly={quantityDerivedFromWorkerOutputs}
+                    className={cn(
+                      'w-full px-4 py-2.5 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-medium focus:border-primary focus:ring-2 focus:ring-primary/12',
+                      quantityDerivedFromWorkerOutputs ? 'bg-[#f0f2f5]/70 text-primary font-black' : 'bg-[#f8f9fa]',
+                    )}
                     placeholder="0"
                     min="0"
                   />
+                  {quantityDerivedFromWorkerOutputs ? (
+                    <p className="mt-1.5 text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
+                      تُحسب الكمية تلقائيًا من إجمالي إنتاج العمالة أدناه ولا تُدخل يدويًا لهذا المنتج الفردي.
+                    </p>
+                  ) : null}
                 </div>
               </>
             )}
@@ -1488,8 +1591,8 @@ export const QuickAction: React.FC = () => {
                 <label className="text-sm font-bold text-[var(--color-text-muted)] block">تفصيل العمالة </label>
                 <button
                   type="button"
-                  onClick={fetchWorkersFromLineAssignments}
-                  disabled={!lineId || loadingWorkersCount}
+                  onClick={openLineWorkersModal}
+                  disabled={loadingWorkersCount}
                   className="text-xs font-bold text-primary hover:text-primary/80 disabled:text-slate-400 disabled:cursor-not-allowed inline-flex items-center gap-1"
                 >
                   <span className={`material-icons-round text-sm ${loadingWorkersCount ? 'animate-spin' : ''}`}>
@@ -1582,7 +1685,7 @@ export const QuickAction: React.FC = () => {
             )}
             {reportType === 'finished_product'
               && lineId && productId
-              && productionWorkerSettings.performance.productionWorkerOutputEnabled ? (
+              && workerOutputEntryEnabled ? (
               <div className="md:col-span-2">
                 <ReportWorkerOutputsSection
                   lineId={lineId}
@@ -1591,14 +1694,14 @@ export const QuickAction: React.FC = () => {
                   lineName={getLineName(lineId)}
                   productName={getProductName(productId)}
                   products={_rawProducts}
-                  reportQty={Number(quantity || 0)}
+                  reportQty={effectiveQuantityProduced}
                   settings={productionWorkerSettings}
                   value={workerOutputs}
                   onChange={setWorkerOutputs}
                   disabled={saving}
                 />
               </div>
-            ) : reportType === 'finished_product' && lineId && productId ? (
+            ) : reportType === 'finished_product' && lineId && productId && workerOutputTargetsEligible ? (
               <div className="md:col-span-2 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 p-4 space-y-2">
                 <p className="text-sm font-bold text-amber-800 dark:text-amber-300">إنتاج العمال غير مفعّل</p>
                 <p className="text-xs text-amber-700 dark:text-amber-400 leading-relaxed">
@@ -1637,7 +1740,7 @@ export const QuickAction: React.FC = () => {
                 || !lineId
                 || (reportType !== 'packaging' && !productId)
                 || !employeeId
-                || (reportType !== 'packaging' && !quantity)
+                || (reportType !== 'packaging' && effectiveQuantityProduced <= 0)
                 || (reportType === 'packaging' && !packagingFormValid)
                 || (reportType !== 'component_injection' && !packagingLaborOptionalQuick && workersTotal <= 0)
                 || !hours
@@ -1779,18 +1882,42 @@ export const QuickAction: React.FC = () => {
       )}
 
       {/* Line Workers Modal */}
-      {showLineWorkers && lineId && (
+      {showLineWorkers && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowLineWorkers(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md max-h-[80vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl max-h-[80vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">groups</span>
-                <h3 className="font-bold">عمالة {getLineName(lineId)} اليوم</h3>
+                <h3 className="font-bold">عمالة الخط اليومية</h3>
                 <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded-[var(--border-radius-base)]">{lineWorkers.length}</span>
               </div>
               <button onClick={() => setShowLineWorkers(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
+            </div>
+            <div className="px-5 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                <div>
+                  <span className="font-bold text-[var(--color-text-muted)]">الخط: </span>
+                  <span className="font-black text-[var(--color-text)]">{lineId ? getLineName(lineId) : 'لم يتم اختيار خط'}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-[var(--color-text-muted)]">التاريخ: </span>
+                  <span className="font-black text-[var(--color-text)]">{today || 'غير محدد'}</span>
+                </div>
+              </div>
+              {lineWorkers.length > 0 && (
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {Array.from(lineWorkerRoleCounts.entries()).map(([role, count]) => {
+                    const resolvedRole = resolveLineWorkerLaborRole(role);
+                    return (
+                      <span key={resolvedRole} className="px-2 py-1 rounded-full bg-primary/10 text-primary text-[11px] font-bold">
+                        {LINE_WORKER_LABOR_ROLE_LABELS[resolvedRole]}: {count}
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
             </div>
             <div className="p-4 border-b border-[var(--color-border)] space-y-2">
               <div className="flex flex-col sm:flex-row sm:items-center gap-2">
@@ -1804,7 +1931,7 @@ export const QuickAction: React.FC = () => {
                 </div>
                 <Button
                   onClick={handleQuickAddWorker}
-                  disabled={!workerPickerId || workerActionBusy}
+                  disabled={!lineId || !workerPickerId || workerActionBusy}
                   className="w-full sm:w-auto shrink-0"
                 >
                   {workerActionBusy ? (
@@ -1818,32 +1945,70 @@ export const QuickAction: React.FC = () => {
               {workerActionError && (
                 <p className="text-xs font-bold text-rose-500">{workerActionError}</p>
               )}
+              {!lineId && (
+                <p className="text-xs font-bold text-amber-600">اختر خط الإنتاج أولاً لعرض أو إضافة عمالة الخط.</p>
+              )}
             </div>
             <div className="p-4 overflow-y-auto divide-y divide-slate-50">
-              {lineWorkers.length === 0 ? (
+              {!lineId ? (
+                <div className="text-center py-8">
+                  <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">format_list_bulleted</span>
+                  <p className="text-sm text-[var(--color-text-muted)] font-medium">اختر الخط والتاريخ لعرض العمالة اليومية المرتبطة به.</p>
+                </div>
+              ) : lineWorkers.length === 0 ? (
                 <div className="text-center py-8">
                   <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">person_add</span>
                   <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمالة مسجلة على هذا الخط اليوم</p>
                 </div>
               ) : (
                 lineWorkers.map((w, i) => (
-                  <div key={w.id || i} className="flex items-center gap-3 py-2.5">
+                  <div key={w.id || i} className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5">
                     <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                       <span className="material-icons-round text-primary text-sm">person</span>
                     </div>
                     <div className="min-w-0 flex-1">
                       <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
-                      <p className="text-xs text-[var(--color-text-muted)] font-mono">{w.employeeCode}</p>
+                      <p className="text-xs text-[var(--color-text-muted)]">
+                        <span className="font-mono">{w.employeeCode || 'بدون كود'}</span>
+                        <span className="mx-1">·</span>
+                        <span>{LINE_WORKER_LABOR_ROLE_LABELS[resolveLineWorkerLaborRole(w.laborRole)]}</span>
+                      </p>
+                      <p className="text-[11px] text-[var(--color-text-muted)]">
+                        {getLineName(w.lineId)} · {w.date || today}
+                      </p>
                     </div>
-                    <button
-                      type="button"
-                      onClick={() => handleQuickRemoveWorker(w.id)}
-                      disabled={workerActionBusy}
-                      className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50"
-                      title="حذف العامل من الخط"
-                    >
-                      <span className="material-icons-round text-base">delete</span>
-                    </button>
+                    <div className="flex w-full sm:w-auto items-center gap-2">
+                      <Select
+                        value={resolveLineWorkerLaborRole(w.laborRole)}
+                        disabled={!w.id || workerActionBusy || updatingWorkerRoleId === w.id}
+                        onValueChange={(value) => {
+                          void handleQuickWorkerRoleChange(w, value as LineWorkerLaborRole);
+                        }}
+                      >
+                        <SelectTrigger
+                          aria-label="وظيفة العامل"
+                          className="h-9 min-w-[116px] flex-1 sm:flex-none border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-2 text-xs"
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {LINE_WORKER_LABOR_ROLES.map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {LINE_WORKER_LABOR_ROLE_LABELS[role]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                      <button
+                        type="button"
+                        onClick={() => handleQuickRemoveWorker(w.id)}
+                        disabled={workerActionBusy || Boolean(updatingWorkerRoleId) || !w.id}
+                        className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50"
+                        title={w.id ? 'حذف العامل من الخط' : 'عامل موروث من آخر توزيع؛ عدّل التوزيع من صفحة ربط العمالة'}
+                      >
+                        <span className="material-icons-round text-base">delete</span>
+                      </button>
+                    </div>
                   </div>
                 ))
               )}

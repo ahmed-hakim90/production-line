@@ -29,6 +29,7 @@ export type Permission =
   | 'production.workers.view' | 'production.workers.manage'
   | 'production.workerTargets.manage'
   | 'production.workerReports.view'
+  | 'production.workerRatings.view' | 'production.workerRatings.manage'
   | 'production.workerBonus.view' | 'production.workerBonus.manage'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
@@ -151,6 +152,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'production.workers.manage', label: 'إدارة عمال الإنتاج' },
       { key: 'production.workerTargets.manage', label: 'إدارة أهداف عمال الإنتاج' },
       { key: 'production.workerReports.view', label: 'عرض تقارير عمال الإنتاج' },
+      { key: 'production.workerRatings.view', label: 'عرض تقييمات عمال الإنتاج' },
+      { key: 'production.workerRatings.manage', label: 'مراجعة تقييمات عمال الإنتاج' },
       { key: 'production.workerBonus.view', label: 'عرض مكافآت عمال الإنتاج' },
       { key: 'production.workerBonus.manage', label: 'إدارة مكافآت عمال الإنتاج' },
       { key: 'lineWorkers.view', label: 'عرض وإدارة ربط العمالة' },

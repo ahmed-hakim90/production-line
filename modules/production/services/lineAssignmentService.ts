@@ -15,24 +15,36 @@ import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
 import type { LineWorkerAssignment, LineWorkerLaborRole } from '../../../types';
 import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
+import { resolveEffectiveLineAssignmentsForDate } from '../utils/effectiveLineAssignments';
 import { lineAssignmentWorkerBridge } from './lineAssignmentWorkerBridge';
 
 const COLLECTION = 'line_worker_assignments';
 
 const eqTenant = () => where('tenantId', '==', getCurrentTenantId());
 
+async function getExactByLineAndDate(lineId: string, date: string): Promise<LineWorkerAssignment[]> {
+  const q = query(
+    collection(db, COLLECTION),
+    eqTenant(),
+    where('lineId', '==', lineId),
+    where('date', '==', date),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineWorkerAssignment));
+}
+
 export const lineAssignmentService = {
   async getByLineAndDate(lineId: string, date: string): Promise<LineWorkerAssignment[]> {
     if (!isConfigured) return [];
     try {
-      const q = query(
-        collection(db, COLLECTION),
-        eqTenant(),
-        where('lineId', '==', lineId),
-        where('date', '==', date),
-      );
-      const snap = await getDocs(q);
-      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as LineWorkerAssignment));
+      const exact = await getExactByLineAndDate(lineId, date);
+      if (exact.length > 0) return exact;
+
+      const sourceDate = await this.getLatestSourceDateBefore(date, lineId);
+      if (!sourceDate) return [];
+
+      const inherited = await getExactByLineAndDate(lineId, sourceDate);
+      return resolveEffectiveLineAssignmentsForDate(exact, inherited, date);
     } catch (error) {
       console.error('lineAssignmentService.getByLineAndDate error:', error);
       throw error;
@@ -98,7 +110,7 @@ export const lineAssignmentService = {
   async deleteByLineAndDate(lineId: string, date: string): Promise<void> {
     if (!isConfigured) return;
     try {
-      const assignments = await this.getByLineAndDate(lineId, date);
+      const assignments = await getExactByLineAndDate(lineId, date);
       for (const a of assignments) {
         if (a.id) await deleteDoc(doc(db, COLLECTION, a.id));
       }
@@ -119,11 +131,11 @@ export const lineAssignmentService = {
     if (!isConfigured) return 0;
     try {
       const sourceAssignments = lineId
-        ? await this.getByLineAndDate(lineId, sourceDate)
+        ? await getExactByLineAndDate(lineId, sourceDate)
         : await this.getByDate(sourceDate);
 
       const existingToday = lineId
-        ? await this.getByLineAndDate(lineId, targetDate)
+        ? await getExactByLineAndDate(lineId, targetDate)
         : await this.getByDate(targetDate);
 
       const existingKeys = new Set(existingToday.map((a) => `${a.lineId}_${a.employeeId}`));

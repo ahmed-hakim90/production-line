@@ -1,11 +1,15 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FirestoreProduct, ProductionReportWorkerOutput, ProductionWorkerSettings } from '@/types';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import { lineAssignmentWorkerBridge } from '../services/lineAssignmentWorkerBridge';
 import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
-import { computeAchievementPercent } from '../selectors/workerTargetSelector';
+import {
+  computeAchievementPercent,
+  getProductAssemblyMode,
+  hasLineSpecificWorkerTarget,
+} from '../selectors/workerTargetSelector';
 import { filterProductionLaborWorkers } from '../utils/lineWorkerLaborRoles';
 import { useAppStore } from '@/store/useAppStore';
 import { formatNumber } from '@/utils/calculations';
@@ -40,6 +44,14 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const [loading, setLoading] = useState(false);
   const [workerSource, setWorkerSource] = useState<'daily' | 'permanent' | null>(null);
+  const lastLoadedContextRef = useRef('');
+  const selectedProduct = useMemo(
+    () => products.find((product) => product.id === productId) ?? null,
+    [products, productId],
+  );
+  const assemblyMode = getProductAssemblyMode(selectedProduct);
+  const canShowWorkerTargets = assemblyMode === 'individual'
+    && hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId);
 
   const totalWorkerOutput = useMemo(
     () => value.reduce((sum, row) => sum + Number(row.outputQty || 0), 0),
@@ -51,7 +63,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     && totalWorkerOutput !== reportQty;
 
   const loadWorkers = useCallback(async () => {
-    if (!lineId || !productId || !date) return;
+    if (!lineId || !productId || !date || !canShowWorkerTargets) return;
     setLoading(true);
     try {
       const [workers, targets, resolvedWorkers] = await Promise.all([
@@ -75,7 +87,15 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
         productName,
         lineProductConfigs,
       });
-      const existingByWorker = new Map(value.map((row) => [row.workerId, row]));
+      const contextKey = `${lineId}|${productId}|${date}|${assemblyMode}`;
+      const shouldPreserveValues = lastLoadedContextRef.current === contextKey;
+      const existingByWorker = new Map(
+        shouldPreserveValues
+          ? value
+            .filter((row) => row.productId === productId && row.lineId === lineId)
+            .map((row) => [row.workerId, row])
+          : [],
+      );
       onChange(rows.map((row) => {
         const prev = existingByWorker.get(row.workerId);
         const outputQty = prev?.outputQty ?? 0;
@@ -86,18 +106,19 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
           notes: prev?.notes ?? row.notes,
         };
       }));
+      lastLoadedContextRef.current = contextKey;
     } finally {
       setLoading(false);
     }
-  }, [lineId, productId, date, products, lineProductConfigs, lineName, productName, onChange, value]);
+  }, [lineId, productId, date, products, lineProductConfigs, lineName, productName, onChange, value, canShowWorkerTargets, assemblyMode]);
 
   useEffect(() => {
-    if (!lineId || !productId || !date) {
+    if (!lineId || !productId || !date || !canShowWorkerTargets) {
       onChange([]);
       return;
     }
     void loadWorkers();
-  }, [lineId, productId, date, lineName, productName]);
+  }, [lineId, productId, date, lineName, productName, canShowWorkerTargets]);
 
   const updateRow = (workerId: string, patch: Partial<ProductionReportWorkerOutput>) => {
     onChange(value.map((row) => {
@@ -113,7 +134,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     }));
   };
 
-  if (!lineId || !productId || !date) return null;
+  if (!lineId || !productId || !date || !canShowWorkerTargets) return null;
 
   return (
     <div className="space-y-3 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">

@@ -44,6 +44,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
   unitsPerCarton: 0,
   sellingPrice: 0,
   autoDeductComponentScrapFromDecomposed: false,
+  assemblyMode: 'individual',
 };
 
 export const GlobalCreateProductModal: React.FC = () => {
@@ -141,6 +142,7 @@ export const GlobalCreateProductModal: React.FC = () => {
       unitsPerCarton: editingRaw.unitsPerCarton ?? 0,
       sellingPrice: editingRaw.sellingPrice ?? 0,
       autoDeductComponentScrapFromDecomposed: editingRaw.autoDeductComponentScrapFromDecomposed === true,
+      assemblyMode: editingRaw.assemblyMode === 'team' ? 'team' : 'individual',
       routingTargetUnitSeconds:
         editingRaw.routingTargetUnitSeconds != null && Number(editingRaw.routingTargetUnitSeconds) > 0
           ? Math.round(Number(editingRaw.routingTargetUnitSeconds))
@@ -391,6 +393,26 @@ export const GlobalCreateProductModal: React.FC = () => {
               />
               {t('modalManager.createProduct.autoDeductScrap')}
             </label>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+              نمط التجميع
+            </label>
+            <select
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium bg-[var(--color-card)]"
+              value={form.assemblyMode ?? 'individual'}
+              onChange={(e) => setForm({
+                ...form,
+                assemblyMode: e.target.value === 'team' ? 'team' : 'individual',
+              })}
+            >
+              <option value="individual">فردي — متابعة إنتاج كل عامل</option>
+              <option value="team">جماعي — إنجاز الفريق/الخطة فقط</option>
+            </select>
+            <p className="text-xs text-[var(--color-text-muted)]">
+              المنتجات الجماعية تُخفي جدول أهداف وإنتاج العمال في التقارير مع استمرار تسجيل العمالة اليومية.
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -12,7 +12,13 @@ import { canonicalPackagingLine } from '../../../modules/production/utils/packag
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
 import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
-import { ProductionLineStatus, type PackagingReportLine, type ProductionReportShift, type ReportComponentScrapItem } from '../../../types';
+import {
+  ProductionLineStatus,
+  type PackagingReportLine,
+  type ProductionReport,
+  type ProductionReportShift,
+  type ReportComponentScrapItem,
+} from '../../../types';
 import { useTranslation } from 'react-i18next';
 import {
   isInjectionCategory,
@@ -50,6 +56,7 @@ type ReportFormState = {
   workHours: number;
   notes: string;
   packagingLines: PackagingReportLine[];
+  productionPlanId: string;
 };
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
@@ -78,11 +85,23 @@ const emptyForm = (): ReportFormState => ({
   workHours: 0,
   notes: '',
   packagingLines: [],
+  productionPlanId: '',
 });
 
 export const GlobalCreateReportModal: React.FC = () => {
   const { t } = useTranslation();
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.REPORTS_CREATE);
+  const modalPayload = payload as {
+    reportType?: ReportFormState['reportType'];
+    productionPlanId?: string;
+    productId?: string;
+    lineId?: string;
+    employeeId?: string;
+    supervisorId?: string;
+    date?: string;
+    shift?: ProductionReportShift;
+    workOrderId?: string;
+  } | undefined;
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const employees = useAppStore((s) => s.employees);
@@ -109,7 +128,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || forceInjectionOnly;
-  const isComponentEntryLocked = payload?.reportType === 'component_injection';
+  const isComponentEntryLocked = modalPayload?.reportType === 'component_injection';
   const availableReportTypes = useMemo<Array<ReportFormState['reportType']>>(() => {
     if (isComponentEntryLocked) return ['component_injection'];
     if (forcePackagingOnly) return ['packaging'];
@@ -348,9 +367,9 @@ export const GlobalCreateReportModal: React.FC = () => {
   useEffect(() => {
     if (!isOpen) return;
     const requestedType: ReportFormState['reportType'] =
-      payload?.reportType === 'component_injection'
+      modalPayload?.reportType === 'component_injection'
         ? 'component_injection'
-        : payload?.reportType === 'packaging'
+        : modalPayload?.reportType === 'packaging'
           ? 'packaging'
           : 'finished_product';
 
@@ -370,7 +389,32 @@ export const GlobalCreateReportModal: React.FC = () => {
           packagingLines: initialType === 'packaging' ? [newEmptyPackagingLine()] : [],
         }
     ));
-  }, [isOpen, payload?.reportType, availableReportTypes]);
+  }, [isOpen, modalPayload?.reportType, availableReportTypes]);
+
+  useEffect(() => {
+    if (!isOpen || !modalPayload?.productionPlanId) return;
+    setForm((prev) => ({
+      ...prev,
+      productionPlanId: modalPayload.productionPlanId ?? '',
+      productId: modalPayload.productId ?? prev.productId,
+      lineId: modalPayload.lineId ?? prev.lineId,
+      employeeId: modalPayload.supervisorId ?? modalPayload.employeeId ?? prev.employeeId,
+      date: modalPayload.date ?? prev.date,
+      shift: modalPayload.shift ?? prev.shift,
+      workOrderId: modalPayload.workOrderId ?? prev.workOrderId,
+      packagingLines: prev.reportType === 'packaging' ? prev.packagingLines : [],
+    }));
+  }, [
+    isOpen,
+    modalPayload?.productionPlanId,
+    modalPayload?.productId,
+    modalPayload?.lineId,
+    modalPayload?.supervisorId,
+    modalPayload?.employeeId,
+    modalPayload?.date,
+    modalPayload?.shift,
+    modalPayload?.workOrderId,
+  ]);
 
   useEffect(() => {
     if (!isOpen || form.reportType !== 'packaging') return;
@@ -453,7 +497,13 @@ export const GlobalCreateReportModal: React.FC = () => {
             ? { shift: form.shift }
             : {}),
         };
-      const created = await createReport(payload);
+      const reportPayload = {
+        ...payload,
+        shift: form.reportType === 'component_injection' && isInjectionShiftSelected(form.shift)
+          ? form.shift
+          : undefined,
+      } as Omit<ProductionReport, 'id' | 'createdAt'>;
+      const created = await createReport(reportPayload);
       if (!created) {
         const storeError = useAppStore.getState().error;
         openErrorOverlay(getReportDuplicateMessage(storeError, t('modalManager.createReport.saveError')));
