@@ -19,6 +19,7 @@
     "text:arabic:apply": "node scripts/fix-mojibake.mjs --apply-arabic",
     "push": "git push",
     "backup:sanitize": "node scripts/sanitize-backup.mjs",
+    "cleanup:old-line-worker-assignments": "node scripts/cleanup-old-line-worker-assignments.mjs",
     "compose:firestore-rules": "node scripts/compose-firestore-rules.mjs",
     "test:rules": "npm run compose:firestore-rules && npx firebase-tools emulators:exec --only firestore \"node tests/firestore.rules.test.mjs\"",
     "verify:firebase-env": "node scripts/verify-firebase-env.mjs",

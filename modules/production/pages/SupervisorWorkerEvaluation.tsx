@@ -20,6 +20,7 @@ import {
   LINE_WORKER_LABOR_ROLE_LABELS,
   resolveLineWorkerLaborRole,
 } from '../utils/lineWorkerLaborRoles';
+import { getPresenceLabel, summarizeWorkerPresenceByWorker } from '../utils/workerPresence';
 import type {
   FirestoreEmployee,
   LineWorkerAssignment,
@@ -47,9 +48,14 @@ type SupervisorWorkerRatingRow = {
   achievementPercent: number;
   productionTargetApplicable: boolean;
   achieved: boolean;
+  isPresent?: boolean;
   rating?: ProductionWorkerStarRating;
   ratingRecord?: ProductionWorkerRatingRecord;
   worker?: ProductionWorker;
+};
+
+type SupervisorWorkerEvaluationProps = {
+  embedded?: boolean;
 };
 
 const PERIOD_OPTIONS: { value: Period; label: string }[] = [
@@ -77,6 +83,24 @@ const emptyRating = (): ProductionWorkerStarRating => ({
   ethics: 0,
   work: 0,
 });
+
+const normalizeRatingNumber = (value: unknown) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? numericValue : 0;
+};
+
+const sanitizeSupervisorRating = (rating: ProductionWorkerStarRating): ProductionWorkerStarRating => {
+  const sanitized: ProductionWorkerStarRating = {
+    behavior: normalizeRatingNumber(rating.behavior),
+    ethics: normalizeRatingNumber(rating.ethics),
+    work: normalizeRatingNumber(rating.work),
+    notes: rating.notes ?? '',
+  };
+  if (rating.ratedBySupervisorId) sanitized.ratedBySupervisorId = rating.ratedBySupervisorId;
+  if (rating.ratedBySupervisorName) sanitized.ratedBySupervisorName = rating.ratedBySupervisorName;
+  if (rating.updatedAt !== undefined) sanitized.updatedAt = rating.updatedAt;
+  return sanitized;
+};
 
 const ratingRecordToStarRating = (record?: ProductionWorkerRatingRecord): ProductionWorkerStarRating | undefined => {
   if (!record) return undefined;
@@ -156,7 +180,7 @@ function StarRating({
   );
 }
 
-export const SupervisorWorkerEvaluation: React.FC = () => {
+export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProps> = ({ embedded = false }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
   const { can } = usePermission();
@@ -179,6 +203,7 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [ratingsLoading, setRatingsLoading] = useState(false);
   const [savingRatingWorkerId, setSavingRatingWorkerId] = useState<string | null>(null);
+  const [ratingActionErrors, setRatingActionErrors] = useState<Record<string, string>>({});
 
   const canRateWorkers = can('production.workers.manage') || can('hr.evaluation.create') || (isSelfSupervisorPage && employee?.level === 2);
   const supervisorRatingKey = employee?.id || (id ? decodeURIComponent(String(id)).trim() : '');
@@ -305,6 +330,10 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
     () => new Map(workerRatings.map((rating) => [rating.workerId, rating])),
     [workerRatings],
   );
+  const periodPresenceByWorkerId = useMemo(
+    () => summarizeWorkerPresenceByWorker(periodReports.flatMap((report) => report.workerOutputs ?? [])),
+    [periodReports],
+  );
 
   const ratingAssignmentLineIds = useMemo(() => {
     const lineIds = new Set<string>();
@@ -393,13 +422,17 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
 
     supervisorBonus.workerContributions.forEach((row) => {
       const worker = workerById.get(row.workerId);
+      const presence = periodPresenceByWorkerId.get(row.workerId);
+      const isPresent = presence?.total ? presence.present > 0 : undefined;
+      const operationalAbsent = presence?.total ? presence.present === 0 && presence.absent > 0 : false;
       rows.set(row.workerId, applyRating({
         ...row,
         workerName: worker?.name || row.workerName,
         workerCode: worker?.code,
         employeeId: worker?.employeeId,
-        productionTargetApplicable: row.targetQty > 0,
-        achieved: row.targetQty > 0 && row.achievementPercent >= 100,
+        productionTargetApplicable: !operationalAbsent && row.targetQty > 0,
+        achieved: !operationalAbsent && row.targetQty > 0 && row.achievementPercent >= 100,
+        isPresent,
         worker,
       }));
     });
@@ -410,12 +443,16 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
       if (!workerId || rows.has(workerId)) {
         const existing = rows.get(workerId);
         if (existing && !existing.laborRole) {
+          const isPresent = assignment.isPresent !== false;
           rows.set(workerId, applyRating({
             ...existing,
             employeeId: existing.employeeId || assignment.employeeId,
             lineId: existing.lineId || assignment.lineId,
             lineName: existing.lineName || getLineName(assignment.lineId),
             laborRole: resolveLineWorkerLaborRole(assignment.laborRole),
+            isPresent,
+            productionTargetApplicable: isPresent ? existing.productionTargetApplicable : false,
+            achieved: isPresent ? existing.achieved : false,
           }));
         }
         return;
@@ -435,6 +472,7 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
         achievementPercent: 0,
         productionTargetApplicable: false,
         achieved: false,
+        isPresent: assignment.isPresent !== false,
         worker,
       }));
     });
@@ -454,6 +492,7 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
         achievementPercent: 0,
         productionTargetApplicable: false,
         achieved: false,
+        isPresent: undefined,
         worker,
       }));
     });
@@ -466,6 +505,7 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
     getLineName,
     ratingDrafts,
     ratingLineAssignments,
+    periodPresenceByWorkerId,
     supervisorBonus.workerContributions,
     supervisorRatingKey,
     workerByEmployeeId,
@@ -479,15 +519,21 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
     ratingInput: ProductionWorkerStarRating,
   ) => {
     if (!canRateWorkers || !supervisorRatingKey) return;
-    const nextRating: ProductionWorkerStarRating = {
+    const nextRating = sanitizeSupervisorRating({
       ...emptyRating(),
       ...ratingInput,
       ratedBySupervisorId: supervisorRatingKey,
-      ratedBySupervisorName: employee?.name,
+      ratedBySupervisorName: employee?.name ?? '',
       updatedAt: new Date().toISOString(),
-    };
+    });
+    const actionKey = row.worker?.id || row.workerId;
 
-    setSavingRatingWorkerId(row.worker?.id || row.workerId);
+    setSavingRatingWorkerId(actionKey);
+    setRatingActionErrors((prev) => {
+      const next = { ...prev };
+      delete next[actionKey];
+      return next;
+    });
     try {
       let worker = row.worker;
       let workerId = worker?.id;
@@ -515,7 +561,7 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
         behavioralRating: Number(nextRating.behavior || 0),
         ethicalRating: Number(nextRating.ethics || 0),
         practicalRating: Number(nextRating.work || 0),
-        notes: nextRating.notes,
+        notes: nextRating.notes ?? '',
       });
       const supervisorRatings = {
         ...(worker.supervisorRatings ?? {}),
@@ -537,7 +583,7 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
         behavioralRating: nextRating.behavior,
         ethicalRating: nextRating.ethics,
         practicalRating: nextRating.work,
-        notes: nextRating.notes,
+        notes: nextRating.notes ?? '',
         managementReview: row.ratingRecord?.managementReview ?? { status: 'pending' },
         updatedAt: nextRating.updatedAt,
       };
@@ -549,10 +595,65 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
           ? prev.map((current) => (current.id === workerId ? nextWorker : current))
           : [...prev, nextWorker];
       });
+    } catch (error) {
+      console.error('SupervisorWorkerEvaluation save rating error:', error);
+      setRatingActionErrors((prev) => ({
+        ...prev,
+        [actionKey]: 'تعذر حفظ التقييم. حاول مرة أخرى.',
+      }));
     } finally {
       setSavingRatingWorkerId(null);
     }
   }, [canRateWorkers, employee?.name, ratingDate, supervisorRatingKey]);
+
+  const cancelWorkerRating = useCallback(async (row: SupervisorWorkerRatingRow) => {
+    if (!canRateWorkers || !supervisorRatingKey) return;
+    if (!window.confirm('هل تريد إلغاء تقييم هذا العامل؟')) return;
+
+    const actionKey = row.worker?.id || row.workerId;
+    const workerId = row.worker?.id || row.ratingRecord?.workerId;
+    setSavingRatingWorkerId(actionKey);
+    setRatingActionErrors((prev) => {
+      const next = { ...prev };
+      delete next[actionKey];
+      return next;
+    });
+
+    try {
+      if (workerId) {
+        await Promise.all([
+          productionWorkerRatingService.deleteSupervisorRating({
+            workerId,
+            supervisorId: supervisorRatingKey,
+            date: ratingDate,
+          }),
+          productionWorkerService.removeSupervisorRating(workerId, supervisorRatingKey),
+        ]);
+      }
+
+      setWorkerRatings((prev) => prev.filter((rating) => rating.workerId !== workerId && rating.workerId !== row.workerId));
+      setRatingDrafts((prev) => {
+        const next = { ...prev };
+        delete next[row.workerId];
+        if (workerId) delete next[workerId];
+        return next;
+      });
+      setProductionWorkers((prev) => prev.map((worker) => {
+        if (worker.id !== workerId) return worker;
+        const supervisorRatings = { ...(worker.supervisorRatings ?? {}) };
+        delete supervisorRatings[supervisorRatingKey];
+        return { ...worker, supervisorRatings };
+      }));
+    } catch (error) {
+      console.error('SupervisorWorkerEvaluation cancel rating error:', error);
+      setRatingActionErrors((prev) => ({
+        ...prev,
+        [actionKey]: 'تعذر إلغاء التقييم. حاول مرة أخرى.',
+      }));
+    } finally {
+      setSavingRatingWorkerId(null);
+    }
+  }, [canRateWorkers, ratingDate, supervisorRatingKey]);
 
   const handleWorkerRatingChange = useCallback((
     row: SupervisorWorkerRatingRow,
@@ -593,14 +694,25 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="تقييم عمال المشرف"
-        subtitle={employee.name ? `صفحة مستقلة لتقييم العمالة - ${employee.name}` : 'صفحة مستقلة لتقييم العمالة'}
-        secondaryAction={{
-          label: 'رجوع للمشرف',
-          onClick: () => navigate(id ? `/supervisors/${encodeURIComponent(id)}` : '/my-workers'),
-        }}
-      />
+      {embedded ? (
+        <Card>
+          <div className="p-4">
+            <h2 className="text-lg font-black text-[var(--color-text)]">تقييم عمال المشرف</h2>
+            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+              {employee.name ? `تقييم العمالة - ${employee.name}` : 'تقييم العمالة'}
+            </p>
+          </div>
+        </Card>
+      ) : (
+        <PageHeader
+          title="تقييم عمال المشرف"
+          subtitle={employee.name ? `صفحة مستقلة لتقييم العمالة - ${employee.name}` : 'صفحة مستقلة لتقييم العمالة'}
+          secondaryAction={{
+            label: 'رجوع للمشرف',
+            onClick: () => navigate(id ? `/supervisors/${encodeURIComponent(id)}` : '/my-workers'),
+          }}
+        />
+      )}
 
       <Card>
         <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 lg:flex-row lg:items-end lg:justify-between">
@@ -661,6 +773,8 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
               {teamWorkerRows.map((row) => {
                 const rating = row.rating ?? emptyRating();
                 const disabled = !canRateWorkers || savingRatingWorkerId === (row.worker?.id || row.workerId);
+                const actionError = ratingActionErrors[row.worker?.id || row.workerId];
+                const hasEvaluation = Boolean(row.ratingRecord || row.rating || ratingDrafts[row.workerId]);
                 const reviewStatus = row.ratingRecord?.managementReview?.status ?? 'pending';
                 return (
                   <div key={row.workerId} className="rounded-2xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 shadow-sm">
@@ -675,6 +789,11 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
                             </span>
                           )}
                           {row.lineId && <span className="rounded-full bg-slate-100 px-2 py-1">{row.lineName || getLineName(row.lineId)}</span>}
+                          {row.isPresent !== undefined && (
+                            <span className={`rounded-full px-2 py-1 ${row.isPresent ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                              {getPresenceLabel(row.isPresent)}
+                            </span>
+                          )}
                         </div>
                       </div>
                       <Badge variant={reviewStatus === 'approved' ? 'success' : reviewStatus === 'rejected' ? 'danger' : 'warning'}>
@@ -688,8 +807,8 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
                       <div className="rounded-xl bg-slate-50 p-3">
                         <div className="text-xs font-bold text-[var(--color-text-muted)]">حالة الهدف</div>
                         <div className="mt-1">
-                          <Badge variant={!row.productionTargetApplicable ? 'neutral' : row.achieved ? 'success' : 'warning'}>
-                            {!row.productionTargetApplicable ? 'غير مطبق' : row.achieved ? 'حقق الهدف' : 'لم يحقق'}
+                          <Badge variant={row.isPresent === false ? 'danger' : !row.productionTargetApplicable ? 'neutral' : row.achieved ? 'success' : 'warning'}>
+                            {row.isPresent === false ? 'غائب' : !row.productionTargetApplicable ? 'غير مطبق' : row.achieved ? 'حقق الهدف' : 'لم يحقق'}
                           </Badge>
                         </div>
                       </div>
@@ -724,16 +843,33 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
                         onChange={(event) => handleWorkerRatingNotesChange(row.workerId, event.target.value)}
                       />
                     </label>
-                    <Button
-                      type="button"
-                      size="sm"
-                      variant="outline"
-                      className="mt-2 h-10 w-full text-sm"
-                      disabled={disabled}
-                      onClick={() => void saveWorkerRating(row, rating)}
-                    >
-                      حفظ الملاحظة
-                    </Button>
+                    <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="h-10 w-full text-sm"
+                        disabled={disabled}
+                        onClick={() => void saveWorkerRating(row, rating)}
+                      >
+                        {savingRatingWorkerId === (row.worker?.id || row.workerId) ? 'جارٍ الحفظ...' : 'حفظ الملاحظة'}
+                      </Button>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="danger"
+                        className="h-10 w-full text-sm"
+                        disabled={disabled || !hasEvaluation}
+                        onClick={() => void cancelWorkerRating(row)}
+                      >
+                        إلغاء التقييم
+                      </Button>
+                    </div>
+                    {actionError && (
+                      <div className="mt-2 rounded-lg bg-rose-50 px-3 py-2 text-xs font-bold text-rose-700">
+                        {actionError}
+                      </div>
+                    )}
                     {ratingsLoading && (
                       <div className="mt-2 text-[10px] font-bold text-primary">تحميل...</div>
                     )}
@@ -753,6 +889,7 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
                       <th key={field.key} className="erp-th text-center">{field.label}</th>
                     ))}
                     <th className="erp-th">ملاحظات المشرف</th>
+                    <th className="erp-th text-center">إجراءات</th>
                     <th className="erp-th text-center">مراجعة الإدارة</th>
                   </tr>
                 </thead>
@@ -760,6 +897,8 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
                   {teamWorkerRows.map((row) => {
                     const rating = row.rating ?? emptyRating();
                     const disabled = !canRateWorkers || savingRatingWorkerId === (row.worker?.id || row.workerId);
+                    const actionError = ratingActionErrors[row.worker?.id || row.workerId];
+                    const hasEvaluation = Boolean(row.ratingRecord || row.rating || ratingDrafts[row.workerId]);
                     const reviewStatus = row.ratingRecord?.managementReview?.status ?? 'pending';
                     return (
                       <tr key={row.workerId} className="border-b border-[var(--color-border)]">
@@ -773,12 +912,17 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
                               </span>
                             )}
                             {row.lineId && <span>{row.lineName || getLineName(row.lineId)}</span>}
+                            {row.isPresent !== undefined && (
+                              <span className={row.isPresent ? 'text-emerald-700' : 'text-rose-700'}>
+                                {getPresenceLabel(row.isPresent)}
+                              </span>
+                            )}
                             {!row.worker?.id && <span className="text-amber-600">سيتم إنشاء/ربط ملف العامل عند الحفظ</span>}
                           </div>
                         </td>
                         <td className="px-4 py-3 text-center">
-                          <Badge variant={!row.productionTargetApplicable ? 'neutral' : row.achieved ? 'success' : 'warning'}>
-                            {!row.productionTargetApplicable ? 'غير مطبق' : row.achieved ? 'حقق الهدف' : 'لم يحقق'}
+                          <Badge variant={row.isPresent === false ? 'danger' : !row.productionTargetApplicable ? 'neutral' : row.achieved ? 'success' : 'warning'}>
+                            {row.isPresent === false ? 'غائب' : !row.productionTargetApplicable ? 'غير مطبق' : row.achieved ? 'حقق الهدف' : 'لم يحقق'}
                           </Badge>
                         </td>
                         <td className="px-4 py-3 text-center font-bold">
@@ -810,7 +954,24 @@ export const SupervisorWorkerEvaluation: React.FC = () => {
                             disabled={disabled}
                             onClick={() => void saveWorkerRating(row, rating)}
                           >
-                            حفظ الملاحظة
+                            {savingRatingWorkerId === (row.worker?.id || row.workerId) ? 'جارٍ الحفظ...' : 'حفظ الملاحظة'}
+                          </Button>
+                          {actionError && (
+                            <div className="mt-2 rounded-lg bg-rose-50 px-2 py-1.5 text-[11px] font-bold text-rose-700">
+                              {actionError}
+                            </div>
+                          )}
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="danger"
+                            className="h-8 text-xs"
+                            disabled={disabled || !hasEvaluation}
+                            onClick={() => void cancelWorkerRating(row)}
+                          >
+                            إلغاء التقييم
                           </Button>
                         </td>
                         <td className="px-4 py-3 text-center">

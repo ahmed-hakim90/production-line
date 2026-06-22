@@ -25,7 +25,6 @@ const RoutingAnalyticsPage = lazyNamed(() => import('../routing/pages/RoutingAna
 const LineWorkerAssignment = lazyNamed(() => import('../pages/LineWorkerAssignment'), 'LineWorkerAssignment');
 const SupplyCyclesList = lazyNamed(() => import('../pages/SupplyCyclesList'), 'SupplyCyclesList');
 const SupplyCycleDetail = lazyNamed(() => import('../pages/SupplyCycleDetail'), 'SupplyCycleDetail');
-const LineEfficiencyReport = lazyNamed(() => import('../pages/LineEfficiencyReport'), 'LineEfficiencyReport');
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/lines', permission: 'lines.view', component: Lines },
@@ -48,7 +47,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/production/workers', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkers },
   { path: '/production-workers/:id', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkerDetails },
   { path: '/production/workers/:id', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkerDetails },
-  { path: '/production/worker-reports', permissionsAny: ['production.workerReports.view', 'productionWorkers.view'], component: ProductionWorkerReports },
+  { path: '/production/worker-reports', permissionsAny: ['production.workerReports.view', 'productionWorkers.view', 'production.workers.view'], component: ProductionWorkerReports },
   { path: '/production/worker-ratings', permissionsAny: ['production.workerRatings.view', 'production.workerRatings.manage', 'hr.evaluation.approve'], component: ProductionWorkerRatingsReview },
   { path: '/reports', permission: 'reports.view', component: Reports },
   { path: '/component-waste-reports', permission: 'reports.componentWaste.create', component: ComponentWasteReports },
@@ -57,12 +56,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/quick-action', permission: 'quickAction.view', component: QuickAction, skeleton: 'form' },
   { path: '/line-workers', permission: 'lineWorkers.view', component: LineWorkerAssignment },
   { path: '/production/routing/analytics', permission: 'routing.analytics', component: RoutingAnalyticsPage },
-  {
-    path: '/production/line-efficiency',
-    permission: 'routing.analytics',
-    component: LineEfficiencyReport,
-    skeleton: 'dashboard',
-  },
+  { path: '/production/line-efficiency', redirectTo: '/reports' },
   { path: '/production/routing/execution/:executionId', permission: 'routing.execute', component: ExecutionPage },
   {
     path: '/production/routing/:productId',

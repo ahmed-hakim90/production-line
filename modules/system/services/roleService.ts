@@ -84,7 +84,6 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'inventory.exceptions.view',
           'system.readiness.view',
           'operations.inbox.view',
-          'reports.executive.export',
           'manufacturing.purchaseGap.view',
           'productionWorkers.view',
           'production.workers.view',

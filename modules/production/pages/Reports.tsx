@@ -67,6 +67,7 @@ import {
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../../../types';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import {
+  computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
 } from '../selectors/workerTargetSelector';
@@ -93,6 +94,7 @@ import {
   shouldApplyWorkersCountAutoFill,
   sumWorkersCountPatch,
 } from '../utils/lineAssignmentWorkersCount';
+import { getPresenceLabel, summarizeWorkerPresenceDays, summarizeWorkerPresenceRows } from '../utils/workerPresence';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
 import { Link, useLocation, useParams } from 'react-router-dom';
@@ -591,7 +593,9 @@ export const Reports: React.FC = () => {
   const formWorkerOutputTotal = useMemo(
     () => (form.workerOutputs || [])
       .filter((row) => row.productId === form.productId && row.lineId === form.lineId)
-      .reduce((sum, row) => sum + Number(row.outputQty || 0), 0),
+      .reduce((sum, row) => (
+        row.isPresent === false ? sum : sum + Number(row.outputQty || 0)
+      ), 0),
     [form.workerOutputs, form.productId, form.lineId],
   );
   const formQuantityDerivedFromWorkerOutputs = form.reportType === 'finished_product' && formWorkerOutputEntryEnabled;
@@ -1583,6 +1587,11 @@ export const Reports: React.FC = () => {
       const wo = woId ? woMap.get(woId) : undefined;
       const rid = (report as ProductionReport).id;
       const asSaved = report as ProductionReport;
+      const presence = summarizeWorkerPresenceDays((asSaved.workerOutputs ?? []).map((row) => ({
+        workerId: row.workerId,
+        date: asSaved.date,
+        isPresent: row.isPresent,
+      })));
       return {
         reportId: rid,
         reportCode: asSaved.reportCode,
@@ -1600,6 +1609,8 @@ export const Reports: React.FC = () => {
         workersQualityCount: report.workersQualityCount || 0,
         workersMaintenanceCount: report.workersMaintenanceCount || 0,
         workersExternalCount: report.workersExternalCount || 0,
+        presentAssignments: presence.presentDays,
+        absentAssignments: presence.absentDays,
         workHours: report.workHours || 0,
         notes: report.notes,
         costPerUnit: rid && canViewCosts ? reportCosts.get(rid) : undefined,
@@ -2222,6 +2233,19 @@ export const Reports: React.FC = () => {
       }
     }
 
+    const reportWorkerOutputs = (form.workerOutputs || [])
+      .filter((row) => row.productId === form.productId && row.lineId === form.lineId)
+      .map((row) => {
+        const isPresent = row.isPresent ?? true;
+        const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+        return {
+          ...row,
+          isPresent,
+          outputQty,
+          achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+        };
+      });
+
     const payload = {
       ...form,
       ...(form.reportType === 'packaging' && packagingLinesValid.length > 0
@@ -2244,7 +2268,7 @@ export const Reports: React.FC = () => {
       workersCount: effectiveFormWorkersCount,
     } as Omit<ProductionReport, 'id' | 'createdAt'> & { supplyCycleId?: string };
     payload.workerOutputs = formWorkerOutputsEnabled
-      ? (form.workerOutputs || []).filter((row) => row.productId === payload.productId && row.lineId === payload.lineId)
+      ? reportWorkerOutputs.filter((row) => row.productId === payload.productId && row.lineId === payload.lineId)
       : [];
     if (editId) {
       payload.supplyCycleId = autoSupplyCycleId || '';
@@ -5674,6 +5698,21 @@ export const Reports: React.FC = () => {
                     <p className="text-[var(--color-text-muted)] font-bold">خارجية</p>
                     <p className="font-black text-sm text-[var(--color-text)]">{viewWorkersData.report.workersExternalCount || 0}</p>
                   </div>
+                  {(() => {
+                    const presence = summarizeWorkerPresenceRows(viewWorkersData.workers);
+                    return (
+                      <>
+                        <div className="rounded-[var(--border-radius-base)] bg-emerald-50 px-2.5 py-2 text-center">
+                          <p className="font-bold text-emerald-700">حاضر</p>
+                          <p className="text-sm font-black text-emerald-700">{presence.present}</p>
+                        </div>
+                        <div className="rounded-[var(--border-radius-base)] bg-rose-50 px-2.5 py-2 text-center">
+                          <p className="font-bold text-rose-700">غائب</p>
+                          <p className="text-sm font-black text-rose-700">{presence.absent}</p>
+                        </div>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -5694,7 +5733,9 @@ export const Reports: React.FC = () => {
                     <span className="text-sm font-bold text-primary">{viewWorkersData.workers.length} عامل</span>
                   </div>
                   <div className="divide-y divide-slate-50">
-                    {viewWorkersData.workers.map((w, i) => (
+                    {viewWorkersData.workers.map((w, i) => {
+                      const isPresent = w.isPresent !== false;
+                      return (
                       <div key={w.id || i} className="flex items-center gap-3 py-2.5">
                         <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
                           <ReportIcon name="person" className="text-primary text-sm" />
@@ -5703,6 +5744,9 @@ export const Reports: React.FC = () => {
                           <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
                           <p className="text-xs text-[var(--color-text-muted)] font-mono">{w.employeeCode}</p>
                         </div>
+                        <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${isPresent ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                          {getPresenceLabel(isPresent)}
+                        </span>
                         <button
                           type="button"
                           onClick={() => removeWorkerFromLineDate(w.id)}
@@ -5713,7 +5757,8 @@ export const Reports: React.FC = () => {
                           <ReportIcon name="delete" className="text-base" />
                         </button>
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </>
               )}

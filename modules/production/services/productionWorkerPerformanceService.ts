@@ -26,6 +26,7 @@ import {
   resolveWorkerTarget,
 } from '../selectors/workerTargetSelector';
 import { calculateBonusEstimate, computePerformanceScore } from './productionBonusEngine';
+import { summarizeWorkerPresenceDays } from '../utils/workerPresence';
 
 const monthRange = (month: string): { start: string; end: string } => {
   const [y, m] = month.split('-').map(Number);
@@ -58,6 +59,7 @@ const resolveDailyStatus = (
 ): WorkerDailyAchievementStatus => {
   if (flags.leave) return 'leave';
   if (flags.absent) return 'absent';
+  if (targetQty <= 0) return 'no_target';
   if (outputQty <= 0) return 'no_output';
   const pct = computeAchievementPercent(outputQty, targetQty);
   if (pct > 100) return 'over_target';
@@ -75,7 +77,9 @@ function aggregateWorkerOutputsFromReports(
     if (date && report.date !== date) continue;
     const lines = report.workerOutputs ?? [];
     for (const line of lines) {
-      if (line.workerId === workerId) total += Number(line.outputQty || 0);
+      if (line.workerId === workerId && line.isPresent !== false) {
+        total += Number(line.outputQty || 0);
+      }
     }
   }
   return total;
@@ -92,6 +96,26 @@ function primaryLineProductForDay(
     if (match) return { lineId: match.lineId, productId: match.productId };
   }
   return {};
+}
+
+function workerPresenceForReports(
+  reports: ProductionReport[],
+  workerId: string,
+  date?: string,
+) {
+  const rows = reports.flatMap((report) => {
+    if (date && report.date !== date) return [];
+    return (report.workerOutputs ?? [])
+      .filter((line) => line.workerId === workerId)
+      .map((line) => ({ workerId: line.workerId, date: report.date, isPresent: line.isPresent }));
+  });
+  const summary = summarizeWorkerPresenceDays(rows);
+  const isPresent = summary.total === 0 ? undefined : summary.present > 0;
+  return {
+    ...summary,
+    isPresent,
+    operationalAbsent: summary.total > 0 && summary.present === 0 && summary.absent > 0,
+  };
 }
 
 export const productionWorkerPerformanceService = {
@@ -133,6 +157,7 @@ export const productionWorkerPerformanceService = {
       ?? await reportService.getByDateRange(date, date);
     const outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
     const { lineId, productId } = primaryLineProductForDay(reports, workerId, date);
+    const presence = workerPresenceForReports(reports, workerId, date);
     const product = context?.products?.find((p) => p.id === productId) ?? null;
     const resolved = productId
       ? resolveWorkerTarget({
@@ -145,8 +170,8 @@ export const productionWorkerPerformanceService = {
         lineProductConfigs: context?.lineProductConfigs,
       })
       : { dailyTargetQty: 0, source: 'missing' as const };
-    const targetQty = resolved.dailyTargetQty;
-    const achievementPercent = computeAchievementPercent(outputQty, targetQty);
+    const targetQty = presence.operationalAbsent ? 0 : resolved.dailyTargetQty;
+    const achievementPercent = presence.operationalAbsent ? 0 : computeAchievementPercent(outputQty, targetQty);
 
     let absent = false;
     let leave = false;
@@ -164,6 +189,7 @@ export const productionWorkerPerformanceService = {
           && req.endDate >= date,
       );
     }
+    absent = absent || presence.operationalAbsent;
 
     return {
       workerId,
@@ -174,6 +200,9 @@ export const productionWorkerPerformanceService = {
       outputQty,
       achievementPercent,
       status: resolveDailyStatus(targetQty, outputQty, { absent, leave }),
+      isPresent: presence.isPresent,
+      presentAssignments: presence.present,
+      absentAssignments: presence.absent,
     };
   },
 
@@ -218,6 +247,7 @@ export const productionWorkerPerformanceService = {
     let overTargetDays = 0;
     let monthlyTarget = 0;
     let monthlyOutput = 0;
+    const monthlyPresence = workerPresenceForReports(reports, workerId);
 
     for (const date of allDates) {
       const dayAttendance = attendanceRecords.find((r) => r.date === date);
@@ -239,6 +269,7 @@ export const productionWorkerPerformanceService = {
       workingDays += 1;
       const outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
       const { lineId, productId } = primaryLineProductForDay(reports, workerId, date);
+      const dayPresence = workerPresenceForReports(reports, workerId, date);
       const product = options?.products?.find((p) => p.id === productId) ?? null;
       const targetQty = productId
         ? resolveWorkerTarget({
@@ -252,9 +283,15 @@ export const productionWorkerPerformanceService = {
         }).dailyTargetQty
         : 0;
 
-      const absent = dayAttendance?.status === 'absent';
-      if (absent) absentDays += 1;
-      else presentDays += 1;
+      const absent = dayAttendance?.status === 'absent' || dayPresence.operationalAbsent;
+      if (dayPresence.totalDays > 0) {
+        if (dayPresence.operationalAbsent) absentDays += 1;
+        else presentDays += 1;
+      }
+
+      if (dayPresence.operationalAbsent) {
+        continue;
+      }
 
       if (outputQty <= 0) {
         if (perf.countAbsentAsZero && absent) {
@@ -280,8 +317,9 @@ export const productionWorkerPerformanceService = {
     const monthlyAchievement = monthlyTarget > 0
       ? Math.round((monthlyOutput / monthlyTarget) * 1000) / 10
       : 0;
-    const attendanceRate = workingDays > 0
-      ? Math.round((presentDays / workingDays) * 1000) / 10
+    const attendanceDenominator = presentDays + absentDays;
+    const attendanceRate = attendanceDenominator > 0
+      ? Math.round((presentDays / attendanceDenominator) * 1000) / 10
       : 0;
     const performanceScore = computePerformanceScore(monthlyAchievement, attendanceRate);
     const bonusEstimate = calculateBonusEstimate({
@@ -308,6 +346,8 @@ export const productionWorkerPerformanceService = {
       attendanceRate,
       performanceScore,
       bonusEstimate,
+      presentAssignments: monthlyPresence.present,
+      absentAssignments: monthlyPresence.absent,
     };
 
     if (options?.persistSummary !== false) {
@@ -329,7 +369,7 @@ export const productionWorkerPerformanceService = {
     products: FirestoreProduct[];
     workers: ProductionWorker[];
     targets: ProductionWorkerTarget[];
-    assignments: { workerId: string }[];
+    assignments: { workerId: string; isPresent?: boolean }[];
     lineName: string;
     productName: string;
     lineProductConfigs?: LineProductConfig[];
@@ -348,9 +388,12 @@ export const productionWorkerPerformanceService = {
     }
 
     const workerMap = new Map(workers.map((w) => [String(w.id), w]));
-    const activeWorkerIds = assignments.map((a) => a.workerId);
+    const activeWorkerAssignments = assignments.map((assignment) => ({
+      workerId: assignment.workerId,
+      isPresent: assignment.isPresent ?? true,
+    }));
 
-    return activeWorkerIds.map((workerId) => {
+    return activeWorkerAssignments.map(({ workerId, isPresent }) => {
       const worker = workerMap.get(workerId);
       const resolved = resolveReportWorkerTarget({
         productId,
@@ -367,6 +410,7 @@ export const productionWorkerPerformanceService = {
         dailyTargetQty: resolved.dailyTargetQty,
         outputQty: 0,
         achievementPercent: 0,
+        isPresent,
         notes: resolved.warning,
       };
     });
@@ -384,7 +428,14 @@ export const productionWorkerPerformanceService = {
     lineProductConfigs?: LineProductConfig[];
   }): Promise<{
     monthlyByWorkerId: Map<string, WorkerMonthlyAchievement>;
-    dailyByWorkerId: Map<string, { output: number; achievement: number; status: WorkerDailyAchievementStatus }>;
+    dailyByWorkerId: Map<string, {
+      output: number;
+      achievement: number;
+      status: WorkerDailyAchievementStatus;
+      isPresent?: boolean;
+      presentAssignments?: number;
+      absentAssignments?: number;
+    }>;
   }> {
     const settings = this.resolveSettings(params.settings);
     const { start, end } = monthRange(params.month);
@@ -397,7 +448,14 @@ export const productionWorkerPerformanceService = {
     ]);
 
     const monthlyByWorkerId = new Map<string, WorkerMonthlyAchievement>();
-    const dailyByWorkerId = new Map<string, { output: number; achievement: number; status: WorkerDailyAchievementStatus }>();
+    const dailyByWorkerId = new Map<string, {
+      output: number;
+      achievement: number;
+      status: WorkerDailyAchievementStatus;
+      isPresent?: boolean;
+      presentAssignments?: number;
+      absentAssignments?: number;
+    }>();
 
     // Sequential per-worker compute — avoids dozens of concurrent setDoc writes
     // that corrupt Firestore persistence batch state (INTERNAL ASSERTION b815/b7de).
@@ -426,6 +484,9 @@ export const productionWorkerPerformanceService = {
         output: daily.outputQty,
         achievement: daily.achievementPercent,
         status: daily.status,
+        isPresent: daily.isPresent,
+        presentAssignments: daily.presentAssignments,
+        absentAssignments: daily.absentAssignments,
       });
     }
 

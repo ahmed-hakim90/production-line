@@ -20,6 +20,7 @@ import type { ProductCostBreakdown } from './productCostBreakdown';
 import { formatOperationDateTime, getReportWaste } from './calculations';
 import type { FirestoreAttendanceLog, FirestoreLeaveRequest, FirestoreEmployeeLoan } from '../modules/hr/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../modules/hr/types';
+import { summarizeWorkerPresenceDays } from '../modules/production/utils/workerPresence';
 
 interface ReportRow {
   'كود التقرير': string;
@@ -36,6 +37,8 @@ interface ReportRow {
   'عمالة الجودة'?: number;
   'عمالة الصيانة'?: number;
   'عمالة خارجية'?: number;
+  'أيام حضور'?: number;
+  'أيام غياب'?: number;
   'ساعات العمل': number;
   'تكلفة الوحدة'?: number | string;
   'أمر الشغل'?: string;
@@ -62,6 +65,11 @@ const mapReportsToRows = (
   const hasCosts = costMap && costMap.size > 0;
   return reports.map((r) => {
     const wasteQuantity = getReportWaste(r);
+    const presence = summarizeWorkerPresenceDays((r.workerOutputs ?? []).map((row) => ({
+      workerId: row.workerId,
+      date: r.date,
+      isPresent: row.isPresent,
+    })));
     const total = (r.quantityProduced || 0) + wasteQuantity;
     const wasteRatio =
       total > 0
@@ -82,6 +90,8 @@ const mapReportsToRows = (
       'عمالة الجودة': r.workersQualityCount || 0,
       'عمالة الصيانة': r.workersMaintenanceCount || 0,
       'عمالة خارجية': r.workersExternalCount || 0,
+      'أيام حضور': presence.presentDays,
+      'أيام غياب': presence.absentDays,
       'ساعات العمل': r.workHours || 0,
     };
     if (hasCosts) {
@@ -111,6 +121,8 @@ const appendSummary = (rows: ReportRow[]): ReportRow[] => {
   const totalWorkersQuality = rows.reduce((s, r) => s + (r['عمالة الجودة'] || 0), 0);
   const totalWorkersMaintenance = rows.reduce((s, r) => s + (r['عمالة الصيانة'] || 0), 0);
   const totalWorkersExternal = rows.reduce((s, r) => s + (r['عمالة خارجية'] || 0), 0);
+  const totalPresentDays = rows.reduce((s, r) => s + (r['أيام حضور'] || 0), 0);
+  const totalAbsentDays = rows.reduce((s, r) => s + (r['أيام غياب'] || 0), 0);
   const totalHours = rows.reduce((s, r) => s + r['ساعات العمل'], 0);
   const total = totalProduced + totalWaste;
   const wasteRatio = total > 0 ? ((totalWaste / total) * 100).toFixed(1) : '0';
@@ -130,6 +142,8 @@ const appendSummary = (rows: ReportRow[]): ReportRow[] => {
     'عمالة الجودة': totalWorkersQuality,
     'عمالة الصيانة': totalWorkersMaintenance,
     'عمالة خارجية': totalWorkersExternal,
+    'أيام حضور': totalPresentDays,
+    'أيام غياب': totalAbsentDays,
     'ساعات العمل': totalHours,
   };
   if (rows[0]?.['تكلفة الوحدة'] !== undefined) {

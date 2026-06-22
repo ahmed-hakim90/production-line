@@ -15,6 +15,7 @@ import type { ShareStandardVarianceTone } from '../../../utils/productionReportS
 import { shareVarianceTailwindToneClass } from '../../../utils/productionReportStandardVariance';
 import { resolveReportType } from '../utils/reportTypes';
 import { getInjectionShiftLabel } from '../utils/injectionReportShift';
+import { summarizeWorkerPresenceDays } from '../utils/workerPresence';
 
 export type { ShareStandardVarianceTone };
 
@@ -37,6 +38,8 @@ export interface ReportPrintRow {
   workersQualityCount?: number;
   workersMaintenanceCount?: number;
   workersExternalCount?: number;
+  presentAssignments?: number;
+  absentAssignments?: number;
   workHours: number;
   notes?: string;
   costPerUnit?: number;
@@ -123,6 +126,11 @@ export const mapReportsToPrintRows = (
 ): ReportPrintRow[] =>
   reports.map((r) => {
     const wo = r.workOrderId && lookups.getWorkOrder ? lookups.getWorkOrder(r.workOrderId) : undefined;
+    const presence = summarizeWorkerPresenceDays((r.workerOutputs ?? []).map((row) => ({
+      workerId: row.workerId,
+      date: r.date,
+      isPresent: row.isPresent,
+    })));
     return {
       date: r.date,
       reportId: r.id,
@@ -140,6 +148,8 @@ export const mapReportsToPrintRows = (
       workersQualityCount: r.workersQualityCount || 0,
       workersMaintenanceCount: r.workersMaintenanceCount || 0,
       workersExternalCount: r.workersExternalCount || 0,
+      presentAssignments: presence.presentDays,
+      absentAssignments: presence.absentDays,
       workHours: r.workHours || 0,
       notes: r.notes,
       costPerUnit: r.id && costMap ? costMap.get(r.id) : undefined,
@@ -359,6 +369,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               {showWaste    && <Th align="center">الهالك</Th>}
               <Th align="center">عدد العمال</Th>
               <Th wrap>تفصيل العمالة</Th>
+              <Th wrap>الحضور</Th>
               <Th align="center">ساعات العمل</Th>
               {showCosts    && <Th align="center">تكلفة الوحدة</Th>}
             </tr>
@@ -379,6 +390,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
                 <Td wrap>
                   إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
                 </Td>
+                <Td wrap>حاضر:{row.presentAssignments ?? 0} | غائب:{row.absentAssignments ?? 0}</Td>
                 <Td align="center">{fmtNum(row.workHours, dp)}</Td>
                 {showCosts    && (
                   <Td align="center" bold color={ps.primaryColor}>
@@ -394,6 +406,7 @@ export const ProductionReportPrint = React.forwardRef<HTMLDivElement, ReportPrin
               <Td align="center" bold color="#059669">{fmtNum(t.totalProduced, dp)}</Td>
               {showWaste && <Td align="center" bold color="#f43f5e">{fmtNum(t.totalWaste, dp)}</Td>}
               <Td align="center">{fmtNum(t.totalWorkers, dp)}</Td>
+              <Td>—</Td>
               <Td>—</Td>
               <Td align="center">{fmtNum(t.totalHours, dp)}</Td>
               {showCosts && (() => {
@@ -476,6 +489,7 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
       supervisorName: report.employeeName || '—',
     };
 
+    const presenceValue = `حاضر: ${report.presentAssignments ?? 0} | غائب: ${report.absentAssignments ?? 0}`;
     const laborDistributionValue = `إنتاج: ${report.workersProductionCount ?? 0} | تغليف: ${report.workersPackagingCount ?? 0} | جودة: ${report.workersQualityCount ?? 0} | صيانة: ${report.workersMaintenanceCount ?? 0} | خارجية: ${report.workersExternalCount ?? 0}`;
     const detailSectionRows = [
       { label: 'ساعات العمل', value: `${fmtNum(report.workHours, dp)} ساعات` },
@@ -487,7 +501,10 @@ export const SingleReportPrint = React.forwardRef<HTMLDivElement, SingleReportPr
         ? []
         : (isShareImage && rt === 'component_injection'
           ? [{ label: 'إجمالي العمالة', value: String(totalWorkersForPrintRow(report)) }]
-          : [{ label: 'توزيع العمالة', value: laborDistributionValue }])),
+          : [
+            { label: 'توزيع العمالة', value: laborDistributionValue },
+            { label: 'الحضور', value: presenceValue },
+          ])),
     ];
 
     const packagingLines = report.packagingPrintLines;

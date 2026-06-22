@@ -10,7 +10,6 @@
 | `/operations` | مركز العمليات (Ops Inbox) |
 | `/inventory/analytics` | تحليلات ABC ودوران مخزون |
 | `/inventory/exceptions` | استثناءات المخزون |
-| `/reports/executive` | تقرير تنفيذي موحّد شهري |
 | `/manufacturing/purchase-gap` | فجوة الشراء + مسودات `purchase_orders` |
 | `/production/line-efficiency` | كفاءة خطوط مبسّطة |
 | `autoGenerateMaterialRequirements` | توليد احتياجات مواد تلقائياً عند حفظ الخطة |

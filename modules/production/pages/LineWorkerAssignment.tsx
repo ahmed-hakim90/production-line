@@ -3,13 +3,19 @@ import { useAppStore } from '../../../store/useAppStore';
 import { Card, Badge, Button } from '../components/UI';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
+import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
+import { productionWorkerService } from '../services/productionWorkerService';
 import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef } from '../../hr/collections';
 import { getTodayDateString } from '../../../utils/calculations';
-import type { LineWorkerAssignment as LWA, LineWorkerLaborRole } from '../../../types';
+import type {
+  LineWorkerAssignment as LWA,
+  LineWorkerLaborRole,
+  ProductionLineWorkerAssignment,
+  ProductionWorker,
+} from '../../../types';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../../hr/types';
 import {
-  DEFAULT_LINE_WORKER_LABOR_ROLE,
   LINE_WORKER_LABOR_ROLE_LABELS,
   LINE_WORKER_LABOR_ROLES,
   resolveLineWorkerLaborRole,
@@ -25,6 +31,19 @@ import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 const WORKER_POSITION_KEYWORDS = ['عامل انتاج', 'عامل إنتاج', 'عامل الانتاج', 'عامل الإنتاج'];
 
+type DisplayLineWorkerAssignment = LWA & {
+  permanentAssignmentId?: string;
+  permanentWorkerId?: string;
+  source: 'permanent' | 'legacy';
+};
+
+const isPermanentAssignmentActiveOnDate = (row: ProductionLineWorkerAssignment, date: string): boolean => {
+  if (!row.isActive) return false;
+  if (row.startDate > date) return false;
+  if (row.endDate && row.endDate < date) return false;
+  return true;
+};
+
 export const LineWorkerAssignment: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -34,19 +53,17 @@ export const LineWorkerAssignment: React.FC = () => {
 
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [selectedLineId, setSelectedLineId] = useState('');
-  const [assignments, setAssignments] = useState<LWA[]>([]);
-  const [allDayAssignments, setAllDayAssignments] = useState<LWA[]>([]);
+  const [assignments, setAssignments] = useState<DisplayLineWorkerAssignment[]>([]);
+  const [allDayAssignments, setAllDayAssignments] = useState<DisplayLineWorkerAssignment[]>([]);
   const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
   const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
   const [loading, setLoading] = useState(false);
   const [scanInput, setScanInput] = useState('');
-  const [copying, setCopying] = useState(false);
-  const [showCopyConfirm, setShowCopyConfirm] = useState(false);
-  const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
-  const [selectedLaborRole, setSelectedLaborRole] = useState<LineWorkerLaborRole>(DEFAULT_LINE_WORKER_LABOR_ROLE);
-  const [updatingLaborRoleId, setUpdatingLaborRoleId] = useState<string | null>(null);
-
   const [showSuggestions, setShowSuggestions] = useState(false);
+  const [savingPermanentLink, setSavingPermanentLink] = useState(false);
+  const [endingPermanentAssignmentId, setEndingPermanentAssignmentId] = useState<string | null>(null);
+  const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
+  const [updatingLaborRoleId, setUpdatingLaborRoleId] = useState<string | null>(null);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
 
   const inputRef = useRef<HTMLInputElement>(null);
@@ -120,10 +137,69 @@ export const LineWorkerAssignment: React.FC = () => {
     [visibleLines],
   );
 
+  const buildPermanentDisplayRows = useCallback((
+    permanentRows: ProductionLineWorkerAssignment[],
+    workersById: Map<string, ProductionWorker>,
+    dailyRows: LWA[],
+  ): DisplayLineWorkerAssignment[] => {
+    const dailyByLineEmployee = new Map(
+      dailyRows
+        .filter((row) => row.lineId && row.employeeId)
+        .map((row) => [`${row.lineId}_${row.employeeId}`, row]),
+    );
+
+    return permanentRows
+      .map((row): DisplayLineWorkerAssignment | null => {
+        const worker = workersById.get(row.workerId);
+        if (!worker || worker.isActive === false) return null;
+        const employeeId = String(worker.employeeId || row.workerId).trim();
+        const daily = dailyByLineEmployee.get(`${row.lineId}_${employeeId}`);
+        return {
+          id: daily?.id,
+          permanentAssignmentId: row.id,
+          permanentWorkerId: row.workerId,
+          source: 'permanent' as const,
+          lineId: row.lineId,
+          employeeId,
+          employeeCode: String(daily?.employeeCode || worker.code || '').trim(),
+          employeeName: String(daily?.employeeName || worker.name || employeeId).trim(),
+          date: selectedDate,
+          laborRole: daily?.laborRole,
+          isPresent: daily?.isPresent ?? true,
+          assignedAt: daily?.assignedAt,
+          assignedBy: daily?.assignedBy,
+        };
+      })
+      .filter((row): row is DisplayLineWorkerAssignment => Boolean(row));
+  }, [selectedDate]);
+
   const loadAssignments = useCallback(async () => {
     setLoading(true);
     try {
-      const all = await lineAssignmentService.getByDate(selectedDate);
+      const [dailyRows, productionWorkers, permanentByLine] = await Promise.all([
+        lineAssignmentService.getByDate(selectedDate),
+        productionWorkerService.getAll(),
+        Promise.all(
+          visibleLineIdList.map(async (lineId) => ({
+            lineId,
+            rows: await productionLineWorkerAssignmentService.getActiveByLineAndDate(lineId, selectedDate),
+          })),
+        ),
+      ]);
+
+      const workersById = new Map(productionWorkers.map((worker) => [String(worker.id || ''), worker]));
+      const permanentRows = permanentByLine.flatMap(({ rows }) => rows);
+      const linesWithPermanent = new Set(permanentByLine.filter(({ rows }) => rows.length > 0).map(({ lineId }) => lineId));
+      const permanentDisplayRows = buildPermanentDisplayRows(permanentRows, workersById, dailyRows);
+      const legacyRows = (
+        await Promise.all(
+          visibleLineIdList
+            .filter((lineId) => !linesWithPermanent.has(lineId))
+            .map((lineId) => lineAssignmentService.getByLineAndDate(lineId, selectedDate)),
+        )
+      ).flat().map((row) => ({ ...row, source: 'legacy' as const }));
+
+      const all = [...permanentDisplayRows, ...legacyRows];
       const scopedAssignments = isSupervisorReporter
         ? all.filter((a) => visibleLineIds.has(String(a.lineId || '').trim()))
         : all;
@@ -138,7 +214,14 @@ export const LineWorkerAssignment: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [selectedDate, selectedLineId, isSupervisorReporter, visibleLineIds]);
+  }, [
+    selectedDate,
+    selectedLineId,
+    isSupervisorReporter,
+    visibleLineIds,
+    visibleLineIdList,
+    buildPermanentDisplayRows,
+  ]);
 
   useEffect(() => {
     loadAssignments();
@@ -150,12 +233,6 @@ export const LineWorkerAssignment: React.FC = () => {
     setSelectedLineId('');
   }, [selectedLineId, visibleLineIds]);
 
-  useEffect(() => {
-    if (selectedLineId && inputRef.current) {
-      inputRef.current.focus();
-    }
-  }, [selectedLineId, assignments]);
-
   const showFeedback = (type: 'success' | 'error' | 'warning', message: string) => {
     showAppToast(type, message);
   };
@@ -163,70 +240,6 @@ export const LineWorkerAssignment: React.FC = () => {
   const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name ?? '';
   const getPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '';
   const getLineName = (id: string) => _rawLines.find((l) => l.id === id)?.name ?? id;
-
-  const handleScan = useCallback(async (code: string) => {
-    const trimmed = code.trim();
-    if (!trimmed || !selectedLineId) return;
-    if (isSupervisorReporter && !visibleLineIds.has(selectedLineId)) {
-      showFeedback('error', 'لا يمكنك تسجيل عمالة على خط غير مربوط بك');
-      setScanInput('');
-      return;
-    }
-
-    const employee = _rawEmployees.find((e) => e.code === trimmed);
-    if (!employee) {
-      showFeedback('error', `كود "${trimmed}" غير معروف`);
-      setScanInput('');
-      inputRef.current?.focus();
-      return;
-    }
-
-    if (employee.isActive === false) {
-      showFeedback('error', `${employee.name} — السجل غير نشط`);
-      setScanInput('');
-      inputRef.current?.focus();
-      return;
-    }
-
-    const existingOnLine = allDayAssignments.find(
-      (a) => a.employeeId === employee.id && a.lineId === selectedLineId
-    );
-    if (existingOnLine) {
-      showFeedback('warning', `${employee.name} مسجل بالفعل على هذا الخط`);
-      setScanInput('');
-      inputRef.current?.focus();
-      return;
-    }
-
-    const existingOnOther = allDayAssignments.find(
-      (a) => a.employeeId === employee.id && a.lineId !== selectedLineId
-    );
-    if (existingOnOther) {
-      const otherLineName = getLineName(existingOnOther.lineId);
-      showFeedback('warning', `${employee.name} مسجل على "${otherLineName}" — أزله من هناك أولاً أو انقله`);
-      setScanInput('');
-      inputRef.current?.focus();
-      return;
-    }
-
-    try {
-      await lineAssignmentService.create({
-        lineId: selectedLineId,
-        employeeId: employee.id!,
-        employeeCode: employee.code || trimmed,
-        employeeName: employee.name,
-        laborRole: selectedLaborRole,
-        date: selectedDate,
-        assignedBy: uid || '',
-      });
-      showFeedback('success', `تمت إضافة ${employee.name}`);
-      setScanInput('');
-      await loadAssignments();
-    } catch {
-      showFeedback('error', 'حدث خطأ أثناء الحفظ');
-    }
-    inputRef.current?.focus();
-  }, [selectedLineId, selectedDate, selectedLaborRole, isSupervisorReporter, visibleLineIds, _rawEmployees, allDayAssignments, uid, loadAssignments]);
 
   const handleLaborRoleChange = async (assignmentId: string, laborRole: LineWorkerLaborRole) => {
     setUpdatingLaborRoleId(assignmentId);
@@ -265,20 +278,133 @@ export const LineWorkerAssignment: React.FC = () => {
     </Select>
   );
 
+  const handlePermanentAdd = useCallback(async (selectedEmployee?: typeof _rawEmployees[number]) => {
+    if (!selectedLineId) {
+      showFeedback('warning', 'اختر خط الإنتاج أولاً');
+      return;
+    }
+    if (isSupervisorReporter && !visibleLineIds.has(selectedLineId)) {
+      showFeedback('error', 'لا يمكنك ربط عامل على خط غير مربوط بك');
+      return;
+    }
+
+    const trimmed = scanInput.trim();
+    const employee = selectedEmployee ?? _rawEmployees.find((e) => e.code === trimmed || e.id === trimmed);
+    if (!employee?.id) {
+      showFeedback('error', trimmed ? `كود "${trimmed}" غير معروف` : 'اختر عامل للإضافة');
+      inputRef.current?.focus();
+      return;
+    }
+    if (employee.isActive === false) {
+      showFeedback('error', `${employee.name} — السجل غير نشط`);
+      inputRef.current?.focus();
+      return;
+    }
+
+    setSavingPermanentLink(true);
+    try {
+      const linkStartDate = getTodayDateString();
+      const workerId = await productionWorkerService.linkEmployee({
+        employeeId: employee.id,
+        name: employee.name,
+        code: employee.code,
+        defaultLineId: selectedLineId,
+        isActive: true,
+      });
+      if (!workerId) {
+        showFeedback('error', 'تعذر إنشاء/تحديد ملف عامل الإنتاج');
+        return;
+      }
+
+      const workerAssignments = await productionLineWorkerAssignmentService.getByWorker(workerId);
+      const activeAssignment = workerAssignments.find((row) => isPermanentAssignmentActiveOnDate(row, linkStartDate));
+      if (activeAssignment) {
+        const lineName = getLineName(activeAssignment.lineId);
+        showFeedback(
+          'warning',
+          activeAssignment.lineId === selectedLineId
+            ? `${employee.name} مربوط بالفعل بهذا الخط`
+            : `${employee.name} مربوط حالياً على "${lineName}" — أنهِ الربط الحالي أولاً`,
+        );
+        return;
+      }
+
+      await productionLineWorkerAssignmentService.create({
+        workerId,
+        lineId: selectedLineId,
+        startDate: linkStartDate,
+        isActive: true,
+      });
+
+      const worker = await productionWorkerService.getById(workerId);
+      if (worker) {
+        const lineIds = Array.from(new Set([...(worker.lineIds || []), selectedLineId]));
+        await productionWorkerService.update(workerId, {
+          lineIds,
+          defaultLineId: worker.defaultLineId || selectedLineId,
+        });
+      }
+
+      setScanInput('');
+      setShowSuggestions(false);
+      await loadAssignments();
+      showFeedback('success', `تم ربط ${employee.name} بالخط ربطاً دائماً`);
+    } catch {
+      showFeedback('error', 'حدث خطأ أثناء حفظ الربط الدائم');
+    } finally {
+      setSavingPermanentLink(false);
+      inputRef.current?.focus();
+    }
+  }, [
+    selectedLineId,
+    isSupervisorReporter,
+    visibleLineIds,
+    scanInput,
+    _rawEmployees,
+    getLineName,
+    loadAssignments,
+  ]);
+
+  const handleEndPermanentAssignment = async (assignment: DisplayLineWorkerAssignment) => {
+    if (!assignment.permanentAssignmentId) {
+      showFeedback('warning', 'هذا سجل يومي قديم فقط. لا يوجد ربط دائم لإلغائه من هنا.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `إلغاء الربط الدائم لـ ${getAssignmentEmployeeName(assignment)} من خط ${getLineName(assignment.lineId)}؟`,
+    );
+    if (!confirmed) return;
+
+    setEndingPermanentAssignmentId(assignment.permanentAssignmentId);
+    try {
+      await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, {
+        isActive: false,
+        endDate: getTodayDateString(),
+      });
+      await loadAssignments();
+      showFeedback('success', 'تم إلغاء الربط الدائم للعامل');
+    } catch {
+      showFeedback('error', 'حدث خطأ أثناء إلغاء الربط الدائم');
+    } finally {
+      setEndingPermanentAssignmentId(null);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
       setShowSuggestions(false);
-      handleScan(scanInput);
+      void handlePermanentAdd();
     } else if (e.key === 'Escape') {
       setShowSuggestions(false);
     }
   };
 
-  const handleSelectWorker = (emp: typeof _rawEmployees[0]) => {
+  const handleSelectWorker = (emp: typeof _rawEmployees[number]) => {
     setShowSuggestions(false);
     setScanInput('');
-    handleScan(emp.code ?? '');
+    void handlePermanentAdd(emp);
   };
 
   useEffect(() => {
@@ -296,93 +422,8 @@ export const LineWorkerAssignment: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleRemove = async (id: string) => {
-    try {
-      await lineAssignmentService.delete(id);
-      await loadAssignments();
-    } catch {
-      showFeedback('error', 'حدث خطأ أثناء الحذف');
-    }
-  };
-
-  const handleCopyFromLastAvailableDay = async () => {
-    const existingToday = selectedLineId
-      ? assignments
-      : allDayAssignments;
-
-    if (existingToday.length > 0) {
-      setShowCopyConfirm(true);
-      return;
-    }
-    await doCopy();
-  };
-
-  const doCopy = async () => {
-    setCopying(true);
-    setShowCopyConfirm(false);
-    try {
-      const activeIds = new Set(
-        _rawEmployees.filter((e) => e.isActive !== false).map((e) => e.id!)
-      );
-      const employeeDirectory = new Map(
-        _rawEmployees
-          .filter((e) => Boolean(e.id))
-          .map((e) => [String(e.id), { name: e.name, code: e.code }])
-      );
-
-      const copyLine = async (lineId?: string) => {
-        const sourceDate = await lineAssignmentService.getLatestSourceDateBefore(selectedDate, lineId);
-        if (!sourceDate) return { count: 0, sourceDate: null as string | null };
-        const count = await lineAssignmentService.copyFromDate(
-          sourceDate,
-          selectedDate,
-          lineId,
-          uid || '',
-          activeIds,
-          employeeDirectory,
-        );
-        return { count, sourceDate };
-      };
-
-      let count = 0;
-      const sourceDates = new Set<string>();
-      if (isSupervisorReporter) {
-        const lineIdsToCopy = selectedLineId ? [selectedLineId] : visibleLineIdList;
-        if (lineIdsToCopy.length === 0 || lineIdsToCopy.some((lineId) => !visibleLineIds.has(lineId))) {
-          showFeedback('warning', 'لا توجد خطوط مربوطة بك للنسخ');
-          return;
-        }
-        for (const lineId of lineIdsToCopy) {
-          const result = await copyLine(lineId);
-          count += result.count;
-          if (result.sourceDate) sourceDates.add(result.sourceDate);
-        }
-      } else {
-        const result = await copyLine(selectedLineId || undefined);
-        count = result.count;
-        if (result.sourceDate) sourceDates.add(result.sourceDate);
-      }
-
-      const sourceDateLabel = Array.from(sourceDates).sort().pop();
-      if (!sourceDateLabel) {
-        showFeedback('warning', 'لا يوجد يوم سابق مسجل فيه عمالة للنسخ');
-        return;
-      }
-      if (count > 0) {
-        showFeedback('success', `تم نسخ ${count} عامل من ${sourceDateLabel}`);
-      } else {
-        showFeedback('warning', `لا يوجد عمالة جديدة لنسخها من ${sourceDateLabel}`);
-      }
-      await loadAssignments();
-    } catch {
-      showFeedback('error', 'حدث خطأ أثناء النسخ');
-    } finally {
-      setCopying(false);
-    }
-  };
-
   const lineGroups = useMemo(() => {
-    const map = new Map<string, LWA[]>();
+    const map = new Map<string, DisplayLineWorkerAssignment[]>();
     for (const a of allDayAssignments) {
       if (!map.has(a.lineId)) map.set(a.lineId, []);
       map.get(a.lineId)!.push(a);
@@ -429,13 +470,13 @@ export const LineWorkerAssignment: React.FC = () => {
     );
   }, [jobPositions]);
 
-  const productionWorkers = useMemo(() => {
+  const productionEmployees = useMemo(() => {
     return _rawEmployees.filter(
-      (e) => e.isActive !== false && workerPositionIds.has(e.jobPositionId)
+      (e) => e.isActive !== false && (workerPositionIds.size === 0 || workerPositionIds.has(e.jobPositionId))
     );
   }, [_rawEmployees, workerPositionIds]);
 
-  const assignedEmployeeIds = useMemo(
+  const linkedEmployeeIds = useMemo(
     () => new Set(allDayAssignments.map((a) => a.employeeId)),
     [allDayAssignments]
   );
@@ -443,14 +484,14 @@ export const LineWorkerAssignment: React.FC = () => {
   const searchResults = useMemo(() => {
     const q = scanInput.trim().toLowerCase();
     if (!q) return [];
-    return productionWorkers
+    return productionEmployees
       .filter((e) => {
         const nameMatch = e.name.toLowerCase().includes(q);
         const codeMatch = (e.code ?? '').toLowerCase().includes(q);
         return nameMatch || codeMatch;
       })
       .slice(0, 8);
-  }, [scanInput, productionWorkers]);
+  }, [scanInput, productionEmployees]);
 
   const formatTime = (ts: any) => {
     if (!ts) return '—';
@@ -463,8 +504,8 @@ export const LineWorkerAssignment: React.FC = () => {
       {/* Header */}
       <div className="erp-page-head">
         <div>
-          <h2 className="page-title">ربط العمالة بخطوط الإنتاج</h2>
-          <p className="page-subtitle">تسجيل العمالة اليومية على خطوط الإنتاج بالباركود أو يدوياً</p>
+          <h2 className="page-title">ربط العمالة الدائم بالخط</h2>
+          <p className="page-subtitle">إدارة الربط الدائم بين عمال الإنتاج وخطوط الإنتاج. التاريخ هنا لعرض حضور/حالة اليوم فقط ولا يُستخدم كربط يومي.</p>
         </div>
       </div>
 
@@ -494,51 +535,23 @@ export const LineWorkerAssignment: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            variant="outline"
-            onClick={handleCopyFromLastAvailableDay}
-            disabled={copying}
-            className="shrink-0"
-          >
-            {copying ? (
-              <span className="material-icons-round animate-spin text-sm">refresh</span>
-            ) : (
-              <span className="material-icons-round text-sm">content_copy</span>
-            )}
-            نسخ من آخر يوم
-          </Button>
         </div>
+        <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
+          تم إيقاف النسخ اليومي. أي إضافة من هذه الصفحة تنشئ ربطاً دائماً في سجل عمال الإنتاج، وليس سجل حضور يومي.
+        </p>
       </Card>
 
-      {/* Scanner Section */}
       {selectedLineId && (
         <Card className="relative z-20 !overflow-visible">
           <div className="space-y-3">
             <div className="flex items-center gap-2 mb-1">
-              <span className="material-icons-round text-primary text-xl">qr_code_scanner</span>
-              <h3 className="font-bold text-base">اسم / إدخال كود العامل</h3>
+              <span className="material-icons-round text-primary text-xl">person_add</span>
+              <h3 className="font-bold text-base">إضافة عامل للربط الدائم</h3>
             </div>
+            <p className="text-xs text-[var(--color-text-muted)] font-medium">
+              يتم إنشاء الربط الدائم من اليوم. لا يتم إنشاء سجل حضور يومي إلا من مسارات الحضور/التقرير.
+            </p>
             <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
-              <div className="w-full sm:w-[132px] shrink-0">
-                <Select
-                  value={selectedLaborRole}
-                  onValueChange={(value) => setSelectedLaborRole(value as LineWorkerLaborRole)}
-                >
-                  <SelectTrigger
-                    aria-label="نوع العامل"
-                    className="w-full h-[46px] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 text-sm"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LINE_WORKER_LABOR_ROLES.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {LINE_WORKER_LABOR_ROLE_LABELS[role]}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
               <div className="flex-1 relative">
                 <input
                   ref={inputRef}
@@ -559,15 +572,14 @@ export const LineWorkerAssignment: React.FC = () => {
                     className="absolute z-50 top-full mt-1 w-full bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] max-h-64 overflow-y-auto"
                   >
                     {searchResults.map((emp) => {
-                      const alreadyAssigned = assignedEmployeeIds.has(emp.id!);
-                      const onThisLine = assignments.some((a) => a.employeeId === emp.id);
+                      const alreadyLinked = linkedEmployeeIds.has(emp.id!);
                       return (
                         <button
                           key={emp.id}
-                          onClick={() => !alreadyAssigned && handleSelectWorker(emp)}
-                          disabled={alreadyAssigned}
+                          onClick={() => !alreadyLinked && handleSelectWorker(emp)}
+                          disabled={alreadyLinked || savingPermanentLink}
                           className={`w-full flex items-center gap-3 px-4 py-2.5 text-sm text-right transition-colors ${
-                            alreadyAssigned
+                            alreadyLinked
                               ? 'opacity-50 cursor-not-allowed bg-[#f8f9fa]/50'
                               : 'hover:bg-primary/5 cursor-pointer'
                           }`}
@@ -579,9 +591,9 @@ export const LineWorkerAssignment: React.FC = () => {
                             <p className="font-bold text-[var(--color-text)] truncate">{emp.name}</p>
                             <p className="text-xs text-slate-400">{emp.code} — {getPositionTitle(emp.jobPositionId)}</p>
                           </div>
-                          {alreadyAssigned && (
+                          {alreadyLinked && (
                             <span className="text-xs font-bold text-amber-500 shrink-0">
-                              {onThisLine ? 'مسجل هنا' : 'مسجل على خط آخر'}
+                              مربوط حالياً
                             </span>
                           )}
                         </button>
@@ -599,16 +611,19 @@ export const LineWorkerAssignment: React.FC = () => {
                   </div>
                 )}
               </div>
-              <button
-                onClick={() => handleScan(scanInput)}
-                disabled={!scanInput.trim()}
-                className="h-[46px] px-4 bg-primary text-white rounded-[var(--border-radius-lg)] hover:bg-primary/90 transition-colors shrink-0 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
+              <Button
+                onClick={() => void handlePermanentAdd()}
+                disabled={!scanInput.trim() || savingPermanentLink}
+                className="h-[46px] shrink-0"
               >
-                <span className="material-icons-round text-xl">add_circle</span>
-                <span className="text-sm font-bold hidden sm:inline">إضافة</span>
-              </button>
+                {savingPermanentLink ? (
+                  <span className="material-icons-round animate-spin text-sm">refresh</span>
+                ) : (
+                  <span className="material-icons-round text-sm">link</span>
+                )}
+                ربط دائم
+              </Button>
             </div>
-
           </div>
         </Card>
       )}
@@ -620,7 +635,7 @@ export const LineWorkerAssignment: React.FC = () => {
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-primary">groups</span>
               <h3 className="font-bold text-base">
-                عمالة {getLineName(selectedLineId)}
+                عمالة {getLineName(selectedLineId)} المرتبطة دائماً
               </h3>
               <Badge variant="info">{assignments.length} عامل</Badge>
             </div>
@@ -634,9 +649,9 @@ export const LineWorkerAssignment: React.FC = () => {
             </div>
           ) : assignments.length === 0 ? (
             <div className="text-center py-10">
-              <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">person_add</span>
-              <p className="page-subtitle">لم يتم تسجيل عمالة على هذا الخط بعد</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">امسح باركود العامل أو اكتب الكود يدوياً</p>
+              <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">groups</span>
+              <p className="page-subtitle">لا يوجد عمال مربوطون دائماً على هذا الخط</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">استخدم البحث بالأعلى لإضافة ربط دائم جديد.</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -648,16 +663,19 @@ export const LineWorkerAssignment: React.FC = () => {
                     <th className="erp-th">النوع</th>
                     <th className="erp-th hidden sm:table-cell">القسم</th>
                     <th className="erp-th hidden sm:table-cell">المنصب</th>
-                    <th className="erp-th">وقت التسجيل</th>
-                    <th className="erp-th w-10"></th>
+                    <th className="erp-th">حالة اليوم</th>
+                    <th className="erp-th">وقت تحديث اليوم</th>
+                    <th className="erp-th w-28">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
                   {assignments.map((a) => {
                     const emp = getEmployeeInfo(a.employeeId);
+                    const canUpdateDailyStatus = Boolean(a.id);
+                    const ending = endingPermanentAssignmentId === a.permanentAssignmentId;
                     return (
                       <tr
-                        key={a.id}
+                        key={a.id || `${a.lineId}_${a.employeeId}`}
                         className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors"
                       >
                         <td className="py-2.5 px-3">
@@ -669,15 +687,32 @@ export const LineWorkerAssignment: React.FC = () => {
                         <td className="py-2.5 px-3">{renderLaborRoleSelect(a, true)}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getDeptName(emp.departmentId) : '—'}</td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] hidden sm:table-cell">{emp ? getPositionTitle(emp.jobPositionId) : '—'}</td>
+                        <td className="py-2.5 px-3">
+                          <Badge variant={a.isPresent === false ? 'danger' : 'success'}>
+                            {a.isPresent === false ? 'غائب' : 'حاضر'}
+                          </Badge>
+                          {!canUpdateDailyStatus && (
+                            <p className="mt-1 text-[10px] font-bold text-amber-600">
+                              لا يوجد سجل حضور يومي بعد؛ يتم عرضه من الربط الدائم
+                            </p>
+                          )}
+                        </td>
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] text-xs">{formatTime(a.assignedAt)}</td>
                         <td className="py-2.5 px-1">
-                          <button
-                            onClick={() => handleRemove(a.id!)}
-                            className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all"
-                            title="إزالة"
+                          <Button
+                            variant="outline"
+                            onClick={() => void handleEndPermanentAssignment(a)}
+                            disabled={!a.permanentAssignmentId || ending}
+                            className="text-xs"
                           >
-                            <span className="material-icons-round text-base">close</span>
-                          </button>
+                            {ending && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                            إلغاء الربط
+                          </Button>
+                          {a.source === 'legacy' && (
+                            <p className="mt-1 text-[10px] font-bold text-amber-600">
+                              سجل يومي قديم للقراءة فقط
+                            </p>
+                          )}
                         </td>
                       </tr>
                     );
@@ -693,14 +728,14 @@ export const LineWorkerAssignment: React.FC = () => {
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-primary">summarize</span>
-          <h3 className="font-bold text-base">تقرير اليوم</h3>
+          <h3 className="font-bold text-base">ملخص الربط وحالة اليوم</h3>
           <Badge variant="info">{allDayAssignments.length} عامل إجمالي</Badge>
         </div>
 
         {lineGroups.length === 0 ? (
           <div className="text-center py-8">
             <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">assignment</span>
-            <p className="page-subtitle">لا يوجد تسجيلات لهذا اليوم</p>
+            <p className="page-subtitle">لا يوجد ربط دائم أو بيانات يومية قديمة لهذا العرض</p>
           </div>
         ) : (
           <>
@@ -744,7 +779,7 @@ export const LineWorkerAssignment: React.FC = () => {
                         {g.workers.map((w) => {
                           const emp = getEmployeeInfo(w.employeeId);
                           return (
-                            <div key={w.id} className="flex items-center justify-between py-2 text-sm">
+                            <div key={w.permanentAssignmentId || w.id || `${w.lineId}_${w.employeeId}`} className="flex items-center justify-between py-2 text-sm">
                               <div className="flex items-center gap-3">
                                 <span className="inline-flex items-center px-2 py-0.5 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-xs font-mono font-bold">
                                   {getAssignmentEmployeeCode(w)}
@@ -770,28 +805,6 @@ export const LineWorkerAssignment: React.FC = () => {
           </>
         )}
       </Card>
-
-      {/* Copy Confirm Modal */}
-      {showCopyConfirm && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowCopyConfirm(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6" onClick={(e) => e.stopPropagation()}>
-            <div className="w-14 h-14 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4">
-              <span className="material-icons-round text-amber-500 text-2xl">content_copy</span>
-            </div>
-            <h3 className="text-lg font-bold text-center mb-2">نسخ من آخر يوم</h3>
-            <p className="text-sm text-[var(--color-text-muted)] text-center mb-6">
-              يوجد عمالة مسجلة بالفعل لهذا اليوم. سيتم إضافة العمالة الناقصة فقط (بدون تكرار).
-            </p>
-            <div className="flex items-center justify-center gap-3">
-              <Button variant="outline" onClick={() => setShowCopyConfirm(false)}>إلغاء</Button>
-              <Button variant="primary" onClick={doCopy} disabled={copying}>
-                {copying && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                إضافة الناقص
-              </Button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

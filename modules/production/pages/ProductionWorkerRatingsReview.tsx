@@ -29,6 +29,10 @@ const RATING_FIELDS: { key: 'behavioralRating' | 'ethicalRating' | 'practicalRat
   { key: 'practicalRating', label: 'عملياً' },
 ];
 
+type ProductionWorkerRatingsReviewProps = {
+  embedded?: boolean;
+};
+
 function StarRating({
   value,
   onChange,
@@ -81,7 +85,7 @@ const emptyReview = (): ProductionWorkerManagementReview => ({
   notes: '',
 });
 
-export const ProductionWorkerRatingsReview: React.FC = () => {
+export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsReviewProps> = ({ embedded = false }) => {
   const { can } = usePermission();
   const canReview = can('production.workerRatings.manage') || can('hr.evaluation.approve');
   const canView = canReview || can('production.workerRatings.view') || can('production.workers.manage');
@@ -167,11 +171,25 @@ export const ProductionWorkerRatingsReview: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <PageHeader
-        title="مراجعة تقييمات العمال"
-        subtitle="اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة"
-        secondaryAction={{ label: 'تحديث', onClick: () => void load() }}
-      />
+      {embedded ? (
+        <Card>
+          <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-black text-[var(--color-text)]">مراجعة تقييمات العمال</h2>
+              <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة.
+              </p>
+            </div>
+            <Button type="button" variant="outline" onClick={() => void load()}>تحديث</Button>
+          </div>
+        </Card>
+      ) : (
+        <PageHeader
+          title="مراجعة تقييمات العمال"
+          subtitle="اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة"
+          secondaryAction={{ label: 'تحديث', onClick: () => void load() }}
+        />
+      )}
 
       <Card>
         <div className="flex flex-wrap items-end gap-3 border-b border-[var(--color-border)] p-4">

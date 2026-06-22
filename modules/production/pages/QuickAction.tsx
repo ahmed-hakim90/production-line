@@ -19,6 +19,7 @@ import {
   shouldApplyWorkersCountAutoFill,
   sumWorkersCountPatch,
 } from '../utils/lineAssignmentWorkersCount';
+import { lineAssignmentWorkerBridge } from '../services/lineAssignmentWorkerBridge';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
@@ -42,6 +43,7 @@ import {
 import { ProductionReportShareCard } from '../components/ProductionReportShareCard';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import {
+  computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
 } from '../selectors/workerTargetSelector';
@@ -162,7 +164,11 @@ const isQuickActionFormDraftEmpty = (draft: QuickActionFormDraft) => (
   && !draft.notes.trim()
   && draft.componentScrapItems.length === 0
   && !draft.selectedWorkOrderId
-  && draft.workerOutputs.every((row) => Number(row.outputQty || 0) <= 0 && !row.notes?.trim())
+  && draft.workerOutputs.every((row) => (
+    row.isPresent !== false
+    && Number(row.outputQty || 0) <= 0
+    && !row.notes?.trim()
+  ))
 );
 
 export const QuickAction: React.FC = () => {
@@ -215,10 +221,9 @@ export const QuickAction: React.FC = () => {
   const [supervisorLinesLoaded, setSupervisorLinesLoaded] = useState(false);
   const [showLineWorkers, setShowLineWorkers] = useState(false);
   const [loadingWorkersCount, setLoadingWorkersCount] = useState(false);
-  const [workerPickerId, setWorkerPickerId] = useState('');
-  const [workerActionBusy, setWorkerActionBusy] = useState(false);
   const [workerActionError, setWorkerActionError] = useState<string | null>(null);
   const [updatingWorkerRoleId, setUpdatingWorkerRoleId] = useState<string | null>(null);
+  const [updatingWorkerPresenceId, setUpdatingWorkerPresenceId] = useState<string | null>(null);
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
   const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
@@ -235,7 +240,9 @@ export const QuickAction: React.FC = () => {
   const workerOutputTotal = useMemo(
     () => workerOutputs
       .filter((row) => row.productId === productId && row.lineId === lineId)
-      .reduce((sum, row) => sum + Number(row.outputQty || 0), 0),
+      .reduce((sum, row) => (
+        row.isPresent === false ? sum : sum + Number(row.outputQty || 0)
+      ), 0),
     [workerOutputs, productId, lineId],
   );
   const quantityDerivedFromWorkerOutputs = reportType === 'finished_product' && workerOutputEntryEnabled;
@@ -649,21 +656,6 @@ export const QuickAction: React.FC = () => {
     (id: string) => employees.find((s) => s.id === id)?.name ?? '—',
     [employees]
   );
-  const assignableEmployees = useMemo(
-    () => employees.filter((e) => e.isActive),
-    [employees],
-  );
-
-  const addableWorkerOptions = useMemo(
-    () => assignableEmployees
-      .filter((e) => !lineWorkers.some((w) => w.employeeId === e.id))
-      .map((e) => ({
-        value: e.id,
-        label: e.code ? `${e.name} (${e.code})` : e.name,
-      })),
-    [assignableEmployees, lineWorkers],
-  );
-
   const currentEmployee = useMemo(
     () => _rawEmployees.find((e) => e.userId === uid) ?? null,
     [_rawEmployees, uid],
@@ -752,57 +744,6 @@ export const QuickAction: React.FC = () => {
     setSelectedWorkOrderId('');
   }, [lineId, allowedLinesForUser, _rawLines.length, isSupervisorReporter, supervisorLinesLoaded]);
 
-  const handleQuickAddWorker = useCallback(async () => {
-    if (!lineId || !workerPickerId) return;
-    const selected = assignableEmployees.find((e) => e.id === workerPickerId);
-    if (!selected) return;
-
-    setWorkerActionBusy(true);
-    setWorkerActionError(null);
-    try {
-      const dayAssignments = await lineAssignmentService.getByDate(today);
-      const sameLine = dayAssignments.find((a) => a.employeeId === selected.id && a.lineId === lineId);
-      if (sameLine) {
-        setWorkerActionError('العامل مسجل بالفعل على هذا الخط اليوم.');
-        return;
-      }
-      const otherLine = dayAssignments.find((a) => a.employeeId === selected.id && a.lineId !== lineId);
-      if (otherLine) {
-        setWorkerActionError(`العامل مسجل على خط آخر اليوم (${getLineName(otherLine.lineId)}).`);
-        return;
-      }
-
-      await lineAssignmentService.create({
-        lineId,
-        employeeId: selected.id,
-        employeeCode: selected.code ?? '',
-        employeeName: selected.name,
-        date: today,
-        assignedBy: uid || '',
-      });
-      setWorkerPickerId('');
-      await fetchWorkersFromLineAssignments();
-    } catch {
-      setWorkerActionError('تعذر إضافة العامل الآن. حاول مرة أخرى.');
-    } finally {
-      setWorkerActionBusy(false);
-    }
-  }, [assignableEmployees, fetchWorkersFromLineAssignments, getLineName, lineId, today, uid, workerPickerId]);
-
-  const handleQuickRemoveWorker = useCallback(async (assignmentId?: string) => {
-    if (!assignmentId) return;
-    setWorkerActionBusy(true);
-    setWorkerActionError(null);
-    try {
-      await lineAssignmentService.delete(assignmentId);
-      await fetchWorkersFromLineAssignments();
-    } catch {
-      setWorkerActionError('تعذر حذف العامل الآن. حاول مرة أخرى.');
-    } finally {
-      setWorkerActionBusy(false);
-    }
-  }, [fetchWorkersFromLineAssignments]);
-
   const handleQuickWorkerRoleChange = useCallback(async (
     assignment: LineWorkerAssignment,
     laborRole: LineWorkerLaborRole,
@@ -828,6 +769,50 @@ export const QuickAction: React.FC = () => {
       setWorkerActionError('تعذر تحديث وظيفة العامل الآن. حاول مرة أخرى.');
     } finally {
       setUpdatingWorkerRoleId(null);
+    }
+  }, [fetchWorkersFromLineAssignments]);
+
+  const handleQuickWorkerPresenceChange = useCallback(async (
+    assignment: LineWorkerAssignment,
+    isPresent: boolean,
+  ) => {
+    if (!assignment.id) {
+      setWorkerActionError('لا يمكن تعديل حضور عامل من بيانات موروثة. حدّث القائمة أو أضفه لليوم أولاً.');
+      return;
+    }
+
+    const previousIsPresent = assignment.isPresent ?? true;
+    if (previousIsPresent === isPresent) return;
+
+    setUpdatingWorkerPresenceId(assignment.id);
+    setWorkerActionError(null);
+    setLineWorkers((current) => current.map((worker) => (
+      worker.id === assignment.id ? { ...worker, isPresent } : worker
+    )));
+
+    try {
+      await lineAssignmentService.updatePresence(assignment.id, isPresent);
+      const workerId = await lineAssignmentWorkerBridge.syncFromLineAssignment(assignment);
+      if (workerId) {
+        setWorkerOutputs((current) => current.map((row) => {
+          if (row.workerId !== workerId) return row;
+          const outputQty = isPresent ? row.outputQty : 0;
+          return {
+            ...row,
+            isPresent,
+            outputQty,
+            achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+          };
+        }));
+      }
+      await fetchWorkersFromLineAssignments();
+    } catch {
+      setLineWorkers((current) => current.map((worker) => (
+        worker.id === assignment.id ? { ...worker, isPresent: previousIsPresent } : worker
+      )));
+      setWorkerActionError('تعذر تحديث حضور العامل الآن. حاول مرة أخرى.');
+    } finally {
+      setUpdatingWorkerPresenceId(null);
     }
   }, [fetchWorkersFromLineAssignments]);
 
@@ -886,6 +871,19 @@ export const QuickAction: React.FC = () => {
     }
     setSaving(true);
 
+    const reportWorkerOutputs = workerOutputs
+      .filter((row) => row.productId === productId && row.lineId === lineId)
+      .map((row) => {
+        const isPresent = row.isPresent ?? true;
+        const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+        return {
+          ...row,
+          isPresent,
+          outputQty,
+          achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+        };
+      });
+
     const data = {
       employeeId,
       lineId,
@@ -913,8 +911,8 @@ export const QuickAction: React.FC = () => {
       ...(reportType === 'component_injection' && isInjectionShiftSelected(injectionShift)
         ? { shift: injectionShift }
         : {}),
-      ...(reportType === 'finished_product' && workerOutputTargetsEligible && workerOutputs.length > 0
-        ? { workerOutputs: workerOutputs.filter((row) => row.productId === productId && row.lineId === lineId) }
+      ...(reportType === 'finished_product' && workerOutputTargetsEligible && reportWorkerOutputs.length > 0
+        ? { workerOutputs: reportWorkerOutputs }
         : {}),
     };
 
@@ -1883,19 +1881,19 @@ export const QuickAction: React.FC = () => {
 
       {/* Line Workers Modal */}
       {showLineWorkers && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowLineWorkers(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl max-h-[80vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
-            <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-2">
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-2 sm:p-4" onClick={() => setShowLineWorkers(false)}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[calc(100dvh-1rem)] sm:max-h-[80vh] border border-[var(--color-border)] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <div className="px-4 sm:px-5 py-4 border-b border-[var(--color-border)] flex items-start justify-between gap-3 shrink-0">
+              <div className="min-w-0 flex flex-wrap items-center gap-2">
                 <span className="material-icons-round text-primary">groups</span>
-                <h3 className="font-bold">عمالة الخط اليومية</h3>
+                <h3 className="font-bold">حضور عمالة الخط اليوم</h3>
                 <span className="px-2 py-0.5 bg-primary/10 text-primary text-xs font-bold rounded-[var(--border-radius-base)]">{lineWorkers.length}</span>
               </div>
-              <button onClick={() => setShowLineWorkers(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
+              <button onClick={() => setShowLineWorkers(false)} className="shrink-0 text-[var(--color-text-muted)] hover:text-slate-600">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="px-5 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60">
+            <div className="px-4 sm:px-5 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                 <div>
                   <span className="font-bold text-[var(--color-text-muted)]">الخط: </span>
@@ -1919,98 +1917,148 @@ export const QuickAction: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="p-4 border-b border-[var(--color-border)] space-y-2">
-              <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-                <div className="w-full sm:flex-1">
-                  <SearchableSelect
-                    placeholder="ابحث عن عامل للإضافة السريعة"
-                    options={addableWorkerOptions}
-                    value={workerPickerId}
-                    onChange={setWorkerPickerId}
-                  />
-                </div>
-                <Button
-                  onClick={handleQuickAddWorker}
-                  disabled={!lineId || !workerPickerId || workerActionBusy}
-                  className="w-full sm:w-auto shrink-0"
-                >
-                  {workerActionBusy ? (
-                    <span className="material-icons-round animate-spin text-sm">refresh</span>
-                  ) : (
-                    <span className="material-icons-round text-sm">person_add</span>
-                  )}
-                  إضافة
-                </Button>
+            <div className="p-3 sm:p-4 border-b border-[var(--color-border)] space-y-2">
+              <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 px-3 py-2">
+                <p className="text-xs font-bold text-amber-800 dark:text-amber-300 leading-relaxed">
+                  الإضافة السريعة اليومية متوقفة. لإضافة عامل إلى خط الإنتاج استخدم صفحة «ربط العمالة الدائم بالخط».
+                </p>
               </div>
               {workerActionError && (
                 <p className="text-xs font-bold text-rose-500">{workerActionError}</p>
               )}
               {!lineId && (
-                <p className="text-xs font-bold text-amber-600">اختر خط الإنتاج أولاً لعرض أو إضافة عمالة الخط.</p>
+                <p className="text-xs font-bold text-amber-600">اختر خط الإنتاج أولاً لعرض حضور عمالة الخط.</p>
               )}
             </div>
-            <div className="p-4 overflow-y-auto divide-y divide-slate-50">
+            <div className="p-3 sm:p-4 overflow-y-auto space-y-3 min-w-0">
               {!lineId ? (
                 <div className="text-center py-8">
                   <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">format_list_bulleted</span>
-                  <p className="text-sm text-[var(--color-text-muted)] font-medium">اختر الخط والتاريخ لعرض العمالة اليومية المرتبطة به.</p>
+                  <p className="text-sm text-[var(--color-text-muted)] font-medium">اختر الخط والتاريخ لعرض حضور العمالة المرتبطة دائماً به.</p>
                 </div>
               ) : lineWorkers.length === 0 ? (
                 <div className="text-center py-8">
-                  <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">person_add</span>
-                  <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمالة مسجلة على هذا الخط اليوم</p>
+                  <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">groups</span>
+                  <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمال دائمون على هذا الخط لهذا اليوم</p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">أدر الربط من صفحة عمال الإنتاج بدلاً من إنشاء رابط يومي.</p>
                 </div>
               ) : (
-                lineWorkers.map((w, i) => (
-                  <div key={w.id || i} className="flex flex-col sm:flex-row sm:items-center gap-3 py-2.5">
-                    <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center shrink-0">
-                      <span className="material-icons-round text-primary text-sm">person</span>
+                lineWorkers.map((w, i) => {
+                  const isPresent = w.isPresent !== false;
+                  const presenceUpdating = updatingWorkerPresenceId === w.id;
+                  const roleUpdating = updatingWorkerRoleId === w.id;
+                  return (
+                    <div
+                      key={w.id || i}
+                      className={cn(
+                        'rounded-[var(--border-radius-lg)] border p-3 shadow-sm transition-colors',
+                        isPresent
+                          ? 'border-emerald-100 bg-white dark:bg-transparent dark:border-emerald-900/30'
+                          : 'border-rose-100 bg-rose-50/50 dark:bg-rose-900/10 dark:border-rose-900/30',
+                      )}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={cn(
+                          'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
+                          isPresent ? 'bg-emerald-50 text-emerald-600' : 'bg-rose-50 text-rose-500',
+                        )}>
+                          <span className="material-icons-round text-lg">person</span>
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
+                            <span className={cn(
+                              'rounded-full px-2 py-0.5 text-[11px] font-black',
+                              isPresent ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-600',
+                            )}>
+                              {isPresent ? 'حاضر' : 'غائب'}
+                            </span>
+                          </div>
+                          <p className="mt-1 text-xs text-[var(--color-text-muted)] leading-relaxed">
+                            <span className="font-mono">{w.employeeCode || 'بدون كود'}</span>
+                            <span className="mx-1">·</span>
+                            <span>{LINE_WORKER_LABOR_ROLE_LABELS[resolveLineWorkerLaborRole(w.laborRole)]}</span>
+                          </p>
+                          <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                            {getLineName(w.lineId)} · {w.date || today}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-[minmax(180px,220px)_minmax(160px,200px)_auto] gap-2 sm:items-end">
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-black text-[var(--color-text-muted)]">الحضور</p>
+                          <div className="grid grid-cols-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-1">
+                            <button
+                              type="button"
+                              disabled={!w.id || presenceUpdating}
+                              onClick={() => void handleQuickWorkerPresenceChange(w, true)}
+                              className={cn(
+                                'min-h-10 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
+                                isPresent
+                                  ? 'bg-emerald-600 text-white shadow-sm'
+                                  : 'text-[var(--color-text-muted)] hover:bg-emerald-50 hover:text-emerald-700',
+                              )}
+                              aria-pressed={isPresent}
+                            >
+                              حاضر
+                            </button>
+                            <button
+                              type="button"
+                              disabled={!w.id || presenceUpdating}
+                              onClick={() => void handleQuickWorkerPresenceChange(w, false)}
+                              className={cn(
+                                'min-h-10 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
+                                !isPresent
+                                  ? 'bg-rose-600 text-white shadow-sm'
+                                  : 'text-[var(--color-text-muted)] hover:bg-rose-50 hover:text-rose-700',
+                              )}
+                              aria-pressed={!isPresent}
+                            >
+                              غائب
+                            </button>
+                          </div>
+                          {presenceUpdating && (
+                            <p className="text-[11px] font-bold text-primary">جاري حفظ الحضور...</p>
+                          )}
+                          {!w.id && (
+                            <p className="text-[11px] font-bold text-amber-600">لا يوجد سجل حضور يومي لهذا العامل بعد؛ لا يتم إنشاء رابط يومي تلقائياً.</p>
+                          )}
+                        </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-black text-[var(--color-text-muted)]">وظيفة العامل</p>
+                          <Select
+                            value={resolveLineWorkerLaborRole(w.laborRole)}
+                            disabled={!w.id || roleUpdating}
+                            onValueChange={(value) => {
+                              void handleQuickWorkerRoleChange(w, value as LineWorkerLaborRole);
+                            }}
+                          >
+                            <SelectTrigger
+                              aria-label="وظيفة العامل"
+                              className="h-11 w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 text-xs"
+                            >
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {LINE_WORKER_LABOR_ROLES.map((role) => (
+                                <SelectItem key={role} value={role}>
+                                  {LINE_WORKER_LABOR_ROLE_LABELS[role]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                          {roleUpdating && (
+                            <p className="text-[11px] font-bold text-primary">جاري حفظ الوظيفة...</p>
+                          )}
+                        </div>
+                        <p className="sm:col-span-3 text-[11px] font-bold text-[var(--color-text-muted)]">
+                          إلغاء ربط العامل أو نقله يتم من ملف العامل في صفحة عمال الإنتاج، وليس من سجل الحضور اليومي.
+                        </p>
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <p className="font-bold text-sm text-[var(--color-text)] truncate">{w.employeeName}</p>
-                      <p className="text-xs text-[var(--color-text-muted)]">
-                        <span className="font-mono">{w.employeeCode || 'بدون كود'}</span>
-                        <span className="mx-1">·</span>
-                        <span>{LINE_WORKER_LABOR_ROLE_LABELS[resolveLineWorkerLaborRole(w.laborRole)]}</span>
-                      </p>
-                      <p className="text-[11px] text-[var(--color-text-muted)]">
-                        {getLineName(w.lineId)} · {w.date || today}
-                      </p>
-                    </div>
-                    <div className="flex w-full sm:w-auto items-center gap-2">
-                      <Select
-                        value={resolveLineWorkerLaborRole(w.laborRole)}
-                        disabled={!w.id || workerActionBusy || updatingWorkerRoleId === w.id}
-                        onValueChange={(value) => {
-                          void handleQuickWorkerRoleChange(w, value as LineWorkerLaborRole);
-                        }}
-                      >
-                        <SelectTrigger
-                          aria-label="وظيفة العامل"
-                          className="h-9 min-w-[116px] flex-1 sm:flex-none border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-2 text-xs"
-                        >
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {LINE_WORKER_LABOR_ROLES.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {LINE_WORKER_LABOR_ROLE_LABELS[role]}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <button
-                        type="button"
-                        onClick={() => handleQuickRemoveWorker(w.id)}
-                        disabled={workerActionBusy || Boolean(updatingWorkerRoleId) || !w.id}
-                        className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 rounded-[var(--border-radius-base)] transition-all disabled:opacity-50"
-                        title={w.id ? 'حذف العامل من الخط' : 'عامل موروث من آخر توزيع؛ عدّل التوزيع من صفحة ربط العمالة'}
-                      >
-                        <span className="material-icons-round text-base">delete</span>
-                      </button>
-                    </div>
-                  </div>
-                ))
+                  );
+                })
               )}
             </div>
           </div>

@@ -145,6 +145,7 @@ import {
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift';
 import {
+  computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
 } from '../modules/production/selectors/workerTargetSelector';
@@ -3325,7 +3326,16 @@ export const useAppStore = create<AppState>((set, get) => ({
       const workerOutputs = workerTargetsApplied
         ? (savePayload.workerOutputs || []).filter((row) => (
           row.productId === savePayload.productId && row.lineId === savePayload.lineId
-        ))
+        )).map((row) => {
+          const isPresent = row.isPresent ?? true;
+          const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+          return {
+            ...row,
+            isPresent,
+            outputQty,
+            achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+          };
+        })
         : [];
 
       let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {

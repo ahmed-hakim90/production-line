@@ -54,7 +54,9 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     && hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId);
 
   const totalWorkerOutput = useMemo(
-    () => value.reduce((sum, row) => sum + Number(row.outputQty || 0), 0),
+    () => value.reduce((sum, row) => (
+      row.isPresent === false ? sum : sum + Number(row.outputQty || 0)
+    ), 0),
     [value],
   );
 
@@ -82,7 +84,10 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
         products,
         workers: workers.filter((w) => w.isActive !== false),
         targets,
-        assignments: productionAssignments.map((row) => ({ workerId: row.workerId })),
+        assignments: productionAssignments.map((row) => ({
+          workerId: row.workerId,
+          isPresent: row.isPresent,
+        })),
         lineName,
         productName,
         lineProductConfigs,
@@ -98,9 +103,11 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
       );
       onChange(rows.map((row) => {
         const prev = existingByWorker.get(row.workerId);
-        const outputQty = prev?.outputQty ?? 0;
+        const isPresent = row.isPresent ?? prev?.isPresent ?? true;
+        const outputQty = isPresent ? (prev?.outputQty ?? 0) : 0;
         return {
           ...row,
+          isPresent,
           outputQty,
           achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
           notes: prev?.notes ?? row.notes,
@@ -123,11 +130,13 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
   const updateRow = (workerId: string, patch: Partial<ProductionReportWorkerOutput>) => {
     onChange(value.map((row) => {
       if (row.workerId !== workerId) return row;
-      const outputQty = patch.outputQty ?? row.outputQty;
+      const isPresent = patch.isPresent ?? row.isPresent ?? true;
+      const outputQty = isPresent ? (patch.outputQty ?? row.outputQty) : 0;
       const dailyTargetQty = patch.dailyTargetQty ?? row.dailyTargetQty;
       return {
         ...row,
         ...patch,
+        isPresent,
         outputQty,
         achievementPercent: computeAchievementPercent(outputQty, dailyTargetQty),
       };
@@ -146,9 +155,9 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
             يُعرض هنا <strong>عمال الإنتاج فقط</strong> — الجودة والتغليف والصيانة والخارجية لا يدخلون في جدول الأهداف.
             {' '}
             {workerSource === 'daily'
-              ? 'العمالة من ربط العمالة اليومي على الخط.'
+              ? 'العمالة من بيانات يومية قديمة للتوافق.'
               : workerSource === 'permanent'
-                ? 'العمالة من الربط الدائم (لا يوجد ربط يومي لهذا التاريخ).'
+                ? 'العمالة من الربط الدائم مع حالة اليوم إن وجدت.'
                 : ''}
           </p>
         </div>
@@ -166,7 +175,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
         <p className="text-sm text-[var(--color-text-muted)]">جاري تحميل العمال...</p>
       ) : value.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">
-          لا يوجد عمال إنتاج مسجلون على هذا الخط في هذا التاريخ — سجّل عمال الإنتاج من صفحة «ربط العمالة بالخطوط»
+          لا يوجد عمال إنتاج مسجلون على هذا الخط في هذا التاريخ — سجّل عمال الإنتاج من صفحة «ربط العمالة الدائم»
         </p>
       ) : (
         <div className="overflow-x-auto">
@@ -179,22 +188,28 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody>
-              {value.map((row) => (
-                <tr key={row.workerId} className="border-t border-[var(--color-border)]">
-                  <td className="py-2 font-medium">{row.workerName}</td>
-                  <td className="py-2 text-center tabular-nums">{formatNumber(row.dailyTargetQty)}</td>
-                  <td className="py-2 text-center">
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-24 border border-[var(--color-border)] rounded-md text-center py-1"
-                      value={row.outputQty || ''}
-                      disabled={disabled}
-                      onChange={(e) => updateRow(row.workerId, { outputQty: Number(e.target.value) || 0 })}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {value.map((row) => {
+                const isPresent = row.isPresent !== false;
+                return (
+                  <tr key={row.workerId} className="border-t border-[var(--color-border)]">
+                    <td className="py-2 font-medium">{row.workerName}</td>
+                    <td className="py-2 text-center tabular-nums">{formatNumber(row.dailyTargetQty)}</td>
+                    <td className="py-2 text-center">
+                      <input
+                        type="number"
+                        min={0}
+                        className="w-24 border border-[var(--color-border)] rounded-md text-center py-1 disabled:bg-[#f0f2f5]/70 disabled:text-[var(--color-text-muted)]"
+                        value={isPresent ? row.outputQty || '' : ''}
+                        disabled={disabled || !isPresent}
+                        onChange={(e) => updateRow(row.workerId, { outputQty: Number(e.target.value) || 0 })}
+                      />
+                      {!isPresent ? (
+                        <p className="mt-1 text-[11px] font-bold text-rose-500">غائب</p>
+                      ) : null}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

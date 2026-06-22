@@ -272,6 +272,7 @@ export function ProductionReportShareCard({
             <DetailRow label="الوردية" value={getInjectionShiftLabel(report.shift)} />
           ) : null}
           <DetailRow label="توزيع العمالة" value={`إنتاج ${report.workersProductionCount ?? 0} | تغليف ${report.workersPackagingCount ?? 0} | جودة ${report.workersQualityCount ?? 0} | صيانة ${report.workersMaintenanceCount ?? 0} | خارجية ${report.workersExternalCount ?? 0}`} ltr />
+          <DetailRow label="الحضور" value={`حاضر ${report.presentAssignments ?? 0} | غائب ${report.absentAssignments ?? 0}`} ltr />
           {report.sourceReportType !== 'packaging' && report.sourceReportType !== 'component_injection' ? (
             <DetailRow label="الهالك" value={`${formatNumber(report.wasteQuantity)} وحدة`} ltr />
           ) : null}

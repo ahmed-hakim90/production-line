@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { X } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
@@ -9,6 +10,7 @@ import { formatNumber, getTodayDateString } from '@/utils/calculations';
 import { Badge, Button, Card, KPIBox, LoadingSkeleton, SearchableSelect } from '../components/UI';
 import { SelectableTable, type TableColumn } from '../components/SelectableTable';
 import type {
+  LineWorkerAssignment,
   ProductionLineWorkerAssignment,
   ProductionWorker,
   ProductionWorkerTarget,
@@ -17,16 +19,25 @@ import type {
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import { productionWorkerService, resolveWorkerCodeFromEmployee } from '../services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
+import { lineAssignmentService } from '../services/lineAssignmentService';
 import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
 import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
+import { ProductionWorkerReports } from './ProductionWorkerReports';
+import { ProductionWorkerRatingsReview } from './ProductionWorkerRatingsReview';
+import { SupervisorWorkerEvaluation } from './SupervisorWorkerEvaluation';
+import { summarizeWorkerPresenceDaysByWorker } from '../utils/workerPresence';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+
+type WorkspaceTab = 'summary' | 'reports' | 'evaluation';
 
 type WorkerRow = ProductionWorker & {
   assignedLineIds: string[];
   activeTargetsCount: number;
   todayOutput: number;
   todayAchievement: number;
+  presentDays: number;
+  absentDays: number;
   monthStats: WorkerMonthlyAchievement | null;
 };
 
@@ -35,11 +46,36 @@ const currentMonth = (): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
+const monthRange = (month: string): { start: string; end: string } => {
+  const [year, rawMonth] = month.split('-').map(Number);
+  const lastDay = new Date(year, rawMonth, 0).getDate();
+  const mm = String(rawMonth).padStart(2, '0');
+  return {
+    start: `${year}-${mm}-01`,
+    end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
+  };
+};
+
+const listDatesInRange = (start: string, end: string): string[] => {
+  const dates: string[] = [];
+  const cursor = new Date(`${start}T00:00:00`);
+  const endDate = new Date(`${end}T00:00:00`);
+  while (cursor <= endDate) {
+    dates.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+  return dates;
+};
+
 export const ProductionWorkers: React.FC = () => {
   const navigate = useTenantNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { can } = usePermission();
   const canManage = can('production.workers.manage') || can('productionWorkers.view');
   const canManageTargets = can('production.workerTargets.manage') || canManage;
+  const canViewReports = can('production.workerReports.view') || can('productionWorkers.view') || can('production.workers.view');
+  const canViewRatingReview = can('production.workerRatings.view') || can('production.workerRatings.manage') || can('hr.evaluation.approve');
+  const canUseSupervisorEvaluation = can('hr.evaluation.create') || can('production.workers.manage') || can('employeeDashboard.view') || can('quickAction.view');
   const productionLines = useAppStore((s) => s.productionLines);
   const products = useAppStore((s) => s.products);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
@@ -68,6 +104,7 @@ export const ProductionWorkers: React.FC = () => {
   const [workers, setWorkers] = useState<ProductionWorker[]>([]);
   const [assignments, setAssignments] = useState<ProductionLineWorkerAssignment[]>([]);
   const [targets, setTargets] = useState<ProductionWorkerTarget[]>([]);
+  const [periodLineAssignments, setPeriodLineAssignments] = useState<LineWorkerAssignment[]>([]);
   const [monthStatsMap, setMonthStatsMap] = useState<Map<string, WorkerMonthlyAchievement>>(new Map());
   const [todayStatsMap, setTodayStatsMap] = useState<Map<string, { output: number; achievement: number }>>(new Map());
 
@@ -78,6 +115,21 @@ export const ProductionWorkers: React.FC = () => {
   const [filterDate, setFilterDate] = useState(getTodayDateString());
   const [filterActive, setFilterActive] = useState<'' | 'active' | 'inactive'>('');
   const [filterPerformance, setFilterPerformance] = useState<'' | 'below' | 'above' | 'missing_target'>('');
+
+  const requestedTab = searchParams.get('tab');
+  const activeWorkspaceTab: WorkspaceTab =
+    requestedTab === 'reports' && canViewReports
+      ? 'reports'
+      : requestedTab === 'evaluation' && (canViewRatingReview || canUseSupervisorEvaluation)
+        ? 'evaluation'
+        : 'summary';
+
+  const setWorkspaceTab = (tab: WorkspaceTab) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'summary') next.delete('tab');
+    else next.set('tab', tab);
+    setSearchParams(next);
+  };
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -127,6 +179,34 @@ export const ProductionWorkers: React.FC = () => {
   useEffect(() => { void loadData(); }, [loadData]);
 
   useEffect(() => {
+    let cancelled = false;
+    const today = getTodayDateString();
+    const { start, end } = monthRange(filterMonth || currentMonth());
+    const rangeEnd = end > today ? today : end;
+    const periodDates = start <= rangeEnd ? listDatesInRange(start, rangeEnd) : [];
+
+    if (periodDates.length === 0) {
+      setPeriodLineAssignments([]);
+      return () => { cancelled = true; };
+    }
+
+    void (async () => {
+      const groups = await Promise.all(periodDates.map(async (date) => {
+        if (productionLines.length === 0) return lineAssignmentService.getByDate(date);
+        const lineGroups = await Promise.all(
+          productionLines
+            .filter((line) => line.id)
+            .map((line) => lineAssignmentService.getByLineAndDate(line.id!, date)),
+        );
+        return lineGroups.flat();
+      }));
+      if (!cancelled) setPeriodLineAssignments(groups.flat());
+    })();
+
+    return () => { cancelled = true; };
+  }, [filterMonth, productionLines]);
+
+  useEffect(() => {
     if (workers.length === 0) {
       setMonthStatsMap(new Map());
       setTodayStatsMap(new Map());
@@ -164,6 +244,20 @@ export const ProductionWorkers: React.FC = () => {
 
   const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? id;
 
+  const assignmentDaysByWorkerId = useMemo(() => {
+    const workerIdByEmployeeId = new Map(
+      workers
+        .filter((worker) => worker.id && worker.employeeId)
+        .map((worker) => [worker.employeeId!, worker.id!]),
+    );
+    return summarizeWorkerPresenceDaysByWorker(periodLineAssignments.flatMap((assignment) => {
+      if (filterLine && assignment.lineId !== filterLine) return [];
+      const workerId = workerIdByEmployeeId.get(assignment.employeeId);
+      if (!workerId) return [];
+      return [{ workerId, date: assignment.date, isPresent: assignment.isPresent }];
+    }));
+  }, [filterLine, periodLineAssignments, workers]);
+
   const rows: WorkerRow[] = useMemo(() => {
     return workers.map((worker) => {
       const workerAssignments = assignments.filter((a) => a.workerId === worker.id && a.isActive);
@@ -176,16 +270,19 @@ export const ProductionWorkers: React.FC = () => {
       ).length;
       const monthStats = worker.id ? monthStatsMap.get(worker.id) ?? null : null;
       const today = worker.id ? todayStatsMap.get(worker.id) : undefined;
+      const assignmentDays = worker.id ? assignmentDaysByWorkerId.get(worker.id) : undefined;
       return {
         ...worker,
         assignedLineIds: lineIds,
         activeTargetsCount,
         todayOutput: today?.output ?? 0,
         todayAchievement: today?.achievement ?? 0,
+        presentDays: assignmentDays?.presentDays ?? 0,
+        absentDays: assignmentDays?.absentDays ?? 0,
         monthStats,
       };
     });
-  }, [workers, assignments, targets, monthStatsMap, todayStatsMap]);
+  }, [workers, assignments, targets, monthStatsMap, todayStatsMap, assignmentDaysByWorkerId]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -320,7 +417,11 @@ export const ProductionWorkers: React.FC = () => {
       'إنتاج الشهر': row.monthStats?.monthlyOutput ?? 0,
       'هدف الشهر': row.monthStats?.monthlyTarget ?? 0,
       'إنجاز الشهر %': row.monthStats?.monthlyAchievement ?? 0,
-      'نسبة الحضور': row.monthStats?.attendanceRate ?? 0,
+      'نسبة الحضور': row.presentDays + row.absentDays > 0
+        ? Math.round((row.presentDays / (row.presentDays + row.absentDays)) * 1000) / 10
+        : 0,
+      'أيام حضور': row.presentDays,
+      'أيام غياب': row.absentDays,
       الدرجة: row.monthStats?.performanceScore ?? 0,
       'تقدير المكافأة': row.monthStats?.bonusEstimate ?? 0,
       الحالة: row.isActive === false ? 'غير نشط' : 'نشط',
@@ -418,7 +519,29 @@ export const ProductionWorkers: React.FC = () => {
     },
     {
       header: 'الحضور %',
-      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : `${row.monthStats?.attendanceRate ?? 0}%`),
+      render: (row) => {
+        if (statsLoading && !monthStatsMap.has(row.id ?? '')) return statPlaceholder;
+        const denominator = row.presentDays + row.absentDays;
+        return `${denominator > 0 ? Math.round((row.presentDays / denominator) * 1000) / 10 : 0}%`;
+      },
+      className: 'text-center',
+    },
+    {
+      header: 'أيام حضور',
+      render: (row) => (
+        <span className="inline-flex min-w-10 justify-center rounded-full bg-emerald-50 px-2 py-1 text-xs font-bold text-emerald-700 tabular-nums">
+          {formatNumber(row.presentDays)}
+        </span>
+      ),
+      className: 'text-center',
+    },
+    {
+      header: 'أيام غياب',
+      render: (row) => (
+        <span className="inline-flex min-w-10 justify-center rounded-full bg-rose-50 px-2 py-1 text-xs font-bold text-rose-700 tabular-nums">
+          {formatNumber(row.absentDays)}
+        </span>
+      ),
       className: 'text-center',
     },
     {
@@ -460,10 +583,51 @@ export const ProductionWorkers: React.FC = () => {
     <div className="space-y-4">
       <PageHeader
         title="عمال الإنتاج"
-        subtitle="ربط موظفي الموارد البشرية بملفات عمال الإنتاج والأهداف والأداء"
-        primaryAction={canManage ? { label: 'ربط موظفين كعمال إنتاج', onClick: () => openLinkForm() } : undefined}
+        subtitle="مساحة موحدة لقائمة العمال والتقارير والتقييمات والتفاصيل"
+        primaryAction={canManage && activeWorkspaceTab === 'summary' ? { label: 'ربط موظفين كعمال إنتاج', onClick: () => openLinkForm() } : undefined}
       />
 
+      <Card>
+        <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant={activeWorkspaceTab === 'summary' ? 'primary' : 'outline'}
+              onClick={() => setWorkspaceTab('summary')}
+            >
+              ملخص العمال
+            </Button>
+            {canViewReports ? (
+              <Button
+                type="button"
+                variant={activeWorkspaceTab === 'reports' ? 'primary' : 'outline'}
+                onClick={() => setWorkspaceTab('reports')}
+              >
+                تقرير الإنجاز
+              </Button>
+            ) : null}
+            {canViewRatingReview || canUseSupervisorEvaluation ? (
+              <Button
+                type="button"
+                variant={activeWorkspaceTab === 'evaluation' ? 'primary' : 'outline'}
+                onClick={() => setWorkspaceTab('evaluation')}
+              >
+                تقييم العمالة
+              </Button>
+            ) : null}
+          </div>
+          <div className="text-xs font-medium text-[var(--color-text-muted)]">
+            الروابط القديمة للتقارير والتقييمات ما زالت تعمل، وهذه الصفحة هي نقطة الدخول الأساسية.
+          </div>
+        </div>
+      </Card>
+
+      {activeWorkspaceTab === 'reports' ? (
+        <ProductionWorkerReports embedded />
+      ) : activeWorkspaceTab === 'evaluation' ? (
+        canViewRatingReview ? <ProductionWorkerRatingsReview embedded /> : <SupervisorWorkerEvaluation embedded />
+      ) : (
+        <>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPIBox label="إجمالي العمال" value={String(workers.length)} icon="groups" />
         <KPIBox label="نشطون" value={String(workers.filter((w) => w.isActive !== false).length)} icon="check_circle" />
@@ -664,6 +828,8 @@ export const ProductionWorkers: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

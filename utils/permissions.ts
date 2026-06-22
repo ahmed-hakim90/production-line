@@ -33,7 +33,7 @@ export type Permission =
   | 'production.workerBonus.view' | 'production.workerBonus.manage'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.executive.export' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
+  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
   | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'lineProductConfig.view'
@@ -177,7 +177,6 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.packaging.only', label: 'تقارير تغليف فقط (إخفاء إنتاج/حقن وقفل النوع على التغليف)' },
       { key: 'reports.packaging.create', label: 'إنشاء تقرير تغليف (بدون صلاحة إنشاء تقارير الإنتاج العامة)' },
       { key: 'reports.componentWaste.create', label: 'إنشاء تقرير هالك مكونات' },
-      { key: 'reports.executive.export', label: 'التقرير التنفيذي الموحّد' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
@@ -436,9 +435,6 @@ export function checkPermission(
   }
   if (permission === 'inventory.analytics.view' || permission === 'inventory.exceptions.view') {
     return permissions['inventory.view'] === true;
-  }
-  if (permission === 'reports.executive.export') {
-    return permissions['reports.view'] === true && permissions['export'] === true;
   }
   if (permission === 'manufacturing.purchaseGap.view') {
     return permissions['planning.materialRequirements.view'] === true;

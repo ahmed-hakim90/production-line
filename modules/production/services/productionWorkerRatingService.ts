@@ -1,5 +1,7 @@
 import {
+  deleteField,
   doc,
+  FieldPath,
   getDoc,
   getDocs,
   query,
@@ -106,6 +108,19 @@ export const productionWorkerRatingService = {
       },
       updatedAt: serverTimestamp(),
     });
+    return id;
+  },
+
+  async deleteSupervisorRating(data: { workerId: string; supervisorId: string; date: string }): Promise<string> {
+    if (!isConfigured || !data.workerId || !data.supervisorId || !data.date) return '';
+    const id = ratingDocId(data.workerId, data.supervisorId, data.date);
+    await updateDoc(
+      doc(productionWorkersRef(), data.workerId),
+      new FieldPath('ratingRecords', id),
+      deleteField(),
+      'updatedAt',
+      serverTimestamp(),
+    );
     return id;
   },
 

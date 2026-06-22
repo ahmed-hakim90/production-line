@@ -34,6 +34,49 @@ assert.equal(empty.averageAchievement, 0);
 assert.equal(empty.totalTargetQty, 0);
 assert.match(empty.summary, /لا توجد أهداف/);
 
+const duplicatePresenceDay = buildLaborGoalsAnalysis({
+  productionReports: [
+    report({
+      workerOutputs: [
+        {
+          workerId: 'worker-1',
+          workerName: 'عامل 1',
+          productId: 'product-1',
+          productName: 'منتج',
+          lineId: 'line-1',
+          lineName: 'خط 1',
+          dailyTargetQty: 0,
+          outputQty: 0,
+          achievementPercent: 0,
+          isPresent: false,
+        },
+      ],
+    }),
+    report({
+      lineId: 'line-2',
+      workerOutputs: [
+        {
+          workerId: 'worker-1',
+          workerName: 'عامل 1',
+          productId: 'product-1',
+          productName: 'منتج',
+          lineId: 'line-2',
+          lineName: 'خط 2',
+          dailyTargetQty: 0,
+          outputQty: 0,
+          achievementPercent: 0,
+        },
+      ],
+    }),
+  ],
+  previousMonthProductionReports: [],
+  lineProductConfigs: [],
+  endDate: '2026-06-22',
+});
+const duplicatePresenceDayPeriod = duplicatePresenceDay.periods.find((period) => period.key === 'day');
+assert.equal(duplicatePresenceDayPeriod?.presentAssignments, 1);
+assert.equal(duplicatePresenceDayPeriod?.absentAssignments, 0);
+
 const fromWorkerOutputs = buildLaborGoalsAnalysis({
   productionReports: [
     report({
@@ -60,6 +103,18 @@ const fromWorkerOutputs = buildLaborGoalsAnalysis({
           outputQty: 55,
           achievementPercent: 110,
         },
+        {
+          workerId: 'worker-3',
+          workerName: 'عامل 3',
+          productId: 'product-1',
+          productName: 'منتج',
+          lineId: 'line-1',
+          lineName: 'خط',
+          dailyTargetQty: 50,
+          outputQty: 999,
+          achievementPercent: 1998,
+          isPresent: false,
+        },
       ],
     }),
   ],
@@ -73,6 +128,10 @@ assert.equal(fromWorkerOutputs.hasConfiguredTargets, true);
 assert.equal(dayFromWorkerOutputs?.targetQty, 100);
 assert.equal(dayFromWorkerOutputs?.actualQty, 100);
 assert.equal(dayFromWorkerOutputs?.achievement, 100);
+assert.equal(dayFromWorkerOutputs?.presentAssignments, 2);
+assert.equal(dayFromWorkerOutputs?.absentAssignments, 1);
+assert.equal(fromWorkerOutputs.totalPresentAssignments, 2);
+assert.equal(fromWorkerOutputs.totalAbsentAssignments, 1);
 
 const fromLineConfig = buildLaborGoalsAnalysis({
   productionReports: [

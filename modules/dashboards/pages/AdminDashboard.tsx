@@ -1918,6 +1918,12 @@ export const AdminDashboard: React.FC = () => {
                   ? `المتبقي ${formatNumber(Math.round(laborGoalsAnalysis.totalRemainingQty))} وحدة`
                   : 'لا توجد أرقام هدف'}
               </Badge>
+              <Badge variant="success">
+                أيام حضور {formatNumber(laborGoalsAnalysis.totalPresentAssignments)}
+              </Badge>
+              <Badge variant={laborGoalsAnalysis.totalAbsentAssignments > 0 ? 'danger' : 'neutral'}>
+                أيام غياب {formatNumber(laborGoalsAnalysis.totalAbsentAssignments)}
+              </Badge>
             </div>
           </div>
 
@@ -1979,6 +1985,14 @@ export const AdminDashboard: React.FC = () => {
                     <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
                       <p className="font-bold text-[var(--color-text-muted)]">أيام نشطة</p>
                       <p className="font-bold text-[var(--color-text)]">{period.activeDays}</p>
+                    </div>
+                    <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
+                      <p className="font-bold text-[var(--color-text-muted)]">أيام حضور</p>
+                      <p className="font-bold text-emerald-700">{formatNumber(period.presentAssignments)}</p>
+                    </div>
+                    <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
+                      <p className="font-bold text-[var(--color-text-muted)]">أيام غياب</p>
+                      <p className="font-bold text-rose-700">{formatNumber(period.absentAssignments)}</p>
                     </div>
                   </div>
 

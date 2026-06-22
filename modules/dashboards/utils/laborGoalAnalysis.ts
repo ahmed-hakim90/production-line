@@ -1,4 +1,5 @@
 import type { LineProductConfig, ProductionReport } from '@/types';
+import { summarizeWorkerPresenceDays } from '@/modules/production/utils/workerPresence';
 
 export type LaborGoalPeriodKey = 'day' | 'week' | 'month';
 
@@ -13,6 +14,8 @@ export interface LaborGoalPeriod {
   deltaPercent: number | null;
   productivity: number;
   activeDays: number;
+  presentAssignments: number;
+  absentAssignments: number;
   status: {
     label: string;
     variant: 'success' | 'warning' | 'danger' | 'neutral';
@@ -28,6 +31,8 @@ export interface LaborGoalsAnalysis {
   totalRemainingQty: number;
   totalTargetQty: number;
   totalActualQty: number;
+  totalPresentAssignments: number;
+  totalAbsentAssignments: number;
   hasConfiguredTargets: boolean;
   summary: string;
 }
@@ -55,7 +60,9 @@ const filterBetween = (rows: ProductionReport[], start: string, end: string) => 
 const formatQty = (value: number) => new Intl.NumberFormat('ar-EG').format(value);
 
 function resolveReportGoal(report: ProductionReport, lineProductConfigs: LineProductConfig[]) {
-  const workerOutputRows = (report.workerOutputs ?? []).filter((row) => Number(row.dailyTargetQty || 0) > 0);
+  const workerOutputRows = (report.workerOutputs ?? []).filter((row) => (
+    row.isPresent !== false && Number(row.dailyTargetQty || 0) > 0
+  ));
   if (workerOutputRows.length > 0) {
     return workerOutputRows.reduce(
       (acc, row) => ({
@@ -79,7 +86,7 @@ function resolveReportGoal(report: ProductionReport, lineProductConfigs: LinePro
 }
 
 function summarizeRows(rows: ProductionReport[], lineProductConfigs: LineProductConfig[]) {
-  return rows.reduce(
+  const totals = rows.reduce(
     (acc, report) => {
       const goal = resolveReportGoal(report, lineProductConfigs);
       acc.targetQty += goal.targetQty;
@@ -88,6 +95,15 @@ function summarizeRows(rows: ProductionReport[], lineProductConfigs: LineProduct
     },
     { targetQty: 0, actualQty: 0 },
   );
+  const presence = summarizeWorkerPresenceDays(rows.flatMap((report) => (
+    report.workerOutputs ?? []
+  ).map((row) => ({ workerId: row.workerId, date: report.date, isPresent: row.isPresent }))));
+
+  return {
+    ...totals,
+    presentAssignments: presence.presentDays,
+    absentAssignments: presence.absentDays,
+  };
 }
 
 function buildPeriod(
@@ -139,6 +155,8 @@ function buildPeriod(
     deltaPercent,
     productivity,
     activeDays,
+    presentAssignments: current.presentAssignments,
+    absentAssignments: current.absentAssignments,
     status,
     comparisonLabel,
     recommendation,
@@ -194,6 +212,9 @@ export function buildLaborGoalsAnalysis(params: {
   const totalRemainingQty = configuredPeriods.reduce((sum, period) => sum + period.remainingQty, 0);
   const totalTargetQty = configuredPeriods.reduce((sum, period) => sum + period.targetQty, 0);
   const totalActualQty = configuredPeriods.reduce((sum, period) => sum + period.actualQty, 0);
+  const monthPeriod = periods.find((period) => period.key === 'month');
+  const totalPresentAssignments = monthPeriod?.presentAssignments ?? 0;
+  const totalAbsentAssignments = monthPeriod?.absentAssignments ?? 0;
   const hasConfiguredTargets = configuredPeriods.length > 0;
   const summary = !hasConfiguredTargets
     ? 'لا توجد أهداف إنتاج عمال مهيأة لهذه الفترة؛ أضف أهداف الخط/المنتج أو سجّل مخرجات العمال حتى تظهر نسبة الإنجاز.'
@@ -208,6 +229,8 @@ export function buildLaborGoalsAnalysis(params: {
     totalRemainingQty,
     totalTargetQty,
     totalActualQty,
+    totalPresentAssignments,
+    totalAbsentAssignments,
     hasConfiguredTargets,
     summary,
   };

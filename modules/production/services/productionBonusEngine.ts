@@ -97,6 +97,7 @@ export function calculateSupervisorTeamBonusEstimate(params: {
 
   for (const report of reports) {
     for (const output of report.workerOutputs ?? []) {
+      if (output.isPresent === false) continue;
       const targetQty = Math.max(0, Number(output.dailyTargetQty || 0));
       if (targetQty <= 0) continue;
 

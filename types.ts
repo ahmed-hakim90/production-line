@@ -285,6 +285,8 @@ export interface ProductionReportWorkerOutput {
   dailyTargetQty: number;
   outputQty: number;
   achievementPercent: number;
+  /** Temporary row-level attendance flag; missing means present for older reports. */
+  isPresent?: boolean;
   notes?: string;
 }
 
@@ -383,6 +385,7 @@ export type WorkerDailyAchievementStatus =
   | 'over_target'
   | 'absent'
   | 'no_output'
+  | 'no_target'
   | 'leave';
 
 export interface WorkerDailyAchievement {
@@ -394,6 +397,9 @@ export interface WorkerDailyAchievement {
   outputQty: number;
   achievementPercent: number;
   status: WorkerDailyAchievementStatus;
+  isPresent?: boolean;
+  presentAssignments?: number;
+  absentAssignments?: number;
 }
 
 export interface WorkerMonthlyAchievement {
@@ -413,6 +419,8 @@ export interface WorkerMonthlyAchievement {
   attendanceRate: number;
   performanceScore: number;
   bonusEstimate: number;
+  presentAssignments?: number;
+  absentAssignments?: number;
 }
 
 export interface WorkerPerformanceSummary extends WorkerMonthlyAchievement {
@@ -546,6 +554,8 @@ export interface LineWorkerAssignment {
   employeeName: string;
   date: string;
   laborRole?: LineWorkerLaborRole;
+  /** Temporary daily attendance flag; missing means present for existing assignments. */
+  isPresent?: boolean;
   assignedAt?: any;
   assignedBy?: string;
 }

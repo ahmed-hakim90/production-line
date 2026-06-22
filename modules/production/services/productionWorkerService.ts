@@ -1,6 +1,8 @@
 import {
   addDoc,
+  deleteField,
   doc,
+  FieldPath,
   getDoc,
   getDocs,
   orderBy,
@@ -173,5 +175,16 @@ export const productionWorkerService = {
       ...stripUndefined(rest as Record<string, unknown>),
       updatedAt: serverTimestamp(),
     });
+  },
+
+  async removeSupervisorRating(id: string, supervisorId: string): Promise<void> {
+    if (!isConfigured || !id || !supervisorId) return;
+    await updateDoc(
+      doc(productionWorkersRef(), id),
+      new FieldPath('supervisorRatings', supervisorId),
+      deleteField(),
+      'updatedAt',
+      serverTimestamp(),
+    );
   },
 };
