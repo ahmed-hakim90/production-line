@@ -4,6 +4,7 @@ import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
 import { db } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { departmentsRef, jobPositionsRef, shiftsRef, employeesRef } from '../collections';
 import { HR_COLLECTIONS } from '../collections';
 import { parseHRExcel, type HRImportResult, type ParsedDepartmentRow, type ParsedPositionRow, type ParsedEmployeeRow, type HRLookups } from '../importHR';
@@ -27,6 +28,8 @@ export const HRImport: React.FC = () => {
   const setJobProgress = useJobsStore((s) => s.setJobProgress);
   const completeJob = useJobsStore((s) => s.completeJob);
   const failJob = useJobsStore((s) => s.failJob);
+  const setPanelHidden = useJobsStore((s) => s.setPanelHidden);
+  const setPanelMinimized = useJobsStore((s) => s.setPanelMinimized);
 
   const [step, setStep] = useState<ImportStep>('upload');
   const [fileName, setFileName] = useState('');
@@ -143,16 +146,19 @@ export const HRImport: React.FC = () => {
     });
 
     setImporting(true);
-    startJob(jobId, 'Saving to database...');
-    // Return UI to upload step immediately; processing continues in background panel.
-    setStep('upload');
-    setFileName('');
-    setResult(null);
+    setImportProgress({ depts: 0, positions: 0, employees: 0, updated: 0 });
+    setImportDone({ depts: 0, positions: 0, employees: 0, updated: 0, errors: 0 });
+    setImportErrors([]);
+    setStep('importing');
     setParseError('');
+    startJob(jobId, 'Saving to database...');
+    setPanelHidden(false);
+    setPanelMinimized(false);
 
     const errors: string[] = [];
     const createdDeptMap: Record<string, string> = {};
     const createdPosMap: Record<string, string> = {};
+    const tenantId = getCurrentTenantId();
     let deptCount = 0, posCount = 0, empCount = 0;
     let doneOps = 0;
     // 1. Create departments (sheet + employee-derived missing departments)
@@ -185,6 +191,7 @@ export const HRImport: React.FC = () => {
           code: dept.code,
           managerId: '',
           isActive: true,
+          tenantId,
           createdAt: serverTimestamp(),
         });
         createdDeptMap[dept.name.toLowerCase()] = ref.id;
@@ -248,6 +255,7 @@ export const HRImport: React.FC = () => {
           level: pos.level,
           hasSystemAccessDefault: false,
           isActive: true,
+          tenantId,
           createdAt: serverTimestamp(),
         });
         createdPosMap[pos.title.toLowerCase()] = ref.id;
@@ -305,6 +313,7 @@ export const HRImport: React.FC = () => {
           if (emp.providedFields.includes('email')) updateData.email = emp.email;
           if (emp.providedFields.includes('isActive')) updateData.isActive = emp.isActive;
           if (emp.providedFields.includes('hasSystemAccess')) updateData.hasSystemAccess = emp.hasSystemAccess;
+          updateData.tenantId = tenantId;
 
           if (Object.keys(updateData).length > 0) {
             await updateDoc(doc(db, HR_COLLECTIONS.EMPLOYEES, emp.existingId), updateData);
@@ -328,6 +337,7 @@ export const HRImport: React.FC = () => {
             managerId: '',
             hasSystemAccess: emp.hasSystemAccess,
             isActive: emp.isActive,
+            tenantId,
             createdAt: serverTimestamp(),
           });
           empCount++;
@@ -350,7 +360,8 @@ export const HRImport: React.FC = () => {
       completeJob(jobId, { addedRows, failedRows: errors.length, statusText: 'Completed' });
     }
     setImporting(false);
-  }, [result, lookups, addJob, fileName, userDisplayName, startJob, setJobProgress, failJob, completeJob, normalize]);
+    setStep('done');
+  }, [result, lookups, addJob, fileName, userDisplayName, startJob, setJobProgress, failJob, completeJob, setPanelHidden, setPanelMinimized, normalize]);
 
   const handleReset = useCallback(() => {
     setStep('upload');

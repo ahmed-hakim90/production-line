@@ -37,6 +37,41 @@ type DisplayLineWorkerAssignment = LWA & {
   source: 'permanent' | 'legacy';
 };
 
+const getEmployeeCodeSortValue = (code: string): { kind: 'numeric' | 'text' | 'empty'; text: string; numberValue: number } => {
+  const text = String(code || '').trim();
+  if (!text || text === '—') return { kind: 'empty', text: '', numberValue: Number.POSITIVE_INFINITY };
+
+  const numberValue = Number(text);
+  if (Number.isFinite(numberValue) && /^-?\d+(?:\.\d+)?$/.test(text)) {
+    return { kind: 'numeric', text, numberValue };
+  }
+
+  return { kind: 'text', text, numberValue: Number.POSITIVE_INFINITY };
+};
+
+const compareEmployeeCodes = (leftCode: string, rightCode: string): number => {
+  const left = getEmployeeCodeSortValue(leftCode);
+  const right = getEmployeeCodeSortValue(rightCode);
+
+  if (left.kind === 'numeric' && right.kind === 'numeric') {
+    return left.numberValue - right.numberValue || left.text.localeCompare(right.text, 'ar', { numeric: true });
+  }
+
+  if (left.kind !== right.kind) {
+    const rank = { numeric: 0, text: 1, empty: 2 };
+    return rank[left.kind] - rank[right.kind];
+  }
+
+  return left.text.localeCompare(right.text, 'ar', { numeric: true });
+};
+
+const sortAssignmentsByEmployeeCode = <T,>(rows: T[], getCode: (row: T) => string): T[] => (
+  rows
+    .map((row, index) => ({ row, index }))
+    .sort((left, right) => compareEmployeeCodes(getCode(left.row), getCode(right.row)) || left.index - right.index)
+    .map(({ row }) => row)
+);
+
 const isPermanentAssignmentActiveOnDate = (row: ProductionLineWorkerAssignment, date: string): boolean => {
   if (!row.isActive) return false;
   if (row.startDate > date) return false;
@@ -422,19 +457,6 @@ export const LineWorkerAssignment: React.FC = () => {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const lineGroups = useMemo(() => {
-    const map = new Map<string, DisplayLineWorkerAssignment[]>();
-    for (const a of allDayAssignments) {
-      if (!map.has(a.lineId)) map.set(a.lineId, []);
-      map.get(a.lineId)!.push(a);
-    }
-    return Array.from(map.entries()).map(([lineId, workers]) => ({
-      lineId,
-      lineName: getLineName(lineId),
-      workers,
-    }));
-  }, [allDayAssignments, _rawLines]);
-
   const toggleExpand = (lineId: string) => {
     setExpandedLines((prev) => {
       const next = new Set(prev);
@@ -461,6 +483,24 @@ export const LineWorkerAssignment: React.FC = () => {
     const employee = getEmployeeInfo(assignment.employeeId);
     return String(employee?.code || '').trim() || '—';
   };
+
+  const sortedAssignments = useMemo(
+    () => sortAssignmentsByEmployeeCode<DisplayLineWorkerAssignment>(assignments, getAssignmentEmployeeCode),
+    [assignments, _rawEmployees],
+  );
+
+  const lineGroups = useMemo(() => {
+    const map = new Map<string, DisplayLineWorkerAssignment[]>();
+    for (const a of allDayAssignments) {
+      if (!map.has(a.lineId)) map.set(a.lineId, []);
+      map.get(a.lineId)!.push(a);
+    }
+    return Array.from(map.entries()).map(([lineId, workers]) => ({
+      lineId,
+      lineName: getLineName(lineId),
+      workers: sortAssignmentsByEmployeeCode<DisplayLineWorkerAssignment>(workers, getAssignmentEmployeeCode),
+    }));
+  }, [allDayAssignments, _rawLines, _rawEmployees]);
 
   const workerPositionIds = useMemo(() => {
     return new Set(
@@ -669,7 +709,7 @@ export const LineWorkerAssignment: React.FC = () => {
                   </tr>
                 </thead>
                 <tbody>
-                  {assignments.map((a) => {
+                  {sortedAssignments.map((a) => {
                     const emp = getEmployeeInfo(a.employeeId);
                     const canUpdateDailyStatus = Boolean(a.id);
                     const ending = endingPermanentAssignmentId === a.permanentAssignmentId;

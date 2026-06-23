@@ -39,6 +39,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -743,9 +749,9 @@ export const ProductionPlans: React.FC = () => {
         subtitle="إدارة وتتبع خطط الإنتاج الرسمية"
         icon="event_note"
         primaryAction={canCreate ? {
-          label: formOpen ? 'إغلاق' : 'خطة جديدة',
-          icon: formOpen ? 'close' : 'add',
-          onClick: () => setFormOpen(!formOpen),
+          label: 'خطة جديدة',
+          icon: 'add',
+          onClick: () => setFormOpen(true),
         } : undefined}
         extra={
           <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-base)] p-0.5 overflow-x-auto">
@@ -787,19 +793,20 @@ export const ProductionPlans: React.FC = () => {
         <KPIBox label="متوسط الإنجاز" value={kpis.avgCompletion} icon="speed" unit="%" colorClass="bg-emerald-100 text-emerald-600" />
       </div>
 
-      {/* Create Form */}
-      {canCreate && formOpen && (
-        <Card className="border-primary/20 shadow-primary/5">
-          <div className="flex items-center gap-3 mb-6">
+      {/* Create Form Modal */}
+      <Dialog open={canCreate && formOpen} onOpenChange={(open) => setFormOpen(open)}>
+        <DialogContent className="max-w-5xl w-[min(100vw-1.5rem,64rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0" dir="rtl">
+          <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center">
               <span className="material-icons-round text-primary">add_task</span>
             </div>
-            <div>
-              <h3 className="text-lg font-bold text-[var(--color-text)]">إنشاء خطة إنتاج جديدة</h3>
+            <div className="pl-8">
+              <DialogTitle className="text-lg font-bold text-[var(--color-text)]">إنشاء خطة إنتاج جديدة</DialogTitle>
               <p className="text-xs text-[var(--color-text-muted)] font-medium">حدد المنتج والخط والكمية لحساب التقديرات تلقائياً</p>
             </div>
           </div>
 
+          <div className="p-6 space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج *</label>
@@ -966,16 +973,18 @@ export const ProductionPlans: React.FC = () => {
             )}
           </div>
 
-          <div className="mt-6 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-3">
+          </div>
+
+          <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
             <Button variant="outline" onClick={() => setFormOpen(false)}>إلغاء</Button>
             <Button variant="primary" onClick={handleCreate} disabled={saving || !formProductId || !formLineId || formQuantity <= 0}>
               {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
               <span className="material-icons-round text-sm">add_task</span>
               إنشاء خطة
             </Button>
-          </div>
-        </Card>
-      )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Capacity Warning Modal */}
       {capacityWarning.show && (
