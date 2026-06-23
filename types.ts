@@ -357,6 +357,7 @@ export interface ProductionLineWorkerAssignment {
   tenantId?: string;
   lineId: string;
   workerId: string;
+  laborRole?: LineWorkerLaborRole;
   isActive: boolean;
   startDate: string;
   endDate?: string;
@@ -548,6 +549,8 @@ export type LineWorkerLaborRole =
 
 export interface LineWorkerAssignment {
   id?: string;
+  permanentAssignmentId?: string;
+  permanentWorkerId?: string;
   lineId: string;
   employeeId: string;
   employeeCode: string;

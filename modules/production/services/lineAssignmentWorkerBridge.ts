@@ -58,7 +58,7 @@ const resolvePermanentRows = (
         workerId: row.workerId,
         employeeId,
         employeeName: worker.name,
-        laborRole: dailyRow?.laborRole || DEFAULT_LINE_WORKER_LABOR_ROLE,
+        laborRole: dailyRow?.laborRole || row.laborRole || DEFAULT_LINE_WORKER_LABOR_ROLE,
         isPresent: dailyRow?.isPresent ?? true,
         source: 'permanent',
       };

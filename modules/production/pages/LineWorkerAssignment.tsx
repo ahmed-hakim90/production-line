@@ -199,7 +199,7 @@ export const LineWorkerAssignment: React.FC = () => {
           employeeCode: String(daily?.employeeCode || worker.code || '').trim(),
           employeeName: String(daily?.employeeName || worker.name || employeeId).trim(),
           date: selectedDate,
-          laborRole: daily?.laborRole,
+          laborRole: daily?.laborRole || row.laborRole,
           isPresent: daily?.isPresent ?? true,
           assignedAt: daily?.assignedAt,
           assignedBy: daily?.assignedBy,
@@ -276,10 +276,18 @@ export const LineWorkerAssignment: React.FC = () => {
   const getPositionTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title ?? '';
   const getLineName = (id: string) => _rawLines.find((l) => l.id === id)?.name ?? id;
 
-  const handleLaborRoleChange = async (assignmentId: string, laborRole: LineWorkerLaborRole) => {
-    setUpdatingLaborRoleId(assignmentId);
+  const handleLaborRoleChange = async (assignment: DisplayLineWorkerAssignment, laborRole: LineWorkerLaborRole) => {
+    const actionId = assignment.id || assignment.permanentAssignmentId;
+    if (!actionId) return;
+
+    setUpdatingLaborRoleId(actionId);
     try {
-      await lineAssignmentService.updateLaborRole(assignmentId, laborRole);
+      if (assignment.permanentAssignmentId) {
+        await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, { laborRole });
+      }
+      if (assignment.id) {
+        await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
+      }
       await loadAssignments();
       showFeedback('success', 'تم تحديث نوع العامل');
     } catch {
@@ -290,14 +298,14 @@ export const LineWorkerAssignment: React.FC = () => {
   };
 
   const renderLaborRoleSelect = (
-    assignment: LWA,
+    assignment: DisplayLineWorkerAssignment,
     compact = false,
   ) => (
     <Select
       value={resolveLineWorkerLaborRole(assignment.laborRole)}
-      disabled={!assignment.id || updatingLaborRoleId === assignment.id}
+      disabled={(!assignment.id && !assignment.permanentAssignmentId) || updatingLaborRoleId === (assignment.id || assignment.permanentAssignmentId)}
       onValueChange={(value) => {
-        if (assignment.id) void handleLaborRoleChange(assignment.id, value as LineWorkerLaborRole);
+        void handleLaborRoleChange(assignment, value as LineWorkerLaborRole);
       }}
     >
       <SelectTrigger className={`${compact ? 'h-8 min-w-[96px] text-xs' : 'h-9 min-w-[120px] text-sm'} border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-2`}>
@@ -368,6 +376,7 @@ export const LineWorkerAssignment: React.FC = () => {
         workerId,
         lineId: selectedLineId,
         startDate: linkStartDate,
+        laborRole: resolveLineWorkerLaborRole(undefined),
         isActive: true,
       });
 

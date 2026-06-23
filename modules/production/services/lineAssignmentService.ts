@@ -56,12 +56,14 @@ function buildPermanentDailyOverlay(
 
       return {
         id: daily?.id,
+        permanentAssignmentId: row.id,
+        permanentWorkerId: row.workerId,
         lineId: row.lineId,
         employeeId,
         employeeCode: String(daily?.employeeCode || worker.code || '').trim(),
         employeeName: String(daily?.employeeName || worker.name || employeeId).trim(),
         date,
-        laborRole: daily?.laborRole || DEFAULT_LINE_WORKER_LABOR_ROLE,
+        laborRole: daily?.laborRole || row.laborRole || DEFAULT_LINE_WORKER_LABOR_ROLE,
         isPresent: daily?.isPresent ?? true,
         assignedAt: daily?.assignedAt,
         assignedBy: daily?.assignedBy,

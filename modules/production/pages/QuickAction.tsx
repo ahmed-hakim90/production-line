@@ -20,6 +20,8 @@ import {
   sumWorkersCountPatch,
 } from '../utils/lineAssignmentWorkersCount';
 import { lineAssignmentWorkerBridge } from '../services/lineAssignmentWorkerBridge';
+import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
+import { productionWorkerService } from '../services/productionWorkerService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
 import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
@@ -48,6 +50,7 @@ import {
   hasLineSpecificWorkerTarget,
 } from '../selectors/workerTargetSelector';
 import {
+  DEFAULT_LINE_WORKER_LABOR_ROLE,
   LINE_WORKER_LABOR_ROLES,
   LINE_WORKER_LABOR_ROLE_LABELS,
   resolveLineWorkerLaborRole,
@@ -142,6 +145,44 @@ const writeQuickActionStoredState = (key: string, state: QuickActionStoredState)
   }
 };
 
+const getEmployeeCodeSortValue = (code: string): { kind: 'numeric' | 'text' | 'empty'; text: string; numberValue: number } => {
+  const text = String(code || '').trim();
+  if (!text) return { kind: 'empty', text: '', numberValue: Number.POSITIVE_INFINITY };
+
+  const numberValue = Number(text);
+  if (Number.isFinite(numberValue) && /^-?\d+(?:\.\d+)?$/.test(text)) {
+    return { kind: 'numeric', text, numberValue };
+  }
+
+  return { kind: 'text', text, numberValue: Number.POSITIVE_INFINITY };
+};
+
+const compareEmployeeCodes = (leftCode: string, rightCode: string): number => {
+  const left = getEmployeeCodeSortValue(leftCode);
+  const right = getEmployeeCodeSortValue(rightCode);
+
+  if (left.kind === 'numeric' && right.kind === 'numeric') {
+    return left.numberValue - right.numberValue || left.text.localeCompare(right.text, 'ar', { numeric: true });
+  }
+
+  if (left.kind !== right.kind) {
+    const rank = { numeric: 0, text: 1, empty: 2 };
+    return rank[left.kind] - rank[right.kind];
+  }
+
+  return left.text.localeCompare(right.text, 'ar', { numeric: true });
+};
+
+const isPermanentAssignmentActiveOnDate = (
+  row: Awaited<ReturnType<typeof productionLineWorkerAssignmentService.getByWorker>>[number],
+  date: string,
+): boolean => {
+  if (!row.isActive) return false;
+  if (row.startDate > date) return false;
+  if (row.endDate && row.endDate < date) return false;
+  return true;
+};
+
 const isQuickActionFormDraftEmpty = (draft: QuickActionFormDraft) => (
   !draft.lineId
   && !draft.productId
@@ -224,6 +265,9 @@ export const QuickAction: React.FC = () => {
   const [workerActionError, setWorkerActionError] = useState<string | null>(null);
   const [updatingWorkerRoleId, setUpdatingWorkerRoleId] = useState<string | null>(null);
   const [updatingWorkerPresenceId, setUpdatingWorkerPresenceId] = useState<string | null>(null);
+  const [selectedLineWorkerEmployeeId, setSelectedLineWorkerEmployeeId] = useState('');
+  const [addingLineWorker, setAddingLineWorker] = useState(false);
+  const [endingLineWorkerAssignmentId, setEndingLineWorkerAssignmentId] = useState<string | null>(null);
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
   const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
@@ -523,7 +567,14 @@ export const QuickAction: React.FC = () => {
     setLoadingWorkersCount(true);
     try {
       const list = await lineAssignmentService.getByLineAndDate(lineId, today);
-      setLineWorkers(list);
+      setLineWorkers(
+        list
+          .map((worker, index) => ({ worker, index }))
+          .sort((left, right) => (
+            compareEmployeeCodes(left.worker.employeeCode, right.worker.employeeCode) || left.index - right.index
+          ))
+          .map(({ worker }) => worker),
+      );
     } catch {
       // Keep current manual value if fetch fails.
     } finally {
@@ -547,6 +598,11 @@ export const QuickAction: React.FC = () => {
   useEffect(() => {
     lastAutoFilledWorkersCountRef.current = null;
   }, [lineId, today, reportType]);
+
+  useEffect(() => {
+    setSelectedLineWorkerEmployeeId('');
+    setWorkerActionError(null);
+  }, [lineId]);
 
   const workersTotal = useMemo(() => (
     (Number(workersProduction) || 0)
@@ -623,6 +679,27 @@ export const QuickAction: React.FC = () => {
     });
     return counts;
   }, [lineWorkers]);
+  const linkedLineWorkerEmployeeIds = useMemo(
+    () => new Set(lineWorkers.map((worker) => String(worker.employeeId || '').trim()).filter(Boolean)),
+    [lineWorkers],
+  );
+  const lineWorkerEmployeeOptions = useMemo(
+    () => _rawEmployees
+      .filter((employee) => employee.isActive !== false && employee.id && !linkedLineWorkerEmployeeIds.has(employee.id))
+      .map((employee) => ({
+        employee,
+        code: String(employee.code || employee.acNo || '').trim(),
+      }))
+      .sort((left, right) => (
+        compareEmployeeCodes(left.code, right.code)
+        || left.employee.name.localeCompare(right.employee.name, 'ar', { numeric: true })
+      ))
+      .map(({ employee, code }) => ({
+        value: employee.id,
+        label: `${code ? `${code} - ` : ''}${employee.name}`,
+      })),
+    [_rawEmployees, linkedLineWorkerEmployeeIds],
+  );
   const getUnitsPerCarton = useCallback((productId: string) => {
     const n = Number(_rawProducts.find((p) => p.id === productId)?.unitsPerCarton ?? 0);
     return n > 0 ? n : undefined;
@@ -744,27 +821,160 @@ export const QuickAction: React.FC = () => {
     setSelectedWorkOrderId('');
   }, [lineId, allowedLinesForUser, _rawLines.length, isSupervisorReporter, supervisorLinesLoaded]);
 
+  const handleQuickAddLineWorker = useCallback(async () => {
+    if (!lineId) {
+      setWorkerActionError('اختر خط الإنتاج أولاً.');
+      return;
+    }
+    if (isSupervisorReporter && !assignedLineIds.has(lineId)) {
+      setWorkerActionError('لا يمكنك ربط عامل على خط غير مربوط بك.');
+      return;
+    }
+
+    const employee = _rawEmployees.find((row) => row.id === selectedLineWorkerEmployeeId);
+    if (!employee?.id) {
+      setWorkerActionError('اختر عامل للإضافة.');
+      return;
+    }
+    if (employee.isActive === false) {
+      setWorkerActionError('لا يمكن إضافة عامل غير نشط.');
+      return;
+    }
+
+    setAddingLineWorker(true);
+    setWorkerActionError(null);
+    try {
+      const workerId = await productionWorkerService.linkEmployee({
+        employeeId: employee.id,
+        name: employee.name,
+        code: employee.code || employee.acNo,
+        defaultLineId: lineId,
+        isActive: true,
+      });
+      if (!workerId) {
+        setWorkerActionError('تعذر إنشاء/تحديد ملف عامل الإنتاج.');
+        return;
+      }
+
+      const workerAssignments = await productionLineWorkerAssignmentService.getByWorker(workerId);
+      const activeAssignment = workerAssignments.find((row) => isPermanentAssignmentActiveOnDate(row, today));
+      if (activeAssignment) {
+        setWorkerActionError(
+          activeAssignment.lineId === lineId
+            ? `${employee.name} مربوط بالفعل بهذا الخط.`
+            : `${employee.name} مربوط حالياً على "${getLineName(activeAssignment.lineId)}"؛ أنهِ الربط الحالي أولاً.`,
+        );
+        return;
+      }
+
+      await productionLineWorkerAssignmentService.create({
+        workerId,
+        lineId,
+        startDate: today,
+        laborRole: DEFAULT_LINE_WORKER_LABOR_ROLE,
+        isActive: true,
+      });
+
+      const worker = await productionWorkerService.getById(workerId);
+      if (worker) {
+        await productionWorkerService.update(workerId, {
+          lineIds: Array.from(new Set([...(worker.lineIds || []), lineId])),
+          defaultLineId: worker.defaultLineId || lineId,
+        });
+      }
+
+      setSelectedLineWorkerEmployeeId('');
+      await fetchWorkersFromLineAssignments();
+      showAppToast('success', `تم ربط ${employee.name} بالخط ربطاً دائماً`);
+    } catch {
+      setWorkerActionError('تعذر إضافة العامل للخط الآن. حاول مرة أخرى.');
+    } finally {
+      setAddingLineWorker(false);
+    }
+  }, [
+    lineId,
+    isSupervisorReporter,
+    assignedLineIds,
+    _rawEmployees,
+    selectedLineWorkerEmployeeId,
+    today,
+    getLineName,
+    fetchWorkersFromLineAssignments,
+  ]);
+
+  const handleQuickEndLineWorkerAssignment = useCallback(async (assignment: LineWorkerAssignment) => {
+    if (!assignment.permanentAssignmentId) {
+      setWorkerActionError('هذا العامل من سجل يومي قديم فقط ولا يوجد ربط دائم لإلغائه من هنا.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `إلغاء الربط الدائم لـ ${assignment.employeeName || assignment.employeeId} من خط ${getLineName(assignment.lineId)}؟`,
+    );
+    if (!confirmed) return;
+
+    setEndingLineWorkerAssignmentId(assignment.permanentAssignmentId);
+    setWorkerActionError(null);
+    try {
+      await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, {
+        isActive: false,
+        endDate: today,
+      });
+      if (assignment.id) {
+        await lineAssignmentService.delete(assignment.id);
+      }
+      if (assignment.permanentWorkerId) {
+        const worker = await productionWorkerService.getById(assignment.permanentWorkerId);
+        if (worker) {
+          await productionWorkerService.update(assignment.permanentWorkerId, {
+            lineIds: (worker.lineIds || []).filter((id) => id !== assignment.lineId),
+          });
+        }
+        setWorkerOutputs((current) => current.filter((row) => row.workerId !== assignment.permanentWorkerId));
+      }
+      await fetchWorkersFromLineAssignments();
+      showAppToast('success', 'تم إلغاء الربط الدائم للعامل من الخط');
+    } catch {
+      setWorkerActionError('تعذر إلغاء ربط العامل الآن. حاول مرة أخرى.');
+    } finally {
+      setEndingLineWorkerAssignmentId(null);
+    }
+  }, [fetchWorkersFromLineAssignments, getLineName, today]);
+
   const handleQuickWorkerRoleChange = useCallback(async (
     assignment: LineWorkerAssignment,
     laborRole: LineWorkerLaborRole,
   ) => {
-    if (!assignment.id) return;
+    if (!assignment.id && !assignment.permanentAssignmentId) {
+      setWorkerActionError('هذا العامل من سجل يومي قديم فقط ولا يمكن تعديل وظيفته من هنا.');
+      return;
+    }
 
     const previousRole = resolveLineWorkerLaborRole(assignment.laborRole);
     if (previousRole === laborRole) return;
+    const actionId = assignment.id || assignment.permanentAssignmentId || `${assignment.lineId}_${assignment.employeeId}`;
 
-    setUpdatingWorkerRoleId(assignment.id);
+    setUpdatingWorkerRoleId(actionId);
     setWorkerActionError(null);
     setLineWorkers((current) => current.map((worker) => (
-      worker.id === assignment.id ? { ...worker, laborRole } : worker
+      (worker.id || worker.permanentAssignmentId || `${worker.lineId}_${worker.employeeId}`) === actionId
+        ? { ...worker, laborRole }
+        : worker
     )));
 
     try {
-      await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
+      if (assignment.permanentAssignmentId) {
+        await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, { laborRole });
+      }
+      if (assignment.id) {
+        await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
+      }
       await fetchWorkersFromLineAssignments();
     } catch {
       setLineWorkers((current) => current.map((worker) => (
-        worker.id === assignment.id ? { ...worker, laborRole: previousRole } : worker
+        (worker.id || worker.permanentAssignmentId || `${worker.lineId}_${worker.employeeId}`) === actionId
+          ? { ...worker, laborRole: previousRole }
+          : worker
       )));
       setWorkerActionError('تعذر تحديث وظيفة العامل الآن. حاول مرة أخرى.');
     } finally {
@@ -776,23 +986,39 @@ export const QuickAction: React.FC = () => {
     assignment: LineWorkerAssignment,
     isPresent: boolean,
   ) => {
-    if (!assignment.id) {
-      setWorkerActionError('لا يمكن تعديل حضور عامل من بيانات موروثة. حدّث القائمة أو أضفه لليوم أولاً.');
+    if (!assignment.id && !assignment.permanentAssignmentId) {
+      setWorkerActionError('هذا العامل من سجل قديم فقط ولا يمكن تعديل حضوره من هنا.');
       return;
     }
 
     const previousIsPresent = assignment.isPresent ?? true;
-    if (previousIsPresent === isPresent) return;
+    if (assignment.id && previousIsPresent === isPresent) return;
+    const actionId = assignment.id || assignment.permanentAssignmentId || `${assignment.lineId}_${assignment.employeeId}`;
 
-    setUpdatingWorkerPresenceId(assignment.id);
+    setUpdatingWorkerPresenceId(actionId);
     setWorkerActionError(null);
     setLineWorkers((current) => current.map((worker) => (
-      worker.id === assignment.id ? { ...worker, isPresent } : worker
+      (worker.id || worker.permanentAssignmentId || `${worker.lineId}_${worker.employeeId}`) === actionId
+        ? { ...worker, isPresent }
+        : worker
     )));
 
     try {
-      await lineAssignmentService.updatePresence(assignment.id, isPresent);
-      const workerId = await lineAssignmentWorkerBridge.syncFromLineAssignment(assignment);
+      if (assignment.id) {
+        await lineAssignmentService.updatePresence(assignment.id, isPresent);
+      } else {
+        await lineAssignmentService.create({
+          lineId: assignment.lineId,
+          employeeId: assignment.employeeId,
+          employeeCode: assignment.employeeCode,
+          employeeName: assignment.employeeName,
+          date: today,
+          laborRole: resolveLineWorkerLaborRole(assignment.laborRole),
+          isPresent,
+          assignedBy: uid || '',
+        });
+      }
+      const workerId = assignment.permanentWorkerId || await lineAssignmentWorkerBridge.syncFromLineAssignment(assignment);
       if (workerId) {
         setWorkerOutputs((current) => current.map((row) => {
           if (row.workerId !== workerId) return row;
@@ -808,13 +1034,15 @@ export const QuickAction: React.FC = () => {
       await fetchWorkersFromLineAssignments();
     } catch {
       setLineWorkers((current) => current.map((worker) => (
-        worker.id === assignment.id ? { ...worker, isPresent: previousIsPresent } : worker
+        (worker.id || worker.permanentAssignmentId || `${worker.lineId}_${worker.employeeId}`) === actionId
+          ? { ...worker, isPresent: previousIsPresent }
+          : worker
       )));
       setWorkerActionError('تعذر تحديث حضور العامل الآن. حاول مرة أخرى.');
     } finally {
       setUpdatingWorkerPresenceId(null);
     }
-  }, [fetchWorkersFromLineAssignments]);
+  }, [fetchWorkersFromLineAssignments, today, uid]);
 
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
@@ -1918,10 +2146,34 @@ export const QuickAction: React.FC = () => {
               )}
             </div>
             <div className="p-3 sm:p-4 border-b border-[var(--color-border)] space-y-2">
-              <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 dark:bg-amber-900/10 dark:border-amber-800 px-3 py-2">
-                <p className="text-xs font-bold text-amber-800 dark:text-amber-300 leading-relaxed">
-                  الإضافة السريعة اليومية متوقفة. لإضافة عامل إلى خط الإنتاج استخدم صفحة «ربط العمالة الدائم بالخط».
+              <div className="rounded-[var(--border-radius-lg)] border border-primary/15 bg-primary/5 px-3 py-3 space-y-2">
+                <p className="text-xs font-bold text-primary leading-relaxed">
+                  الإضافة والحذف من هنا تعدّل الربط الدائم للخط، أما أزرار الحضور فتخص سجل اليوم فقط.
                 </p>
+                <div className="flex flex-col sm:flex-row gap-2 sm:items-center">
+                  <div className="flex-1 min-w-0">
+                    <SearchableSelect
+                      placeholder="اختر عامل لإضافته للخط"
+                      options={lineWorkerEmployeeOptions}
+                      value={selectedLineWorkerEmployeeId}
+                      onChange={setSelectedLineWorkerEmployeeId}
+                      className="h-11"
+                    />
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={() => void handleQuickAddLineWorker()}
+                    disabled={!lineId || !selectedLineWorkerEmployeeId || addingLineWorker}
+                    className="h-11 shrink-0"
+                  >
+                    {addingLineWorker ? (
+                      <span className="material-icons-round animate-spin text-sm">refresh</span>
+                    ) : (
+                      <span className="material-icons-round text-sm">person_add</span>
+                    )}
+                    إضافة عامل
+                  </Button>
+                </div>
               </div>
               {workerActionError && (
                 <p className="text-xs font-bold text-rose-500">{workerActionError}</p>
@@ -1940,16 +2192,18 @@ export const QuickAction: React.FC = () => {
                 <div className="text-center py-8">
                   <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">groups</span>
                   <p className="text-sm text-[var(--color-text-muted)] font-medium">لا يوجد عمال دائمون على هذا الخط لهذا اليوم</p>
-                  <p className="text-xs text-[var(--color-text-muted)] mt-1">أدر الربط من صفحة عمال الإنتاج بدلاً من إنشاء رابط يومي.</p>
+                  <p className="text-xs text-[var(--color-text-muted)] mt-1">استخدم اختيار العامل بالأعلى لإنشاء ربط دائم جديد.</p>
                 </div>
               ) : (
                 lineWorkers.map((w, i) => {
                   const isPresent = w.isPresent !== false;
-                  const presenceUpdating = updatingWorkerPresenceId === w.id;
-                  const roleUpdating = updatingWorkerRoleId === w.id;
+                  const workerActionId = w.id || w.permanentAssignmentId || `${w.lineId}_${w.employeeId}`;
+                  const presenceUpdating = updatingWorkerPresenceId === workerActionId;
+                  const roleUpdating = updatingWorkerRoleId === workerActionId;
+                  const endingWorker = endingLineWorkerAssignmentId === w.permanentAssignmentId;
                   return (
                     <div
-                      key={w.id || i}
+                      key={workerActionId || i}
                       className={cn(
                         'rounded-[var(--border-radius-lg)] border p-3 shadow-sm transition-colors',
                         isPresent
@@ -1991,7 +2245,7 @@ export const QuickAction: React.FC = () => {
                           <div className="grid grid-cols-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-1">
                             <button
                               type="button"
-                              disabled={!w.id || presenceUpdating}
+                              disabled={(!w.id && !w.permanentAssignmentId) || presenceUpdating}
                               onClick={() => void handleQuickWorkerPresenceChange(w, true)}
                               className={cn(
                                 'min-h-10 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
@@ -2005,7 +2259,7 @@ export const QuickAction: React.FC = () => {
                             </button>
                             <button
                               type="button"
-                              disabled={!w.id || presenceUpdating}
+                              disabled={(!w.id && !w.permanentAssignmentId) || presenceUpdating}
                               onClick={() => void handleQuickWorkerPresenceChange(w, false)}
                               className={cn(
                                 'min-h-10 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
@@ -2021,15 +2275,13 @@ export const QuickAction: React.FC = () => {
                           {presenceUpdating && (
                             <p className="text-[11px] font-bold text-primary">جاري حفظ الحضور...</p>
                           )}
-                          {!w.id && (
-                            <p className="text-[11px] font-bold text-amber-600">لا يوجد سجل حضور يومي لهذا العامل بعد؛ لا يتم إنشاء رابط يومي تلقائياً.</p>
-                          )}
+                       
                         </div>
                         <div className="space-y-1.5">
                           <p className="text-[11px] font-black text-[var(--color-text-muted)]">وظيفة العامل</p>
                           <Select
                             value={resolveLineWorkerLaborRole(w.laborRole)}
-                            disabled={!w.id || roleUpdating}
+                            disabled={(!w.id && !w.permanentAssignmentId) || roleUpdating}
                             onValueChange={(value) => {
                               void handleQuickWorkerRoleChange(w, value as LineWorkerLaborRole);
                             }}
@@ -2052,8 +2304,25 @@ export const QuickAction: React.FC = () => {
                             <p className="text-[11px] font-bold text-primary">جاري حفظ الوظيفة...</p>
                           )}
                         </div>
+                        <div className="space-y-1.5">
+                          <p className="text-[11px] font-black text-[var(--color-text-muted)]">إجراء</p>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => void handleQuickEndLineWorkerAssignment(w)}
+                            disabled={!w.permanentAssignmentId || endingWorker}
+                            className="h-11 w-full justify-center text-xs text-rose-600 border-rose-200 hover:bg-rose-50"
+                          >
+                            {endingWorker ? (
+                              <span className="material-icons-round animate-spin text-sm">refresh</span>
+                            ) : (
+                              <span className="material-icons-round text-sm">link_off</span>
+                            )}
+                            إلغاء الربط
+                          </Button>
+                        </div>
                         <p className="sm:col-span-3 text-[11px] font-bold text-[var(--color-text-muted)]">
-                          إلغاء ربط العامل أو نقله يتم من ملف العامل في صفحة عمال الإنتاج، وليس من سجل الحضور اليومي.
+                          الحذف هنا ينهي الربط الدائم لهذا العامل مع الخط، ولا يحذف ملف العامل من النظام.
                         </p>
                       </div>
                     </div>
