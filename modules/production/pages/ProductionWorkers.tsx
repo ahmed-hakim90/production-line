@@ -10,22 +10,22 @@ import { formatNumber, getTodayDateString } from '@/utils/calculations';
 import { Badge, Button, Card, KPIBox, LoadingSkeleton, SearchableSelect } from '../components/UI';
 import { SelectableTable, type TableColumn } from '../components/SelectableTable';
 import type {
-  LineWorkerAssignment,
   ProductionLineWorkerAssignment,
   ProductionWorker,
   ProductionWorkerTarget,
+  WorkerDailyAchievementStatus,
   WorkerMonthlyAchievement,
 } from '@/types';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import { productionWorkerService, resolveWorkerCodeFromEmployee } from '../services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
-import { lineAssignmentService } from '../services/lineAssignmentService';
+import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
 import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
 import { ProductionWorkerReports } from './ProductionWorkerReports';
 import { ProductionWorkerRatingsReview } from './ProductionWorkerRatingsReview';
 import { SupervisorWorkerEvaluation } from './SupervisorWorkerEvaluation';
-import { summarizeWorkerPresenceDaysByWorker } from '../utils/workerPresence';
+import { shouldShowProductionWorkerForSupervisor } from '../utils/productionWorkerVisibility';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -36,6 +36,7 @@ type WorkerRow = ProductionWorker & {
   activeTargetsCount: number;
   todayOutput: number;
   todayAchievement: number;
+  todayStatus?: WorkerDailyAchievementStatus;
   presentDays: number;
   absentDays: number;
   monthStats: WorkerMonthlyAchievement | null;
@@ -46,25 +47,24 @@ const currentMonth = (): string => {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
 };
 
-const monthRange = (month: string): { start: string; end: string } => {
-  const [year, rawMonth] = month.split('-').map(Number);
-  const lastDay = new Date(year, rawMonth, 0).getDate();
-  const mm = String(rawMonth).padStart(2, '0');
-  return {
-    start: `${year}-${mm}-01`,
-    end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
-  };
+const TODAY_STATUS_LABELS: Record<WorkerDailyAchievementStatus, string> = {
+  achieved: 'حقق الهدف',
+  below_target: 'أقل من الهدف',
+  over_target: 'تجاوز الهدف',
+  absent: 'غائب',
+  no_output: 'لا يوجد إنتاج',
+  no_target: 'غير مكلف بهدف',
+  leave: 'إجازة',
 };
 
-const listDatesInRange = (start: string, end: string): string[] => {
-  const dates: string[] = [];
-  const cursor = new Date(`${start}T00:00:00`);
-  const endDate = new Date(`${end}T00:00:00`);
-  while (cursor <= endDate) {
-    dates.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`);
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
+const TODAY_STATUS_BADGE: Record<WorkerDailyAchievementStatus, 'success' | 'warning' | 'danger' | 'info' | 'neutral'> = {
+  achieved: 'success',
+  below_target: 'warning',
+  over_target: 'success',
+  absent: 'danger',
+  no_output: 'warning',
+  no_target: 'neutral',
+  leave: 'info',
 };
 
 export const ProductionWorkers: React.FC = () => {
@@ -80,6 +80,9 @@ export const ProductionWorkers: React.FC = () => {
   const products = useAppStore((s) => s.products);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
+  const uid = useAppStore((s) => s.uid);
+  const storeCurrentEmployee = useAppStore((s) => s.currentEmployee);
+  const userRoleName = useAppStore((s) => s.userRoleName);
   const rawWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
   const workerSettings = useMemo(() => ({
     performance: {
@@ -104,9 +107,10 @@ export const ProductionWorkers: React.FC = () => {
   const [workers, setWorkers] = useState<ProductionWorker[]>([]);
   const [assignments, setAssignments] = useState<ProductionLineWorkerAssignment[]>([]);
   const [targets, setTargets] = useState<ProductionWorkerTarget[]>([]);
-  const [periodLineAssignments, setPeriodLineAssignments] = useState<LineWorkerAssignment[]>([]);
   const [monthStatsMap, setMonthStatsMap] = useState<Map<string, WorkerMonthlyAchievement>>(new Map());
-  const [todayStatsMap, setTodayStatsMap] = useState<Map<string, { output: number; achievement: number }>>(new Map());
+  const [todayStatsMap, setTodayStatsMap] = useState<Map<string, { output: number; achievement: number; status: WorkerDailyAchievementStatus }>>(new Map());
+  const [supervisorLineIds, setSupervisorLineIds] = useState<Set<string>>(new Set());
+  const [supervisorLinesLoaded, setSupervisorLinesLoaded] = useState(true);
 
   const [search, setSearch] = useState('');
   const [filterLine, setFilterLine] = useState('');
@@ -115,6 +119,15 @@ export const ProductionWorkers: React.FC = () => {
   const [filterDate, setFilterDate] = useState(getTodayDateString());
   const [filterActive, setFilterActive] = useState<'' | 'active' | 'inactive'>('');
   const [filterPerformance, setFilterPerformance] = useState<'' | 'below' | 'above' | 'missing_target'>('');
+
+  const currentEmployee = useMemo(
+    () => (storeCurrentEmployee?.id ? storeCurrentEmployee : _rawEmployees.find((e) => e.userId === uid)) ?? null,
+    [storeCurrentEmployee, _rawEmployees, uid],
+  );
+  const isSupervisorReporter = useMemo(
+    () => String(userRoleName || '').trim().includes('مشرف') || currentEmployee?.level === 2,
+    [userRoleName, currentEmployee?.level],
+  );
 
   const requestedTab = searchParams.get('tab');
   const activeWorkspaceTab: WorkspaceTab =
@@ -179,32 +192,34 @@ export const ProductionWorkers: React.FC = () => {
   useEffect(() => { void loadData(); }, [loadData]);
 
   useEffect(() => {
-    let cancelled = false;
-    const today = getTodayDateString();
-    const { start, end } = monthRange(filterMonth || currentMonth());
-    const rangeEnd = end > today ? today : end;
-    const periodDates = start <= rangeEnd ? listDatesInRange(start, rangeEnd) : [];
-
-    if (periodDates.length === 0) {
-      setPeriodLineAssignments([]);
-      return () => { cancelled = true; };
+    let mounted = true;
+    if (!isSupervisorReporter || !currentEmployee?.id) {
+      setSupervisorLineIds(new Set());
+      setSupervisorLinesLoaded(true);
+      return () => { mounted = false; };
     }
 
-    void (async () => {
-      const groups = await Promise.all(periodDates.map(async (date) => {
-        if (productionLines.length === 0) return lineAssignmentService.getByDate(date);
-        const lineGroups = await Promise.all(
-          productionLines
-            .filter((line) => line.id)
-            .map((line) => lineAssignmentService.getByLineAndDate(line.id!, date)),
+    setSupervisorLinesLoaded(false);
+    supervisorLineAssignmentService
+      .getActiveByDate(filterDate)
+      .then((rows) => {
+        if (!mounted) return;
+        const ids = new Set(
+          rows
+            .filter((row) => String(row.supervisorId || '').trim() === currentEmployee.id)
+            .map((row) => String(row.lineId || '').trim())
+            .filter(Boolean),
         );
-        return lineGroups.flat();
-      }));
-      if (!cancelled) setPeriodLineAssignments(groups.flat());
-    })();
-
-    return () => { cancelled = true; };
-  }, [filterMonth, productionLines]);
+        setSupervisorLineIds(ids);
+        setSupervisorLinesLoaded(true);
+      })
+      .catch(() => {
+        if (!mounted) return;
+        setSupervisorLineIds(new Set());
+        setSupervisorLinesLoaded(true);
+      });
+    return () => { mounted = false; };
+  }, [isSupervisorReporter, currentEmployee?.id, filterDate]);
 
   useEffect(() => {
     if (workers.length === 0) {
@@ -225,6 +240,7 @@ export const ProductionWorkers: React.FC = () => {
               date: filterDate,
               settings: workerSettings,
               products: products as never[],
+              lineId: filterLine || undefined,
               lineProductConfigs,
             });
           if (!cancelled) {
@@ -240,23 +256,9 @@ export const ProductionWorkers: React.FC = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [workers, filterMonth, filterDate, targets, products, lineProductConfigs, workerSettings]);
+  }, [workers, filterMonth, filterDate, filterLine, targets, products, lineProductConfigs, workerSettings]);
 
   const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? id;
-
-  const assignmentDaysByWorkerId = useMemo(() => {
-    const workerIdByEmployeeId = new Map(
-      workers
-        .filter((worker) => worker.id && worker.employeeId)
-        .map((worker) => [worker.employeeId!, worker.id!]),
-    );
-    return summarizeWorkerPresenceDaysByWorker(periodLineAssignments.flatMap((assignment) => {
-      if (filterLine && assignment.lineId !== filterLine) return [];
-      const workerId = workerIdByEmployeeId.get(assignment.employeeId);
-      if (!workerId) return [];
-      return [{ workerId, date: assignment.date, isPresent: assignment.isPresent }];
-    }));
-  }, [filterLine, periodLineAssignments, workers]);
 
   const rows: WorkerRow[] = useMemo(() => {
     return workers.map((worker) => {
@@ -270,23 +272,41 @@ export const ProductionWorkers: React.FC = () => {
       ).length;
       const monthStats = worker.id ? monthStatsMap.get(worker.id) ?? null : null;
       const today = worker.id ? todayStatsMap.get(worker.id) : undefined;
-      const assignmentDays = worker.id ? assignmentDaysByWorkerId.get(worker.id) : undefined;
       return {
         ...worker,
         assignedLineIds: lineIds,
         activeTargetsCount,
         todayOutput: today?.output ?? 0,
         todayAchievement: today?.achievement ?? 0,
-        presentDays: assignmentDays?.presentDays ?? 0,
-        absentDays: assignmentDays?.absentDays ?? 0,
+        todayStatus: today?.status,
+        presentDays: monthStats?.presentDays ?? 0,
+        absentDays: monthStats?.absentDays ?? 0,
         monthStats,
       };
     });
-  }, [workers, assignments, targets, monthStatsMap, todayStatsMap, assignmentDaysByWorkerId]);
+  }, [workers, assignments, targets, monthStatsMap, todayStatsMap]);
+
+  const scopedRows = useMemo(
+    () => rows.filter((row) => shouldShowProductionWorkerForSupervisor(
+      row.assignedLineIds,
+      isSupervisorReporter,
+      supervisorLineIds,
+    )),
+    [rows, isSupervisorReporter, supervisorLineIds],
+  );
+
+  const visibleProductionLines = useMemo(
+    () => (
+      isSupervisorReporter
+        ? productionLines.filter((line) => supervisorLineIds.has(String(line.id || '').trim()))
+        : productionLines
+    ),
+    [productionLines, isSupervisorReporter, supervisorLineIds],
+  );
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return rows.filter((row) => {
+    return scopedRows.filter((row) => {
       if (filterActive === 'active' && row.isActive === false) return false;
       if (filterActive === 'inactive' && row.isActive !== false) return false;
       if (filterLine && !row.assignedLineIds.includes(filterLine)) return false;
@@ -300,7 +320,7 @@ export const ProductionWorkers: React.FC = () => {
         || row.code.toLowerCase().includes(q)
         || employeeName.toLowerCase().includes(q);
     });
-  }, [rows, search, filterActive, filterLine, filterProduct, filterPerformance, targets, employeeNameById]);
+  }, [scopedRows, search, filterActive, filterLine, filterProduct, filterPerformance, targets, employeeNameById]);
 
   const linkableEmployeeOptions = useMemo(
     () => linkableEmployees
@@ -414,6 +434,7 @@ export const ProductionWorkers: React.FC = () => {
       'أهداف نشطة': row.activeTargetsCount,
       'إنتاج اليوم': row.todayOutput,
       'إنجاز اليوم %': row.todayAchievement,
+      'حالة اليوم': row.todayStatus ? TODAY_STATUS_LABELS[row.todayStatus] : '—',
       'إنتاج الشهر': row.monthStats?.monthlyOutput ?? 0,
       'هدف الشهر': row.monthStats?.monthlyTarget ?? 0,
       'إنجاز الشهر %': row.monthStats?.monthlyAchievement ?? 0,
@@ -503,6 +524,15 @@ export const ProductionWorkers: React.FC = () => {
       className: 'text-center',
     },
     {
+      header: 'حالة اليوم',
+      render: (row) => {
+        if (statsLoading && !todayStatsMap.has(row.id ?? '')) return statPlaceholder;
+        if (!row.todayStatus) return '—';
+        return <Badge variant={TODAY_STATUS_BADGE[row.todayStatus]}>{TODAY_STATUS_LABELS[row.todayStatus]}</Badge>;
+      },
+      className: 'text-center',
+    },
+    {
       header: 'إنتاج الشهر',
       render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.monthStats?.monthlyOutput ?? 0)),
       className: 'text-center',
@@ -577,7 +607,7 @@ export const ProductionWorkers: React.FC = () => {
     },
   ];
 
-  if (loading) return <LoadingSkeleton rows={8} />;
+  if (loading || !supervisorLinesLoaded) return <LoadingSkeleton rows={8} />;
 
   return (
     <div className="space-y-4">
@@ -629,8 +659,8 @@ export const ProductionWorkers: React.FC = () => {
       ) : (
         <>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KPIBox label="إجمالي العمال" value={String(workers.length)} icon="groups" />
-        <KPIBox label="نشطون" value={String(workers.filter((w) => w.isActive !== false).length)} icon="check_circle" />
+        <KPIBox label="إجمالي العمال" value={String(scopedRows.length)} icon="groups" />
+        <KPIBox label="نشطون" value={String(scopedRows.filter((w) => w.isActive !== false).length)} icon="check_circle" />
         <KPIBox
           label="متوسط إنجاز الشهر"
           value={statsLoading ? '…' : `${filtered.length > 0 ? Math.round(filtered.reduce((s, r) => s + (r.monthStats?.monthlyAchievement ?? 0), 0) / filtered.length) : 0}%`}
@@ -651,7 +681,7 @@ export const ProductionWorkers: React.FC = () => {
           {
             key: 'line',
             placeholder: 'كل الخطوط',
-            options: productionLines.map((l) => ({ value: l.id, label: l.name })),
+            options: visibleProductionLines.map((l) => ({ value: l.id, label: l.name })),
           },
           {
             key: 'product',
@@ -780,7 +810,7 @@ export const ProductionWorkers: React.FC = () => {
                 onChange={(e) => setForm({ ...form, defaultLineId: e.target.value })}
               >
                 <option value="">بدون خط افتراضي</option>
-                {productionLines.map((l) => (
+                {visibleProductionLines.map((l) => (
                   <option key={l.id} value={l.id}>{l.name}</option>
                 ))}
               </select>

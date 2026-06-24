@@ -19,7 +19,7 @@ import {
   addDaysToDate,
   getTodayDateString,
 } from '../../../utils/calculations';
-import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
+import { effectivePlanningAssemblyMinutes } from '../../../utils/routingStandardAssembly';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { productionPlanService } from '../services/productionPlanService';
@@ -105,7 +105,7 @@ export const ProductionPlans: React.FC = () => {
 
   const {
     products, _rawLines, _rawProducts, productionPlans, planReports,
-    todayReports, lineProductConfigs, routingTotalTimeSecondsByProduct, loading, uid, systemSettings,
+    todayReports, lineProductConfigs, routingTotalTimeSecondsByProduct, routingVarianceBasisSecondsByProduct, loading, uid, systemSettings,
     laborSettings, costCenters, costCenterValues, costAllocations,
   } = useShallowStore((s) => ({
     products: s.products,
@@ -116,6 +116,7 @@ export const ProductionPlans: React.FC = () => {
     todayReports: s.todayReports,
     lineProductConfigs: s.lineProductConfigs,
     routingTotalTimeSecondsByProduct: s.routingTotalTimeSecondsByProduct,
+    routingVarianceBasisSecondsByProduct: s.routingVarianceBasisSecondsByProduct,
     loading: s.loading,
     uid: s.uid,
     systemSettings: s.systemSettings,
@@ -248,12 +249,13 @@ export const ProductionPlans: React.FC = () => {
       ? lineProductConfigs.find((c) => c.productId === formProductId && c.lineId === formLineId)
       : undefined;
     const avgTime = calculateAvgAssemblyTime(reportsForCalc);
-    const stdFromRoute = effectiveStandardAssemblyMinutes(
+    const planningTime = effectivePlanningAssemblyMinutes(
       formProductId,
       config?.standardAssemblyTime,
+      routingVarianceBasisSecondsByProduct,
       routingTotalTimeSecondsByProduct,
     );
-    const effectiveTime = stdFromRoute > 0 ? stdFromRoute : (avgTime > 0 ? avgTime : 0);
+    const effectiveTime = planningTime > 0 ? planningTime : (avgTime > 0 ? avgTime : 0);
     const dailyCapacity = line && effectiveTime > 0
       ? calculateDailyCapacity(line.maxWorkers, line.dailyWorkingHours, effectiveTime)
       : 0;
@@ -286,7 +288,7 @@ export const ProductionPlans: React.FC = () => {
       avgDailyTarget,
       usesManualDailyTarget: manualDailyTarget > 0,
     };
-  }, [formProductId, formLineId, formQuantity, formDailyTarget, formStartDate, productReports, _rawLines, lineProductConfigs, routingTotalTimeSecondsByProduct, laborSettings, products]);
+  }, [formProductId, formLineId, formQuantity, formDailyTarget, formStartDate, productReports, _rawLines, lineProductConfigs, routingVarianceBasisSecondsByProduct, routingTotalTimeSecondsByProduct, laborSettings, products]);
 
   const formProductOptions = useMemo(() => {
     const q = formProductInput.trim().toLowerCase();
@@ -938,7 +940,7 @@ export const ProductionPlans: React.FC = () => {
                 <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">متوسط وقت التجميع</p>
                   <p className="text-lg font-bold text-primary">
-                    {calculations.avgAssemblyTime > 0 ? `${calculations.avgAssemblyTime} د/و` : '—'}
+                    {calculations.avgAssemblyTime > 0 ? `${formatNumber(Number(calculations.avgAssemblyTime.toFixed(2)))} د/و` : '—'}
                   </p>
                 </div>
                 <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">

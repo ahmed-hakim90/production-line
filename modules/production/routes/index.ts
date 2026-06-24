@@ -14,6 +14,7 @@ const ProductionWorkerReports = lazyNamed(() => import('../pages/ProductionWorke
 const ProductionWorkerRatingsReview = lazyNamed(() => import('../pages/ProductionWorkerRatingsReview'), 'ProductionWorkerRatingsReview');
 const ProductionWorkers = lazyNamed(() => import('../pages/ProductionWorkers'), 'ProductionWorkers');
 const ProductionWorkerDetails = lazyNamed(() => import('../pages/ProductionWorkerDetails'), 'ProductionWorkerDetails');
+const ProductionAttendance = lazyNamed(() => import('../pages/ProductionAttendance'), 'ProductionAttendance');
 const Reports = lazyNamed(() => import('../pages/Reports'), 'Reports');
 const ComponentWasteReports = lazyNamed(() => import('../pages/ComponentWasteReports'), 'ComponentWasteReports');
 const QuickAction = lazyNamed(() => import('../pages/QuickAction'), 'QuickAction');
@@ -49,6 +50,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/production/workers/:id', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkerDetails },
   { path: '/production/worker-reports', permissionsAny: ['production.workerReports.view', 'productionWorkers.view', 'production.workers.view'], component: ProductionWorkerReports },
   { path: '/production/worker-ratings', permissionsAny: ['production.workerRatings.view', 'production.workerRatings.manage', 'hr.evaluation.approve'], component: ProductionWorkerRatingsReview },
+  { path: '/production/attendance', permissionsAny: ['production.attendance.view', 'production.attendance.manage', 'reports.view'], component: ProductionAttendance },
   { path: '/reports', permission: 'reports.view', component: Reports },
   { path: '/component-waste-reports', permission: 'reports.componentWaste.create', component: ComponentWasteReports },
   { path: '/supply-cycles', permission: 'supplyCycles.view', component: SupplyCyclesList },

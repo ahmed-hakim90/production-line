@@ -633,7 +633,11 @@ export const exportAllEmployees = (
   employees: FirestoreEmployee[],
   getDeptName: (id: string) => string,
   getJobTitle: (id: string) => string,
-  getShiftName: (id: string) => string
+  getShiftName: (id: string) => string,
+  options?: {
+    getProductionLineName?: (employee: FirestoreEmployee) => string;
+    getManagerName?: (employee: FirestoreEmployee) => string;
+  },
 ) => {
   const rows = employees.map((e) => ({
     'الكود': e.code || '—',
@@ -641,6 +645,8 @@ export const exportAllEmployees = (
     'رقم الهاتف': e.phone || '—',
     'القسم': getDeptName(e.departmentId),
     'الوظيفة': getJobTitle(e.jobPositionId),
+    'خط الإنتاج': options?.getProductionLineName?.(e) || '—',
+    'المدير / المشرف': options?.getManagerName?.(e) || '—',
     'نوع التوظيف': EMPLOYMENT_TYPE_AR[e.employmentType] || e.employmentType,
     'المستوى': e.level,
     'الراتب الأساسي': e.baseSalary,

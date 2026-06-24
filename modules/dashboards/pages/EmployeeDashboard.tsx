@@ -5,6 +5,7 @@ import { WorkOrderPrint } from '../../production/components/ProductionReportPrin
 import type { WorkOrderPrintData } from '../../production/components/ProductionReportPrint';
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
+import { ShiftLifecyclePanel } from '../../../components/EmployeeDashboardWidget';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -22,9 +23,11 @@ import {
   countUniqueDays,
 } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
-import type { ProductionReport, WorkOrder } from '../../../types';
+import type { ProductionPlan, ProductionReport, WorkOrder } from '../../../types';
 import type { InventoryTransferRequest } from '../../inventory/types';
 import { transferApprovalService } from '../../inventory/services/transferApprovalService';
+import { supervisorLineAssignmentService } from '../../production/services/supervisorLineAssignmentService';
+import { findOpenProductionShift } from '../../production/utils/productionShiftLifecycle';
 import {
   emptyWorkOrderCardMetricsData,
   getWorkOrderCardMetrics,
@@ -122,15 +125,18 @@ export const EmployeeDashboard: React.FC = () => {
     (s) => s.systemSettings.planSettings?.transferApprovalPermission || 'inventory.transfers.approve',
   );
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+  const updateReport = useAppStore((s) => s.updateReport);
 
   const [period, setPeriod] = useState<Period>('daily');
   const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
   const [periodLoading, setPeriodLoading] = useState(false);
   const [pendingEntriesLoading, setPendingEntriesLoading] = useState(false);
   const [pendingProductionEntries, setPendingProductionEntries] = useState<InventoryTransferRequest[]>([]);
+  const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
   const [workOrderCardMetricsData, setWorkOrderCardMetricsData] = useState<WorkOrderCardMetricsData>(
     () => emptyWorkOrderCardMetricsData(),
   );
+  const today = getTodayDateString();
 
   const [woPrintData, setWoPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
@@ -197,6 +203,30 @@ export const EmployeeDashboard: React.FC = () => {
     () => _rawEmployees.find((s) => s.userId === uid),
     [_rawEmployees, uid]
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (!employee?.id) {
+      setAssignedLineIds(new Set());
+      return;
+    }
+
+    supervisorLineAssignmentService.getActiveByDate(today)
+      .then((rows) => {
+        if (cancelled) return;
+        setAssignedLineIds(new Set(
+          rows
+            .filter((row) => row.supervisorId === employee.id)
+            .map((row) => row.lineId)
+            .filter(Boolean),
+        ));
+      })
+      .catch(() => {
+        if (!cancelled) setAssignedLineIds(new Set());
+      });
+
+    return () => { cancelled = true; };
+  }, [employee?.id, today]);
 
   const myActiveWorkOrders = useMemo(() => {
     if (!employee) return [];
@@ -343,19 +373,33 @@ export const EmployeeDashboard: React.FC = () => {
 
   // â”€â”€ Active Plan Card â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  const activePlan = useMemo(() => {
+  const activePlan = useMemo((): {
+    plan: ProductionPlan;
+    productName: string;
+    lineName: string;
+    plannedQuantity: number;
+    periodProduced: number;
+    globalProduced: number;
+    globalRemaining: number;
+    progress: number;
+    status: ProductionPlan['status'];
+  } | null => {
     if (!employee?.id) return null;
 
     const employeeLineIds = [...new Set(
-      [...todayReports, ...monthlyReports]
+      [
+        ...todayReports,
+        ...monthlyReports,
+      ]
         .filter((r) => r.employeeId === employee.id)
         .map((r) => r.lineId)
     )];
+    const visibleLineIds = [...new Set([...employeeLineIds, ...assignedLineIds])];
 
     const plan = productionPlans.find(
       (p) =>
         (p.status === 'in_progress' || p.status === 'planned') &&
-        employeeLineIds.includes(p.lineId)
+        visibleLineIds.includes(p.lineId)
     );
 
     if (!plan) return null;
@@ -385,6 +429,7 @@ export const EmployeeDashboard: React.FC = () => {
     const progress = calculatePlanProgress(globalProduced, plan.plannedQuantity);
 
     return {
+      plan,
       productName: product?.name ?? '—',
       lineName: line?.name ?? '—',
       plannedQuantity: plan.plannedQuantity,
@@ -394,7 +439,27 @@ export const EmployeeDashboard: React.FC = () => {
       progress,
       status: plan.status,
     };
-  }, [employee?.id, productionPlans, planReports, todayReports, monthlyReports, periodReports, _rawProducts, _rawLines]);
+  }, [employee?.id, productionPlans, planReports, todayReports, monthlyReports, periodReports, _rawProducts, _rawLines, assignedLineIds]);
+
+  const assignedLines = useMemo(
+    () => _rawLines.filter((line) => line.id && assignedLineIds.has(line.id)),
+    [_rawLines, assignedLineIds],
+  );
+
+  const planOpenShift = useMemo(
+    () => activePlan
+      ? findOpenProductionShift(todayReports, {
+        lineId: activePlan.plan.lineId,
+        planId: activePlan.plan.id,
+        productId: activePlan.plan.productId,
+      })
+      : null,
+    [activePlan, todayReports],
+  );
+
+  const refreshTodayReports = useCallback(async () => {
+    await ensureProductionReportsForRange(today, today, { force: true });
+  }, [ensureProductionReportsForRange, today]);
 
   // â”€â”€ Personal Performance â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -655,6 +720,26 @@ export const EmployeeDashboard: React.FC = () => {
         </Card>
       )}
 
+      {employee?.id && (
+        <Card>
+          <ShiftLifecyclePanel
+            context={{ type: 'general', label: 'بدء وردية عامة' }}
+            employeeId={employee.id}
+            employeeName={employee.name || ''}
+            uid={uid}
+            today={today}
+            products={_rawProducts}
+            lines={_rawLines}
+            assignedLines={assignedLines}
+            openShift={null}
+            reports={todayReports}
+            onStarted={refreshTodayReports}
+            onClosed={refreshTodayReports}
+            updateReport={updateReport}
+          />
+        </Card>
+      )}
+
       {/* â”€â”€ Alerts â”€â”€ */}
       {alerts.length > 0 && (
         <div className="space-y-2">
@@ -789,6 +874,24 @@ export const EmployeeDashboard: React.FC = () => {
                     </div>
                   ))}
                 </div>
+
+                {employee?.id && (
+                  <ShiftLifecyclePanel
+                    context={{ type: 'plan', plan: activePlan.plan, label: 'بدء وردية من هذه الخطة' }}
+                    employeeId={employee.id}
+                    employeeName={employee.name || ''}
+                    uid={uid}
+                    today={today}
+                    products={_rawProducts}
+                    lines={_rawLines}
+                    assignedLines={assignedLines}
+                    openShift={planOpenShift}
+                    reports={todayReports}
+                    onStarted={refreshTodayReports}
+                    onClosed={refreshTodayReports}
+                    updateReport={updateReport}
+                  />
+                )}
               </Card>
             ) : (
               <Card>

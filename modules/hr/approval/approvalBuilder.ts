@@ -94,10 +94,13 @@ export function buildApprovalChain(options: BuildChainOptions): BuildChainResult
     };
   }
 
+  const managerLevelLimit = settings.hrAlwaysFinalLevel && hrEmployeeId
+    ? Math.max(1, settings.maxApprovalLevels - 1)
+    : settings.maxApprovalLevels;
   const managers = collectManagerChain(
     employee,
     allEmployees,
-    settings.maxApprovalLevels,
+    managerLevelLimit,
   );
 
   if (managers.length === 0) {
@@ -132,7 +135,15 @@ export function buildApprovalChain(options: BuildChainOptions): BuildChainResult
   }
 
   if (chain.length > settings.maxApprovalLevels) {
-    chain.length = settings.maxApprovalLevels;
+    if (settings.hrAlwaysFinalLevel && hrEmployeeId) {
+      const hrStep = chain.find((item) => item.approverEmployeeId === hrEmployeeId);
+      const nonHrSteps = chain.filter((item) => item.approverEmployeeId !== hrEmployeeId);
+      chain.length = 0;
+      chain.push(...nonHrSteps.slice(0, Math.max(0, settings.maxApprovalLevels - 1)));
+      if (hrStep) chain.push(hrStep);
+    } else {
+      chain.length = settings.maxApprovalLevels;
+    }
   }
 
   return { chain, errors };

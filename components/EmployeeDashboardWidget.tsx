@@ -1,4 +1,5 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
@@ -18,11 +19,22 @@ import {
   Loader2,
   NotebookText,
   Package,
+  PlayCircle,
+  Save,
+  Share2,
+  SquareCheckBig,
   Trash2,
   User,
+  Users,
   type LucideIcon,
 } from 'lucide-react';
 import { Card, Badge, LoadingSkeleton } from './UI';
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../store/useAppStore';
 import {
   formatNumber,
@@ -30,8 +42,37 @@ import {
   calculatePlanProgress,
   getReportWaste,
   countUniqueDays,
+  getTodayDateString,
 } from '../utils/calculations';
-import type { ProductionReport, ProductionPlan } from '../types';
+import type { FirestoreProduct, FirestoreProductionLine, ProductionReport, ProductionPlan, ProductionShiftWorkerSnapshot } from '../types';
+import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import { supervisorLineAssignmentService } from '@/modules/production/services/supervisorLineAssignmentService';
+import { lineAssignmentService } from '@/modules/production/services/lineAssignmentService';
+import {
+  productionShiftService,
+} from '@/modules/production/services/productionShiftService';
+import {
+  mapReportsToPrintRows,
+  type ReportPrintRow,
+} from '@/modules/production/components/ProductionReportPrint';
+import { ProductionReportShareCardTarget } from '@/modules/production/components/ProductionReportShareCardTarget';
+import {
+  buildProductionReportShareRow,
+  shareProductionReportCardToWhatsApp,
+} from '@/modules/production/utils/productionReportShare';
+import {
+  findOpenProductionShift,
+  mapLineAssignmentsToShiftWorkers,
+} from '@/modules/production/utils/productionShiftLifecycle';
+import {
+  LINE_WORKER_LABOR_ROLES,
+  LINE_WORKER_LABOR_ROLE_LABELS,
+  resolveLineWorkerLaborRole,
+} from '@/modules/production/utils/lineWorkerLaborRoles';
+import {
+  getShareResultFeedbackMessage,
+  type ShareResult,
+} from '@/utils/reportExport';
 
 // ─── Period Filter ───────────────────────────────────────────────────────────
 
@@ -116,6 +157,620 @@ function getWeekDateRange(): { start: string; end: string } {
   return { start: fmtDate(start), end: fmtDate(end) };
 }
 
+const formatShiftTime = (value?: string): string => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
+};
+
+type ShiftPanelContext =
+  | { type: 'plan'; plan: ProductionPlan; label: string }
+  | { type: 'general'; label: string };
+
+type ShiftLifecyclePanelProps = {
+  context: ShiftPanelContext;
+  employeeId: string;
+  employeeName: string;
+  uid?: string | null;
+  today: string;
+  products: FirestoreProduct[];
+  lines: FirestoreProductionLine[];
+  assignedLines: FirestoreProductionLine[];
+  openShift: ProductionReport | null;
+  reports: ProductionReport[];
+  onStarted: () => Promise<void>;
+  onClosed: () => Promise<void>;
+  updateReport: (id: string, data: Partial<ProductionReport>) => Promise<void>;
+};
+
+export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
+  context,
+  employeeId,
+  employeeName,
+  uid,
+  today,
+  products,
+  lines,
+  assignedLines,
+  openShift,
+  reports,
+  onStarted,
+  onClosed,
+  updateReport,
+}) => {
+  const fixedPlan = context.type === 'plan' ? context.plan : null;
+  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
+  const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
+  const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
+  const [selectedLineId, setSelectedLineId] = useState('');
+  const [selectedProductId, setSelectedProductId] = useState('');
+  const [workers, setWorkers] = useState<ProductionShiftWorkerSnapshot[]>([]);
+  const [loadingWorkers, setLoadingWorkers] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
+  const [startDialogOpen, setStartDialogOpen] = useState(false);
+  const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [startStep, setStartStep] = useState(0);
+  const [closeQuantity, setCloseQuantity] = useState('');
+  const [closeNotes, setCloseNotes] = useState('');
+  const [closedReport, setClosedReport] = useState<ProductionReport | null>(null);
+  const [shareCardRow, setShareCardRow] = useState<ReportPrintRow | null>(null);
+  const shareCardRef = useRef<HTMLDivElement>(null);
+
+  const lineId = fixedPlan?.lineId || selectedLineId;
+  const productId = fixedPlan?.productId || selectedProductId;
+  const presentCount = workers.filter((worker) => worker.isPresent !== false).length;
+  const effectiveOpenShift = useMemo(
+    () => openShift || findOpenProductionShift(reports, { lineId, productId }),
+    [openShift, reports, lineId, productId],
+  );
+  const closeFlowReport = closedReport || effectiveOpenShift;
+  const closeSucceeded = Boolean(closedReport);
+  const displayLineId = closeFlowReport?.lineId || lineId;
+  const displayProductId = closeFlowReport?.productId || productId;
+  const lineName = lines.find((line) => line.id === displayLineId)?.name ?? '—';
+  const productName = products.find((product) => product.id === displayProductId)?.name ?? '—';
+  const startSteps = ['السياق', 'حضور العمال', 'تأكيد البدء'];
+  const reportLookups = useMemo(() => ({
+    getLineName: (id: string) => lines.find((line) => line.id === id)?.name ?? '—',
+    getProductName: (id: string) => products.find((product) => product.id === id)?.name ?? '—',
+    getEmployeeName: (id: string) => id === employeeId ? employeeName : '—',
+    getUnitsPerCarton: (id: string) => products.find((product) => product.id === id)?.unitsPerCarton,
+  }), [employeeId, employeeName, lines, products]);
+
+  const showShareFeedback = useCallback((result: ShareResult) => {
+    const message = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التقرير' });
+    if (message) showAppToast('success', message, { duration: 8000 });
+  }, []);
+
+  const buildClosedReportShareRow = useCallback((report: ProductionReport): ReportPrintRow => {
+    const [baseRow] = mapReportsToPrintRows([report], reportLookups);
+    return buildProductionReportShareRow(report, baseRow, {
+      lineProductConfigs,
+      routingVarianceBasisSecondsByProduct,
+      routingPlanTargetUnitSecondsByProduct,
+      routingProductTargetUnitSecondsByProduct,
+    });
+  }, [
+    lineProductConfigs,
+    reportLookups,
+    routingPlanTargetUnitSecondsByProduct,
+    routingProductTargetUnitSecondsByProduct,
+    routingVarianceBasisSecondsByProduct,
+  ]);
+
+  useEffect(() => {
+    if (!lineId) {
+      setWorkers([]);
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingWorkers(true);
+    lineAssignmentService.getByLineAndDate(lineId, today)
+      .then((rows) => {
+        if (!cancelled) setWorkers(mapLineAssignmentsToShiftWorkers(rows));
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWorkers([]);
+          showAppToast('error', 'تعذر تحميل عمال الخط لهذا اليوم.');
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingWorkers(false);
+      });
+
+    return () => { cancelled = true; };
+  }, [lineId, today]);
+
+  const updateWorker = (employeeId: string, patch: Partial<ProductionShiftWorkerSnapshot>) => {
+    setWorkers((current) => current.map((worker) => (
+      worker.employeeId === employeeId
+        ? { ...worker, ...patch, laborRole: resolveLineWorkerLaborRole(patch.laborRole ?? worker.laborRole) }
+        : worker
+    )));
+  };
+
+  const handleStart = async () => {
+    if (!lineId || !productId) {
+      showAppToast('error', 'اختر الخط والمنتج قبل بدء الوردية.');
+      return;
+    }
+    if (workers.length === 0) {
+      showAppToast('error', 'لا توجد قائمة عمال لهذا الخط. راجع ربط العمال بالخط أولاً.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const id = await productionShiftService.startShift({
+        employeeId,
+        lineId,
+        productId,
+        date: today,
+        context: context.type,
+        planId: fixedPlan?.id,
+        userId: uid,
+        workers,
+      });
+      if (!id) {
+        showAppToast('error', 'تعذر بدء الوردية الآن.');
+        return;
+      }
+      showAppToast('success', 'تم بدء الوردية وتسجيل وقت البداية تلقائياً.');
+      setStartDialogOpen(false);
+      setStartStep(0);
+      await onStarted();
+    } catch (error) {
+      showAppToast('error', (error as Error).message || 'تعذر بدء الوردية.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClose = async () => {
+    if (!effectiveOpenShift?.id) return;
+    const produced = Number(closeQuantity || 0);
+    if (produced <= 0) {
+      showAppToast('error', 'أدخل كمية الإنتاج الفعلية قبل إغلاق الوردية.');
+      return;
+    }
+
+    setSaving(true);
+    try {
+      const closePayload = productionShiftService.buildClosePayload(effectiveOpenShift, {
+        quantityProduced: produced,
+        notes: closeNotes,
+        closedByUid: uid,
+      });
+      await updateReport(effectiveOpenShift.id, closePayload);
+      setClosedReport({ ...effectiveOpenShift, ...closePayload, id: effectiveOpenShift.id });
+      showAppToast('success', 'تم إغلاق الوردية وحفظ الإنتاج الفعلي.');
+      setCloseQuantity('');
+      setCloseNotes('');
+      await onClosed();
+    } catch (error) {
+      showAppToast('error', (error as Error).message || 'تعذر إغلاق الوردية.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleShareClosedReport = async () => {
+    if (!closedReport || sharing) return;
+    setSharing(true);
+    const row = buildClosedReportShareRow(closedReport);
+    flushSync(() => {
+      setShareCardRow(row);
+    });
+    try {
+      if (!shareCardRef.current) {
+        showAppToast('error', 'تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.');
+        return;
+      }
+      const result = await shareProductionReportCardToWhatsApp({
+        node: shareCardRef.current,
+        row,
+        printSettings: printTemplate,
+      });
+      showShareFeedback(result);
+    } catch (error: unknown) {
+      const err = error as { name?: string; message?: string };
+      if (err?.name !== 'AbortError') {
+        showAppToast(
+          'error',
+          err?.message === 'capture_timeout'
+            ? 'استغرق تجهيز الصورة وقتاً طويلاً. حاول مرة أخرى.'
+            : 'تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.',
+        );
+      }
+    } finally {
+      setSharing(false);
+      setShareCardRow(null);
+    }
+  };
+
+  const openStartDialog = () => {
+    setStartStep(0);
+    setStartDialogOpen(true);
+  };
+
+  const handleCloseDialogOpenChange = (open: boolean) => {
+    if (saving || sharing) return;
+    setCloseDialogOpen(open);
+    if (!open) {
+      setClosedReport(null);
+      setShareCardRow(null);
+    }
+  };
+
+  const workerAttendanceSection = (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-sm font-bold text-[var(--color-text)]">
+          <Users size={16} className="text-primary" />
+          <span>عمال الخط ({presentCount} حاضر / {workers.length} إجمالي)</span>
+        </div>
+        {loadingWorkers && <Loader2 size={16} className="animate-spin text-slate-400" />}
+      </div>
+
+      {!lineId ? (
+        <p className="text-xs text-[var(--color-text-muted)] bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-3">
+          اختر الخط أولاً لتحميل عمال اليوم.
+        </p>
+      ) : workers.length === 0 && !loadingWorkers ? (
+        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-100 rounded-[var(--border-radius-base)] p-3">
+          لا توجد قائمة عمال محفوظة لهذا الخط اليوم.
+        </p>
+      ) : (
+        <div className="space-y-2 max-h-[45vh] overflow-auto pr-1">
+          {workers.map((worker) => (
+            <div key={worker.employeeId} className="grid grid-cols-1 sm:grid-cols-[1fr_auto_150px] gap-2 items-center bg-white dark:bg-slate-900/30 border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-2.5">
+              <div>
+                <p className="text-sm font-bold text-[var(--color-text)]">{worker.employeeName}</p>
+                <p className="text-[11px] text-[var(--color-text-muted)]">{worker.employeeCode || worker.employeeId}</p>
+              </div>
+              <div className="flex rounded-[var(--border-radius-base)] bg-[#f0f2f5] p-1">
+                <button
+                  type="button"
+                  onClick={() => updateWorker(worker.employeeId, { isPresent: true })}
+                  className={`px-3 py-1 text-xs font-bold rounded ${worker.isPresent !== false ? 'bg-emerald-100 text-emerald-700' : 'text-slate-500'}`}
+                >
+                  حاضر
+                </button>
+                <button
+                  type="button"
+                  onClick={() => updateWorker(worker.employeeId, { isPresent: false })}
+                  className={`px-3 py-1 text-xs font-bold rounded ${worker.isPresent === false ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}
+                >
+                  غائب
+                </button>
+              </div>
+              <select
+                className="erp-input text-xs py-2"
+                value={resolveLineWorkerLaborRole(worker.laborRole)}
+                onChange={(event) => updateWorker(worker.employeeId, { laborRole: event.target.value as ProductionShiftWorkerSnapshot['laborRole'] })}
+              >
+                {LINE_WORKER_LABOR_ROLES.map((role) => (
+                  <option key={role} value={role}>{LINE_WORKER_LABOR_ROLE_LABELS[role]}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const startDialog = (
+    <Dialog open={startDialogOpen} onOpenChange={(open) => !saving && setStartDialogOpen(open)}>
+      <DialogContent className="max-w-3xl w-[min(100vw-1.5rem,48rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0" dir="rtl">
+        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center">
+            <PlayCircle size={20} className="text-primary" />
+          </div>
+          <div className="pl-8">
+            <DialogTitle className="text-lg font-bold text-[var(--color-text)]">بدء الوردية</DialogTitle>
+            <p className="text-xs text-[var(--color-text-muted)] font-medium">
+              راجع الخط والمنتج، سجل حضور العمال وأدوارهم، ثم أكد البدء.
+            </p>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div className="grid grid-cols-3 gap-2">
+            {startSteps.map((label, index) => (
+              <button
+                key={label}
+                type="button"
+                onClick={() => setStartStep(index)}
+                className={`rounded-[var(--border-radius-base)] border px-3 py-2 text-xs font-bold transition-colors ${
+                  startStep === index
+                    ? 'border-primary bg-primary/10 text-primary'
+                    : 'border-[var(--color-border)] bg-[#f8f9fa] text-[var(--color-text-muted)]'
+                }`}
+              >
+                {index + 1}. {label}
+              </button>
+            ))}
+          </div>
+
+          {startStep === 0 && (
+            <div className="space-y-4">
+              <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-4">
+                <p className="text-sm font-extrabold text-[var(--color-text)]">{context.label}</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  {fixedPlan
+                    ? 'سيتم استخدام بيانات الخطة مباشرة في الوردية.'
+                    : 'اختر خطاً من الخطوط المرتبطة بك ثم المنتج قبل الانتقال لحضور العمال.'}
+                </p>
+              </div>
+
+              {fixedPlan ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-white p-3">
+                    <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{lineName}</p>
+                  </div>
+                  <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-white p-3">
+                    <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{productName}</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <select className="erp-input" value={selectedLineId} onChange={(event) => setSelectedLineId(event.target.value)}>
+                    <option value="">اختر الخط</option>
+                    {assignedLines.map((line) => (
+                      <option key={line.id} value={line.id}>{line.name}</option>
+                    ))}
+                  </select>
+                  <select className="erp-input" value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)}>
+                    <option value="">اختر المنتج</option>
+                    {products.map((product) => (
+                      <option key={product.id} value={product.id}>{product.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+          )}
+
+          {startStep === 1 && workerAttendanceSection}
+
+          {startStep === 2 && (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{lineName}</p>
+                </div>
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{productName}</p>
+                </div>
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">حضور العمال</p>
+                  <p className="text-sm font-bold text-emerald-600">{presentCount} حاضر / {workers.length} إجمالي</p>
+                </div>
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)] bg-blue-50 border border-blue-100 rounded-[var(--border-radius-base)] p-3">
+                سيتم تسجيل وقت بداية الوردية تلقائياً وحفظ لقطة حضور العمال والأدوار الحالية.
+              </p>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
+          <button
+            type="button"
+            onClick={() => setStartDialogOpen(false)}
+            disabled={saving}
+            className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text-muted)] disabled:opacity-60"
+          >
+            إلغاء
+          </button>
+          {startStep > 0 && (
+            <button
+              type="button"
+              onClick={() => setStartStep((step) => Math.max(step - 1, 0))}
+              disabled={saving}
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text)] disabled:opacity-60"
+            >
+              السابق
+            </button>
+          )}
+          {startStep < 2 ? (
+            <button
+              type="button"
+              onClick={() => setStartStep((step) => Math.min(step + 1, 2))}
+              disabled={saving || loadingWorkers || !lineId || !productId || (startStep === 1 && workers.length === 0)}
+              className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
+            >
+              التالي
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={saving || loadingWorkers || !lineId || !productId || workers.length === 0}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <PlayCircle size={16} />}
+              بدء الوردية الآن
+            </button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+
+  if (closeFlowReport) {
+    return (
+      <div className="mt-5 rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-900/10 dark:border-emerald-900/30 p-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-extrabold">
+              <SquareCheckBig size={18} />
+              <span>{closeSucceeded ? 'تم إغلاق الوردية' : 'وردية مفتوحة'}</span>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              بدأت الساعة {formatShiftTime(closeFlowReport.shiftStartedAt)} على خط {lineName} لمنتج {productName}
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+            <Badge variant="success">{closeSucceeded ? 'تم الحفظ' : 'مستمرة'}</Badge>
+            <button
+              type="button"
+              onClick={() => setCloseDialogOpen(true)}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold"
+            >
+              {closeSucceeded ? <Share2 size={16} /> : <Save size={16} />}
+              {closeSucceeded ? 'مشاركة التقرير' : 'متابعة / إغلاق'}
+            </button>
+          </div>
+        </div>
+        <Dialog open={closeDialogOpen} onOpenChange={handleCloseDialogOpenChange}>
+          <DialogContent className="max-w-2xl w-[min(100vw-1.5rem,42rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0" dir="rtl">
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
+              <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+                <SquareCheckBig size={20} className="text-emerald-600" />
+              </div>
+              <div className="pl-8">
+                <DialogTitle className="text-lg font-bold text-[var(--color-text)]">
+                  {closeSucceeded ? 'تم حفظ تقرير الإنتاج' : 'إغلاق الوردية'}
+                </DialogTitle>
+                <p className="text-xs text-[var(--color-text-muted)] font-medium">
+                  {closeSucceeded
+                    ? 'يمكنك مشاركة التقرير بنفس قالب تقارير الإنتاج.'
+                    : 'أدخل الإنتاج الفعلي وأي ملاحظات قبل حفظ الإغلاق.'}
+                </p>
+              </div>
+            </div>
+
+            <div className="p-6 space-y-5">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">وقت البدء</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{formatShiftTime(closeFlowReport.shiftStartedAt)}</p>
+                </div>
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{lineName}</p>
+                </div>
+                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{productName}</p>
+                </div>
+              </div>
+
+              {closeSucceeded ? (
+                <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                    <div>
+                      <p className="text-sm font-extrabold text-emerald-700">تم تسجيل الإنتاج بنجاح</p>
+                      <p className="text-xs text-emerald-700/80 mt-1">
+                        الكمية: {formatNumber(closeFlowReport.quantityProduced || 0)} وحدة
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => void handleShareClosedReport()}
+                      disabled={sharing}
+                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
+                    >
+                      {sharing ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+                      مشاركة واتساب
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  <input
+                    type="number"
+                    min="0"
+                    value={closeQuantity}
+                    onChange={(event) => setCloseQuantity(event.target.value)}
+                    placeholder="الإنتاج الفعلي"
+                    className="erp-input"
+                  />
+                  <input
+                    value={closeNotes}
+                    onChange={(event) => setCloseNotes(event.target.value)}
+                    placeholder="ملاحظات وتفاصيل الإغلاق"
+                    className="erp-input sm:col-span-2"
+                  />
+                </div>
+              )}
+            </div>
+
+            <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
+              <button
+                type="button"
+                onClick={() => handleCloseDialogOpenChange(false)}
+                disabled={saving || sharing}
+                className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text-muted)] disabled:opacity-60"
+              >
+                {closeSucceeded ? 'إغلاق' : 'إلغاء'}
+              </button>
+              {!closeSucceeded && (
+                <button
+                  type="button"
+                  onClick={handleClose}
+                  disabled={saving}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
+                >
+                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+                  إغلاق الوردية
+                </button>
+              )}
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+        <ProductionReportShareCardTarget
+          row={shareCardRow}
+          targetRef={shareCardRef}
+          printSettings={printTemplate}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2 font-extrabold text-[var(--color-text)]">
+            <PlayCircle size={18} className="text-primary" />
+            <span>{context.label}</span>
+          </div>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            {fixedPlan
+              ? `سيتم استخدام خط ${lineName} ومنتج ${productName} من الخطة مباشرة.`
+              : 'اختر خطاً من الخطوط المرتبطة بك ثم المنتج قبل تسجيل العمال.'}
+          </p>
+        </div>
+        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+          <Badge variant="info">جاهزة للبدء</Badge>
+          <button
+            type="button"
+            onClick={openStartDialog}
+            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold"
+          >
+            <PlayCircle size={16} />
+            بدء الوردية
+          </button>
+        </div>
+      </div>
+      {startDialog}
+    </div>
+  );
+};
+
 // ─── Employee Dashboard Widget ───────────────────────────────────────────────
 
 interface Props {
@@ -138,12 +793,34 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
     loading: s.loading,
   }));
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
+  const updateReport = useAppStore((s) => s.updateReport);
+  const uid = useAppStore((s) => s.uid);
 
   const [period, setPeriod] = useState<Period>('daily');
   const [yesterdayReports, setYesterdayReports] = useState<ProductionReport[]>([]);
   const [yesterdayLoading, setYesterdayLoading] = useState(false);
   const [weeklyReports, setWeeklyReports] = useState<ProductionReport[]>([]);
   const [weeklyLoading, setWeeklyLoading] = useState(false);
+  const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
+  const today = getTodayDateString();
+
+  useEffect(() => {
+    let cancelled = false;
+    supervisorLineAssignmentService.getActiveByDate(today)
+      .then((rows) => {
+        if (cancelled) return;
+        setAssignedLineIds(new Set(
+          rows
+            .filter((row) => row.supervisorId === employeeId)
+            .map((row) => row.lineId)
+            .filter(Boolean),
+        ));
+      })
+      .catch(() => {
+        if (!cancelled) setAssignedLineIds(new Set());
+      });
+    return () => { cancelled = true; };
+  }, [employeeId, today]);
 
   useEffect(() => {
     if (period !== 'yesterday') return;
@@ -261,6 +938,35 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
     return periodMy.reduce((s, r) => s + (r.quantityProduced || 0), 0);
   }, [activePlan, myReports]);
 
+  const assignedLines = useMemo(
+    () => _rawLines.filter((line) => line.id && assignedLineIds.has(line.id)),
+    [_rawLines, assignedLineIds],
+  );
+
+  const planOpenShift = useMemo(
+    () => activePlan
+      ? findOpenProductionShift(todayReports, {
+        lineId: activePlan.plan.lineId,
+        planId: activePlan.plan.id,
+        productId: activePlan.plan.productId,
+      })
+      : null,
+    [activePlan, todayReports],
+  );
+
+  const generalOpenShift = useMemo(
+    () => todayReports.find((report) => (
+      report.employeeId === employeeId
+      && report.lifecycleStatus === 'open'
+      && report.shiftStartContext === 'general'
+    )) ?? null,
+    [employeeId, todayReports],
+  );
+
+  const refreshTodayReports = useCallback(async () => {
+    await ensureProductionReportsForRange(today, today, { force: true });
+  }, [ensureProductionReportsForRange, today]);
+
   // ── Alerts ──
   const alerts = useMemo(() => {
     const items: { type: 'warning' | 'danger'; icon: string; text: string }[] = [];
@@ -328,6 +1034,24 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           <span className="text-sm font-bold">{t('dashboard.loadingData')}</span>
         </div>
       )}
+
+      <Card className="border-primary/20">
+        <ShiftLifecyclePanel
+          context={{ type: 'general', label: 'بدء وردية عامة' }}
+          employeeId={employeeId}
+          employeeName={employeeName}
+          uid={uid}
+          today={today}
+          products={_rawProducts}
+          lines={_rawLines}
+          assignedLines={assignedLines}
+          openShift={generalOpenShift}
+          reports={todayReports}
+          onStarted={refreshTodayReports}
+          onClosed={refreshTodayReports}
+          updateReport={updateReport}
+        />
+      </Card>
 
       {/* ── KPIs ── */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
@@ -461,6 +1185,21 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
                   <span>{t('dashboard.activePlan.lineName', { line: _rawLines.find((l) => l.id === activePlan.plan.lineId)?.name ?? '—' })}</span>
                 </div>
               </div>
+              <ShiftLifecyclePanel
+                context={{ type: 'plan', plan: activePlan.plan, label: 'بدء وردية من هذه الخطة' }}
+                employeeId={employeeId}
+                employeeName={employeeName}
+                uid={uid}
+                today={today}
+                products={_rawProducts}
+                lines={_rawLines}
+                assignedLines={assignedLines}
+                openShift={planOpenShift}
+                reports={todayReports}
+                onStarted={refreshTodayReports}
+                onClosed={refreshTodayReports}
+                updateReport={updateReport}
+              />
             </Card>
           ) : (
             <Card>

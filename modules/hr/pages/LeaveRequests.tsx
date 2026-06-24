@@ -48,6 +48,27 @@ function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
   };
 }
 
+function getManagedEmployeeIds(managerId: string, employees: FirestoreEmployee[]): Set<string> {
+  const directReports = new Map<string, string[]>();
+  employees.forEach((employee) => {
+    if (!employee.id || !employee.managerId) return;
+    const rows = directReports.get(employee.managerId) ?? [];
+    rows.push(employee.id);
+    directReports.set(employee.managerId, rows);
+  });
+
+  const managed = new Set<string>();
+  const queue = [...(directReports.get(managerId) ?? [])];
+  while (queue.length > 0) {
+    const id = queue.shift()!;
+    if (managed.has(id)) continue;
+    managed.add(id);
+    queue.push(...(directReports.get(id) ?? []));
+  }
+
+  return managed;
+}
+
 // ─── Component ──────────────────────────────────────────────────────────────
 
 export const LeaveRequests: React.FC = () => {
@@ -68,6 +89,7 @@ export const LeaveRequests: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<ApprovalStatus | ''>('');
 
   // Form state
+  const [formEmployeeId, setFormEmployeeId] = useState('');
   const [formLeaveType, setFormLeaveType] = useState<LeaveType>('annual');
   const [formStartDate, setFormStartDate] = useState('');
   const [formEndDate, setFormEndDate] = useState('');
@@ -77,6 +99,7 @@ export const LeaveRequests: React.FC = () => {
   const [deleting, setDeleting] = useState(false);
 
   const isHR = can('leave.manage');
+  const canCreateLeave = can('leave.create') || isHR;
   const canDelete = can('leave.manage') || can('hrSettings.edit');
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'leaveRequests'),
@@ -144,16 +167,51 @@ export const LeaveRequests: React.FC = () => {
   }, [getEmpName, viewerEmployeeId]);
   const leaveTypeByKey = useMemo(() => leaveTypeMapByKey(leaveTypes), [leaveTypes]);
   const selectedLeaveType = leaveTypeByKey[formLeaveType];
+  const managedEmployeeIds = useMemo(
+    () => (viewerEmployeeId ? getManagedEmployeeIds(viewerEmployeeId, allEmployees) : new Set<string>()),
+    [allEmployees, viewerEmployeeId],
+  );
+  const requestableEmployees = useMemo(() => {
+    const visibleIds = new Set<string>();
+    if (employeeId) visibleIds.add(employeeId);
+    if (isHR) {
+      allEmployees.forEach((employee) => {
+        if (employee.id) visibleIds.add(employee.id);
+      });
+    } else if (canCreateLeave) {
+      managedEmployeeIds.forEach((id) => visibleIds.add(id));
+    }
+    return Array.from(visibleIds)
+      .map((id) => allEmployees.find((employee) => employee.id === id) || (id === employeeId ? currentEmployee : null))
+      .filter((employee): employee is FirestoreEmployee => Boolean(employee?.id))
+      .map((employee) => ({ value: employee.id!, label: employee.id === employeeId ? `${employee.name} (أنا)` : employee.name }));
+  }, [allEmployees, canCreateLeave, currentEmployee, employeeId, isHR, managedEmployeeIds]);
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [allRequests, bal, emps, configuredLeaveTypes] = await Promise.all([
-        isHR ? leaveRequestService.getAll() : leaveRequestService.getByEmployee(employeeId),
-        leaveBalanceService.getOrCreate(employeeId),
-        isHR ? employeeService.getAll() : Promise.resolve([]),
+      const [emps, configuredLeaveTypes] = await Promise.all([
+        (isHR || canCreateLeave) ? employeeService.getAll() : Promise.resolve(currentEmployee?.id ? [currentEmployee] : []),
         getLeaveTypesFromConfig(),
       ]);
+      const targetIds = new Set<string>();
+      if (employeeId) targetIds.add(employeeId);
+      if (isHR) {
+        emps.forEach((employee) => {
+          if (employee.id) targetIds.add(employee.id);
+        });
+      } else if (canCreateLeave && viewerEmployeeId) {
+        getManagedEmployeeIds(viewerEmployeeId, emps).forEach((id) => targetIds.add(id));
+      }
+      const allRequests = isHR
+        ? await leaveRequestService.getAll()
+        : (await Promise.all(Array.from(targetIds).map((id) => leaveRequestService.getByEmployee(id)))).flat();
+      const selectedEmployeeId = formEmployeeId && targetIds.has(formEmployeeId)
+        ? formEmployeeId
+        : employeeId;
+      const bal = selectedEmployeeId
+        ? await leaveBalanceService.getOrCreate(selectedEmployeeId)
+        : null;
 
       // One-time silent backfill for old pending leave requests that were created
       // before approval-center linking was enforced.
@@ -205,6 +263,7 @@ export const LeaveRequests: React.FC = () => {
       setRequests(allRequests);
       setBalance(bal);
       setAllEmployees(emps);
+      setFormEmployeeId(selectedEmployeeId);
       setLeaveTypes(configuredLeaveTypes);
       setFormLeaveType((prev) =>
         configuredLeaveTypes.find((row) => row.key === prev)
@@ -216,7 +275,7 @@ export const LeaveRequests: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [employeeId, isHR, currentEmployee, userDisplayName, permissions, uid]);
+  }, [employeeId, isHR, canCreateLeave, currentEmployee, userDisplayName, permissions, uid, viewerEmployeeId, formEmployeeId]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -226,11 +285,15 @@ export const LeaveRequests: React.FC = () => {
   }, [formStartDate, formEndDate]);
 
   const handleSubmit = useCallback(async () => {
-    if (!formStartDate || !formEndDate || formDays <= 0) return;
+    const targetEmployeeId = formEmployeeId || employeeId;
+    const targetEmployee = allEmployees.find((employee) => employee.id === targetEmployeeId)
+      || (targetEmployeeId === currentEmployee?.id ? currentEmployee : null);
+    if (!targetEmployeeId || !formStartDate || !formEndDate || formDays <= 0) return;
     setSubmitting(true);
     try {
       const leavePayload = {
-        employeeId,
+        employeeId: targetEmployeeId,
+        employeeName: targetEmployee?.name,
         leaveType: formLeaveType,
         leaveTypeLabel: selectedLeaveType?.label || LEAVE_TYPE_LABELS[formLeaveType] || formLeaveType,
         leaveTypeIsPaid: selectedLeaveType ? selectedLeaveType.isPaid : formLeaveType !== 'unpaid',
@@ -238,11 +301,14 @@ export const LeaveRequests: React.FC = () => {
         endDate: formEndDate,
         totalDays: formDays,
         affectsSalary: selectedLeaveType ? !selectedLeaveType.isPaid : formLeaveType === 'unpaid',
-        status: 'pending',
+        status: 'pending' as ApprovalStatus,
         approvalChain: [],
-        finalStatus: 'pending',
+        finalStatus: 'pending' as ApprovalStatus,
         reason: formReason,
         createdBy: uid || '',
+        requestedByEmployeeId: currentEmployee?.id || employeeId,
+        requestedByName: currentEmployee?.name || userDisplayName || '',
+        requestedOnBehalf: targetEmployeeId !== (currentEmployee?.id || employeeId),
       };
       const leaveId = await leaveRequestService.create(leavePayload);
       const allEmployeesForApproval = await employeeService.getAll();
@@ -254,14 +320,18 @@ export const LeaveRequests: React.FC = () => {
       const approvalResult = await createRequest(
         {
           requestType: 'leave',
-          employeeId,
+          employeeId: targetEmployeeId,
           requestData: {
             leaveType: formLeaveType,
             leaveTypeLabel: leavePayload.leaveTypeLabel,
+            employeeName: targetEmployee?.name || getEmpName(targetEmployeeId),
             startDate: formStartDate,
             endDate: formEndDate,
             totalDays: formDays,
             reason: formReason || '—',
+            requestedByEmployeeId: leavePayload.requestedByEmployeeId,
+            requestedByName: leavePayload.requestedByName,
+            requestedOnBehalf: leavePayload.requestedOnBehalf,
           },
           sourceRequestId: leaveId,
           createdBy: uid || '',
@@ -288,7 +358,7 @@ export const LeaveRequests: React.FC = () => {
     } finally {
       setSubmitting(false);
     }
-  }, [employeeId, uid, formLeaveType, formStartDate, formEndDate, formDays, formReason, fetchData, selectedLeaveType, currentEmployee, userDisplayName, permissions]);
+  }, [allEmployees, employeeId, uid, formEmployeeId, formLeaveType, formStartDate, formEndDate, formDays, formReason, fetchData, selectedLeaveType, currentEmployee, userDisplayName, permissions, getEmpName]);
 
   const handleDelete = useCallback(async (id: string) => {
     setDeleting(true);
@@ -318,6 +388,7 @@ export const LeaveRequests: React.FC = () => {
     const ids = [...new Set(requests.map((r) => r.employeeId))];
     return ids.map((id) => ({ value: id, label: getEmpName(id) }));
   }, [requests, getEmpName]);
+  const showEmployeeColumn = isHR || requestableEmployees.length > 1;
 
   if (loading) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
@@ -330,11 +401,11 @@ export const LeaveRequests: React.FC = () => {
         title="إدارة الإجازات"
         subtitle="طلب إجازة ومتابعة الأرصدة وحالات الموافقة"
         icon="beach_access"
-        primaryAction={{
+        primaryAction={canCreateLeave ? {
           label: showForm ? 'إغلاق' : 'طلب إجازة',
           icon: showForm ? 'close' : 'add',
           onClick: () => setShowForm(!showForm),
-        }}
+        } : undefined}
         moreActions={[
           {
             label: 'تصدير Excel',
@@ -382,8 +453,27 @@ export const LeaveRequests: React.FC = () => {
 
       {/* Create Form */}
       {showForm && (
-        <Card title="طلب إجازة جديد">
+        <Card title={requestableEmployees.length > 1 ? 'طلب إجازة جديد للفريق' : 'طلب إجازة جديد'}>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {requestableEmployees.length > 1 && (
+              <div className="sm:col-span-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
+                  الموظف
+                </label>
+                <SearchableSelect
+                  options={requestableEmployees}
+                  value={formEmployeeId || employeeId}
+                  onChange={setFormEmployeeId}
+                  placeholder="اختر الموظف..."
+                />
+                {formEmployeeId && formEmployeeId !== employeeId && (
+                  <p className="mt-2 text-xs font-bold text-blue-600">
+                    سيتم إرسال الطلب نيابة عن {getEmpName(formEmployeeId)} عبر سلسلة مديره حتى مدير الموارد البشرية.
+                  </p>
+                )}
+              </div>
+            )}
+
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">
                 نوع الإجازة
@@ -476,7 +566,7 @@ export const LeaveRequests: React.FC = () => {
 
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-3">
-        {isHR && (
+        {showEmployeeColumn && (
           <SearchableSelect
             options={[{ value: '', label: 'جميع الموظفين' }, ...uniqueEmployees]}
             value={filterEmployee}
@@ -511,9 +601,9 @@ export const LeaveRequests: React.FC = () => {
             <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
-                  {isHR && <th className="erp-th">الموظف</th>}
+                  {showEmployeeColumn && <th className="erp-th">الموظف</th>}
                   <th className="erp-th">النوع</th>
-                  <th className="erp-th">8&8 </th>
+                  <th className="erp-th">من</th>
                   <th className="erp-th">إلى</th>
                   <th className="erp-th">الأيام</th>
                   <th className="erp-th">تؤثر على الراتب</th>
@@ -529,7 +619,7 @@ export const LeaveRequests: React.FC = () => {
                   const pendingSummary = getPendingChainSummary(req);
                   return (
                     <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
-                      {isHR && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
+                      {showEmployeeColumn && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
                       <td className="py-3 px-3">
                         <Badge variant="info">{leaveTypeByKey[req.leaveType]?.label || req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType}</Badge>
                       </td>

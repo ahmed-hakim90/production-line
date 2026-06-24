@@ -292,6 +292,7 @@ export const LEAVE_TYPE_LABELS: Record<string, string> = {
 export interface FirestoreLeaveRequest {
   id?: string;
   employeeId: string;
+  employeeName?: string;
   leaveType: LeaveType;
   leaveTypeLabel?: string;
   leaveTypeIsPaid?: boolean;
@@ -307,6 +308,9 @@ export interface FirestoreLeaveRequest {
   outsideBalanceDaysApplied?: number;
   createdAt?: any;
   createdBy: string;
+  requestedByEmployeeId?: string;
+  requestedByName?: string;
+  requestedOnBehalf?: boolean;
 }
 
 export interface FirestoreLeaveBalance {

@@ -341,6 +341,7 @@ export const buildProducts = (
       avgDailyProduction,
       wasteUnits: totalWaste,
       avgAssemblyTime: standardMin,
+      assemblyMode: p.assemblyMode === 'team' ? 'team' : 'individual',
     };
   });
 };

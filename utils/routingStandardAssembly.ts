@@ -98,3 +98,21 @@ export function effectiveStandardAssemblyMinutes(
   if (sec != null && sec > 0) return sec / 60;
   return configStandardMinutes ?? 0;
 }
+
+/**
+ * Planning/cost estimate time in minutes per unit.
+ * Uses the route target basis first because it represents the expected seconds/unit
+ * for production output; falls back to route step total/config when no target exists.
+ */
+export function effectivePlanningAssemblyMinutes(
+  productId: string,
+  configStandardMinutes: number | undefined,
+  routingVarianceBasisSecondsByProduct: Record<string, number> | undefined,
+  routingTotalsByProductId: Record<string, number> | undefined,
+): number {
+  const pid = String(productId || '').trim();
+  if (!pid) return configStandardMinutes ?? 0;
+  const basisSec = routingVarianceBasisSecondsByProduct?.[pid];
+  if (basisSec != null && basisSec > 0) return basisSec / 60;
+  return effectiveStandardAssemblyMinutes(pid, configStandardMinutes, routingTotalsByProductId);
+}

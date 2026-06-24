@@ -79,7 +79,6 @@ import {
 } from '../../../utils/reportExport';
 import {
   formatBulkProductionReportsShareCaption,
-  formatProductionReportShareCaption,
 } from '../../../utils/productionReportShareCaption';
 import type {
   ImportResult,
@@ -111,7 +110,7 @@ import {
   buildPackagingPrintLinesFromReport,
   formatPackagingLineDisplay,
 } from '../components/ProductionReportPrint';
-import { ProductionReportShareCard } from '../components/ProductionReportShareCard';
+import { ProductionReportShareCardTarget } from '../components/ProductionReportShareCardTarget';
 import { SelectableTable } from '../components/SelectableTable';
 import type { TableColumn, TableBulkAction } from '../components/SelectableTable';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
@@ -134,6 +133,11 @@ import {
 } from '../utils/injectionMaterialFilter';
 import { countsTowardFinishedGoodsProduction, effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
 import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
+import {
+  buildProductionReportShareRow,
+  getProductionReportShareKey,
+  shareProductionReportCardToWhatsApp,
+} from '../utils/productionReportShare';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
@@ -1678,35 +1682,15 @@ export const Reports: React.FC = () => {
     async (report: ProductionReport) => {
       if (shareWhatsAppLockRef.current) return;
       shareWhatsAppLockRef.current = true;
-      const sharingId = report.id || report.reportCode || `${report.date}-${report.lineId}-${report.productId}`;
+      const sharingId = getProductionReportShareKey(report);
       setExporting(true);
       setSharingReportId(sharingId);
-      const base = buildReportRow(report);
-      const validPackagingLines = (report.packagingLines ?? [])
-        .map((l) => ({
-          productId: String(l?.productId || '').trim(),
-          quantityPieces: Math.max(0, Number(l?.quantityPieces || 0)),
-        }))
-        .filter((l) => l.productId && l.quantityPieces > 0);
-      const packagingMultiProduct = report.reportType === 'packaging' && validPackagingLines.length > 1;
-      const variance = computeProductionReportStandardQtyVariance({
-        productId: report.productId,
-        lineId: report.lineId,
-        quantityProduced: report.quantityProduced || 0,
-        workersCount: report.workersCount || 0,
-        workHours: report.workHours || 0,
+      const row = buildProductionReportShareRow(report, buildReportRow(report), {
         lineProductConfigs,
         routingVarianceBasisSecondsByProduct,
         routingPlanTargetUnitSecondsByProduct,
         routingProductTargetUnitSecondsByProduct,
       });
-      const row: ReportPrintRow = {
-        ...base,
-        ...(report.reportType === 'packaging' ? { packagingShareImage: true } : {}),
-        ...(!packagingMultiProduct
-          ? { shareStandardVariance: buildShareStandardVarianceBanner(variance) }
-          : {}),
-      };
       flushSync(() => {
         setShareCardRow(row);
       });
@@ -1715,15 +1699,11 @@ export const Reports: React.FC = () => {
           toast.error('تعذر تجهيز صورة التقرير للمشاركة. حاول مرة أخرى.');
           return;
         }
-        const { captureNodeAndShareToWhatsApp } = await import('@/src/shared/utils/exportNodeToImage');
-        const caption = formatProductionReportShareCaption(row, printTemplate);
-        const reportNumber = row.reportCode?.trim()
-          || (row.reportId ? `RPT-${row.reportId.slice(-6).toUpperCase()}` : 'RPT-NA');
-        const result = await captureNodeAndShareToWhatsApp(
-          shareCardRef.current,
-          `production-report-${reportNumber}`,
-          { caption },
-        );
+        const result = await shareProductionReportCardToWhatsApp({
+          node: shareCardRef.current,
+          row,
+          printSettings: printTemplate,
+        });
         showShareFeedback(result);
       } catch (error: unknown) {
         const err = error as { name?: string; message?: string };
@@ -3842,23 +3822,11 @@ export const Reports: React.FC = () => {
       )}
 
       {/* Fixed-size WhatsApp share image render target */}
-      {shareCardRow && (
-        <div
-          style={{
-            position: 'fixed',
-            left: '-99999px',
-            top: 0,
-            width: 1080,
-            background: 'white',
-            zIndex: -1,
-            pointerEvents: 'none',
-          }}
-        >
-          <div ref={shareCardRef} style={{ width: 1080, background: 'white' }}>
-            <ProductionReportShareCard report={shareCardRow} printSettings={printTemplate} />
-          </div>
-        </div>
-      )}
+      <ProductionReportShareCardTarget
+        row={shareCardRow}
+        targetRef={shareCardRef}
+        printSettings={printTemplate}
+      />
 
       {/* Hidden print components (off-screen, only rendered for print) */}
       <div

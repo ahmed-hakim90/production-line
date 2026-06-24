@@ -270,7 +270,7 @@
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
         'work_orders', 'notifications', 'scan_events', 'product_materials',
         'cost_deviation_analysis',
-        'line_worker_assignments', 'production_workers', 'production_line_worker_assignments',
+        'line_worker_assignments', 'production_workers', 'production_attendance_records', 'production_line_worker_assignments',
         'production_worker_targets', 'worker_performance_summaries',
         'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
         'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',

@@ -40,6 +40,7 @@ export interface Product {
   wasteUnits: number;
   avgAssemblyTime: number;
   imageUrl?: string;
+  assemblyMode?: ProductAssemblyMode;
 }
 
 export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'daily';
@@ -226,7 +227,16 @@ export interface PackagingReportLine {
 
 /** Injection reports: morning (صباحي) or evening (مسائي) shift on the same line/day. */
 export type ProductionReportShift = 'morning' | 'evening';
+export type ProductionReportLifecycleStatus = 'open' | 'closed';
 export type ProductAssemblyMode = 'individual' | 'team';
+
+export interface ProductionShiftWorkerSnapshot {
+  employeeId: string;
+  employeeCode?: string;
+  employeeName: string;
+  laborRole: LineWorkerLaborRole;
+  isPresent: boolean;
+}
 
 export interface ProductionReport {
   id?: string;
@@ -261,6 +271,15 @@ export interface ProductionReport {
   /** اختياري: ربط التقرير بدورة توريد (باتش) لاحتساب الهالك والتتبع */
   supplyCycleId?: string;
   reportType?: 'finished_product' | 'component_injection' | 'packaging' | 'component_waste';
+  /** Employee-dashboard shift lifecycle; missing means legacy completed report. */
+  lifecycleStatus?: ProductionReportLifecycleStatus;
+  shiftStartedAt?: string;
+  shiftClosedAt?: string;
+  shiftStartedByUid?: string;
+  shiftClosedByUid?: string;
+  shiftStartContext?: 'plan' | 'general';
+  /** Snapshot captured at shift start from the line worker attendance step. */
+  shiftWorkers?: ProductionShiftWorkerSnapshot[];
   productionPlanId?: string;
   productionPlanLinkMode?: 'manual' | 'auto';
   assemblyModeSnapshot?: ProductAssemblyMode;
@@ -288,6 +307,33 @@ export interface ProductionReportWorkerOutput {
   /** Temporary row-level attendance flag; missing means present for older reports. */
   isPresent?: boolean;
   notes?: string;
+}
+
+export type ProductionAttendanceStatus = 'present' | 'absent';
+export type ProductionAttendanceSource = 'shift_workers' | 'worker_outputs';
+
+export interface ProductionAttendanceRecord {
+  id?: string;
+  tenantId?: string;
+  reportId: string;
+  reportCode?: string;
+  date: string;
+  lineId: string;
+  productId: string;
+  employeeId?: string;
+  employeeCode?: string;
+  employeeName: string;
+  workerId?: string;
+  workerName?: string;
+  laborRole?: LineWorkerLaborRole;
+  status: ProductionAttendanceStatus;
+  source: ProductionAttendanceSource;
+  quantityProduced?: number;
+  workHours?: number;
+  notes?: string;
+  recordedAt?: unknown;
+  updatedAt?: unknown;
+  createdAt?: unknown;
 }
 
 export type ProductionWorkerType = 'production';

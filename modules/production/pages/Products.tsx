@@ -622,6 +622,26 @@ export const Products: React.FC = () => {
   const toggleRow = (id: string) =>
     setSelectedIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
+  const handleBulkAssemblyModeChange = async (assemblyMode: 'individual' | 'team') => {
+    if (bulkToggleSaving || selectedIds.size === 0) return;
+    setBulkToggleSaving(true);
+    try {
+      await Promise.all([...selectedIds].map((id) => updateProduct(id, { assemblyMode })));
+      setSaveMsg({
+        type: 'success',
+        text:
+          assemblyMode === 'team'
+            ? 'تم تحويل المنتجات المحددة إلى تجميع جماعي'
+            : 'تم تحويل المنتجات المحددة إلى تجميع فردي',
+      });
+      setSelectedIds(new Set());
+    } catch {
+      setSaveMsg({ type: 'error', text: 'تعذر تغيير نمط التجميع للمنتجات المحددة حالياً' });
+    } finally {
+      setBulkToggleSaving(false);
+    }
+  };
+
   useEffect(() => {
     void (async () => {
       try {
@@ -1279,6 +1299,22 @@ export const Products: React.FC = () => {
                 <button
                   className="btn btn-secondary btn-sm gap-1"
                   disabled={bulkToggleSaving}
+                  onClick={() => void handleBulkAssemblyModeChange('individual')}
+                >
+                  <ProductIcon name="precision_manufacturing" className="text-[15px]" />
+                  تحويل لفردي
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm gap-1"
+                  disabled={bulkToggleSaving}
+                  onClick={() => void handleBulkAssemblyModeChange('team')}
+                >
+                  <ProductIcon name="call_split" className="text-[15px]" />
+                  تحويل لجماعي
+                </button>
+                <button
+                  className="btn btn-secondary btn-sm gap-1"
+                  disabled={bulkToggleSaving}
                   onClick={async () => {
                     if (bulkToggleSaving) return;
                     setBulkToggleSaving(true);
@@ -1339,6 +1375,7 @@ export const Products: React.FC = () => {
                   <input type="checkbox" checked={allPageSelected} ref={(el) => { if (el) el.indeterminate = somePageSelected; }} onChange={toggleSelectAll} className="cursor-pointer" />
                 </th>
                 <th className="erp-th cursor-pointer select-none" onClick={() => handleSort('name')}>المنتج <SortIcon col="name" /></th>
+                <th className="erp-th text-center">نمط التجميع</th>
                 {visibleColumns.openingStock && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('openingStock')}>رصيد مفكك <SortIcon col="openingStock" /></th>}
                 {visibleColumns.totalProduction && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('totalProduction')}>ما تم إنتاجه <SortIcon col="totalProduction" /></th>}
                 {visibleColumns.monthlyProductionQty && (
@@ -1434,6 +1471,17 @@ export const Products: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${
+                        product.assemblyMode === 'team'
+                          ? 'bg-indigo-50 text-indigo-600'
+                          : 'bg-emerald-50 text-emerald-600'
+                      }`}
+                    >
+                      {product.assemblyMode === 'team' ? 'جماعي' : 'فردي'}
+                    </span>
                   </td>
                   {visibleColumns.openingStock && <td className="px-4 py-4 text-center font-bold text-[var(--color-text)] tabular-nums">{formatNumber(decomposedBalance)}</td>}
                   {visibleColumns.totalProduction && <td className="px-4 py-4 text-center">

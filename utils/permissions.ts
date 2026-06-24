@@ -31,6 +31,7 @@ export type Permission =
   | 'production.workerReports.view'
   | 'production.workerRatings.view' | 'production.workerRatings.manage'
   | 'production.workerBonus.view' | 'production.workerBonus.manage'
+  | 'production.attendance.view' | 'production.attendance.manage'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
   | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
@@ -156,6 +157,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'production.workerRatings.manage', label: 'مراجعة تقييمات عمال الإنتاج' },
       { key: 'production.workerBonus.view', label: 'عرض مكافآت عمال الإنتاج' },
       { key: 'production.workerBonus.manage', label: 'إدارة مكافآت عمال الإنتاج' },
+      { key: 'production.attendance.view', label: 'عرض سجل حضور الإنتاج' },
+      { key: 'production.attendance.manage', label: 'إدارة سجل حضور الإنتاج' },
       { key: 'lineWorkers.view', label: 'عرض وإدارة ربط العمالة' },
       { key: 'supervisorAssignments.manage', label: 'إدارة توزيع المشرفين على الخطوط' },
       { key: 'plans.view', label: 'عرض خطط الإنتاج' },
@@ -441,6 +444,12 @@ export function checkPermission(
   }
   if (permission === 'attendance.sync' || permission === 'attendance.process') {
     return permissions['attendance.import'] === true || permissions['attendance.edit'] === true;
+  }
+  if (permission === 'leave.view' || permission === 'leave.create') {
+    return permissions['leave.manage'] === true
+      || permissions['approval.view'] === true
+      || permissions['reports.create'] === true
+      || permissions['production.workerReports.view'] === true;
   }
   if (permission === 'catalog.categories.view') {
     return permissions['products.view'] === true;

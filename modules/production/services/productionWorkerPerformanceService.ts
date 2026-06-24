@@ -26,7 +26,8 @@ import {
   resolveWorkerTarget,
 } from '../selectors/workerTargetSelector';
 import { calculateBonusEstimate, computePerformanceScore } from './productionBonusEngine';
-import { summarizeWorkerPresenceDays } from '../utils/workerPresence';
+import { buildWorkerPresenceRowsFromReports, summarizeWorkerPresenceDays } from '../utils/workerPresence';
+import { isOnApprovedLeave } from '../utils/productionLeaveAvailability';
 
 const monthRange = (month: string): { start: string; end: string } => {
   const [y, m] = month.split('-').map(Number);
@@ -101,14 +102,10 @@ function primaryLineProductForDay(
 function workerPresenceForReports(
   reports: ProductionReport[],
   workerId: string,
+  employeeId?: string,
   date?: string,
 ) {
-  const rows = reports.flatMap((report) => {
-    if (date && report.date !== date) return [];
-    return (report.workerOutputs ?? [])
-      .filter((line) => line.workerId === workerId)
-      .map((line) => ({ workerId: line.workerId, date: report.date, isPresent: line.isPresent }));
-  });
+  const rows = buildWorkerPresenceRowsFromReports(reports, workerId, employeeId, date);
   const summary = summarizeWorkerPresenceDays(rows);
   const isPresent = summary.total === 0 ? undefined : summary.present > 0;
   return {
@@ -157,7 +154,7 @@ export const productionWorkerPerformanceService = {
       ?? await reportService.getByDateRange(date, date);
     const outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
     const { lineId, productId } = primaryLineProductForDay(reports, workerId, date);
-    const presence = workerPresenceForReports(reports, workerId, date);
+    const presence = workerPresenceForReports(reports, workerId, worker?.employeeId, date);
     const product = context?.products?.find((p) => p.id === productId) ?? null;
     const resolved = productId
       ? resolveWorkerTarget({
@@ -182,12 +179,7 @@ export const productionWorkerPerformanceService = {
       ]);
       const dayAttendance = attendanceRecords.find((r) => r.date === date);
       absent = dayAttendance?.status === 'absent';
-      leave = leaveRequests.some(
-        (req) =>
-          (req.finalStatus === 'approved')
-          && req.startDate <= date
-          && req.endDate >= date,
-      );
+      leave = isOnApprovedLeave(leaveRequests, date);
     }
     absent = absent || presence.operationalAbsent;
 
@@ -247,16 +239,11 @@ export const productionWorkerPerformanceService = {
     let overTargetDays = 0;
     let monthlyTarget = 0;
     let monthlyOutput = 0;
-    const monthlyPresence = workerPresenceForReports(reports, workerId);
+    const monthlyPresence = workerPresenceForReports(reports, workerId, worker?.employeeId);
 
     for (const date of allDates) {
       const dayAttendance = attendanceRecords.find((r) => r.date === date);
-      const onLeave = leaveRequests.some(
-        (req) =>
-          (req.finalStatus === 'approved')
-          && req.startDate <= date
-          && req.endDate >= date,
-      );
+      const onLeave = isOnApprovedLeave(leaveRequests, date);
       const weeklyOff = dayAttendance?.isWorkDay === false
         || dayAttendance?.status === 'off_day'
         || dayAttendance?.status === 'holiday';
@@ -269,7 +256,7 @@ export const productionWorkerPerformanceService = {
       workingDays += 1;
       const outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
       const { lineId, productId } = primaryLineProductForDay(reports, workerId, date);
-      const dayPresence = workerPresenceForReports(reports, workerId, date);
+      const dayPresence = workerPresenceForReports(reports, workerId, worker?.employeeId, date);
       const product = options?.products?.find((p) => p.id === productId) ?? null;
       const targetQty = productId
         ? resolveWorkerTarget({
@@ -425,6 +412,7 @@ export const productionWorkerPerformanceService = {
     settings?: ProductionWorkerSettings;
     products?: FirestoreProduct[];
     workerIds?: string[];
+    lineId?: string;
     lineProductConfigs?: LineProductConfig[];
   }): Promise<{
     monthlyByWorkerId: Map<string, WorkerMonthlyAchievement>;
@@ -446,6 +434,12 @@ export const productionWorkerPerformanceService = {
       reportService.getByDateRange(start, end),
       reportService.getByDateRange(params.date, params.date),
     ]);
+    const scopedMonthReports = params.lineId
+      ? monthReports.filter((report) => report.lineId === params.lineId)
+      : monthReports;
+    const scopedDayReports = params.lineId
+      ? dayReports.filter((report) => report.lineId === params.lineId)
+      : dayReports;
 
     const monthlyByWorkerId = new Map<string, WorkerMonthlyAchievement>();
     const dailyByWorkerId = new Map<string, {
@@ -467,7 +461,7 @@ export const productionWorkerPerformanceService = {
         worker,
         targets: workerTargets,
         products: params.products,
-        reports: monthReports,
+        reports: scopedMonthReports,
         persistSummary: false,
         lineProductConfigs: params.lineProductConfigs,
       });
@@ -476,7 +470,7 @@ export const productionWorkerPerformanceService = {
         targets: workerTargets,
         products: params.products,
         settings,
-        reports: dayReports,
+        reports: scopedDayReports,
         lineProductConfigs: params.lineProductConfigs,
       });
       monthlyByWorkerId.set(workerId, monthly);

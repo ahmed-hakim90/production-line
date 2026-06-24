@@ -221,7 +221,7 @@ export async function createRequest(
     }
   }
 
-  const createValidation = validateCreate(caller, options.employeeId);
+  const createValidation = validateCreate(caller, options.employeeId, allEmployees);
   if (!createValidation.allowed) {
     return { success: false, error: createValidation.error };
   }

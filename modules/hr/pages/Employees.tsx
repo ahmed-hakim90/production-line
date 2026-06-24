@@ -46,6 +46,14 @@ import { useRegisterModalOpener } from '../../../components/modal-manager/useReg
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { productionWorkerService } from '@/modules/production/services/productionWorkerService';
+import { productionLineWorkerAssignmentService } from '@/modules/production/services/productionLineWorkerAssignmentService';
+import { supervisorLineAssignmentService } from '@/modules/production/services/supervisorLineAssignmentService';
+import { lineService } from '@/modules/production/services/lineService';
+import {
+  buildProductionEmployeeContext,
+  type ProductionEmployeeContext,
+} from '@/modules/production/utils/productionEmployeeContext';
 
 const emptyForm: Omit<FirestoreEmployee, 'id' | 'createdAt'> = {
   name: '',
@@ -132,6 +140,7 @@ export const Employees: React.FC = () => {
   const [listHasMore, setListHasMore] = useState(false);
   const [listLoading, setListLoading] = useState(false);
   const [tenantEmployeeCount, setTenantEmployeeCount] = useState<number | null>(null);
+  const [productionEmployeeContext, setProductionEmployeeContext] = useState<Map<string, ProductionEmployeeContext>>(new Map());
 
   const [search, setSearch] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
@@ -207,6 +216,28 @@ export const Employees: React.FC = () => {
     }
   }, [canManageUsers]);
 
+  const loadProductionEmployeeContext = useCallback(async () => {
+    const today = getTodayDateString();
+    try {
+      const [workers, lineAssignments, supervisorAssignments, lines] = await Promise.all([
+        productionWorkerService.getAll(),
+        productionLineWorkerAssignmentService.getAll(),
+        supervisorLineAssignmentService.getActiveByDate(today),
+        lineService.getAll(),
+      ]);
+      setProductionEmployeeContext(buildProductionEmployeeContext({
+        workers,
+        lineAssignments,
+        supervisorAssignments,
+        lines,
+        date: today,
+      }));
+    } catch (e) {
+      console.error('loadProductionEmployeeContext error:', e);
+      setProductionEmployeeContext(new Map());
+    }
+  }, []);
+
   useEffect(() => {
     loadRefData();
   }, [loadRefData]);
@@ -214,6 +245,10 @@ export const Employees: React.FC = () => {
   useEffect(() => {
     loadUsers();
   }, [loadUsers]);
+
+  useEffect(() => {
+    void loadProductionEmployeeContext();
+  }, [loadProductionEmployeeContext]);
 
   const reloadEmployeeList = useCallback(async () => {
     setListLoading(true);
@@ -260,6 +295,12 @@ export const Employees: React.FC = () => {
     listEmployees.find((e) => e.id === id)?.name
     ?? _rawEmployees.find((e) => e.id === id)?.name
     ?? '—';
+  const getProductionContext = (employeeId: string | undefined) =>
+    employeeId ? productionEmployeeContext.get(employeeId) : undefined;
+  const getEffectiveManagerName = (employee: FirestoreEmployee) => {
+    const context = getProductionContext(employee.id);
+    return context?.managerId ? getManagerName(context.managerId) : getManagerName(employee.managerId || '');
+  };
 
   const resolveEmployeeById = useCallback(
     (id: string | null | undefined) =>
@@ -282,7 +323,10 @@ export const Employees: React.FC = () => {
     if (q) {
       list = list.filter(
         (e) =>
-          e.name?.toLowerCase().includes(q) || (e.code && e.code.toLowerCase().includes(q))
+          e.name?.toLowerCase().includes(q) ||
+          (e.code && e.code.toLowerCase().includes(q)) ||
+          getProductionContext(e.id)?.lineName.toLowerCase().includes(q) ||
+          getEffectiveManagerName(e).toLowerCase().includes(q)
       );
     }
     if (filterDepartment) list = list.filter((e) => e.departmentId === filterDepartment);
@@ -293,7 +337,7 @@ export const Employees: React.FC = () => {
     if (filterSystemAccess === 'yes') list = list.filter((e) => e.hasSystemAccess);
     if (filterSystemAccess === 'no') list = list.filter((e) => !e.hasSystemAccess);
     return list;
-  }, [listEmployees, search, filterDepartment, filterJobPosition, filterStatus, filterEmploymentType, filterSystemAccess]);
+  }, [listEmployees, _rawEmployees, search, filterDepartment, filterJobPosition, filterStatus, filterEmploymentType, filterSystemAccess, productionEmployeeContext]);
 
   const filteredSalaryTotal = useMemo(
     () => filtered.reduce((sum, emp) => sum + Number(emp.baseSalary ?? 0), 0),
@@ -675,6 +719,36 @@ export const Employees: React.FC = () => {
       render: (emp) => <span className="text-sm text-[var(--color-text-muted)]">{getJobPositionTitle(emp.jobPositionId ?? '')}</span>,
     },
     {
+      header: 'خط الإنتاج',
+      sortKey: (emp) => getProductionContext(emp.id)?.lineName || '',
+      render: (emp) => {
+        const context = getProductionContext(emp.id);
+        return context ? (
+          <span className="inline-flex items-center px-2 py-1 rounded-[var(--border-radius-base)] bg-primary/5 text-primary text-xs font-bold">
+            {context.lineName}
+          </span>
+        ) : (
+          <span className="text-sm text-[var(--color-text-muted)]">—</span>
+        );
+      },
+    },
+    {
+      header: 'المدير / المشرف',
+      sortKey: (emp) => getEffectiveManagerName(emp),
+      render: (emp) => {
+        const context = getProductionContext(emp.id);
+        const managerName = context?.managerId ? getManagerName(context.managerId) : getManagerName(emp.managerId || '');
+        return (
+          <div className="min-w-0">
+            <span className="text-sm text-[var(--color-text-muted)] block truncate">{managerName}</span>
+            {context?.managerId && (
+              <span className="text-[10px] text-primary font-bold">حسب خط الإنتاج</span>
+            )}
+          </div>
+        );
+      },
+    },
+    {
       header: 'المستوى',
       sortKey: (emp) => emp.level ?? 1,
       render: (emp) => <span className="text-sm font-bold">{JOB_LEVEL_LABELS[(emp.level ?? 1) as 1 | 2 | 3 | 4] ?? emp.level}</span>,
@@ -725,7 +799,7 @@ export const Employees: React.FC = () => {
         </Badge>
       ),
     },
-  ], [departments, jobPositions, can]);
+  ], [departments, jobPositions, can, productionEmployeeContext, listEmployees, _rawEmployees]);
 
   // â”€â”€ SelectableTable: row actions â”€â”€
   const renderEmployeeActions = useCallback((emp: FirestoreEmployee) => (
@@ -798,12 +872,14 @@ export const Employees: React.FC = () => {
   }, [updateEmployee, uid]);
 
   const handleBulkExport = useCallback((items: FirestoreEmployee[]) => {
-    const headers = ['الاسم', 'الكود', 'القسم', 'المنصب', 'المستوى', 'نوع التوظيف', 'الحالة', 'دخول النظام'];
+    const headers = ['الاسم', 'الكود', 'القسم', 'المنصب', 'خط الإنتاج', 'المدير / المشرف', 'المستوى', 'نوع التوظيف', 'الحالة', 'دخول النظام'];
     const rows = items.map((emp) => [
       getEmployeeDisplayName(emp),
       emp.code || '—',
       getDepartmentName(emp.departmentId ?? ''),
       getJobPositionTitle(emp.jobPositionId ?? ''),
+      getProductionContext(emp.id)?.lineName || '—',
+      getEffectiveManagerName(emp),
       JOB_LEVEL_LABELS[(emp.level ?? 1) as 1 | 2 | 3 | 4] ?? String(emp.level),
       EMPLOYMENT_TYPE_LABELS[(emp.employmentType as EmploymentType)] ?? emp.employmentType,
       emp.isActive !== false ? 'نشط' : 'غير نشط',
@@ -818,7 +894,7 @@ export const Employees: React.FC = () => {
     a.download = `الموظفين-${getTodayDateString()}.csv`;
     a.click();
     URL.revokeObjectURL(url);
-  }, [departments, jobPositions]);
+  }, [departments, jobPositions, productionEmployeeContext, listEmployees, _rawEmployees]);
 
   const employeeBulkActions = useMemo<TableBulkAction<FirestoreEmployee>[]>(() => {
     const actions: TableBulkAction<FirestoreEmployee>[] = [
@@ -891,7 +967,10 @@ export const Employees: React.FC = () => {
                 const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
                 const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
                 const all = await employeeService.getAll();
-                exportAllEmployees(all, getDeptName, getJobTitle, getShiftName);
+                exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
+                  getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
+                  getManagerName: getEffectiveManagerName,
+                });
               })();
             },
           },

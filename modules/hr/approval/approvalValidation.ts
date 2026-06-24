@@ -16,6 +16,7 @@ import type {
   FirestoreApprovalSettings,
   ApprovalRequestType,
   AutoApproveThreshold,
+  ApprovalEmployeeInfo,
 } from './types';
 
 // ─── RBAC Role Resolution ───────────────────────────────────────────────────
@@ -46,18 +47,53 @@ export interface CreateValidationResult {
   error?: string;
 }
 
+function isEmployeeManagedByCaller(
+  callerEmployeeId: string,
+  targetEmployeeId: string,
+  allEmployees: ApprovalEmployeeInfo[] = [],
+): boolean {
+  const byId = new Map(allEmployees.map((employee) => [employee.employeeId, employee]));
+  const visited = new Set<string>();
+  let current = byId.get(targetEmployeeId);
+
+  while (current?.managerId && !visited.has(current.managerId)) {
+    if (current.managerId === callerEmployeeId) return true;
+    visited.add(current.managerId);
+    current = byId.get(current.managerId);
+  }
+
+  return false;
+}
+
+function canCreateManagedLeaveRequest(permissions: Record<string, boolean>): boolean {
+  return permissions['leave.create'] === true
+    || permissions['approval.view'] === true
+    || permissions['reports.create'] === true
+    || permissions['production.workerReports.view'] === true;
+}
+
 /**
  * Validate that a caller can create a request for a given employee.
  * - Employees can only create requests for themselves
+ * - Supervisors/managers can create leave requests for employees in their reporting chain
  * - HR and Admin can create on behalf of any employee
  */
 export function validateCreate(
   caller: CallerContext,
   targetEmployeeId: string,
+  allEmployees: ApprovalEmployeeInfo[] = [],
 ): CreateValidationResult {
   const role = resolveApprovalRole(caller.permissions);
 
   if (role === 'admin' || role === 'hr') {
+    return { allowed: true };
+  }
+
+  if (
+    caller.employeeId !== targetEmployeeId &&
+    canCreateManagedLeaveRequest(caller.permissions) &&
+    isEmployeeManagedByCaller(caller.employeeId, targetEmployeeId, allEmployees)
+  ) {
     return { allowed: true };
   }
 

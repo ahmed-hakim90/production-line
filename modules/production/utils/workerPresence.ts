@@ -1,3 +1,5 @@
+import type { ProductionReport } from '../../../types';
+
 export type WorkerPresenceRow = {
   workerId?: string;
   date?: string;
@@ -87,6 +89,26 @@ export function summarizeWorkerPresenceDaysByWorker(rows: WorkerPresenceRow[] = 
     workerId,
     summarizeWorkerPresenceDays(workerRows),
   ]));
+}
+
+export function buildWorkerPresenceRowsFromReports(
+  reports: Pick<ProductionReport, 'date' | 'workerOutputs' | 'shiftWorkers'>[],
+  workerId: string,
+  employeeId?: string,
+  date?: string,
+): WorkerPresenceRow[] {
+  return reports.flatMap((report) => {
+    if (date && report.date !== date) return [];
+    const outputRows = (report.workerOutputs ?? [])
+      .filter((line) => line.workerId === workerId)
+      .map((line) => ({ workerId: line.workerId, date: report.date, isPresent: line.isPresent }));
+    const shiftRows = employeeId
+      ? (report.shiftWorkers ?? [])
+        .filter((line) => line.employeeId === employeeId)
+        .map((line) => ({ workerId, date: report.date, isPresent: line.isPresent }))
+      : [];
+    return [...outputRows, ...shiftRows];
+  });
 }
 
 export const getPresenceLabel = (isPresent: boolean): string => (isPresent ? 'حاضر' : 'غائب');

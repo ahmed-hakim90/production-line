@@ -23,6 +23,7 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { createReportDuplicateError } from '../utils/reportDuplicateError';
 import { resolveReportType } from '../utils/reportTypes';
+import { productionAttendanceService } from './productionAttendanceService';
 
 const COLLECTION = 'production_reports';
 const UNIQUE_COLLECTION = 'production_report_uniques';
@@ -326,9 +327,54 @@ export const reportService = {
           });
         }
       });
+      await productionAttendanceService.replaceForReport({
+        ...data,
+        id: reportRef.id,
+        reportType: resolveReportType(data.reportType),
+        reportCode,
+      } as ProductionReport);
       return reportRef.id;
     } catch (error) {
       console.error('reportService.create error:', error);
+      throw error;
+    }
+  },
+
+  async createOpenShift(data: Omit<ProductionReport, 'id' | 'createdAt'>): Promise<string | null> {
+    if (!isConfigured) return null;
+
+    const required: (keyof typeof data)[] = ['employeeId', 'productId', 'lineId', 'date'];
+    for (const field of required) {
+      if (data[field] === undefined || data[field] === null || data[field] === '') {
+        throw new Error(`Missing required field: ${field}`);
+      }
+    }
+
+    try {
+      const reportCode = data.reportCode || await generateNextReportCode();
+      const reportRef = doc(collection(db, COLLECTION));
+      await runTransaction(db, async (tx) => {
+        const payload = stripUndefinedDeep({
+          ...data,
+          tenantId: getCurrentTenantId(),
+          reportType: resolveReportType(data.reportType),
+          reportCode,
+          lifecycleStatus: 'open',
+          quantityProduced: Number(data.quantityProduced || 0),
+          workersCount: Number(data.workersCount || 0),
+          workersProductionCount: data.workersProductionCount ?? 0,
+          workersPackagingCount: data.workersPackagingCount ?? 0,
+          workersQualityCount: data.workersQualityCount ?? 0,
+          workersMaintenanceCount: data.workersMaintenanceCount ?? 0,
+          workersExternalCount: data.workersExternalCount ?? 0,
+          workHours: Number(data.workHours || 0),
+          createdAt: serverTimestamp(),
+        });
+        tx.set(reportRef, payload);
+      });
+      return reportRef.id;
+    } catch (error) {
+      console.error('reportService.createOpenShift error:', error);
       throw error;
     }
   },
@@ -351,6 +397,7 @@ export const reportService = {
       if (Object.keys(cleanedFields).length === 0) return;
 
       const reportRef = doc(db, COLLECTION, id);
+      let attendanceReport: ProductionReport | null = null;
       await runTransaction(db, async (tx) => {
         const snap = await tx.get(reportRef);
         if (!snap.exists()) {
@@ -359,6 +406,7 @@ export const reportService = {
 
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
         const next = { ...current, ...cleanedFields } as ProductionReport;
+        attendanceReport = next;
         const oldSkipsUnique = skipsReportUniqueConstraint(current.reportType);
         const nextSkipsUnique = skipsReportUniqueConstraint(next.reportType);
 
@@ -436,6 +484,9 @@ export const reportService = {
 
         tx.update(reportRef, cleanedFields);
       });
+      if (attendanceReport) {
+        await productionAttendanceService.replaceForReport(attendanceReport);
+      }
     } catch (error) {
       console.error('reportService.update error:', error);
       throw error;
@@ -488,6 +539,7 @@ export const reportService = {
           tx.delete(uniqueRef);
         }
       });
+      await productionAttendanceService.deleteForReport(id);
     } catch (error) {
       console.error('reportService.delete error:', error);
       throw error;
