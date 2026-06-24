@@ -5,7 +5,7 @@ import type {
   ProductionWorker,
   SupervisorLineAssignment,
 } from '@/types';
-import type { FirestoreDepartment } from '@/modules/hr/types';
+import type { FirestoreDepartment, FirestoreJobPosition } from '@/modules/hr/types';
 
 export type ProductionEmployeeContext = {
   workerId: string;
@@ -43,11 +43,81 @@ export type TeamRequestScopePermission =
   | 'productionWorkers.view'
   | 'production.workerReports.view';
 
+const normalizeScopeText = (value: unknown): string => String(value || '').trim().toLowerCase();
+
+const includesAny = (value: string, needles: string[]): boolean => needles.some((needle) => value.includes(needle));
+
+const getStructuralText = (input: {
+  employee?: Pick<FirestoreEmployee, 'departmentId' | 'jobPositionId'> | null;
+  department?: Pick<FirestoreDepartment, 'id' | 'name' | 'code'> | null;
+  jobPosition?: Pick<FirestoreJobPosition, 'id' | 'title'> | null;
+}): string => [
+  input.employee?.departmentId,
+  input.department?.id,
+  input.department?.name,
+  input.department?.code,
+  input.employee?.jobPositionId,
+  input.jobPosition?.id,
+  input.jobPosition?.title,
+].map(normalizeScopeText).filter(Boolean).join(' ');
+
+const isHrStructure = (input: {
+  employee?: FirestoreEmployee | null;
+  department?: FirestoreDepartment | null;
+  jobPosition?: FirestoreJobPosition | null;
+}): boolean => includesAny(getStructuralText(input), [
+  'hr',
+  'human resources',
+  'people',
+  'personnel',
+  'موارد',
+  'بشر',
+  'شؤون العاملين',
+  'شئون العاملين',
+]);
+
+const isProductionStructure = (input: {
+  employee?: FirestoreEmployee | null;
+  department?: FirestoreDepartment | null;
+  jobPosition?: FirestoreJobPosition | null;
+}): boolean => includesAny(getStructuralText(input), [
+  'production',
+  'manufacturing',
+  'factory',
+  'prod',
+  'إنتاج',
+  'انتاج',
+  'تصنيع',
+  'مصنع',
+]);
+
+const isManagerStructure = (input: {
+  employee?: FirestoreEmployee | null;
+  jobPosition?: FirestoreJobPosition | null;
+}): boolean => {
+  const text = getStructuralText(input);
+  return Number(input.employee?.level || input.jobPosition?.level || 0) >= 3
+    || includesAny(text, ['manager', 'head', 'lead', 'مدير', 'رئيس']);
+};
+
+const isSupervisorStructure = (input: {
+  employee?: FirestoreEmployee | null;
+  jobPosition?: FirestoreJobPosition | null;
+}): boolean => {
+  const text = getStructuralText(input);
+  return Number(input.employee?.level || input.jobPosition?.level || 0) === 2
+    || includesAny(text, ['supervisor', 'مشرف']);
+};
+
 export const resolveTeamRequestScope = (input: {
   can: (permission: TeamRequestScopePermission) => boolean;
   managesDepartment: boolean;
+  currentEmployee?: FirestoreEmployee | null;
+  department?: FirestoreDepartment | null;
+  jobPosition?: FirestoreJobPosition | null;
+  hasAssignedLines?: boolean;
 }): TeamWorkerScope => {
-  if (
+  const hasProductionWidePermission = (
     input.can('production.workers.manage')
     || input.can('production.workers.view')
     || input.can('productionWorkers.view')
@@ -56,11 +126,34 @@ export const resolveTeamRequestScope = (input: {
     || input.can('plans.create')
     || input.can('plans.edit')
     || input.can('plans.componentInjection.manage')
-  ) {
+  );
+  const structurallyHr = isHrStructure({
+    employee: input.currentEmployee,
+    department: input.department,
+    jobPosition: input.jobPosition,
+  });
+  const structurallyProductionManager = hasProductionWidePermission
+    && isProductionStructure({
+      employee: input.currentEmployee,
+      department: input.department,
+      jobPosition: input.jobPosition,
+    })
+    && isManagerStructure({
+      employee: input.currentEmployee,
+      jobPosition: input.jobPosition,
+    });
+  const structurallyLineSupervisor = Boolean(input.hasAssignedLines)
+    && isSupervisorStructure({
+      employee: input.currentEmployee,
+      jobPosition: input.jobPosition,
+    });
+
+  if (input.can('leave.manage') && structurallyHr) return 'hr_all';
+  if (structurallyProductionManager) {
     return 'production_all';
   }
-  if (input.can('leave.manage')) return 'hr_all';
   if (input.managesDepartment) return 'department_manager';
+  if (structurallyLineSupervisor) return 'assigned_lines';
   return 'assigned_lines';
 };
 

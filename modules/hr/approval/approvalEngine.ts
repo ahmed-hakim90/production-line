@@ -32,7 +32,9 @@ import {
   approvalRequestDocRef,
   approvalSettingsDocRef,
 } from './collections';
+import { departmentsRef, jobPositionsRef } from '../collections';
 import { buildApprovalChain, tryAutoApprove } from './approvalBuilder';
+import { resolveHrApproverEmployeeIdFromOrg } from './hrApproverResolution';
 import {
   validateCreate,
   validateAction,
@@ -63,6 +65,7 @@ import type {
   ApprovalEmployeeInfo,
   ApprovalRequestType,
 } from './types';
+import type { FirestoreDepartment, FirestoreJobPosition } from '../types';
 import { normalizeApprovalSettings } from './types';
 
 const REQUEST_TYPE_LABELS: Record<ApprovalRequestType, string> = {
@@ -143,10 +146,12 @@ async function resolveHrApproverEmployeeId(
   if (explicitHrEmployeeId) return explicitHrEmployeeId;
 
   try {
-    const [users, roles, rawEmployees, systemSettings] = await Promise.all([
+    const [users, roles, rawEmployees, departmentsSnap, jobPositionsSnap, systemSettings] = await Promise.all([
       userService.getAll(),
       roleService.getAll(),
       employeeService.getAll(),
+      getDocs(departmentsRef()),
+      getDocs(jobPositionsRef()),
       systemSettingsService.get(),
     ]);
 
@@ -173,31 +178,15 @@ async function resolveHrApproverEmployeeId(
         .filter(Boolean),
     );
 
-    const infoIds = new Set(allEmployees.map((e) => e.employeeId));
-    const configuredCandidates = rawEmployees.filter(
-      (employee) =>
-        employee.isActive !== false &&
-        Boolean(employee.id) &&
-        Boolean(employee.userId) &&
-        configuredHrUserIds.has(String(employee.userId || '').trim()),
-    );
-    if (configuredCandidates.length > 0) {
-      const inCurrentGraph = configuredCandidates.find((employee) => infoIds.has(String(employee.id)));
-      return String((inCurrentGraph || configuredCandidates[0])?.id || '') || undefined;
-    }
-
-    if (hrUserIdsByPermission.size === 0) return undefined;
-
-    const permissionCandidates = rawEmployees.filter(
-      (employee) =>
-        employee.isActive !== false &&
-        Boolean(employee.id) &&
-        Boolean(employee.userId) &&
-        hrUserIdsByPermission.has(String(employee.userId || '').trim()),
-    );
-
-    const inCurrentGraph = permissionCandidates.find((employee) => infoIds.has(String(employee.id)));
-    return String((inCurrentGraph || permissionCandidates[0])?.id || '') || undefined;
+    return resolveHrApproverEmployeeIdFromOrg({
+      allEmployees,
+      rawEmployees,
+      departments: departmentsSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as FirestoreDepartment)),
+      jobPositions: jobPositionsSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as FirestoreJobPosition)),
+      configuredHrUserIds,
+      hrUserIdsByPermission,
+      explicitHrEmployeeId,
+    });
   } catch {
     return undefined;
   }

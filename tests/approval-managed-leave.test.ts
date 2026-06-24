@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { buildApprovalChain } from '../modules/hr/approval/approvalBuilder.ts';
+import { resolveHrApproverEmployeeIdFromOrg } from '../modules/hr/approval/hrApproverResolution.ts';
 import { validateAction, validateCreate } from '../modules/hr/approval/approvalValidation.ts';
 import {
   normalizeApprovalSettings,
@@ -7,6 +8,8 @@ import {
   type ApprovalRequestType,
   type FirestoreApprovalRequest,
 } from '../modules/hr/approval/types.ts';
+import type { FirestoreDepartment, FirestoreJobPosition } from '../modules/hr/types.ts';
+import type { FirestoreEmployee } from '../types.ts';
 
 const employees: ApprovalEmployeeInfo[] = [
   {
@@ -104,6 +107,75 @@ assert.deepEqual(
   chain.chain.map((step) => step.approverEmployeeId),
   ['sup-1', 'hr-1'],
 );
+
+const rawEmployees: FirestoreEmployee[] = employees.map((employee) => ({
+  id: employee.employeeId,
+  name: employee.employeeName,
+  departmentId: employee.departmentId,
+  jobPositionId: employee.jobPositionId,
+  level: employee.jobLevel,
+  managerId: employee.managerId,
+  employmentType: 'full_time',
+  baseSalary: 0,
+  hourlyRate: 0,
+  hasSystemAccess: employee.employeeId === 'hr-1',
+  isActive: true,
+  userId: employee.employeeId === 'hr-1' ? 'hr-user-1' : undefined,
+}));
+
+const departments: FirestoreDepartment[] = [
+  { id: 'prod', name: 'Production', code: 'PROD', managerId: 'manager-1', isActive: true },
+  { id: 'hr', name: 'Human Resources', code: 'HR', managerId: 'hr-1', isActive: true },
+];
+
+const jobPositions: FirestoreJobPosition[] = [
+  { id: 'worker', title: 'Worker', departmentId: 'prod', level: 1, hasSystemAccessDefault: false, isActive: true },
+  { id: 'sup', title: 'Supervisor', departmentId: 'prod', level: 2, hasSystemAccessDefault: true, isActive: true },
+  { id: 'manager', title: 'Manager', departmentId: 'prod', level: 3, hasSystemAccessDefault: true, isActive: true },
+  { id: 'exec', title: 'Executive', departmentId: 'prod', level: 4, hasSystemAccessDefault: true, isActive: true },
+  { id: 'hr-manager', title: 'HR Manager', departmentId: 'hr', level: 4, hasSystemAccessDefault: true, isActive: true },
+];
+
+const structurallyResolvedHr = resolveHrApproverEmployeeIdFromOrg({
+  allEmployees: employees,
+  rawEmployees,
+  departments,
+  jobPositions,
+  configuredHrUserIds: [],
+  hrUserIdsByPermission: [],
+});
+
+assert.equal(structurallyResolvedHr, 'hr-1');
+
+const structuralChain = buildApprovalChain({
+  employee: employees[0],
+  allEmployees: employees,
+  requestType: 'leave',
+  settings: {
+    maxApprovalLevels: 3,
+    hrAlwaysFinalLevel: true,
+    escalationDays: 3,
+    allowDelegation: false,
+    autoApproveThresholds: [],
+  },
+  hrEmployeeId: structurallyResolvedHr,
+});
+
+assert.deepEqual(
+  structuralChain.chain.map((step) => step.approverEmployeeId),
+  ['sup-1', 'manager-1', 'hr-1'],
+);
+
+const legacyResolvedHr = resolveHrApproverEmployeeIdFromOrg({
+  allEmployees: employees,
+  rawEmployees,
+  departments: departments.filter((department) => department.id !== 'hr'),
+  jobPositions: jobPositions.filter((position) => position.departmentId !== 'hr' && position.id !== 'hr-manager'),
+  configuredHrUserIds: ['hr-user-1'],
+  hrUserIdsByPermission: [],
+});
+
+assert.equal(legacyResolvedHr, 'hr-1');
 
 const normalizedLegacySettings = normalizeApprovalSettings({
   maxApprovalLevels: 3,

@@ -44,10 +44,10 @@ import {
   type LeaveTypeDefinition,
 } from '@/modules/hr/leaveTypes';
 import type { FirestoreEmployee } from '@/types';
-import type { FirestoreDepartment } from '@/modules/hr/types';
+import type { FirestoreDepartment, FirestoreJobPosition } from '@/modules/hr/types';
 import type { ApprovalChainItem, ApprovalStatus, FirestoreLeaveBalance, FirestoreLeaveRequest, FirestoreEmployeeLoan, LeaveType, LoanType } from '@/modules/hr/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '@/modules/hr/types';
-import { departmentsRef } from '@/modules/hr/collections';
+import { departmentsRef, jobPositionsRef } from '@/modules/hr/collections';
 import { getDocs } from 'firebase/firestore';
 import { lineService } from '../services/lineService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
@@ -337,6 +337,7 @@ export const SupervisorTeamActions: React.FC = () => {
         supervisorAssignments,
         lines,
         departmentSnap,
+        jobPositionSnap,
         configuredLeaveTypes,
         configuredLeaveReasons,
       ] = await Promise.all([
@@ -346,13 +347,25 @@ export const SupervisorTeamActions: React.FC = () => {
         supervisorLineAssignmentService.getActiveByDate(today),
         lineService.getAll(),
         getDocs(departmentsRef()),
+        getDocs(jobPositionsRef()),
         getLeaveTypesFromConfig(),
         getLeaveReasonsFromConfig(),
       ]);
 
       const departmentsList = departmentSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreDepartment));
+      const jobPositionsList = jobPositionSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreJobPosition));
       const managesDepartment = departmentsList.some((department) => department.isActive !== false && department.managerId === supervisor.id);
-      const scope = resolveTeamRequestScope({ can, managesDepartment });
+      const currentDepartment = departmentsList.find((department) => department.id === supervisor.departmentId) || null;
+      const currentJobPosition = jobPositionsList.find((position) => position.id === supervisor.jobPositionId) || null;
+      const hasAssignedLines = supervisorAssignments.some((assignment) => assignment.supervisorId === supervisor.id);
+      const scope = resolveTeamRequestScope({
+        can,
+        managesDepartment,
+        currentEmployee: supervisor,
+        department: currentDepartment,
+        jobPosition: currentJobPosition,
+        hasAssignedLines,
+      });
       const rows = buildSupervisorTeamWorkers({
         supervisorId: supervisor.id,
         employees,

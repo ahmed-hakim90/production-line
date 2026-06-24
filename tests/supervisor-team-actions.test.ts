@@ -71,16 +71,18 @@ const lines = [
   { id: 'line-2', name: 'Line 2', dailyWorkingHours: 8, maxWorkers: 10, status: ProductionLineStatus.ACTIVE },
 ];
 
+const supervisorAssignments = [
+  { id: 's-1', lineId: 'line-1', supervisorId: 'sup-1', supervisorName: 'Supervisor', effectiveFrom: '2026-01-01', isActive: true },
+  { id: 's-2', lineId: 'line-2', supervisorId: 'other-sup', supervisorName: 'Other', effectiveFrom: '2026-01-01', isActive: true },
+];
+
 const team = buildSupervisorTeamWorkers({
   supervisorId: 'sup-1',
   date: '2026-06-24',
   employees,
   workers,
   lineAssignments,
-  supervisorAssignments: [
-    { id: 's-1', lineId: 'line-1', supervisorId: 'sup-1', supervisorName: 'Supervisor', effectiveFrom: '2026-01-01', isActive: true },
-    { id: 's-2', lineId: 'line-2', supervisorId: 'other-sup', supervisorName: 'Other', effectiveFrom: '2026-01-01', isActive: true },
-  ],
+  supervisorAssignments,
   lines,
 });
 
@@ -105,9 +107,62 @@ assert.equal(productionManagerTeam.length, 2);
 assert.equal(productionManagerTeam[0].employeeId, 'worker-1');
 assert.equal(productionManagerTeam[1].employeeId, 'worker-2');
 
+const supervisorWithProductionPermissionsScope = resolveTeamRequestScope({
+  managesDepartment: false,
+  currentEmployee: {
+    id: 'sup-1',
+    name: 'Supervisor',
+    departmentId: 'prod',
+    jobPositionId: 'line-supervisor',
+    level: 2,
+    employmentType: 'full_time',
+    baseSalary: 0,
+    hourlyRate: 0,
+    hasSystemAccess: true,
+    isActive: true,
+  },
+  department: { id: 'prod', name: 'Production', code: 'PROD', managerId: 'prod-manager', isActive: true },
+  jobPosition: { id: 'line-supervisor', title: 'مشرف خط إنتاج', departmentId: 'prod', level: 2, hasSystemAccessDefault: true, isActive: true },
+  hasAssignedLines: true,
+  can: (permission) => ({
+    'production.workerReports.view': true,
+    'production.workers.view': true,
+    'plans.view': true,
+  })[permission] === true,
+});
+
+assert.equal(supervisorWithProductionPermissionsScope, 'assigned_lines');
+assert.deepEqual(
+  buildSupervisorTeamWorkers({
+    supervisorId: 'sup-1',
+    date: '2026-06-24',
+    scope: supervisorWithProductionPermissionsScope,
+    employees,
+    workers,
+    lineAssignments,
+    supervisorAssignments,
+    lines,
+  }).map((row) => row.employeeId),
+  ['worker-1'],
+);
+
 assert.equal(
   resolveTeamRequestScope({
     managesDepartment: false,
+    currentEmployee: {
+      id: 'prod-manager',
+      name: 'Production Manager',
+      departmentId: 'prod',
+      jobPositionId: 'production-manager',
+      level: 3,
+      employmentType: 'full_time',
+      baseSalary: 0,
+      hourlyRate: 0,
+      hasSystemAccess: true,
+      isActive: true,
+    },
+    department: { id: 'prod', name: 'Production', code: 'PROD', managerId: 'prod-manager', isActive: true },
+    jobPosition: { id: 'production-manager', title: 'Production Manager', departmentId: 'prod', level: 3, hasSystemAccessDefault: true, isActive: true },
     can: (permission) => ({
       'approval.manage': true,
       'production.workerReports.view': true,
@@ -124,7 +179,7 @@ assert.equal(
       'production.workers.view': true,
     })[permission] === true,
   }),
-  'production_all',
+  'assigned_lines',
 );
 
 assert.equal(
@@ -135,7 +190,7 @@ assert.equal(
       'plans.view': true,
     })[permission] === true,
   }),
-  'production_all',
+  'assigned_lines',
 );
 
 assert.equal(
@@ -149,6 +204,20 @@ assert.equal(
 assert.equal(
   resolveTeamRequestScope({
     managesDepartment: false,
+    currentEmployee: {
+      id: 'hr-1',
+      name: 'HR Manager',
+      departmentId: 'hr',
+      jobPositionId: 'hr-manager',
+      level: 3,
+      employmentType: 'full_time',
+      baseSalary: 0,
+      hourlyRate: 0,
+      hasSystemAccess: true,
+      isActive: true,
+    },
+    department: { id: 'hr', name: 'Human Resources', code: 'HR', managerId: 'hr-1', isActive: true },
+    jobPosition: { id: 'hr-manager', title: 'HR Manager', departmentId: 'hr', level: 3, hasSystemAccessDefault: true, isActive: true },
     can: (permission) => permission === 'leave.manage',
   }),
   'hr_all',
