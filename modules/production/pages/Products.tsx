@@ -39,13 +39,22 @@ import { formatNumber } from '../../../utils/calculations';
 import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
 import type { Product, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
-import { parseProductsExcel, toProductData, toProductDataWithExisting, ProductImportResult } from '../../../utils/importProducts';
+import {
+  parseProductsExcel,
+  toProductData,
+  toProductDataWithExisting,
+  type ProductImportResult,
+  type ProductImportMaterialCatalogItem,
+} from '../../../utils/importProducts';
 import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
 import { exportAllProducts } from '../../../utils/exportExcel';
 import type { ProductExportOptions } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import type { ProductMaterial } from '../../../types';
 import { productMaterialService } from '../services/productMaterialService';
+import { bomService } from '../../manufacturing/services/bomService';
+import { materialService } from '../../manufacturing/services/materialService';
+import type { BomItem } from '../../manufacturing/types';
 import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';
@@ -837,13 +846,75 @@ export const Products: React.FC = () => {
     setShowImportModal(true);
     setImportResult(null);
     try {
-      const result = await parseProductsExcel(file, _rawProducts);
+      let manufacturingMaterials: ProductImportMaterialCatalogItem[] = [];
+      let materialCatalogError = false;
+      try {
+        manufacturingMaterials = await materialService.getAll();
+      } catch {
+        materialCatalogError = true;
+      }
+      const result = await parseProductsExcel(file, _rawProducts, {
+        manufacturingMaterials,
+        validateManufacturingMaterials: true,
+      });
+      if (materialCatalogError) {
+        result.fileErrors = [
+          ...(result.fileErrors ?? []),
+          'تعذر تحميل كتالوج مواد التصنيع؛ سيتم رفض صفوف المواد حتى يتم تحميل الكتالوج بنجاح.',
+        ];
+      }
       setImportResult(result);
     } catch {
       setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0, newCount: 0, updateCount: 0 });
     } finally {
       setImportParsing(false);
     }
+  };
+
+  const saveImportedBomItems = async (productId: string, row: ProductImportResult['rows'][number]) => {
+    if (row.materials.length === 0) return { added: 0, updated: 0 };
+
+    const bomId = await bomService.ensureActiveBom('product', productId);
+    const existingItems = await bomService.getItemsByBomId(bomId);
+    let nextSortOrder = existingItems.reduce((max, item) => Math.max(max, Number(item.sortOrder ?? -1)), -1) + 1;
+    let added = 0;
+    let updated = 0;
+
+    for (const material of row.materials) {
+      if (!material.matchedMaterialId) {
+        throw new Error(`لم يتم العثور على مادة تصنيع مطابقة للمنتج ${row.code}`);
+      }
+
+      const payload: Omit<BomItem, 'id' | 'tenantId' | 'bomId'> = {
+        itemId: material.matchedMaterialId,
+        itemType: 'material',
+        itemName: material.matchedMaterialName || material.materialName,
+        qtyPerUnit: Number(material.quantityUsed || 0),
+        unit: material.matchedMaterialUnit || 'piece',
+        wastePercent: 0,
+        costBehavior: 'direct',
+        directCostPerUnit: Number(material.unitCost || 0),
+        indirectCostPerUnit: 0,
+      };
+
+      const existing = existingItems.find(
+        (item) => item.itemType === 'material' && item.itemId === material.matchedMaterialId,
+      );
+
+      if (existing?.id) {
+        await bomService.updateItem(existing.id, payload);
+        updated++;
+      } else {
+        const sortOrder = nextSortOrder++;
+        const addedItemId = await bomService.addItem(bomId, { ...payload, sortOrder });
+        if (addedItemId) {
+          existingItems.push({ ...payload, id: addedItemId, bomId, sortOrder });
+        }
+        added++;
+      }
+    }
+
+    return { added, updated };
   };
 
   const handleImportSave = async () => {
@@ -880,8 +951,17 @@ export const Products: React.FC = () => {
         } else {
           productId = await createProduct(toProductData(row));
         }
-        // Materials/BOM: use manufacturing BOM import — legacy product_materials writes are disabled.
-      } catch { failed++; }
+        if (productId) {
+          await saveImportedBomItems(productId, row);
+        }
+      } catch (error) {
+        failed++;
+        console.error('[products-import] Failed to save row', {
+          productCode: row.code,
+          rowIndex: row.rowIndex,
+          error,
+        });
+      }
       done++;
       setImportProgress({ done, total: validRows.length });
       setJobProgress(jobId, {
@@ -1924,6 +2004,15 @@ export const Products: React.FC = () => {
                       </div>
                     )}
                   </div>
+
+                  {importResult.fileErrors && importResult.fileErrors.length > 0 && (
+                    <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+                      <p className="mb-1">ملاحظات على شيت المواد الخام:</p>
+                      <ul className="space-y-0.5">
+                        {importResult.fileErrors.map((err, i) => <li key={i}>• {err}</li>)}
+                      </ul>
+                    </div>
+                  )}
 
                   <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <table className="erp-table w-full text-right text-sm border-collapse">

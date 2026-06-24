@@ -391,13 +391,20 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
               className="bg-[var(--color-card)]"
             />
             {selectedPlan && (
-              <div className="mt-2 rounded-[var(--border-radius-base)] border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700">
-                {t('modalManager.createWorkOrder.remainingInPlan')}: {formatNumber(selectedPlanRemaining)} {t('modalManager.createWorkOrder.units')}
-                <span className="text-blue-500"> ({t('modalManager.createWorkOrder.ofPlanned', { value: formatNumber(selectedPlan.plannedQuantity || 0) })})</span>
-                <span className="mx-1 text-blue-400">—</span>
-                {productNameById.get(selectedPlan.productId) || t('modalManager.createWorkOrder.unknownProduct')}
-                <span className="mx-1 text-blue-400">/</span>
-                {lines.find((l) => l.id === selectedPlan.lineId)?.name || t('modalManager.createWorkOrder.unknownLine')}
+              <div className="mt-2 rounded-[var(--border-radius-base)] border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700 space-y-1">
+                <p>
+                  {t('modalManager.createWorkOrder.remainingInPlan')}: {formatNumber(selectedPlanRemaining)} {t('modalManager.createWorkOrder.units')}
+                  <span className="text-blue-500"> ({t('modalManager.createWorkOrder.ofPlanned', { value: formatNumber(selectedPlan.plannedQuantity || 0) })})</span>
+                  <span className="mx-1 text-blue-400">—</span>
+                  {productNameById.get(selectedPlan.productId) || t('modalManager.createWorkOrder.unknownProduct')}
+                  <span className="mx-1 text-blue-400">/</span>
+                  {lines.find((l) => l.id === selectedPlan.lineId)?.name || t('modalManager.createWorkOrder.unknownLine')}
+                </p>
+                <p className={selectedPlan.acceptsProductionFromReports === false ? 'text-amber-700' : 'text-blue-600'}>
+                  {selectedPlan.acceptsProductionFromReports === false
+                    ? 'هذه الخطة لا تستقبل إنتاج أوامر الشغل؛ سيتم تتبع كمية أمر الشغل منفصلة عن تقدم الخطة.'
+                    : 'أمر الشغل مرتبط بالخطة، وتقاريره تُحسب على تقدم الخطة.'}
+                </p>
               </div>
             )}
           </div>

@@ -304,6 +304,7 @@ export interface FirestoreLeaveRequest {
   approvalChain: ApprovalChainItem[];
   finalStatus: ApprovalStatus;
   reason: string;
+  reasonCode?: string;
   balanceImpactApplied?: boolean;
   outsideBalanceDaysApplied?: number;
   createdAt?: any;
@@ -400,6 +401,10 @@ export interface FirestoreEmployeeDeduction {
   deductionTypeId: string;
   deductionTypeName: string;
   amount: number;
+  penaltyDurationDays?: number;
+  penaltyDurationLabel?: string;
+  penaltyDailyRate?: number;
+  penaltyAmountSource?: 'legacy_amount' | 'base_salary_daily_rate' | 'duration_only';
   isRecurring: boolean;
   startMonth: string;
   endMonth: string | null;

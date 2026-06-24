@@ -42,9 +42,14 @@ export interface ParsedProductRow {
 }
 
 export interface ParsedProductMaterialInput {
+  productCode: string;
+  materialCode?: string;
   materialName: string;
   quantityUsed: number;
   unitCost: number;
+  matchedMaterialId?: string;
+  matchedMaterialName?: string;
+  matchedMaterialUnit?: string;
 }
 
 export interface ProductImportResult {
@@ -54,6 +59,20 @@ export interface ProductImportResult {
   errorCount: number;
   newCount: number;
   updateCount: number;
+  fileErrors?: string[];
+}
+
+export interface ProductImportMaterialCatalogItem {
+  id?: string;
+  code?: string;
+  name: string;
+  baseUnit?: string;
+  isActive?: boolean;
+}
+
+export interface ProductImportParseOptions {
+  manufacturingMaterials?: ProductImportMaterialCatalogItem[];
+  validateManufacturingMaterials?: boolean;
 }
 
 // ─── Header mapping (Arabic → field) ────────────────────────────────────────
@@ -102,6 +121,11 @@ const MATERIAL_HEADER_MAP: Record<string, string> = {
   'كود المنتج': 'productCode',
   'الكود': 'productCode',
   'كود': 'productCode',
+  'كود المادة': 'materialCode',
+  'كود المادة الخام': 'materialCode',
+  'كود خامة': 'materialCode',
+  'كود الخامة': 'materialCode',
+  'material code': 'materialCode',
   'اسم المادة الخام': 'materialName',
   'المادة الخام': 'materialName',
   'المادة': 'materialName',
@@ -166,11 +190,72 @@ function isMaterialRowEmpty(row: Record<string, any>): boolean {
   return Object.values(row).every((v) => String(v ?? '').trim() === '');
 }
 
+function normalizeLookupKey(v: unknown): string {
+  return String(v ?? '').trim().toLowerCase();
+}
+
+function uniqueByIdOrCode(rows: ProductImportMaterialCatalogItem[]): ProductImportMaterialCatalogItem[] {
+  const seen = new Set<string>();
+  const unique: ProductImportMaterialCatalogItem[] = [];
+  for (const row of rows) {
+    const key = row.id || row.code || row.name;
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    unique.push(row);
+  }
+  return unique;
+}
+
+function buildMaterialLookup(materials: ProductImportMaterialCatalogItem[]) {
+  const byCode = new Map<string, ProductImportMaterialCatalogItem[]>();
+  const byName = new Map<string, ProductImportMaterialCatalogItem[]>();
+  for (const material of materials) {
+    const codeKey = normalizeLookupKey(material.code);
+    if (codeKey) byCode.set(codeKey, [...(byCode.get(codeKey) ?? []), material]);
+    const nameKey = normalizeLookupKey(material.name);
+    if (nameKey) byName.set(nameKey, [...(byName.get(nameKey) ?? []), material]);
+  }
+  return { byCode, byName };
+}
+
+export function resolveProductImportMaterial(
+  input: Pick<ParsedProductMaterialInput, 'materialCode' | 'materialName'>,
+  materials: ProductImportMaterialCatalogItem[],
+): { material?: ProductImportMaterialCatalogItem; error?: string } {
+  const lookup = buildMaterialLookup(materials);
+  const code = String(input.materialCode || '').trim();
+  const name = String(input.materialName || '').trim();
+  const candidates = code
+    ? lookup.byCode.get(normalizeLookupKey(code)) ?? []
+    : lookup.byName.get(normalizeLookupKey(name)) ?? [];
+  const label = code ? `كود المادة "${code}"` : `اسم المادة "${name}"`;
+
+  if (candidates.length === 0) {
+    return { error: `لم يتم العثور على ${label} في مواد التصنيع` };
+  }
+
+  const uniqueCandidates = uniqueByIdOrCode(candidates);
+  if (uniqueCandidates.length > 1) {
+    return { error: `${label} يطابق أكثر من مادة تصنيع؛ استخدم كود مادة فريد` };
+  }
+
+  const material = uniqueCandidates[0];
+  if (!material.id) {
+    return { error: `${label} لا يحتوي على معرّف صالح في كتالوج مواد التصنيع` };
+  }
+  if (material.isActive === false) {
+    return { error: `${label} يطابق مادة غير نشطة` };
+  }
+
+  return { material };
+}
+
 // ─── Main parse function ────────────────────────────────────────────────────
 
 export function parseProductsExcel(
   file: File,
   existingProducts: FirestoreProduct[],
+  options: ProductImportParseOptions = {},
 ): Promise<ProductImportResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -306,6 +391,7 @@ export function parseProductsExcel(
           if (r.currentCode) productRowsByCode.set(r.currentCode.trim().toLowerCase(), r);
         });
 
+        const fileErrors: string[] = [];
         const materialsSheetName = resolveMaterialsSheetName(wb.SheetNames, productsSheetName);
         if (materialsSheetName) {
           const materialsSheet = wb.Sheets[materialsSheetName];
@@ -329,23 +415,44 @@ export function parseProductsExcel(
               };
 
               const productCode = String(getMaterialValue('productCode') ?? '').trim();
+              const materialCode = String(getMaterialValue('materialCode') ?? '').trim();
               const materialName = String(getMaterialValue('materialName') ?? '').trim();
               const quantityUsed = Number(getMaterialValue('quantityUsed')) || 0;
               const unitCost = Number(getMaterialValue('unitCost')) || 0;
 
-              if (!productCode || !materialName) return;
+              if (!productCode || (!materialCode && !materialName)) return;
 
               const targetProduct = productRowsByCode.get(productCode.toLowerCase());
-              if (!targetProduct) return;
+              if (!targetProduct) {
+                fileErrors.push(`صف مادة خام ${idx + 2}: كود المنتج "${productCode}" غير موجود في شيت المنتجات`);
+                return;
+              }
+
+              let matchedMaterial: ProductImportMaterialCatalogItem | undefined;
+              if (options.validateManufacturingMaterials === true) {
+                const resolved = resolveProductImportMaterial(
+                  { materialCode: materialCode || undefined, materialName },
+                  options.manufacturingMaterials ?? [],
+                );
+                if (resolved.error) {
+                  targetProduct.errors.push(`صف مادة خام ${idx + 2}: ${resolved.error}`);
+                }
+                matchedMaterial = resolved.material;
+              }
 
               targetProduct.materials.push({
+                productCode,
+                materialCode: materialCode || undefined,
                 materialName,
                 quantityUsed,
                 unitCost,
+                matchedMaterialId: matchedMaterial?.id,
+                matchedMaterialName: matchedMaterial?.name,
+                matchedMaterialUnit: matchedMaterial?.baseUnit,
               });
 
-              if (quantityUsed < 0 || unitCost < 0) {
-                targetProduct.errors.push(`صف مادة خام ${idx + 2}: الكمية والتكلفة يجب أن تكونا >= 0`);
+              if (quantityUsed <= 0 || unitCost < 0) {
+                targetProduct.errors.push(`صف مادة خام ${idx + 2}: الكمية يجب أن تكون أكبر من 0 والتكلفة لا تقل عن 0`);
               }
             });
           }
@@ -362,6 +469,7 @@ export function parseProductsExcel(
           errorCount: rows.length - validRows.length,
           newCount,
           updateCount,
+          fileErrors,
         });
       } catch (err) {
         reject(err);

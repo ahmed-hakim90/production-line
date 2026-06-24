@@ -167,6 +167,7 @@ export const ProductionPlans: React.FC = () => {
   const [formStartDate, setFormStartDate] = useState(() => getTodayDateString());
   const [formPriority, setFormPriority] = useState<PlanPriority>('medium');
   const [formPlanType, setFormPlanType] = useState<'finished_product' | 'component_injection'>('finished_product');
+  const [formAcceptsProductionFromReports, setFormAcceptsProductionFromReports] = useState(true);
   const [saving, setSaving] = useState(false);
   const [formOpen, setFormOpen] = useState(!!searchParams.get('productId'));
 
@@ -181,7 +182,14 @@ export const ProductionPlans: React.FC = () => {
 
   // â”€â”€ Edit modal â”€â”€
   const [editPlan, setEditPlan] = useState<ProductionPlan | null>(null);
-  const [editForm, setEditForm] = useState({ plannedQuantity: 0, avgDailyTarget: 0, startDate: '', lineId: '', priority: 'medium' as PlanPriority });
+  const [editForm, setEditForm] = useState({
+    plannedQuantity: 0,
+    avgDailyTarget: 0,
+    startDate: '',
+    lineId: '',
+    priority: 'medium' as PlanPriority,
+    acceptsProductionFromReports: true,
+  });
   const [editSaving, setEditSaving] = useState(false);
 
   // â”€â”€ Status modal â”€â”€
@@ -599,6 +607,7 @@ export const ProductionPlans: React.FC = () => {
       priority: formPriority,
       estimatedCost: calculations.estimatedCost,
       actualCost: 0,
+      acceptsProductionFromReports: formAcceptsProductionFromReports,
       status: 'planned',
       createdBy: uid,
     });
@@ -609,6 +618,7 @@ export const ProductionPlans: React.FC = () => {
     setFormDailyTarget(0);
     setFormPriority('medium');
     setFormPlanType('finished_product');
+    setFormAcceptsProductionFromReports(true);
     setSaving(false);
     setFormOpen(false);
     setCapacityWarning({ show: false, load: 0, capacity: 0 });
@@ -630,6 +640,7 @@ export const ProductionPlans: React.FC = () => {
       plannedEndDate: durationDays > 0 ? addDaysToDate(editForm.startDate, durationDays) : editPlan.plannedEndDate,
       lineId: editForm.lineId,
       priority: editForm.priority,
+      acceptsProductionFromReports: editForm.acceptsProductionFromReports,
     });
     setEditSaving(false);
     setEditPlan(null);
@@ -919,6 +930,22 @@ export const ProductionPlans: React.FC = () => {
                 </SelectContent>
               </Select>
             </div>
+            <label className="lg:col-span-3 flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-primary/15 bg-primary/5 p-4 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={formAcceptsProductionFromReports}
+                onChange={(e) => setFormAcceptsProductionFromReports(e.target.checked)}
+                className="mt-1 h-4 w-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/30"
+              />
+              <span className="space-y-1">
+                <span className="block text-sm font-black text-[var(--color-text)]">
+                  تسجيل إنتاج التقارير وأوامر الشغل على هذه الخطة
+                </span>
+                <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
+                  عند التفعيل تُحسب التقارير المرتبطة بالخطة، والتقارير المباشرة غير المرتبطة بأمر شغل، ضمن إنجاز الخطة. عند الإيقاف تبقى كميات أوامر الشغل والتقارير منفصلة ولا تغير تقدم الخطة.
+                </span>
+              </span>
+            </label>
 
             {calculations?.plannedEndDate && (
               <div className="space-y-2">
@@ -1198,6 +1225,18 @@ export const ProductionPlans: React.FC = () => {
                   <p className="font-bold text-[var(--color-text)]">{getCurrentRunningAction(activeDrawerPlan)}</p>
                 </div>
 
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-1">
+                  <p className="text-xs text-[var(--color-text-muted)]">احتساب إنتاج التقارير وأوامر الشغل</p>
+                  <p className={`text-sm font-bold ${activeDrawerPlan.acceptsProductionFromReports === false ? 'text-amber-600' : 'text-emerald-600'}`}>
+                    {activeDrawerPlan.acceptsProductionFromReports === false
+                      ? 'متوقف — الكميات تبقى منفصلة عن تقدم الخطة'
+                      : 'مفعل — الإنتاج المرتبط والمباشر يُحسب على الخطة'}
+                  </p>
+                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                    أمر الشغل المستقل بدون ربط بالخطة يُتابع وحده ولا يُضاف تلقائيًا لإنجاز هذه الخطة.
+                  </p>
+                </div>
+
                 {canViewCosts && (
                   <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-1 text-sm">
                     <p><span className="font-bold text-[var(--color-text-muted)]">تكلفة تقديرية:</span> {formatCurrency(activeDrawerPlan.estimatedCost || 0)}</p>
@@ -1249,7 +1288,7 @@ export const ProductionPlans: React.FC = () => {
               <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-2">
                 {canEdit && (
                   <>
-                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, lineId: activeDrawerPlan.lineId, priority: activeDrawerPlan.priority || 'medium' }); setActiveDrawerPlanId(null); }}>
+                    <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, lineId: activeDrawerPlan.lineId, priority: activeDrawerPlan.priority || 'medium', acceptsProductionFromReports: activeDrawerPlan.acceptsProductionFromReports !== false }); setActiveDrawerPlanId(null); }}>
                       تعديل
                     </Button>
                     <Button variant="outline" onClick={() => { setStatusPlan(activeDrawerPlan); setNewStatus(activeDrawerPlan.effectiveStatus); setActiveDrawerPlanId(null); }}>
@@ -1259,7 +1298,7 @@ export const ProductionPlans: React.FC = () => {
                 )}
                 {(can('workOrders.create') || (activeDrawerPlan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
                   <Button variant="outline" onClick={() => { navigate(`/work-orders?planId=${activeDrawerPlan.id}&productId=${activeDrawerPlan.productId}`); setActiveDrawerPlanId(null); }}>
-                    أمر شغل
+                    أمر شغل مرتبط بالخطة
                   </Button>
                 )}
                 {canCreateReport && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
@@ -1347,6 +1386,22 @@ export const ProductionPlans: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
+              <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-primary/15 bg-primary/5 p-4 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={editForm.acceptsProductionFromReports}
+                  onChange={(e) => setEditForm({ ...editForm, acceptsProductionFromReports: e.target.checked })}
+                  className="mt-1 h-4 w-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/30"
+                />
+                <span className="space-y-1">
+                  <span className="block text-sm font-black text-[var(--color-text)]">
+                    تسجيل إنتاج التقارير وأوامر الشغل على هذه الخطة
+                  </span>
+                  <span className="block text-[11px] font-semibold leading-relaxed text-[var(--color-text-muted)]">
+                    أوقف هذا الخيار عندما تكون كميات أوامر الشغل منفصلة عن الخطة ولا تريدها أن تغير تقدم الخطة.
+                  </span>
+                </span>
+              </label>
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setEditPlan(null)}>إلغاء</Button>
@@ -1684,7 +1739,7 @@ export const ProductionPlans: React.FC = () => {
                                   {canEdit && (
                                     <>
                                       <button
-                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium' }); }}
+                                        onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium', acceptsProductionFromReports: plan.acceptsProductionFromReports !== false }); }}
                                         className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
                                         <span className="material-icons-round text-sm">edit</span>
                                       </button>

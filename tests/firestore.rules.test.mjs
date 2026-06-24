@@ -44,6 +44,20 @@ const seed = async () => {
       'repair.parts.view': true,
     },
   });
+  await set('roles', 'tenantA-hr-settings-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'hrSettings.view': true,
+      'hrSettings.edit': true,
+    },
+  });
+  await set('roles', 'tenantA-leave-manager-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'leave.view': true,
+      'leave.manage': true,
+    },
+  });
   await set('roles', 'tenantB-admin-role', {
     tenantId: 'tenantB',
     permissions: {
@@ -66,6 +80,18 @@ const seed = async () => {
     roleId: 'tenantA-operator-role',
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
+  });
+  await set('users', 'userAHrSettings', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-hr-settings-role',
+  });
+  await set('users', 'userALeaveManager', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-leave-manager-role',
   });
   await set('users', 'userBAdmin', {
     tenantId: 'tenantB',
@@ -127,6 +153,16 @@ const seed = async () => {
   await set('payroll_records', 'payrollA', {
     tenantId: 'tenantA',
     netSalary: 1000,
+  });
+  await set('hr_config_modules', 'leave', {
+    tenantId: 'tenantA',
+    configVersion: 1,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'seed',
+    defaultAnnualBalance: 21,
+    defaultSickBalance: 14,
+    defaultEmergencyBalance: 3,
+    leaveTypes: [],
   });
 };
 
@@ -212,6 +248,79 @@ await seed();
   await assertFails(adminDb.collection('production_report_uniques').doc('tenantB-unique').set({
     tenantId: 'tenantB',
     reportId: 'foreign-report',
+  }));
+}
+
+// 6) HR leave type config writes require tenant scope and HR config/leave-management permission.
+{
+  const hrSettingsDb = testEnv.authenticatedContext('userAHrSettings').firestore();
+  const leaveManagerDb = testEnv.authenticatedContext('userALeaveManager').firestore();
+  const operatorDb = testEnv.authenticatedContext('userAOperator').firestore();
+
+  const leaveConfig = {
+    tenantId: 'tenantA',
+    configVersion: 2,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'HR Settings',
+    defaultAnnualBalance: 21,
+    defaultSickBalance: 14,
+    defaultEmergencyBalance: 3,
+    leaveTypes: [{
+      type: 'custom_leave_1',
+      labelAr: 'إجازة خاصة',
+      defaultBalance: 0,
+      salaryImpact: 'unpaid',
+      deductPercent: 100,
+      requiresApproval: true,
+      maxConsecutiveDays: 0,
+      carryOverAllowed: false,
+      maxCarryOverDays: 0,
+    }],
+  };
+
+  await assertSucceeds(hrSettingsDb.collection('hr_config_modules').doc('leave').set(leaveConfig));
+  await assertSucceeds(leaveManagerDb.collection('hr_config_modules').doc('leave').set({
+    ...leaveConfig,
+    configVersion: 3,
+    updatedBy: 'Leave Manager',
+  }));
+  await assertFails(operatorDb.collection('hr_config_modules').doc('leave').set({
+    ...leaveConfig,
+    configVersion: 4,
+    updatedBy: 'Operator',
+  }));
+  await assertFails(leaveManagerDb.collection('hr_config_modules').doc('leave').set({
+    ...leaveConfig,
+    tenantId: 'tenantB',
+    configVersion: 5,
+  }));
+  await assertFails(leaveManagerDb.collection('hr_config_modules').doc('general').set({
+    tenantId: 'tenantA',
+    configVersion: 1,
+    updatedAt: new Date().toISOString(),
+    updatedBy: 'Leave Manager',
+  }));
+
+  await assertSucceeds(leaveManagerDb.collection('hr_config_audit_logs').add({
+    tenantId: 'tenantA',
+    module: 'leave',
+    action: 'update',
+    previousVersion: 2,
+    newVersion: 3,
+    changedFields: ['leaveTypes'],
+    performedBy: 'Leave Manager',
+    timestamp: new Date().toISOString(),
+    details: 'updated leave types',
+  }));
+  await assertFails(leaveManagerDb.collection('hr_config_audit_logs').add({
+    module: 'leave',
+    action: 'update',
+    previousVersion: 3,
+    newVersion: 4,
+    changedFields: ['leaveTypes'],
+    performedBy: 'Leave Manager',
+    timestamp: new Date().toISOString(),
+    details: 'missing tenant',
   }));
 }
 

@@ -10,6 +10,7 @@ export type {
   LeaveConfig,
   LeaveSalaryImpact,
   LeaveTypeDefinition,
+  LeaveReasonDefinition,
   LoanConfig,
   PayrollSettingsConfig,
   ApprovalConfig,

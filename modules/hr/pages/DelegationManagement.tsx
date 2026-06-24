@@ -14,6 +14,7 @@ import type { FirestoreEmployee } from '@/types';
 const REQUEST_TYPE_LABELS: Record<ApprovalRequestType, string> = {
   leave: 'إجازات',
   loan: 'سُلف',
+  penalty: 'جزاءات',
   overtime: 'عمل إضافي',
 };
 

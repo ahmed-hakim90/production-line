@@ -9,6 +9,7 @@
  */
 import { addDoc, serverTimestamp, getDocs, query, where, orderBy, limit } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { hrConfigAuditLogsRef } from './collections';
 import type {
   HRConfigModuleName,
@@ -29,6 +30,7 @@ export const hrConfigAuditService = {
     if (!isConfigured) return;
 
     await addDoc(hrConfigAuditLogsRef(), {
+      tenantId: getCurrentTenantId(),
       module,
       action,
       previousVersion,

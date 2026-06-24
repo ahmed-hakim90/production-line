@@ -9,7 +9,6 @@ const WorkOrderScanner = lazyNamed(() => import('../pages/WorkOrderScanner'), 'W
 const Supervisors = lazyNamed(() => import('../pages/Supervisors'), 'Supervisors');
 const SupervisorDetails = lazyNamed(() => import('../pages/SupervisorDetails'), 'SupervisorDetails');
 const SupervisorWorkerEvaluation = lazyNamed(() => import('../pages/SupervisorWorkerEvaluation'), 'SupervisorWorkerEvaluation');
-const SupervisorLineAssignment = lazyNamed(() => import('../pages/SupervisorLineAssignment'), 'SupervisorLineAssignment');
 const ProductionWorkerReports = lazyNamed(() => import('../pages/ProductionWorkerReports'), 'ProductionWorkerReports');
 const ProductionWorkerRatingsReview = lazyNamed(() => import('../pages/ProductionWorkerRatingsReview'), 'ProductionWorkerRatingsReview');
 const ProductionWorkers = lazyNamed(() => import('../pages/ProductionWorkers'), 'ProductionWorkers');
@@ -38,12 +37,13 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
     component: WorkOrderScanner,
     skeleton: 'form',
   },
-  { path: '/supervisors', permission: 'supervisors.view', component: Supervisors },
+  { path: '/supervisors', permissionsAny: ['supervisors.view', 'supervisorAssignments.manage'], component: Supervisors },
   { path: '/supervisors/:id/evaluation', permissionsAny: ['supervisors.view', 'production.workers.manage', 'hr.evaluation.create'], component: SupervisorWorkerEvaluation },
   { path: '/supervisors/:id', permission: 'supervisors.view', component: SupervisorDetails },
   { path: '/my-workers/evaluation', permissionsAny: ['employeeDashboard.view', 'quickAction.view', 'hr.evaluation.create'], component: SupervisorWorkerEvaluation, skeleton: 'dashboard' },
+  { path: '/production/my-team-actions', redirectTo: '/team-requests' },
   { path: '/my-workers', permissionsAny: ['employeeDashboard.view', 'quickAction.view'], component: SupervisorDetails, skeleton: 'dashboard' },
-  { path: '/supervisor-line-assignments', permission: 'supervisorAssignments.manage', component: SupervisorLineAssignment },
+  { path: '/supervisor-line-assignments', redirectTo: '/supervisors?tab=assignments' },
   { path: '/production-workers', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkers },
   { path: '/production/workers', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkers },
   { path: '/production-workers/:id', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkerDetails },

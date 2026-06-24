@@ -67,6 +67,8 @@ function isEmployeeManagedByCaller(
 
 function canCreateManagedLeaveRequest(permissions: Record<string, boolean>): boolean {
   return permissions['leave.create'] === true
+    || permissions['quickAction.view'] === true
+    || permissions['employeeDashboard.view'] === true
     || permissions['approval.view'] === true
     || permissions['reports.create'] === true
     || permissions['production.workerReports.view'] === true;

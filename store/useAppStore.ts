@@ -71,6 +71,9 @@ import {
   resolveReportType,
   workOrderMatchesReportType,
 } from '../modules/production/utils/reportTypes';
+import {
+  filterReportsForProductionPlan,
+} from '../modules/production/utils/productionPlanReports';
 import { supplyCycleService } from '../modules/production/services/supplyCycleService';
 import { lineStatusService } from '../modules/production/services/lineStatusService';
 import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
@@ -464,22 +467,27 @@ function deriveProductionPlanAutoPatch(
   reports: ProductionReport[],
 ): Partial<ProductionPlan> | null {
   const plannedQty = Number(plan.plannedQuantity || 0);
-  const producedQty = Number(plan.producedQuantity || 0);
+  const planReports = filterReportsForProductionPlan(plan, reports);
+  const producedQty = planReports.reduce((sum, report) => sum + Number(report.quantityProduced || 0), 0);
   const remainingQty = Math.max(0, plannedQty - producedQty);
   const achievementPercent = plannedQty > 0
     ? Math.round((producedQty / plannedQty) * 1000) / 10
     : 0;
-  const hasReportProgress = reports.some((report) => Number(report.quantityProduced || 0) > 0);
+  const hasReportProgress = planReports.some((report) => Number(report.quantityProduced || 0) > 0);
   const hasProgress = producedQty > 0 || hasReportProgress;
 
   let nextStatus = plan.status;
   if (plannedQty > 0 && producedQty >= plannedQty && plan.status !== 'completed') {
     nextStatus = 'completed';
+  } else if (plan.status === 'completed' && (plannedQty <= 0 || producedQty < plannedQty)) {
+    nextStatus = hasProgress ? 'in_progress' : 'planned';
   } else if (plan.status === 'planned' && hasProgress) {
     nextStatus = 'in_progress';
+  } else if (plan.status === 'in_progress' && !hasProgress) {
+    nextStatus = 'planned';
   }
 
-  const firstReportDate = reports
+  const firstReportDate = planReports
     .filter((report) => Number(report.quantityProduced || 0) > 0 && Boolean(report.date))
     .map((report) => report.date)
     .sort((a, b) => a.localeCompare(b))[0];
@@ -487,6 +495,9 @@ function deriveProductionPlanAutoPatch(
   const patch: Partial<ProductionPlan> = {};
   if (nextStatus !== plan.status) {
     patch.status = nextStatus;
+  }
+  if (Number(plan.producedQuantity ?? -1) !== producedQty) {
+    patch.producedQuantity = producedQty;
   }
   if (Number(plan.remainingQuantity ?? -1) !== remainingQty) {
     patch.remainingQuantity = remainingQty;
@@ -1625,7 +1636,8 @@ export const useAppStore = create<AppState>((set, get) => ({
             planReportResults.forEach((result) => {
               if (result.status !== 'fulfilled') return;
               const { plan, key, reports } = result.value;
-              nextPlanReports[key] = reports;
+              const planReports = filterReportsForProductionPlan(plan, reports);
+              nextPlanReports[key] = planReports;
               if (!plan.id) return;
               const patch = deriveProductionPlanAutoPatch(plan, reports);
               if (!patch) return;
@@ -2241,7 +2253,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           const reports = await reportService.getByLineAndProduct(
             plan.lineId, plan.productId, plan.startDate
           );
-          planReports[key] = reports;
+          planReports[key] = filterReportsForProductionPlan(plan, reports);
           if (!plan.id) return;
           const patch = deriveProductionPlanAutoPatch(plan, reports);
           if (!patch) return;
@@ -3249,32 +3261,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
 
-      const explicitPlanId = String((savePayload as ProductionReport).productionPlanId || '').trim();
-      const explicitPlan = explicitPlanId ? await productionPlanService.getById(explicitPlanId) : null;
-      const activePlans = await productionPlanService.getActiveByLineAndProduct(savePayload.lineId, savePayload.productId);
-      const planMatchType = effectivePlanReportType(reportType);
-      const planMatchesReport = (plan: ProductionPlan | null) => {
-        if (!plan) return false;
-        if (plan.lineId !== savePayload.lineId || plan.productId !== savePayload.productId) return false;
-        const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
-        return planType === planMatchType;
-      };
-      const activePlan = planMatchesReport(explicitPlan)
-        ? explicitPlan
-        : activePlans.find(planMatchesReport) ?? activePlans[0] ?? null;
-
-      if (!planSettings.allowReportWithoutPlan && !activePlan) {
-        set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
-        return null;
-      }
-
-      if (!planSettings.allowOverProduction && activePlan) {
-        if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
-          set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
-          return null;
-        }
-      }
-
       let activeWO: WorkOrder | null = null;
       if (savePayload.workOrderId) {
         const selectedWO = await workOrderService.getById(savePayload.workOrderId);
@@ -3318,6 +3304,47 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       }
 
+      const explicitPlanId = String((savePayload as ProductionReport).productionPlanId || '').trim();
+      const explicitPlan = explicitPlanId ? await productionPlanService.getById(explicitPlanId) : null;
+      const workOrderPlanId = String(activeWO?.planId || '').trim();
+      const workOrderPlan = workOrderPlanId && workOrderPlanId !== explicitPlanId
+        ? await productionPlanService.getById(workOrderPlanId)
+        : null;
+      const activePlans = await productionPlanService.getActiveByLineAndProduct(savePayload.lineId, savePayload.productId);
+      const planMatchType = effectivePlanReportType(reportType);
+      const planMatchesReportContext = (plan: ProductionPlan | null) => {
+        if (!plan) return false;
+        if (plan.lineId !== savePayload.lineId || plan.productId !== savePayload.productId) return false;
+        const planType = plan.planType === 'component_injection' ? 'component_injection' : 'finished_product';
+        return planType === planMatchType;
+      };
+      const planMatchesReport = (plan: ProductionPlan | null) => (
+        planMatchesReportContext(plan) && plan?.acceptsProductionFromReports !== false
+      );
+      const activePlan = planMatchesReport(explicitPlan)
+        ? explicitPlan
+        : planMatchesReport(workOrderPlan)
+          ? workOrderPlan
+          : !activeWO
+            ? (activePlans.find(planMatchesReport) ?? null)
+            : null;
+      const shouldPostToPlan = Boolean(activePlan?.id) && reportType !== 'packaging';
+      const hasMatchingPlanContext = planMatchesReportContext(explicitPlan)
+        || planMatchesReportContext(workOrderPlan)
+        || activePlans.some(planMatchesReportContext);
+
+      if (!activePlan && !activeWO && !hasMatchingPlanContext && !planSettings.allowReportWithoutPlan) {
+        set({ error: 'لا يمكن إنشاء تقرير بدون خطة إنتاج نشطة لهذا الخط والمنتج' });
+        return null;
+      }
+
+      if (shouldPostToPlan && !planSettings.allowOverProduction && activePlan) {
+        if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
+          set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
+          return null;
+        }
+      }
+
       const reportProduct = _rawProducts.find((p) => p.id === savePayload.productId) ?? null;
       const assemblyModeSnapshot = getProductAssemblyMode(reportProduct);
       const workerTargetsApplied = reportType === 'finished_product'
@@ -3344,7 +3371,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         componentScrapItems,
         workOrderId: activeWO?.id || savePayload.workOrderId || '',
         productionPlanId: activePlan?.id || undefined,
-        productionPlanLinkMode: activePlan?.id ? (explicitPlanId ? 'manual' : 'auto') : undefined,
+        productionPlanLinkMode: activePlan?.id ? (explicitPlanId || workOrderPlanId ? 'manual' : 'auto') : undefined,
         assemblyModeSnapshot,
         workerTargetsApplied,
         workerTargetSource: workerTargetsApplied ? 'line_product' : 'none',
@@ -3473,12 +3500,12 @@ export const useAppStore = create<AppState>((set, get) => ({
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
       }
 
-      const skipWoPlanProgress = isPackagingThroughputReport(
+      const skipWoProgress = isPackagingThroughputReport(
         { lineId: reportData.lineId, reportType },
         get()._rawLines,
       );
       try {
-        if (activeWO?.id && !skipWoPlanProgress) {
+        if (activeWO?.id && !skipWoProgress) {
           await workOrderService.incrementProduced(activeWO.id, reportData.quantityProduced, reportIndustrialCost);
           const newProduced = (activeWO.producedQuantity ?? 0) + reportData.quantityProduced;
           if (newProduced >= activeWO.quantity) {
@@ -3488,7 +3515,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           }
         }
 
-        if (activePlan?.id && !skipWoPlanProgress) {
+        if (activePlan?.id && shouldPostToPlan && !skipWoProgress) {
           if (activePlan.status === 'planned') {
             await productionPlanService.update(activePlan.id, {
               status: 'in_progress',
@@ -3740,6 +3767,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch (snapErr) {
         console.warn('persistProductionReportCostSnapshot (update):', snapErr);
       }
+      await get().fetchProductionPlans();
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -3883,6 +3911,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       get()._rebuildProducts();
       get()._rebuildLines();
+      await get().fetchProductionPlans();
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',

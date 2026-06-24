@@ -12,6 +12,7 @@ import type {
   TransportConfig,
   HRConfigMap,
 } from './types';
+import { DEFAULT_LEAVE_REASONS } from '../leaveTypes';
 
 type WithoutMeta<T> = Omit<T, 'configVersion' | 'updatedAt' | 'updatedBy'>;
 
@@ -92,12 +93,29 @@ export const DEFAULT_LEAVE: WithoutMeta<LeaveConfig> = {
       maxCarryOverDays: 0,
     },
   ],
+  leaveReasons: DEFAULT_LEAVE_REASONS.map(({ code, label }) => ({ code, labelAr: label })),
   allowNegativeBalance: false,
   carryOverLimit: 10,
   maxConsecutiveDays: 30,
   requireDocumentForSick: true,
   sickDocumentThresholdDays: 3,
 };
+
+export function withLeaveReasonDefaults<T extends Partial<LeaveConfig>>(
+  config: T,
+): T & { leaveReasons: LeaveConfig['leaveReasons'] } {
+  const shouldUseDefaultReasons = !Array.isArray(config.leaveReasons)
+    || (config.leaveReasons.length === 0 && config.leaveReasonsConfigured !== true);
+
+  if (!shouldUseDefaultReasons) {
+    return config as T & { leaveReasons: LeaveConfig['leaveReasons'] };
+  }
+
+  return {
+    ...config,
+    leaveReasons: DEFAULT_LEAVE.leaveReasons.map((reason) => ({ ...reason })),
+  };
+}
 
 export const DEFAULT_LOAN: WithoutMeta<LoanConfig> = {
   maxLoanMultiplier: 3,

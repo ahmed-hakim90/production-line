@@ -1,14 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { X } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { formatNumber, getTodayDateString } from '@/utils/calculations';
-import { Badge, Button, Card, KPIBox, LoadingSkeleton, SearchableSelect } from '../components/UI';
-import { SelectableTable, type TableColumn } from '../components/SelectableTable';
+import { Badge, Button, Card, KPIBox, LoadingSkeleton } from '../components/UI';
+import { SelectableTable, type TableBulkAction, type TableColumn } from '../components/SelectableTable';
 import type {
   ProductionLineWorkerAssignment,
   ProductionWorker,
@@ -17,7 +16,7 @@ import type {
   WorkerMonthlyAchievement,
 } from '@/types';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
-import { productionWorkerService, resolveWorkerCodeFromEmployee } from '../services/productionWorkerService';
+import { productionWorkerService } from '../services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
@@ -25,7 +24,14 @@ import { productionWorkerPerformanceService } from '../services/productionWorker
 import { ProductionWorkerReports } from './ProductionWorkerReports';
 import { ProductionWorkerRatingsReview } from './ProductionWorkerRatingsReview';
 import { SupervisorWorkerEvaluation } from './SupervisorWorkerEvaluation';
-import { shouldShowProductionWorkerForSupervisor } from '../utils/productionWorkerVisibility';
+import {
+  matchesProductionWorkerLineFilter,
+  normalizeWorkerLineIds,
+  shouldShowProductionWorkerForSupervisor,
+  UNASSIGNED_LINE_FILTER_VALUE,
+} from '../utils/productionWorkerVisibility';
+import { buildBulkWorkerLineTransferPlans, getWorkersEligibleForLineTransfer } from '../utils/productionWorkerLineTransfer';
+import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -144,27 +150,14 @@ export const ProductionWorkers: React.FC = () => {
     setSearchParams(next);
   };
 
-  const [showForm, setShowForm] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [linkProgress, setLinkProgress] = useState<{ current: number; total: number } | null>(null);
-  const [saveSummary, setSaveSummary] = useState<string | null>(null);
-  const [saveErrors, setSaveErrors] = useState<{ employeeId: string; name: string; message: string }[]>([]);
-  const [form, setForm] = useState({
-    selectedEmployeeIds: [] as string[],
-    isActive: true,
-    defaultLineId: '',
-  });
-
-  const linkedEmployeeIds = useMemo(
-    () => new Set(workers.map((w) => w.employeeId).filter((id): id is string => Boolean(id))),
-    [workers],
-  );
-
-  const linkableEmployees = useMemo(
-    () => _rawEmployees.filter((e) => e.id && e.isActive !== false && !linkedEmployeeIds.has(e.id)),
-    [_rawEmployees, linkedEmployeeIds],
-  );
-
+  const [lineTransfer, setLineTransfer] = useState<{
+    workers: WorkerRow[];
+    sourceLineId?: string;
+    targetLineId: string;
+    transferDate: string;
+    error: string | null;
+  } | null>(null);
+  const [lineTransferSaving, setLineTransferSaving] = useState(false);
   const employeeNameById = useMemo(() => {
     const map = new Map<string, string>();
     _rawEmployees.forEach((e) => {
@@ -240,7 +233,7 @@ export const ProductionWorkers: React.FC = () => {
               date: filterDate,
               settings: workerSettings,
               products: products as never[],
-              lineId: filterLine || undefined,
+              lineId: filterLine && filterLine !== UNASSIGNED_LINE_FILTER_VALUE ? filterLine : undefined,
               lineProductConfigs,
             });
           if (!cancelled) {
@@ -263,10 +256,10 @@ export const ProductionWorkers: React.FC = () => {
   const rows: WorkerRow[] = useMemo(() => {
     return workers.map((worker) => {
       const workerAssignments = assignments.filter((a) => a.workerId === worker.id && a.isActive);
-      const lineIds = [...new Set([
-        ...worker.lineIds,
+      const lineIds = normalizeWorkerLineIds([...new Set([
+        ...(worker.lineIds || []),
         ...workerAssignments.map((a) => a.lineId),
-      ])];
+      ])]);
       const activeTargetsCount = targets.filter(
         (t) => t.workerId === worker.id && t.isActive,
       ).length;
@@ -291,8 +284,9 @@ export const ProductionWorkers: React.FC = () => {
       row.assignedLineIds,
       isSupervisorReporter,
       supervisorLineIds,
+      { includeUnassigned: filterLine === UNASSIGNED_LINE_FILTER_VALUE },
     )),
-    [rows, isSupervisorReporter, supervisorLineIds],
+    [rows, isSupervisorReporter, supervisorLineIds, filterLine],
   );
 
   const visibleProductionLines = useMemo(
@@ -309,7 +303,7 @@ export const ProductionWorkers: React.FC = () => {
     return scopedRows.filter((row) => {
       if (filterActive === 'active' && row.isActive === false) return false;
       if (filterActive === 'inactive' && row.isActive !== false) return false;
-      if (filterLine && !row.assignedLineIds.includes(filterLine)) return false;
+      if (!matchesProductionWorkerLineFilter(row.assignedLineIds, filterLine)) return false;
       if (filterProduct && !targets.some((t) => t.workerId === row.id && t.productId === filterProduct)) return false;
       if (filterPerformance === 'below' && (row.monthStats?.monthlyAchievement ?? 0) >= 100) return false;
       if (filterPerformance === 'above' && (row.monthStats?.monthlyAchievement ?? 0) <= 100) return false;
@@ -322,109 +316,130 @@ export const ProductionWorkers: React.FC = () => {
     });
   }, [scopedRows, search, filterActive, filterLine, filterProduct, filterPerformance, targets, employeeNameById]);
 
-  const linkableEmployeeOptions = useMemo(
-    () => linkableEmployees
-      .filter((e) => e.id && !form.selectedEmployeeIds.includes(e.id))
-      .map((e) => ({
-        value: e.id!,
-        label: `${e.name}${e.code ? ` (${e.code})` : ''}`,
-      })),
-    [linkableEmployees, form.selectedEmployeeIds],
-  );
-
-  const selectedEmployees = useMemo(
-    () => form.selectedEmployeeIds
-      .map((id) => _rawEmployees.find((e) => e.id === id))
-      .filter((e): e is NonNullable<typeof e> => Boolean(e)),
-    [form.selectedEmployeeIds, _rawEmployees],
-  );
-
-  const resetForm = () => {
-    setForm({ selectedEmployeeIds: [], isActive: true, defaultLineId: '' });
-    setLinkProgress(null);
-    setSaveSummary(null);
-    setSaveErrors([]);
-    setShowForm(false);
-  };
-
-  const openLinkForm = (employeeId = '') => {
-    setForm({
-      selectedEmployeeIds: employeeId ? [employeeId] : [],
-      isActive: true,
-      defaultLineId: '',
+  const openLineTransfer = useCallback((selectedWorkers: WorkerRow[] | WorkerRow) => {
+    const transferWorkers = Array.isArray(selectedWorkers) ? selectedWorkers.filter((worker) => worker.id) : [selectedWorkers];
+    if (transferWorkers.length === 0) return;
+    setLineTransfer({
+      workers: transferWorkers,
+      targetLineId: '',
+      transferDate: filterDate || getTodayDateString(),
+      error: null,
     });
-    setLinkProgress(null);
-    setSaveSummary(null);
-    setSaveErrors([]);
-    setShowForm(true);
+  }, [filterDate]);
+
+  const openLineTransferByLine = useCallback(() => {
+    setLineTransfer({
+      workers: [],
+      sourceLineId: filterLine && filterLine !== UNASSIGNED_LINE_FILTER_VALUE ? filterLine : '',
+      targetLineId: '',
+      transferDate: filterDate || getTodayDateString(),
+      error: null,
+    });
+  }, [filterDate, filterLine]);
+
+  const closeLineTransfer = () => {
+    if (lineTransferSaving) return;
+    setLineTransfer(null);
   };
 
-  const addEmployeeToSelection = (employeeId: string) => {
-    if (!employeeId || form.selectedEmployeeIds.includes(employeeId)) return;
-    if (!linkableEmployees.some((e) => e.id === employeeId)) return;
-    setForm((prev) => ({
-      ...prev,
-      selectedEmployeeIds: [...prev.selectedEmployeeIds, employeeId],
-    }));
-    setSaveSummary(null);
-    setSaveErrors([]);
-  };
-
-  const removeEmployeeFromSelection = (employeeId: string) => {
-    setForm((prev) => ({
-      ...prev,
-      selectedEmployeeIds: prev.selectedEmployeeIds.filter((id) => id !== employeeId),
-    }));
-    setSaveSummary(null);
-    setSaveErrors([]);
-  };
-
-  const formatLinkSummary = (linked: number, skipped: number, failed: number, total: number) => {
-    const parts: string[] = [];
-    if (linked > 0) parts.push(`تم ربط ${linked}`);
-    if (skipped > 0) parts.push(`تم تخطي ${skipped} (مرتبط مسبقاً)`);
-    if (failed > 0) parts.push(`فشل ${failed}`);
-    const headline = parts.length > 0 ? parts.join('، ') : 'لم يتم الربط';
-    return `${headline} من ${total}`;
-  };
-
-  const handleSaveWorker = async () => {
-    if (saving || form.selectedEmployeeIds.length === 0) return;
-    setSaving(true);
-    setSaveSummary(null);
-    setSaveErrors([]);
-    const total = form.selectedEmployeeIds.length;
-    setLinkProgress({ current: 0, total });
+  const handleSaveLineTransfer = async () => {
+    if (!lineTransfer || lineTransferSaving) return;
+    const workersToTransfer = getLineTransferEligibleWorkers(lineTransfer);
+    const validationError = getLineTransferValidationError(lineTransfer, workersToTransfer);
+    if (validationError) {
+      setLineTransfer((prev) => prev ? { ...prev, error: validationError } : prev);
+      return;
+    }
+    setLineTransferSaving(true);
     try {
-      const employees = selectedEmployees.map((employee) => ({
-        employeeId: employee.id!,
-        name: employee.name,
-        code: resolveWorkerCodeFromEmployee(employee),
-      }));
-      const result = await productionWorkerService.linkEmployees(employees, {
-        isActive: form.isActive,
-        defaultLineId: form.defaultLineId || undefined,
-      }, (current, total) => {
-        setLinkProgress({ current, total });
+      const workerPlans = buildBulkWorkerLineTransferPlans({
+        workers: workersToTransfer,
+        assignments,
+        targetLineId: lineTransfer.targetLineId,
+        transferDate: lineTransfer.transferDate,
       });
-      setSaveSummary(formatLinkSummary(result.linked, result.skipped, result.failed, total));
-      setSaveErrors(result.errors);
+
+      await Promise.all(workerPlans.flatMap(({ plan }) => (
+        plan.assignmentsToClose
+          .filter((row) => Boolean(row.id))
+          .map((row) => productionLineWorkerAssignmentService.update(row.id!, {
+            isActive: false,
+            endDate: plan.closeEndDate,
+          }))
+      )));
+      await Promise.all(workerPlans.map(async ({ worker, plan }) => {
+        if (plan.shouldCreateTargetAssignment) {
+          await productionLineWorkerAssignmentService.create({
+            workerId: worker.id!,
+            lineId: lineTransfer.targetLineId,
+            startDate: lineTransfer.transferDate,
+            laborRole: DEFAULT_LINE_WORKER_LABOR_ROLE,
+            isActive: true,
+          });
+        }
+
+        await productionWorkerService.update(worker.id!, {
+          lineIds: plan.nextLineIds,
+          defaultLineId: plan.nextDefaultLineId,
+        });
+      }));
       await loadData();
-      if (result.failed === 0) {
-        resetForm();
-      } else {
-        setForm((prev) => ({
-          ...prev,
-          selectedEmployeeIds: prev.selectedEmployeeIds.filter(
-            (id) => result.errors.some((err) => err.employeeId === id),
-          ),
-        }));
-      }
+      setLineTransfer(null);
+    } catch {
+      setLineTransfer((prev) => prev ? { ...prev, error: 'تعذر نقل العامل الآن. حاول مرة أخرى.' } : prev);
     } finally {
-      setSaving(false);
-      setLinkProgress(null);
+      setLineTransferSaving(false);
     }
   };
+
+  const getLineTransferSourceWorkers = (transfer: NonNullable<typeof lineTransfer>) => {
+    if (transfer.sourceLineId === undefined) return transfer.workers;
+    if (!transfer.sourceLineId) return [];
+    return scopedRows.filter((worker) => worker.assignedLineIds.includes(transfer.sourceLineId!));
+  };
+
+  const getLineTransferEligibleWorkers = (transfer: NonNullable<typeof lineTransfer>) => {
+    return getWorkersEligibleForLineTransfer(getLineTransferSourceWorkers(transfer), transfer.targetLineId);
+  };
+
+  const getLineTransferValidationError = (
+    transfer: NonNullable<typeof lineTransfer>,
+    workersToTransfer: WorkerRow[],
+  ) => {
+    if (transfer.sourceLineId !== undefined && !transfer.sourceLineId) return 'اختر الخط الحالي.';
+    const sourceWorkers = getLineTransferSourceWorkers(transfer);
+    if (sourceWorkers.length === 0) return 'لا يوجد عمال على الخط الحالي للنقل.';
+    if (!transfer.targetLineId) return 'اختر الخط الجديد.';
+    if (transfer.sourceLineId && transfer.sourceLineId === transfer.targetLineId) return 'اختر خطاً جديداً مختلفاً عن الخط الحالي.';
+    if (transfer.sourceLineId === undefined && transfer.workers.length === 0) return 'اختر عاملاً واحداً على الأقل للنقل.';
+    if (!transfer.transferDate) return 'اختر تاريخ بداية النقل.';
+    if (workersToTransfer.length === 0) return 'كل العمال المختارين موجودون بالفعل على الخط الجديد.';
+    return null;
+  };
+
+  const workerBulkActions = useMemo<TableBulkAction<WorkerRow>[]>(() => {
+    if (!canManage) return [];
+    return [
+      {
+        label: 'نقل المحدد',
+        icon: 'swap_horiz',
+        action: (items) => openLineTransfer(items),
+        disabled: lineTransferSaving,
+      },
+    ];
+  }, [canManage, openLineTransfer, lineTransferSaving]);
+
+  const lineTransferEligibleWorkers = lineTransfer ? getLineTransferEligibleWorkers(lineTransfer) : [];
+  const lineTransferValidationError = lineTransfer
+    ? getLineTransferValidationError(lineTransfer, lineTransferEligibleWorkers)
+    : null;
+  const lineTransferAlreadyOnTargetCount = lineTransfer?.targetLineId
+    ? getLineTransferSourceWorkers(lineTransfer).length - lineTransferEligibleWorkers.length
+    : 0;
+  const lineTransferWorkerNames = lineTransfer
+    ? getLineTransferSourceWorkers(lineTransfer).slice(0, 5).map((worker) => worker.name).join('، ')
+    : '';
+  const lineTransferSourceCount = lineTransfer ? getLineTransferSourceWorkers(lineTransfer).length : 0;
 
   const exportExcel = () => {
     const data = filtered.map((row) => ({
@@ -614,7 +629,7 @@ export const ProductionWorkers: React.FC = () => {
       <PageHeader
         title="عمال الإنتاج"
         subtitle="مساحة موحدة لقائمة العمال والتقارير والتقييمات والتفاصيل"
-        primaryAction={canManage && activeWorkspaceTab === 'summary' ? { label: 'ربط موظفين كعمال إنتاج', onClick: () => openLinkForm() } : undefined}
+        primaryAction={canManage && activeWorkspaceTab === 'summary' ? { label: 'نقل العمالة بين الخطوط', onClick: openLineTransferByLine } : undefined}
       />
 
       <Card>
@@ -681,7 +696,10 @@ export const ProductionWorkers: React.FC = () => {
           {
             key: 'line',
             placeholder: 'كل الخطوط',
-            options: visibleProductionLines.map((l) => ({ value: l.id, label: l.name })),
+            options: [
+              { value: UNASSIGNED_LINE_FILTER_VALUE, label: 'بدون خط' },
+              ...visibleProductionLines.map((l) => ({ value: l.id, label: l.name })),
+            ],
           },
           {
             key: 'product',
@@ -730,7 +748,7 @@ export const ProductionWorkers: React.FC = () => {
         extra={(
           <div className="flex gap-2">
             {canManage ? (
-              <Button variant="outline" onClick={() => openLinkForm()}>ربط من الموظفين</Button>
+              <Button variant="outline" onClick={openLineTransferByLine}>نقل من خط إلى خط</Button>
             ) : null}
             <Button variant="outline" onClick={exportExcel}>تصدير Excel</Button>
           </div>
@@ -742,6 +760,7 @@ export const ProductionWorkers: React.FC = () => {
           data={filtered}
           columns={columns}
           getId={(row) => row.id ?? row.code}
+          bulkActions={workerBulkActions}
           onRowClick={(row) => row.id && navigate(`/production-workers/${row.id}`)}
           renderActions={(row) => (
             <div className="flex gap-2">
@@ -749,116 +768,115 @@ export const ProductionWorkers: React.FC = () => {
               {canManageTargets && row.id ? (
                 <Button variant="outline" onClick={() => navigate(`/production-workers/${row.id}?tab=targets`)}>الأهداف</Button>
               ) : null}
+              {canManage && row.id ? (
+                <Button
+                  variant="outline"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openLineTransfer(row);
+                  }}
+                >
+                  نقل
+                </Button>
+              ) : null}
             </div>
           )}
         />
       </Card>
 
-      {showForm && canManage && (
-        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4">
-          <div className="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-bold">ربط موظفين كعمال إنتاج</h3>
+      {lineTransfer && canManage && (
+        <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={closeLineTransfer}>
+          <div
+            className="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
             <div>
-              <label className="block text-sm font-bold mb-2">اختر موظفين *</label>
-              <SearchableSelect
-                options={linkableEmployeeOptions}
-                value=""
-                onChange={(employeeId) => addEmployeeToSelection(employeeId)}
-                placeholder="ابحث وأضف موظفاً..."
-              />
-              {linkableEmployees.length === 0 ? (
-                <p className="text-sm text-[var(--color-text-muted)] mt-2">
-                  جميع الموظفين النشطين مرتبطون بملفات عمال إنتاج.
+              <h3 className="text-lg font-bold">
+                {lineTransfer.sourceLineId !== undefined
+                  ? 'نقل العمالة من خط إلى خط'
+                  : lineTransfer.workers.length === 1 ? 'نقل عامل إلى خط آخر' : 'نقل مجموعة عمال إلى خط آخر'}
+              </h3>
+              {lineTransfer.sourceLineId !== undefined ? (
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                  اختر الخط الحالي ثم الخط الجديد لنقل كل العمالة النشطة بينهما.
                 </p>
-              ) : null}
-              {selectedEmployees.length > 0 ? (
-                <div className="mt-3 space-y-2">
-                  <p className="text-xs text-[var(--color-text-muted)]">
-                    الموظفون المختارون ({selectedEmployees.length})
-                  </p>
-                  <div className="flex flex-wrap gap-2">
-                    {selectedEmployees.map((employee) => (
-                      <span
-                        key={employee.id}
-                        className="inline-flex items-center gap-1.5 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-700 dark:text-indigo-300 text-sm font-medium px-3 py-1.5 rounded-[var(--border-radius-base)] border border-indigo-200 dark:border-indigo-800"
-                      >
-                        {employee.name}
-                        {employee.code ? ` (${employee.code})` : ''}
-                        <button
-                          type="button"
-                          onClick={() => removeEmployeeFromSelection(employee.id!)}
-                          className="text-indigo-400 hover:text-rose-500 transition-colors"
-                          aria-label={`إزالة ${employee.name}`}
-                        >
-                          <X size={14} />
-                        </button>
-                      </span>
-                    ))}
-                  </div>
-                </div>
               ) : (
-                <p className="text-sm text-[var(--color-text-muted)] mt-2">
-                  لم يتم اختيار موظفين بعد.
+                <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                  المختارون ({lineTransfer.workers.length}): {lineTransferWorkerNames}
+                  {lineTransfer.workers.length > 5 ? `، و${lineTransfer.workers.length - 5} آخرين` : ''}
                 </p>
               )}
             </div>
+            {lineTransfer.sourceLineId !== undefined ? (
+              <div>
+                <label className="block text-sm font-bold mb-2">الخط الحالي *</label>
+                <select
+                  className="w-full border rounded-lg p-3"
+                  value={lineTransfer.sourceLineId}
+                  onChange={(e) => setLineTransfer((prev) => prev ? { ...prev, sourceLineId: e.target.value, error: null } : prev)}
+                >
+                  <option value="">اختر الخط الحالي</option>
+                  {visibleProductionLines.map((line) => (
+                    <option key={line.id} value={line.id}>
+                      {line.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  العمالة على الخط الحالي: {lineTransferSourceCount} عامل
+                  {lineTransferWorkerNames ? ` — ${lineTransferWorkerNames}${lineTransferSourceCount > 5 ? `، و${lineTransferSourceCount - 5} آخرين` : ''}` : ''}.
+                </p>
+              </div>
+            ) : null}
             <div>
-              <label className="block text-sm font-bold mb-2">الخط الافتراضي (اختياري)</label>
+              <label className="block text-sm font-bold mb-2">الخط الجديد *</label>
               <select
                 className="w-full border rounded-lg p-3"
-                value={form.defaultLineId}
-                onChange={(e) => setForm({ ...form, defaultLineId: e.target.value })}
+                value={lineTransfer.targetLineId}
+                onChange={(e) => setLineTransfer((prev) => prev ? { ...prev, targetLineId: e.target.value, error: null } : prev)}
               >
-                <option value="">بدون خط افتراضي</option>
-                {visibleProductionLines.map((l) => (
-                  <option key={l.id} value={l.id}>{l.name}</option>
+                <option value="">اختر الخط الجديد</option>
+                {visibleProductionLines.map((line) => (
+                  <option key={line.id} value={line.id}>
+                    {line.name}
+                  </option>
                 ))}
               </select>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                يُطبَّق على جميع الموظفين المختارين عند الربط.
+                سيتم نقل {lineTransferEligibleWorkers.length} عامل {lineTransfer.sourceLineId !== undefined ? 'من الخط الحالي' : 'من المختارين'}
+                {lineTransferAlreadyOnTargetCount > 0 ? ` وتخطي ${lineTransferAlreadyOnTargetCount} موجودين بالفعل على هذا الخط` : ''}.
               </p>
             </div>
-            <label className="flex items-center gap-2 text-sm">
+            <div>
+              <label className="block text-sm font-bold mb-2">تاريخ بداية النقل *</label>
               <input
-                type="checkbox"
-                checked={form.isActive}
-                onChange={(e) => setForm({ ...form, isActive: e.target.checked })}
+                type="date"
+                className="w-full border rounded-lg p-3"
+                value={lineTransfer.transferDate}
+                onChange={(e) => setLineTransfer((prev) => prev ? { ...prev, transferDate: e.target.value, error: null } : prev)}
               />
-              نشط
-            </label>
-            {linkProgress ? (
-              <p className="text-sm text-[var(--color-text-muted)]">
-                جاري الربط... ({linkProgress.current}/{linkProgress.total})
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                سيتم إنهاء الربط الحالي قبل هذا التاريخ وربط العمال بالخط الجديد.
               </p>
-            ) : null}
-            {saveSummary ? (
-              <p className={`text-sm font-medium ${saveErrors.length > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
-                {saveSummary}
-              </p>
-            ) : null}
-            {saveErrors.length > 0 ? (
-              <ul className="text-sm text-rose-600 space-y-1">
-                {saveErrors.map((err) => (
-                  <li key={err.employeeId}>
-                    {err.name}: {err.message}
-                  </li>
-                ))}
-              </ul>
+            </div>
+            {lineTransfer.error || lineTransferValidationError ? (
+              <p className="text-sm font-medium text-rose-600">{lineTransfer.error ?? lineTransferValidationError}</p>
             ) : null}
             <div className="flex gap-2 justify-end">
-              <Button variant="outline" onClick={resetForm} disabled={saving}>إلغاء</Button>
+              <Button variant="outline" onClick={closeLineTransfer} disabled={lineTransferSaving}>إلغاء</Button>
               <Button
-                disabled={saving || form.selectedEmployeeIds.length === 0}
-                onClick={() => void handleSaveWorker()}
+                disabled={lineTransferSaving || Boolean(lineTransferValidationError)}
+                onClick={() => void handleSaveLineTransfer()}
               >
-                {saving
-                  ? (linkProgress ? `جاري الربط (${linkProgress.current}/${linkProgress.total})...` : 'جاري الحفظ...')
-                  : `ربط (${form.selectedEmployeeIds.length})`}
+                {lineTransferSaving
+                  ? 'جاري النقل...'
+                  : `نقل ${lineTransferEligibleWorkers.length || lineTransfer.workers.length}`}
               </Button>
             </div>
           </div>
         </div>
       )}
+
         </>
       )}
     </div>

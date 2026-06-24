@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
@@ -33,6 +34,7 @@ import {
 } from '@/components/ui/select';
 import { Search, Filter, SlidersHorizontal, Zap, Printer } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { SupervisorLineAssignment } from './SupervisorLineAssignment';
 
 // Performance Score
 
@@ -129,6 +131,7 @@ interface SupervisorRow extends FirestoreEmployee {
 
 type StatFilter = '' | 'today' | 'week' | 'highScrap' | 'lowScore' | 'active';
 type ReportsViewMode = 'today' | 'range';
+type SupervisorPageTab = 'list' | 'assignments';
 
 const toDateInputValue = (date: Date): string => {
   const y = date.getFullYear();
@@ -140,6 +143,36 @@ const toDateInputValue = (date: Date): string => {
 export const Supervisors: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const canViewSupervisors = can('supervisors.view');
+  const canManageSupervisorAssignments = can('supervisorAssignments.manage');
+  const requestedTab = searchParams.get('tab');
+  const activeTab: SupervisorPageTab =
+    requestedTab === 'assignments' && canManageSupervisorAssignments
+      ? 'assignments'
+      : canViewSupervisors
+        ? 'list'
+        : 'assignments';
+  const supervisorTabs = useMemo(
+    () => [
+      ...(canViewSupervisors
+        ? [{ id: 'list' as const, label: 'قائمة المشرفين', icon: 'engineering' }]
+        : []),
+      ...(canManageSupervisorAssignments
+        ? [{ id: 'assignments' as const, label: 'توزيع المشرفين', icon: 'supervisor_account' }]
+        : []),
+    ],
+    [canManageSupervisorAssignments, canViewSupervisors],
+  );
+  const handleTabChange = useCallback((tab: SupervisorPageTab) => {
+    const next = new URLSearchParams(searchParams);
+    if (tab === 'assignments') {
+      next.set('tab', 'assignments');
+    } else {
+      next.delete('tab');
+    }
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const productionReports = useAppStore((s) => s.productionReports);
@@ -482,10 +515,11 @@ export const Supervisors: React.FC = () => {
   );
 
   useEffect(() => {
+    if (activeTab !== 'list') return;
     if (!rangeStart || !rangeEnd) return;
     void loadReportsRange(rangeStart, rangeEnd);
     void loadAssignmentsForDate(rangeEnd);
-  }, [rangeStart, rangeEnd, loadReportsRange, loadAssignmentsForDate]);
+  }, [activeTab, rangeStart, rangeEnd, loadReportsRange, loadAssignmentsForDate]);
 
   // Filtering
 
@@ -1160,13 +1194,41 @@ export const Supervisors: React.FC = () => {
         title="المشرفين"
         subtitle="لوحة إدارة مشرفي خطوط الإنتاج وتحليل الأداء"
         icon="engineering"
-        secondaryAction={hasActiveFilters ? {
+        secondaryAction={activeTab === 'list' && hasActiveFilters ? {
           label: 'مسح الفلاتر',
           icon: 'filter_alt_off',
           onClick: clearAllFilters,
         } : undefined}
       />
 
+      {supervisorTabs.length > 1 && (
+        <div className="flex flex-wrap gap-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
+          {supervisorTabs.map((tab) => {
+            const isActive = activeTab === tab.id;
+            return (
+              <button
+                key={tab.id}
+                type="button"
+                onClick={() => handleTabChange(tab.id)}
+                className={cn(
+                  'inline-flex items-center gap-2 rounded-[var(--border-radius-base)] px-4 py-2 text-sm font-bold transition-all',
+                  isActive
+                    ? 'bg-primary text-white shadow-sm'
+                    : 'text-[var(--color-text-muted)] hover:bg-[var(--color-muted)] hover:text-[var(--color-text)]',
+                )}
+              >
+                <span className="material-icons-round text-lg">{tab.icon}</span>
+                {tab.label}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {activeTab === 'assignments' ? (
+        <SupervisorLineAssignment />
+      ) : (
+        <>
       {/* Stat Cards (clickable) */}
       <div className="erpnext-kpi-grid grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <button className="text-right erpnext-kpi-btn" onClick={() => toggleStatFilter('today')}>
@@ -1518,6 +1580,8 @@ export const Supervisors: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
+        </>
+      )}
     </div>
   );
 };

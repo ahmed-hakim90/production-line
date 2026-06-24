@@ -1,11 +1,12 @@
 import assert from 'node:assert/strict';
 import {
+  getAvailableIndividualLineWorkerTargetProducts,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
   resolveReportWorkerTarget,
   resolveWorkerTarget,
 } from '../modules/production/selectors/workerTargetSelector.ts';
-import type { LineProductConfig, ProductionWorkerTarget } from '../types';
+import type { FirestoreProduct, LineProductConfig, ProductionWorkerTarget } from '../types';
 
 const baseTarget = (overrides: Partial<ProductionWorkerTarget>): ProductionWorkerTarget => ({
   workerId: 'w1',
@@ -108,5 +109,45 @@ assert.equal(hasLineSpecificWorkerTarget([lineConfig({ dailyWorkerTargetQty: 50 
 assert.equal(hasLineSpecificWorkerTarget([lineConfig({ dailyWorkerTargetQty: 0 })], 'l1', 'p1'), false);
 assert.equal(getProductAssemblyMode(null), 'individual');
 assert.equal(getProductAssemblyMode({ assemblyMode: 'team' }), 'team');
+
+const targetProducts: FirestoreProduct[] = [
+  {
+    id: 'p1',
+    name: 'منتج فردي موجود',
+    model: '',
+    code: 'IND-1',
+    openingBalance: 0,
+    assemblyMode: 'individual',
+  },
+  {
+    id: 'p2',
+    name: 'منتج جماعي',
+    model: '',
+    code: 'TEAM-1',
+    openingBalance: 0,
+    assemblyMode: 'team',
+  },
+  {
+    id: 'p3',
+    name: 'منتج فردي جديد',
+    model: '',
+    code: 'IND-2',
+    openingBalance: 0,
+    assemblyMode: 'individual',
+  },
+  {
+    id: 'p4',
+    name: 'منتج قديم بدون نمط',
+    model: '',
+    code: 'LEGACY',
+    openingBalance: 0,
+  },
+];
+
+assert.deepEqual(
+  getAvailableIndividualLineWorkerTargetProducts(targetProducts, [lineConfig({ productId: 'p1' })], 'l1')
+    .map((product) => product.id),
+  ['p3', 'p4'],
+);
 
 console.log('worker-target-selector.test.ts: ok');

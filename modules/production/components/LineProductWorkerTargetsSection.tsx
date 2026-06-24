@@ -2,7 +2,11 @@ import React, { useMemo, useState } from 'react';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { formatNumber } from '@/utils/calculations';
-import { Button } from './UI';
+import {
+  getAvailableIndividualLineWorkerTargetProducts,
+  getProductAssemblyMode,
+} from '../selectors/workerTargetSelector';
+import { Button, SearchableSelect } from './UI';
 
 type Props = {
   lineId: string;
@@ -22,9 +26,19 @@ export const LineProductWorkerTargetsSection: React.FC<Props> = ({ lineId }) => 
   const [form, setForm] = useState({ productId: '', dailyWorkerTargetQty: 0 });
   const [drafts, setDrafts] = useState<Record<string, number>>({});
 
+  const individualProductIds = useMemo(
+    () => new Set(
+      products
+        .filter((p) => getProductAssemblyMode(p) === 'individual')
+        .map((p) => p.id)
+        .filter(Boolean),
+    ),
+    [products],
+  );
+
   const lineConfigs = useMemo(
-    () => lineProductConfigs.filter((c) => c.lineId === lineId),
-    [lineProductConfigs, lineId],
+    () => lineProductConfigs.filter((c) => c.lineId === lineId && individualProductIds.has(c.productId)),
+    [lineProductConfigs, lineId, individualProductIds],
   );
 
   const productNameById = useMemo(
@@ -32,14 +46,17 @@ export const LineProductWorkerTargetsSection: React.FC<Props> = ({ lineId }) => 
     [products],
   );
 
-  const usedProductIds = useMemo(
-    () => new Set(lineConfigs.map((c) => c.productId)),
-    [lineConfigs],
+  const availableProducts = useMemo(
+    () => getAvailableIndividualLineWorkerTargetProducts(products, lineProductConfigs, lineId),
+    [products, lineProductConfigs, lineId],
   );
 
-  const availableProducts = useMemo(
-    () => products.filter((p) => p.id && !usedProductIds.has(p.id)),
-    [products, usedProductIds],
+  const productOptions = useMemo(
+    () => availableProducts.map((p) => ({
+      value: p.id!,
+      label: p.code ? `${p.name} (${p.code})` : p.name,
+    })),
+    [availableProducts],
   );
 
   const saveTarget = async (configId: string, dailyWorkerTargetQty: number) => {
@@ -82,16 +99,13 @@ export const LineProductWorkerTargetsSection: React.FC<Props> = ({ lineId }) => 
 
       {canManage && availableProducts.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <select
-            className="border border-[var(--color-border)] rounded-lg p-2.5 text-sm"
+          <SearchableSelect
+            options={productOptions}
             value={form.productId}
-            onChange={(e) => setForm((prev) => ({ ...prev, productId: e.target.value }))}
-          >
-            <option value="">اختر المنتج</option>
-            {availableProducts.map((p) => (
-              <option key={p.id} value={p.id}>{p.name}</option>
-            ))}
-          </select>
+            onChange={(productId) => setForm((prev) => ({ ...prev, productId }))}
+            placeholder="ابحث واختر منتج تجميع فردي"
+            className="bg-[var(--color-card)]"
+          />
           <input
             type="number"
             min={0}

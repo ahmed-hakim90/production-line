@@ -41,7 +41,6 @@ export type Permission =
   | 'assets.view' | 'assets.create' | 'assets.edit' | 'assets.delete' | 'assets.depreciation.run' | 'assets.depreciation.view'
   | 'settings.view' | 'settings.edit'
   | 'system.readiness.view'
-  | 'operations.inbox.view'
   | 'users.manage'
   | 'roles.view' | 'roles.manage'
   | 'activityLog.view'
@@ -82,7 +81,6 @@ export type Permission =
   | 'repair.treasury.view' | 'repair.treasury.manage'
   | 'repair.settings.manage'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
-  | 'customerDeposits.view' | 'customerDeposits.create' | 'customerDeposits.confirm' | 'customerDeposits.manage'
   | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -107,7 +105,6 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'employeeDashboard.view', label: 'عرض لوحة الموظف' },
       { key: 'factoryDashboard.view', label: 'عرض لوحة مدير المصنع' },
       { key: 'adminDashboard.view', label: 'عرض لوحة مدير النظام' },
-      { key: 'operations.inbox.view', label: 'مركز العمليات (Ops Inbox)' },
     ],
   },
   {
@@ -192,16 +189,6 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'supplyCycles.manage', label: 'إنشاء وتعديل دورات التوريد' },
       { key: 'supplyCycles.close', label: 'إقفال دورة توريد' },
       { key: 'supplyCycles.delete', label: 'حذف دورة توريد (مسودة/فارغة)' },
-    ],
-  },
-  {
-    key: 'customers',
-    label: 'العملاء وإيداعات البنك',
-    permissions: [
-      { key: 'customerDeposits.view', label: 'عرض الإيداعات والكشوف والأرصدة' },
-      { key: 'customerDeposits.create', label: 'تسجيل إيداع جديد (معلق)' },
-      { key: 'customerDeposits.confirm', label: 'تأكيد إيداع (موكّد) — الخزينة' },
-      { key: 'customerDeposits.manage', label: 'إدارة كاملة (ماستر العملاء/الحسابات والتسويات)' },
     ],
   },
   {
@@ -358,8 +345,6 @@ const PERMISSION_GROUP_ORDER: string[] = [
   'production',
   // Inventory
   'inventory',
-  // Customers / bank deposits
-  'customers',
   // Quality
   'quality',
   // HR
@@ -429,13 +414,6 @@ export function checkPermission(
   if (permission === 'system.readiness.view') {
     return permissions['settings.view'] === true || permissions['adminDashboard.view'] === true;
   }
-  if (permission === 'operations.inbox.view') {
-    return (
-      permissions['factoryDashboard.view'] === true
-      || permissions['adminDashboard.view'] === true
-      || permissions['dashboard.view'] === true
-    );
-  }
   if (permission === 'inventory.analytics.view' || permission === 'inventory.exceptions.view') {
     return permissions['inventory.view'] === true;
   }
@@ -476,14 +454,6 @@ export function checkPermission(
       || permissions['reports.packaging.create'] === true
       || permissions['quickAction.view'] === true
     );
-  }
-  if (
-    (permission === 'customerDeposits.view' ||
-      permission === 'customerDeposits.create' ||
-      permission === 'customerDeposits.confirm') &&
-    permissions['customerDeposits.manage'] === true
-  ) {
-    return true;
   }
   return false;
 }

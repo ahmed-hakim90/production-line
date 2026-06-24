@@ -7,6 +7,7 @@ import {
   getDocs,
   getDoc,
   addDoc,
+  setDoc,
   updateDoc,
   deleteDoc,
   onSnapshot,
@@ -83,7 +84,6 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'inventory.analytics.view',
           'inventory.exceptions.view',
           'system.readiness.view',
-          'operations.inbox.view',
           'manufacturing.purchaseGap.view',
           'productionWorkers.view',
           'production.workers.view',
@@ -233,6 +233,33 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
   return _defaultRoles;
 }
 
+function normalizeRoleName(value: unknown): string {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function defaultRoleDocId(tenantId: string, roleKey: string): string {
+  return `${tenantId.replace(/\//g, '_')}__${roleKey}`;
+}
+
+function existingDefaultRoleKeys(roles: FirestoreRole[]): Set<string> {
+  const defaultsByName = new Map(
+    getDefaultRoles().map((role) => [normalizeRoleName(role.name), role.roleKey]),
+  );
+  const keys = new Set<string>();
+
+  roles.forEach((role) => {
+    if (role.roleKey) {
+      keys.add(role.roleKey);
+      return;
+    }
+
+    const roleKey = defaultsByName.get(normalizeRoleName(role.name));
+    if (roleKey) keys.add(roleKey);
+  });
+
+  return keys;
+}
+
 let seedIfEmptyInFlight: Promise<FirestoreRole[]> | null = null;
 let productionWorkerPermsMigrationInFlight: Promise<number> | null = null;
 /** Session guard — migration is idempotent; skip re-runs after first successful pass. */
@@ -357,12 +384,15 @@ export const roleService = {
     seedIfEmptyInFlight = (async () => {
       const tid = getCurrentTenantId();
       const existing = await this.getAll();
-      if (existing.length > 0) return existing;
-
       const defaults = getDefaultRoles();
+      const existingKeys = existingDefaultRoleKeys(existing);
+      const missingDefaults = defaults.filter((role) => role.roleKey && !existingKeys.has(role.roleKey));
+
+      if (missingDefaults.length === 0) return existing;
+
       await Promise.all(
-        defaults.map((role) =>
-          addDoc(collection(db, COLLECTION), {
+        missingDefaults.map((role) =>
+          setDoc(doc(db, COLLECTION, defaultRoleDocId(tid, role.roleKey!)), {
             ...role,
             tenantId: tid,
           }),

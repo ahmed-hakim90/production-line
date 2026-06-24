@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { addDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
 import { db } from '../../../services/firebase';
-import { Button, Badge } from '../../UI';
+import { Button, Badge, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import {
@@ -180,6 +180,25 @@ export const GlobalOrganizationModal: React.FC = () => {
     [employees],
   );
 
+  const managerEmployeeOptions = useMemo(() => {
+    const options = activeEmployees
+      .filter((e): e is EmployeeLite & { id: string } => Boolean(e.id))
+      .map((e) => ({ value: e.id, label: e.name?.trim() || e.id }));
+
+    if (deptForm.managerId && !options.some((option) => option.value === deptForm.managerId)) {
+      const currentManager = employees.find((e) => e.id === deptForm.managerId);
+      options.unshift({
+        value: deptForm.managerId,
+        label: currentManager?.name?.trim() || deptForm.managerId,
+      });
+    }
+
+    return [
+      { value: '', label: t('modalManager.organization.noManager') },
+      ...options,
+    ];
+  }, [activeEmployees, deptForm.managerId, employees, t]);
+
   if (!isOpen || !modalPayload) return null;
 
   const handleSave = async () => {
@@ -251,10 +270,13 @@ export const GlobalOrganizationModal: React.FC = () => {
               <Field label={t('modalManager.organization.departmentNameRequired')}><input className={inputClass} value={deptForm.name} onChange={(e) => setDeptForm({ ...deptForm, name: e.target.value })} placeholder={t('modalManager.organization.departmentNamePlaceholder')} autoFocus /></Field>
               <Field label={t('modalManager.organization.departmentCode')}><input className={inputClass} value={deptForm.code} onChange={(e) => setDeptForm({ ...deptForm, code: e.target.value })} placeholder="ASM" /></Field>
               <Field label={t('modalManager.organization.departmentManager')}>
-                <select className={selectClass} value={deptForm.managerId} onChange={(e) => setDeptForm({ ...deptForm, managerId: e.target.value })}>
-                  <option value="">{t('modalManager.organization.noManager')}</option>
-                  {activeEmployees.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
-                </select>
+                <SearchableSelect
+                  options={managerEmployeeOptions}
+                  value={deptForm.managerId}
+                  onChange={(managerId) => setDeptForm({ ...deptForm, managerId })}
+                  placeholder={t('modalManager.organization.noManager')}
+                  className="h-[46px] bg-[var(--color-card)]"
+                />
               </Field>
               <Toggle value={deptForm.isActive} onChange={(v) => setDeptForm({ ...deptForm, isActive: v })} label={t('modalManager.organization.active')} />
             </>

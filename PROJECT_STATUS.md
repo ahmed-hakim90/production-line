@@ -7,7 +7,6 @@
 | المكون | الوصف |
 |--------|--------|
 | `/system/readiness` | لوحة جاهزية المستأجر (فحوصات إعداد) |
-| `/operations` | مركز العمليات (Ops Inbox) |
 | `/inventory/analytics` | تحليلات ABC ودوران مخزون |
 | `/inventory/exceptions` | استثناءات المخزون |
 | `/manufacturing/purchase-gap` | فجوة الشراء + مسودات `purchase_orders` |

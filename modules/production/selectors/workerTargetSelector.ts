@@ -38,6 +38,25 @@ export function getProductAssemblyMode(
   return product?.assemblyMode === 'team' ? 'team' : 'individual';
 }
 
+export function getAvailableIndividualLineWorkerTargetProducts<
+  T extends Pick<FirestoreProduct, 'id' | 'name' | 'code' | 'assemblyMode'>,
+>(
+  products: T[],
+  configs: LineProductConfig[] | undefined,
+  lineId: string,
+): T[] {
+  const usedProductIds = new Set(
+    (configs ?? [])
+      .filter((config) => config.lineId === lineId)
+      .map((config) => config.productId),
+  );
+
+  return products.filter((product) => {
+    if (!product.id || usedProductIds.has(product.id)) return false;
+    return getProductAssemblyMode(product) === 'individual';
+  });
+}
+
 export function hasLineSpecificWorkerTarget(
   configs: LineProductConfig[] | undefined,
   lineId?: string,

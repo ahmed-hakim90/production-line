@@ -6,7 +6,7 @@ import { LEAVE_TYPE_LABELS } from '../types';
 
 interface ApprovalEmployeeContextProps {
   employeeId: string;
-  requestType: 'leave' | 'loan' | 'overtime';
+  requestType: 'leave' | 'loan' | 'overtime' | 'penalty';
   requestData: Record<string, any>;
 }
 

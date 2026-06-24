@@ -8,6 +8,7 @@ import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary 
 import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import { loanService } from '../loanService';
 import { createRequest, getPendingApprovals, type ApprovalEmployeeInfo, type FirestoreApprovalRequest } from '../approval';
+import { formatPenaltyRequestSummary } from '../approval/penaltyApproval';
 import { getEmployeeLockedPayslip } from '../payroll';
 import { printPayslip } from '../utils/payslipGenerator';
 import type { FirestorePayrollRecord } from '../payroll';
@@ -584,7 +585,7 @@ export const EmployeeSelfService: React.FC = () => {
                   {managerPendingApprovals.slice(0, 12).map((req) => (
                     <tr key={req.id} className="border-b border-[var(--color-border)]">
                       <td className="py-2 px-2">
-                        {req.requestType === 'leave' ? 'إجازة' : req.requestType === 'loan' ? 'سلفة' : 'إضافي'}
+                        {req.requestType === 'leave' ? 'إجازة' : req.requestType === 'loan' ? 'سلفة' : req.requestType === 'penalty' ? 'جزاء' : 'إضافي'}
                       </td>
                       <td className="py-2 px-2">{req.employeeName}</td>
                       <td className="py-2 px-2 text-[var(--color-text-muted)]">
@@ -592,6 +593,8 @@ export const EmployeeSelfService: React.FC = () => {
                           ? `${req.requestData?.startDate || '—'} → ${req.requestData?.endDate || '—'}`
                           : req.requestType === 'loan'
                             ? `${formatNumber(Number(req.requestData?.loanAmount || 0))} ج.م`
+                            : req.requestType === 'penalty'
+                              ? formatPenaltyRequestSummary(req.requestData || {})
                             : (req.requestData?.description || '—')}
                       </td>
                       <td className="py-2 px-2">

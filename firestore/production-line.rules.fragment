@@ -41,66 +41,8 @@
         && exists(pl_currentUserPath())
         && exists(pl_currentRolePath())
         && pl_roleBelongsToTenant()
+        && permissionKey in pl_currentRoleDoc().data.permissions
         && pl_currentRoleDoc().data.permissions[permissionKey] == true;
-    }
-
-    function pl_customerDepositsReadPerm() {
-      return pl_isSuperAdmin()
-        || pl_hasErpPermission('customerDeposits.view')
-        || pl_hasErpPermission('customerDeposits.create')
-        || pl_hasErpPermission('customerDeposits.confirm')
-        || pl_hasErpPermission('customerDeposits.manage');
-    }
-
-    /** تسجيل إيداع معلق أو تحديث مسلسل الإيداعات — يشمل المشرف العام (الواجهة قد تعتمد على دور غير مزامن مع القواعد). */
-    function pl_customerDepositsCanCreatePendingEntry() {
-      return pl_hasErpPermission('customerDeposits.create')
-        || pl_hasErpPermission('customerDeposits.manage')
-        || pl_isSuperAdmin();
-    }
-
-    function pl_depositEntryAmountOk() {
-      return request.resource.data.amount is int
-        || request.resource.data.amount is float
-        || request.resource.data.amount is number;
-    }
-
-    function pl_depositEntryTenantOk() {
-      return pl_isActiveUser()
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == resource.data.tenantId;
-    }
-
-    function pl_depositEntryConfirmUpdate() {
-      return (pl_hasErpPermission('customerDeposits.confirm') || pl_hasErpPermission('customerDeposits.manage'))
-        && resource.data.status == 'pending'
-        && request.resource.data.status == 'confirmed'
-        && request.resource.data.amount == resource.data.amount
-        && request.resource.data.customerId == resource.data.customerId
-        && request.resource.data.companyBankAccountId == resource.data.companyBankAccountId
-        && request.resource.data.depositDate == resource.data.depositDate
-        && request.resource.data.depositorName == resource.data.depositorName
-        && request.resource.data.depositorAccountNumber == resource.data.depositorAccountNumber
-        && request.resource.data.customerCodeSnapshot == resource.data.customerCodeSnapshot
-        && request.resource.data.customerNameSnapshot == resource.data.customerNameSnapshot
-        && request.resource.data.bankLabelSnapshot == resource.data.bankLabelSnapshot
-        && request.resource.data.createdByUid == resource.data.createdByUid
-        && request.resource.data.confirmedByUid == request.auth.uid
-        && request.resource.data.confirmedAt is timestamp;
-    }
-
-    function pl_depositEntryCreatorPendingUpdate() {
-      return pl_hasErpPermission('customerDeposits.create')
-        && !(pl_hasErpPermission('customerDeposits.manage'))
-        && resource.data.status == 'pending'
-        && request.resource.data.status == 'pending'
-        && resource.data.createdByUid == request.auth.uid;
-    }
-
-    /** المسلسل لا يُغيّر بعد الإنشاء (سجلات بلا حقل تبقى قابلة للتحديث دون إضافة مسلسل من العميل). */
-    function pl_depositEntrySerialUnchanged() {
-      return !('depositSerial' in resource.data)
-        || request.resource.data.depositSerial == resource.data.depositSerial;
     }
 
     function pl_isActiveUser() {
@@ -111,12 +53,14 @@
 
     function pl_sameTenantWrite() {
       return pl_isActiveUser()
+        && request.resource.data.keys().hasAll(['tenantId'])
         && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
     function pl_sameTenantUpdate() {
       return pl_isActiveUser()
         && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && request.resource.data.keys().hasAll(['tenantId'])
         && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
@@ -132,6 +76,7 @@
 
     function pl_sameTenantOrLegacyWrite() {
       return pl_isActiveUser()
+        && request.resource.data.keys().hasAll(['tenantId'])
         && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
@@ -139,6 +84,7 @@
       return pl_isActiveUser()
         && (!('tenantId' in resource.data)
           || resource.data.tenantId == pl_currentUserDoc().data.tenantId)
+        && request.resource.data.keys().hasAll(['tenantId'])
         && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
     }
 
@@ -281,8 +227,8 @@
         'attendance_records', 'attendance_monthly_summaries', 'attendance_import_history',
         'leave_requests', 'leave_balances', 'employee_loans', 'employee_allowances', 'employee_deductions',
         'vehicles', 'approval_requests', 'approval_settings', 'approval_delegations', 'approval_audit_logs',
-        'hr_notifications', 'employee_performance', 'employee_bonuses', 'hr_config_modules',
-        'hr_config_audit_logs', 'quality_settings', 'quality_reason_catalog', 'quality_workers_assignments',
+        'hr_notifications', 'employee_performance', 'employee_bonuses',
+        'quality_settings', 'quality_reason_catalog', 'quality_workers_assignments',
         'quality_inspections', 'quality_defects', 'quality_rework_orders', 'quality_capa', 'quality_print_logs',
         'production_report_uniques', 'product_categories', 'material_categories', 'automation_runs', 'backups',
         'production_routing_plans', 'production_routing_steps',
@@ -308,6 +254,25 @@
           !('tenantId' in resource.data)
           || !('tenantId' in request.resource.data)
           || request.resource.data.tenantId == resource.data.tenantId
+        );
+    }
+
+    function pl_canManageHrConfigModule(moduleId) {
+      return pl_isSuperAdmin()
+        || pl_hasErpPermission('hrSettings.edit')
+        || pl_hasErpPermission('settings.edit')
+        || (moduleId == 'leave' && pl_hasErpPermission('leave.manage'));
+    }
+
+    function pl_canCreateHrConfigAuditLog() {
+      return pl_isSuperAdmin()
+        || pl_hasErpPermission('hrSettings.edit')
+        || pl_hasErpPermission('settings.edit')
+        || (
+          'module' in request.resource.data
+          && request.resource.data.module is string
+          && request.resource.data.module == 'leave'
+          && pl_hasErpPermission('leave.manage')
         );
     }
 
@@ -625,119 +590,6 @@
         );
     }
 
-    match /customer_deposit_customers/{docId} {
-      allow read: if pl_isActiveUser()
-        && pl_customerDepositsReadPerm()
-        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
-      allow create: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.code is string
-        && request.resource.data.codeNormalized is string
-        && request.resource.data.name is string
-        && request.resource.data.openingBalance is number
-        && request.resource.data.isActive is bool;
-      allow update: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
-    }
-
-    match /customer_deposit_company_bank_accounts/{docId} {
-      allow read: if pl_isActiveUser()
-        && pl_customerDepositsReadPerm()
-        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
-      allow create: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.accountNumber is string
-        && request.resource.data.accountNumberNormalized is string
-        && request.resource.data.bankLabel is string
-        && request.resource.data.openingBalance is number
-        && request.resource.data.isActive is bool;
-      allow update: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
-    }
-
-    match /customer_deposit_adjustments/{docId} {
-      allow read: if pl_isActiveUser()
-        && pl_customerDepositsReadPerm()
-        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
-      allow create: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.effectiveDate is string
-        && request.resource.data.signedAmount is number
-        && request.resource.data.note is string
-        && request.resource.data.createdByUid == request.auth.uid
-        && (
-          (request.resource.data.customerId is string && request.resource.data.customerId != '')
-          || (request.resource.data.companyBankAccountId is string && request.resource.data.companyBankAccountId != '')
-        );
-      allow update: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == resource.data.tenantId;
-      allow delete: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
-    }
-
-    match /customer_deposit_entry_sequences/{tenantDocId} {
-      allow read: if pl_isActiveUser()
-        && pl_customerDepositsReadPerm()
-        && tenantDocId == pl_currentUserDoc().data.tenantId
-        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
-      allow create, update: if pl_isActiveUser()
-        && tenantDocId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && pl_customerDepositsCanCreatePendingEntry()
-        && request.resource.data.nextSeq is int
-        && request.resource.data.nextSeq >= 1
-        && request.resource.data.freeSerials is list;
-    }
-
-    match /customer_deposit_entries/{docId} {
-      allow read: if pl_isActiveUser()
-        && pl_customerDepositsReadPerm()
-        && (resource.data.tenantId == pl_currentUserDoc().data.tenantId);
-      allow create: if pl_isActiveUser()
-        && pl_customerDepositsCanCreatePendingEntry()
-        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.status == 'pending'
-        && request.resource.data.createdByUid == request.auth.uid
-        && request.resource.data.depositSerial is int
-        && request.resource.data.depositSerial >= 1
-        && pl_depositEntryAmountOk()
-        && request.resource.data.depositorName is string
-        && request.resource.data.depositorAccountNumber is string
-        && request.resource.data.customerId is string
-        && request.resource.data.customerCodeSnapshot is string
-        && request.resource.data.customerNameSnapshot is string
-        && request.resource.data.companyBankAccountId is string
-        && request.resource.data.bankLabelSnapshot is string
-        && request.resource.data.depositDate is string;
-      allow update: if pl_isActiveUser()
-        && pl_depositEntryTenantOk()
-        && pl_depositEntrySerialUnchanged()
-        && (
-          (pl_hasErpPermission('customerDeposits.manage'))
-          || (pl_depositEntryConfirmUpdate())
-          || (pl_depositEntryCreatorPendingUpdate())
-        );
-      allow delete: if pl_isActiveUser()
-        && pl_hasErpPermission('customerDeposits.manage')
-        && resource.data.tenantId == pl_currentUserDoc().data.tenantId;
-    }
-
     match /production_report_uniques/{docId} {
       allow read: if pl_isActiveUser()
         && (
@@ -752,6 +604,24 @@
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
       allow delete: if pl_isActiveUser()
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+    }
+
+    match /hr_config_modules/{moduleId} {
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_canManageHrConfigModule(moduleId)
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_canManageHrConfigModule(moduleId)
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if false;
+    }
+
+    match /hr_config_audit_logs/{logId} {
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_canCreateHrConfigAuditLog()
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update, delete: if false;
     }
 
     match /{coll}/{docId} {

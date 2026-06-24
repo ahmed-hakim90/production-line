@@ -17,6 +17,7 @@ import {
   isRequestOverdue,
   type CallerContext,
 } from '../approval';
+import { formatPenaltyRequestSummary, getPenaltyDurationLabel } from '../approval/penaltyApproval';
 import type {
   FirestoreApprovalRequest,
   ApprovalRequestType,
@@ -31,6 +32,7 @@ const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; co
   overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/30' },
   leave: { label: 'إجازة', icon: 'beach_access', color: 'text-blue-500', bg: 'bg-blue-100' },
   loan: { label: 'سلفة', icon: 'payments', color: 'text-amber-500', bg: 'bg-amber-100' },
+  penalty: { label: 'جزاء', icon: 'gavel', color: 'text-rose-500', bg: 'bg-rose-100' },
 };
 
 const STATUS_CONFIG: Record<ApprovalRequestStatus, { label: string; variant: 'warning' | 'success' | 'danger' | 'info' | 'neutral' }> = {
@@ -51,6 +53,9 @@ function formatRequestSummary(req: FirestoreApprovalRequest): string {
   if (req.requestType === 'loan') {
     return `سلفة ${(data.loanAmount || 0).toLocaleString('en-US')}`;
   }
+  if (req.requestType === 'penalty') {
+    return formatPenaltyRequestSummary(data);
+  }
   return 'عمل إضافي';
 }
 
@@ -61,6 +66,10 @@ function formatRequestDetail(req: FirestoreApprovalRequest): string {
   }
   if (req.requestType === 'loan') {
     return `${data.totalInstallments || 0} قسط × ${(data.installmentAmount || 0).toLocaleString('en-US')} — بدء: ${data.startMonth || '—'}`;
+  }
+  if (req.requestType === 'penalty') {
+    const durationLabel = getPenaltyDurationLabel(data);
+    return `${durationLabel ? `المدة: ${durationLabel} — ` : ''}${data.productionLineName || '—'} — شهر ${data.startMonth || '—'} — ${data.reason || '—'}`;
   }
   return data.description || '';
 }

@@ -41,9 +41,11 @@ import {
 } from './approvalValidation';
 import { approvalDelegationService } from './approvalDelegation';
 import { approvalAuditService } from './approvalAudit';
+import { buildPenaltyDeductionInput, formatPenaltyRequestSummary } from './penaltyApproval';
 import { hrNotificationService } from './notifications';
 import { employeeService } from '../employeeService';
 import { syncLeaveApprovalDecision } from '../leaveService';
+import { employeeDeductionService } from '../employeeFinancialsService';
 import { userService } from '@/services/userService';
 import { roleService } from '@/modules/system/services/roleService';
 import { systemSettingsService } from '@/modules/system/services/systemSettingsService';
@@ -61,11 +63,12 @@ import type {
   ApprovalEmployeeInfo,
   ApprovalRequestType,
 } from './types';
-import { DEFAULT_APPROVAL_SETTINGS } from './types';
+import { normalizeApprovalSettings } from './types';
 
 const REQUEST_TYPE_LABELS: Record<ApprovalRequestType, string> = {
   leave: 'إجازة',
   loan: 'سلفة',
+  penalty: 'جزاء',
   overtime: 'عمل إضافي',
 };
 
@@ -77,17 +80,20 @@ function getRequestSummary(request: FirestoreApprovalRequest): string {
   if (request.requestType === 'loan') {
     return `${Number(data.loanAmount || 0).toLocaleString('en-US')} ج.م`;
   }
+  if (request.requestType === 'penalty') {
+    return formatPenaltyRequestSummary(data);
+  }
   return data.description || 'طلب عمل إضافي';
 }
 
 // ─── Settings ───────────────────────────────────────────────────────────────
 
 export async function getApprovalSettings(): Promise<FirestoreApprovalSettings> {
-  if (!isConfigured) return { ...DEFAULT_APPROVAL_SETTINGS };
+  if (!isConfigured) return normalizeApprovalSettings();
 
   const snap = await getDoc(approvalSettingsDocRef());
-  if (!snap.exists()) return { ...DEFAULT_APPROVAL_SETTINGS };
-  return snap.data() as FirestoreApprovalSettings;
+  if (!snap.exists()) return normalizeApprovalSettings();
+  return normalizeApprovalSettings(snap.data() as Partial<FirestoreApprovalSettings>);
 }
 
 export async function updateApprovalSettings(
@@ -197,6 +203,31 @@ async function resolveHrApproverEmployeeId(
   }
 }
 
+async function syncApprovedPenaltyDeduction(request: FirestoreApprovalRequest): Promise<void> {
+  if (request.requestType !== 'penalty' || request.status !== 'approved' || !request.id) return;
+  const data = request.requestData || {};
+  const employee = await employeeService.getById(request.employeeId).catch(() => null);
+  const deductionInput = buildPenaltyDeductionInput(request, employee);
+  if (!deductionInput) return;
+
+  const deductionId = await employeeDeductionService.create(deductionInput);
+  const deductionMetadata = {
+    ...(deductionInput.amount > 0 ? { penaltyCalculatedAmount: deductionInput.amount } : {}),
+    ...(deductionInput.penaltyDailyRate ? { penaltyDailyRate: deductionInput.penaltyDailyRate } : {}),
+    ...(deductionInput.penaltyAmountSource ? { penaltyAmountSource: deductionInput.penaltyAmountSource } : {}),
+  };
+
+  await updateDoc(approvalRequestDocRef(request.id), {
+    requestData: {
+      ...data,
+      ...deductionMetadata,
+      deductionId,
+      deductionAppliedAt: serverTimestamp(),
+    },
+    updatedAt: serverTimestamp(),
+  });
+}
+
 // ─── Create Request ─────────────────────────────────────────────────────────
 
 export async function createRequest(
@@ -291,6 +322,10 @@ export async function createRequest(
           { warning: `leave-sync-failed:${syncResult.error || 'unknown'}` },
         );
       }
+    }
+
+    if (options.requestType === 'penalty') {
+      await syncApprovedPenaltyDeduction({ id: ref.id, ...requestDoc });
     }
 
     return { success: true, requestId: ref.id };
@@ -473,6 +508,15 @@ export async function approveRequest(
       }
     }
   } else if (resultStatus === 'approved') {
+    await syncApprovedPenaltyDeduction({
+      ...request,
+      id: options.requestId,
+      approvalChain: updatedChain,
+      currentStep: nextStep,
+      status: 'approved',
+      history: updatedRequest.history || request.history,
+    });
+
     const employeeUserId = await employeeService.getUserIdByEmployeeId(request.employeeId);
     if (employeeUserId) {
       await hrNotificationService.create({

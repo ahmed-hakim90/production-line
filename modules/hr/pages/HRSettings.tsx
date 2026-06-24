@@ -14,6 +14,7 @@ import {
   type HRConfigModuleName,
   type FirestoreHRConfigAuditLog,
   type LeaveSalaryImpact,
+  type LeaveReasonDefinition,
   type LeaveTypeDefinition,
   type TransportZone,
 } from '../config';
@@ -102,6 +103,24 @@ function validateLeave(data: HRConfigMap['leave']): ValidationError[] {
           errors.push({ field: `leaveTypes.${i}.type`, message: `نوع الإجازة "${type}" مكرر` });
         } else {
           types.add(type);
+        }
+      }
+    }
+  }
+  if (Array.isArray(data.leaveReasons)) {
+    const reasonCodes = new Set<string>();
+    const leaveReasons = data.leaveReasons as LeaveReasonDefinition[];
+    for (let i = 0; i < leaveReasons.length; i++) {
+      const row = leaveReasons[i];
+      const code = String(row.code || '').trim();
+      const label = String(row.labelAr || '').trim();
+      if (!code) errors.push({ field: `leaveReasons.${i}.code`, message: `كود سبب الإجازة في الصف ${i + 1} مطلوب` });
+      if (!label) errors.push({ field: `leaveReasons.${i}.labelAr`, message: `اسم سبب الإجازة في الصف ${i + 1} مطلوب` });
+      if (code) {
+        if (reasonCodes.has(code)) {
+          errors.push({ field: `leaveReasons.${i}.code`, message: `سبب الإجازة "${code}" مكرر` });
+        } else {
+          reasonCodes.add(code);
         }
       }
     }
@@ -429,6 +448,7 @@ const OvertimeForm: React.FC<TabFormProps<'overtime'>> = ({ config, onChange, er
 );
 
 const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, readOnly }) => {
+  const LOCKED_LEAVE_TYPE_CODES = new Set(['annual', 'sick', 'emergency', 'unpaid']);
   const IMPACT_OPTIONS: { value: LeaveSalaryImpact; label: string }[] = [
     { value: 'full_paid', label: 'مدفوعة بالكامل' },
     { value: 'deduct_daily', label: 'خصم يومي من الراتب' },
@@ -440,6 +460,64 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
     const leaveTypes = [...config.leaveTypes];
     leaveTypes[index] = { ...leaveTypes[index], ...patch };
     onChange({ ...config, leaveTypes });
+  };
+
+  const addLeaveType = () => {
+    const existing = new Set((config.leaveTypes || []).map((lt) => String(lt.type || '').trim()));
+    let nextIndex = (config.leaveTypes || []).length + 1;
+    let type = `custom_leave_${nextIndex}`;
+    while (existing.has(type)) {
+      nextIndex += 1;
+      type = `custom_leave_${nextIndex}`;
+    }
+    const leaveTypes = [
+      ...(config.leaveTypes || []),
+      {
+        type,
+        labelAr: 'نوع إجازة جديد',
+        defaultBalance: 0,
+        salaryImpact: 'full_paid' as LeaveSalaryImpact,
+        deductPercent: 0,
+        requiresApproval: true,
+        maxConsecutiveDays: 0,
+        carryOverAllowed: false,
+        maxCarryOverDays: 0,
+      },
+    ];
+    onChange({ ...config, leaveTypes });
+  };
+
+  const removeLeaveType = (index: number) => {
+    const leaveTypes = config.leaveTypes.filter((_, i) => i !== index);
+    onChange({ ...config, leaveTypes });
+  };
+
+  const updateLeaveReason = (index: number, patch: Partial<LeaveReasonDefinition>) => {
+    const leaveReasons = [...(config.leaveReasons || [])];
+    leaveReasons[index] = { ...leaveReasons[index], ...patch };
+    onChange({ ...config, leaveReasons });
+  };
+
+  const addLeaveReason = () => {
+    const existing = new Set((config.leaveReasons || []).map((reason) => String(reason.code || '').trim()));
+    let nextIndex = (config.leaveReasons || []).length + 1;
+    let code = `leave_reason_${nextIndex}`;
+    while (existing.has(code)) {
+      nextIndex += 1;
+      code = `leave_reason_${nextIndex}`;
+    }
+    onChange({
+      ...config,
+      leaveReasons: [
+        ...(config.leaveReasons || []),
+        { code, labelAr: 'سبب إجازة جديد' },
+      ],
+    });
+  };
+
+  const removeLeaveReason = (index: number) => {
+    const leaveReasons = (config.leaveReasons || []).filter((_, i) => i !== index);
+    onChange({ ...config, leaveReasons });
   };
 
   return (
@@ -479,13 +557,135 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
         </p>
       </div>
 
-      {(config.leaveTypes || []).map((lt, idx) => (
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold text-[var(--color-text)]">أسباب الإجازات</h3>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">هذه الاختيارات تظهر في طلبات إجازات الفريق كقائمة قابلة للبحث.</p>
+        </div>
+        <Button variant="primary" onClick={addLeaveReason} disabled={readOnly}>
+          <span className="material-icons-round text-sm">add</span>
+          إضافة سبب
+        </Button>
+      </div>
+
+      {(config.leaveReasons || []).length === 0 ? (
+        <div className="border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-sm font-medium text-[var(--color-text-muted)]">
+          لا توجد أسباب إجازات معرفة حالياً. أضف الأسباب التي سيختار منها المشرفون عند إنشاء طلب إجازة.
+        </div>
+      ) : (
+        <div className="space-y-3">
+          {(config.leaveReasons || []).map((reason, idx) => (
+            <Card key={`${reason.code || 'leave_reason'}-${idx}`}>
+              <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.5fr_auto] gap-4 items-start">
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                    كود السبب
+                  </label>
+                  <input
+                    type="text"
+                    value={reason.code}
+                    disabled={readOnly}
+                    dir="ltr"
+                    onChange={e => updateLeaveReason(idx, { code: e.target.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_') })}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
+                  />
+                  {getError(errors, `leaveReasons.${idx}.code`) && (
+                    <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveReasons.${idx}.code`)}</p>
+                  )}
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                    اسم السبب
+                  </label>
+                  <input
+                    type="text"
+                    value={reason.labelAr}
+                    disabled={readOnly}
+                    onChange={e => updateLeaveReason(idx, { labelAr: e.target.value })}
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
+                  />
+                  {getError(errors, `leaveReasons.${idx}.labelAr`) && (
+                    <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveReasons.${idx}.labelAr`)}</p>
+                  )}
+                </div>
+
+                {!readOnly && (
+                  <Button variant="danger" size="sm" onClick={() => removeLeaveReason(idx)} className="sm:mt-6">
+                    <span className="material-icons-round text-sm">delete</span>
+                    حذف
+                  </Button>
+                )}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <h3 className="text-base font-bold text-[var(--color-text)]">أنواع الإجازات</h3>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">أضف نوع إجازة جديد وحدد رصيده وطريقة تأثيره على الراتب.</p>
+        </div>
+        <Button variant="primary" onClick={addLeaveType} disabled={readOnly}>
+          <span className="material-icons-round text-sm">add</span>
+          إضافة نوع إجازة
+        </Button>
+      </div>
+
+      {(config.leaveTypes || []).map((lt, idx) => {
+        const hasLockedCode = LOCKED_LEAVE_TYPE_CODES.has(String(lt.type));
+        return (
         <Card key={lt.type}>
-          <div className="flex items-center gap-3 mb-4">
-            <span className="material-icons-round text-primary">beach_access</span>
-            <h4 className="font-bold text-[var(--color-text)]">{lt.labelAr}</h4>
+          <div className="flex items-center justify-between gap-3 mb-4">
+            <div className="flex items-center gap-3">
+              <span className="material-icons-round text-primary">beach_access</span>
+              <div>
+                <h4 className="font-bold text-[var(--color-text)]">{lt.labelAr || 'نوع إجازة بدون اسم'}</h4>
+                <p className="text-xs text-[var(--color-text-muted)] font-mono" dir="ltr">{lt.type || 'missing_type'}</p>
+              </div>
+            </div>
+            {!readOnly && (
+              <Button variant="danger" size="sm" onClick={() => removeLeaveType(idx)}>
+                <span className="material-icons-round text-sm">delete</span>
+                حذف
+              </Button>
+            )}
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                كود النوع
+              </label>
+              <input
+                type="text"
+                value={lt.type}
+                disabled={readOnly || hasLockedCode}
+                dir="ltr"
+                onChange={e => updateLeaveType(idx, { type: e.target.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '_') })}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
+              />
+              {getError(errors, `leaveTypes.${idx}.type`) && (
+                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.type`)}</p>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
+                اسم الإجازة
+              </label>
+              <input
+                type="text"
+                value={lt.labelAr}
+                disabled={readOnly}
+                onChange={e => updateLeaveType(idx, { labelAr: e.target.value })}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)] focus:border-primary focus:ring-1 focus:ring-primary/20 outline-none disabled:opacity-60"
+              />
+              {getError(errors, `leaveTypes.${idx}.labelAr`) && (
+                <p className="text-xs text-rose-500 mt-1">{getError(errors, `leaveTypes.${idx}.labelAr`)}</p>
+              )}
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
                 الرصيد السنوي (أيام)
@@ -603,7 +803,8 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
             </div>
           </div>
         </Card>
-      ))}
+        );
+      })}
 
       {getError(errors, 'leaveTypes') && (
         <p className="text-xs text-rose-500 font-medium">{getError(errors, 'leaveTypes')}</p>
@@ -1054,7 +1255,8 @@ export const HRSettings: React.FC = () => {
       await loadConfigs();
     } catch (err) {
       console.error('Failed to save config:', err);
-      setToast({ message: 'فشل في حفظ الإعدادات', type: 'error' });
+      const message = err instanceof Error ? err.message : 'سبب غير معروف';
+      setToast({ message: `فشل في حفظ الإعدادات: ${message}`, type: 'error' });
     } finally {
       setSaving(false);
     }

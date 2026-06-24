@@ -21,6 +21,7 @@ import {
   leaveBalancesRef,
   HR_COLLECTIONS,
 } from './collections';
+import { getLeaveTypesFromConfig } from './leaveTypes';
 import type {
   FirestoreLeaveRequest,
   FirestoreLeaveBalance,
@@ -398,28 +399,14 @@ export async function getEmployeeLeaveUsageSummary(
     .filter((req) => isWithinRange(req.startDate, options?.startDate, options?.endDate))
     .sort((a, b) => getRequestTimeMs(b) - getRequestTimeMs(a));
 
-  const approvedDaysByType: Record<LeaveType, number> = {
-    annual: 0,
-    sick: 0,
-    emergency: 0,
-    unpaid: 0,
-  };
-  const approvedCountByType: Record<LeaveType, number> = {
-    annual: 0,
-    sick: 0,
-    emergency: 0,
-    unpaid: 0,
-  };
-  const lastUsedDateByType: Record<LeaveType, string | null> = {
-    annual: null,
-    sick: null,
-    emergency: null,
-    unpaid: null,
-  };
+  const configuredLeaveTypes = await getLeaveTypesFromConfig();
+  const approvedDaysByType: Record<LeaveType, number> = {};
+  const approvedCountByType: Record<LeaveType, number> = {};
+  const lastUsedDateByType: Record<LeaveType, string | null> = {};
 
   approvedRequests.forEach((req) => {
-    approvedDaysByType[req.leaveType] += Number(req.totalDays || 0);
-    approvedCountByType[req.leaveType] += 1;
+    approvedDaysByType[req.leaveType] = (approvedDaysByType[req.leaveType] || 0) + Number(req.totalDays || 0);
+    approvedCountByType[req.leaveType] = (approvedCountByType[req.leaveType] || 0) + 1;
     if (!lastUsedDateByType[req.leaveType]) {
       lastUsedDateByType[req.leaveType] = req.startDate;
     }
@@ -431,31 +418,49 @@ export async function getEmployeeLeaveUsageSummary(
     emergency: leaveBalance.emergencyBalance || 0,
   };
 
-  const perType: LeaveTypeUsageItem[] = [
+  const coreRows: LeaveTypeUsageItem[] = [
     ...PAID_LEAVE_TYPES.map((leaveType) => {
       const fromBalance = Math.max(0, DEFAULT_BALANCE_BY_TYPE[leaveType] - balanceByType[leaveType]);
       return {
         leaveType,
         label: LEAVE_TYPE_LABELS[leaveType],
-        approvedDaysInRange: approvedDaysByType[leaveType],
-        usedDays: Math.max(approvedDaysByType[leaveType], fromBalance),
+        approvedDaysInRange: approvedDaysByType[leaveType] || 0,
+        usedDays: Math.max(approvedDaysByType[leaveType] || 0, fromBalance),
         availableDays: Math.max(0, balanceByType[leaveType]),
         defaultDays: DEFAULT_BALANCE_BY_TYPE[leaveType],
-        approvedRequestsCount: approvedCountByType[leaveType],
-        lastUsedDate: lastUsedDateByType[leaveType],
+        approvedRequestsCount: approvedCountByType[leaveType] || 0,
+        lastUsedDate: lastUsedDateByType[leaveType] || null,
       };
     }),
     {
       leaveType: 'unpaid',
       label: LEAVE_TYPE_LABELS.unpaid,
-      approvedDaysInRange: approvedDaysByType.unpaid,
-      usedDays: Math.max(leaveBalance.unpaidTaken || 0, approvedDaysByType.unpaid),
+      approvedDaysInRange: approvedDaysByType.unpaid || 0,
+      usedDays: Math.max(leaveBalance.unpaidTaken || 0, approvedDaysByType.unpaid || 0),
       availableDays: 0,
       defaultDays: null,
-      approvedRequestsCount: approvedCountByType.unpaid,
-      lastUsedDate: lastUsedDateByType.unpaid,
+      approvedRequestsCount: approvedCountByType.unpaid || 0,
+      lastUsedDate: lastUsedDateByType.unpaid || null,
     },
   ];
+  const coreTypes = new Set(coreRows.map((row) => row.leaveType));
+  const customRows = configuredLeaveTypes
+    .filter((row) => !coreTypes.has(row.key))
+    .map((row) => {
+      const usedDays = approvedDaysByType[row.key] || 0;
+      const defaultDays = Number(row.defaultBalance ?? 0);
+      return {
+        leaveType: row.key,
+        label: row.label,
+        approvedDaysInRange: usedDays,
+        usedDays,
+        availableDays: Math.max(0, defaultDays - usedDays),
+        defaultDays,
+        approvedRequestsCount: approvedCountByType[row.key] || 0,
+        lastUsedDate: lastUsedDateByType[row.key] || null,
+      };
+    });
+  const perType: LeaveTypeUsageItem[] = [...coreRows, ...customRows];
 
   const latestReq = approvedRequests[0];
   return {

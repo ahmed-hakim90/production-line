@@ -27,15 +27,15 @@ export function downloadProductsTemplate() {
   XLSX.utils.book_append_sheet(wb, productsWs, 'المنتجات');
 
   const materialsAoa: (string | number)[][] = [
-    ['كود المنتج', 'اسم المادة الخام', 'الكمية المستخدمة', 'تكلفة الوحدة'],
-    ['SK-999N', 'موتور نحاس', 1, 18],
-    ['SK-999N', 'هيكل بلاستيك', 1, 7.5],
-    ['PRD-002', 'جلدة مانعة للتسرب', 2, 1.2],
-    ['PRD-003', 'قماش خارجي', 1.5, 22],
-    ['PRD-003', 'إسفنج', 3, 31],
+    ['كود المنتج', 'كود المادة', 'اسم المادة الخام', 'الكمية المستخدمة', 'تكلفة الوحدة'],
+    ['SK-999N', 'MAT-001', 'موتور نحاس', 1, 18],
+    ['SK-999N', 'MAT-002', 'هيكل بلاستيك', 1, 7.5],
+    ['PRD-002', 'MAT-003', 'جلدة مانعة للتسرب', 2, 1.2],
+    ['PRD-003', 'MAT-004', 'قماش خارجي', 1.5, 22],
+    ['PRD-003', 'MAT-005', 'إسفنج', 3, 31],
   ];
   const materialsWs = XLSX.utils.aoa_to_sheet(materialsAoa);
-  materialsWs['!cols'] = [{ wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 14 }];
+  materialsWs['!cols'] = [{ wch: 16 }, { wch: 16 }, { wch: 28 }, { wch: 18 }, { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, materialsWs, 'المواد الخام');
 
   XLSX.writeFile(wb, 'template_products.xlsx');

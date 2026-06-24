@@ -22,12 +22,7 @@ const outPath = resolve(root, 'firestore.rules');
 /** Longest first so substrings of other identifiers are not corrupted. */
 const RENAME_PAIRS = [
   ['canCreateRepairTreasuryEntryForOpenSession', 'pl_canCreateRepairTreasuryEntryForOpenSession'],
-  ['customerDepositsCanCreatePendingEntry', 'pl_customerDepositsCanCreatePendingEntry'],
-  ['depositEntryCreatorPendingUpdate', 'pl_depositEntryCreatorPendingUpdate'],
   ['isTechnicianAssignedToBranch', 'pl_isTechnicianAssignedToBranch'],
-  ['depositEntrySerialUnchanged', 'pl_depositEntrySerialUnchanged'],
-  ['depositEntryConfirmUpdate', 'pl_depositEntryConfirmUpdate'],
-  ['customerDepositsReadPerm', 'pl_customerDepositsReadPerm'],
   ['canUpdateRepairBranchScoped', 'pl_canUpdateRepairBranchScoped'],
   ['canCreateRepairBranchScoped', 'pl_canCreateRepairBranchScoped'],
   ['canReadRepairBranchScoped', 'pl_canReadRepairBranchScoped'],
@@ -40,8 +35,6 @@ const RENAME_PAIRS = [
   ['isBusinessCollection', 'pl_isErpBusinessCollection'],
   ['roleBelongsToTenant', 'pl_roleBelongsToTenant'],
   ['isRepairBranchAdmin', 'pl_isRepairBranchAdmin'],
-  ['depositEntryAmountOk', 'pl_depositEntryAmountOk'],
-  ['depositEntryTenantOk', 'pl_depositEntryTenantOk'],
   ['isPresenceOwner', 'pl_isPresenceOwner'],
   ['sameTenantUpdate', 'pl_sameTenantUpdate'],
   ['sameTenantWrite', 'pl_sameTenantWrite'],

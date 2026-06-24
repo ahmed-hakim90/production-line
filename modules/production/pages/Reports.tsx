@@ -4855,9 +4855,10 @@ export const Reports: React.FC = () => {
               const linked = productionPlans.find(
                 (p) => p.lineId === form.lineId && p.productId === form.productId && (p.status === 'in_progress' || p.status === 'planned')
               );
+              const linkedPlanAcceptsDirectReports = linked?.acceptsProductionFromReports !== false;
               const noActivePlan = !linked;
               const blockWithoutPlan = !planSettings?.allowReportWithoutPlan && noActivePlan && !editId;
-              const overProduced = linked && !planSettings?.allowOverProduction && (linked.producedQuantity ?? 0) >= linked.plannedQuantity;
+              const overProduced = linkedPlanAcceptsDirectReports && linked && !planSettings?.allowOverProduction && (linked.producedQuantity ?? 0) >= linked.plannedQuantity;
 
               return (
                 <>
@@ -4871,6 +4872,12 @@ export const Reports: React.FC = () => {
                           {' '}{Math.min(Math.round(((linked.producedQuantity ?? 0) / linked.plannedQuantity) * 100), 100)}%
                         </p>
                       </div>
+                    </div>
+                  )}
+                  {linked && !linkedPlanAcceptsDirectReports && form.reportType !== 'packaging' && !form.workOrderId && (
+                    <div className="mx-4 sm:mx-6 mb-2 bg-slate-50 dark:bg-slate-900/10 border border-slate-200 rounded-[var(--border-radius-lg)] p-3 flex items-center gap-3">
+                      <ReportIcon name="info" className="text-slate-500 text-lg" />
+                      <p className="text-xs font-bold text-slate-600">هذه الخطة لا تستقبل إنتاجًا مباشرًا من التقارير غير المرتبطة.</p>
                     </div>
                   )}
                   {blockWithoutPlan && (

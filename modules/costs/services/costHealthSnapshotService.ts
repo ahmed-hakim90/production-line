@@ -1,9 +1,16 @@
 import type { SystemSettings } from '../../../types';
-import type { OpsInboxSeverity } from '../../operations/services/opsInboxService';
+
+export type CostHealthIssueSeverity = 'critical' | 'high' | 'medium' | 'low';
+
+type CostHealthSettings = SystemSettings & {
+  laborSettings?: {
+    hourlyRate?: number;
+  };
+};
 
 export type CostHealthQuickIssue = {
   id: string;
-  severity: OpsInboxSeverity;
+  severity: CostHealthIssueSeverity;
   title: string;
   description: string;
 };
@@ -15,8 +22,9 @@ export type CostHealthQuickSnapshot = {
 
 export const costHealthSnapshotService = {
   getQuickSnapshot(settings: SystemSettings): CostHealthQuickSnapshot {
+    const costSettings = settings as CostHealthSettings;
     const issues: CostHealthQuickIssue[] = [];
-    const hourlyRate = Number(settings.laborSettings?.hourlyRate || 0);
+    const hourlyRate = Number(costSettings.laborSettings?.hourlyRate || 0);
     if (hourlyRate <= 0) {
       issues.push({
         id: 'labor-rate',

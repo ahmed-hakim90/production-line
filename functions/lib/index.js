@@ -9,7 +9,6 @@ import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
 import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRestore.js';
-import { runImportCustomerDepositsPack } from './customerDepositsPackImport.js';
 initializeApp();
 const db = getFirestore();
 const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
@@ -938,20 +937,6 @@ export const runAssetDepreciationJob = onCall({
     }
     const requestedPeriod = String(request.data?.period || '').trim();
     return runAssetDepreciationForPeriod(requestedPeriod || undefined);
-});
-export const importCustomerDepositsPack = onCall({
-    region: 'us-central1',
-    memory: '512MiB',
-    timeoutSeconds: 300,
-}, async (request) => {
-    const requesterUid = String(request.auth?.uid || '').trim();
-    const data = request.data;
-    const mode = data?.mode === 'replace_module' ? 'replace_module' : 'merge';
-    const pack = data?.pack;
-    if (pack == null) {
-        throw new HttpsError('invalid-argument', 'يجب تمرير pack.');
-    }
-    return runImportCustomerDepositsPack({ db, requesterUid, rawPack: pack, mode });
 });
 export const deleteRepairBranchCascade = onCall({
     region: 'us-central1',

@@ -20,6 +20,7 @@ import type {
 import { effectiveStandardAssemblyMinutes } from './routingStandardAssembly';
 import type { ProductCategory } from '../modules/catalog/services/categoryService';
 import { resolveProductCategoryLabel } from '../modules/catalog/lib/resolveProductCategory';
+import { filterReportsForProductionPlan } from '../modules/production/utils/productionPlanReports';
 
 // ─── Core Metrics ───────────────────────────────────────────────────────────
 
@@ -384,11 +385,9 @@ export const buildProductionLines = (
 
     if (activePlan) {
       const key = `${line.id}_${activePlan.productId}`;
-      const historical = planReports[key] || [];
+      const historical = filterReportsForProductionPlan(activePlan, planReports[key] || []);
 
-      const todayForPlan = todayReports.filter(
-        (r) => r.lineId === line.id && r.productId === activePlan.productId
-      );
+      const todayForPlan = filterReportsForProductionPlan(activePlan, todayReports);
       const historicalIds = new Set(historical.map((r) => r.id));
       const merged = [
         ...historical,

@@ -11,6 +11,69 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { userService } from '../../../services/userService';
 import { withTenantPath } from '../../../lib/tenantPaths';
+import type { FirestoreRole, FirestoreRoleKey } from '../../../types';
+
+const DEFAULT_ROLE_KEY_BY_NAME: Record<string, FirestoreRoleKey> = {
+  [normalizeRoleName('مدير النظام')]: 'admin',
+  [normalizeRoleName('مدير المصنع')]: 'factory_manager',
+  [normalizeRoleName('مشرف الصالة')]: 'hall_supervisor',
+  [normalizeRoleName('مشرف')]: 'supervisor',
+  [normalizeRoleName('مدير الموارد البشرية')]: 'hr_manager',
+  [normalizeRoleName('محاسب')]: 'accountant',
+};
+
+type VisibleRoleGroup = {
+  key: string;
+  role: FirestoreRole;
+  ids: string[];
+};
+
+function normalizeRoleName(value: unknown): string {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function getBuiltInRoleKey(role: FirestoreRole): FirestoreRoleKey | undefined {
+  return role.roleKey ?? DEFAULT_ROLE_KEY_BY_NAME[normalizeRoleName(role.name)];
+}
+
+function getRoleGroupKey(role: FirestoreRole): string {
+  const builtInRoleKey = getBuiltInRoleKey(role);
+  if (builtInRoleKey) return `default:${builtInRoleKey}`;
+
+  const normalizedName = normalizeRoleName(role.name);
+  return normalizedName ? `custom:${normalizedName}` : `role:${role.id ?? ''}`;
+}
+
+function canonicalRoleScore(role: FirestoreRole): number {
+  const builtInRoleKey = getBuiltInRoleKey(role);
+  if (!builtInRoleKey) return role.id ? 1 : 0;
+
+  const stableDefaultId = role.id?.endsWith(`__${builtInRoleKey}`) ? 4 : 0;
+  const explicitRoleKey = role.roleKey === builtInRoleKey ? 2 : 0;
+  return stableDefaultId + explicitRoleKey + (role.id ? 1 : 0);
+}
+
+function shouldPreferCanonicalRole(candidate: FirestoreRole, current: FirestoreRole): boolean {
+  return canonicalRoleScore(candidate) > canonicalRoleScore(current);
+}
+
+function getVisibleRoleGroups(roles: FirestoreRole[]): VisibleRoleGroup[] {
+  const groups = new Map<string, VisibleRoleGroup>();
+
+  roles.forEach((role) => {
+    const key = getRoleGroupKey(role);
+    const existing = groups.get(key);
+    if (!existing) {
+      groups.set(key, { key, role, ids: role.id ? [role.id] : [] });
+      return;
+    }
+
+    if (role.id && !existing.ids.includes(role.id)) existing.ids.push(role.id);
+    if (shouldPreferCanonicalRole(role, existing.role)) existing.role = role;
+  });
+
+  return Array.from(groups.values());
+}
 
 export const RolesManagement: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
@@ -24,6 +87,28 @@ export const RolesManagement: React.FC = () => {
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [userCountByRoleId, setUserCountByRoleId] = useState<Record<string, number>>({});
   const [userCountsLoading, setUserCountsLoading] = useState(true);
+
+  const visibleRoleGroups = useMemo(() => getVisibleRoleGroups(roles), [roles]);
+
+  const roleIdsByVisibleRoleId = useMemo(() => {
+    const result: Record<string, string[]> = {};
+    visibleRoleGroups.forEach((group) => {
+      if (group.role.id) result[group.role.id] = group.ids;
+    });
+    return result;
+  }, [visibleRoleGroups]);
+
+  const visibleUserCountByRoleId = useMemo(() => {
+    const result: Record<string, number> = {};
+    visibleRoleGroups.forEach((group) => {
+      if (!group.role.id) return;
+      result[group.role.id] = group.ids.reduce(
+        (sum, id) => sum + (userCountByRoleId[id] ?? 0),
+        0,
+      );
+    });
+    return result;
+  }, [userCountByRoleId, visibleRoleGroups]);
 
   const roleIdsKey = useMemo(
     () =>
@@ -64,7 +149,8 @@ export const RolesManagement: React.FC = () => {
     setDeleteBusy(true);
     try {
       const users = await userService.getAll();
-      const linked = users.filter((u) => String(u.roleId || '').trim() === id);
+      const relatedRoleIds = new Set(roleIdsByVisibleRoleId[id] ?? [id]);
+      const linked = users.filter((u) => relatedRoleIds.has(String(u.roleId || '').trim()));
       if (linked.length > 0) {
         window.alert(
           `لا يمكن حذف الدور: يوجد ${linked.length} مستخدم مرتبط بهذا الدور. عيّن لهم دوراً آخر من «إدارة المستخدمين» ثم أعد المحاولة.`,
@@ -110,7 +196,7 @@ export const RolesManagement: React.FC = () => {
       </div>
 
       {/* ── Roles Card Grid: 1 col → 2 col → 3 col ── */}
-      {roles.length === 0 ? (
+      {visibleRoleGroups.length === 0 ? (
         <Card>
           <div className="text-center py-16 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-20">admin_panel_settings</span>
@@ -120,7 +206,7 @@ export const RolesManagement: React.FC = () => {
         </Card>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
-          {roles.map((role) => {
+          {visibleRoleGroups.map(({ role }) => {
             const count = enabledCount(role.permissions);
             const pct = Math.round((count / ALL_PERMISSIONS.length) * 100);
             const activeGroups = PERMISSION_GROUPS.map((g) => ({
@@ -130,7 +216,7 @@ export const RolesManagement: React.FC = () => {
 
             return (
               <div
-                key={role.id}
+                key={role.id ?? getRoleGroupKey(role)}
                 className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 flex flex-col overflow-hidden"
               >
                 {/* Card top accent stripe using role color */}
@@ -154,7 +240,7 @@ export const RolesManagement: React.FC = () => {
                     <span className="text-[11px] font-bold text-[var(--color-text-muted)]">مستخدمو الدور</span>
                     <div className="flex items-center gap-2">
                       <span className="text-sm font-bold text-[var(--color-text)] tabular-nums">
-                        {userCountsLoading ? '…' : userCountByRoleId[role.id!] ?? 0}
+                        {userCountsLoading ? '…' : visibleUserCountByRoleId[role.id!] ?? 0}
                       </span>
                       {can('users.manage') && role.id && (
                         <Link
@@ -242,10 +328,10 @@ export const RolesManagement: React.FC = () => {
             </div>
             <h3 className="text-lg font-bold mb-2">تأكيد حذف الدور</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">
-              {deleteConfirmId && (userCountByRoleId[deleteConfirmId] ?? 0) > 0 ? (
+              {deleteConfirmId && (visibleUserCountByRoleId[deleteConfirmId] ?? 0) > 0 ? (
                 <>
                   لا يمكن المتابعة: يوجد{' '}
-                  <span className="font-bold text-[var(--color-text)]">{userCountByRoleId[deleteConfirmId]}</span>{' '}
+                  <span className="font-bold text-[var(--color-text)]">{visibleUserCountByRoleId[deleteConfirmId]}</span>{' '}
                   مستخدم مرتبط بهذا الدور. عيّن لهم دوراً آخر من إدارة المستخدمين ثم احذف الدور.
                 </>
               ) : (
@@ -262,7 +348,7 @@ export const RolesManagement: React.FC = () => {
                 onClick={() => handleDelete(deleteConfirmId)}
                 disabled={
                   deleteBusy ||
-                  Boolean(deleteConfirmId && (userCountByRoleId[deleteConfirmId] ?? 0) > 0)
+                  Boolean(deleteConfirmId && (visibleUserCountByRoleId[deleteConfirmId] ?? 0) > 0)
                 }
               >
                 <span className="material-icons-round" style={{ fontSize: 15 }}>delete</span>

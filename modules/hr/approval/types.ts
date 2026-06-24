@@ -9,7 +9,7 @@ import type { JobLevel } from '../types';
 
 // ─── Enums & Literal Unions ─────────────────────────────────────────────────
 
-export type ApprovalRequestType = 'overtime' | 'leave' | 'loan';
+export type ApprovalRequestType = 'overtime' | 'leave' | 'loan' | 'penalty';
 
 export type ApprovalRequestStatus =
   | 'pending'
@@ -107,6 +107,16 @@ export const DEFAULT_APPROVAL_SETTINGS: FirestoreApprovalSettings = {
   allowDelegation: true,
   autoApproveThresholds: [],
 };
+
+export function normalizeApprovalSettings(
+  settings?: Partial<FirestoreApprovalSettings> | null,
+): FirestoreApprovalSettings {
+  return {
+    ...DEFAULT_APPROVAL_SETTINGS,
+    ...(settings || {}),
+    autoApproveThresholds: settings?.autoApproveThresholds || [],
+  };
+}
 
 // ─── Delegation ─────────────────────────────────────────────────────────────
 

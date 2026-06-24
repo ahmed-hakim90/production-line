@@ -22,6 +22,7 @@ export type HRConfigModuleName = (typeof HR_CONFIG_MODULES)[number];
 // ─── Base Config (shared metadata on every module) ──────────────────────────
 
 export interface ConfigMetadata {
+  tenantId?: string;
   configVersion: number;
   updatedAt: any;
   updatedBy: string;
@@ -67,6 +68,8 @@ export interface LeaveConfig extends ConfigMetadata {
   defaultSickBalance: number;
   defaultEmergencyBalance: number;
   leaveTypes: LeaveTypeDefinition[];
+  leaveReasons: LeaveReasonDefinition[];
+  leaveReasonsConfigured?: boolean;
   allowNegativeBalance: boolean;
   carryOverLimit: number;
   maxConsecutiveDays: number;
@@ -81,7 +84,7 @@ export type LeaveSalaryImpact =
   | 'unpaid';
 
 export interface LeaveTypeDefinition {
-  type: 'annual' | 'sick' | 'unpaid' | 'emergency';
+  type: string;
   labelAr: string;
   defaultBalance: number;
   salaryImpact: LeaveSalaryImpact;
@@ -90,6 +93,11 @@ export interface LeaveTypeDefinition {
   maxConsecutiveDays: number;
   carryOverAllowed: boolean;
   maxCarryOverDays: number;
+}
+
+export interface LeaveReasonDefinition {
+  code: string;
+  labelAr: string;
 }
 
 // ─── Module: Loan ───────────────────────────────────────────────────────────
@@ -166,6 +174,7 @@ export type HRConfigAuditAction = 'update' | 'reset' | 'bulk_update';
 
 export interface FirestoreHRConfigAuditLog {
   id?: string;
+  tenantId?: string;
   module: HRConfigModuleName;
   action: HRConfigAuditAction;
   previousVersion: number;

@@ -650,6 +650,8 @@ export interface ProductionPlan {
   workOrderId?: string;
   remainingQuantity?: number;
   achievementPercent?: number;
+  /** Missing means legacy/default behavior: the plan accepts direct unlinked report production. */
+  acceptsProductionFromReports?: boolean;
   achievementExcluded?: boolean;
   achievementExclusionReason?: string;
   stopReason?: string;

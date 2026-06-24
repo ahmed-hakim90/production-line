@@ -12,8 +12,9 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { hrConfigModuleDocRef, hrConfigModulesRef } from './collections';
-import { HR_CONFIG_DEFAULTS } from './defaults';
+import { HR_CONFIG_DEFAULTS, withLeaveReasonDefaults } from './defaults';
 import { hrConfigAuditService } from './configAudit';
 import {
   HR_CONFIG_MODULES,
@@ -24,6 +25,36 @@ import {
 } from './types';
 
 type ConfigWithoutMeta<T> = Omit<T, keyof ConfigMetadata>;
+
+function applyModuleDefaults<K extends HRConfigModuleName>(
+  moduleName: K,
+  data: Partial<HRConfigMap[K]>,
+): HRConfigMap[K] {
+  const merged = {
+    ...HR_CONFIG_DEFAULTS[moduleName],
+    ...data,
+  };
+
+  if (moduleName === 'leave') {
+    return withLeaveReasonDefaults(merged as Partial<HRConfigMap['leave']>) as HRConfigMap[K];
+  }
+
+  return merged as HRConfigMap[K];
+}
+
+function markConfiguredFields<K extends HRConfigModuleName>(
+  moduleName: K,
+  data: Partial<ConfigWithoutMeta<HRConfigMap[K]>>,
+): Partial<ConfigWithoutMeta<HRConfigMap[K]>> {
+  if (moduleName === 'leave' && Object.prototype.hasOwnProperty.call(data, 'leaveReasons')) {
+    return {
+      ...data,
+      leaveReasonsConfigured: true,
+    } as Partial<ConfigWithoutMeta<HRConfigMap[K]>>;
+  }
+
+  return data;
+}
 
 /** Detect which top-level fields changed between two objects */
 function diffFields(
@@ -48,25 +79,23 @@ export async function getConfigModule<K extends HRConfigModuleName>(
   moduleName: K,
 ): Promise<HRConfigMap[K]> {
   if (!isConfigured) {
-    return {
-      ...HR_CONFIG_DEFAULTS[moduleName],
+    return applyModuleDefaults(moduleName, {
       configVersion: 0,
       updatedAt: null,
       updatedBy: '',
-    } as HRConfigMap[K];
+    } as Partial<HRConfigMap[K]>);
   }
 
   const snap = await getDoc(hrConfigModuleDocRef(moduleName));
   if (!snap.exists()) {
-    return {
-      ...HR_CONFIG_DEFAULTS[moduleName],
+    return applyModuleDefaults(moduleName, {
       configVersion: 0,
       updatedAt: null,
       updatedBy: '',
-    } as HRConfigMap[K];
+    } as Partial<HRConfigMap[K]>);
   }
 
-  return snap.data() as HRConfigMap[K];
+  return applyModuleDefaults(moduleName, snap.data() as Partial<HRConfigMap[K]>);
 }
 
 /**
@@ -96,12 +125,13 @@ export async function updateConfigModule<K extends HRConfigModuleName>(
   if (!isConfigured) throw new Error('Firebase not configured');
 
   const current = await getConfigModule(moduleName);
+  const dataWithMarkers = markConfiguredFields(moduleName, data);
   const previousVersion = current.configVersion;
   const newVersion = previousVersion + 1;
 
   const changedFields = diffFields(
     current as unknown as Record<string, unknown>,
-    data as unknown as Record<string, unknown>,
+    dataWithMarkers as unknown as Record<string, unknown>,
   );
 
   if (changedFields.length === 0) {
@@ -111,7 +141,8 @@ export async function updateConfigModule<K extends HRConfigModuleName>(
   const merged = {
     ...HR_CONFIG_DEFAULTS[moduleName],
     ...current,
-    ...data,
+    ...dataWithMarkers,
+    tenantId: getCurrentTenantId(),
     configVersion: newVersion,
     updatedAt: serverTimestamp(),
     updatedBy: performedBy,
@@ -150,6 +181,7 @@ export async function resetConfigModule<K extends HRConfigModuleName>(
 
   const merged = {
     ...defaults,
+    tenantId: getCurrentTenantId(),
     configVersion: newVersion,
     updatedAt: serverTimestamp(),
     updatedBy: performedBy,
@@ -200,6 +232,7 @@ export async function initializeConfigModules(performedBy: string): Promise<void
     if (!snap.exists()) {
       await setDoc(hrConfigModuleDocRef(moduleName), {
         ...HR_CONFIG_DEFAULTS[moduleName],
+        tenantId: getCurrentTenantId(),
         configVersion: 1,
         updatedAt: serverTimestamp(),
         updatedBy: performedBy,
