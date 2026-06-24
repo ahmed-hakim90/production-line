@@ -21,11 +21,12 @@ import {
   readCachedTenantTheme,
   resolveTheme,
 } from '../../../core/ui-engine/theme/tenantTheme';
+import { employeeService } from '../../hr/employeeService';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { userService } from '../../../services/userService';
 import type {
   AlertSettings, ThemeSettings,
-  QuickActionItem, QuickActionColor, CustomWidgetConfig, FirestoreUser,
+  QuickActionItem, QuickActionColor, CustomWidgetConfig, FirestoreEmployee, FirestoreUser,
 } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
 import type { ReportPrintRow } from '../../production/components/ProductionReportPrint';
@@ -36,6 +37,7 @@ import { ProductionWorkerSettingsSection } from '@/modules/production/components
 import { GeneralSystemBehaviorSection } from '../components/settings/GeneralSystemBehaviorSection';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionWorkerSettings } from '@/types';
 import { InventoryRoutingSettingsSection } from '../components/settings/InventoryRoutingSettingsSection';
+import { ProductionRequestRoutingSettingsSection } from '../components/settings/ProductionRequestRoutingSettingsSection';
 import { GeneralDashboardDisplaySection } from '../components/settings/GeneralDashboardDisplaySection';
 import { GeneralAlertsSection } from '../components/settings/GeneralAlertsSection';
 import { KPIThresholdsSection } from '../components/settings/KPIThresholdsSection';
@@ -374,6 +376,7 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     resolveProductionWorkerSettings,
   });
   const [inventoryWarehouses, setInventoryWarehouses] = useState<Warehouse[]>([]);
+  const [productionApproverEmployees, setProductionApproverEmployees] = useState<FirestoreEmployee[]>([]);
   const [systemUsers, setSystemUsers] = useState<FirestoreUser[]>([]);
   const [editingQuickActionId, setEditingQuickActionId] = useState<string | null>(null);
   const [uploadingLogo, setUploadingLogo] = useState(false);
@@ -413,10 +416,15 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     if (!isAdmin) return;
     void (async () => {
       try {
-        const users = await userService.getAll();
+        const [users, employees] = await Promise.all([
+          userService.getAll(),
+          employeeService.getAll(),
+        ]);
         setSystemUsers(users.filter((user) => user.isActive !== false));
+        setProductionApproverEmployees(employees.filter((employee) => employee.isActive !== false));
       } catch {
         setSystemUsers([]);
+        setProductionApproverEmployees([]);
       }
     })();
   }, [isAdmin]);
@@ -829,6 +837,13 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             value={localProductionWorkerSettings}
             onChange={setLocalProductionWorkerSettings}
             disabled={!isAdmin}
+          />
+
+          <ProductionRequestRoutingSettingsSection
+            isAdmin={isAdmin}
+            localPlanSettings={localPlanSettings}
+            setLocalPlanSettings={setLocalPlanSettings}
+            employees={productionApproverEmployees}
           />
 
           <InventoryRoutingSettingsSection

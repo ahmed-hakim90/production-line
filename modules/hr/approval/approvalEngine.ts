@@ -33,8 +33,8 @@ import {
   approvalSettingsDocRef,
 } from './collections';
 import { departmentsRef, jobPositionsRef } from '../collections';
-import { buildApprovalChain, tryAutoApprove } from './approvalBuilder';
-import { resolveHrApproverEmployeeIdFromOrg } from './hrApproverResolution';
+import { buildApprovalChain, buildConfiguredApprovalChain, tryAutoApprove } from './approvalBuilder';
+import { resolveHrApproverFromOrg, type HrApproverResolutionResult } from './hrApproverResolution';
 import {
   validateCreate,
   validateAction,
@@ -142,18 +142,25 @@ function deriveStatusFromChain(request: FirestoreApprovalRequest): ApprovalReque
 async function resolveHrApproverEmployeeId(
   allEmployees: ApprovalEmployeeInfo[],
   explicitHrEmployeeId?: string,
-): Promise<string | undefined> {
-  if (explicitHrEmployeeId) return explicitHrEmployeeId;
+): Promise<HrApproverResolutionResult> {
+  if (explicitHrEmployeeId) return { employeeId: explicitHrEmployeeId, source: 'explicit' };
 
   try {
-    const [users, roles, rawEmployees, departmentsSnap, jobPositionsSnap, systemSettings] = await Promise.all([
-      userService.getAll(),
-      roleService.getAll(),
+    const [rawEmployees, departmentsSnap, jobPositionsSnap] = await Promise.all([
       employeeService.getAll(),
       getDocs(departmentsRef()),
       getDocs(jobPositionsRef()),
+    ]);
+
+    const [usersResult, rolesResult, systemSettingsResult] = await Promise.allSettled([
+      userService.getAll(),
+      roleService.getAll(),
       systemSettingsService.get(),
     ]);
+
+    const users = usersResult.status === 'fulfilled' ? usersResult.value : [];
+    const roles = rolesResult.status === 'fulfilled' ? rolesResult.value : [];
+    const systemSettings = systemSettingsResult.status === 'fulfilled' ? systemSettingsResult.value : null;
 
     const rolePermissions = new Map<string, Record<string, boolean>>();
     roles.forEach((role) => {
@@ -178,18 +185,45 @@ async function resolveHrApproverEmployeeId(
         .filter(Boolean),
     );
 
-    return resolveHrApproverEmployeeIdFromOrg({
+    const activeUserIds = usersResult.status === 'fulfilled'
+      ? new Set(
+          users
+            .filter((user) => user.isActive !== false)
+            .map((user) => String(user.id || '').trim())
+            .filter(Boolean),
+        )
+      : undefined;
+
+    return resolveHrApproverFromOrg({
       allEmployees,
       rawEmployees,
       departments: departmentsSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as FirestoreDepartment)),
       jobPositions: jobPositionsSnap.docs.map((docSnap) => ({ id: docSnap.id, ...docSnap.data() } as FirestoreJobPosition)),
+      activeUserIds,
       configuredHrUserIds,
       hrUserIdsByPermission,
       explicitHrEmployeeId,
     });
   } catch {
-    return undefined;
+    return { error: 'تعذر التحقق من إعداد مسؤول الموارد البشرية من الهيكل التنظيمي' };
   }
+}
+
+function isProductionRequest(options: CreateRequestOptions): boolean {
+  const data = options.requestData || {};
+  return Boolean(data.productionLineId || data.productionLineName);
+}
+
+async function getConfiguredProductionApproverIds(options: CreateRequestOptions): Promise<string[]> {
+  if (!isProductionRequest(options)) return [];
+  const systemSettings = await systemSettingsService.get().catch(() => null);
+  const planSettings = systemSettings?.planSettings;
+  return Array.from(new Set([
+    planSettings?.productionRequestFirstApproverEmployeeId,
+    planSettings?.productionRequestFinalApproverEmployeeId,
+  ]
+    .map((id) => String(id || '').trim())
+    .filter(Boolean)));
 }
 
 async function syncApprovedPenaltyDeduction(request: FirestoreApprovalRequest): Promise<void> {
@@ -232,6 +266,7 @@ export async function createRequest(
     const existingSnap = await getDocs(
       query(
         approvalRequestsRef(),
+        where('tenantId', '==', getCurrentTenantId()),
         where('requestType', '==', options.requestType),
         where('sourceRequestId', '==', options.sourceRequestId),
       ),
@@ -252,14 +287,14 @@ export async function createRequest(
   }
 
   const settings = await getApprovalSettings();
-  const resolvedHrEmployeeId = await resolveHrApproverEmployeeId(allEmployees, hrEmployeeId);
 
   const autoResult = tryAutoApprove(options.requestData, {
     employee,
     allEmployees,
     requestType: options.requestType,
     settings,
-    hrEmployeeId: resolvedHrEmployeeId,
+    hrEmployeeId,
+    requestCreatorEmployeeId: caller.employeeId,
   });
 
   if (autoResult) {
@@ -320,13 +355,40 @@ export async function createRequest(
     return { success: true, requestId: ref.id };
   }
 
-  const chainResult = buildApprovalChain({
-    employee,
-    allEmployees,
-    requestType: options.requestType,
-    settings,
-    hrEmployeeId: resolvedHrEmployeeId,
-  });
+  const configuredProductionApproverIds = await getConfiguredProductionApproverIds(options);
+  let chainResult = configuredProductionApproverIds.length > 0
+    ? buildConfiguredApprovalChain(
+        {
+          employee,
+          allEmployees,
+          requestType: options.requestType,
+          settings,
+          requestCreatorEmployeeId: caller.employeeId,
+        },
+        configuredProductionApproverIds,
+      )
+    : null;
+
+  if (!chainResult) {
+    const hrApproverResolution = await resolveHrApproverEmployeeId(allEmployees, hrEmployeeId);
+    const resolvedHrEmployeeId = hrApproverResolution.employeeId;
+
+    if (settings.hrAlwaysFinalLevel && !resolvedHrEmployeeId) {
+      return {
+        success: false,
+        error: hrApproverResolution.error || 'لم يتم تحديد مسؤول الموارد البشرية النهائي في سلسلة الموافقات',
+      };
+    }
+
+    chainResult = buildApprovalChain({
+      employee,
+      allEmployees,
+      requestType: options.requestType,
+      settings,
+      hrEmployeeId: resolvedHrEmployeeId,
+      requestCreatorEmployeeId: caller.employeeId,
+    });
+  }
 
   if (chainResult.chain.length === 0) {
     return {
@@ -691,6 +753,7 @@ export async function getRequestsByEmployee(
   if (!isConfigured) return [];
   const q = query(
     approvalRequestsRef(),
+    where('tenantId', '==', getCurrentTenantId()),
     where('employeeId', '==', employeeId),
     orderBy('createdAt', 'desc'),
   );
@@ -704,6 +767,7 @@ export async function getRequestsByType(
   if (!isConfigured) return [];
   const q = query(
     approvalRequestsRef(),
+    where('tenantId', '==', getCurrentTenantId()),
     where('requestType', '==', requestType),
     orderBy('createdAt', 'desc'),
   );
@@ -713,9 +777,32 @@ export async function getRequestsByType(
 
 export async function getAllRequests(): Promise<FirestoreApprovalRequest[]> {
   if (!isConfigured) return [];
-  const q = query(approvalRequestsRef(), orderBy('createdAt', 'desc'));
+  const q = query(
+    approvalRequestsRef(),
+    where('tenantId', '==', getCurrentTenantId()),
+    orderBy('createdAt', 'desc'),
+  );
   const snap = await getDocs(q);
   return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreApprovalRequest));
+}
+
+export async function getRequestsCreatedBy(
+  userId: string,
+): Promise<FirestoreApprovalRequest[]> {
+  if (!isConfigured || !userId) return [];
+  const q = query(
+    approvalRequestsRef(),
+    where('tenantId', '==', getCurrentTenantId()),
+    where('createdBy', '==', userId),
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => ({ id: d.id, ...d.data() } as FirestoreApprovalRequest))
+    .sort((a, b) => {
+      const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+      const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+      return tb - ta;
+    });
 }
 
 /**
@@ -734,11 +821,13 @@ export async function getPendingApprovals(
     const q = params.requestType
       ? query(
           approvalRequestsRef(),
+          where('tenantId', '==', getCurrentTenantId()),
           where('status', '==', status),
           where('requestType', '==', params.requestType),
         )
       : query(
           approvalRequestsRef(),
+          where('tenantId', '==', getCurrentTenantId()),
           where('status', '==', status),
         );
 
@@ -773,6 +862,7 @@ export async function getRequestsByStatus(
   if (!isConfigured) return [];
   const q = query(
     approvalRequestsRef(),
+    where('tenantId', '==', getCurrentTenantId()),
     where('status', '==', status),
     orderBy('createdAt', 'desc'),
   );

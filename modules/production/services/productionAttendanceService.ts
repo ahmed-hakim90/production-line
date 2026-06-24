@@ -19,6 +19,7 @@ import type {
   ProductionReport,
 } from '../../../types';
 import { buildProductionAttendanceRecords } from '../utils/productionAttendanceRecords';
+import { buildProductionAttendanceReportStatusPatch } from '../utils/productionAttendanceReportPatch';
 
 const COLLECTION = 'production_attendance_records';
 const REPORTS_COLLECTION = 'production_reports';
@@ -108,22 +109,10 @@ async function updateReportAttendanceStatus(
   if (!snap.exists()) throw new Error('تعذر العثور على تقرير الإنتاج المرتبط بسجل الحضور.');
 
   const report = { id: snap.id, ...snap.data() } as ProductionReport;
-  const isPresent = status === 'present';
+  const patch = buildProductionAttendanceReportStatusPatch(report, record, status);
+  if (!patch) return;
 
-  if (record.source === 'shift_workers') {
-    const employeeId = cleanText(record.employeeId);
-    const shiftWorkers = (report.shiftWorkers || []).map((worker) => (
-      cleanText(worker.employeeId) === employeeId ? { ...worker, isPresent } : worker
-    ));
-    await updateDoc(reportRef, { shiftWorkers, updatedAt: serverTimestamp() });
-    return;
-  }
-
-  const workerId = cleanText(record.workerId);
-  const workerOutputs = (report.workerOutputs || []).map((worker) => (
-    cleanText(worker.workerId) === workerId ? { ...worker, isPresent } : worker
-  ));
-  await updateDoc(reportRef, { workerOutputs, updatedAt: serverTimestamp() });
+  await updateDoc(reportRef, { ...patch, updatedAt: serverTimestamp() });
 }
 
 export const productionAttendanceService = {
@@ -232,6 +221,7 @@ export const productionAttendanceService = {
     if (!isConfigured || !record.id) return;
     try {
       await this.updateStatus(record.id, status, record.notes);
+      await updateReportAttendanceStatus(record, status);
     } catch (error) {
       if (!isPermissionDenied(error) && !isNotFound(error)) throw error;
       await updateReportAttendanceStatus(record, status);

@@ -57,10 +57,17 @@ export {
   getRequestById,
   getRequestsByEmployee,
   getRequestsByType,
+  getRequestsCreatedBy,
   getAllRequests,
   getPendingApprovals,
   getRequestsByStatus,
 } from './approvalEngine';
+
+export {
+  getApprovalStatusDisplay,
+  type ApprovalStatusDisplay,
+  type ApprovalStatusDisplayVariant,
+} from './approvalStatusDisplay';
 
 // Validation (RBAC)
 export {

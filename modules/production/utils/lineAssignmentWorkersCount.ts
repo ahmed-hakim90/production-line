@@ -13,28 +13,50 @@ export type WorkersCountAutoFillPatch = {
   workersQualityCount?: number;
   workersMaintenanceCount?: number;
   workersExternalCount?: number;
+  presentAssignments?: number;
+  absentAssignments?: number;
 };
 
-type AssignmentForCount = Pick<LineWorkerAssignment, 'employeeId' | 'laborRole'>;
+type AssignmentForCount = Pick<LineWorkerAssignment, 'employeeId' | 'laborRole' | 'isPresent'>;
 
-/** Count line workers, excluding the reporting supervisor when provided. */
+const isCountableAssignment = (
+  assignment: Pick<LineWorkerAssignment, 'employeeId' | 'isPresent'>,
+  supervisorEmployeeId?: string,
+): boolean => {
+  const supervisorId = String(supervisorEmployeeId || '').trim();
+  if (assignment.isPresent === false) return false;
+  return !supervisorId || String(assignment.employeeId || '') !== supervisorId;
+};
+
+/** Count present line workers, excluding the reporting supervisor when provided. */
 export function countOperatorsFromAssignments(
-  assignments: Pick<LineWorkerAssignment, 'employeeId'>[],
+  assignments: Pick<LineWorkerAssignment, 'employeeId' | 'isPresent'>[],
   supervisorEmployeeId?: string,
 ): number {
+  return assignments.filter((assignment) => isCountableAssignment(assignment, supervisorEmployeeId)).length;
+}
+
+export function summarizeAssignmentPresence(
+  assignments: Pick<LineWorkerAssignment, 'employeeId' | 'isPresent'>[],
+  supervisorEmployeeId?: string,
+): Pick<WorkersCountAutoFillPatch, 'presentAssignments' | 'absentAssignments'> {
   const supervisorId = String(supervisorEmployeeId || '').trim();
-  if (!supervisorId) return assignments.length;
-  return assignments.filter((a) => String(a.employeeId || '') !== supervisorId).length;
+  return assignments.reduce(
+    (summary, assignment) => {
+      if (supervisorId && String(assignment.employeeId || '') === supervisorId) return summary;
+      if (assignment.isPresent === false) summary.absentAssignments += 1;
+      else summary.presentAssignments += 1;
+      return summary;
+    },
+    { presentAssignments: 0, absentAssignments: 0 },
+  );
 }
 
 export function countLaborRolesFromAssignments(
   assignments: AssignmentForCount[],
   supervisorEmployeeId?: string,
 ): WorkersCountAutoFillPatch {
-  const supervisorId = String(supervisorEmployeeId || '').trim();
-  const filtered = supervisorId
-    ? assignments.filter((a) => String(a.employeeId || '') !== supervisorId)
-    : assignments;
+  const filtered = assignments.filter((assignment) => isCountableAssignment(assignment, supervisorEmployeeId));
 
   const patch: WorkersCountAutoFillPatch = {
     workersProductionCount: 0,
@@ -84,14 +106,18 @@ export function buildWorkersCountAutoFillFromAssignments(
   target: WorkersCountAutoFillTarget,
   supervisorEmployeeId?: string,
 ): WorkersCountAutoFillPatch {
-  const count = countOperatorsFromAssignments(assignments, supervisorEmployeeId);
-  if (count <= 0) return {};
+  const presence = summarizeAssignmentPresence(assignments, supervisorEmployeeId);
+  const count = presence.presentAssignments;
+  if (count <= 0 && presence.absentAssignments <= 0) return {};
 
   if (target.reportType === 'component_injection' || target.reportType === 'packaging') {
-    return { workersCount: count };
+    return { workersCount: count, ...presence };
   }
 
-  return countLaborRolesFromAssignments(assignments, supervisorEmployeeId);
+  return {
+    ...countLaborRolesFromAssignments(assignments, supervisorEmployeeId),
+    ...presence,
+  };
 }
 
 export function sumWorkersCountPatch(patch: WorkersCountAutoFillPatch): number {

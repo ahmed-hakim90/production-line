@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { approvalAuditLogsRef } from './collections';
 import type {
   FirestoreApprovalAuditLog,
@@ -34,6 +35,7 @@ export const approvalAuditService = {
     if (!isConfigured) return '';
 
     const entry: Omit<FirestoreApprovalAuditLog, 'id'> = {
+      tenantId: getCurrentTenantId(),
       requestId,
       requestType,
       employeeId,
@@ -53,6 +55,7 @@ export const approvalAuditService = {
     if (!isConfigured) return [];
     const q = query(
       approvalAuditLogsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('requestId', '==', requestId),
       orderBy('timestamp', 'asc'),
     );
@@ -64,6 +67,7 @@ export const approvalAuditService = {
     if (!isConfigured) return [];
     const q = query(
       approvalAuditLogsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('employeeId', '==', employeeId),
       orderBy('timestamp', 'desc'),
     );
@@ -75,6 +79,7 @@ export const approvalAuditService = {
     if (!isConfigured) return [];
     const q = query(
       approvalAuditLogsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('performedBy', '==', performedBy),
       orderBy('timestamp', 'desc'),
     );
@@ -86,6 +91,7 @@ export const approvalAuditService = {
     if (!isConfigured) return [];
     const q = query(
       approvalAuditLogsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('action', '==', action),
       orderBy('timestamp', 'desc'),
     );

@@ -11,6 +11,7 @@ import {
   hasLineSpecificWorkerTarget,
 } from '../selectors/workerTargetSelector';
 import { filterProductionLaborWorkers } from '../utils/lineWorkerLaborRoles';
+import { getVisibleWorkerOutputRows } from '../utils/workerOutputRows';
 import { useAppStore } from '@/store/useAppStore';
 import { formatNumber } from '@/utils/calculations';
 
@@ -57,6 +58,10 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     () => value.reduce((sum, row) => (
       row.isPresent === false ? sum : sum + Number(row.outputQty || 0)
     ), 0),
+    [value],
+  );
+  const visibleRows = useMemo(
+    () => getVisibleWorkerOutputRows(value),
     [value],
   );
 
@@ -173,43 +178,39 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
 
       {loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">جاري تحميل العمال...</p>
-      ) : value.length === 0 ? (
+      ) : visibleRows.length === 0 ? (
         <p className="text-sm text-[var(--color-text-muted)]">
-          لا يوجد عمال إنتاج مسجلون على هذا الخط في هذا التاريخ — سجّل عمال الإنتاج من صفحة «ربط العمالة الدائم»
+          لا يوجد عمال إنتاج حاضرون على هذا الخط في هذا التاريخ — سجّل الحضور من صفحة «ربط العمالة الدائم»
         </p>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-[var(--color-text-muted)]">
+                <th className="text-center py-2 w-10">#</th>
                 <th className="text-right py-2">العامل</th>
                 <th className="text-center py-2">هدف العامل</th>
                 <th className="text-center py-2">إنتاج العامل</th>
               </tr>
             </thead>
             <tbody>
-              {value.map((row) => {
-                const isPresent = row.isPresent !== false;
-                return (
-                  <tr key={row.workerId} className="border-t border-[var(--color-border)]">
-                    <td className="py-2 font-medium">{row.workerName}</td>
-                    <td className="py-2 text-center tabular-nums">{formatNumber(row.dailyTargetQty)}</td>
-                    <td className="py-2 text-center">
-                      <input
-                        type="number"
-                        min={0}
-                        className="w-24 border border-[var(--color-border)] rounded-md text-center py-1 disabled:bg-[#f0f2f5]/70 disabled:text-[var(--color-text-muted)]"
-                        value={isPresent ? row.outputQty || '' : ''}
-                        disabled={disabled || !isPresent}
-                        onChange={(e) => updateRow(row.workerId, { outputQty: Number(e.target.value) || 0 })}
-                      />
-                      {!isPresent ? (
-                        <p className="mt-1 text-[11px] font-bold text-rose-500">غائب</p>
-                      ) : null}
-                    </td>
-                  </tr>
-                );
-              })}
+              {visibleRows.map((row, index) => (
+                <tr key={row.workerId} className="border-t border-[var(--color-border)]">
+                  <td className="py-2 text-center text-[var(--color-text-muted)] tabular-nums font-bold">{index + 1}</td>
+                  <td className="py-2 font-medium">{row.workerName}</td>
+                  <td className="py-2 text-center tabular-nums">{formatNumber(row.dailyTargetQty)}</td>
+                  <td className="py-2 text-center">
+                    <input
+                      type="number"
+                      min={0}
+                      className="w-24 border border-[var(--color-border)] rounded-md text-center py-1 disabled:bg-[#f0f2f5]/70 disabled:text-[var(--color-text-muted)]"
+                      value={row.outputQty || ''}
+                      disabled={disabled}
+                      onChange={(e) => updateRow(row.workerId, { outputQty: Number(e.target.value) || 0 })}
+                    />
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

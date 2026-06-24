@@ -286,19 +286,20 @@ service cloud.firestore {
         'products', 'production_lines', 'productionLines', 'employees', 'production_reports',
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
+        'production_workers', 'production_line_worker_assignments',
         'work_orders', 'notifications', 'scan_events', 'product_materials',
         'materials', 'boms', 'bom_items', 'material_requirement_runs',
         'production_plan_material_requirements', 'purchase_orders',
         'cost_deviation_analysis',
         'line_worker_assignments', 'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
         'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',
-        'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations', 'system_settings',
+        'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations',
         'activity_logs', 'departments', 'job_positions', 'shifts', 'hr_settings',
         'penalty_rules', 'late_rules', 'allowance_types', 'attendance_raw_logs', 'attendance_logs',
         'attendance_records', 'attendance_monthly_summaries', 'attendance_import_history',
-        'leave_requests', 'leave_balances', 'employee_loans', 'employee_allowances', 'employee_deductions',
-        'vehicles', 'approval_requests', 'approval_settings', 'approval_delegations', 'approval_audit_logs',
-        'hr_notifications', 'employee_performance', 'employee_bonuses',
+        'employee_allowances',
+        'vehicles', 'approval_settings',
+        'employee_performance', 'employee_bonuses',
         'quality_settings', 'quality_reason_catalog', 'quality_workers_assignments',
         'quality_inspections', 'quality_defects', 'quality_rework_orders', 'quality_capa', 'quality_print_logs',
         'production_report_uniques', 'product_categories', 'material_categories', 'automation_runs', 'backups',
@@ -345,6 +346,53 @@ service cloud.firestore {
           && request.resource.data.module == 'leave'
           && pl_hasErpPermission('leave.manage')
         );
+    }
+
+    function pl_hasSupervisorRequestPermission() {
+      return pl_hasErpPermission('employeeDashboard.view')
+        || pl_hasErpPermission('quickAction.view')
+        || pl_hasErpPermission('production.workerReports.view')
+        || pl_hasErpPermission('leave.manage')
+        || pl_hasErpPermission('approval.view')
+        || pl_hasErpPermission('approval.manage');
+    }
+
+    function pl_hasApprovalReadPermission() {
+      return pl_hasErpPermission('approval.view')
+        || pl_hasErpPermission('approval.manage')
+        || pl_hasErpPermission('approval.override')
+        || pl_hasErpPermission('approval.escalate');
+    }
+
+    function pl_hasApprovalWritePermission() {
+      return pl_hasErpPermission('approval.view')
+        || pl_hasErpPermission('approval.manage')
+        || pl_hasErpPermission('approval.override');
+    }
+
+    function pl_isOwnCreatedDoc() {
+      return pl_authSignedIn()
+        && 'createdBy' in resource.data
+        && resource.data.createdBy == request.auth.uid;
+    }
+
+    function pl_isOwnCreatedWrite() {
+      return pl_authSignedIn()
+        && 'createdBy' in request.resource.data
+        && request.resource.data.createdBy == request.auth.uid;
+    }
+
+    function pl_isOwnNotification() {
+      return pl_authSignedIn()
+        && 'recipientUserId' in resource.data
+        && resource.data.recipientUserId == request.auth.uid;
+    }
+
+    function pl_isSpecialHrWorkflowCollection(coll) {
+      return coll in [
+        'leave_requests', 'leave_balances', 'employee_loans', 'employee_deductions',
+        'approval_requests', 'approval_delegations', 'approval_audit_logs', 'hr_notifications'
+      ];
     }
 
     function pl_isPresenceOwner(userId) {
@@ -695,14 +743,130 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
-    match /{coll}/{docId} {
-      allow read: if pl_isErpBusinessCollection(coll)
+    match /leave_balances/{docId} {
+      allow read: if pl_isActiveUser()
+        && pl_hasSupervisorRequestPermission()
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
-      allow create: if pl_isErpBusinessCollection(coll)
+      allow create: if pl_hasSupervisorRequestPermission()
         && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
-      allow update: if pl_isErpBusinessCollection(coll)
+      allow update: if (pl_hasErpPermission('leave.manage') || pl_hasErpPermission('approval.manage'))
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
-      allow delete: if pl_isErpBusinessCollection(coll)
+      allow delete: if false;
+    }
+
+    match /leave_requests/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasSupervisorRequestPermission() || pl_isOwnCreatedDoc())
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_hasSupervisorRequestPermission()
+        && pl_isOwnCreatedWrite()
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if (pl_hasApprovalWritePermission() || pl_hasErpPermission('leave.manage') || pl_isOwnCreatedDoc())
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isOwnCreatedDoc()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
+        && (!('finalStatus' in resource.data) || resource.data.finalStatus == 'pending');
+    }
+
+    match /employee_loans/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasSupervisorRequestPermission() || pl_isOwnCreatedDoc())
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_hasSupervisorRequestPermission()
+        && pl_isOwnCreatedWrite()
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if (pl_hasApprovalWritePermission() || pl_hasErpPermission('loan.manage') || pl_hasErpPermission('loan.disburse') || pl_isOwnCreatedDoc())
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isOwnCreatedDoc()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
+        && (!('finalStatus' in resource.data) || resource.data.finalStatus == 'pending');
+    }
+
+    match /employee_deductions/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasSupervisorRequestPermission() || pl_hasErpPermission('payroll.view'))
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if (pl_hasApprovalWritePermission() || pl_hasErpPermission('payroll.generate') || pl_hasErpPermission('hrSettings.edit'))
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if (pl_hasErpPermission('payroll.generate') || pl_hasErpPermission('hrSettings.edit'))
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if (pl_hasErpPermission('payroll.generate') || pl_hasErpPermission('hrSettings.edit'))
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+    }
+
+    match /approval_requests/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasApprovalReadPermission() || pl_isOwnCreatedDoc())
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_hasSupervisorRequestPermission()
+        && pl_isOwnCreatedWrite()
+        && request.resource.data.keys().hasAll([
+          'tenantId', 'requestType', 'employeeId', 'requestData', 'approvalChain',
+          'currentStep', 'status', 'history', 'createdBy'
+        ])
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_hasApprovalWritePermission()
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if false;
+    }
+
+    match /approval_delegations/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasSupervisorRequestPermission() || pl_hasApprovalReadPermission())
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if pl_hasErpPermission('approval.delegate')
+        && pl_isOwnCreatedWrite()
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_hasErpPermission('approval.delegate')
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if false;
+    }
+
+    match /approval_audit_logs/{docId} {
+      allow read: if pl_hasApprovalReadPermission()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if (pl_hasSupervisorRequestPermission() || pl_hasApprovalWritePermission())
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update, delete: if false;
+    }
+
+    match /hr_notifications/{docId} {
+      allow read: if pl_isOwnNotification()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if (pl_hasSupervisorRequestPermission() || pl_hasApprovalWritePermission())
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isOwnNotification()
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk())
+        && request.resource.data.recipientUserId == resource.data.recipientUserId;
+      allow delete: if false;
+    }
+
+    match /system_settings/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if (
+          pl_isSuperAdmin()
+          || (pl_isActiveUser()
+            && (pl_hasErpPermission('settings.edit') || pl_hasErpPermission('roles.manage'))
+            && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk()))
+        );
+      allow update: if (
+          pl_isSuperAdmin()
+          || (pl_isActiveUser()
+            && (pl_hasErpPermission('settings.edit') || pl_hasErpPermission('roles.manage'))
+            && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()))
+        );
+      allow delete: if false;
+    }
+
+    match /{coll}/{docId} {
+      allow read: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
+        && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if !pl_isSpecialHrWorkflowCollection(coll) && pl_isErpBusinessCollection(coll)
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }
 

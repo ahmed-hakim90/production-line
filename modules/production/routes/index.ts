@@ -17,6 +17,7 @@ const ProductionAttendance = lazyNamed(() => import('../pages/ProductionAttendan
 const Reports = lazyNamed(() => import('../pages/Reports'), 'Reports');
 const ComponentWasteReports = lazyNamed(() => import('../pages/ComponentWasteReports'), 'ComponentWasteReports');
 const QuickAction = lazyNamed(() => import('../pages/QuickAction'), 'QuickAction');
+const SupervisorTeamActions = lazyNamed(() => import('../pages/SupervisorTeamActions'), 'SupervisorTeamActions');
 
 const RoutingPlansPage = lazyNamed(() => import('../routing/pages/RoutingPlansPage'), 'RoutingPlansPage');
 const PlanBuilderPage = lazyNamed(() => import('../routing/pages/PlanBuilderPage'), 'PlanBuilderPage');
@@ -41,7 +42,8 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/supervisors/:id/evaluation', permissionsAny: ['supervisors.view', 'production.workers.manage', 'hr.evaluation.create'], component: SupervisorWorkerEvaluation },
   { path: '/supervisors/:id', permission: 'supervisors.view', component: SupervisorDetails },
   { path: '/my-workers/evaluation', permissionsAny: ['employeeDashboard.view', 'quickAction.view', 'hr.evaluation.create'], component: SupervisorWorkerEvaluation, skeleton: 'dashboard' },
-  { path: '/production/my-team-actions', redirectTo: '/team-requests' },
+  { path: '/production/requests', permissionsAny: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage'], component: SupervisorTeamActions, skeleton: 'dashboard' },
+  { path: '/production/my-team-actions', redirectTo: '/production/requests' },
   { path: '/my-workers', permissionsAny: ['employeeDashboard.view', 'quickAction.view'], component: SupervisorDetails, skeleton: 'dashboard' },
   { path: '/supervisor-line-assignments', redirectTo: '/supervisors?tab=assignments' },
   { path: '/production-workers', permissionsAny: ['productionWorkers.view', 'production.workers.view'], component: ProductionWorkers },

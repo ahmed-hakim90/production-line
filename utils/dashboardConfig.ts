@@ -227,6 +227,8 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   transferApprovalPermission: 'inventory.transfers.approve',
   transferDisplayUnit: 'piece',
   hrApproverUserIds: [],
+  productionRequestFirstApproverEmployeeId: '',
+  productionRequestFinalApproverEmployeeId: '',
   allowNegativeDecomposedStock: false,
   allowNegativeFinishedTransferStock: false,
   requireFinishedStockApprovalForReports: true,

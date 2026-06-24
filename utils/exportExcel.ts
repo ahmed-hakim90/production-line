@@ -17,96 +17,14 @@ import type {
   SupplyCycleWasteLine,
 } from '../types';
 import type { ProductCostBreakdown } from './productCostBreakdown';
-import { formatOperationDateTime, getReportWaste } from './calculations';
+import { formatOperationDateTime } from './calculations';
 import type { FirestoreAttendanceLog, FirestoreLeaveRequest, FirestoreEmployeeLoan } from '../modules/hr/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../modules/hr/types';
-import { summarizeWorkerPresenceDays } from '../modules/production/utils/workerPresence';
-
-interface ReportRow {
-  'كود التقرير': string;
-  التاريخ: string;
-  'خط الإنتاج': string;
-  المنتج: string;
-  الموظف: string;
-  'الكمية المنتجة': number;
-  الهالك: number;
-  'نسبة الهالك %': string;
-  'عدد العمال': number;
-  'عمالة الإنتاج'?: number;
-  'عمالة التعبئة'?: number;
-  'عمالة الجودة'?: number;
-  'عمالة الصيانة'?: number;
-  'عمالة خارجية'?: number;
-  'أيام حضور'?: number;
-  'أيام غياب'?: number;
-  'ساعات العمل': number;
-  'تكلفة الوحدة'?: number | string;
-  'أمر الشغل'?: string;
-  'كمية أمر الشغل'?: number | string;
-  'عمالة أمر الشغل'?: number | string;
-}
-
-interface LookupFns {
-  getLineName: (id: string) => string;
-  getProductName: (id: string) => string;
-  getEmployeeName: (id: string) => string;
-  getWorkOrder?: (id: string) => WorkOrder | undefined;
-}
-
-/**
- * Transform raw reports into Arabic-labeled rows.
- */
-const mapReportsToRows = (
-  reports: ProductionReport[],
-  lookups: LookupFns,
-  costMap?: Map<string, number>
-): ReportRow[] => {
-  const hasWO = lookups.getWorkOrder && reports.some((r) => r.workOrderId);
-  const hasCosts = costMap && costMap.size > 0;
-  return reports.map((r) => {
-    const wasteQuantity = getReportWaste(r);
-    const presence = summarizeWorkerPresenceDays((r.workerOutputs ?? []).map((row) => ({
-      workerId: row.workerId,
-      date: r.date,
-      isPresent: row.isPresent,
-    })));
-    const total = (r.quantityProduced || 0) + wasteQuantity;
-    const wasteRatio =
-      total > 0
-        ? ((wasteQuantity / total) * 100).toFixed(1)
-        : '0';
-    const row: ReportRow = {
-      'كود التقرير': r.reportCode || '—',
-      التاريخ: r.date,
-      'خط الإنتاج': lookups.getLineName(r.lineId),
-      المنتج: lookups.getProductName(r.productId),
-      الموظف: lookups.getEmployeeName(r.employeeId),
-      'الكمية المنتجة': r.quantityProduced || 0,
-      الهالك: wasteQuantity,
-      'نسبة الهالك %': `${wasteRatio}%`,
-      'عدد العمال': r.workersCount || 0,
-      'عمالة الإنتاج': r.workersProductionCount || 0,
-      'عمالة التعبئة': r.workersPackagingCount || 0,
-      'عمالة الجودة': r.workersQualityCount || 0,
-      'عمالة الصيانة': r.workersMaintenanceCount || 0,
-      'عمالة خارجية': r.workersExternalCount || 0,
-      'أيام حضور': presence.presentDays,
-      'أيام غياب': presence.absentDays,
-      'ساعات العمل': r.workHours || 0,
-    };
-    if (hasCosts) {
-      const cost = r.id ? costMap.get(r.id) : undefined;
-      row['تكلفة الوحدة'] = cost != null && cost > 0 ? Number(cost.toFixed(2)) : '—';
-    }
-    if (hasWO) {
-      const wo = r.workOrderId && lookups.getWorkOrder ? lookups.getWorkOrder(r.workOrderId) : undefined;
-      row['أمر الشغل'] = wo ? wo.workOrderNumber : '—';
-      row['كمية أمر الشغل'] = wo ? wo.quantity : '—';
-      row['عمالة أمر الشغل'] = wo ? wo.maxWorkers : '—';
-    }
-    return row;
-  });
-};
+import {
+  buildProductionReportExportRows,
+  type ProductionReportExportLookupFns as LookupFns,
+  type ProductionReportExportRow as ReportRow,
+} from '../modules/production/utils/productionReportExportRows';
 
 /**
  * Add a summary row at the bottom of the sheet.
@@ -236,7 +154,7 @@ export const exportSupervisorReports = (
   lookups: LookupFns,
   costMap?: Map<string, number>
 ) => {
-  const rows = appendSummary(mapReportsToRows(reports, lookups, costMap));
+  const rows = appendSummary(buildProductionReportExportRows(reports, lookups, costMap));
   const date = new Date().toISOString().slice(0, 10);
   downloadExcel(rows, `تقارير ${employeeName}`, `تقارير-${employeeName}-${date}`);
 };
@@ -250,7 +168,7 @@ export const exportProductReports = (
   lookups: LookupFns,
   costMap?: Map<string, number>
 ) => {
-  const rows = appendSummary(mapReportsToRows(reports, lookups, costMap));
+  const rows = appendSummary(buildProductionReportExportRows(reports, lookups, costMap));
   const date = new Date().toISOString().slice(0, 10);
   downloadExcel(rows, `تقارير ${productName}`, `تقارير-${productName}-${date}`);
 };
@@ -265,7 +183,7 @@ export const exportReportsByDateRange = (
   lookups: LookupFns,
   costMap?: Map<string, number>
 ) => {
-  const rows = appendSummary(mapReportsToRows(reports, lookups, costMap));
+  const rows = appendSummary(buildProductionReportExportRows(reports, lookups, costMap));
   const label = startDate === endDate ? startDate : `${startDate}_${endDate}`;
   downloadExcel(rows, 'تقارير الإنتاج', `تقارير-الإنتاج-${label}`);
 };

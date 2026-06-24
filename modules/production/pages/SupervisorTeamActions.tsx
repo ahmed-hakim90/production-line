@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import {
@@ -10,6 +10,7 @@ import {
 } from '@/components/ui/dialog';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
+import { exportGenericRows } from '@/utils/exportExcel';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { employeeService } from '@/modules/hr/employeeService';
 import { leaveBalanceService, leaveRequestService, syncLeaveApprovalDecision } from '@/modules/hr/leaveService';
@@ -19,6 +20,7 @@ import {
   createRequest,
   getPendingApprovals,
   getRequestById,
+  getRequestsCreatedBy,
   rejectRequest,
   type ApprovalChainSnapshot,
   type ApprovalEmployeeInfo,
@@ -49,6 +51,7 @@ import type { ApprovalChainItem, ApprovalStatus, FirestoreLeaveBalance, Firestor
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '@/modules/hr/types';
 import { departmentsRef, jobPositionsRef } from '@/modules/hr/collections';
 import { getDocs } from 'firebase/firestore';
+import { resolveEmployeeHierarchyId, resolveEmployeeManagerId } from '@/modules/hr/utils/organizationHierarchy';
 import { lineService } from '../services/lineService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
 import { productionWorkerService } from '../services/productionWorkerService';
@@ -60,6 +63,14 @@ import {
   type TeamWorkerScope,
   type SupervisorTeamWorker,
 } from '../utils/productionEmployeeContext';
+import {
+  buildSupervisorApprovalExportRows,
+  canSupervisorActOnApprovalRequest,
+  getProductionApprovalStatusDisplay,
+  getSupervisorApprovalLeaveTypeLabel,
+  isApprovalRequestCreatedBySupervisor,
+  mergeSupervisorVisibleApprovalRequests,
+} from '../utils/supervisorApprovalVisibility';
 
 type PageTab = 'create' | 'approvals';
 type ActionTab = 'leave' | 'loan' | 'penalty';
@@ -78,15 +89,6 @@ const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; co
   leave: { label: 'إجازة', icon: 'beach_access', color: 'text-blue-500', bg: 'bg-blue-100' },
   loan: { label: 'سلفة', icon: 'payments', color: 'text-amber-500', bg: 'bg-amber-100' },
   penalty: { label: 'جزاء', icon: 'gavel', color: 'text-rose-500', bg: 'bg-rose-100' },
-};
-
-const STATUS_CONFIG: Record<ApprovalRequestStatus, { label: string; variant: 'warning' | 'success' | 'danger' | 'info' | 'neutral' }> = {
-  pending: { label: 'قيد الانتظار', variant: 'warning' },
-  in_progress: { label: 'قيد المعالجة', variant: 'info' },
-  approved: { label: 'مُعتمد', variant: 'success' },
-  rejected: { label: 'مرفوض', variant: 'danger' },
-  cancelled: { label: 'مُلغى', variant: 'neutral' },
-  escalated: { label: 'مُصعّد', variant: 'danger' },
 };
 
 function getToday(): string {
@@ -160,12 +162,19 @@ function mapSnapshotChainToLegacy(chain: ApprovalChainSnapshot[]): ApprovalChain
   }));
 }
 
-function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
+function toApprovalEmployeeInfo(
+  e: FirestoreEmployee,
+  departmentManagersById: Map<string, string> = new Map(),
+  managerIdsByEmployeeId: Map<string, string> = new Map(),
+): ApprovalEmployeeInfo {
   const level = Math.min(4, Math.max(1, Number(e.level || 1))) as 1 | 2 | 3 | 4;
+  const departmentManagerId = departmentManagersById.get(e.departmentId || '');
+  const managerId = managerIdsByEmployeeId.get(e.id || '') || String(e.managerId || '').trim();
   return {
     employeeId: e.id!,
     employeeName: e.name,
-    managerId: e.managerId,
+    managerId,
+    departmentManagerId,
     departmentId: e.departmentId || 'unknown_department',
     departmentName: e.departmentId || 'unknown_department',
     jobPositionId: e.jobPositionId || 'unknown_position',
@@ -177,15 +186,25 @@ function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
 function buildApprovalEmployeesForWorker(
   employees: FirestoreEmployee[],
   selectedWorker: SupervisorTeamWorker,
+  departments: FirestoreDepartment[] = [],
 ): ApprovalEmployeeInfo[] {
-  return employees
-    .filter((employee): employee is FirestoreEmployee => Boolean(employee.id))
+  const employeeRows = employees.filter((employee): employee is FirestoreEmployee & { id: string } => Boolean(employee.id));
+  const departmentManagersById = new Map(
+    departments
+      .filter((department) => department.id && department.isActive !== false)
+      .map((department) => [department.id!, resolveEmployeeHierarchyId(employeeRows, department.managerId)]),
+  );
+  const managerIdsByEmployeeId = new Map(
+    employeeRows.map((employee) => [employee.id, resolveEmployeeManagerId(employeeRows, employee)]),
+  );
+  const selectedWorkerSupervisorId = resolveEmployeeHierarchyId(employeeRows, selectedWorker.supervisorId);
+  return employeeRows
     .map((employee) => {
-      const info = toApprovalEmployeeInfo(employee);
+      const info = toApprovalEmployeeInfo(employee, departmentManagersById, managerIdsByEmployeeId);
       if (info.employeeId === selectedWorker.employeeId) {
         return {
           ...info,
-          managerId: selectedWorker.supervisorId,
+          managerId: selectedWorkerSupervisorId,
         };
       }
       return info;
@@ -202,6 +221,7 @@ export const SupervisorTeamActions: React.FC = () => {
   const [resolvedSupervisor, setResolvedSupervisor] = useState<FirestoreEmployee | null>(currentEmployee);
   const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>([]);
   const [teamWorkers, setTeamWorkers] = useState<SupervisorTeamWorker[]>([]);
+  const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
   const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
   const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
   const [leaveReasons, setLeaveReasons] = useState<LeaveReasonDefinition[]>([]);
@@ -216,11 +236,14 @@ export const SupervisorTeamActions: React.FC = () => {
   const [recentLeaves, setRecentLeaves] = useState<FirestoreLeaveRequest[]>([]);
   const [recentLoans, setRecentLoans] = useState<FirestoreEmployeeLoan[]>([]);
   const [teamScope, setTeamScope] = useState<TeamWorkerScope>('assigned_lines');
-  const [pendingApprovals, setPendingApprovals] = useState<FirestoreApprovalRequest[]>([]);
+  const [managedDepartmentCount, setManagedDepartmentCount] = useState(0);
+  const [approvalRequests, setApprovalRequests] = useState<FirestoreApprovalRequest[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
   const [approvalActionLoading, setApprovalActionLoading] = useState<string | null>(null);
   const [approvalActionNotes, setApprovalActionNotes] = useState<Record<string, string>>({});
   const [expandedApprovalIds, setExpandedApprovalIds] = useState<Set<string>>(new Set());
+  const [exportingApprovalsPdf, setExportingApprovalsPdf] = useState(false);
+  const approvalsPdfRef = useRef<HTMLDivElement>(null);
 
   const [leaveType, setLeaveType] = useState<LeaveType>('annual');
   const [leaveStartDate, setLeaveStartDate] = useState('');
@@ -294,29 +317,67 @@ export const SupervisorTeamActions: React.FC = () => {
     })),
     [teamWorkers],
   );
+  const teamScopeLabel = useMemo(() => {
+    if (teamScope === 'hr_all') return 'النطاق: كل الموظفين';
+    if (teamScope === 'production_all') return 'النطاق: كل عمال الإنتاج';
+    if (teamScope === 'department_manager' || teamScope === 'department_manager_assigned_lines') {
+      const departmentLabel = managedDepartmentCount === 1
+        ? 'القسم الذي تديره'
+        : `الأقسام التي تديرها (${managedDepartmentCount})`;
+      return teamScope === 'department_manager_assigned_lines'
+        ? `النطاق: خطوطك و${departmentLabel}`
+        : `النطاق: ${departmentLabel}`;
+    }
+    return 'النطاق: خطوطك الحالية';
+  }, [managedDepartmentCount, teamScope]);
 
   const approvalCaller: CallerContext = useMemo(() => ({
     employeeId: supervisorId,
-    employeeName: resolvedSupervisor?.name || userDisplayName || 'مسؤول الفريق',
+    employeeName: resolvedSupervisor?.name || userDisplayName || 'مسؤول الإنتاج',
     permissions,
   }), [permissions, resolvedSupervisor?.name, supervisorId, userDisplayName]);
 
+  const actionableApprovalCount = useMemo(
+    () => approvalRequests.filter((req) => canSupervisorActOnApprovalRequest(req, supervisorId)).length,
+    [approvalRequests, supervisorId],
+  );
+  const approvalExportRows = useMemo(
+    () => buildSupervisorApprovalExportRows(approvalRequests),
+    [approvalRequests],
+  );
+  const approvalExportHeaders = useMemo(
+    () => Object.keys(approvalExportRows[0] || {}),
+    [approvalExportRows],
+  );
+
   const fetchPendingApprovalRequests = useCallback(async (opts?: { silent?: boolean }) => {
     if (!supervisorId) {
-      setPendingApprovals([]);
+      setApprovalRequests([]);
       return;
     }
     if (!opts?.silent) setApprovalsLoading(true);
     try {
-      const data = await getPendingApprovals({ approverEmployeeId: supervisorId });
-      setPendingApprovals(data);
+      const canReadApprovalInbox = permissions['approval.view'] === true || permissions['approval.manage'] === true;
+      const [pending, allRequests] = await Promise.all([
+        canReadApprovalInbox ? getPendingApprovals({ approverEmployeeId: supervisorId }) : Promise.resolve([]),
+        uid ? getRequestsCreatedBy(uid).catch((allRequestsErr) => {
+          console.warn('Failed to load supervisor-created approval requests:', allRequestsErr);
+          return [];
+        }) : Promise.resolve([]),
+      ]);
+      setApprovalRequests(mergeSupervisorVisibleApprovalRequests({
+        pendingApprovals: pending,
+        allRequests,
+        supervisorEmployeeId: supervisorId,
+        supervisorUserId: uid || undefined,
+      }));
     } catch (err) {
       console.error('Failed to load team approval inbox:', err);
       setToast({ type: 'error', message: 'تعذر تحميل طلبات الاعتماد' });
     } finally {
       if (!opts?.silent) setApprovalsLoading(false);
     }
-  }, [supervisorId]);
+  }, [permissions, supervisorId, uid]);
 
   const fetchTeam = useCallback(async () => {
     setLoading(true);
@@ -326,6 +387,8 @@ export const SupervisorTeamActions: React.FC = () => {
       if (!supervisor?.id) {
         setTeamWorkers([]);
         setAllEmployees([]);
+        setDepartments([]);
+        setManagedDepartmentCount(0);
         return;
       }
 
@@ -354,10 +417,16 @@ export const SupervisorTeamActions: React.FC = () => {
 
       const departmentsList = departmentSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreDepartment));
       const jobPositionsList = jobPositionSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreJobPosition));
-      const managesDepartment = departmentsList.some((department) => department.isActive !== false && department.managerId === supervisor.id);
+      const managedDepartments = departmentsList.filter((department) => (
+        department.isActive !== false
+        && resolveEmployeeHierarchyId(employees, department.managerId) === supervisor.id
+      ));
+      const managesDepartment = managedDepartments.length > 0;
       const currentDepartment = departmentsList.find((department) => department.id === supervisor.departmentId) || null;
       const currentJobPosition = jobPositionsList.find((position) => position.id === supervisor.jobPositionId) || null;
-      const hasAssignedLines = supervisorAssignments.some((assignment) => assignment.supervisorId === supervisor.id);
+      const hasAssignedLines = supervisorAssignments.some((assignment) =>
+        resolveEmployeeHierarchyId(employees, assignment.supervisorId) === supervisor.id,
+      );
       const scope = resolveTeamRequestScope({
         can,
         managesDepartment,
@@ -379,8 +448,10 @@ export const SupervisorTeamActions: React.FC = () => {
       });
 
       setAllEmployees(employees);
+      setDepartments(departmentsList);
       setTeamWorkers(rows);
       setTeamScope(scope);
+      setManagedDepartmentCount(managedDepartments.length);
       setLeaveTypes(configuredLeaveTypes);
       setLeaveReasons(configuredLeaveReasons);
       setLeaveType((prev) => configuredLeaveTypes.some((row) => row.key === prev) ? prev : (configuredLeaveTypes[0]?.key || 'annual'));
@@ -388,7 +459,7 @@ export const SupervisorTeamActions: React.FC = () => {
       setSelectedEmployeeId((prev) => rows.some((row) => row.employeeId === prev) ? prev : (rows[0]?.employeeId || ''));
     } catch (err) {
       console.error('Failed to load supervisor team actions data:', err);
-      setToast({ type: 'error', message: 'تعذر تحميل عمال الفريق' });
+      setToast({ type: 'error', message: 'تعذر تحميل عمال الإنتاج' });
     } finally {
       setLoading(false);
     }
@@ -398,7 +469,7 @@ export const SupervisorTeamActions: React.FC = () => {
 
   useEffect(() => {
     if (!supervisorId) {
-      setPendingApprovals([]);
+      setApprovalRequests([]);
       return;
     }
     void fetchPendingApprovalRequests();
@@ -424,7 +495,7 @@ export const SupervisorTeamActions: React.FC = () => {
         setRecentLeaves(leaves.slice(0, 5));
         setRecentLoans(loans.slice(0, 5));
       } catch (err) {
-        console.warn('Failed to load worker HR context:', err);
+        console.warn('Failed to load worker request context:', err);
       }
     };
     void fetchWorkerContext();
@@ -459,6 +530,22 @@ export const SupervisorTeamActions: React.FC = () => {
       );
     }
   }, []);
+
+  const addCreatedApprovalToStatusList = useCallback(async (requestId?: string) => {
+    if (!requestId || !supervisorId) return;
+    try {
+      const createdRequest = await getRequestById(requestId);
+      if (!createdRequest) return;
+      setApprovalRequests((prev) => mergeSupervisorVisibleApprovalRequests({
+        pendingApprovals: prev.filter((request) => canSupervisorActOnApprovalRequest(request, supervisorId)),
+        allRequests: [createdRequest, ...prev],
+        supervisorEmployeeId: supervisorId,
+        supervisorUserId: uid || undefined,
+      }));
+    } catch (err) {
+      console.warn('Failed to add created approval request to status list:', err);
+    }
+  }, [supervisorId, uid]);
 
   const handleApprovalAction = useCallback(async (
     req: FirestoreApprovalRequest,
@@ -507,19 +594,46 @@ export const SupervisorTeamActions: React.FC = () => {
     });
   }, []);
 
+  const handleExportApprovals = useCallback(() => {
+    if (approvalRequests.length === 0) return;
+    const date = new Date().toISOString().slice(0, 10);
+    exportGenericRows(
+      approvalExportRows,
+      `production-approval-requests-${date}`,
+      'طلبات الإنتاج',
+    );
+  }, [approvalExportRows, approvalRequests.length]);
+
+  const handleExportApprovalsPdf = useCallback(async () => {
+    if (approvalExportRows.length === 0 || !approvalsPdfRef.current) return;
+    setExportingApprovalsPdf(true);
+    try {
+      const date = new Date().toISOString().slice(0, 10);
+      const { exportToPDF, waitForExportPaint } = await import('@/utils/reportExport');
+      await waitForExportPaint(150);
+      await exportToPDF(approvalsPdfRef.current, `production-approval-requests-${date}`, {
+        paperSize: 'a4',
+        orientation: 'landscape',
+        copies: 1,
+      });
+    } finally {
+      setExportingApprovalsPdf(false);
+    }
+  }, [approvalExportRows.length]);
+
   const getApprovalContext = useCallback(() => {
     if (!selectedWorker || !supervisorId || !isEmployeeInSupervisorTeam(teamWorkers, selectedWorker.employeeId)) {
-      throw new Error('العامل غير متاح ضمن فريقك الحالي');
+      throw new Error('العامل غير متاح ضمن نطاق الإنتاج الحالي');
     }
     return {
-      approvalEmployees: buildApprovalEmployeesForWorker(allEmployees, selectedWorker),
+      approvalEmployees: buildApprovalEmployeesForWorker(allEmployees, selectedWorker, departments),
       caller: {
         employeeId: supervisorId,
-        employeeName: resolvedSupervisor?.name || userDisplayName || 'مسؤول الفريق',
+        employeeName: resolvedSupervisor?.name || userDisplayName || 'مسؤول الإنتاج',
         permissions,
       },
     };
-  }, [allEmployees, permissions, resolvedSupervisor?.name, selectedWorker, supervisorId, teamWorkers, userDisplayName]);
+  }, [allEmployees, departments, permissions, resolvedSupervisor?.name, selectedWorker, supervisorId, teamWorkers, userDisplayName]);
 
   const handleLeaveSubmit = useCallback(async (): Promise<boolean> => {
     if (!selectedWorker || !leaveStartDate || !leaveEndDate || leaveDays <= 0 || !selectedLeaveReason) return false;
@@ -580,8 +694,10 @@ export const SupervisorTeamActions: React.FC = () => {
       setLeaveStartDate('');
       setLeaveEndDate('');
       setLeaveReasonCode(leaveReasons[0]?.code || '');
+      await addCreatedApprovalToStatusList(approvalResult.requestId);
       setToast({ type: 'success', message: 'تم إرسال طلب الإجازة للموافقات' });
       setRecentLeaves(await leaveRequestService.getByEmployee(selectedWorker.employeeId));
+      await fetchPendingApprovalRequests({ silent: true });
       return true;
     } catch (err) {
       setToast({ type: 'error', message: err instanceof Error ? err.message : 'فشل إرسال طلب الإجازة' });
@@ -589,7 +705,7 @@ export const SupervisorTeamActions: React.FC = () => {
     } finally {
       setSubmitting(null);
     }
-  }, [getApprovalContext, leaveDays, leaveEndDate, leaveReasons, leaveStartDate, leaveType, resolvedSupervisor?.name, selectedLeaveReason, selectedLeaveType, selectedWorker, supervisorId, uid, userDisplayName]);
+  }, [addCreatedApprovalToStatusList, fetchPendingApprovalRequests, getApprovalContext, leaveDays, leaveEndDate, leaveReasons, leaveStartDate, leaveType, resolvedSupervisor?.name, selectedLeaveReason, selectedLeaveType, selectedWorker, supervisorId, uid, userDisplayName]);
 
   const handleLoanSubmit = useCallback(async (): Promise<boolean> => {
     const amount = Number(loanAmount || 0);
@@ -651,8 +767,10 @@ export const SupervisorTeamActions: React.FC = () => {
       setLoanAmount('');
       setLoanInstallments('1');
       setLoanReason('');
+      await addCreatedApprovalToStatusList(approvalResult.requestId);
       setToast({ type: 'success', message: 'تم إرسال طلب السلفة للموافقات' });
       setRecentLoans(await loanService.getByEmployee(selectedWorker.employeeId));
+      await fetchPendingApprovalRequests({ silent: true });
       return true;
     } catch (err) {
       setToast({ type: 'error', message: err instanceof Error ? err.message : 'فشل إرسال طلب السلفة' });
@@ -660,7 +778,7 @@ export const SupervisorTeamActions: React.FC = () => {
     } finally {
       setSubmitting(null);
     }
-  }, [getApprovalContext, loanAmount, loanInstallmentAmount, loanInstallments, loanReason, loanType, resolvedSupervisor?.name, selectedWorker, supervisorId, uid, userDisplayName]);
+  }, [addCreatedApprovalToStatusList, fetchPendingApprovalRequests, getApprovalContext, loanAmount, loanInstallmentAmount, loanInstallments, loanReason, loanType, resolvedSupervisor?.name, selectedWorker, supervisorId, uid, userDisplayName]);
 
   const handlePenaltySubmit = useCallback(async (): Promise<boolean> => {
     const durationDays = normalizePenaltyDurationDays(penaltyDurationDays);
@@ -703,7 +821,9 @@ export const SupervisorTeamActions: React.FC = () => {
       }
       setPenaltyDurationDays('0.25');
       setPenaltyReason('');
+      await addCreatedApprovalToStatusList(approvalResult.requestId);
       setToast({ type: 'success', message: 'تم إرسال طلب الجزاء للموافقات' });
+      await fetchPendingApprovalRequests({ silent: true });
       return true;
     } catch (err) {
       setToast({ type: 'error', message: err instanceof Error ? err.message : 'فشل إرسال طلب الجزاء' });
@@ -711,7 +831,7 @@ export const SupervisorTeamActions: React.FC = () => {
     } finally {
       setSubmitting(null);
     }
-  }, [getApprovalContext, penaltyDurationDays, penaltyMonth, penaltyName, penaltyReason, resolvedSupervisor?.name, selectedWorker, supervisorId, uid, userDisplayName]);
+  }, [addCreatedApprovalToStatusList, fetchPendingApprovalRequests, getApprovalContext, penaltyDurationDays, penaltyMonth, penaltyName, penaltyReason, resolvedSupervisor?.name, selectedWorker, supervisorId, uid, userDisplayName]);
 
   const handleCreateRequestSubmit = useCallback(async () => {
     const success = activeTab === 'leave'
@@ -727,14 +847,14 @@ export const SupervisorTeamActions: React.FC = () => {
   }
 
   if (!canUsePage) {
-    return <Card><p className="text-sm font-bold text-rose-600">غير مصرح بعرض طلبات الفريق.</p></Card>;
+    return <Card><p className="text-sm font-bold text-rose-600">غير مصرح بعرض طلبات الإنتاج.</p></Card>;
   }
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="طلبات الفريق"
-        subtitle="متابعة طلبات واعتمادات الفريق مع إنشاء الطلبات من نافذة مستقلة"
+        title="طلبات الإنتاج"
+        subtitle="إنشاء ومتابعة طلبات عمال الإنتاج مع تصدير الحالة كملف Excel أو PDF"
         icon="assignment"
         primaryAction={{
           label: 'طلب جديد',
@@ -757,22 +877,16 @@ export const SupervisorTeamActions: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">مسؤول الفريق</p>
+          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">مسؤول الإنتاج</p>
           <p className="text-lg font-black text-[var(--color-text)]">{resolvedSupervisor?.name || userDisplayName || '—'}</p>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            {teamScope === 'hr_all'
-              ? 'النطاق: كل الموظفين'
-              : teamScope === 'production_all'
-                ? 'النطاق: كل عمال الإنتاج'
-                : teamScope === 'department_manager'
-                  ? 'النطاق: موظفو القسم'
-                  : 'النطاق: خطوطك الحالية'} — المتاحين: {teamWorkers.length}
+            {teamScopeLabel} — المتاحين: {teamWorkers.length}
           </p>
         </Card>
         <Card>
           <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">طلبات الاعتماد</p>
-          <p className="text-lg font-black text-[var(--color-text)]">{pendingApprovals.length}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">طلبات بانتظار قرارك حالياً</p>
+          <p className="text-lg font-black text-[var(--color-text)]">{actionableApprovalCount}</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">{approvalRequests.length} طلب ظاهر لك مع الحالة الحالية</p>
         </Card>
         <Card>
           <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">إنشاء الطلبات</p>
@@ -783,8 +897,8 @@ export const SupervisorTeamActions: React.FC = () => {
 
       <div className="flex flex-wrap gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
         {[
-          { key: 'create' as const, label: 'إنشاء طلب للفريق', icon: 'edit_note' },
-          { key: 'approvals' as const, label: `اعتمادات بانتظاري${pendingApprovals.length ? ` (${pendingApprovals.length})` : ''}`, icon: 'approval' },
+          { key: 'create' as const, label: 'إنشاء طلب إنتاج', icon: 'edit_note' },
+          { key: 'approvals' as const, label: `حالات الطلبات${approvalRequests.length ? ` (${approvalRequests.length})` : ''}`, icon: 'approval' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -803,27 +917,50 @@ export const SupervisorTeamActions: React.FC = () => {
       </div>
 
       {activePageTab === 'approvals' ? (
-        <Card title="طلبات اعتماد بانتظارك">
+        <Card>
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <h3 className="text-base font-black text-[var(--color-text)]">طلبات الإنتاج وحالاتها</h3>
+              <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">تابع المرحلة الحالية أو صدّر الطلبات الظاهرة كملف Excel أو PDF.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={handleExportApprovals} disabled={approvalRequests.length === 0}>
+                <span className="material-icons-round text-sm">download</span>
+                تصدير Excel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => { void handleExportApprovalsPdf(); }}
+                disabled={approvalRequests.length === 0 || exportingApprovalsPdf}
+              >
+                <span className="material-icons-round text-sm">{exportingApprovalsPdf ? 'hourglass_empty' : 'picture_as_pdf'}</span>
+                {exportingApprovalsPdf ? 'جاري التصدير...' : 'تصدير PDF'}
+              </Button>
+            </div>
+          </div>
           {approvalsLoading ? (
             <div className="text-sm font-bold text-[var(--color-text-muted)] py-8 text-center">جاري تحميل طلبات الاعتماد...</div>
-          ) : pendingApprovals.length === 0 ? (
+          ) : approvalRequests.length === 0 ? (
             <div className="text-center py-10">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">task_alt</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد طلبات اعتماد بانتظارك حالياً.</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">ستظهر هنا طلبات الإجازة والسلفة والجزاء عندما تكون أنت خطوة الاعتماد الحالية.</p>
+              <p className="text-sm font-bold text-slate-500">لا توجد طلبات إنتاج ظاهرة حالياً.</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">ستظهر هنا طلبات عمال الإنتاج التي أنشأتها، وكذلك الطلبات التي تنتظر قرارك.</p>
             </div>
           ) : (
             <div className="space-y-4">
-              {pendingApprovals.map((req) => {
+              {approvalRequests.map((req) => {
                 const typeCfg = TYPE_CONFIG[req.requestType];
-                const statusCfg = STATUS_CONFIG[req.status];
+                const statusCfg = getProductionApprovalStatusDisplay(req);
                 const requestId = req.id || '';
                 const isProcessing = approvalActionLoading === requestId;
                 const requesterName = req.requestData?.requestedByName || req.createdBy || '—';
                 const isExpanded = requestId ? expandedApprovalIds.has(requestId) : false;
+                const canAct = canSupervisorActOnApprovalRequest(req, supervisorId);
+                const isCreatedBySupervisor = isApprovalRequestCreatedBySupervisor(req, supervisorId, uid || undefined);
+                const approvalLeaveTypeLabel = getSupervisorApprovalLeaveTypeLabel(req);
 
                 return (
-                  <div key={requestId} className="border border-primary/20 rounded-[var(--border-radius-lg)] bg-[var(--color-card)] overflow-hidden">
+                  <div key={requestId} className={`border rounded-[var(--border-radius-lg)] bg-[var(--color-card)] overflow-hidden ${canAct ? 'border-primary/20' : 'border-[var(--color-border)]'}`}>
                     <div className="p-4">
                       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                         <div className="flex items-start gap-3 min-w-0">
@@ -834,6 +971,7 @@ export const SupervisorTeamActions: React.FC = () => {
                             <div className="flex flex-wrap items-center gap-2">
                               <Badge variant="info">{typeCfg.label}</Badge>
                               <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                              {isCreatedBySupervisor && !canAct && <Badge variant="neutral">للمتابعة</Badge>}
                               {req.approvalChain[req.currentStep]?.delegatedToName && <Badge variant="info">مفوّض</Badge>}
                             </div>
                             <h4 className="text-base font-black text-[var(--color-text)] mt-2">{formatRequestSummary(req)}</h4>
@@ -865,6 +1003,12 @@ export const SupervisorTeamActions: React.FC = () => {
                             <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">الخط</p>
                             <p className="font-bold text-[var(--color-text)]">{req.requestData?.productionLineName || '—'}</p>
                           </div>
+                          {req.requestType === 'leave' && (
+                            <div>
+                              <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع الإجازة</p>
+                              <p className="font-bold text-[var(--color-text)]">{approvalLeaveTypeLabel || '—'}</p>
+                            </div>
+                          )}
                           <div>
                             <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">الخطوة الحالية</p>
                             <p className="font-bold text-[var(--color-text)]">{req.approvalChain[req.currentStep]?.approverName || '—'}</p>
@@ -876,32 +1020,34 @@ export const SupervisorTeamActions: React.FC = () => {
                         </div>
                       )}
 
-                      <div className="mt-4 pt-4 border-t border-[var(--color-border)] flex flex-col lg:flex-row gap-3">
-                        <input
-                          type="text"
-                          className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-2.5 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-                          placeholder="ملاحظات الاعتماد (اختياري)..."
-                          value={approvalActionNotes[requestId] || ''}
-                          onChange={(e) => setApprovalActionNotes((prev) => ({ ...prev, [requestId]: e.target.value }))}
-                        />
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
-                            onClick={() => handleApprovalAction(req, 'rejected')}
-                            disabled={isProcessing}
-                            className="!border-rose-200 !text-rose-600 hover:!bg-rose-50"
-                          >
-                            {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                            <span className="material-icons-round text-sm">close</span>
-                            رفض
-                          </Button>
-                          <Button variant="secondary" onClick={() => handleApprovalAction(req, 'approved')} disabled={isProcessing}>
-                            {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                            <span className="material-icons-round text-sm">check</span>
-                            اعتماد
-                          </Button>
+                      {canAct && (
+                        <div className="mt-4 pt-4 border-t border-[var(--color-border)] flex flex-col lg:flex-row gap-3">
+                          <input
+                            type="text"
+                            className="flex-1 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-2.5 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
+                            placeholder="ملاحظات الاعتماد (اختياري)..."
+                            value={approvalActionNotes[requestId] || ''}
+                            onChange={(e) => setApprovalActionNotes((prev) => ({ ...prev, [requestId]: e.target.value }))}
+                          />
+                          <div className="flex gap-2">
+                            <Button
+                              variant="outline"
+                              onClick={() => handleApprovalAction(req, 'rejected')}
+                              disabled={isProcessing}
+                              className="!border-rose-200 !text-rose-600 hover:!bg-rose-50"
+                            >
+                              {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                              <span className="material-icons-round text-sm">close</span>
+                              رفض
+                            </Button>
+                            <Button variant="secondary" onClick={() => handleApprovalAction(req, 'approved')} disabled={isProcessing}>
+                              {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                              <span className="material-icons-round text-sm">check</span>
+                              اعتماد
+                            </Button>
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   </div>
                 );
@@ -913,9 +1059,9 @@ export const SupervisorTeamActions: React.FC = () => {
         <Card>
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
-              <h3 className="text-lg font-black text-[var(--color-text)]">إنشاء طلب جديد للفريق</h3>
+              <h3 className="text-lg font-black text-[var(--color-text)]">إنشاء طلب إنتاج جديد</h3>
               <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                اختر العامل ونوع الطلب داخل نافذة واحدة، ثم أرسل الطلب لمسار الاعتماد الحالي.
+                اختر العامل ونوع الطلب داخل نافذة واحدة، ثم أرسله لمسار اعتماد الإدارة الحالي.
               </p>
             </div>
             <Button onClick={() => setCreateModalOpen(true)} disabled={workerOptions.length === 0}>
@@ -925,7 +1071,7 @@ export const SupervisorTeamActions: React.FC = () => {
           </div>
           {workerOptions.length === 0 && (
             <div className="mt-4 text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
-              لا يوجد أفراد فريق متاحين لك حالياً. تأكد من تعيين الفريق وربط العاملين بالخطوط المناسبة.
+              لا يوجد عمال إنتاج متاحون لك حالياً. تأكد من ربط العاملين بخطوط الإنتاج المناسبة.
             </div>
           )}
         </Card>
@@ -948,7 +1094,7 @@ export const SupervisorTeamActions: React.FC = () => {
               <Card title="١. اختيار العامل">
                 {workerOptions.length === 0 ? (
                   <div className="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
-                    لا يوجد أفراد فريق متاحين لك حالياً. تأكد من تعيين الفريق وربط العاملين بالخطوط المناسبة.
+                    لا يوجد عمال إنتاج متاحون لك حالياً. تأكد من ربط العاملين بخطوط الإنتاج المناسبة.
                   </div>
                 ) : (
                   <div className="space-y-2">
@@ -1072,7 +1218,7 @@ export const SupervisorTeamActions: React.FC = () => {
                             />
                           ) : (
                             <div className="border border-amber-200 bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-bold text-amber-700">
-                              لا توجد أسباب إجازات معرفة. يرجى إضافتها من إعدادات الموارد البشرية ثم العودة لإنشاء الطلب.
+                              لا توجد أسباب إجازات معرفة. يرجى إضافتها من إعدادات الإجازات ثم العودة لإنشاء الطلب.
                             </div>
                           )}
                         </div>
@@ -1277,6 +1423,69 @@ export const SupervisorTeamActions: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+      {approvalExportRows.length > 0 && (
+        <div
+          ref={approvalsPdfRef}
+          className="arabic-export-root"
+          dir="rtl"
+          style={{
+            position: 'absolute',
+            left: '-10000px',
+            top: 0,
+            width: '1120px',
+            background: '#ffffff',
+            color: '#0f172a',
+            padding: '24px',
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={{ fontFamily: 'Cairo, Tahoma, sans-serif' }}>
+            <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 900 }}>طلبات الإنتاج</h2>
+            <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: '13px', fontWeight: 700 }}>
+              تقرير إنتاجي للطلبات الظاهرة وحالة اعتماد الإدارة
+            </p>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
+              <thead>
+                <tr>
+                  {approvalExportHeaders.map((header) => (
+                    <th
+                      key={header}
+                      style={{
+                        border: '1px solid #e2e8f0',
+                        background: '#f8fafc',
+                        padding: '8px',
+                        textAlign: 'right',
+                        fontWeight: 900,
+                      }}
+                    >
+                      {header}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {approvalExportRows.map((row, index) => (
+                  <tr key={String(row['رقم الطلب'] || index)}>
+                    {approvalExportHeaders.map((header) => (
+                      <td
+                        key={header}
+                        style={{
+                          border: '1px solid #e2e8f0',
+                          padding: '7px',
+                          verticalAlign: 'top',
+                          fontWeight: 700,
+                        }}
+                      >
+                        {String(row[header] ?? '—') || '—'}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

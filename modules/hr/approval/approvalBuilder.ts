@@ -26,6 +26,18 @@ interface ManagerCandidate {
   distanceFromRequester: number;
 }
 
+function getNextManagerId(employee: ApprovalEmployeeInfo): string {
+  const directManagerId = String(employee.managerId || '').trim();
+  if (directManagerId) return directManagerId;
+
+  const departmentManagerId = String(employee.departmentManagerId || '').trim();
+  if (departmentManagerId && departmentManagerId !== employee.employeeId) {
+    return departmentManagerId;
+  }
+
+  return '';
+}
+
 /**
  * Walk the managerId chain upward, collecting manager candidates.
  * Guards against cycles via a visited set.
@@ -34,27 +46,57 @@ function collectManagerChain(
   employee: ApprovalEmployeeInfo,
   allEmployees: ApprovalEmployeeInfo[],
   maxLevels: number,
+  requestCreatorEmployeeId?: string,
 ): ManagerCandidate[] {
   const candidates: ManagerCandidate[] = [];
   const visited = new Set<string>();
   let current = employee;
   let distance = 0;
+  let nextManagerId = getNextManagerId(current);
 
-  while (current.managerId && !visited.has(current.managerId) && candidates.length < maxLevels) {
-    visited.add(current.managerId);
-    const manager = allEmployees.find((e) => e.employeeId === current.managerId);
+  while (nextManagerId && !visited.has(nextManagerId) && candidates.length < maxLevels) {
+    visited.add(nextManagerId);
+    const manager = allEmployees.find((e) => e.employeeId === nextManagerId);
     if (!manager) break;
 
-    if (manager.jobLevel > employee.jobLevel) {
+    if (
+      manager.jobLevel > employee.jobLevel &&
+      manager.employeeId !== requestCreatorEmployeeId
+    ) {
       distance++;
       candidates.push({ employee: manager, distanceFromRequester: distance });
     }
 
     current = manager;
+    nextManagerId = getNextManagerId(current);
   }
 
-  candidates.sort((a, b) => a.employee.jobLevel - b.employee.jobLevel);
   return candidates;
+}
+
+function getMissingManagerChainError(
+  employee: ApprovalEmployeeInfo,
+  allEmployees: ApprovalEmployeeInfo[],
+  requestCreatorEmployeeId?: string,
+): string {
+  const firstManagerId = getNextManagerId(employee);
+  const firstManager = allEmployees.find((e) => e.employeeId === firstManagerId);
+
+  if (!firstManager) {
+    return `لم يتم العثور على مديرين في التسلسل الوظيفي — المدير المشار إليه (${firstManagerId}) غير موجود كسجل موظف`;
+  }
+
+  if (firstManager.employeeId === requestCreatorEmployeeId) {
+    const higherManagerId = getNextManagerId(firstManager);
+    if (!higherManagerId) {
+      return 'لم يتم العثور على مديرين في التسلسل الوظيفي — المشرف منشئ الطلب ولا يوجد مدير أعلى مضبوط له';
+    }
+    if (!allEmployees.some((e) => e.employeeId === higherManagerId)) {
+      return `لم يتم العثور على مديرين في التسلسل الوظيفي — مدير المشرف (${higherManagerId}) غير موجود كسجل موظف`;
+    }
+  }
+
+  return 'لم يتم العثور على مديرين في التسلسل الوظيفي — تأكد من حقل المدير ومستوى المدير في الهيكل التنظيمي';
 }
 
 /**
@@ -77,6 +119,45 @@ function toChainSnapshot(emp: ApprovalEmployeeInfo): ApprovalChainSnapshot {
 }
 
 /**
+ * Build an approval chain from explicitly configured approver employee IDs.
+ * Used for production request routing when admins choose the target approvers in settings.
+ */
+export function buildConfiguredApprovalChain(
+  options: BuildChainOptions,
+  approverEmployeeIds: string[],
+): BuildChainResult {
+  const { allEmployees, settings } = options;
+  const errors: string[] = [];
+  const uniqueApproverIds = Array.from(new Set(
+    approverEmployeeIds
+      .map((id) => String(id || '').trim())
+      .filter(Boolean),
+  ));
+
+  if (uniqueApproverIds.length === 0) return { chain: [], errors: [] };
+
+  if (uniqueApproverIds.length > settings.maxApprovalLevels) {
+    return {
+      chain: [],
+      errors: [`سلسلة الموافقات تتجاوز الحد الأقصى (${settings.maxApprovalLevels} مستويات)`],
+    };
+  }
+
+  const chain = uniqueApproverIds.flatMap((employeeId) => {
+    const approver = allEmployees.find((employee) => employee.employeeId === employeeId);
+    if (!approver) {
+      errors.push(`لم يتم العثور على الموافق المحدد (${employeeId}) كسجل موظف`);
+      return [];
+    }
+    return [toChainSnapshot(approver)];
+  });
+
+  if (errors.length > 0) return { chain: [], errors };
+
+  return { chain, errors };
+}
+
+/**
  * Build the full approval chain for a request.
  *
  * This is the primary entry point for chain construction. The resulting
@@ -84,13 +165,13 @@ function toChainSnapshot(emp: ApprovalEmployeeInfo): ApprovalChainSnapshot {
  * never modified based on org changes.
  */
 export function buildApprovalChain(options: BuildChainOptions): BuildChainResult {
-  const { employee, allEmployees, settings, hrEmployeeId } = options;
+  const { employee, allEmployees, settings, hrEmployeeId, requestCreatorEmployeeId } = options;
   const errors: string[] = [];
 
-  if (!employee.managerId) {
+  if (!getNextManagerId(employee)) {
     return {
       chain: [],
-      errors: ['الموظف ليس لديه مدير مباشر — لا يمكن إنشاء سلسلة موافقات'],
+      errors: ['الموظف ليس لديه مدير مباشر — حدّد المدير في الهيكل التنظيمي أولاً'],
     };
   }
 
@@ -101,10 +182,11 @@ export function buildApprovalChain(options: BuildChainOptions): BuildChainResult
     employee,
     allEmployees,
     managerLevelLimit,
+    requestCreatorEmployeeId,
   );
 
   if (managers.length === 0) {
-    errors.push('لم يتم العثور على مديرين في التسلسل الوظيفي');
+    errors.push(getMissingManagerChainError(employee, allEmployees, requestCreatorEmployeeId));
     return { chain: [], errors };
   }
 
@@ -115,7 +197,7 @@ export function buildApprovalChain(options: BuildChainOptions): BuildChainResult
   if (settings.hrAlwaysFinalLevel && !hrEmployeeId) {
     return {
       chain: [],
-      errors: ['لم يتم تعيين موظف HR بصلاحية الموافقات (approval.manage) ومربوط بحساب مستخدم'],
+      errors: ['لم يتم تحديد مسؤول الموارد البشرية النهائي في سلسلة الموافقات'],
     };
   }
 

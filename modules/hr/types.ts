@@ -418,6 +418,7 @@ export interface FirestoreEmployeeDeduction {
 
 export interface HRNotification {
   id?: string;
+  tenantId?: string;
   recipientEmployeeId: string;
   recipientUserId: string;
   type: 'new_approval_request' | 'request_approved' | 'request_rejected' | 'payroll_ready';

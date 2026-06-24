@@ -7,6 +7,7 @@ import type { FirestorePayrollRecord } from '../payroll/types';
 import { useAppStore } from '@/store/useAppStore';
 import { db } from '@/services/firebase';
 import { usePermission } from '@/utils/permissions';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 
 function fmt(value: number): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
@@ -26,7 +27,11 @@ export const PayrollAccounts: React.FC = () => {
     setLoading(true);
     setError('');
     try {
-      const distSnap = await getDocs(query(payrollDistributionsRef(), where('status', '==', 'distributed')));
+      const distSnap = await getDocs(query(
+        payrollDistributionsRef(),
+        where('tenantId', '==', getCurrentTenantId()),
+        where('status', '==', 'distributed'),
+      ));
       const months = distSnap.docs
         .map((d) => String((d.data() as any).month || ''))
         .filter(Boolean)

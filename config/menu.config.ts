@@ -82,14 +82,6 @@ export const MENU_CONFIG: MenuGroup[] = [
           'adminDashboard.view',
         ],
       },
-      {
-        key: 'team-requests',
-        label: 'طلبات الفريق',
-        icon: 'assignment',
-        path: '/team-requests',
-        permission: 'employeeDashboard.view',
-        anyOfPermissions: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage'],
-      },
     ],
   },
   {
@@ -111,6 +103,15 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'precision_manufacturing',
     children: [
       { key: 'quick', label: 'إدخال سريع', icon: 'bolt', path: '/quick-action', permission: 'quickAction.view' },
+      {
+        key: 'production-requests',
+        label: 'طلبات الإنتاج',
+        icon: 'assignment',
+        path: '/production/requests',
+        permission: 'employeeDashboard.view',
+        anyOfPermissions: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage'],
+        activePatterns: ['/production/requests', '/team-requests'],
+      },
       {
         key: 'my-workers-evaluation',
         label: 'تقييم العمالة',

@@ -254,6 +254,9 @@ export interface ProductionReport {
   workersQualityCount?: number;
   workersMaintenanceCount?: number;
   workersExternalCount?: number;
+  /** Attendance snapshot for labor details; workersCount only includes present workers. */
+  presentAssignments?: number;
+  absentAssignments?: number;
   workHours: number;
   supervisorHourlyRateApplied?: number;
   supervisorIndirectCost?: number;
@@ -1211,6 +1214,10 @@ export interface PlanSettings {
   transferApprovalPermission?: string;
   transferDisplayUnit?: 'piece' | 'carton';
   hrApproverUserIds?: string[];
+  /** First configured approver for production-created leave/loan/penalty requests. */
+  productionRequestFirstApproverEmployeeId?: string;
+  /** Optional final configured approver for production-created leave/loan/penalty requests. */
+  productionRequestFinalApproverEmployeeId?: string;
   allowNegativeDecomposedStock?: boolean;
   allowNegativeFinishedTransferStock?: boolean;
   requireFinishedStockApprovalForReports?: boolean;

@@ -1,7 +1,11 @@
 import assert from 'node:assert/strict';
 import { buildApprovalChain } from '../modules/hr/approval/approvalBuilder.ts';
-import { resolveHrApproverEmployeeIdFromOrg } from '../modules/hr/approval/hrApproverResolution.ts';
+import {
+  resolveHrApproverEmployeeIdFromOrg,
+  resolveHrApproverFromOrg,
+} from '../modules/hr/approval/hrApproverResolution.ts';
 import { validateAction, validateCreate } from '../modules/hr/approval/approvalValidation.ts';
+import { getApprovalStatusDisplay } from '../modules/hr/approval/approvalStatusDisplay.ts';
 import {
   normalizeApprovalSettings,
   type ApprovalEmployeeInfo,
@@ -108,6 +112,151 @@ assert.deepEqual(
   ['sup-1', 'hr-1'],
 );
 
+const supervisorCreatedChain = buildApprovalChain({
+  employee: employees[0],
+  allEmployees: employees,
+  requestType: 'leave',
+  settings: {
+    maxApprovalLevels: 2,
+    hrAlwaysFinalLevel: true,
+    escalationDays: 3,
+    allowDelegation: false,
+    autoApproveThresholds: [],
+  },
+  hrEmployeeId: 'hr-1',
+  requestCreatorEmployeeId: 'sup-1',
+});
+
+assert.deepEqual(
+  supervisorCreatedChain.chain.map((step) => step.approverEmployeeId),
+  ['manager-1', 'hr-1'],
+  'Supervisor-created requests should route to the higher manager before HR',
+);
+
+const employeesWithDepartmentManagerFallback = employees.map((employee) =>
+  employee.employeeId === 'sup-1'
+    ? { ...employee, managerId: undefined, departmentManagerId: 'manager-1' }
+    : employee,
+);
+
+const fallbackDepartmentManagerChain = buildApprovalChain({
+  employee: employeesWithDepartmentManagerFallback[0],
+  allEmployees: employeesWithDepartmentManagerFallback,
+  requestType: 'leave',
+  settings: {
+    maxApprovalLevels: 2,
+    hrAlwaysFinalLevel: true,
+    escalationDays: 3,
+    allowDelegation: false,
+    autoApproveThresholds: [],
+  },
+  hrEmployeeId: 'hr-1',
+  requestCreatorEmployeeId: 'sup-1',
+});
+
+assert.deepEqual(
+  fallbackDepartmentManagerChain.chain.map((step) => step.approverEmployeeId),
+  ['manager-1', 'hr-1'],
+  'Department manager should be used when the supervisor manager link is missing',
+);
+
+const chainWithInconsistentLevels = buildApprovalChain({
+  employee: employees[0],
+  allEmployees: employees.map((employee) => {
+    if (employee.employeeId === 'sup-1') return { ...employee, jobLevel: 4 };
+    if (employee.employeeId === 'manager-1') return { ...employee, jobLevel: 3 };
+    return employee;
+  }),
+  requestType: 'leave',
+  settings: {
+    maxApprovalLevels: 2,
+    hrAlwaysFinalLevel: false,
+    escalationDays: 3,
+    allowDelegation: false,
+    autoApproveThresholds: [],
+  },
+});
+
+assert.deepEqual(
+  chainWithInconsistentLevels.chain.map((step) => step.approverEmployeeId),
+  ['sup-1', 'manager-1'],
+  'Approval chain should follow the manager links instead of re-sorting by job level',
+);
+
+const supervisorCreatedRequestAtManager: FirestoreApprovalRequest = {
+  requestType: 'leave',
+  employeeId: 'worker-1',
+  employeeName: 'Worker',
+  departmentId: 'prod',
+  requestData: {},
+  approvalChain: supervisorCreatedChain.chain,
+  currentStep: 0,
+  status: 'pending',
+  history: [],
+  sourceRequestId: null,
+  createdBy: 'sup-1',
+};
+
+assert.equal(
+  validateAction(
+    { employeeId: 'sup-1', employeeName: 'Supervisor', permissions: { 'approval.view': true } },
+    supervisorCreatedRequestAtManager,
+  ).allowed,
+  false,
+  'Supervisor should not approve a request they created',
+);
+
+assert.equal(
+  validateAction(
+    { employeeId: 'manager-1', employeeName: 'Manager', permissions: { 'approval.view': true } },
+    supervisorCreatedRequestAtManager,
+  ).allowed,
+  true,
+  'Higher manager should approve the supervisor-created request first',
+);
+
+const afterHigherManagerApproval = supervisorCreatedRequestAtManager.approvalChain.map((step, index) => ({
+  ...step,
+  status: index === 0 ? 'approved' : step.status,
+}));
+const supervisorCreatedNextStep = supervisorCreatedRequestAtManager.currentStep + 1;
+
+assert.equal(supervisorCreatedNextStep, 1);
+assert.equal(afterHigherManagerApproval[supervisorCreatedNextStep].approverEmployeeId, 'hr-1');
+assert.equal(afterHigherManagerApproval[supervisorCreatedNextStep].status, 'pending');
+assert.equal(
+  afterHigherManagerApproval.every((step) => step.status === 'approved' || step.status === 'skipped'),
+  false,
+  'Supervisor-created request should not be final-approved before HR acts',
+);
+
+assert.equal(
+  getApprovalStatusDisplay(supervisorCreatedRequestAtManager).label,
+  'بانتظار موافقة المدير',
+  'Supervisor-created requests should display the current higher-manager approval status',
+);
+
+assert.equal(
+  getApprovalStatusDisplay({
+    ...supervisorCreatedRequestAtManager,
+    approvalChain: afterHigherManagerApproval,
+    currentStep: supervisorCreatedNextStep,
+    status: 'in_progress',
+  }).label,
+  'بانتظار موافقة الموارد البشرية',
+  'Requests should display HR as the current pending approval step after manager approval',
+);
+
+assert.equal(
+  getApprovalStatusDisplay({ ...supervisorCreatedRequestAtManager, status: 'approved' }).label,
+  'مُعتمد',
+);
+
+assert.equal(
+  getApprovalStatusDisplay({ ...supervisorCreatedRequestAtManager, status: 'rejected' }).label,
+  'مرفوض',
+);
+
 const rawEmployees: FirestoreEmployee[] = employees.map((employee) => ({
   id: employee.employeeId,
   name: employee.employeeName,
@@ -141,11 +290,60 @@ const structurallyResolvedHr = resolveHrApproverEmployeeIdFromOrg({
   rawEmployees,
   departments,
   jobPositions,
+  activeUserIds: ['hr-user-1'],
   configuredHrUserIds: [],
   hrUserIdsByPermission: [],
 });
 
 assert.equal(structurallyResolvedHr, 'hr-1');
+
+const structurallyResolvedHrFromUserIdManager = resolveHrApproverFromOrg({
+  allEmployees: employees,
+  rawEmployees,
+  departments: [
+    { id: 'prod', name: 'Production', code: 'PROD', managerId: 'manager-1', isActive: true },
+    { id: 'hr', name: 'الموارد البشرية', code: 'HR', managerId: 'hr-user-1', isActive: true },
+  ],
+  jobPositions,
+  activeUserIds: ['hr-user-1'],
+  configuredHrUserIds: [],
+  hrUserIdsByPermission: [],
+});
+
+assert.equal(structurallyResolvedHrFromUserIdManager.employeeId, 'hr-1');
+assert.equal(structurallyResolvedHrFromUserIdManager.source, 'structure');
+
+const structurallyResolvedHrWithoutActiveUserLookup = resolveHrApproverFromOrg({
+  allEmployees: employees,
+  rawEmployees,
+  departments,
+  jobPositions,
+  configuredHrUserIds: [],
+  hrUserIdsByPermission: [],
+});
+
+assert.equal(structurallyResolvedHrWithoutActiveUserLookup.employeeId, 'hr-1');
+assert.equal(structurallyResolvedHrWithoutActiveUserLookup.source, 'structure');
+
+const structurallyResolvedHrWithoutUser = resolveHrApproverFromOrg({
+  allEmployees: employees,
+  rawEmployees: rawEmployees.map((employee) =>
+    employee.id === 'hr-1'
+      ? { ...employee, userId: undefined, hasSystemAccess: false }
+      : employee,
+  ),
+  departments,
+  jobPositions,
+  activeUserIds: [],
+  configuredHrUserIds: [],
+  hrUserIdsByPermission: [],
+});
+
+assert.equal(structurallyResolvedHrWithoutUser.employeeId, undefined);
+assert.match(
+  structurallyResolvedHrWithoutUser.error || '',
+  /غير مربوط بحساب مستخدم نشط/,
+);
 
 const structuralChain = buildApprovalChain({
   employee: employees[0],

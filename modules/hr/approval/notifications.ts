@@ -13,19 +13,26 @@ import {
   writeBatch,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { hrNotificationsRef } from '../collections';
 import type { HRNotification } from '../types';
 
 export const hrNotificationService = {
   async create(n: Omit<HRNotification, 'id' | 'read' | 'createdAt'>): Promise<void> {
     if (!isConfigured) return;
-    await addDoc(hrNotificationsRef(), { ...n, read: false, createdAt: serverTimestamp() });
+    await addDoc(hrNotificationsRef(), {
+      ...n,
+      tenantId: getCurrentTenantId(),
+      read: false,
+      createdAt: serverTimestamp(),
+    });
   },
 
   subscribeUnread(userId: string, cb: (items: HRNotification[]) => void): () => void {
     if (!isConfigured || !userId) return () => {};
     const q = query(
       hrNotificationsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('recipientUserId', '==', userId),
       where('read', '==', false),
       orderBy('createdAt', 'desc'),
@@ -55,7 +62,12 @@ export const hrNotificationService = {
 
   async markAllRead(userId: string): Promise<void> {
     if (!isConfigured || !userId) return;
-    const q = query(hrNotificationsRef(), where('recipientUserId', '==', userId), where('read', '==', false));
+    const q = query(
+      hrNotificationsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
+      where('recipientUserId', '==', userId),
+      where('read', '==', false),
+    );
     const snap = await getDocs(q);
     if (snap.empty) return;
     const batch = writeBatch(db);

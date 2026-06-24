@@ -5,8 +5,10 @@ import {
   countLaborRolesFromAssignments,
   countOperatorsFromAssignments,
   shouldApplyWorkersCountAutoFill,
+  summarizeAssignmentPresence,
   sumWorkersCountPatch,
 } from '../modules/production/utils/lineAssignmentWorkersCount.ts';
+import { getVisibleWorkerOutputRows } from '../modules/production/utils/workerOutputRows.ts';
 import { filterProductionLaborWorkers } from '../modules/production/utils/lineWorkerLaborRoles.ts';
 import {
   inheritLineAssignmentsForDate,
@@ -16,10 +18,18 @@ import type { LineWorkerAssignment } from '../types';
 
 assert.equal(
   countOperatorsFromAssignments(
-    [{ employeeId: 'e1' }, { employeeId: 'e2' }, { employeeId: 'sup' }],
+    [{ employeeId: 'e1' }, { employeeId: 'e2' }, { employeeId: 'sup' }, { employeeId: 'absent', isPresent: false }],
     'sup',
   ),
   2,
+);
+
+assert.deepEqual(
+  summarizeAssignmentPresence(
+    [{ employeeId: 'e1' }, { employeeId: 'e2', isPresent: false }, { employeeId: 'sup', isPresent: false }],
+    'sup',
+  ),
+  { presentAssignments: 1, absentAssignments: 1 },
 );
 
 assert.deepEqual(
@@ -47,6 +57,7 @@ assert.deepEqual(
       { employeeId: 'e4', laborRole: 'quality' },
       { employeeId: 'e5', laborRole: 'quality' },
       { employeeId: 'e6', laborRole: 'maintenance' },
+      { employeeId: 'e7', laborRole: 'external', isPresent: false },
       { employeeId: 'sup', laborRole: 'production' },
     ],
     'sup',
@@ -88,6 +99,8 @@ assert.deepEqual(
     workersQualityCount: 1,
     workersMaintenanceCount: 1,
     workersExternalCount: 0,
+    presentAssignments: 3,
+    absentAssignments: 0,
   },
 );
 
@@ -96,16 +109,46 @@ assert.deepEqual(
     [
       { employeeId: 'e1', laborRole: 'production' },
       { employeeId: 'e2', laborRole: 'quality' },
+      { employeeId: 'e3', laborRole: 'maintenance', isPresent: false },
     ],
     { reportType: 'component_injection' },
   ),
-  { workersCount: 2 },
+  { workersCount: 2, presentAssignments: 2, absentAssignments: 1 },
 );
 
 assert.equal(sumWorkersCountPatch({ workersProductionCount: 10, workersQualityCount: 2 }), 12);
 assert.equal(shouldApplyWorkersCountAutoFill(0, null), true);
 assert.equal(shouldApplyWorkersCountAutoFill(15, 15), true);
 assert.equal(shouldApplyWorkersCountAutoFill(12, 15), false);
+
+assert.deepEqual(
+  getVisibleWorkerOutputRows([
+    {
+      workerId: 'w1',
+      workerName: 'Worker One',
+      productId: 'p1',
+      productName: 'Product',
+      lineId: 'l1',
+      lineName: 'Line',
+      dailyTargetQty: 10,
+      outputQty: 5,
+      achievementPercent: 50,
+    },
+    {
+      workerId: 'w2',
+      workerName: 'Worker Two',
+      productId: 'p1',
+      productName: 'Product',
+      lineId: 'l1',
+      lineName: 'Line',
+      dailyTargetQty: 10,
+      outputQty: 0,
+      achievementPercent: 0,
+      isPresent: false,
+    },
+  ]).map((row) => row.workerId),
+  ['w1'],
+);
 
 assert.deepEqual(
   filterProductionLaborWorkers([

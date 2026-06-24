@@ -17,6 +17,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import {
   employeeAllowancesRef,
   employeeDeductionsRef,
@@ -185,6 +186,7 @@ export const employeeDeductionService = {
 
     const ref = await addDoc(employeeDeductionsRef(), {
       ...data,
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

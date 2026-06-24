@@ -31,6 +31,8 @@ export function countPresentShiftWorkers(workers: ProductionShiftWorkerSnapshot[
   | 'workersQualityCount'
   | 'workersMaintenanceCount'
   | 'workersExternalCount'
+  | 'presentAssignments'
+  | 'absentAssignments'
 > {
   const counts = {
     workersCount: 0,
@@ -39,10 +41,16 @@ export function countPresentShiftWorkers(workers: ProductionShiftWorkerSnapshot[
     workersQualityCount: 0,
     workersMaintenanceCount: 0,
     workersExternalCount: 0,
+    presentAssignments: 0,
+    absentAssignments: 0,
   };
 
   workers.forEach((worker) => {
-    if (worker.isPresent === false) return;
+    if (worker.isPresent === false) {
+      counts.absentAssignments += 1;
+      return;
+    }
+    counts.presentAssignments += 1;
     counts.workersCount += 1;
     counts[PRESENT_ROLE_KEYS[resolveLineWorkerLaborRole(worker.laborRole)]] += 1;
   });

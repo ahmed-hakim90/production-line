@@ -17,6 +17,7 @@ import {
   buildWorkersCountAutoFillFromAssignments,
   countOperatorsFromAssignments,
   shouldApplyWorkersCountAutoFill,
+  summarizeAssignmentPresence,
   sumWorkersCountPatch,
 } from '../utils/lineAssignmentWorkersCount';
 import { lineAssignmentWorkerBridge } from '../services/lineAssignmentWorkerBridge';
@@ -611,6 +612,10 @@ export const QuickAction: React.FC = () => {
     + (Number(workersMaintenance) || 0)
     + (Number(workersExternal) || 0)
   ), [workersProduction, workersPackaging, workersQuality, workersMaintenance, workersExternal]);
+  const lineWorkerPresence = useMemo(
+    () => summarizeAssignmentPresence(lineWorkers, employeeId),
+    [lineWorkers, employeeId],
+  );
 
   useEffect(() => {
     if (!lineId) return;
@@ -1133,6 +1138,8 @@ export const QuickAction: React.FC = () => {
       workersQualityCount: reportType === 'finished_product' ? (Number(workersQuality) || 0) : 0,
       workersMaintenanceCount: reportType === 'finished_product' ? (Number(workersMaintenance) || 0) : 0,
       workersExternalCount: reportType === 'finished_product' ? (Number(workersExternal) || 0) : 0,
+      presentAssignments: lineWorkerPresence.presentAssignments,
+      absentAssignments: lineWorkerPresence.absentAssignments,
       workHours: Number(hours),
       notes: notes.trim(),
       componentScrapItems: reportType === 'packaging' ? [] : componentScrapItems,
@@ -1180,6 +1187,8 @@ export const QuickAction: React.FC = () => {
         workersQualityCount: data.workersQualityCount,
         workersMaintenanceCount: data.workersMaintenanceCount,
         workersExternalCount: data.workersExternalCount,
+        presentAssignments: data.presentAssignments,
+        absentAssignments: data.absentAssignments,
         workHours: data.workHours,
         notes: data.notes,
         packagingPrintLines,

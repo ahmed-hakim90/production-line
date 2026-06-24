@@ -77,6 +77,22 @@ function allocation(costCenterId: string, percentage = 100): CostAllocation {
 }
 
 {
+  const result = runEngine({
+    hourlyRate: 10,
+    reports: [report({
+      id: 'absent-workers',
+      quantityProduced: 100,
+      workersCount: 2,
+      presentAssignments: 2,
+      absentAssignments: 3,
+      workHours: 5,
+    })],
+  });
+  assert.equal(result.byProduct.p1.laborCost, 100);
+  assert.equal(result.byProduct.p1.costPerUnit, 1);
+}
+
+{
   const center = indirectCenter('cc-line');
   const result = runEngine({
     reports: [

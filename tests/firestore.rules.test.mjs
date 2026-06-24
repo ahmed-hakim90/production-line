@@ -35,6 +35,7 @@ const seed = async () => {
       'repair.jobs.delete': true,
       'repair.parts.view': true,
       'repair.parts.manage': true,
+      'payroll.accounts.disburse': true,
     },
   });
   await set('roles', 'tenantA-operator-role', {
@@ -42,6 +43,13 @@ const seed = async () => {
     permissions: {
       'repair.view': true,
       'repair.parts.view': true,
+    },
+  });
+  await set('roles', 'tenantA-settings-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'settings.view': true,
+      'settings.edit': true,
     },
   });
   await set('roles', 'tenantA-hr-settings-role', {
@@ -56,6 +64,30 @@ const seed = async () => {
     permissions: {
       'leave.view': true,
       'leave.manage': true,
+    },
+  });
+  await set('roles', 'tenantA-supervisor-request-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'employeeDashboard.view': true,
+      'quickAction.view': true,
+      'reports.create': true,
+      'leave.create': true,
+      'production.workerReports.view': true,
+    },
+  });
+  await set('roles', 'tenantA-approval-manager-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'approval.view': true,
+    },
+  });
+  await set('roles', 'tenantA-approval-hr-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'approval.view': true,
+      'approval.manage': true,
+      'approval.delegate': true,
     },
   });
   await set('roles', 'tenantB-admin-role', {
@@ -81,6 +113,12 @@ const seed = async () => {
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
   });
+  await set('users', 'userASettings', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-settings-role',
+  });
   await set('users', 'userAHrSettings', {
     tenantId: 'tenantA',
     isActive: true,
@@ -92,6 +130,24 @@ const seed = async () => {
     isActive: true,
     isSuperAdmin: false,
     roleId: 'tenantA-leave-manager-role',
+  });
+  await set('users', 'userASupervisor', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-supervisor-request-role',
+  });
+  await set('users', 'userAManager', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-approval-manager-role',
+  });
+  await set('users', 'userAHrApprover', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-approval-hr-role',
   });
   await set('users', 'userBAdmin', {
     tenantId: 'tenantB',
@@ -108,6 +164,29 @@ const seed = async () => {
   await set('products', 'tenantB_product', {
     tenantId: 'tenantB',
     name: 'B Product',
+  });
+  await set('system_settings', 'tenantA', {
+    tenantId: 'tenantA',
+    planSettings: {
+      productionRequestFirstApproverEmployeeId: '',
+      productionRequestFinalApproverEmployeeId: '',
+    },
+  });
+  await set('production_workers', 'workerA', {
+    tenantId: 'tenantA',
+    employeeId: 'emp-worker-a',
+    name: 'Worker A',
+    code: 'WA',
+    isActive: true,
+    workerType: 'production',
+  });
+  await set('production_line_worker_assignments', 'workerLineA', {
+    tenantId: 'tenantA',
+    workerId: 'workerA',
+    employeeId: 'emp-worker-a',
+    lineId: 'line-a',
+    isActive: true,
+    startDate: '2026-06-01',
   });
   await set('repair_jobs', 'job_branchA', {
     tenantId: 'tenantA',
@@ -179,6 +258,27 @@ await seed();
 
   await assertSucceeds(userAAdminDb.collection('products').doc('tenantA_product').get());
   await assertFails(userAAdminDb.collection('products').doc('tenantB_product').get());
+}
+
+// 1b) System settings writes are limited to settings admins.
+{
+  const settingsDb = testEnv.authenticatedContext('userASettings').firestore();
+  const operatorDb = testEnv.authenticatedContext('userAOperator').firestore();
+
+  await assertSucceeds(operatorDb.collection('system_settings').doc('tenantA').get());
+  await assertSucceeds(settingsDb.collection('system_settings').doc('tenantA').set({
+    tenantId: 'tenantA',
+    planSettings: {
+      productionRequestFirstApproverEmployeeId: 'emp-manager-a',
+      productionRequestFinalApproverEmployeeId: 'emp-hr-a',
+    },
+  }, { merge: true }));
+  await assertFails(operatorDb.collection('system_settings').doc('tenantA').set({
+    tenantId: 'tenantA',
+    planSettings: {
+      productionRequestFirstApproverEmployeeId: 'emp-operator-a',
+    },
+  }, { merge: true }));
 }
 
 // 2) Role restrictions: operator cannot access payroll.
@@ -321,6 +421,215 @@ await seed();
     performedBy: 'Leave Manager',
     timestamp: new Date().toISOString(),
     details: 'missing tenant',
+  }));
+}
+
+// 7) Supervisor-created approval workflow docs are tenant-scoped and role-gated.
+{
+  const supervisorDb = testEnv.authenticatedContext('userASupervisor').firestore();
+  const managerDb = testEnv.authenticatedContext('userAManager').firestore();
+  const hrDb = testEnv.authenticatedContext('userAHrApprover').firestore();
+  const adminDb = testEnv.authenticatedContext('userAAdmin').firestore();
+  const operatorDb = testEnv.authenticatedContext('userAOperator').firestore();
+  const tenantBDb = testEnv.authenticatedContext('userBAdmin').firestore();
+  const createdAt = new Date();
+  const approvalDoc = {
+    tenantId: 'tenantA',
+    requestType: 'leave',
+    employeeId: 'emp-worker-a',
+    employeeName: 'Worker A',
+    departmentId: 'dept-a',
+    requestData: {
+      startDate: '2026-06-24',
+      endDate: '2026-06-24',
+      requestedByEmployeeId: 'emp-supervisor-a',
+      requestedOnBehalf: true,
+      productionLineId: 'line-a',
+    },
+    approvalChain: [{
+      approverEmployeeId: 'emp-manager-a',
+      approverName: 'Manager A',
+      approverJobTitle: 'Manager',
+      level: 2,
+      departmentId: 'dept-a',
+      departmentName: 'Dept A',
+      status: 'pending',
+      actionDate: null,
+      notes: '',
+      delegatedTo: null,
+      delegatedToName: null,
+    }],
+    currentStep: 0,
+    status: 'pending',
+    history: [],
+    sourceRequestId: 'leave-a',
+    createdBy: 'userASupervisor',
+    createdAt,
+    updatedAt: createdAt,
+  };
+
+  await assertSucceeds(supervisorDb.collection('production_workers').where('tenantId', '==', 'tenantA').get());
+  await assertSucceeds(
+    supervisorDb.collection('production_line_worker_assignments').where('tenantId', '==', 'tenantA').get(),
+  );
+  await assertSucceeds(supervisorDb.collection('leave_balances').add({
+    tenantId: 'tenantA',
+    employeeId: 'emp-worker-a',
+    annualBalance: 21,
+    sickBalance: 14,
+    unpaidTaken: 0,
+    emergencyBalance: 3,
+    lastUpdated: createdAt,
+  }));
+  await assertSucceeds(supervisorDb.collection('leave_requests').doc('leave-a').set({
+    tenantId: 'tenantA',
+    employeeId: 'emp-worker-a',
+    employeeName: 'Worker A',
+    leaveType: 'annual',
+    startDate: '2026-06-24',
+    endDate: '2026-06-24',
+    totalDays: 1,
+    affectsSalary: false,
+    status: 'pending',
+    approvalChain: [],
+    finalStatus: 'pending',
+    reason: 'team request',
+    createdBy: 'userASupervisor',
+    createdAt,
+  }));
+  await assertSucceeds(
+    supervisorDb
+      .collection('approval_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('createdBy', '==', 'userASupervisor')
+      .get(),
+  );
+  await assertSucceeds(supervisorDb.collection('approval_requests').doc('approval-a').set(approvalDoc));
+  await assertSucceeds(supervisorDb.collection('approval_requests').doc('approval-a').get());
+  await assertFails(supervisorDb.collection('approval_requests').doc('approval-other').set({
+    ...approvalDoc,
+    createdBy: 'userAManager',
+  }));
+  await assertFails(supervisorDb.collection('approval_requests').doc('approval-foreign').set({
+    ...approvalDoc,
+    tenantId: 'tenantB',
+  }));
+
+  await assertSucceeds(
+    managerDb
+      .collection('approval_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('status', '==', 'pending')
+      .get(),
+  );
+  await assertSucceeds(managerDb.collection('approval_requests').doc('approval-a').update({
+    tenantId: 'tenantA',
+    status: 'in_progress',
+    currentStep: 1,
+    updatedAt: createdAt,
+  }));
+  await assertSucceeds(hrDb.collection('approval_requests').doc('approval-a').update({
+    tenantId: 'tenantA',
+    status: 'approved',
+    updatedAt: createdAt,
+  }));
+  await assertSucceeds(hrDb.collection('employee_deductions').add({
+    tenantId: 'tenantA',
+    employeeId: 'emp-worker-a',
+    deductionTypeId: 'disciplinary_penalty',
+    deductionTypeName: 'جزاء',
+    amount: 25,
+    isRecurring: false,
+    startMonth: '2026-06',
+    endMonth: null,
+    reason: 'penalty approved',
+    category: 'disciplinary',
+    status: 'active',
+    createdBy: 'emp-manager-a',
+    createdAt,
+    updatedAt: createdAt,
+  }));
+  await assertSucceeds(managerDb.collection('approval_audit_logs').add({
+    tenantId: 'tenantA',
+    requestId: 'approval-a',
+    requestType: 'leave',
+    employeeId: 'emp-worker-a',
+    action: 'approved',
+    performedBy: 'emp-manager-a',
+    performedByName: 'Manager A',
+    step: 0,
+    details: { notes: 'ok' },
+    timestamp: createdAt,
+  }));
+  await assertSucceeds(managerDb.collection('hr_notifications').doc('notification-a').set({
+    tenantId: 'tenantA',
+    recipientEmployeeId: 'emp-worker-a',
+    recipientUserId: 'userASupervisor',
+    type: 'new_approval_request',
+    title: 'طلب موافقة جديد',
+    body: 'يوجد طلب بانتظار الموافقة',
+    requestId: 'approval-a',
+    read: false,
+    actionUrl: '/hr/approvals',
+    createdAt,
+  }));
+  await assertSucceeds(supervisorDb.collection('hr_notifications').doc('notification-a').get());
+  await assertSucceeds(supervisorDb.collection('hr_notifications').doc('notification-a').update({
+    tenantId: 'tenantA',
+    recipientEmployeeId: 'emp-worker-a',
+    recipientUserId: 'userASupervisor',
+    type: 'new_approval_request',
+    title: 'طلب موافقة جديد',
+    body: 'يوجد طلب بانتظار الموافقة',
+    requestId: 'approval-a',
+    read: true,
+    actionUrl: '/hr/approvals',
+    createdAt,
+  }));
+
+  await assertFails(operatorDb.collection('approval_requests').doc('approval-denied').set(approvalDoc));
+  await assertFails(operatorDb.collection('approval_requests').doc('approval-a').get());
+  await assertFails(tenantBDb.collection('approval_requests').doc('approval-a').get());
+  await assertFails(operatorDb.collection('approval_audit_logs').add({
+    tenantId: 'tenantA',
+    requestId: 'approval-a',
+    requestType: 'leave',
+    employeeId: 'emp-worker-a',
+    action: 'created',
+    performedBy: 'emp-worker-a',
+    performedByName: 'Worker A',
+    step: null,
+    details: {},
+    timestamp: createdAt,
+  }));
+  await assertFails(managerDb.collection('hr_notifications').doc('notification-foreign').set({
+    tenantId: 'tenantB',
+    recipientEmployeeId: 'manager-a',
+    recipientUserId: 'userASupervisor',
+    type: 'new_approval_request',
+    title: 'طلب موافقة جديد',
+    body: 'يوجد طلب بانتظار الموافقة',
+    requestId: 'approval-a',
+    read: false,
+    actionUrl: '/hr/approvals',
+    createdAt,
+  }));
+  await assertSucceeds(adminDb.collection('payroll_distributions').add({
+    tenantId: 'tenantA',
+    month: '2026-06',
+    distributedAt: createdAt,
+    distributedBy: 'userAAdmin',
+    distributedByName: 'Admin',
+    employeeCount: 1,
+    status: 'distributed',
+  }));
+  await assertFails(adminDb.collection('payroll_distributions').add({
+    month: '2026-06',
+    distributedAt: createdAt,
+    distributedBy: 'userAAdmin',
+    distributedByName: 'Admin',
+    employeeCount: 1,
+    status: 'distributed',
   }));
 }
 

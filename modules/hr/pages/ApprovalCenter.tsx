@@ -15,6 +15,7 @@ import {
   resolveApprovalRole,
   canViewAllRequests,
   isRequestOverdue,
+  getApprovalStatusDisplay,
   type CallerContext,
 } from '../approval';
 import { formatPenaltyRequestSummary, getPenaltyDurationLabel } from '../approval/penaltyApproval';
@@ -27,21 +28,13 @@ import type {
 import { LEAVE_TYPE_LABELS, type ApprovalChainItem, type ApprovalStatus } from '../types';
 import { ApprovalEmployeeContext } from '../components/ApprovalEmployeeContext';
 import { HRNotificationBell } from '../components/HRNotificationBell';
+import { isApprovalRequestCreatedBySupervisor } from '@/modules/production/utils/supervisorApprovalVisibility';
 
 const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; color: string; bg: string }> = {
   overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/30' },
   leave: { label: 'إجازة', icon: 'beach_access', color: 'text-blue-500', bg: 'bg-blue-100' },
   loan: { label: 'سلفة', icon: 'payments', color: 'text-amber-500', bg: 'bg-amber-100' },
   penalty: { label: 'جزاء', icon: 'gavel', color: 'text-rose-500', bg: 'bg-rose-100' },
-};
-
-const STATUS_CONFIG: Record<ApprovalRequestStatus, { label: string; variant: 'warning' | 'success' | 'danger' | 'info' | 'neutral' }> = {
-  pending: { label: 'قيد الانتظار', variant: 'warning' },
-  in_progress: { label: 'قيد المعالجة', variant: 'info' },
-  approved: { label: 'مُعتمد', variant: 'success' },
-  rejected: { label: 'مرفوض', variant: 'danger' },
-  cancelled: { label: 'مُلغى', variant: 'neutral' },
-  escalated: { label: 'مُصعّد', variant: 'danger' },
 };
 
 function formatRequestSummary(req: FirestoreApprovalRequest): string {
@@ -201,7 +194,10 @@ export const ApprovalCenter: React.FC = () => {
           getPendingApprovals({ approverEmployeeId }),
           getAllRequests(),
         ]);
-        const ownRequests = own.filter((r) => r.employeeId === approverEmployeeId);
+        const ownRequests = own.filter((r) =>
+          r.employeeId === approverEmployeeId ||
+          isApprovalRequestCreatedBySupervisor(r, approverEmployeeId, uid || undefined),
+        );
         const merged = new Map<string, FirestoreApprovalRequest>();
         [...pending, ...ownRequests].forEach((r) => { if (r.id) merged.set(r.id, r); });
         data = Array.from(merged.values());
@@ -229,7 +225,7 @@ export const ApprovalCenter: React.FC = () => {
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [viewAll, approverEmployeeId]);
+  }, [viewAll, approverEmployeeId, uid]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -482,7 +478,7 @@ export const ApprovalCenter: React.FC = () => {
         <div className="space-y-4">
           {filtered.map((req) => {
             const typeCfg = TYPE_CONFIG[req.requestType];
-            const statusCfg = STATUS_CONFIG[req.status];
+            const statusCfg = getApprovalStatusDisplay(req);
             const canAct = canActOnStep(req);
             const isProcessing = actionLoading === req.id;
             const isOverdue = overdueMap[req.id!];

@@ -196,6 +196,8 @@ const emptyForm = {
   workersQualityCount: 0,
   workersMaintenanceCount: 0,
   workersExternalCount: 0,
+  presentAssignments: 0,
+  absentAssignments: 0,
   workHours: 0,
   notes: '',
   componentScrapItems: [] as ReportComponentScrapItem[],
@@ -1613,8 +1615,8 @@ export const Reports: React.FC = () => {
         workersQualityCount: report.workersQualityCount || 0,
         workersMaintenanceCount: report.workersMaintenanceCount || 0,
         workersExternalCount: report.workersExternalCount || 0,
-        presentAssignments: presence.presentDays,
-        absentAssignments: presence.absentDays,
+        presentAssignments: report.presentAssignments ?? presence.presentDays,
+        absentAssignments: report.absentAssignments ?? presence.absentDays,
         workHours: report.workHours || 0,
         notes: report.notes,
         costPerUnit: rid && canViewCosts ? reportCosts.get(rid) : undefined,
@@ -2005,6 +2007,8 @@ export const Reports: React.FC = () => {
       workersQualityCount: report.workersQualityCount || 0,
       workersMaintenanceCount: report.workersMaintenanceCount || 0,
       workersExternalCount: report.workersExternalCount || 0,
+      presentAssignments: report.presentAssignments || 0,
+      absentAssignments: report.absentAssignments || 0,
       workHours: report.workHours,
       notes: report.notes ?? '',
       componentScrapItems: Array.isArray(report.componentScrapItems) ? report.componentScrapItems : [],
@@ -2246,6 +2250,8 @@ export const Reports: React.FC = () => {
         ? { shift: form.shift }
         : { shift: undefined }),
       workersCount: effectiveFormWorkersCount,
+      presentAssignments: form.presentAssignments || effectiveFormWorkersCount,
+      absentAssignments: form.absentAssignments || 0,
     } as Omit<ProductionReport, 'id' | 'createdAt'> & { supplyCycleId?: string };
     payload.workerOutputs = formWorkerOutputsEnabled
       ? reportWorkerOutputs.filter((row) => row.productId === payload.productId && row.lineId === payload.lineId)
@@ -3009,6 +3015,7 @@ export const Reports: React.FC = () => {
         render: (r) => (
           <span className="inline-block whitespace-nowrap text-[11px] font-bold text-[var(--color-text-muted)]">
             إ:{r.workersProductionCount ?? 0} | ت:{r.workersPackagingCount ?? 0} | ج:{r.workersQualityCount ?? 0} | ص:{r.workersMaintenanceCount ?? 0} | خ:{r.workersExternalCount ?? 0}
+            {' '}| غ:{r.absentAssignments ?? 0}
           </span>
         ),
       },
@@ -4057,6 +4064,7 @@ export const Reports: React.FC = () => {
                     {row.reportType !== 'packaging' && (
                       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-xs font-bold text-[var(--color-text-muted)]">
                         إ:{row.workersProductionCount ?? 0} | ت:{row.workersPackagingCount ?? 0} | ج:{row.workersQualityCount ?? 0} | ص:{row.workersMaintenanceCount ?? 0} | خ:{row.workersExternalCount ?? 0}
+                        {' '}| غ:{row.absentAssignments ?? 0}
                       </div>
                     )}
                     <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">

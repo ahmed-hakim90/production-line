@@ -80,7 +80,6 @@ const CompanyNotApprovedPage = lazyNamed(() => import('./modules/auth/pages/Comp
 const SuperAdminShell = lazyNamed(() => import('./modules/super-admin/SuperAdminShell'), 'SuperAdminShell');
 const TenantsApproval = lazyNamed(() => import('./modules/super-admin/pages/TenantsApproval'), 'TenantsApproval');
 const TenantInsightsPage = lazyNamed(() => import('./modules/super-admin/pages/TenantInsightsPage'), 'TenantInsightsPage');
-const TeamRequests = lazyNamed(() => import('./pages/TeamRequests'), 'TeamRequests');
 import { UiDensityBootstrap } from './core/ui-engine/density/UiDensityBootstrap';
 
 const POST_LOGIN_REDIRECT_KEY = 'post_login_redirect_path';
@@ -198,9 +197,7 @@ const HomeRedirect: React.FC = () => (
 const PROTECTED_ROUTES: AppRouteDef[] = [
   {
     path: '/team-requests',
-    permissionsAny: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage'],
-    component: TeamRequests,
-    skeleton: 'dashboard',
+    redirectTo: '/production/requests',
   },
   ...DASHBOARD_ROUTES,
   ...CATALOG_ROUTES,

@@ -16,6 +16,7 @@ import {
 import { printPayslip, printCombinedPayslips } from '../utils/payslipGenerator';
 import { addDoc, getDocs, query, where } from 'firebase/firestore';
 import { departmentsRef, payrollDistributionsRef } from '../collections';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import type { FirestoreEmployee } from '@/types';
 import type {
   FirestoreDepartment,
@@ -521,7 +522,11 @@ export const Payroll: React.FC = () => {
     setError('');
     setSuccess('');
     try {
-      const existingSnap = await getDocs(query(payrollDistributionsRef(), where('month', '==', month)));
+      const existingSnap = await getDocs(query(
+        payrollDistributionsRef(),
+        where('tenantId', '==', getCurrentTenantId()),
+        where('month', '==', month),
+      ));
       if (!existingSnap.empty) {
         setSuccess('تم توزيع هذا الشهر مسبقًا.');
         setActionLoading('');
@@ -550,6 +555,7 @@ export const Payroll: React.FC = () => {
       }, 0);
 
       await addDoc(payrollDistributionsRef(), {
+        tenantId: getCurrentTenantId(),
         month,
         distributedAt: new Date(),
         distributedBy: uid || '',

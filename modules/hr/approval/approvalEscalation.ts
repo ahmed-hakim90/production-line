@@ -20,6 +20,7 @@ import {
   Timestamp,
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import { approvalRequestsRef, approvalRequestDocRef } from './collections';
 import { getApprovalSettings } from './approvalEngine';
 import { approvalAuditService } from './approvalAudit';
@@ -58,6 +59,7 @@ export async function processEscalations(): Promise<EscalationResult> {
   for (const status of pendingStatuses) {
     const q = query(
       approvalRequestsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('status', '==', status),
       where('updatedAt', '<=', cutoffTimestamp),
       orderBy('updatedAt', 'asc'),
@@ -164,6 +166,7 @@ export async function getEscalatedRequests(): Promise<FirestoreApprovalRequest[]
 
   const q = query(
     approvalRequestsRef(),
+    where('tenantId', '==', getCurrentTenantId()),
     where('status', '==', 'escalated'),
     orderBy('escalatedAt', 'desc'),
   );

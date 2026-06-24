@@ -122,6 +122,7 @@ export function normalizeApprovalSettings(
 
 export interface FirestoreApprovalDelegation {
   id?: string;
+  tenantId?: string;
   fromEmployeeId: string;
   fromEmployeeName: string;
   toEmployeeId: string;
@@ -138,6 +139,7 @@ export interface FirestoreApprovalDelegation {
 
 export interface FirestoreApprovalAuditLog {
   id?: string;
+  tenantId?: string;
   requestId: string;
   requestType: ApprovalRequestType;
   employeeId: string;
@@ -155,6 +157,7 @@ export interface ApprovalEmployeeInfo {
   employeeId: string;
   employeeName: string;
   managerId?: string;
+  departmentManagerId?: string;
   departmentId: string;
   departmentName: string;
   jobPositionId: string;
@@ -168,6 +171,7 @@ export interface BuildChainOptions {
   requestType: ApprovalRequestType;
   settings: FirestoreApprovalSettings;
   hrEmployeeId?: string;
+  requestCreatorEmployeeId?: string;
 }
 
 export interface BuildChainResult {

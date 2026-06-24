@@ -6,6 +6,7 @@ import type {
   SupervisorLineAssignment,
 } from '@/types';
 import type { FirestoreDepartment, FirestoreJobPosition } from '@/modules/hr/types';
+import { resolveEmployeeHierarchyId } from '@/modules/hr/utils/organizationHierarchy';
 
 export type ProductionEmployeeContext = {
   workerId: string;
@@ -30,7 +31,12 @@ export type SupervisorTeamWorker = {
   worker: ProductionWorker;
 };
 
-export type TeamWorkerScope = 'assigned_lines' | 'department_manager' | 'production_all' | 'hr_all';
+export type TeamWorkerScope =
+  | 'assigned_lines'
+  | 'department_manager'
+  | 'department_manager_assigned_lines'
+  | 'production_all'
+  | 'hr_all';
 
 export type TeamRequestScopePermission =
   | 'leave.manage'
@@ -152,6 +158,7 @@ export const resolveTeamRequestScope = (input: {
   if (structurallyProductionManager) {
     return 'production_all';
   }
+  if (input.managesDepartment && structurallyLineSupervisor) return 'department_manager_assigned_lines';
   if (input.managesDepartment) return 'department_manager';
   if (structurallyLineSupervisor) return 'assigned_lines';
   return 'assigned_lines';
@@ -270,7 +277,8 @@ export const buildSupervisorTeamWorkers = (input: {
   date: string;
   scope?: TeamWorkerScope;
 }): SupervisorTeamWorker[] => {
-  const supervisorId = String(input.supervisorId || '').trim();
+  const resolveSupervisorId = (value?: string): string => resolveEmployeeHierarchyId(input.employees, value);
+  const supervisorId = resolveSupervisorId(input.supervisorId);
   if (!supervisorId) return [];
 
   const contextByEmployee = buildProductionEmployeeContext(input);
@@ -316,7 +324,7 @@ export const buildSupervisorTeamWorkers = (input: {
       workerCode: worker.code || employee.code || '',
       lineId,
       lineName: context?.lineName || line?.name || lineId || 'كل الأقسام',
-      supervisorId: context?.managerId || supervisorId,
+      supervisorId: resolveSupervisorId(context?.managerId) || supervisorId,
       supervisorName: context?.supervisorName,
       employee,
       worker,
@@ -353,13 +361,29 @@ export const buildSupervisorTeamWorkers = (input: {
       .sort(sortTeamWorkers);
   }
 
-  if (input.scope === 'department_manager') {
+  const buildAssignedLineTeamWorkers = (): SupervisorTeamWorker[] => Array.from(contextByEmployee.entries())
+    .filter(([, context]) => resolveSupervisorId(context.managerId) === supervisorId)
+    .map<SupervisorTeamWorker | null>(([employeeId, context]) => {
+      const employee = employeeById.get(employeeId);
+      const worker = workerById.get(context.workerId);
+      if (!employee || !worker) return null;
+      return toTeamWorker(employee, worker, context);
+    })
+    .filter((row): row is SupervisorTeamWorker => row !== null);
+
+  if (input.scope === 'department_manager' || input.scope === 'department_manager_assigned_lines') {
     const managedDepartmentIds = new Set(
       (input.departments || [])
-        .filter((department) => department.isActive !== false && department.managerId === supervisorId && department.id)
+        .filter((department) => department.isActive !== false && resolveSupervisorId(department.managerId) === supervisorId && department.id)
         .map((department) => department.id!),
     );
-    return input.employees
+    const rowsByEmployeeId = new Map<string, SupervisorTeamWorker>();
+    if (input.scope === 'department_manager_assigned_lines') {
+      for (const row of buildAssignedLineTeamWorkers()) {
+        rowsByEmployeeId.set(row.employeeId, row);
+      }
+    }
+    for (const row of input.employees
       .filter((employee): employee is FirestoreEmployee & { id: string } => (
         Boolean(employee.id)
         && employee.isActive !== false
@@ -376,20 +400,15 @@ export const buildSupervisorTeamWorkers = (input: {
           isActive: true,
         };
         return toTeamWorker(employee, worker, contextByEmployee.get(employee.id));
-      })
-      .sort(sortTeamWorkers);
+      })) {
+      if (!rowsByEmployeeId.has(row.employeeId)) {
+        rowsByEmployeeId.set(row.employeeId, row);
+      }
+    }
+    return Array.from(rowsByEmployeeId.values()).sort(sortTeamWorkers);
   }
 
-  return Array.from(contextByEmployee.entries())
-    .filter(([, context]) => context.managerId === supervisorId)
-    .map<SupervisorTeamWorker | null>(([employeeId, context]) => {
-      const employee = employeeById.get(employeeId);
-      const worker = workerById.get(context.workerId);
-      if (!employee || !worker) return null;
-      return toTeamWorker(employee, worker, context);
-    })
-    .filter((row): row is SupervisorTeamWorker => row !== null)
-    .sort(sortTeamWorkers);
+  return buildAssignedLineTeamWorkers().sort(sortTeamWorkers);
 };
 
 const sortTeamWorkers = (a: SupervisorTeamWorker, b: SupervisorTeamWorker): number => (

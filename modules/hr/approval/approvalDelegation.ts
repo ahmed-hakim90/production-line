@@ -16,6 +16,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 import {
   approvalDelegationsRef,
   approvalDelegationDocRef,
@@ -33,6 +34,7 @@ export const approvalDelegationService = {
 
     const ref = await addDoc(approvalDelegationsRef(), {
       ...data,
+      tenantId: getCurrentTenantId(),
       createdAt: serverTimestamp(),
     });
     return ref.id;
@@ -51,6 +53,7 @@ export const approvalDelegationService = {
     if (!isConfigured) return [];
     const q = query(
       approvalDelegationsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('fromEmployeeId', '==', fromEmployeeId),
       orderBy('createdAt', 'desc'),
     );
@@ -64,6 +67,7 @@ export const approvalDelegationService = {
     if (!isConfigured) return [];
     const q = query(
       approvalDelegationsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('toEmployeeId', '==', toEmployeeId),
       orderBy('createdAt', 'desc'),
     );
@@ -78,7 +82,11 @@ export const approvalDelegationService = {
 
   async getAll(): Promise<FirestoreApprovalDelegation[]> {
     if (!isConfigured) return [];
-    const q = query(approvalDelegationsRef(), orderBy('createdAt', 'desc'));
+    const q = query(
+      approvalDelegationsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
+      orderBy('createdAt', 'desc'),
+    );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreApprovalDelegation));
   },
@@ -96,6 +104,7 @@ export const approvalDelegationService = {
 
     const q = query(
       approvalDelegationsRef(),
+      where('tenantId', '==', getCurrentTenantId()),
       where('fromEmployeeId', '==', approverEmployeeId),
       where('isActive', '==', true),
     );
