@@ -4,7 +4,7 @@ import {
   resolveHrApproverEmployeeIdFromOrg,
   resolveHrApproverFromOrg,
 } from '../modules/hr/approval/hrApproverResolution.ts';
-import { validateAction, validateCreate } from '../modules/hr/approval/approvalValidation.ts';
+import { validateAction, validateCancel, validateCreate } from '../modules/hr/approval/approvalValidation.ts';
 import { getApprovalStatusDisplay } from '../modules/hr/approval/approvalStatusDisplay.ts';
 import {
   normalizeApprovalSettings,
@@ -215,6 +215,30 @@ assert.equal(
   'Higher manager should approve the supervisor-created request first',
 );
 
+assert.equal(
+  validateCancel(
+    { employeeId: 'sup-1', employeeName: 'Supervisor', permissions: { 'production.workerReports.view': true } },
+    {
+      ...supervisorCreatedRequestAtManager,
+      requestData: { requestedByEmployeeId: 'sup-1' },
+    },
+  ).allowed,
+  true,
+  'Supervisor creator should cancel before approval starts',
+);
+
+assert.equal(
+  validateCancel(
+    { employeeId: 'other-sup', employeeName: 'Other Supervisor', permissions: { 'production.workerReports.view': true } },
+    {
+      ...supervisorCreatedRequestAtManager,
+      requestData: { requestedByEmployeeId: 'sup-1' },
+    },
+  ).allowed,
+  false,
+  'Other supervisors should not cancel creator-owned requests',
+);
+
 const afterHigherManagerApproval = supervisorCreatedRequestAtManager.approvalChain.map((step, index) => ({
   ...step,
   status: index === 0 ? 'approved' : step.status,
@@ -228,6 +252,21 @@ assert.equal(
   afterHigherManagerApproval.every((step) => step.status === 'approved' || step.status === 'skipped'),
   false,
   'Supervisor-created request should not be final-approved before HR acts',
+);
+
+assert.equal(
+  validateCancel(
+    { employeeId: 'sup-1', employeeName: 'Supervisor', permissions: { 'production.workerReports.view': true } },
+    {
+      ...supervisorCreatedRequestAtManager,
+      requestData: { requestedByEmployeeId: 'sup-1' },
+      approvalChain: afterHigherManagerApproval,
+      currentStep: supervisorCreatedNextStep,
+      status: 'in_progress',
+    },
+  ).allowed,
+  false,
+  'Supervisor creator should not cancel after manager approval',
 );
 
 assert.equal(

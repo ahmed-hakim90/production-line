@@ -16,8 +16,12 @@ import {
 import { getApprovalStatusDisplay } from '../modules/hr/approval/approvalStatusDisplay.ts';
 import {
   buildSupervisorApprovalExportRows,
+  canSupervisorCancelApprovalRequest,
   canSupervisorActOnApprovalRequest,
+  filterProductionApprovalHistory,
+  getApprovalRequestParticipantEmployeeIds,
   getProductionApprovalStatusDisplay,
+  isApprovalRequestParticipant,
   isApprovalRequestCreatedBySupervisor,
   mergeSupervisorVisibleApprovalRequests,
 } from '../modules/production/utils/supervisorApprovalVisibility.ts';
@@ -841,6 +845,21 @@ assert.equal(isApprovalRequestCreatedBySupervisor(supervisorEmployeeLinkedApprov
 assert.equal(canSupervisorActOnApprovalRequest(actionableApproval, 'sup-1'), true);
 assert.equal(canSupervisorActOnApprovalRequest(supervisorCreatedApproval, 'sup-1'), false);
 assert.equal(
+  canSupervisorCancelApprovalRequest(supervisorEmployeeLinkedApproval, 'sup-1', 'supervisor-user'),
+  true,
+  'Supervisor creator should be able to cancel before any approval',
+);
+assert.equal(
+  canSupervisorCancelApprovalRequest(supervisorCreatedApproval, 'sup-1', 'supervisor-user'),
+  false,
+  'Supervisor creator should not be able to cancel after approval has started',
+);
+assert.equal(
+  canSupervisorCancelApprovalRequest(supervisorEmployeeLinkedApproval, 'other-supervisor', 'other-user'),
+  false,
+  'Other supervisors should not be able to cancel the request',
+);
+assert.equal(
   getApprovalStatusDisplay(actionableApproval).label,
   'بانتظار موافقة المشرف',
   'Actionable supervisor approvals should show the current approver status',
@@ -911,6 +930,184 @@ assert.equal(
 assert.equal(
   buildSupervisorApprovalExportRows([hrPendingApproval])[0]['الحالة'],
   'بانتظار موافقة الإدارة',
+);
+assert.equal(
+  buildSupervisorApprovalExportRows([{ ...supervisorEmployeeLinkedApproval, status: 'cancelled' } as any])[0]['الحالة'],
+  'مُلغى',
+  'Cancelled requests should export with the cancellation status',
+);
+
+const approvedHistoryApproval = {
+  ...supervisorCreatedApproval,
+  id: 'history-approved',
+  status: 'approved',
+  currentStep: 1,
+  approvalChain: [
+    { approverEmployeeId: 'manager-1', approverName: 'Manager One', delegatedTo: '', level: 3, status: 'approved' },
+    { approverEmployeeId: 'final-1', approverName: 'Final One', delegatedTo: '', level: 4, status: 'approved' },
+  ],
+} as any;
+const rejectedHistoryApproval = {
+  ...actionableApproval,
+  id: 'history-rejected',
+  status: 'rejected',
+  requestData: { requestedByEmployeeId: 'other-supervisor', requestedByName: 'Other Supervisor' },
+  approvalChain: [
+    { approverEmployeeId: 'manager-1', approverName: 'Manager One', delegatedTo: '', level: 3, status: 'rejected' },
+    { approverEmployeeId: 'final-1', approverName: 'Final One', delegatedTo: '', level: 4, status: 'pending' },
+  ],
+} as any;
+const secondStageRejectedHistoryApproval = {
+  ...actionableApproval,
+  id: 'history-second-stage-rejected',
+  status: 'rejected',
+  currentStep: 1,
+  requestData: { requestedByEmployeeId: 'other-supervisor', requestedByName: 'Other Supervisor' },
+  approvalChain: [
+    { approverEmployeeId: 'manager-1', approverName: 'Manager One', delegatedTo: '', level: 3, status: 'approved' },
+    { approverEmployeeId: 'final-1', approverName: 'Final One', delegatedTo: '', level: 4, status: 'rejected' },
+  ],
+  history: [
+    {
+      step: 0,
+      action: 'approved',
+      performedBy: 'manager-1',
+      performedByName: 'Manager One',
+      previousStatus: 'pending',
+      newStatus: 'in_progress',
+    },
+    {
+      step: 1,
+      action: 'rejected',
+      performedBy: 'final-1',
+      performedByName: 'Final One',
+      previousStatus: 'in_progress',
+      newStatus: 'rejected',
+    },
+  ],
+} as any;
+const firstConfiguredApproverRejectedWithEmployeeId = {
+  ...actionableApproval,
+  id: 'history-first-configured-approver-rejected',
+  status: 'rejected',
+  currentStep: 0,
+  requestData: {
+    requestedByEmployeeId: 'other-supervisor',
+    requestedByName: 'Other Supervisor',
+    productionLineName: 'Line A',
+  },
+  approvalChain: [
+    { approverEmployeeId: 'salah-employee', approverName: 'Salah', delegatedTo: '', level: 3, status: 'rejected' },
+    { approverEmployeeId: 'final-1', approverName: 'Final One', delegatedTo: '', level: 4, status: 'pending' },
+  ],
+  history: [
+    {
+      step: 0,
+      action: 'rejected',
+      performedBy: 'salah-employee',
+      performedByName: 'Salah',
+      previousStatus: 'pending',
+      newStatus: 'rejected',
+    },
+  ],
+  createdBy: 'other-user',
+} as any;
+const firstConfiguredApproverRejectedWithUserId = {
+  ...firstConfiguredApproverRejectedWithEmployeeId,
+  id: 'history-first-configured-approver-rejected-user-id',
+  approvalChain: [
+    { approverEmployeeId: 'salah-user', approverName: 'Salah', delegatedTo: '', level: 3, status: 'rejected' },
+    { approverEmployeeId: 'final-1', approverName: 'Final One', delegatedTo: '', level: 4, status: 'pending' },
+  ],
+  history: [
+    {
+      step: 0,
+      action: 'rejected',
+      performedBy: 'salah-user',
+      performedByName: 'Salah',
+      previousStatus: 'pending',
+      newStatus: 'rejected',
+    },
+  ],
+} as any;
+const cancelledHistoryApproval = {
+  ...supervisorEmployeeLinkedApproval,
+  id: 'history-cancelled',
+  status: 'cancelled',
+} as any;
+
+assert.deepEqual(
+  filterProductionApprovalHistory({
+    requests: [approvedHistoryApproval, rejectedHistoryApproval, cancelledHistoryApproval, actionableApproval],
+    status: 'approved',
+  }).map((request) => request.id),
+  ['history-approved'],
+  'History status filter should include approved rows only',
+);
+assert.deepEqual(
+  filterProductionApprovalHistory({
+    requests: [approvedHistoryApproval, rejectedHistoryApproval, cancelledHistoryApproval, actionableApproval],
+    status: 'rejected',
+  }).map((request) => request.id),
+  ['history-rejected'],
+  'History status filter should include rejected rows only',
+);
+assert.deepEqual(
+  filterProductionApprovalHistory({
+    requests: [approvedHistoryApproval, rejectedHistoryApproval, secondStageRejectedHistoryApproval, cancelledHistoryApproval, actionableApproval],
+    status: 'all',
+    participantEmployeeId: 'manager-1',
+  }).map((request) => request.id),
+  ['history-approved', 'history-rejected', 'history-second-stage-rejected', 'history-cancelled'],
+  'History participant filter should match approvers in the chain',
+);
+assert.deepEqual(
+  filterProductionApprovalHistory({
+    requests: [approvedHistoryApproval, rejectedHistoryApproval, secondStageRejectedHistoryApproval, cancelledHistoryApproval],
+    status: 'rejected',
+    participantEmployeeId: 'final-1',
+  }).map((request) => request.id),
+  ['history-rejected', 'history-second-stage-rejected'],
+  'History should include requests rejected by the second/final-stage approver',
+);
+assert.deepEqual(
+  filterProductionApprovalHistory({
+    requests: [approvedHistoryApproval, rejectedHistoryApproval, cancelledHistoryApproval],
+    status: 'all',
+    participantEmployeeId: 'sup-1',
+  }).map((request) => request.id),
+  ['history-approved', 'history-cancelled'],
+  'History participant filter should match request creators by employee id',
+);
+assert.equal(isApprovalRequestParticipant(approvedHistoryApproval, 'worker-2'), false);
+assert.equal(
+  getApprovalRequestParticipantEmployeeIds(secondStageRejectedHistoryApproval).has('final-1'),
+  true,
+  'Final-stage rejection performer should be included as a history participant',
+);
+assert.equal(
+  isApprovalRequestParticipant(firstConfiguredApproverRejectedWithEmployeeId, 'salah-employee', 'salah-user'),
+  true,
+  'First configured approver should be a participant after rejecting with their employee id',
+);
+assert.equal(
+  isApprovalRequestParticipant(firstConfiguredApproverRejectedWithUserId, 'salah-employee', 'salah-user'),
+  true,
+  'First configured approver should be a participant after rejecting when the stored actor id is their user id',
+);
+assert.equal(
+  isApprovalRequestParticipant(firstConfiguredApproverRejectedWithUserId, 'unrelated-employee', 'unrelated-user'),
+  false,
+  'Unrelated users should not see rejected requests through participant matching',
+);
+assert.deepEqual(
+  [
+    firstConfiguredApproverRejectedWithEmployeeId,
+    firstConfiguredApproverRejectedWithUserId,
+    unrelatedApproval,
+  ].filter((request) => isApprovalRequestParticipant(request, 'salah-employee', 'salah-user')).map((request) => request.id),
+  ['history-first-configured-approver-rejected', 'history-first-configured-approver-rejected-user-id'],
+  'Restrictive history source should include only requests rejected by the current first approver',
 );
 
 console.log('supervisor-team-actions.test.ts: ok');

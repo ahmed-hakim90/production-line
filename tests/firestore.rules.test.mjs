@@ -515,6 +515,61 @@ await seed();
     tenantId: 'tenantB',
   }));
 
+  await assertSucceeds(supervisorDb.collection('approval_requests').doc('approval-cancel').set({
+    ...approvalDoc,
+    sourceRequestId: 'leave-cancel',
+    history: [],
+  }));
+  await assertSucceeds(supervisorDb.collection('approval_requests').doc('approval-cancel').update({
+    status: 'cancelled',
+    updatedAt: createdAt,
+    history: [{
+      step: 0,
+      action: 'cancelled',
+      performedBy: 'emp-supervisor-a',
+      performedByName: 'Supervisor A',
+      timestamp: createdAt,
+      notes: 'cancel before approval',
+      previousStatus: 'pending',
+      newStatus: 'cancelled',
+    }],
+  }));
+  await assertFails(operatorDb.collection('approval_requests').doc('approval-cancel').update({
+    status: 'cancelled',
+    updatedAt: createdAt,
+    history: [{
+      step: 0,
+      action: 'cancelled',
+      performedBy: 'operator',
+      performedByName: 'Operator',
+      timestamp: createdAt,
+      notes: 'not owner',
+      previousStatus: 'pending',
+      newStatus: 'cancelled',
+    }],
+  }));
+  await assertSucceeds(supervisorDb.collection('approval_requests').doc('approval-restrict').set({
+    ...approvalDoc,
+    sourceRequestId: 'leave-restrict',
+  }));
+  await assertFails(supervisorDb.collection('approval_requests').doc('approval-restrict').update({
+    requestData: {
+      ...approvalDoc.requestData,
+      reason: 'arbitrary edit should fail',
+    },
+  }));
+  await assertSucceeds(supervisorDb.collection('leave_requests').doc('leave-a').update({
+    approvalChain: [{
+      approverEmployeeId: 'emp-manager-a',
+      level: 2,
+      status: 'pending',
+      actionDate: null,
+      notes: '',
+    }],
+    finalStatus: 'rejected',
+    status: 'rejected',
+  }));
+
   await assertSucceeds(
     managerDb
       .collection('approval_requests')
@@ -527,6 +582,20 @@ await seed();
     status: 'in_progress',
     currentStep: 1,
     updatedAt: createdAt,
+  }));
+  await assertFails(supervisorDb.collection('approval_requests').doc('approval-a').update({
+    status: 'cancelled',
+    updatedAt: createdAt,
+    history: [{
+      step: 1,
+      action: 'cancelled',
+      performedBy: 'emp-supervisor-a',
+      performedByName: 'Supervisor A',
+      timestamp: createdAt,
+      notes: 'too late',
+      previousStatus: 'in_progress',
+      newStatus: 'cancelled',
+    }],
   }));
   await assertSucceeds(hrDb.collection('approval_requests').doc('approval-a').update({
     tenantId: 'tenantA',

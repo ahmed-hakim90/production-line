@@ -311,6 +311,32 @@
         && request.resource.data.createdBy == request.auth.uid;
     }
 
+    function pl_isOwnApprovalCreatorCancellationUpdate() {
+      return pl_isOwnCreatedDoc()
+        && resource.data.status == 'pending'
+        && resource.data.currentStep == 0
+        && request.resource.data.status == 'cancelled'
+        && request.resource.data.currentStep == resource.data.currentStep
+        && request.resource.data.createdBy == resource.data.createdBy
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'updatedAt', 'history'])
+        && request.resource.data.history is list
+        && resource.data.history is list
+        && request.resource.data.history.size() == resource.data.history.size() + 1
+        && (
+          !('approvalChain' in resource.data)
+          || resource.data.approvalChain.size() == 0
+          || resource.data.approvalChain[0].status == 'pending'
+        );
+    }
+
+    function pl_isOwnPendingSourceCancellationUpdate() {
+      return pl_isOwnCreatedDoc()
+        && (!('finalStatus' in resource.data) || resource.data.finalStatus == 'pending')
+        && request.resource.data.finalStatus == 'rejected'
+        && request.resource.data.status in ['pending', 'rejected']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['approvalChain', 'finalStatus', 'status']);
+    }
+
     function pl_isOwnNotification() {
       return pl_authSignedIn()
         && 'recipientUserId' in resource.data
@@ -690,7 +716,7 @@
       allow create: if pl_hasSupervisorRequestPermission()
         && pl_isOwnCreatedWrite()
         && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
-      allow update: if (pl_hasApprovalWritePermission() || pl_hasErpPermission('leave.manage') || pl_isOwnCreatedDoc())
+      allow update: if (pl_hasApprovalWritePermission() || pl_hasErpPermission('leave.manage') || pl_isOwnPendingSourceCancellationUpdate())
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
       allow delete: if pl_isOwnCreatedDoc()
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
@@ -704,7 +730,7 @@
       allow create: if pl_hasSupervisorRequestPermission()
         && pl_isOwnCreatedWrite()
         && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
-      allow update: if (pl_hasApprovalWritePermission() || pl_hasErpPermission('loan.manage') || pl_hasErpPermission('loan.disburse') || pl_isOwnCreatedDoc())
+      allow update: if (pl_hasApprovalWritePermission() || pl_hasErpPermission('loan.manage') || pl_hasErpPermission('loan.disburse') || pl_isOwnPendingSourceCancellationUpdate())
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
       allow delete: if pl_isOwnCreatedDoc()
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
@@ -734,7 +760,7 @@
           'currentStep', 'status', 'history', 'createdBy'
         ])
         && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
-      allow update: if pl_hasApprovalWritePermission()
+      allow update: if (pl_hasApprovalWritePermission() || pl_isOwnApprovalCreatorCancellationUpdate())
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
       allow delete: if false;
     }

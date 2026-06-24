@@ -17,7 +17,10 @@ import { leaveBalanceService, leaveRequestService, syncLeaveApprovalDecision } f
 import { loanService } from '@/modules/hr/loanService';
 import {
   approveRequest,
+  cancelRequest,
   createRequest,
+  canViewAllRequests,
+  getAllRequests,
   getPendingApprovals,
   getRequestById,
   getRequestsCreatedBy,
@@ -65,15 +68,20 @@ import {
 } from '../utils/productionEmployeeContext';
 import {
   buildSupervisorApprovalExportRows,
+  canSupervisorCancelApprovalRequest,
   canSupervisorActOnApprovalRequest,
+  filterProductionApprovalHistory,
   getProductionApprovalStatusDisplay,
   getSupervisorApprovalLeaveTypeLabel,
+  getApprovalRequestParticipantEmployeeIds,
+  isApprovalRequestParticipant,
   isApprovalRequestCreatedBySupervisor,
   mergeSupervisorVisibleApprovalRequests,
 } from '../utils/supervisorApprovalVisibility';
 
-type PageTab = 'create' | 'approvals';
+type PageTab = 'create' | 'approvals' | 'history';
 type ActionTab = 'leave' | 'loan' | 'penalty';
+type HistoryStatusFilter = 'all' | 'approved' | 'rejected' | 'cancelled';
 type Toast = { type: 'success' | 'error'; message: string } | null;
 
 const INPUT_CLASS = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none';
@@ -238,10 +246,13 @@ export const SupervisorTeamActions: React.FC = () => {
   const [teamScope, setTeamScope] = useState<TeamWorkerScope>('assigned_lines');
   const [managedDepartmentCount, setManagedDepartmentCount] = useState(0);
   const [approvalRequests, setApprovalRequests] = useState<FirestoreApprovalRequest[]>([]);
+  const [historyRequests, setHistoryRequests] = useState<FirestoreApprovalRequest[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
   const [approvalActionLoading, setApprovalActionLoading] = useState<string | null>(null);
   const [approvalActionNotes, setApprovalActionNotes] = useState<Record<string, string>>({});
   const [expandedApprovalIds, setExpandedApprovalIds] = useState<Set<string>>(new Set());
+  const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatusFilter>('all');
+  const [historyParticipantFilter, setHistoryParticipantFilter] = useState('');
   const [exportingApprovalsPdf, setExportingApprovalsPdf] = useState(false);
   const approvalsPdfRef = useRef<HTMLDivElement>(null);
 
@@ -333,7 +344,7 @@ export const SupervisorTeamActions: React.FC = () => {
 
   const approvalCaller: CallerContext = useMemo(() => ({
     employeeId: supervisorId,
-    employeeName: resolvedSupervisor?.name || userDisplayName || 'مسؤول الإنتاج',
+    employeeName: resolvedSupervisor?.name || userDisplayName || 'المستخدم الحالي',
     permissions,
   }), [permissions, resolvedSupervisor?.name, supervisorId, userDisplayName]);
 
@@ -349,27 +360,101 @@ export const SupervisorTeamActions: React.FC = () => {
     () => Object.keys(approvalExportRows[0] || {}),
     [approvalExportRows],
   );
+  const filteredHistoryRequests = useMemo(
+    () => filterProductionApprovalHistory({
+      requests: historyRequests,
+      status: historyStatusFilter,
+      participantEmployeeId: historyParticipantFilter || undefined,
+    }),
+    [historyParticipantFilter, historyRequests, historyStatusFilter],
+  );
+  const historyParticipantOptions = useMemo(() => {
+    const namesById = new Map<string, string>();
+    allEmployees.forEach((employee) => {
+      if (employee.id) namesById.set(employee.id, employee.name || employee.id);
+    });
+    historyRequests.forEach((request) => {
+      const requestedByEmployeeId = String(request.requestData?.requestedByEmployeeId || '').trim();
+      if (requestedByEmployeeId && !namesById.has(requestedByEmployeeId)) {
+        namesById.set(requestedByEmployeeId, request.requestData?.requestedByName || requestedByEmployeeId);
+      }
+      request.approvalChain.forEach((step) => {
+        if (step.approverEmployeeId && !namesById.has(step.approverEmployeeId)) {
+          namesById.set(step.approverEmployeeId, step.approverName || step.approverEmployeeId);
+        }
+        if (step.delegatedTo && !namesById.has(step.delegatedTo)) {
+          namesById.set(step.delegatedTo, step.delegatedToName || step.delegatedTo);
+        }
+      });
+      request.history?.forEach((entry) => {
+        if (entry.performedBy && entry.performedBy !== 'system' && !namesById.has(entry.performedBy)) {
+          namesById.set(entry.performedBy, entry.performedByName || entry.performedBy);
+        }
+      });
+    });
+    return Array.from(namesById.entries())
+      .filter(([employeeId]) => historyRequests.some((request) => getApprovalRequestParticipantEmployeeIds(request).has(employeeId)))
+      .map(([value, label]) => ({ value, label }))
+      .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
+  }, [allEmployees, historyRequests]);
+  const historyExportRows = useMemo(
+    () => buildSupervisorApprovalExportRows(filteredHistoryRequests),
+    [filteredHistoryRequests],
+  );
+  const historyExportHeaders = useMemo(
+    () => Object.keys(historyExportRows[0] || {}),
+    [historyExportRows],
+  );
+  const pdfExportRows = activePageTab === 'history' ? historyExportRows : approvalExportRows;
+  const pdfExportHeaders = activePageTab === 'history' ? historyExportHeaders : approvalExportHeaders;
+  const pdfExportTitle = activePageTab === 'history' ? 'سجل طلبات الإنتاج' : 'طلبات الإنتاج';
 
   const fetchPendingApprovalRequests = useCallback(async (opts?: { silent?: boolean }) => {
     if (!supervisorId) {
       setApprovalRequests([]);
+      setHistoryRequests([]);
       return;
     }
     if (!opts?.silent) setApprovalsLoading(true);
     try {
-      const canReadApprovalInbox = permissions['approval.view'] === true || permissions['approval.manage'] === true;
-      const [pending, allRequests] = await Promise.all([
+      const canReadApprovalInbox = (
+        permissions['approval.view'] === true ||
+        permissions['approval.manage'] === true ||
+        permissions['approval.override'] === true ||
+        permissions['approval.escalate'] === true
+      );
+      const canReadAllApprovalHistory = canViewAllRequests(permissions);
+      const [pending, createdRequests, readableRequests] = await Promise.all([
         canReadApprovalInbox ? getPendingApprovals({ approverEmployeeId: supervisorId }) : Promise.resolve([]),
         uid ? getRequestsCreatedBy(uid).catch((allRequestsErr) => {
           console.warn('Failed to load supervisor-created approval requests:', allRequestsErr);
           return [];
         }) : Promise.resolve([]),
+        canReadApprovalInbox ? getAllRequests().catch((allRequestsErr) => {
+          console.warn('Failed to load approval history requests:', allRequestsErr);
+          return [];
+        }) : Promise.resolve([]),
       ]);
       setApprovalRequests(mergeSupervisorVisibleApprovalRequests({
         pendingApprovals: pending,
-        allRequests,
+        allRequests: createdRequests,
         supervisorEmployeeId: supervisorId,
         supervisorUserId: uid || undefined,
+      }));
+      const historySource = canReadAllApprovalHistory
+        ? readableRequests
+        : [
+            ...createdRequests,
+            ...readableRequests.filter((request) =>
+              isApprovalRequestParticipant(request, supervisorId, uid || undefined),
+            ),
+          ];
+      const historyById = new Map<string, FirestoreApprovalRequest>();
+      historySource.forEach((request) => { if (request.id) historyById.set(request.id, request); });
+      setHistoryRequests(Array.from(historyById.values()).sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+        const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+        return tb - ta;
       }));
     } catch (err) {
       console.error('Failed to load team approval inbox:', err);
@@ -508,6 +593,13 @@ export const SupervisorTeamActions: React.FC = () => {
     return () => window.clearTimeout(timer);
   }, [toast]);
 
+  useEffect(() => {
+    if (!historyParticipantFilter) return;
+    if (!historyParticipantOptions.some((option) => option.value === historyParticipantFilter)) {
+      setHistoryParticipantFilter('');
+    }
+  }, [historyParticipantFilter, historyParticipantOptions]);
+
   const syncSourceRequestApproval = useCallback(async (request: FirestoreApprovalRequest) => {
     if (!request.sourceRequestId) return;
     const mappedStatus = mapApprovalStatusToLegacy(request.status);
@@ -585,6 +677,42 @@ export const SupervisorTeamActions: React.FC = () => {
     }
   }, [approvalActionNotes, approvalCaller, fetchPendingApprovalRequests, supervisorId, syncSourceRequestApproval]);
 
+  const handleCancelApprovalRequest = useCallback(async (req: FirestoreApprovalRequest) => {
+    if (!req.id || !supervisorId) return;
+    if (!canSupervisorCancelApprovalRequest(req, supervisorId, uid || undefined)) return;
+    if (!window.confirm('هل أنت متأكد من إلغاء هذا الطلب قبل الاعتماد؟')) return;
+
+    setApprovalActionLoading(req.id);
+    try {
+      const result = await cancelRequest(
+        {
+          requestId: req.id,
+          cancelledBy: supervisorId,
+          cancelledByName: approvalCaller.employeeName,
+          reason: 'إلغاء بواسطة مشرف الإنتاج قبل الاعتماد',
+        },
+        approvalCaller,
+      );
+      if (!result.success) {
+        setToast({ type: 'error', message: result.error || 'تعذر إلغاء الطلب' });
+        return;
+      }
+
+      const updatedRequest = await getRequestById(req.id);
+      if (updatedRequest) {
+        await syncSourceRequestApproval(updatedRequest);
+      }
+
+      setToast({ type: 'success', message: 'تم إلغاء الطلب' });
+      await fetchPendingApprovalRequests({ silent: true });
+    } catch (err) {
+      console.error('Production request cancellation failed:', err);
+      setToast({ type: 'error', message: 'تعذر إلغاء الطلب' });
+    } finally {
+      setApprovalActionLoading(null);
+    }
+  }, [approvalCaller, fetchPendingApprovalRequests, supervisorId, syncSourceRequestApproval, uid]);
+
   const toggleApprovalDetails = useCallback((requestId: string) => {
     setExpandedApprovalIds((prev) => {
       const next = new Set(prev);
@@ -604,14 +732,25 @@ export const SupervisorTeamActions: React.FC = () => {
     );
   }, [approvalExportRows, approvalRequests.length]);
 
+  const handleExportHistory = useCallback(() => {
+    if (historyExportRows.length === 0) return;
+    const date = new Date().toISOString().slice(0, 10);
+    exportGenericRows(
+      historyExportRows,
+      `production-approval-history-${date}`,
+      'سجل طلبات الإنتاج',
+    );
+  }, [historyExportRows]);
+
   const handleExportApprovalsPdf = useCallback(async () => {
-    if (approvalExportRows.length === 0 || !approvalsPdfRef.current) return;
+    if (pdfExportRows.length === 0 || !approvalsPdfRef.current) return;
     setExportingApprovalsPdf(true);
     try {
       const date = new Date().toISOString().slice(0, 10);
+      const filePrefix = activePageTab === 'history' ? 'production-approval-history' : 'production-approval-requests';
       const { exportToPDF, waitForExportPaint } = await import('@/utils/reportExport');
       await waitForExportPaint(150);
-      await exportToPDF(approvalsPdfRef.current, `production-approval-requests-${date}`, {
+      await exportToPDF(approvalsPdfRef.current, `${filePrefix}-${date}`, {
         paperSize: 'a4',
         orientation: 'landscape',
         copies: 1,
@@ -619,7 +758,7 @@ export const SupervisorTeamActions: React.FC = () => {
     } finally {
       setExportingApprovalsPdf(false);
     }
-  }, [approvalExportRows.length]);
+  }, [activePageTab, pdfExportRows.length]);
 
   const getApprovalContext = useCallback(() => {
     if (!selectedWorker || !supervisorId || !isEmployeeInSupervisorTeam(teamWorkers, selectedWorker.employeeId)) {
@@ -629,7 +768,7 @@ export const SupervisorTeamActions: React.FC = () => {
       approvalEmployees: buildApprovalEmployeesForWorker(allEmployees, selectedWorker, departments),
       caller: {
         employeeId: supervisorId,
-        employeeName: resolvedSupervisor?.name || userDisplayName || 'مسؤول الإنتاج',
+        employeeName: resolvedSupervisor?.name || userDisplayName || 'المستخدم الحالي',
         permissions,
       },
     };
@@ -877,7 +1016,7 @@ export const SupervisorTeamActions: React.FC = () => {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">مسؤول الإنتاج</p>
+          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">المستخدم الحالي</p>
           <p className="text-lg font-black text-[var(--color-text)]">{resolvedSupervisor?.name || userDisplayName || '—'}</p>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
             {teamScopeLabel} — المتاحين: {teamWorkers.length}
@@ -899,6 +1038,7 @@ export const SupervisorTeamActions: React.FC = () => {
         {[
           { key: 'create' as const, label: 'إنشاء طلب إنتاج', icon: 'edit_note' },
           { key: 'approvals' as const, label: `حالات الطلبات${approvalRequests.length ? ` (${approvalRequests.length})` : ''}`, icon: 'approval' },
+          { key: 'history' as const, label: `سجل الطلبات${filteredHistoryRequests.length ? ` (${filteredHistoryRequests.length})` : ''}`, icon: 'history' },
         ].map((tab) => (
           <button
             key={tab.key}
@@ -916,7 +1056,130 @@ export const SupervisorTeamActions: React.FC = () => {
         ))}
       </div>
 
-      {activePageTab === 'approvals' ? (
+      {activePageTab === 'history' ? (
+        <Card>
+          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <h3 className="text-base font-black text-[var(--color-text)]">سجل طلبات الإنتاج</h3>
+              <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">يعرض الطلبات المعتمدة والمرفوضة والملغاة ضمن نطاقك الحالي.</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={handleExportHistory} disabled={filteredHistoryRequests.length === 0}>
+                <span className="material-icons-round text-sm">download</span>
+                تصدير Excel
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => { void handleExportApprovalsPdf(); }}
+                disabled={filteredHistoryRequests.length === 0 || exportingApprovalsPdf}
+              >
+                <span className="material-icons-round text-sm">{exportingApprovalsPdf ? 'hourglass_empty' : 'picture_as_pdf'}</span>
+                {exportingApprovalsPdf ? 'جاري التصدير...' : 'تصدير PDF'}
+              </Button>
+            </div>
+          </div>
+
+          <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] lg:items-end">
+            <div>
+              <label className="mb-2 block text-xs font-black text-[var(--color-text-muted)]">الحالة</label>
+              <select
+                className={INPUT_CLASS}
+                value={historyStatusFilter}
+                onChange={(e) => setHistoryStatusFilter(e.target.value as HistoryStatusFilter)}
+              >
+                <option value="all">كل الحالات النهائية</option>
+                <option value="approved">المعتمدة</option>
+                <option value="rejected">المرفوضة</option>
+                <option value="cancelled">الملغاة</option>
+              </select>
+            </div>
+            <div>
+              <label className="mb-2 block text-xs font-black text-[var(--color-text-muted)]">المشرف أو الموافق</label>
+              <SearchableSelect
+                options={[{ value: '', label: 'كل المشاركين' }, ...historyParticipantOptions]}
+                value={historyParticipantFilter}
+                onChange={setHistoryParticipantFilter}
+                placeholder="اختر منشئ الطلب أو أحد الموافقين..."
+                className="h-12 bg-[#f8f9fa]"
+              />
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setHistoryStatusFilter('all');
+                setHistoryParticipantFilter('');
+              }}
+              disabled={historyStatusFilter === 'all' && !historyParticipantFilter}
+            >
+              <span className="material-icons-round text-sm">filter_alt_off</span>
+              مسح الفلاتر
+            </Button>
+          </div>
+
+          {approvalsLoading ? (
+            <div className="text-sm font-bold text-[var(--color-text-muted)] py-8 text-center">جاري تحميل سجل الطلبات...</div>
+          ) : filteredHistoryRequests.length === 0 ? (
+            <div className="text-center py-10">
+              <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">history</span>
+              <p className="text-sm font-bold text-slate-500">لا توجد طلبات نهائية تطابق الفلاتر الحالية.</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">جرّب تغيير الحالة أو اختيار مشارك آخر في سلسلة الاعتماد.</p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredHistoryRequests.map((req) => {
+                const typeCfg = TYPE_CONFIG[req.requestType];
+                const statusCfg = getProductionApprovalStatusDisplay(req);
+                const requestId = req.id || '';
+                const requesterName = req.requestData?.requestedByName || req.createdBy || '—';
+                const decidedBy = req.history
+                  ?.slice()
+                  .reverse()
+                  .find((entry) => entry.newStatus === req.status || entry.action === req.status);
+                const approvalLeaveTypeLabel = getSupervisorApprovalLeaveTypeLabel(req);
+
+                return (
+                  <div key={requestId} className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[var(--color-card)] p-4">
+                    <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                      <div className="flex min-w-0 items-start gap-3">
+                        <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0 ${typeCfg.bg}`}>
+                          <span className={`material-icons-round ${typeCfg.color}`}>{typeCfg.icon}</span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <Badge variant="info">{typeCfg.label}</Badge>
+                            <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                            {approvalLeaveTypeLabel && <Badge variant="neutral">{approvalLeaveTypeLabel}</Badge>}
+                          </div>
+                          <h4 className="mt-2 text-base font-black text-[var(--color-text)]">{formatRequestSummary(req)}</h4>
+                          <p className="mt-1 text-sm text-[var(--color-text-muted)]">
+                            <span className="font-bold text-[var(--color-text)]">{req.employeeName}</span> — {formatRequestDetail(req)}
+                          </p>
+                          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                            مقدم بواسطة: {requesterName} — تاريخ الطلب: {formatApprovalCreatedAt(req.createdAt)}
+                            {decidedBy?.performedByName ? ` — آخر قرار: ${decidedBy.performedByName}` : ''}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="min-w-0 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-3 text-xs font-bold text-[var(--color-text-muted)] lg:max-w-md">
+                        <p className="mb-2 text-[var(--color-text)]">سلسلة الاعتماد</p>
+                        <div className="flex flex-wrap gap-2">
+                          {req.approvalChain.length === 0 ? (
+                            <span>اعتماد تلقائي</span>
+                          ) : req.approvalChain.map((step, index) => (
+                            <span key={`${requestId}-${step.approverEmployeeId}-${index}`} className="rounded-full bg-white px-3 py-1 border border-[var(--color-border)]">
+                              {step.approverName || step.approverEmployeeId} — {step.status === 'approved' ? 'اعتمد' : step.status === 'rejected' ? 'رفض' : step.status === 'skipped' ? 'تم التخطي' : 'لم يكتمل'}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Card>
+      ) : activePageTab === 'approvals' ? (
         <Card>
           <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <div>
@@ -957,6 +1220,7 @@ export const SupervisorTeamActions: React.FC = () => {
                 const isExpanded = requestId ? expandedApprovalIds.has(requestId) : false;
                 const canAct = canSupervisorActOnApprovalRequest(req, supervisorId);
                 const isCreatedBySupervisor = isApprovalRequestCreatedBySupervisor(req, supervisorId, uid || undefined);
+                const canCancel = canSupervisorCancelApprovalRequest(req, supervisorId, uid || undefined);
                 const approvalLeaveTypeLabel = getSupervisorApprovalLeaveTypeLabel(req);
 
                 return (
@@ -1046,6 +1310,21 @@ export const SupervisorTeamActions: React.FC = () => {
                               اعتماد
                             </Button>
                           </div>
+                        </div>
+                      )}
+
+                      {canCancel && (
+                        <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
+                          <Button
+                            variant="outline"
+                            onClick={() => { void handleCancelApprovalRequest(req); }}
+                            disabled={isProcessing}
+                            className="!border-slate-200 !text-slate-600 hover:!bg-slate-50"
+                          >
+                            {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
+                            <span className="material-icons-round text-sm">block</span>
+                            إلغاء الطلب
+                          </Button>
                         </div>
                       )}
                     </div>
@@ -1423,7 +1702,7 @@ export const SupervisorTeamActions: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
-      {approvalExportRows.length > 0 && (
+      {pdfExportRows.length > 0 && (
         <div
           ref={approvalsPdfRef}
           className="arabic-export-root"
@@ -1440,14 +1719,14 @@ export const SupervisorTeamActions: React.FC = () => {
           }}
         >
           <div style={{ fontFamily: 'Cairo, Tahoma, sans-serif' }}>
-            <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 900 }}>طلبات الإنتاج</h2>
+            <h2 style={{ margin: '0 0 6px', fontSize: '22px', fontWeight: 900 }}>{pdfExportTitle}</h2>
             <p style={{ margin: '0 0 18px', color: '#64748b', fontSize: '13px', fontWeight: 700 }}>
               تقرير إنتاجي للطلبات الظاهرة وحالة اعتماد الإدارة
             </p>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '11px' }}>
               <thead>
                 <tr>
-                  {approvalExportHeaders.map((header) => (
+                  {pdfExportHeaders.map((header) => (
                     <th
                       key={header}
                       style={{
@@ -1464,9 +1743,9 @@ export const SupervisorTeamActions: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {approvalExportRows.map((row, index) => (
+                {pdfExportRows.map((row, index) => (
                   <tr key={String(row['رقم الطلب'] || index)}>
-                    {approvalExportHeaders.map((header) => (
+                    {pdfExportHeaders.map((header) => (
                       <td
                         key={header}
                         style={{

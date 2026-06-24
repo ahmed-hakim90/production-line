@@ -195,6 +195,9 @@ export function validateCancel(
   request: FirestoreApprovalRequest,
 ): CreateValidationResult {
   const role = resolveApprovalRole(caller.permissions);
+  const requestedByEmployeeId = String(request.requestData?.requestedByEmployeeId || '').trim();
+  const isCreatorEmployee = caller.employeeId === request.employeeId || caller.employeeId === requestedByEmployeeId;
+  const hasCompletedApproval = request.currentStep > 0 || request.approvalChain.some((step) => step.status === 'approved');
 
   if (request.status === 'approved' || request.status === 'rejected' || request.status === 'cancelled') {
     return {
@@ -203,21 +206,21 @@ export function validateCancel(
     };
   }
 
+  if (hasCompletedApproval) {
+    return {
+      allowed: false,
+      error: 'لا يمكن إلغاء الطلب بعد بدء عملية الموافقة',
+    };
+  }
+
   if (role === 'admin' || role === 'hr') {
     return { allowed: true };
   }
 
-  if (caller.employeeId !== request.employeeId) {
+  if (!isCreatorEmployee) {
     return {
       allowed: false,
       error: 'يمكن فقط لصاحب الطلب إلغاءه',
-    };
-  }
-
-  if (request.currentStep > 0) {
-    return {
-      allowed: false,
-      error: 'لا يمكن إلغاء الطلب بعد بدء عملية الموافقة',
     };
   }
 
