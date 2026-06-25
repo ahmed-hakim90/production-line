@@ -156,7 +156,7 @@ export const EmployeeSelfService: React.FC = () => {
           loanService.getByEmployee(employeeId),
           getEmployeeLockedPayslip(employeeId),
           getLeaveTypesFromConfig(),
-          canViewApprovals ? getPendingApprovals({ approverEmployeeId: employeeId }) : Promise.resolve([]),
+          canViewApprovals ? getPendingApprovals({ approverEmployeeId: employeeId, approverUserId: uid || undefined }) : Promise.resolve([]),
         ]);
         if (!cancelled) {
           setAttendanceLogs(logs);

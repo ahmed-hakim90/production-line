@@ -77,6 +77,10 @@ export interface FirestoreApprovalRequest {
   requestData: Record<string, any>;
   approvalChain: ApprovalChainSnapshot[];
   currentStep: number;
+  currentApproverEmployeeIds?: string[];
+  currentApproverUserIds?: string[];
+  participantEmployeeIds?: string[];
+  participantUserIds?: string[];
   status: ApprovalRequestStatus;
   history: ApprovalHistoryEntry[];
   sourceRequestId: string | null;
@@ -220,5 +224,6 @@ export interface OperationResult {
 
 export interface PendingApprovalsQuery {
   approverEmployeeId: string;
+  approverUserId?: string;
   requestType?: ApprovalRequestType;
 }

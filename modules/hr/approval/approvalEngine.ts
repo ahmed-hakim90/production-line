@@ -272,6 +272,58 @@ async function getConfiguredProductionApproverIds(options: CreateRequestOptions)
     .filter(Boolean)));
 }
 
+function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
+  return Array.from(new Set(
+    values
+      .map((value) => String(value || '').trim())
+      .filter(Boolean),
+  ));
+}
+
+function getCurrentApproverEmployeeIds(request: Pick<FirestoreApprovalRequest, 'approvalChain' | 'currentStep' | 'status'>): string[] {
+  if (request.status !== 'pending' && request.status !== 'in_progress' && request.status !== 'escalated') return [];
+  if (request.currentStep < 0 || request.currentStep >= request.approvalChain.length) return [];
+
+  const step = request.approvalChain[request.currentStep];
+  return uniqueNonEmpty([step?.approverEmployeeId, step?.delegatedTo]);
+}
+
+function getParticipantEmployeeIds(request: Pick<FirestoreApprovalRequest, 'employeeId' | 'requestData' | 'approvalChain' | 'history'>): string[] {
+  return uniqueNonEmpty([
+    request.employeeId,
+    request.requestData?.requestedByEmployeeId,
+    ...request.approvalChain.flatMap((step) => [step.approverEmployeeId, step.delegatedTo]),
+    ...(request.history || []).map((entry) => entry.performedBy === 'system' ? '' : entry.performedBy),
+  ]);
+}
+
+async function resolveUserIdsForEmployeeIds(employeeIds: string[]): Promise<string[]> {
+  const userIds = await Promise.all(
+    uniqueNonEmpty(employeeIds).map((employeeId) =>
+      employeeService.getUserIdByEmployeeId(employeeId).catch(() => null),
+    ),
+  );
+  return uniqueNonEmpty(userIds);
+}
+
+async function buildApprovalAccessFields(
+  request: Pick<FirestoreApprovalRequest, 'employeeId' | 'requestData' | 'approvalChain' | 'currentStep' | 'status' | 'history'>,
+): Promise<Pick<FirestoreApprovalRequest, 'currentApproverEmployeeIds' | 'currentApproverUserIds' | 'participantEmployeeIds' | 'participantUserIds'>> {
+  const currentApproverEmployeeIds = getCurrentApproverEmployeeIds(request);
+  const participantEmployeeIds = getParticipantEmployeeIds(request);
+  const [currentApproverUserIds, participantUserIds] = await Promise.all([
+    resolveUserIdsForEmployeeIds(currentApproverEmployeeIds),
+    resolveUserIdsForEmployeeIds(participantEmployeeIds),
+  ]);
+
+  return {
+    currentApproverEmployeeIds,
+    currentApproverUserIds,
+    participantEmployeeIds,
+    participantUserIds,
+  };
+}
+
 async function syncApprovedPenaltyDeduction(request: FirestoreApprovalRequest): Promise<void> {
   if (request.requestType !== 'penalty' || request.status !== 'approved' || !request.id) return;
   const data = request.requestData || {};
@@ -365,6 +417,7 @@ export async function createRequest(
       createdBy: options.createdBy,
       updatedAt: serverTimestamp(),
     };
+    Object.assign(requestDoc, await buildApprovalAccessFields(requestDoc));
 
     const ref = await addDoc(approvalRequestsRef(), requestDoc);
 
@@ -483,6 +536,7 @@ export async function createRequest(
     createdBy: options.createdBy,
     updatedAt: serverTimestamp(),
   };
+  Object.assign(requestDoc, await buildApprovalAccessFields(requestDoc));
 
   const ref = await addDoc(approvalRequestsRef(), requestDoc);
 
@@ -560,6 +614,13 @@ export async function approveRequest(
     updatedRequest.status!,
   );
   updatedRequest.history = [...request.history, historyEntry];
+  Object.assign(updatedRequest, await buildApprovalAccessFields({
+    ...request,
+    approvalChain: updatedChain,
+    currentStep: nextStep,
+    status: updatedRequest.status!,
+    history: updatedRequest.history,
+  }));
 
   await updateDoc(approvalRequestDocRef(options.requestId), updatedRequest);
 
@@ -659,6 +720,12 @@ export async function rejectRequest(
     updatedAt: serverTimestamp(),
     history: [...request.history, historyEntry],
   };
+  Object.assign(updatedRequest, await buildApprovalAccessFields({
+    ...request,
+    approvalChain: updatedChain,
+    status: 'rejected',
+    history: updatedRequest.history!,
+  }));
 
   await updateDoc(approvalRequestDocRef(options.requestId), updatedRequest);
 
@@ -712,11 +779,18 @@ export async function cancelRequest(
     'cancelled',
   );
 
-  await updateDoc(approvalRequestDocRef(options.requestId), {
+  const updatedRequest: Partial<FirestoreApprovalRequest> = {
     status: 'cancelled',
     updatedAt: serverTimestamp(),
     history: [...request.history, historyEntry],
-  });
+  };
+  Object.assign(updatedRequest, await buildApprovalAccessFields({
+    ...request,
+    status: 'cancelled',
+    history: updatedRequest.history!,
+  }));
+
+  await updateDoc(approvalRequestDocRef(options.requestId), updatedRequest);
 
   await approvalAuditService.log(
     options.requestId, request.requestType, request.employeeId,
@@ -838,6 +912,36 @@ export async function getPendingApprovals(
 
   const statusFilter = ['pending', 'in_progress', 'escalated'];
   const allPending: FirestoreApprovalRequest[] = [];
+
+  if (params.approverUserId) {
+    const q = params.requestType
+      ? query(
+          approvalRequestsRef(),
+          where('tenantId', '==', getCurrentTenantId()),
+          where('currentApproverUserIds', 'array-contains', params.approverUserId),
+          where('requestType', '==', params.requestType),
+        )
+      : query(
+          approvalRequestsRef(),
+          where('tenantId', '==', getCurrentTenantId()),
+          where('currentApproverUserIds', 'array-contains', params.approverUserId),
+        );
+    const snap = await getDocs(q);
+    return snap.docs
+      .map((d) => ({ id: d.id, ...d.data() } as FirestoreApprovalRequest))
+      .filter((req) => statusFilter.includes(req.status))
+      .filter((req) => {
+        if (req.currentStep < 0 || req.currentStep >= req.approvalChain.length) return false;
+        const step = req.approvalChain[req.currentStep];
+        return step.approverEmployeeId === params.approverEmployeeId || step.delegatedTo === params.approverEmployeeId;
+      })
+      .sort((a, b) => {
+        const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
+        const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
+        return tb - ta;
+      });
+  }
+
   const settings = await getApprovalSettings();
   const today = new Date().toISOString().slice(0, 10);
   const delegationsToCaller = settings.allowDelegation

@@ -200,7 +200,7 @@ export const HRDashboard: React.FC = () => {
         currentEmployee?.id
           ? safeFetch(
               'pending approvals',
-              getPendingApprovals({ approverEmployeeId: currentEmployee.id }),
+              getPendingApprovals({ approverEmployeeId: currentEmployee.id, approverUserId: uid || undefined }),
               [] as Awaited<ReturnType<typeof getPendingApprovals>>,
             )
           : Promise.resolve([] as Awaited<ReturnType<typeof getPendingApprovals>>),
@@ -261,7 +261,7 @@ export const HRDashboard: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [currentEmployee?.id]);
+  }, [currentEmployee?.id, uid]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 

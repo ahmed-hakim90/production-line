@@ -299,6 +299,33 @@
         || pl_hasErpPermission('approval.override');
     }
 
+    function pl_isApprovalParticipantDoc() {
+      return pl_authSignedIn()
+        && 'participantUserIds' in resource.data
+        && resource.data.participantUserIds is list
+        && resource.data.participantUserIds.hasAny([request.auth.uid]);
+    }
+
+    function pl_isCurrentApprovalActorDoc() {
+      return pl_authSignedIn()
+        && 'currentApproverUserIds' in resource.data
+        && resource.data.currentApproverUserIds is list
+        && resource.data.currentApproverUserIds.hasAny([request.auth.uid]);
+    }
+
+    function pl_isCurrentApprovalActionUpdate() {
+      return pl_isCurrentApprovalActorDoc()
+        && resource.data.status in ['pending', 'in_progress', 'escalated']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+          'approvalChain', 'currentStep', 'status', 'updatedAt', 'history',
+          'currentApproverEmployeeIds', 'currentApproverUserIds',
+          'participantEmployeeIds', 'participantUserIds'
+        ])
+        && request.resource.data.history is list
+        && resource.data.history is list
+        && request.resource.data.history.size() == resource.data.history.size() + 1;
+    }
+
     function pl_isOwnCreatedDoc() {
       return pl_authSignedIn()
         && 'createdBy' in resource.data
@@ -751,7 +778,7 @@
 
     match /approval_requests/{docId} {
       allow read: if pl_isActiveUser()
-        && (pl_hasApprovalReadPermission() || pl_isOwnCreatedDoc())
+        && (pl_hasApprovalReadPermission() || pl_isOwnCreatedDoc() || pl_isApprovalParticipantDoc() || pl_isCurrentApprovalActorDoc())
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
       allow create: if pl_hasSupervisorRequestPermission()
         && pl_isOwnCreatedWrite()
@@ -760,7 +787,7 @@
           'currentStep', 'status', 'history', 'createdBy'
         ])
         && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
-      allow update: if (pl_hasApprovalWritePermission() || pl_isOwnApprovalCreatorCancellationUpdate())
+      allow update: if (pl_hasApprovalWritePermission() || pl_isCurrentApprovalActionUpdate() || pl_isOwnApprovalCreatorCancellationUpdate())
         && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
       allow delete: if false;
     }

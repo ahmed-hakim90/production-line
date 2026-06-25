@@ -190,7 +190,7 @@ export const ApprovalCenter: React.FC = () => {
       if (viewAll) {
         const [all, actionable] = await Promise.all([
           getAllRequests(),
-          approverEmployeeId ? getPendingApprovals({ approverEmployeeId }) : Promise.resolve([]),
+          approverEmployeeId ? getPendingApprovals({ approverEmployeeId, approverUserId: uid || undefined }) : Promise.resolve([]),
         ]);
         const merged = new Map<string, FirestoreApprovalRequest>();
         all.forEach((r) => { if (r.id) merged.set(r.id, r); });
@@ -198,7 +198,7 @@ export const ApprovalCenter: React.FC = () => {
         data = Array.from(merged.values());
       } else if (approverEmployeeId) {
         const [pending, own] = await Promise.all([
-          getPendingApprovals({ approverEmployeeId }),
+          getPendingApprovals({ approverEmployeeId, approverUserId: uid || undefined }),
           getAllRequests(),
         ]);
         const ownRequests = own.filter((r) =>

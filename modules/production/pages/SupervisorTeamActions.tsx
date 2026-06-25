@@ -419,7 +419,7 @@ export const SupervisorTeamActions: React.FC = () => {
     try {
       const canReadAllApprovalHistory = canViewAllRequests(permissions);
       const [pending, createdRequests, readableRequests] = await Promise.all([
-        getPendingApprovals({ approverEmployeeId: supervisorId }),
+        getPendingApprovals({ approverEmployeeId: supervisorId, approverUserId: uid || undefined }),
         uid ? getRequestsCreatedBy(uid).catch((allRequestsErr) => {
           console.warn('Failed to load supervisor-created approval requests:', allRequestsErr);
           return [];
