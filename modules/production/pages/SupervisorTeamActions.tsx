@@ -13,12 +13,12 @@ import { usePermission } from '@/utils/permissions';
 import { exportGenericRows } from '@/utils/exportExcel';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { employeeService } from '@/modules/hr/employeeService';
+import { employeeDeductionService } from '@/modules/hr/employeeFinancialsService';
 import { leaveBalanceService, leaveRequestService, syncLeaveApprovalDecision } from '@/modules/hr/leaveService';
 import { loanService } from '@/modules/hr/loanService';
 import {
   approveRequest,
   cancelRequest,
-  createRequest,
   canViewAllRequests,
   getAllRequests,
   getPendingApprovals,
@@ -34,6 +34,7 @@ import {
 } from '@/modules/hr/approval';
 import {
   calculatePenaltyAmountFromDuration,
+  buildPenaltyDeductionInput,
   formatPenaltyDuration,
   formatPenaltyRequestSummary,
   getPenaltyDurationLabel,
@@ -59,6 +60,7 @@ import { lineService } from '../services/lineService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
+import { productionApprovalRequestService } from '../services/productionApprovalRequestService';
 import {
   buildSupervisorTeamWorkers,
   isEmployeeInSupervisorTeam,
@@ -74,7 +76,6 @@ import {
   getProductionApprovalStatusDisplay,
   getSupervisorApprovalLeaveTypeLabel,
   getApprovalRequestParticipantEmployeeIds,
-  isApprovalRequestParticipant,
   isApprovalRequestCreatedBySupervisor,
   mergeSupervisorVisibleApprovalRequests,
 } from '../utils/supervisorApprovalVisibility';
@@ -83,6 +84,8 @@ type PageTab = 'create' | 'approvals' | 'history';
 type ActionTab = 'leave' | 'loan' | 'penalty';
 type HistoryStatusFilter = 'all' | 'approved' | 'rejected' | 'cancelled';
 type Toast = { type: 'success' | 'error'; message: string } | null;
+
+const LEGACY_PRODUCTION_APPROVAL_SOURCE = 'legacy_hr_approval';
 
 const INPUT_CLASS = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none';
 
@@ -122,6 +125,28 @@ function formatApprovalCreatedAt(value: any): string {
   const date = value?.toDate ? value.toDate() : value?.seconds ? new Date(value.seconds * 1000) : null;
   if (!date) return '—';
   return date.toLocaleDateString('ar-EG');
+}
+
+function isProductionApprovalRequest(req: FirestoreApprovalRequest): boolean {
+  return Boolean(req.requestData?.productionLineId || req.requestData?.productionLineName);
+}
+
+function markLegacyProductionApprovalRequest(req: FirestoreApprovalRequest): FirestoreApprovalRequest {
+  return {
+    ...req,
+    requestData: {
+      ...(req.requestData || {}),
+      productionApprovalSource: LEGACY_PRODUCTION_APPROVAL_SOURCE,
+    },
+  };
+}
+
+function isLegacyProductionApprovalRequest(req: FirestoreApprovalRequest): boolean {
+  return req.requestData?.productionApprovalSource === LEGACY_PRODUCTION_APPROVAL_SOURCE;
+}
+
+function getProductionApprovalRenderKey(req: FirestoreApprovalRequest): string {
+  return `${isLegacyProductionApprovalRequest(req) ? 'legacy' : 'production'}-${req.id || ''}`;
 }
 
 function formatRequestSummary(req: FirestoreApprovalRequest): string {
@@ -417,42 +442,71 @@ export const SupervisorTeamActions: React.FC = () => {
     }
     if (!opts?.silent) setApprovalsLoading(true);
     try {
-      const canReadAllApprovalHistory = canViewAllRequests(permissions);
-      const [pending, createdRequests, readableRequests] = await Promise.all([
-        getPendingApprovals({ approverEmployeeId: supervisorId, approverUserId: uid || undefined }),
-        uid ? getRequestsCreatedBy(uid).catch((allRequestsErr) => {
-          console.warn('Failed to load supervisor-created approval requests:', allRequestsErr);
-          return [];
-        }) : Promise.resolve([]),
-        canReadAllApprovalHistory ? getAllRequests().catch((allRequestsErr) => {
-          console.warn('Failed to load approval history requests:', allRequestsErr);
-          return [];
-        }) : Promise.resolve([]),
+      const viewAllProductionApprovals = (
+        permissions['production.workers.manage'] === true ||
+        permissions['production.workerReports.view'] === true ||
+        permissions['leave.manage'] === true
+      );
+      const canReadAllLegacyApprovals = canViewAllRequests(permissions);
+      const [newRequestsResult, legacyPendingResult, legacyCreatedResult, legacyAllResult] = await Promise.allSettled([
+        productionApprovalRequestService.getVisible({
+          employeeId: supervisorId,
+          userId: uid || undefined,
+          viewAll: viewAllProductionApprovals,
+        }),
+        getPendingApprovals({ approverEmployeeId: supervisorId }),
+        uid ? getRequestsCreatedBy(uid) : Promise.resolve([]),
+        canReadAllLegacyApprovals ? getAllRequests() : Promise.resolve([]),
       ]);
-      setApprovalRequests(mergeSupervisorVisibleApprovalRequests({
-        pendingApprovals: pending,
-        allRequests: createdRequests,
+
+      if (newRequestsResult.status === 'rejected') console.warn('Production approval requests failed:', newRequestsResult.reason);
+      if (legacyPendingResult.status === 'rejected') console.warn('Legacy production pending approvals failed:', legacyPendingResult.reason);
+      if (legacyCreatedResult.status === 'rejected') console.warn('Legacy production created approvals failed:', legacyCreatedResult.reason);
+      if (legacyAllResult.status === 'rejected') console.warn('Legacy production all approvals failed:', legacyAllResult.reason);
+
+      const legacyPending = legacyPendingResult.status === 'fulfilled'
+        ? legacyPendingResult.value.filter(isProductionApprovalRequest).map(markLegacyProductionApprovalRequest)
+        : [];
+      const legacyCreated = legacyCreatedResult.status === 'fulfilled'
+        ? legacyCreatedResult.value.filter(isProductionApprovalRequest).map(markLegacyProductionApprovalRequest)
+        : [];
+      const legacyAll = legacyAllResult.status === 'fulfilled'
+        ? legacyAllResult.value.filter(isProductionApprovalRequest).map(markLegacyProductionApprovalRequest)
+        : [];
+      const legacyVisible = mergeSupervisorVisibleApprovalRequests({
+        pendingApprovals: legacyPending,
+        allRequests: canReadAllLegacyApprovals ? legacyAll : legacyCreated,
         supervisorEmployeeId: supervisorId,
         supervisorUserId: uid || undefined,
-      }));
-      const historySource = canReadAllApprovalHistory
-        ? readableRequests
-        : [
-            ...createdRequests,
-            ...readableRequests.filter((request) =>
-              isApprovalRequestParticipant(request, supervisorId, uid || undefined),
-            ),
-          ];
-      const historyById = new Map<string, FirestoreApprovalRequest>();
-      historySource.forEach((request) => { if (request.id) historyById.set(request.id, request); });
-      setHistoryRequests(Array.from(historyById.values()).sort((a, b) => {
+      });
+
+      const visibleByKey = new Map<string, FirestoreApprovalRequest>();
+      const newRequests = newRequestsResult.status === 'fulfilled' ? newRequestsResult.value : [];
+      [...newRequests, ...legacyVisible].forEach((request) => {
+        if (request.id) visibleByKey.set(getProductionApprovalRenderKey(request), request);
+      });
+      if (visibleByKey.size === 0 && newRequestsResult.status === 'rejected' && legacyPendingResult.status === 'rejected' && legacyCreatedResult.status === 'rejected' && legacyAllResult.status === 'rejected') {
+        throw newRequestsResult.reason;
+      }
+      const visibleRequests = Array.from(visibleByKey.values()).sort((a, b) => {
         const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;
         const tb = b.createdAt?.toMillis?.() ?? b.createdAt?.seconds * 1000 ?? 0;
         return tb - ta;
-      }));
+      });
+      setApprovalRequests(visibleRequests.filter((request) =>
+        request.status === 'pending' || request.status === 'in_progress' || request.status === 'escalated',
+      ));
+      setHistoryRequests(visibleRequests);
     } catch (err) {
       console.error('Failed to load team approval inbox:', err);
-      setToast({ type: 'error', message: 'تعذر تحميل طلبات الاعتماد' });
+      const errorCode = typeof err === 'object' && err && 'code' in err ? String((err as { code?: unknown }).code || '') : '';
+      const errorMessage = err instanceof Error ? err.message : '';
+      const message = errorCode.includes('permission-denied')
+        ? 'تعذر تحميل طلبات الاعتماد: قواعد Firestore الجديدة لم تُنشر بعد'
+        : errorMessage.includes('index')
+          ? 'تعذر تحميل طلبات الاعتماد: فهارس Firestore لطلبات الإنتاج لم تجهز بعد'
+          : 'تعذر تحميل طلبات الاعتماد';
+      setToast({ type: 'error', message });
     } finally {
       if (!opts?.silent) setApprovalsLoading(false);
     }
@@ -595,11 +649,10 @@ export const SupervisorTeamActions: React.FC = () => {
   }, [historyParticipantFilter, historyParticipantOptions]);
 
   const syncSourceRequestApproval = useCallback(async (request: FirestoreApprovalRequest) => {
-    if (!request.sourceRequestId) return;
     const mappedStatus = mapApprovalStatusToLegacy(request.status);
     const mappedChain = mapSnapshotChainToLegacy(request.approvalChain);
 
-    if (request.requestType === 'leave') {
+    if (request.requestType === 'leave' && request.sourceRequestId) {
       const syncResult = await syncLeaveApprovalDecision({
         leaveRequestId: request.sourceRequestId,
         approvalChain: mappedChain,
@@ -608,30 +661,33 @@ export const SupervisorTeamActions: React.FC = () => {
       if (!syncResult.success) {
         console.warn('Leave sync warning (team approvals):', syncResult.error);
       }
-    } else if (request.requestType === 'loan') {
+    } else if (request.requestType === 'loan' && request.sourceRequestId) {
       await loanService.updateApproval(
         request.sourceRequestId,
         mappedChain,
         mappedStatus,
       );
+    } else if (request.requestType === 'penalty' && request.status === 'approved') {
+      const employee = await employeeService.getById(request.employeeId).catch(() => null);
+      const deductionInput = buildPenaltyDeductionInput(request, employee);
+      if (deductionInput) {
+        await employeeDeductionService.create(deductionInput).catch((err) => {
+          console.warn('Penalty deduction sync warning (team approvals):', err);
+        });
+      }
     }
   }, []);
 
   const addCreatedApprovalToStatusList = useCallback(async (requestId?: string) => {
     if (!requestId || !supervisorId) return;
     try {
-      const createdRequest = await getRequestById(requestId);
+      const createdRequest = await productionApprovalRequestService.getById(requestId);
       if (!createdRequest) return;
-      setApprovalRequests((prev) => mergeSupervisorVisibleApprovalRequests({
-        pendingApprovals: prev.filter((request) => canSupervisorActOnApprovalRequest(request, supervisorId)),
-        allRequests: [createdRequest, ...prev],
-        supervisorEmployeeId: supervisorId,
-        supervisorUserId: uid || undefined,
-      }));
+      setApprovalRequests((prev) => [createdRequest, ...prev.filter((request) => request.id !== createdRequest.id)]);
     } catch (err) {
       console.warn('Failed to add created approval request to status list:', err);
     }
-  }, [supervisorId, uid]);
+  }, [supervisorId]);
 
   const handleApprovalAction = useCallback(async (
     req: FirestoreApprovalRequest,
@@ -640,22 +696,39 @@ export const SupervisorTeamActions: React.FC = () => {
     if (!req.id || !supervisorId) return;
     setApprovalActionLoading(req.id);
     try {
-      const actionOptions = {
-        requestId: req.id,
-        approverEmployeeId: supervisorId,
-        approverName: approvalCaller.employeeName,
-        action,
-        notes: approvalActionNotes[req.id] || '',
-      };
-      const result = action === 'approved'
-        ? await approveRequest(actionOptions, approvalCaller)
-        : await rejectRequest(actionOptions, approvalCaller);
+      const notes = approvalActionNotes[req.id] || '';
+      const isLegacy = isLegacyProductionApprovalRequest(req);
+      const result = isLegacy
+        ? action === 'approved'
+          ? await approveRequest(
+              { requestId: req.id, approverEmployeeId: supervisorId, approverName: approvalCaller.employeeName, action, notes },
+              approvalCaller,
+            )
+          : await rejectRequest(
+              { requestId: req.id, approverEmployeeId: supervisorId, approverName: approvalCaller.employeeName, action, notes },
+              approvalCaller,
+            )
+        : action === 'approved'
+          ? await productionApprovalRequestService.approve({
+              requestId: req.id,
+              actorEmployeeId: supervisorId,
+              actorName: approvalCaller.employeeName,
+              notes,
+            })
+          : await productionApprovalRequestService.reject({
+              requestId: req.id,
+              actorEmployeeId: supervisorId,
+              actorName: approvalCaller.employeeName,
+              notes,
+            });
       if (!result.success) {
         setToast({ type: 'error', message: result.error || 'تعذر تنفيذ قرار الاعتماد' });
         return;
       }
 
-      const updatedRequest = await getRequestById(req.id);
+      const updatedRequest = isLegacy
+        ? await getRequestById(req.id).then((request) => request ? markLegacyProductionApprovalRequest(request) : null)
+        : await productionApprovalRequestService.getById(req.id);
       if (updatedRequest) {
         await syncSourceRequestApproval(updatedRequest);
       }
@@ -678,21 +751,31 @@ export const SupervisorTeamActions: React.FC = () => {
 
     setApprovalActionLoading(req.id);
     try {
-      const result = await cancelRequest(
-        {
-          requestId: req.id,
-          cancelledBy: supervisorId,
-          cancelledByName: approvalCaller.employeeName,
-          reason: 'إلغاء بواسطة مشرف الإنتاج قبل الاعتماد',
-        },
-        approvalCaller,
-      );
+      const isLegacy = isLegacyProductionApprovalRequest(req);
+      const result = isLegacy
+        ? await cancelRequest(
+            {
+              requestId: req.id,
+              cancelledBy: supervisorId,
+              cancelledByName: approvalCaller.employeeName,
+              reason: 'إلغاء بواسطة مشرف الإنتاج قبل الاعتماد',
+            },
+            approvalCaller,
+          )
+        : await productionApprovalRequestService.cancel({
+            requestId: req.id,
+            actorEmployeeId: supervisorId,
+            actorName: approvalCaller.employeeName,
+            notes: 'إلغاء بواسطة مشرف الإنتاج قبل الاعتماد',
+          });
       if (!result.success) {
         setToast({ type: 'error', message: result.error || 'تعذر إلغاء الطلب' });
         return;
       }
 
-      const updatedRequest = await getRequestById(req.id);
+      const updatedRequest = isLegacy
+        ? await getRequestById(req.id).then((request) => request ? markLegacyProductionApprovalRequest(request) : null)
+        : await productionApprovalRequestService.getById(req.id);
       if (updatedRequest) {
         await syncSourceRequestApproval(updatedRequest);
       }
@@ -760,19 +843,14 @@ export const SupervisorTeamActions: React.FC = () => {
     }
     return {
       approvalEmployees: buildApprovalEmployeesForWorker(allEmployees, selectedWorker, departments),
-      caller: {
-        employeeId: supervisorId,
-        employeeName: resolvedSupervisor?.name || userDisplayName || 'المستخدم الحالي',
-        permissions,
-      },
     };
-  }, [allEmployees, departments, permissions, resolvedSupervisor?.name, selectedWorker, supervisorId, teamWorkers, userDisplayName]);
+  }, [allEmployees, departments, selectedWorker, supervisorId, teamWorkers]);
 
   const handleLeaveSubmit = useCallback(async (): Promise<boolean> => {
     if (!selectedWorker || !leaveStartDate || !leaveEndDate || leaveDays <= 0 || !selectedLeaveReason) return false;
     setSubmitting('leave');
     try {
-      const { approvalEmployees, caller } = getApprovalContext();
+      const { approvalEmployees } = getApprovalContext();
       const leaveTypeLabel = selectedLeaveType?.label || LEAVE_TYPE_LABELS[leaveType] || leaveType;
       const leaveReasonLabel = selectedLeaveReason.label;
       const leaveId = await leaveRequestService.create({
@@ -795,31 +873,29 @@ export const SupervisorTeamActions: React.FC = () => {
         requestedByName: resolvedSupervisor?.name || userDisplayName || '',
         requestedOnBehalf: true,
       });
-      const approvalResult = await createRequest(
-        {
-          requestType: 'leave',
-          employeeId: selectedWorker.employeeId,
-          requestData: {
-            leaveType,
-            leaveTypeLabel,
-            employeeName: selectedWorker.employeeName,
-            startDate: leaveStartDate,
-            endDate: leaveEndDate,
-            totalDays: leaveDays,
-            reason: leaveReasonLabel,
-            reasonCode: selectedLeaveReason.code,
-            requestedByEmployeeId: supervisorId,
-            requestedByName: resolvedSupervisor?.name || userDisplayName || '',
-            requestedOnBehalf: true,
-            productionLineId: selectedWorker.lineId,
-            productionLineName: selectedWorker.lineName,
-          },
-          sourceRequestId: leaveId,
-          createdBy: uid || '',
+      const approvalResult = await productionApprovalRequestService.create({
+        requestType: 'leave',
+        employeeId: selectedWorker.employeeId,
+        employeeName: selectedWorker.employeeName,
+        departmentId: selectedWorker.employee.departmentId || 'production',
+        requestData: {
+          leaveType,
+          leaveTypeLabel,
+          employeeName: selectedWorker.employeeName,
+          startDate: leaveStartDate,
+          endDate: leaveEndDate,
+          totalDays: leaveDays,
+          reason: leaveReasonLabel,
+          reasonCode: selectedLeaveReason.code,
+          productionLineId: selectedWorker.lineId,
+          productionLineName: selectedWorker.lineName,
         },
-        caller,
+        sourceRequestId: leaveId,
+        createdBy: uid || '',
+        createdByEmployeeId: supervisorId,
+        createdByName: resolvedSupervisor?.name || userDisplayName || '',
         approvalEmployees,
-      );
+      });
       if (!approvalResult.success) {
         await leaveRequestService.delete(leaveId);
         throw new Error(approvalResult.error || 'تعذر إرسال طلب الإجازة للموافقات');
@@ -845,7 +921,7 @@ export const SupervisorTeamActions: React.FC = () => {
     if (!selectedWorker || amount <= 0) return false;
     setSubmitting('loan');
     try {
-      const { approvalEmployees, caller } = getApprovalContext();
+      const { approvalEmployees } = getApprovalContext();
       const isMonthly = loanType === 'monthly_advance';
       const installments = isMonthly ? 1 : Math.max(1, Number(loanInstallments || 1));
       const startMonth = getCurrentMonth();
@@ -867,32 +943,30 @@ export const SupervisorTeamActions: React.FC = () => {
         disbursed: false,
         createdBy: uid || '',
       });
-      const approvalResult = await createRequest(
-        {
-          requestType: 'loan',
-          employeeId: selectedWorker.employeeId,
-          requestData: {
-            loanType,
-            loanTypeLabel: LOAN_TYPE_LABELS[loanType],
-            loanAmount: amount,
-            installmentAmount: isMonthly ? amount : loanInstallmentAmount,
-            totalInstallments: installments,
-            remainingInstallments: installments,
-            startMonth,
-            month: isMonthly ? startMonth : undefined,
-            reason: loanReason || '—',
-            requestedByEmployeeId: supervisorId,
-            requestedByName: resolvedSupervisor?.name || userDisplayName || '',
-            requestedOnBehalf: true,
-            productionLineId: selectedWorker.lineId,
-            productionLineName: selectedWorker.lineName,
-          },
-          sourceRequestId: loanId,
-          createdBy: uid || '',
+      const approvalResult = await productionApprovalRequestService.create({
+        requestType: 'loan',
+        employeeId: selectedWorker.employeeId,
+        employeeName: selectedWorker.employeeName,
+        departmentId: selectedWorker.employee.departmentId || 'production',
+        requestData: {
+          loanType,
+          loanTypeLabel: LOAN_TYPE_LABELS[loanType],
+          loanAmount: amount,
+          installmentAmount: isMonthly ? amount : loanInstallmentAmount,
+          totalInstallments: installments,
+          remainingInstallments: installments,
+          startMonth,
+          month: isMonthly ? startMonth : undefined,
+          reason: loanReason || '—',
+          productionLineId: selectedWorker.lineId,
+          productionLineName: selectedWorker.lineName,
         },
-        caller,
+        sourceRequestId: loanId,
+        createdBy: uid || '',
+        createdByEmployeeId: supervisorId,
+        createdByName: resolvedSupervisor?.name || userDisplayName || '',
         approvalEmployees,
-      );
+      });
       if (!approvalResult.success) {
         await loanService.delete(loanId);
         throw new Error(approvalResult.error || 'تعذر إرسال طلب السلفة للموافقات');
@@ -920,35 +994,34 @@ export const SupervisorTeamActions: React.FC = () => {
     if (!selectedWorker || durationDays <= 0 || !durationLabel || !penaltyMonth || !penaltyReason.trim()) return false;
     setSubmitting('penalty');
     try {
-      const { approvalEmployees, caller } = getApprovalContext();
-      const approvalResult = await createRequest(
-        {
-          requestType: 'penalty',
-          employeeId: selectedWorker.employeeId,
-          requestData: {
-            penaltyName: penaltyName.trim() || 'جزاء تأديبي',
-            penaltyDurationDays: Math.round(durationDays * 1000) / 1000,
-            penaltyDurationLabel: durationLabel,
-            ...(calculatedAmount ? {
-              penaltyAmount: calculatedAmount.amount,
-              penaltyDailyRate: calculatedAmount.dailyRate,
-              penaltyAmountSource: 'base_salary_daily_rate',
-            } : {
-              penaltyAmountSource: 'duration_only',
-            }),
-            startMonth: penaltyMonth,
-            reason: penaltyReason.trim(),
-            requestedByEmployeeId: supervisorId,
-            requestedByName: resolvedSupervisor?.name || userDisplayName || '',
-            requestedOnBehalf: true,
-            productionLineId: selectedWorker.lineId,
-            productionLineName: selectedWorker.lineName,
-          },
-          createdBy: uid || '',
+      const { approvalEmployees } = getApprovalContext();
+      const approvalResult = await productionApprovalRequestService.create({
+        requestType: 'penalty',
+        employeeId: selectedWorker.employeeId,
+        employeeName: selectedWorker.employeeName,
+        departmentId: selectedWorker.employee.departmentId || 'production',
+        requestData: {
+          penaltyName: penaltyName.trim() || 'جزاء تأديبي',
+          penaltyDurationDays: Math.round(durationDays * 1000) / 1000,
+          penaltyDurationLabel: durationLabel,
+          ...(calculatedAmount ? {
+            penaltyAmount: calculatedAmount.amount,
+            penaltyDailyRate: calculatedAmount.dailyRate,
+            penaltyAmountSource: 'base_salary_daily_rate',
+          } : {
+            penaltyAmountSource: 'duration_only',
+          }),
+          startMonth: penaltyMonth,
+          reason: penaltyReason.trim(),
+          productionLineId: selectedWorker.lineId,
+          productionLineName: selectedWorker.lineName,
         },
-        caller,
+        sourceRequestId: null,
+        createdBy: uid || '',
+        createdByEmployeeId: supervisorId,
+        createdByName: resolvedSupervisor?.name || userDisplayName || '',
         approvalEmployees,
-      );
+      });
       if (!approvalResult.success) {
         throw new Error(approvalResult.error || 'تعذر إرسال طلب الجزاء للموافقات');
       }
@@ -1124,6 +1197,7 @@ export const SupervisorTeamActions: React.FC = () => {
                 const typeCfg = TYPE_CONFIG[req.requestType];
                 const statusCfg = getProductionApprovalStatusDisplay(req);
                 const requestId = req.id || '';
+                const renderKey = getProductionApprovalRenderKey(req);
                 const requesterName = req.requestData?.requestedByName || req.createdBy || '—';
                 const decidedBy = req.history
                   ?.slice()
@@ -1209,6 +1283,7 @@ export const SupervisorTeamActions: React.FC = () => {
                 const typeCfg = TYPE_CONFIG[req.requestType];
                 const statusCfg = getProductionApprovalStatusDisplay(req);
                 const requestId = req.id || '';
+                const renderKey = getProductionApprovalRenderKey(req);
                 const isProcessing = approvalActionLoading === requestId;
                 const requesterName = req.requestData?.requestedByName || req.createdBy || '—';
                 const isExpanded = requestId ? expandedApprovalIds.has(requestId) : false;
@@ -1218,7 +1293,7 @@ export const SupervisorTeamActions: React.FC = () => {
                 const approvalLeaveTypeLabel = getSupervisorApprovalLeaveTypeLabel(req);
 
                 return (
-                  <div key={requestId} className={`border rounded-[var(--border-radius-lg)] bg-[var(--color-card)] overflow-hidden ${canAct ? 'border-primary/20' : 'border-[var(--color-border)]'}`}>
+                  <div key={renderKey} className={`border rounded-[var(--border-radius-lg)] bg-[var(--color-card)] overflow-hidden ${canAct ? 'border-primary/20' : 'border-[var(--color-border)]'}`}>
                     <div className="p-4">
                       <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-4">
                         <div className="flex items-start gap-3 min-w-0">

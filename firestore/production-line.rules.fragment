@@ -213,6 +213,7 @@
     function pl_isErpBusinessCollection(coll) {
       return coll in [
         'products', 'production_lines', 'productionLines', 'employees', 'production_reports',
+        'production_approval_requests',
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
         'production_workers', 'production_line_worker_assignments',

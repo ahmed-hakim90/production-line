@@ -207,6 +207,29 @@ const emptyForm = {
 
 const deriveReportWaste = (report: Pick<ProductionReport, 'componentScrapItems'>): number =>
   (report.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0);
+
+const normalizeReportWorkerOutputs = (
+  rows: ProductionReportWorkerOutput[] = [],
+  lineId: string,
+  productId: string,
+): ProductionReportWorkerOutput[] => rows
+  .filter((row) => row.productId === productId && row.lineId === lineId)
+  .map((row) => {
+    const isPresent = row.isPresent ?? true;
+    const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+    return {
+      ...row,
+      isPresent,
+      outputQty,
+      achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+    };
+  });
+
+const countPresentReportWorkerOutputs = (report: Pick<ProductionReport, 'workerOutputs' | 'lineId' | 'productId'>): number | null => {
+  const rows = normalizeReportWorkerOutputs(report.workerOutputs || [], report.lineId, report.productId);
+  if (rows.length === 0) return null;
+  return rows.reduce((sum, row) => (row.isPresent === false ? sum : sum + 1), 0);
+};
 const NOTE_PREVIEW_LENGTH = 10;
 
 
@@ -1446,7 +1469,8 @@ export const Reports: React.FC = () => {
       };
 
       const produced = Number(report.quantityProduced || 0);
-      const productionWorkers = Number(report.workersProductionCount || report.workersCount || 0);
+      const productionWorkers = countPresentReportWorkerOutputs(report)
+        ?? Number(report.workersProductionCount || report.workersCount || 0);
       const workersCount = Number(report.workersCount || 0);
       const unitCost = report.id ? Number(reportCosts.get(report.id) || 0) : 0;
       current.totalProducedQty += produced;
@@ -2217,18 +2241,20 @@ export const Reports: React.FC = () => {
       }
     }
 
-    const reportWorkerOutputs = (form.workerOutputs || [])
-      .filter((row) => row.productId === form.productId && row.lineId === form.lineId)
-      .map((row) => {
-        const isPresent = row.isPresent ?? true;
-        const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
-        return {
-          ...row,
-          isPresent,
-          outputQty,
-          achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
-        };
-      });
+    const reportWorkerOutputs = normalizeReportWorkerOutputs(
+      form.workerOutputs || [],
+      form.lineId,
+      form.productId,
+    );
+    const appliedWorkerOutputs = formWorkerOutputsEnabled
+      ? reportWorkerOutputs
+      : [];
+    const workerOutputPresence = summarizeWorkerPresenceDays(appliedWorkerOutputs.map((row) => ({
+      workerId: row.workerId,
+      date: form.date,
+      isPresent: row.isPresent,
+    })));
+    const hasAppliedWorkerOutputRows = appliedWorkerOutputs.length > 0;
 
     const payload = {
       ...form,
@@ -2250,12 +2276,20 @@ export const Reports: React.FC = () => {
         ? { shift: form.shift }
         : { shift: undefined }),
       workersCount: effectiveFormWorkersCount,
-      presentAssignments: form.presentAssignments || effectiveFormWorkersCount,
-      absentAssignments: form.absentAssignments || 0,
+      presentAssignments: hasAppliedWorkerOutputRows
+        ? workerOutputPresence.presentDays
+        : form.presentAssignments || effectiveFormWorkersCount,
+      absentAssignments: hasAppliedWorkerOutputRows
+        ? workerOutputPresence.absentDays
+        : form.absentAssignments || 0,
+      assemblyModeSnapshot: formAssemblyMode,
+      workerTargetsApplied: formWorkerOutputsEnabled,
+      workerTargetSource: formWorkerOutputsEnabled ? 'line_product' : 'none',
+      laborAssignmentSource: effectiveFormWorkersCount > 0 || hasAppliedWorkerOutputRows
+        ? 'line_worker_assignments'
+        : 'none',
     } as Omit<ProductionReport, 'id' | 'createdAt'> & { supplyCycleId?: string };
-    payload.workerOutputs = formWorkerOutputsEnabled
-      ? reportWorkerOutputs.filter((row) => row.productId === payload.productId && row.lineId === payload.lineId)
-      : [];
+    payload.workerOutputs = appliedWorkerOutputs.filter((row) => row.productId === payload.productId && row.lineId === payload.lineId);
     if (editId) {
       payload.supplyCycleId = autoSupplyCycleId || '';
     }
