@@ -188,7 +188,14 @@ export const ApprovalCenter: React.FC = () => {
     try {
       let data: FirestoreApprovalRequest[];
       if (viewAll) {
-        data = await getAllRequests();
+        const [all, actionable] = await Promise.all([
+          getAllRequests(),
+          approverEmployeeId ? getPendingApprovals({ approverEmployeeId }) : Promise.resolve([]),
+        ]);
+        const merged = new Map<string, FirestoreApprovalRequest>();
+        all.forEach((r) => { if (r.id) merged.set(r.id, r); });
+        actionable.forEach((r) => { if (r.id) merged.set(r.id, r); });
+        data = Array.from(merged.values());
       } else if (approverEmployeeId) {
         const [pending, own] = await Promise.all([
           getPendingApprovals({ approverEmployeeId }),
@@ -352,7 +359,11 @@ export const ApprovalCenter: React.FC = () => {
     if (role === 'admin') return true;
     if (req.currentStep >= req.approvalChain.length) return false;
     const step = req.approvalChain[req.currentStep];
-    return step.approverEmployeeId === approverEmployeeId || step.delegatedTo === approverEmployeeId;
+    return (
+      step.approverEmployeeId === approverEmployeeId ||
+      step.delegatedTo === approverEmployeeId ||
+      (role === 'hr' && req.currentStep === req.approvalChain.length - 1)
+    );
   }, [approverEmployeeId, role]);
 
   const toggleContext = useCallback((requestId: string) => {

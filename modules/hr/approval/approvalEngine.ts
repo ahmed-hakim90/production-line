@@ -64,6 +64,7 @@ import type {
   PendingApprovalsQuery,
   ApprovalEmployeeInfo,
   ApprovalRequestType,
+  FirestoreApprovalDelegation,
 } from './types';
 import type { FirestoreDepartment, FirestoreJobPosition } from '../types';
 import { normalizeApprovalSettings } from './types';
@@ -137,6 +138,51 @@ function deriveStatusFromChain(request: FirestoreApprovalRequest): ApprovalReque
   if (chain.every((s) => s.status === 'approved' || s.status === 'skipped')) return 'approved';
   if (chain.some((s) => s.status === 'approved')) return 'in_progress';
   return 'pending';
+}
+
+function isDelegationActiveForRequest(
+  delegation: FirestoreApprovalDelegation,
+  requestType: ApprovalRequestType,
+  date: string,
+): boolean {
+  if (!delegation.isActive) return false;
+  if (delegation.startDate > date || delegation.endDate < date) return false;
+  return delegation.requestTypes === 'all' || delegation.requestTypes.includes(requestType);
+}
+
+function getActiveDelegationForCurrentStep(
+  request: FirestoreApprovalRequest,
+  delegations: FirestoreApprovalDelegation[],
+  date: string,
+): FirestoreApprovalDelegation | undefined {
+  const currentStep = request.approvalChain[request.currentStep];
+  if (!currentStep) return undefined;
+
+  return delegations.find((delegation) =>
+    delegation.fromEmployeeId === currentStep.approverEmployeeId &&
+    isDelegationActiveForRequest(delegation, request.requestType, date),
+  );
+}
+
+async function resolveDelegateOfCurrentStep(
+  request: FirestoreApprovalRequest,
+  callerEmployeeId: string,
+  allowDelegation: boolean,
+): Promise<string | undefined> {
+  if (!allowDelegation || !callerEmployeeId) return undefined;
+
+  const currentStep = request.approvalChain[request.currentStep];
+  if (!currentStep) return undefined;
+
+  if (currentStep.delegatedTo === callerEmployeeId) {
+    return currentStep.approverEmployeeId;
+  }
+
+  const today = new Date().toISOString().slice(0, 10);
+  const activeDelegations = await approvalDelegationService.getByToEmployee(callerEmployeeId);
+  const matchingDelegation = getActiveDelegationForCurrentStep(request, activeDelegations, today);
+
+  return matchingDelegation?.fromEmployeeId;
 }
 
 async function resolveHrApproverEmployeeId(
@@ -461,24 +507,7 @@ export async function approveRequest(
   if (!request) return { success: false, error: 'الطلب غير موجود' };
 
   const settings = await getApprovalSettings();
-  let delegateOf: string | undefined;
-
-  if (settings.allowDelegation) {
-    const today = new Date().toISOString().slice(0, 10);
-    const delegation = await approvalDelegationService.resolveDelegate(
-      caller.employeeId,
-      request.requestType,
-      today,
-    );
-    if (delegation) {
-      delegateOf = delegation.fromEmployeeId;
-    }
-
-    const currentStep = request.approvalChain[request.currentStep];
-    if (currentStep?.delegatedTo === caller.employeeId) {
-      delegateOf = currentStep.approverEmployeeId;
-    }
-  }
+  const delegateOf = await resolveDelegateOfCurrentStep(request, caller.employeeId, settings.allowDelegation);
 
   const validation = validateAction(caller, request, delegateOf);
   if (!validation.allowed) {
@@ -597,14 +626,7 @@ export async function rejectRequest(
   if (!request) return { success: false, error: 'الطلب غير موجود' };
 
   const settings = await getApprovalSettings();
-  let delegateOf: string | undefined;
-
-  if (settings.allowDelegation) {
-    const currentStep = request.approvalChain[request.currentStep];
-    if (currentStep?.delegatedTo === caller.employeeId) {
-      delegateOf = currentStep.approverEmployeeId;
-    }
-  }
+  const delegateOf = await resolveDelegateOfCurrentStep(request, caller.employeeId, settings.allowDelegation);
 
   const validation = validateAction(caller, request, delegateOf);
   if (!validation.allowed) {
@@ -816,6 +838,11 @@ export async function getPendingApprovals(
 
   const statusFilter = ['pending', 'in_progress', 'escalated'];
   const allPending: FirestoreApprovalRequest[] = [];
+  const settings = await getApprovalSettings();
+  const today = new Date().toISOString().slice(0, 10);
+  const delegationsToCaller = settings.allowDelegation
+    ? await approvalDelegationService.getByToEmployee(params.approverEmployeeId)
+    : [];
 
   for (const status of statusFilter) {
     const q = params.requestType
@@ -838,13 +865,30 @@ export async function getPendingApprovals(
   }
 
   return allPending
-    .filter((req) => {
-      if (req.currentStep >= req.approvalChain.length) return false;
+    .flatMap((req) => {
+      if (req.currentStep < 0 || req.currentStep >= req.approvalChain.length) return [];
       const step = req.approvalChain[req.currentStep];
-      return (
+      const activeDelegation = getActiveDelegationForCurrentStep(req, delegationsToCaller, today);
+
+      const canAct = (
         step.approverEmployeeId === params.approverEmployeeId ||
-        step.delegatedTo === params.approverEmployeeId
+        step.delegatedTo === params.approverEmployeeId ||
+        Boolean(activeDelegation)
       );
+
+      if (!canAct) return [];
+
+      if (!activeDelegation || step.delegatedTo === params.approverEmployeeId) {
+        return [req];
+      }
+
+      const approvalChain = [...req.approvalChain];
+      approvalChain[req.currentStep] = {
+        ...step,
+        delegatedTo: activeDelegation.toEmployeeId,
+        delegatedToName: activeDelegation.toEmployeeName,
+      };
+      return [{ ...req, approvalChain }];
     })
     .sort((a, b) => {
       const ta = a.createdAt?.toMillis?.() ?? a.createdAt?.seconds * 1000 ?? 0;

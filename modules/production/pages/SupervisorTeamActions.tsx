@@ -417,20 +417,14 @@ export const SupervisorTeamActions: React.FC = () => {
     }
     if (!opts?.silent) setApprovalsLoading(true);
     try {
-      const canReadApprovalInbox = (
-        permissions['approval.view'] === true ||
-        permissions['approval.manage'] === true ||
-        permissions['approval.override'] === true ||
-        permissions['approval.escalate'] === true
-      );
       const canReadAllApprovalHistory = canViewAllRequests(permissions);
       const [pending, createdRequests, readableRequests] = await Promise.all([
-        canReadApprovalInbox ? getPendingApprovals({ approverEmployeeId: supervisorId }) : Promise.resolve([]),
+        getPendingApprovals({ approverEmployeeId: supervisorId }),
         uid ? getRequestsCreatedBy(uid).catch((allRequestsErr) => {
           console.warn('Failed to load supervisor-created approval requests:', allRequestsErr);
           return [];
         }) : Promise.resolve([]),
-        canReadApprovalInbox ? getAllRequests().catch((allRequestsErr) => {
+        canReadAllApprovalHistory ? getAllRequests().catch((allRequestsErr) => {
           console.warn('Failed to load approval history requests:', allRequestsErr);
           return [];
         }) : Promise.resolve([]),

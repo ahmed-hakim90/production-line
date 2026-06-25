@@ -845,6 +845,32 @@ assert.equal(isApprovalRequestCreatedBySupervisor(supervisorEmployeeLinkedApprov
 assert.equal(canSupervisorActOnApprovalRequest(actionableApproval, 'sup-1'), true);
 assert.equal(canSupervisorActOnApprovalRequest(supervisorCreatedApproval, 'sup-1'), false);
 assert.equal(
+  canSupervisorActOnApprovalRequest({
+    ...actionableApproval,
+    approvalChain: [
+      { approverEmployeeId: 'first-approver', delegatedTo: '', level: 2, status: 'pending' },
+      { approverEmployeeId: 'second-approver', delegatedTo: '', level: 3, status: 'pending' },
+    ],
+    currentStep: 0,
+    status: 'pending',
+  } as any, 'first-approver'),
+  true,
+  'First configured approver should see approve/reject while the first step is pending',
+);
+assert.equal(
+  canSupervisorActOnApprovalRequest({
+    ...actionableApproval,
+    approvalChain: [
+      { approverEmployeeId: 'first-approver', delegatedTo: '', level: 2, status: 'approved' },
+      { approverEmployeeId: 'second-approver', delegatedTo: '', level: 3, status: 'pending' },
+    ],
+    currentStep: 1,
+    status: 'in_progress',
+  } as any, 'second-approver'),
+  true,
+  'Second configured approver should see approve/reject after the first approver approves',
+);
+assert.equal(
   canSupervisorCancelApprovalRequest(supervisorEmployeeLinkedApproval, 'sup-1', 'supervisor-user'),
   true,
   'Supervisor creator should be able to cancel before any approval',
