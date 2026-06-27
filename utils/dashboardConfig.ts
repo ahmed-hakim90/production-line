@@ -229,6 +229,8 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   hrApproverUserIds: [],
   productionRequestFirstApproverEmployeeId: '',
   productionRequestFinalApproverEmployeeId: '',
+  productionRequestObserverEmployeeIds: [],
+  productionRequestObserverUserIds: [],
   allowNegativeDecomposedStock: false,
   allowNegativeFinishedTransferStock: false,
   requireFinishedStockApprovalForReports: true,

@@ -21,7 +21,7 @@ import {
 } from '../../../types';
 import { useTranslation } from 'react-i18next';
 import {
-  isInjectionCategory,
+  isInjectionMaterial,
   parseInjectionCategoryTokens,
 } from '@/modules/production/utils/injectionMaterialFilter';
 import {
@@ -213,7 +213,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   }, [form.reportType, lines, injectionLineIds]);
 
   const injectionRawMaterialOptions = useMemo(
-    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
+    () => rawMaterialOptions.filter((row) => isInjectionMaterial(row, injectionCategoryTokens)),
     [rawMaterialOptions, injectionCategoryTokens],
   );
 

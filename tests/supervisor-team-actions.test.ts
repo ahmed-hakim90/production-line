@@ -290,8 +290,13 @@ const productionRequestsItem = productionGroup?.children.find((item) => item.key
 assert.equal(dashboardGroup?.children.some((item) => item.key === 'team-requests'), false);
 assert.equal(productionRequestsItem?.label, 'طلبات الإنتاج');
 assert.equal(productionRequestsItem?.path, '/production/requests');
+assert.equal(productionRequestsItem?.anyOfPermissions?.includes('production.requests.observe'), true);
 assert.equal(
   PRODUCTION_ROUTES.some((route) => route.path === '/production/requests' && !route.redirectTo),
+  true,
+);
+assert.equal(
+  PRODUCTION_ROUTES.find((route) => route.path === '/production/requests')?.permissionsAny?.includes('production.requests.observe'),
   true,
 );
 assert.equal(
@@ -835,6 +840,22 @@ const visibleApprovals = mergeSupervisorVisibleApprovalRequests({
   supervisorEmployeeId: 'sup-1',
   supervisorUserId: 'supervisor-user',
 });
+const observerOnlyApproval = {
+  ...actionableApproval,
+  id: 'approval-observer-only',
+  requestData: {
+    ...actionableApproval.requestData,
+    requestedByEmployeeId: 'other-supervisor',
+    requestedByName: 'Other Supervisor',
+    productionRequestObserverEmployeeIds: ['observer-1'],
+  },
+  approvalChain: [
+    { approverEmployeeId: 'manager-1', approverName: 'Manager One', approverJobTitle: 'Production Manager', delegatedTo: '', level: 3, status: 'pending' },
+  ],
+  currentStep: 0,
+  status: 'pending',
+  createdBy: 'other-user',
+} as any;
 
 assert.deepEqual(
   visibleApprovals.map((request) => request.id),
@@ -844,6 +865,9 @@ assert.equal(isApprovalRequestCreatedBySupervisor(supervisorCreatedApproval, 'su
 assert.equal(isApprovalRequestCreatedBySupervisor(supervisorEmployeeLinkedApproval, 'sup-1', 'supervisor-user'), true);
 assert.equal(canSupervisorActOnApprovalRequest(actionableApproval, 'sup-1'), true);
 assert.equal(canSupervisorActOnApprovalRequest(supervisorCreatedApproval, 'sup-1'), false);
+assert.equal(canSupervisorActOnApprovalRequest(observerOnlyApproval, 'observer-1'), false);
+assert.equal(canSupervisorCancelApprovalRequest(observerOnlyApproval, 'observer-1', 'observer-user'), false);
+assert.equal(isApprovalRequestParticipant(observerOnlyApproval, 'observer-1', 'observer-user'), true);
 assert.equal(
   canSupervisorActOnApprovalRequest({
     ...actionableApproval,
@@ -944,6 +968,11 @@ assert.deepEqual(
 assert.ok(
   Object.keys(exportRows[0]).includes('نوع الإجازة'),
   'PDF/Excel export rows should include a leave type column',
+);
+assert.equal(
+  buildSupervisorApprovalExportRows([observerOnlyApproval])[0]['مرحلة الاعتماد'],
+  'Manager One',
+  'Observer-visible requests should remain exportable without changing the approval stage',
 );
 assert.equal(
   buildSupervisorApprovalExportRows([{
@@ -1104,6 +1133,15 @@ assert.deepEqual(
   }).map((request) => request.id),
   ['history-approved', 'history-cancelled'],
   'History participant filter should match request creators by employee id',
+);
+assert.deepEqual(
+  filterProductionApprovalHistory({
+    requests: [{ ...observerOnlyApproval, id: 'history-observer', status: 'approved' } as any, approvedHistoryApproval],
+    status: 'all',
+    participantEmployeeId: 'observer-1',
+  }).map((request) => request.id),
+  ['history-observer'],
+  'History participant filter should include configured production observers',
 );
 assert.equal(isApprovalRequestParticipant(approvedHistoryApproval, 'worker-2'), false);
 assert.equal(

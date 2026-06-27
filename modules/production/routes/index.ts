@@ -42,7 +42,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/supervisors/:id/evaluation', permissionsAny: ['supervisors.view', 'production.workers.manage', 'hr.evaluation.create'], component: SupervisorWorkerEvaluation },
   { path: '/supervisors/:id', permission: 'supervisors.view', component: SupervisorDetails },
   { path: '/my-workers/evaluation', permissionsAny: ['employeeDashboard.view', 'quickAction.view', 'hr.evaluation.create'], component: SupervisorWorkerEvaluation, skeleton: 'dashboard' },
-  { path: '/production/requests', permissionsAny: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage'], component: SupervisorTeamActions, skeleton: 'dashboard' },
+  { path: '/production/requests', permissionsAny: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage', 'production.requests.observe'], component: SupervisorTeamActions, skeleton: 'dashboard' },
   { path: '/production/my-team-actions', redirectTo: '/production/requests' },
   { path: '/my-workers', permissionsAny: ['employeeDashboard.view', 'quickAction.view'], component: SupervisorDetails, skeleton: 'dashboard' },
   { path: '/supervisor-line-assignments', redirectTo: '/supervisors?tab=assignments' },

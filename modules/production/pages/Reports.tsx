@@ -128,7 +128,7 @@ import {
   normalizeInjectionShift,
 } from '../utils/injectionReportShift';
 import {
-  isInjectionCategory,
+  isInjectionMaterial,
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
 import { countsTowardFinishedGoodsProduction, effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
@@ -794,7 +794,7 @@ export const Reports: React.FC = () => {
   );
 
   const injectionRawMaterialOptions = useMemo(
-    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
+    () => rawMaterialOptions.filter((row) => isInjectionMaterial(row, injectionCategoryTokens)),
     [rawMaterialOptions, injectionCategoryTokens],
   );
 

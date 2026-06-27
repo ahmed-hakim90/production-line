@@ -250,6 +250,7 @@ export const SupervisorTeamActions: React.FC = () => {
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const permissions = useAppStore((s) => s.userPermissions);
+  const planSettings = useAppStore((s) => s.systemSettings.planSettings);
 
   const [resolvedSupervisor, setResolvedSupervisor] = useState<FirestoreEmployee | null>(currentEmployee);
   const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>([]);
@@ -296,8 +297,10 @@ export const SupervisorTeamActions: React.FC = () => {
   const [penaltyMonth, setPenaltyMonth] = useState(getCurrentMonth());
   const [penaltyReason, setPenaltyReason] = useState('');
 
-  const canUsePage = can('employeeDashboard.view') || can('quickAction.view') || can('production.workerReports.view') || can('reports.create') || can('approval.view') || can('leave.manage') || can('approval.manage');
   const supervisorId = resolvedSupervisor?.id || '';
+  const isConfiguredProductionRequestObserver = (planSettings.productionRequestObserverEmployeeIds ?? []).includes(supervisorId);
+  const canCreateProductionRequests = can('employeeDashboard.view') || can('quickAction.view') || can('production.workerReports.view') || can('reports.create') || can('approval.view') || can('leave.manage') || can('approval.manage');
+  const canUsePage = canCreateProductionRequests || can('production.requests.observe') || isConfiguredProductionRequestObserver;
   const selectedWorker = useMemo(
     () => teamWorkers.find((worker) => worker.employeeId === selectedEmployeeId) || null,
     [selectedEmployeeId, teamWorkers],
@@ -445,7 +448,8 @@ export const SupervisorTeamActions: React.FC = () => {
       const viewAllProductionApprovals = (
         permissions['production.workers.manage'] === true ||
         permissions['production.workerReports.view'] === true ||
-        permissions['leave.manage'] === true
+        permissions['leave.manage'] === true ||
+        isConfiguredProductionRequestObserver
       );
       const canReadAllLegacyApprovals = canViewAllRequests(permissions);
       const [newRequestsResult, legacyPendingResult, legacyCreatedResult, legacyAllResult] = await Promise.allSettled([
@@ -510,7 +514,7 @@ export const SupervisorTeamActions: React.FC = () => {
     } finally {
       if (!opts?.silent) setApprovalsLoading(false);
     }
-  }, [permissions, supervisorId, uid]);
+  }, [isConfiguredProductionRequestObserver, permissions, supervisorId, uid]);
 
   const fetchTeam = useCallback(async () => {
     setLoading(true);
@@ -640,6 +644,12 @@ export const SupervisorTeamActions: React.FC = () => {
     const timer = window.setTimeout(() => setToast(null), 4500);
     return () => window.clearTimeout(timer);
   }, [toast]);
+
+  useEffect(() => {
+    if (!canCreateProductionRequests && activePageTab === 'create') {
+      setActivePageTab('approvals');
+    }
+  }, [activePageTab, canCreateProductionRequests]);
 
   useEffect(() => {
     if (!historyParticipantFilter) return;
@@ -1062,12 +1072,12 @@ export const SupervisorTeamActions: React.FC = () => {
         title="طلبات الإنتاج"
         subtitle="إنشاء ومتابعة طلبات عمال الإنتاج مع تصدير الحالة كملف Excel أو PDF"
         icon="assignment"
-        primaryAction={{
+        primaryAction={canCreateProductionRequests ? {
           label: 'طلب جديد',
           icon: 'add',
           onClick: () => setCreateModalOpen(true),
           disabled: workerOptions.length === 0,
-        }}
+        } : undefined}
       />
 
       {toast && (
@@ -1103,7 +1113,7 @@ export const SupervisorTeamActions: React.FC = () => {
 
       <div className="flex flex-wrap gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
         {[
-          { key: 'create' as const, label: 'إنشاء طلب إنتاج', icon: 'edit_note' },
+          ...(canCreateProductionRequests ? [{ key: 'create' as const, label: 'إنشاء طلب إنتاج', icon: 'edit_note' }] : []),
           { key: 'approvals' as const, label: `حالات الطلبات${approvalRequests.length ? ` (${approvalRequests.length})` : ''}`, icon: 'approval' },
           { key: 'history' as const, label: `سجل الطلبات${filteredHistoryRequests.length ? ` (${filteredHistoryRequests.length})` : ''}`, icon: 'history' },
         ].map((tab) => (
@@ -1403,7 +1413,7 @@ export const SupervisorTeamActions: React.FC = () => {
             </div>
           )}
         </Card>
-      ) : (
+      ) : canCreateProductionRequests ? (
         <Card>
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
             <div>
@@ -1423,8 +1433,13 @@ export const SupervisorTeamActions: React.FC = () => {
             </div>
           )}
         </Card>
+      ) : (
+        <Card>
+          <p className="text-sm font-bold text-[var(--color-text-muted)]">هذه الصفحة مخصصة للاطلاع فقط لهذا المستخدم.</p>
+        </Card>
       )}
 
+      {canCreateProductionRequests && (
       <Dialog open={createModalOpen} onOpenChange={(open) => !submitting && setCreateModalOpen(open)}>
         <DialogContent
           className="!flex !flex-col !w-[calc(100vw-1rem)] !max-w-[calc(100vw-1rem)] !max-h-[min(96vh,96dvh)] !overflow-hidden !p-0 sm:!w-full sm:!max-w-5xl sm:!p-0"
@@ -1771,6 +1786,7 @@ export const SupervisorTeamActions: React.FC = () => {
           )}
         </DialogContent>
       </Dialog>
+      )}
       {pdfExportRows.length > 0 && (
         <div
           ref={approvalsPdfRef}

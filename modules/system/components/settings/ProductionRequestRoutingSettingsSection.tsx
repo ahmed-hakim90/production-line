@@ -31,6 +31,12 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
       label: `${employee.code ? `${employee.code} — ` : ''}${employee.name || 'موظف'}${employee.hasSystemAccess || employee.userId ? ' (له حساب)' : ''}`,
     }));
   }, [employees]);
+  const observerOptions = useMemo(
+    () => approverOptions.filter((option) => employees.some((employee) => (
+      employee.id === option.id && Boolean(String(employee.userId || '').trim())
+    ))),
+    [approverOptions, employees],
+  );
 
   if (!isAdmin) return null;
 
@@ -39,6 +45,25 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
     value: string,
   ) => {
     setLocalPlanSettings((prev) => ({ ...prev, [key]: value }));
+  };
+  const toggleObserver = (employeeId: string, checked: boolean) => {
+    setLocalPlanSettings((prev) => {
+      const current = prev.productionRequestObserverEmployeeIds ?? [];
+      const nextEmployeeIds = checked
+        ? Array.from(new Set([...current, employeeId]))
+        : current.filter((id) => id !== employeeId);
+      const userIdsByEmployeeId = new Map(
+        employees.map((employee) => [employee.id, String(employee.userId || '').trim()]),
+      );
+      const nextUserIds = nextEmployeeIds
+        .map((id) => userIdsByEmployeeId.get(id) || '')
+        .filter(Boolean);
+      return {
+        ...prev,
+        productionRequestObserverEmployeeIds: nextEmployeeIds,
+        productionRequestObserverUserIds: Array.from(new Set(nextUserIds)),
+      };
+    });
   };
 
   const selectApprover = (
@@ -85,6 +110,32 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
             'اختياري. اتركه فارغًا إذا كان الاعتماد مرحلة واحدة فقط.',
             localPlanSettings.productionRequestFinalApproverEmployeeId,
             (value) => updateApprover('productionRequestFinalApproverEmployeeId', value),
+          )}
+        </div>
+
+        <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+          <p className="text-sm font-bold text-[var(--color-text)]">جهات الاطلاع</p>
+          <p className="text-xs text-[var(--color-text-muted)] mb-3">
+            جهات متابعة فقط ترى حالات وسجل طلبات الإنتاج دون دخول سلسلة الاعتماد أو إظهار أزرار الموافقة والرفض.
+          </p>
+          {observerOptions.length === 0 ? (
+            <p className="text-xs text-[var(--color-text-muted)]">لا يوجد موظفون نشطون مرتبطون بحساب مستخدم للاختيار.</p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              {observerOptions.map((option) => {
+                const selected = (localPlanSettings.productionRequestObserverEmployeeIds ?? []).includes(option.id);
+                return (
+                  <label key={option.id} className="flex items-center gap-2 text-xs font-medium text-[var(--color-text)] p-2 rounded border border-[var(--color-border)] bg-[var(--color-card)]">
+                    <input
+                      type="checkbox"
+                      checked={selected}
+                      onChange={(event) => toggleObserver(option.id, event.target.checked)}
+                    />
+                    <span>{option.label}</span>
+                  </label>
+                );
+              })}
+            </div>
           )}
         </div>
 

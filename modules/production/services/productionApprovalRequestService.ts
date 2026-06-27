@@ -10,6 +10,7 @@ import {
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
+import { employeeService } from '@/modules/hr/employeeService';
 import { systemSettingsService } from '@/modules/system/services/systemSettingsService';
 import {
   productionApprovalRequestDocRef,
@@ -113,9 +114,37 @@ function getParticipantEmployeeIds(request: FirestoreApprovalRequest): string[] 
   return uniqueNonEmpty([
     request.employeeId,
     request.requestData?.requestedByEmployeeId,
+    ...(request.requestData?.productionRequestObserverEmployeeIds || []),
     ...request.approvalChain.flatMap((step) => [step.approverEmployeeId, step.delegatedTo]),
     ...(request.history || []).map((entry) => entry.performedBy === 'system' ? '' : entry.performedBy),
   ]);
+}
+
+async function resolveUserIdsForEmployeeIds(employeeIds: string[]): Promise<string[]> {
+  const userIds = await Promise.all(
+    uniqueNonEmpty(employeeIds).map((employeeId) =>
+      employeeService.getUserIdByEmployeeId(employeeId).catch(() => null),
+    ),
+  );
+  return uniqueNonEmpty(userIds);
+}
+
+async function buildProductionApprovalAccessFields(
+  request: FirestoreApprovalRequest,
+): Promise<Pick<FirestoreApprovalRequest, 'currentApproverEmployeeIds' | 'currentApproverUserIds' | 'participantEmployeeIds' | 'participantUserIds'>> {
+  const currentApproverEmployeeIds = getCurrentApproverEmployeeIds(request);
+  const participantEmployeeIds = getParticipantEmployeeIds(request);
+  const [currentApproverUserIds, participantUserIds] = await Promise.all([
+    resolveUserIdsForEmployeeIds(currentApproverEmployeeIds),
+    resolveUserIdsForEmployeeIds(participantEmployeeIds),
+  ]);
+
+  return {
+    currentApproverEmployeeIds,
+    currentApproverUserIds,
+    participantEmployeeIds,
+    participantUserIds,
+  };
 }
 
 function getCurrentApproverEmployeeIds(request: FirestoreApprovalRequest): string[] {
@@ -147,15 +176,17 @@ function isVisibleTo(request: FirestoreApprovalRequest, params: VisibleProductio
 
 async function buildProductionApprovalChain(
   approvalEmployees: ApprovalEmployeeInfo[],
-): Promise<{ chain: ApprovalChainSnapshot[]; error?: string }> {
+): Promise<{ chain: ApprovalChainSnapshot[]; observerEmployeeIds: string[]; observerUserIds: string[]; error?: string }> {
   const settings = await systemSettingsService.get().catch(() => null);
   const approverIds = uniqueNonEmpty([
     settings?.planSettings?.productionRequestFirstApproverEmployeeId,
     settings?.planSettings?.productionRequestFinalApproverEmployeeId,
   ]);
+  const observerEmployeeIds = uniqueNonEmpty(settings?.planSettings?.productionRequestObserverEmployeeIds || []);
+  const observerUserIds = uniqueNonEmpty(settings?.planSettings?.productionRequestObserverUserIds || []);
 
   if (approverIds.length === 0) {
-    return { chain: [], error: 'لم يتم تحديد الموافق الأول أو النهائي لطلبات الإنتاج من الإعدادات' };
+    return { chain: [], observerEmployeeIds, observerUserIds, error: 'لم يتم تحديد الموافق الأول أو النهائي لطلبات الإنتاج من الإعدادات' };
   }
 
   const chain = approverIds.flatMap((employeeId) => {
@@ -164,10 +195,10 @@ async function buildProductionApprovalChain(
   });
 
   if (chain.length !== approverIds.length) {
-    return { chain: [], error: 'أحد الموافقين المحددين لطلبات الإنتاج غير موجود كسجل موظف' };
+    return { chain: [], observerEmployeeIds, observerUserIds, error: 'أحد الموافقين المحددين لطلبات الإنتاج غير موجود كسجل موظف' };
   }
 
-  return { chain };
+  return { chain, observerEmployeeIds, observerUserIds };
 }
 
 export const productionApprovalRequestService = {
@@ -188,6 +219,8 @@ export const productionApprovalRequestService = {
         requestedByEmployeeId: input.createdByEmployeeId,
         requestedByName: input.createdByName,
         requestedOnBehalf: true,
+        productionRequestObserverEmployeeIds: chainResult.observerEmployeeIds,
+        productionRequestObserverUserIds: chainResult.observerUserIds,
       },
       approvalChain: chainResult.chain,
       currentStep: 0,
@@ -208,10 +241,7 @@ export const productionApprovalRequestService = {
       createdBy: input.createdBy,
       updatedAt: serverTimestamp(),
     };
-    Object.assign(requestDoc, {
-      currentApproverEmployeeIds: getCurrentApproverEmployeeIds(requestDoc),
-      participantEmployeeIds: getParticipantEmployeeIds(requestDoc),
-    });
+    Object.assign(requestDoc, await buildProductionApprovalAccessFields(requestDoc));
 
     const ref = await addDoc(productionApprovalRequestsRef(), requestDoc);
     return { success: true, requestId: ref.id };
@@ -286,8 +316,7 @@ export const productionApprovalRequestService = {
       currentStep: nextStep,
       status: newStatus,
       history,
-      currentApproverEmployeeIds: getCurrentApproverEmployeeIds({ ...request, approvalChain: updatedChain, currentStep: nextStep, status: newStatus }),
-      participantEmployeeIds: getParticipantEmployeeIds({ ...request, approvalChain: updatedChain, history }),
+      ...(await buildProductionApprovalAccessFields({ ...request, approvalChain: updatedChain, currentStep: nextStep, status: newStatus, history })),
       updatedAt: serverTimestamp(),
     });
 
@@ -317,8 +346,7 @@ export const productionApprovalRequestService = {
       approvalChain: updatedChain,
       status: 'rejected',
       history,
-      currentApproverEmployeeIds: [],
-      participantEmployeeIds: getParticipantEmployeeIds({ ...request, approvalChain: updatedChain, history }),
+      ...(await buildProductionApprovalAccessFields({ ...request, approvalChain: updatedChain, status: 'rejected', history })),
       updatedAt: serverTimestamp(),
     });
 
@@ -344,8 +372,7 @@ export const productionApprovalRequestService = {
     await updateDoc(productionApprovalRequestDocRef(input.requestId), {
       status: 'cancelled',
       history,
-      currentApproverEmployeeIds: [],
-      participantEmployeeIds: getParticipantEmployeeIds({ ...request, history }),
+      ...(await buildProductionApprovalAccessFields({ ...request, status: 'cancelled', history })),
       updatedAt: serverTimestamp(),
     });
 

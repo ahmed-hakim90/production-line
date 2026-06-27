@@ -1218,6 +1218,10 @@ export interface PlanSettings {
   productionRequestFirstApproverEmployeeId?: string;
   /** Optional final configured approver for production-created leave/loan/penalty requests. */
   productionRequestFinalApproverEmployeeId?: string;
+  /** View-only employee observers for production-created leave/loan/penalty requests. */
+  productionRequestObserverEmployeeIds?: string[];
+  /** Linked user ids for production request observers, used by Firestore rules. */
+  productionRequestObserverUserIds?: string[];
   allowNegativeDecomposedStock?: boolean;
   allowNegativeFinishedTransferStock?: boolean;
   requireFinishedStockApprovalForReports?: boolean;

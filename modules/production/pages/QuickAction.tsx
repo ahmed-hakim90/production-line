@@ -70,7 +70,7 @@ import {
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
 import {
-  isInjectionCategory,
+  isInjectionMaterial,
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
@@ -527,7 +527,7 @@ export const QuickAction: React.FC = () => {
   }, [_rawLines, lineStatuses]);
 
   const injectionRawMaterialOptions = useMemo(
-    () => rawMaterialOptions.filter((row) => isInjectionCategory(row.categoryName, injectionCategoryTokens)),
+    () => rawMaterialOptions.filter((row) => isInjectionMaterial(row, injectionCategoryTokens)),
     [rawMaterialOptions, injectionCategoryTokens],
   );
 

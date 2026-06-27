@@ -100,6 +100,11 @@ export function getApprovalRequestParticipantEmployeeIds(request: FirestoreAppro
   const requestedByEmployeeId = String(request.requestData?.requestedByEmployeeId || '').trim();
   if (requestedByEmployeeId) participants.add(requestedByEmployeeId);
 
+  (request.requestData?.productionRequestObserverEmployeeIds || []).forEach((employeeId: string) => {
+    const normalized = String(employeeId || '').trim();
+    if (normalized) participants.add(normalized);
+  });
+
   request.approvalChain.forEach((step) => {
     const approverEmployeeId = String(step.approverEmployeeId || '').trim();
     const delegatedTo = String(step.delegatedTo || '').trim();

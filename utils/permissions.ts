@@ -37,6 +37,7 @@ export type Permission =
   | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
   | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
+  | 'production.requests.observe'
   | 'lineProductConfig.view'
   | 'assets.view' | 'assets.create' | 'assets.edit' | 'assets.delete' | 'assets.depreciation.run' | 'assets.depreciation.view'
   | 'settings.view' | 'settings.edit'
@@ -178,6 +179,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.packaging.create', label: 'إنشاء تقرير تغليف (بدون صلاحة إنشاء تقارير الإنتاج العامة)' },
       { key: 'reports.componentWaste.create', label: 'إنشاء تقرير هالك مكونات' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
+      { key: 'production.requests.observe', label: 'الاطلاع على طلبات الإنتاج' },
       { key: 'lineStatus.view', label: 'عرض حالة الخطوط' },
       { key: 'lineStatus.edit', label: 'تعديل حالة الخطوط' },
       { key: 'routing.view', label: 'عرض مسارات الإنتاج' },

@@ -113,6 +113,12 @@ const seed = async () => {
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
   });
+  await set('users', 'userAObserver', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-operator-role',
+  });
   await set('users', 'userASettings', {
     tenantId: 'tenantA',
     isActive: true,
@@ -170,6 +176,8 @@ const seed = async () => {
     planSettings: {
       productionRequestFirstApproverEmployeeId: '',
       productionRequestFinalApproverEmployeeId: '',
+      productionRequestObserverEmployeeIds: ['emp-observer-a'],
+      productionRequestObserverUserIds: ['userAObserver'],
     },
   });
   await set('production_workers', 'workerA', {
@@ -431,6 +439,7 @@ await seed();
   const hrDb = testEnv.authenticatedContext('userAHrApprover').firestore();
   const adminDb = testEnv.authenticatedContext('userAAdmin').firestore();
   const operatorDb = testEnv.authenticatedContext('userAOperator').firestore();
+  const observerDb = testEnv.authenticatedContext('userAObserver').firestore();
   const tenantBDb = testEnv.authenticatedContext('userBAdmin').firestore();
   const createdAt = new Date();
   const approvalDoc = {
@@ -654,6 +663,43 @@ await seed();
     read: true,
     actionUrl: '/hr/approvals',
     createdAt,
+  }));
+
+  const productionApprovalDoc = {
+    ...approvalDoc,
+    requestData: {
+      ...approvalDoc.requestData,
+      productionLineName: 'Line A',
+      productionRequestObserverEmployeeIds: ['emp-observer-a'],
+      productionRequestObserverUserIds: ['userAObserver'],
+    },
+    currentApproverEmployeeIds: ['emp-manager-a'],
+    currentApproverUserIds: ['userAManager'],
+    participantEmployeeIds: ['emp-worker-a', 'emp-supervisor-a', 'emp-observer-a'],
+    participantUserIds: ['userASupervisor', 'userAObserver'],
+  };
+  await assertSucceeds(supervisorDb.collection('production_approval_requests').doc('prod-approval-a').set(productionApprovalDoc));
+  await assertSucceeds(observerDb.collection('production_approval_requests').doc('prod-approval-a').get());
+  await assertSucceeds(
+    observerDb.collection('production_approval_requests').where('tenantId', '==', 'tenantA').get(),
+  );
+  await assertFails(
+    operatorDb.collection('production_approval_requests').where('tenantId', '==', 'tenantA').get(),
+  );
+  await assertFails(operatorDb.collection('production_approval_requests').doc('prod-approval-a').get());
+  await assertFails(observerDb.collection('production_approval_requests').doc('prod-approval-a').update({
+    status: 'approved',
+    updatedAt: createdAt,
+    history: [{
+      step: 0,
+      action: 'approved',
+      performedBy: 'emp-observer-a',
+      performedByName: 'Observer A',
+      timestamp: createdAt,
+      notes: 'observer should not approve',
+      previousStatus: 'pending',
+      newStatus: 'approved',
+    }],
   }));
 
   await assertFails(operatorDb.collection('approval_requests').doc('approval-denied').set(approvalDoc));

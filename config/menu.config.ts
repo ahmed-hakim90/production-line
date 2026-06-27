@@ -109,7 +109,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         icon: 'assignment',
         path: '/production/requests',
         permission: 'employeeDashboard.view',
-        anyOfPermissions: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage'],
+        anyOfPermissions: ['employeeDashboard.view', 'quickAction.view', 'production.workerReports.view', 'reports.create', 'approval.view', 'leave.manage', 'approval.manage', 'production.requests.observe'],
         activePatterns: ['/production/requests', '/team-requests'],
       },
       {
