@@ -98,7 +98,11 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
         lineProductConfigs,
       });
       const contextKey = `${lineId}|${productId}|${date}|${assemblyMode}`;
-      const shouldPreserveValues = lastLoadedContextRef.current === contextKey;
+      // On the very first load (e.g. when editing an existing report) the parent
+      // already supplies the saved per-worker outputs, so keep them instead of
+      // resetting every quantity to zero.
+      const isFirstLoad = lastLoadedContextRef.current === '';
+      const shouldPreserveValues = lastLoadedContextRef.current === contextKey || isFirstLoad;
       const existingByWorker = new Map(
         shouldPreserveValues
           ? value

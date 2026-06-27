@@ -2077,6 +2077,14 @@ export const Reports: React.FC = () => {
           : [],
       workerOutputs: Array.isArray(report.workerOutputs) ? report.workerOutputs : [],
     });
+    // Pre-seed the worker-outputs context so the reset effect does not wipe the
+    // saved per-worker production when the edit modal first opens.
+    const editProduct = _rawProducts.find((p) => p.id === report.productId) ?? null;
+    const editAssemblyMode = getProductAssemblyMode(editProduct);
+    const editWorkerOutputsEnabled = rt === 'finished_product'
+      && editAssemblyMode === 'individual'
+      && hasLineSpecificWorkerTarget(lineProductConfigs, report.lineId, report.productId);
+    lastFormWorkerOutputsContextRef.current = `${rt}|${report.productId}|${report.lineId}|${report.date}|${editAssemblyMode}|${editWorkerOutputsEnabled}`;
     setShowModal(true);
   };
 
