@@ -272,7 +272,13 @@ export const QuickAction: React.FC = () => {
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState('');
   const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
+  // `today` holds the report date the user is filing for (defaults to the
+  // operational day, but can be back-dated to a previous day).
   const [today, setToday] = useState(() => getOperationalDateString(8));
+  // The current operational day (auto-synced). Used as the default and as the
+  // latest selectable report date so future-dated reports are not allowed.
+  const [operationalDate, setOperationalDate] = useState(() => getOperationalDateString(8));
+  const reportDateManuallyChangedRef = useRef(false);
   const selectedProduct = useMemo(
     () => _rawProducts.find((p) => p.id === productId) ?? null,
     [_rawProducts, productId],
@@ -553,12 +559,25 @@ export const QuickAction: React.FC = () => {
   useEffect(() => {
     const syncOperationalDate = () => {
       const next = getOperationalDateString(8);
-      setToday((prev) => (prev === next ? prev : next));
+      setOperationalDate((prev) => (prev === next ? prev : next));
+      // Only roll the report date forward automatically while the user has not
+      // manually picked a back-dated day.
+      if (!reportDateManuallyChangedRef.current) {
+        setToday((prev) => (prev === next ? prev : next));
+      }
     };
     syncOperationalDate();
     const timer = window.setInterval(syncOperationalDate, 30_000);
     return () => window.clearInterval(timer);
   }, []);
+
+  const handleReportDateChange = useCallback((value: string) => {
+    if (!value) return;
+    // Never allow a future date; clamp to the current operational day.
+    const clamped = value > operationalDate ? operationalDate : value;
+    reportDateManuallyChangedRef.current = clamped !== operationalDate;
+    setToday(clamped);
+  }, [operationalDate]);
 
   const fetchWorkersFromLineAssignments = useCallback(async () => {
     if (!lineId) {
@@ -754,7 +773,7 @@ export const QuickAction: React.FC = () => {
       return () => { mounted = false; };
     }
     setSupervisorLinesLoaded(false);
-    supervisorLineAssignmentService.getActiveByDate(today)
+    supervisorLineAssignmentService.getActiveByDate(operationalDate)
       .then((rows) => {
         if (!mounted) return;
         const ids = new Set(
@@ -772,7 +791,7 @@ export const QuickAction: React.FC = () => {
         setSupervisorLinesLoaded(true);
       });
     return () => { mounted = false; };
-  }, [isSupervisorReporter, currentEmployee?.id, today]);
+  }, [isSupervisorReporter, currentEmployee?.id, operationalDate]);
 
   const allowedLinesForUser = useMemo(
     () => (
@@ -1239,6 +1258,8 @@ export const QuickAction: React.FC = () => {
     setSaved(false);
     setPrintReport(null);
     setShareCardRow(null);
+    reportDateManuallyChangedRef.current = false;
+    setToday(operationalDate);
     clearQuickActionStorage();
   };
 
@@ -1547,6 +1568,27 @@ export const QuickAction: React.FC = () => {
                 value={lineId}
                 onChange={setLineId}
               />
+            </div>
+            <div>
+              <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 block">تاريخ التقرير *</label>
+              <input
+                type="date"
+                value={today}
+                max={operationalDate}
+                onChange={(e) => handleReportDateChange(e.target.value)}
+                className={cn(
+                  'w-full px-4 py-2.5 border rounded-[var(--border-radius-lg)] text-sm font-bold focus:border-primary focus:ring-2 focus:ring-primary/12',
+                  today !== operationalDate
+                    ? 'bg-amber-50 border-amber-300 text-amber-800'
+                    : 'bg-[#f8f9fa] border-[var(--color-border)]',
+                )}
+              />
+              {today !== operationalDate && (
+                <p className="mt-1.5 text-[11px] font-bold text-amber-600 leading-relaxed flex items-center gap-1">
+                  <span className="material-icons-round text-sm">history</span>
+                  تقرير ليوم سابق ({today}) — سيُسجَّل الحضور والغياب على هذا التاريخ.
+                </p>
+              )}
             </div>
             {reportType === 'component_injection' && (
               <div>
