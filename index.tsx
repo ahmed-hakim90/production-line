@@ -6,6 +6,9 @@ import './src/index.css';
 import './src/i18n';
 import App from './App';
 import { queryClient } from './lib/queryClient';
+import { registerPwaAutoUpdate } from './src/pwaAutoUpdate';
+
+registerPwaAutoUpdate();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

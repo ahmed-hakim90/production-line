@@ -97,6 +97,7 @@ export const LineWorkerAssignment: React.FC = () => {
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [savingPermanentLink, setSavingPermanentLink] = useState(false);
   const [endingPermanentAssignmentId, setEndingPermanentAssignmentId] = useState<string | null>(null);
+  const [clearingPermanentAssignments, setClearingPermanentAssignments] = useState(false);
   const [expandedLines, setExpandedLines] = useState<Set<string>>(new Set());
   const [updatingLaborRoleId, setUpdatingLaborRoleId] = useState<string | null>(null);
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
@@ -435,6 +436,50 @@ export const LineWorkerAssignment: React.FC = () => {
     }
   };
 
+  const cancellablePermanentAssignments = useMemo(() => {
+    const targetLineIds = selectedLineId ? new Set([selectedLineId]) : visibleLineIds;
+    const uniqueByPermanentId = new Map<string, DisplayLineWorkerAssignment>();
+
+    for (const assignment of allDayAssignments) {
+      if (!assignment.permanentAssignmentId || !targetLineIds.has(String(assignment.lineId || '').trim())) continue;
+      uniqueByPermanentId.set(assignment.permanentAssignmentId, assignment);
+    }
+
+    return Array.from(uniqueByPermanentId.values());
+  }, [allDayAssignments, selectedLineId, visibleLineIds]);
+
+  const handleClearPermanentAssignments = async () => {
+    if (cancellablePermanentAssignments.length === 0) {
+      showFeedback('warning', selectedLineId ? 'لا يوجد عمال مربوطون دائماً على هذا الخط' : 'لا يوجد عمال مربوطون دائماً على الخطوط المعروضة');
+      return;
+    }
+
+    const scopeLabel = selectedLineId ? `خط ${getLineName(selectedLineId)}` : 'كل الخطوط المعروضة';
+    const confirmed = window.confirm(
+      `سيتم إلغاء الربط الدائم لعدد ${cancellablePermanentAssignments.length} عامل من ${scopeLabel}. هل تريد المتابعة؟`,
+    );
+    if (!confirmed) return;
+
+    setClearingPermanentAssignments(true);
+    try {
+      const endDate = getTodayDateString();
+      await Promise.all(
+        cancellablePermanentAssignments.map((assignment) => (
+          productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId!, {
+            isActive: false,
+            endDate,
+          })
+        )),
+      );
+      await loadAssignments();
+      showFeedback('success', selectedLineId ? 'تم إلغاء ربط عمال الخط' : 'تم إلغاء ربط عمال كل الخطوط المعروضة');
+    } catch {
+      showFeedback('error', 'حدث خطأ أثناء إلغاء ربط العمال');
+    } finally {
+      setClearingPermanentAssignments(false);
+    }
+  };
+
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -584,6 +629,19 @@ export const LineWorkerAssignment: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
+          <Button
+            variant="danger"
+            onClick={() => void handleClearPermanentAssignments()}
+            disabled={loading || clearingPermanentAssignments || cancellablePermanentAssignments.length === 0}
+            className="h-[42px] shrink-0"
+          >
+            {clearingPermanentAssignments ? (
+              <span className="material-icons-round animate-spin text-sm">refresh</span>
+            ) : (
+              <span className="material-icons-round text-sm">link_off</span>
+            )}
+            {selectedLineId ? 'إلغاء عمال الخط' : 'إلغاء عمال كل الخطوط'}
+          </Button>
         </div>
         <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
           تم إيقاف النسخ اليومي. أي إضافة من هذه الصفحة تنشئ ربطاً دائماً في سجل عمال الإنتاج، وليس سجل حضور يومي.
