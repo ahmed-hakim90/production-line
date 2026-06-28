@@ -155,11 +155,11 @@ export const resolveTeamRequestScope = (input: {
     });
 
   if (input.can('leave.manage') && structurallyHr) return 'hr_all';
+  if (input.managesDepartment && structurallyLineSupervisor) return 'department_manager_assigned_lines';
+  if (input.managesDepartment) return 'department_manager';
   if (structurallyProductionManager) {
     return 'production_all';
   }
-  if (input.managesDepartment && structurallyLineSupervisor) return 'department_manager_assigned_lines';
-  if (input.managesDepartment) return 'department_manager';
   if (structurallyLineSupervisor) return 'assigned_lines';
   return 'assigned_lines';
 };
@@ -287,6 +287,11 @@ export const buildSupervisorTeamWorkers = (input: {
       .filter((employee) => employee.id && employee.isActive !== false)
       .map((employee) => [employee.id!, employee]),
   );
+  const departmentById = new Map(
+    (input.departments || [])
+      .filter((department) => department.id)
+      .map((department) => [department.id!, department]),
+  );
   const workerById = new Map(
     input.workers
       .filter((worker) => worker.id && worker.isActive !== false)
@@ -315,6 +320,7 @@ export const buildSupervisorTeamWorkers = (input: {
     const fallbackAssignment = worker.id ? latestLineByWorker.get(worker.id) : undefined;
     const lineId = context?.lineId || fallbackAssignment?.lineId || worker.defaultLineId || worker.lineIds?.[0] || '';
     const line = lineId ? linesById.get(lineId) : undefined;
+    const department = employee.departmentId ? departmentById.get(employee.departmentId) : undefined;
     return {
       employeeId: employee.id!,
       employeeName: employee.name || worker.name || employee.id!,
@@ -323,7 +329,7 @@ export const buildSupervisorTeamWorkers = (input: {
       workerName: worker.name || employee.name || employee.id!,
       workerCode: worker.code || employee.code || '',
       lineId,
-      lineName: context?.lineName || line?.name || lineId || 'كل الأقسام',
+      lineName: context?.lineName || line?.name || department?.name || lineId || 'بدون خط محدد',
       supervisorId: resolveSupervisorId(context?.managerId) || supervisorId,
       supervisorName: context?.supervisorName,
       employee,

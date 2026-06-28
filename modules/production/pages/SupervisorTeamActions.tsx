@@ -83,6 +83,8 @@ import {
 type PageTab = 'create' | 'approvals' | 'history';
 type ActionTab = 'leave' | 'loan' | 'penalty';
 type HistoryStatusFilter = 'all' | 'approved' | 'rejected' | 'cancelled';
+type ExportRequestTypeFilter = 'all' | ApprovalRequestType;
+type ExportStatusFilter = 'all' | ApprovalRequestStatus;
 type Toast = { type: 'success' | 'error'; message: string } | null;
 
 const LEGACY_PRODUCTION_APPROVAL_SOURCE = 'legacy_hr_approval';
@@ -146,6 +148,12 @@ function formatApprovalCreatedAt(value: any): string {
   return date.toLocaleDateString('ar-EG');
 }
 
+function formatApprovalDateKey(value: any): string {
+  const date = value?.toDate ? value.toDate() : value?.seconds ? new Date(value.seconds * 1000) : null;
+  if (!date || Number.isNaN(date.getTime())) return '';
+  return date.toISOString().slice(0, 10);
+}
+
 function isProductionApprovalRequest(req: FirestoreApprovalRequest): boolean {
   return Boolean(req.requestData?.productionLineId || req.requestData?.productionLineName);
 }
@@ -196,6 +204,19 @@ function formatRequestDetail(req: FirestoreApprovalRequest): string {
     return `${durationLabel ? `المدة: ${durationLabel} — ` : ''}${data.productionLineName || '—'} — شهر ${data.startMonth || '—'} — ${data.reason || '—'}`;
   }
   return data.description || '';
+}
+
+function getRequestCreatedDateKey(req: FirestoreApprovalRequest): string {
+  return formatApprovalDateKey(req.createdAt);
+}
+
+function isRequestInDateRange(req: FirestoreApprovalRequest, from: string, to: string): boolean {
+  if (!from && !to) return true;
+  const dateKey = getRequestCreatedDateKey(req);
+  if (!dateKey) return false;
+  if (from && dateKey < from) return false;
+  if (to && dateKey > to) return false;
+  return true;
 }
 
 function mapApprovalStatusToLegacy(status: ApprovalRequestStatus): ApprovalStatus {
@@ -298,6 +319,10 @@ export const SupervisorTeamActions: React.FC = () => {
   const [expandedApprovalIds, setExpandedApprovalIds] = useState<Set<string>>(new Set());
   const [historyStatusFilter, setHistoryStatusFilter] = useState<HistoryStatusFilter>('all');
   const [historyParticipantFilter, setHistoryParticipantFilter] = useState('');
+  const [exportDateFrom, setExportDateFrom] = useState('');
+  const [exportDateTo, setExportDateTo] = useState('');
+  const [exportRequestTypeFilter, setExportRequestTypeFilter] = useState<ExportRequestTypeFilter>('all');
+  const [exportStatusFilter, setExportStatusFilter] = useState<ExportStatusFilter>('all');
   const [exportingApprovalsPdf, setExportingApprovalsPdf] = useState(false);
   const approvalsPdfRef = useRef<HTMLDivElement>(null);
 
@@ -377,16 +402,16 @@ export const SupervisorTeamActions: React.FC = () => {
   );
   const teamScopeLabel = useMemo(() => {
     if (teamScope === 'hr_all') return 'النطاق: كل الموظفين';
-    if (teamScope === 'production_all') return 'النطاق: كل عمال الإنتاج';
+    if (teamScope === 'production_all') return 'النطاق: كل موظفي الإنتاج';
     if (teamScope === 'department_manager' || teamScope === 'department_manager_assigned_lines') {
       const departmentLabel = managedDepartmentCount === 1
         ? 'القسم الذي تديره'
         : `الأقسام التي تديرها (${managedDepartmentCount})`;
       return teamScope === 'department_manager_assigned_lines'
-        ? `النطاق: خطوطك و${departmentLabel}`
+        ? `النطاق: ${departmentLabel} وخطوطك`
         : `النطاق: ${departmentLabel}`;
     }
-    return 'النطاق: خطوطك الحالية';
+    return 'النطاق: الموظفون على خطوطك الحالية';
   }, [managedDepartmentCount, teamScope]);
 
   const approvalCaller: CallerContext = useMemo(() => ({
@@ -451,6 +476,17 @@ export const SupervisorTeamActions: React.FC = () => {
   const historyExportHeaders = useMemo(
     () => Object.keys(historyExportRows[0] || {}),
     [historyExportRows],
+  );
+  const reportExportRequests = useMemo(
+    () => historyRequests
+      .filter((request) => isRequestInDateRange(request, exportDateFrom, exportDateTo))
+      .filter((request) => exportRequestTypeFilter === 'all' || request.requestType === exportRequestTypeFilter)
+      .filter((request) => exportStatusFilter === 'all' || request.status === exportStatusFilter),
+    [exportDateFrom, exportDateTo, exportRequestTypeFilter, exportStatusFilter, historyRequests],
+  );
+  const reportExportRows = useMemo(
+    () => buildSupervisorApprovalExportRows(reportExportRequests),
+    [reportExportRequests],
   );
   const pdfExportRows = activePageTab === 'history' ? historyExportRows : approvalExportRows;
   const pdfExportHeaders = activePageTab === 'history' ? historyExportHeaders : approvalExportHeaders;
@@ -848,6 +884,16 @@ export const SupervisorTeamActions: React.FC = () => {
     );
   }, [historyExportRows]);
 
+  const handleExportFilteredReport = useCallback(() => {
+    if (reportExportRows.length === 0) return;
+    const date = new Date().toISOString().slice(0, 10);
+    exportGenericRows(
+      reportExportRows,
+      `production-requests-report-${date}`,
+      'تقرير طلبات الإنتاج',
+    );
+  }, [reportExportRows]);
+
   const handleExportApprovalsPdf = useCallback(async () => {
     if (pdfExportRows.length === 0 || !approvalsPdfRef.current) return;
     setExportingApprovalsPdf(true);
@@ -1089,7 +1135,7 @@ export const SupervisorTeamActions: React.FC = () => {
     <div className="space-y-6">
       <PageHeader
         title="طلبات الإنتاج"
-        subtitle="إنشاء ومتابعة طلبات عمال الإنتاج مع تصدير الحالة كملف Excel أو PDF"
+        subtitle="إنشاء طلبات للموظفين ضمن الأقسام المتاحة لك، ثم متابعتها وتصديرها كملف Excel"
         icon="assignment"
         primaryAction={canCreateProductionRequests ? {
           label: 'طلب جديد',
@@ -1119,16 +1165,78 @@ export const SupervisorTeamActions: React.FC = () => {
           </p>
         </Card>
         <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">طلبات الاعتماد</p>
+          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">طلبات تنتظر قرارك</p>
           <p className="text-lg font-black text-[var(--color-text)]">{actionableApprovalCount}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">{approvalRequests.length} طلب ظاهر لك مع الحالة الحالية</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">{approvalRequests.length} طلب ظاهر لك للمتابعة</p>
         </Card>
         <Card>
           <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">إنشاء الطلبات</p>
           <p className="text-lg font-black text-[var(--color-text)]">إجازة / سلفة / جزاء</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">اختر العامل والنوع داخل نافذة الطلب الجديد</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">تذهب الطلبات للموافقين المحددين في إعدادات النظام</p>
         </Card>
       </div>
+
+      <Card>
+        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+          <div>
+            <h3 className="text-base font-black text-[var(--color-text)]">تقرير Excel للطلبات</h3>
+            <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">
+              اختر فترة ونوع الطلب والحالة، ثم صدّر الطلبات الظاهرة لك في ملف واحد.
+            </p>
+          </div>
+          <Button variant="outline" onClick={handleExportFilteredReport} disabled={reportExportRows.length === 0}>
+            <span className="material-icons-round text-sm">download</span>
+            تصدير التقرير ({reportExportRows.length})
+          </Button>
+        </div>
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--color-text-muted)]">من تاريخ الطلب</label>
+            <input type="date" className={INPUT_CLASS} value={exportDateFrom} onChange={(e) => setExportDateFrom(e.target.value)} />
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--color-text-muted)]">إلى تاريخ الطلب</label>
+            <input type="date" className={INPUT_CLASS} value={exportDateTo} min={exportDateFrom} onChange={(e) => setExportDateTo(e.target.value)} />
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--color-text-muted)]">نوع الطلب</label>
+            <select className={INPUT_CLASS} value={exportRequestTypeFilter} onChange={(e) => setExportRequestTypeFilter(e.target.value as ExportRequestTypeFilter)}>
+              <option value="all">كل الأنواع</option>
+              {Object.entries(TYPE_CONFIG).map(([key, config]) => (
+                <option key={key} value={key}>{config.label}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="mb-2 block text-xs font-black text-[var(--color-text-muted)]">الحالة</label>
+            <select className={INPUT_CLASS} value={exportStatusFilter} onChange={(e) => setExportStatusFilter(e.target.value as ExportStatusFilter)}>
+              <option value="all">كل الحالات</option>
+              <option value="pending">قيد الانتظار</option>
+              <option value="in_progress">قيد المعالجة</option>
+              <option value="escalated">مصعّد</option>
+              <option value="approved">معتمد</option>
+              <option value="rejected">مرفوض</option>
+              <option value="cancelled">ملغى</option>
+            </select>
+          </div>
+          <div className="flex items-end">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setExportDateFrom('');
+                setExportDateTo('');
+                setExportRequestTypeFilter('all');
+                setExportStatusFilter('all');
+              }}
+              disabled={!exportDateFrom && !exportDateTo && exportRequestTypeFilter === 'all' && exportStatusFilter === 'all'}
+              className="w-full"
+            >
+              <span className="material-icons-round text-sm">filter_alt_off</span>
+              مسح الفلاتر
+            </Button>
+          </div>
+        </div>
+      </Card>
 
       <div className="flex flex-wrap gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
         {[

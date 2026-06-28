@@ -283,6 +283,7 @@
       return pl_hasErpPermission('employeeDashboard.view')
         || pl_hasErpPermission('quickAction.view')
         || pl_hasErpPermission('production.workerReports.view')
+        || pl_hasErpPermission('reports.create')
         || pl_hasErpPermission('leave.manage')
         || pl_hasErpPermission('approval.view')
         || pl_hasErpPermission('approval.manage');

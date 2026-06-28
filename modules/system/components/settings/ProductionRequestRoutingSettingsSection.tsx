@@ -94,7 +94,7 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
         <div>
           <p className="text-sm font-bold text-[var(--color-text)]">أين تذهب طلبات الإنتاج؟</p>
           <p className="text-xs text-[var(--color-text-muted)] mt-1 leading-6">
-            عند اختيار موافق هنا، ستذهب طلبات الإجازة والسلفة والجزاء التي ينشئها الإنتاج إلى هؤلاء الموافقين مباشرة. إذا تركت الحقول فارغة يستخدم النظام التسلسل الوظيفي كما هو.
+            ستذهب طلبات الإجازة والسلفة والجزاء التي ينشئها الإنتاج إلى الموافقين المحددين هنا. يجب تحديد الموافق الأول على الأقل، والموافق النهائي اختياري.
           </p>
         </div>
 

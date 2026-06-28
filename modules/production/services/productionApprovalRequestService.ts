@@ -12,6 +12,7 @@ import { isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
 import { employeeService } from '@/modules/hr/employeeService';
 import { systemSettingsService } from '@/modules/system/services/systemSettingsService';
+import { buildConfiguredApprovalChain } from '@/modules/hr/approval/approvalBuilder';
 import {
   productionApprovalRequestDocRef,
   productionApprovalRequestsRef,
@@ -24,6 +25,7 @@ import type {
   ApprovalRequestType,
   FirestoreApprovalRequest,
 } from '@/modules/hr/approval';
+import { normalizeApprovalSettings } from '@/modules/hr/approval/types';
 
 const ACTIONABLE_STATUSES: ApprovalRequestStatus[] = ['pending', 'in_progress', 'escalated'];
 
@@ -67,22 +69,6 @@ function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
 
 function getApprovalChain(request: FirestoreApprovalRequest): ApprovalChainSnapshot[] {
   return Array.isArray(request.approvalChain) ? request.approvalChain : [];
-}
-
-function toChainSnapshot(employee: ApprovalEmployeeInfo): ApprovalChainSnapshot {
-  return {
-    approverEmployeeId: employee.employeeId,
-    approverName: employee.employeeName,
-    approverJobTitle: employee.jobTitle,
-    level: employee.jobLevel,
-    departmentId: employee.departmentId,
-    departmentName: employee.departmentName,
-    status: 'pending',
-    actionDate: null,
-    notes: '',
-    delegatedTo: null,
-    delegatedToName: null,
-  };
 }
 
 function deriveStatus(approvalChain: ApprovalChainSnapshot[]): ApprovalRequestStatus {
@@ -183,37 +169,57 @@ function isVisibleTo(request: FirestoreApprovalRequest, params: VisibleProductio
 }
 
 async function buildProductionApprovalChain(
+  requestEmployeeId: string,
+  requestType: ApprovalRequestType,
+  requestCreatorEmployeeId: string,
   approvalEmployees: ApprovalEmployeeInfo[],
 ): Promise<{ chain: ApprovalChainSnapshot[]; observerEmployeeIds: string[]; observerUserIds: string[]; error?: string }> {
   const settings = await systemSettingsService.get().catch(() => null);
+  const approvalSettings = normalizeApprovalSettings();
   const approverIds = uniqueNonEmpty([
     settings?.planSettings?.productionRequestFirstApproverEmployeeId,
     settings?.planSettings?.productionRequestFinalApproverEmployeeId,
   ]);
   const observerEmployeeIds = uniqueNonEmpty(settings?.planSettings?.productionRequestObserverEmployeeIds || []);
   const observerUserIds = uniqueNonEmpty(settings?.planSettings?.productionRequestObserverUserIds || []);
+  const employee = approvalEmployees.find((row) => row.employeeId === requestEmployeeId);
+
+  if (!employee) {
+    return { chain: [], observerEmployeeIds, observerUserIds, error: 'العامل غير موجود كسجل موظف لبناء سلسلة الموافقات' };
+  }
 
   if (approverIds.length === 0) {
-    return { chain: [], observerEmployeeIds, observerUserIds, error: 'لم يتم تحديد الموافق الأول أو النهائي لطلبات الإنتاج من الإعدادات' };
+    return { chain: [], observerEmployeeIds, observerUserIds, error: 'حدد موافقاً واحداً على الأقل لطلبات الإنتاج من إعدادات النظام' };
   }
 
-  const chain = approverIds.flatMap((employeeId) => {
-    const approver = approvalEmployees.find((employee) => employee.employeeId === employeeId);
-    return approver ? [toChainSnapshot(approver)] : [];
-  });
+  const chainResult = buildConfiguredApprovalChain(
+    {
+      employee,
+      allEmployees: approvalEmployees,
+      requestType,
+      settings: approvalSettings,
+      requestCreatorEmployeeId,
+    },
+    approverIds,
+  );
 
-  if (chain.length !== approverIds.length) {
-    return { chain: [], observerEmployeeIds, observerUserIds, error: 'أحد الموافقين المحددين لطلبات الإنتاج غير موجود كسجل موظف' };
+  if (chainResult.chain.length === 0) {
+    return { chain: [], observerEmployeeIds, observerUserIds, error: chainResult.errors.join(' | ') || 'فشل في بناء سلسلة موافقات طلب الإنتاج' };
   }
 
-  return { chain, observerEmployeeIds, observerUserIds };
+  return { chain: chainResult.chain, observerEmployeeIds, observerUserIds };
 }
 
 export const productionApprovalRequestService = {
   async create(input: CreateProductionApprovalRequestInput): Promise<{ success: boolean; requestId?: string; error?: string }> {
     if (!isConfigured) return { success: false, error: 'Firebase not configured' };
 
-    const chainResult = await buildProductionApprovalChain(input.approvalEmployees);
+    const chainResult = await buildProductionApprovalChain(
+      input.employeeId,
+      input.requestType,
+      input.createdByEmployeeId,
+      input.approvalEmployees,
+    );
     if (chainResult.error) return { success: false, error: chainResult.error };
 
     const requestDoc: Omit<FirestoreApprovalRequest, 'id'> = {

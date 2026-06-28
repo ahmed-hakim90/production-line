@@ -132,6 +132,14 @@ export const Organization: React.FC = () => {
     [_rawEmployees, selectedEmployeeId],
   );
   const directReportCounts = useMemo(() => getDirectReportCounts(_rawEmployees), [_rawEmployees]);
+  const managedDepartmentCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    departments.forEach((department) => {
+      if (department.isActive === false || !department.managerId) return;
+      counts[department.managerId] = (counts[department.managerId] || 0) + 1;
+    });
+    return counts;
+  }, [departments]);
   const employeeHierarchySummary = useMemo(() => {
     const active = _rawEmployees.filter((e) => e.isActive !== false);
     return {
@@ -379,13 +387,23 @@ export const Organization: React.FC = () => {
       {/* ── Departments Tab ── */}
       {tab === 'departments' && (
         <Card>
+          <div className="mb-4 rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">
+            يمكن اختيار نفس الموظف كمدير لأكثر من قسم. أي موظف يكون مديراً لقسم سيستطيع إنشاء طلبات إنتاج لموظفي هذا القسم من صفحة طلبات الإنتاج.
+          </div>
           {departments.length === 0 ? <EmptyState icon="business" label="لا يوجد أقسام" sub='اضغط "إضافة قسم" للبدء' /> : (
             <DataTable headers={['القسم', 'الرمز', 'مدير القسم', { label: 'الموظفين', center: true }, { label: 'المناصب', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {departments.map((d) => (
                 <tr key={d.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa] transition-colors">
                   <td className="py-3 px-4 font-bold text-[var(--color-text)]">{d.name}</td>
                   <td className="py-3 px-4"><span className="bg-[#f0f2f5] text-[var(--color-text-muted)] px-2 py-0.5 rounded text-xs font-mono">{d.code}</span></td>
-                  <td className="py-3 px-4 text-[var(--color-text-muted)]">{d.managerId ? getManagerName(d.managerId) : '—'}</td>
+                  <td className="py-3 px-4 text-[var(--color-text-muted)]">
+                    <div className="space-y-1">
+                      <p>{d.managerId ? getManagerName(d.managerId) : '—'}</p>
+                      {d.managerId && managedDepartmentCounts[d.managerId] > 1 && (
+                        <p className="text-[10px] font-bold text-primary">يدير {managedDepartmentCounts[d.managerId]} أقسام</p>
+                      )}
+                    </div>
+                  </td>
                   <td className="py-3 px-4 text-center font-bold">{deptEmployeeCount[d.id!] || 0}</td>
                   <td className="py-3 px-4 text-center font-bold">{posCountByDept[d.id!] || 0}</td>
                   <td className="py-3 px-4 text-center"><Badge variant={d.isActive ? 'success' : 'neutral'}>{d.isActive ? 'نشط' : 'غير نشط'}</Badge></td>
@@ -542,7 +560,7 @@ export const Organization: React.FC = () => {
                   </div>
 
                   <div className="rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 p-4 text-sm text-blue-800">
-                    يتم تحديد الوظيفة من القسم والمنصب والمستوى الوظيفي هنا. الصلاحيات تظل بوابات اعتماد فقط ولا تغير مكان الموظف في التسلسل.
+                    يتم تحديد الوظيفة من القسم والمنصب والمستوى الوظيفي هنا. لإتاحة تسجيل طلبات إنتاج لأكثر من قسم، افتح كل قسم من تبويب الأقسام واختر نفس الموظف كمدير للقسم.
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
