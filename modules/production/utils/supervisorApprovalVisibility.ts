@@ -18,6 +18,10 @@ function getCreatedTime(request: FirestoreApprovalRequest): number {
   return request.createdAt?.toMillis?.() ?? request.createdAt?.seconds * 1000 ?? 0;
 }
 
+function getApprovalChain(request: FirestoreApprovalRequest) {
+  return Array.isArray(request.approvalChain) ? request.approvalChain : [];
+}
+
 function formatExportDate(value: any): string {
   const date = value?.toDate ? value.toDate() : value?.seconds ? new Date(value.seconds * 1000) : null;
   if (!date || Number.isNaN(date.getTime())) return '';
@@ -75,9 +79,11 @@ export function canSupervisorActOnApprovalRequest(
   supervisorEmployeeId: string,
 ): boolean {
   if (!ACTIONABLE_STATUSES.has(request.status)) return false;
-  if (!supervisorEmployeeId || request.currentStep >= request.approvalChain.length) return false;
+  const approvalChain = getApprovalChain(request);
+  const currentStep = Math.max(0, Number(request.currentStep || 0));
+  if (!supervisorEmployeeId || currentStep >= approvalChain.length) return false;
 
-  const step = request.approvalChain[request.currentStep];
+  const step = approvalChain[currentStep];
   return step.approverEmployeeId === supervisorEmployeeId || step.delegatedTo === supervisorEmployeeId;
 }
 
@@ -88,7 +94,7 @@ export function canSupervisorCancelApprovalRequest(
 ): boolean {
   if (!isApprovalRequestCreatedBySupervisor(request, supervisorEmployeeId, supervisorUserId)) return false;
   if (request.status !== 'pending' || request.currentStep !== 0) return false;
-  return !request.approvalChain.some((step) => step.status === 'approved' || step.status === 'rejected');
+  return !getApprovalChain(request).some((step) => step.status === 'approved' || step.status === 'rejected');
 }
 
 export function isProductionApprovalHistoryRequest(request: FirestoreApprovalRequest): boolean {
@@ -105,7 +111,7 @@ export function getApprovalRequestParticipantEmployeeIds(request: FirestoreAppro
     if (normalized) participants.add(normalized);
   });
 
-  request.approvalChain.forEach((step) => {
+  getApprovalChain(request).forEach((step) => {
     const approverEmployeeId = String(step.approverEmployeeId || '').trim();
     const delegatedTo = String(step.delegatedTo || '').trim();
     if (approverEmployeeId) participants.add(approverEmployeeId);
@@ -176,7 +182,7 @@ export function mergeSupervisorVisibleApprovalRequests(params: {
 export function buildSupervisorApprovalExportRows(requests: FirestoreApprovalRequest[]): Record<string, string | number>[] {
   return requests.map((request) => {
     const data = request.requestData || {};
-    const currentStep = request.approvalChain[request.currentStep];
+    const currentStep = getApprovalChain(request)[request.currentStep];
     const status = getProductionApprovalStatusDisplay(request);
 
     return {

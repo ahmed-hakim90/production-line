@@ -102,6 +102,25 @@ const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; co
   penalty: { label: 'جزاء', icon: 'gavel', color: 'text-rose-500', bg: 'bg-rose-100' },
 };
 
+const FALLBACK_TYPE_CONFIG = {
+  label: 'طلب',
+  icon: 'assignment',
+  color: 'text-slate-500',
+  bg: 'bg-slate-100',
+};
+
+function getRequestTypeConfig(requestType: string) {
+  return TYPE_CONFIG[requestType as ApprovalRequestType] || FALLBACK_TYPE_CONFIG;
+}
+
+function getRequestApprovalChain(request: FirestoreApprovalRequest): ApprovalChainSnapshot[] {
+  return Array.isArray(request.approvalChain) ? request.approvalChain : [];
+}
+
+function getRequestCurrentStep(request: FirestoreApprovalRequest): number {
+  return Math.max(0, Number(request.currentStep || 0));
+}
+
 function getToday(): string {
   return new Date().toISOString().slice(0, 10);
 }
@@ -406,7 +425,7 @@ export const SupervisorTeamActions: React.FC = () => {
       if (requestedByEmployeeId && !namesById.has(requestedByEmployeeId)) {
         namesById.set(requestedByEmployeeId, request.requestData?.requestedByName || requestedByEmployeeId);
       }
-      request.approvalChain.forEach((step) => {
+      getRequestApprovalChain(request).forEach((step) => {
         if (step.approverEmployeeId && !namesById.has(step.approverEmployeeId)) {
           namesById.set(step.approverEmployeeId, step.approverName || step.approverEmployeeId);
         }
@@ -660,7 +679,7 @@ export const SupervisorTeamActions: React.FC = () => {
 
   const syncSourceRequestApproval = useCallback(async (request: FirestoreApprovalRequest) => {
     const mappedStatus = mapApprovalStatusToLegacy(request.status);
-    const mappedChain = mapSnapshotChainToLegacy(request.approvalChain);
+    const mappedChain = mapSnapshotChainToLegacy(getRequestApprovalChain(request));
 
     if (request.requestType === 'leave' && request.sourceRequestId) {
       const syncResult = await syncLeaveApprovalDecision({
@@ -1204,12 +1223,13 @@ export const SupervisorTeamActions: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {filteredHistoryRequests.map((req) => {
-                const typeCfg = TYPE_CONFIG[req.requestType];
+                const typeCfg = getRequestTypeConfig(req.requestType);
                 const statusCfg = getProductionApprovalStatusDisplay(req);
                 const requestId = req.id || '';
                 const renderKey = getProductionApprovalRenderKey(req);
+                const approvalChain = getRequestApprovalChain(req);
                 const requesterName = req.requestData?.requestedByName || req.createdBy || '—';
-                const decidedBy = req.history
+                const decidedBy = (Array.isArray(req.history) ? req.history : [])
                   ?.slice()
                   .reverse()
                   .find((entry) => entry.newStatus === req.status || entry.action === req.status);
@@ -1241,9 +1261,9 @@ export const SupervisorTeamActions: React.FC = () => {
                       <div className="min-w-0 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-3 text-xs font-bold text-[var(--color-text-muted)] lg:max-w-md">
                         <p className="mb-2 text-[var(--color-text)]">سلسلة الاعتماد</p>
                         <div className="flex flex-wrap gap-2">
-                          {req.approvalChain.length === 0 ? (
+                          {approvalChain.length === 0 ? (
                             <span>اعتماد تلقائي</span>
-                          ) : req.approvalChain.map((step, index) => (
+                          ) : approvalChain.map((step, index) => (
                             <span key={`${requestId}-${step.approverEmployeeId}-${index}`} className="rounded-full bg-white px-3 py-1 border border-[var(--color-border)]">
                               {step.approverName || step.approverEmployeeId} — {step.status === 'approved' ? 'اعتمد' : step.status === 'rejected' ? 'رفض' : step.status === 'skipped' ? 'تم التخطي' : 'لم يكتمل'}
                             </span>
@@ -1290,10 +1310,12 @@ export const SupervisorTeamActions: React.FC = () => {
           ) : (
             <div className="space-y-4">
               {approvalRequests.map((req) => {
-                const typeCfg = TYPE_CONFIG[req.requestType];
+                const typeCfg = getRequestTypeConfig(req.requestType);
                 const statusCfg = getProductionApprovalStatusDisplay(req);
                 const requestId = req.id || '';
                 const renderKey = getProductionApprovalRenderKey(req);
+                const approvalChain = getRequestApprovalChain(req);
+                const currentStep = getRequestCurrentStep(req);
                 const isProcessing = approvalActionLoading === requestId;
                 const requesterName = req.requestData?.requestedByName || req.createdBy || '—';
                 const isExpanded = requestId ? expandedApprovalIds.has(requestId) : false;
@@ -1315,7 +1337,7 @@ export const SupervisorTeamActions: React.FC = () => {
                               <Badge variant="info">{typeCfg.label}</Badge>
                               <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
                               {isCreatedBySupervisor && !canAct && <Badge variant="neutral">للمتابعة</Badge>}
-                              {req.approvalChain[req.currentStep]?.delegatedToName && <Badge variant="info">مفوّض</Badge>}
+                              {approvalChain[currentStep]?.delegatedToName && <Badge variant="info">مفوّض</Badge>}
                             </div>
                             <h4 className="text-base font-black text-[var(--color-text)] mt-2">{formatRequestSummary(req)}</h4>
                             <p className="text-sm text-[var(--color-text-muted)] mt-1">
@@ -1354,7 +1376,7 @@ export const SupervisorTeamActions: React.FC = () => {
                           )}
                           <div>
                             <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">الخطوة الحالية</p>
-                            <p className="font-bold text-[var(--color-text)]">{req.approvalChain[req.currentStep]?.approverName || '—'}</p>
+                            <p className="font-bold text-[var(--color-text)]">{approvalChain[currentStep]?.approverName || '—'}</p>
                           </div>
                           <div className="md:col-span-3">
                             <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">ملاحظات الطلب</p>

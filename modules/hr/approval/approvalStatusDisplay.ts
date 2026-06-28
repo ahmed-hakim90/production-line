@@ -50,7 +50,8 @@ export function getApprovalStatusDisplay(request: FirestoreApprovalRequest): App
     return FINAL_STATUS_DISPLAY[request.status];
   }
 
-  const currentStep = request.approvalChain[request.currentStep];
+  const approvalChain = Array.isArray(request.approvalChain) ? request.approvalChain : [];
+  const currentStep = approvalChain[Math.max(0, Number(request.currentStep || 0))];
   if (!currentStep || currentStep.status !== 'pending') {
     return FINAL_STATUS_DISPLAY[request.status] || FINAL_STATUS_DISPLAY.pending;
   }

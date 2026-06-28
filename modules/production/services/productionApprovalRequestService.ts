@@ -65,6 +65,10 @@ function uniqueNonEmpty(values: Array<string | null | undefined>): string[] {
   ));
 }
 
+function getApprovalChain(request: FirestoreApprovalRequest): ApprovalChainSnapshot[] {
+  return Array.isArray(request.approvalChain) ? request.approvalChain : [];
+}
+
 function toChainSnapshot(employee: ApprovalEmployeeInfo): ApprovalChainSnapshot {
   return {
     approverEmployeeId: employee.employeeId,
@@ -115,7 +119,7 @@ function getParticipantEmployeeIds(request: FirestoreApprovalRequest): string[] 
     request.employeeId,
     request.requestData?.requestedByEmployeeId,
     ...(request.requestData?.productionRequestObserverEmployeeIds || []),
-    ...request.approvalChain.flatMap((step) => [step.approverEmployeeId, step.delegatedTo]),
+    ...getApprovalChain(request).flatMap((step) => [step.approverEmployeeId, step.delegatedTo]),
     ...(request.history || []).map((entry) => entry.performedBy === 'system' ? '' : entry.performedBy),
   ]);
 }
@@ -149,15 +153,19 @@ async function buildProductionApprovalAccessFields(
 
 function getCurrentApproverEmployeeIds(request: FirestoreApprovalRequest): string[] {
   if (!ACTIONABLE_STATUSES.includes(request.status)) return [];
-  if (request.currentStep < 0 || request.currentStep >= request.approvalChain.length) return [];
-  const step = request.approvalChain[request.currentStep];
+  const approvalChain = getApprovalChain(request);
+  const currentStep = Math.max(0, Number(request.currentStep || 0));
+  if (currentStep >= approvalChain.length) return [];
+  const step = approvalChain[currentStep];
   return uniqueNonEmpty([step.approverEmployeeId, step.delegatedTo]);
 }
 
 function isCurrentActor(request: FirestoreApprovalRequest, employeeId: string): boolean {
   if (!ACTIONABLE_STATUSES.includes(request.status)) return false;
-  if (!employeeId || request.currentStep < 0 || request.currentStep >= request.approvalChain.length) return false;
-  const step = request.approvalChain[request.currentStep];
+  const approvalChain = getApprovalChain(request);
+  const currentStep = Math.max(0, Number(request.currentStep || 0));
+  if (!employeeId || currentStep >= approvalChain.length) return false;
+  const step = approvalChain[currentStep];
   return step.approverEmployeeId === employeeId || step.delegatedTo === employeeId;
 }
 
@@ -297,18 +305,23 @@ export const productionApprovalRequestService = {
       return { success: false, error: 'ليس لديك صلاحية الموافقة على هذا الطلب' };
     }
 
-    const updatedChain = [...request.approvalChain];
-    updatedChain[request.currentStep] = {
-      ...updatedChain[request.currentStep],
+    const approvalChain = getApprovalChain(request);
+    const currentStep = Math.max(0, Number(request.currentStep || 0));
+    if (currentStep >= approvalChain.length) {
+      return { success: false, error: 'لا توجد مرحلة اعتماد حالية لهذا الطلب' };
+    }
+    const updatedChain = [...approvalChain];
+    updatedChain[currentStep] = {
+      ...updatedChain[currentStep],
       status: 'approved',
       actionDate: Timestamp.now(),
       notes: input.notes || '',
     };
-    const nextStep = request.currentStep + 1;
+    const nextStep = currentStep + 1;
     const newStatus = deriveStatus(updatedChain);
     const history = [
-      ...request.history,
-      buildHistoryEntry(request.currentStep, 'approved', input.actorEmployeeId, input.actorName, input.notes || '', request.status, newStatus),
+      ...(Array.isArray(request.history) ? request.history : []),
+      buildHistoryEntry(currentStep, 'approved', input.actorEmployeeId, input.actorName, input.notes || '', request.status, newStatus),
     ];
 
     await updateDoc(productionApprovalRequestDocRef(input.requestId), {
@@ -330,16 +343,21 @@ export const productionApprovalRequestService = {
       return { success: false, error: 'ليس لديك صلاحية رفض هذا الطلب' };
     }
 
-    const updatedChain = [...request.approvalChain];
-    updatedChain[request.currentStep] = {
-      ...updatedChain[request.currentStep],
+    const approvalChain = getApprovalChain(request);
+    const currentStep = Math.max(0, Number(request.currentStep || 0));
+    if (currentStep >= approvalChain.length) {
+      return { success: false, error: 'لا توجد مرحلة اعتماد حالية لهذا الطلب' };
+    }
+    const updatedChain = [...approvalChain];
+    updatedChain[currentStep] = {
+      ...updatedChain[currentStep],
       status: 'rejected',
       actionDate: Timestamp.now(),
       notes: input.notes || '',
     };
     const history = [
-      ...request.history,
-      buildHistoryEntry(request.currentStep, 'rejected', input.actorEmployeeId, input.actorName, input.notes || '', request.status, 'rejected'),
+      ...(Array.isArray(request.history) ? request.history : []),
+      buildHistoryEntry(currentStep, 'rejected', input.actorEmployeeId, input.actorName, input.notes || '', request.status, 'rejected'),
     ];
 
     await updateDoc(productionApprovalRequestDocRef(input.requestId), {
@@ -365,7 +383,7 @@ export const productionApprovalRequestService = {
     }
 
     const history = [
-      ...request.history,
+      ...(Array.isArray(request.history) ? request.history : []),
       buildHistoryEntry(request.currentStep, 'cancelled', input.actorEmployeeId, input.actorName, input.notes || '', request.status, 'cancelled'),
     ];
 
