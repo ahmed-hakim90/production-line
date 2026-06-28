@@ -512,10 +512,57 @@ const TenantLayout: React.FC = () => {
     setForbiddenRequiresLogout(false);
     setForbiddenRedirectPath(null);
     void (async () => {
+      const resolveAuthenticatedTenantFallback = async (): Promise<boolean> => {
+        const loggedInTenantId = String(userProfile?.tenantId || '').trim();
+        if (!isAuthenticated || !loggedInTenantId) return false;
+
+        setCurrentTenant(loggedInTenantId);
+        try {
+          const ownTenant = await tenantService.getById(loggedInTenantId);
+          if (!alive) return true;
+          const ownSlug = String(ownTenant?.slug || '').trim();
+          if (ownSlug && tenantSlug && ownSlug !== tenantSlug) {
+            setForbiddenRequiresLogout(false);
+            setForbiddenRedirectPath(`/t/${encodeURIComponent(ownSlug)}/`);
+            setGate('forbidden_slug');
+            return true;
+          }
+          if (ownTenant?.status === 'suspended') {
+            setGate('suspended');
+            return true;
+          }
+          if (ownTenant?.status && ownTenant.status !== 'active') {
+            setTenantResolve({
+              pendingRegistration: false,
+              tenantStatus: ownTenant.status,
+            });
+            setGate('inactive');
+            return true;
+          }
+          setTenantResolve({
+            pendingRegistration: false,
+            tenantStatus: ownTenant?.status || 'active',
+          });
+          setGate('ready');
+          return true;
+        } catch {
+          if (!alive) return true;
+          // PWA/offline startup can make slug resolution flaky. A valid session tenant
+          // is enough to keep the app mounted instead of bouncing through root redirects.
+          setTenantResolve({
+            pendingRegistration: false,
+            tenantStatus: 'unknown',
+          });
+          setGate('ready');
+          return true;
+        }
+      };
+
       try {
         const r = await tenantService.resolveSlug(tenantSlug);
         if (!alive) return;
         if (!r.exists || !r.tenantId) {
+          if (await resolveAuthenticatedTenantFallback()) return;
           if (!isAuthenticated) {
             // Keep slug context for shared links even if slug resolution is temporarily unavailable.
             setTenantResolve({
@@ -586,6 +633,7 @@ const TenantLayout: React.FC = () => {
         setGate('ready');
       } catch {
         if (!alive) return;
+        if (await resolveAuthenticatedTenantFallback()) return;
         if (!isAuthenticated) {
           // Public/shared slug links should stay tenant-scoped on transient resolver failures.
           setTenantResolve({
