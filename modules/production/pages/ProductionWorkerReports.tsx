@@ -181,6 +181,8 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
   const printRef = useRef<HTMLDivElement>(null);
   const [kind, setKind] = useState<ReportKind>('daily');
   const [date, setDate] = useState(getTodayDateString());
+  const [startDate, setStartDate] = useState(getTodayDateString());
+  const [endDate, setEndDate] = useState(getTodayDateString());
   const [month, setMonth] = useState(currentMonth());
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
   const [presenceFilter, setPresenceFilter] = useState<PresenceFilter>('all');
@@ -197,49 +199,69 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
       const workers = await productionWorkerService.getAll();
       const activeWorkers = workers.filter((w) => w.isActive !== false);
       if (kind === 'daily') {
-        const assignmentPromise = productionLines.length > 0
-          ? Promise.all(
-            productionLines
-              .filter((line) => line.id)
-              .map((line) => lineAssignmentService.getByLineAndDate(line.id!, date)),
-          ).then((groups) => groups.flat())
-          : lineAssignmentService.getByDate(date);
+        const rangeStart = startDate <= endDate ? startDate : endDate;
+        const rangeEnd = startDate <= endDate ? endDate : startDate;
+        const periodDates = listDatesInRange(rangeStart, rangeEnd);
+        const assignmentPromise = Promise.all(periodDates.map(async (periodDate) => {
+          const assignments = productionLines.length > 0
+            ? (await Promise.all(
+              productionLines
+                .filter((line) => line.id)
+                .map((line) => lineAssignmentService.getByLineAndDate(line.id!, periodDate)),
+            )).flat()
+            : await lineAssignmentService.getByDate(periodDate);
+          return assignments;
+        })).then((groups) => groups.flat());
         const [targets, reports, dailyAssignments] = await Promise.all([
           productionWorkerTargetService.getAll(),
-          reportService.getByDateRange(date, date),
+          reportService.getByDateRange(rangeStart, rangeEnd),
           assignmentPromise,
         ]);
         const assignmentInfoByWorkerId = buildAssignmentInfoByWorker(dailyAssignments, workers, reports, getLineName);
 
         const dailyRows = await Promise.all(activeWorkers.map(async (worker) => {
           if (!worker.id) return null;
-          const achievement = await productionWorkerPerformanceService.getDailyAchievement(worker.id, date, {
-            worker,
-            targets: targets.filter((target) => target.workerId === worker.id),
-            reports,
-            products: products as never[],
-            settings: workerSettings,
-            lineProductConfigs,
-          });
+          const workerTargets = targets.filter((target) => target.workerId === worker.id);
+          const achievements = await Promise.all(periodDates.map((periodDate) => (
+            productionWorkerPerformanceService.getDailyAchievement(worker.id!, periodDate, {
+              worker,
+              targets: workerTargets,
+              reports,
+              products: products as never[],
+              settings: workerSettings,
+              lineProductConfigs,
+            })
+          )));
+          const targetQty = achievements.reduce((sum, achievement) => sum + Number(achievement.targetQty || 0), 0);
+          const outputQty = achievements.reduce((sum, achievement) => sum + Number(achievement.outputQty || 0), 0);
+          const achievementPercent = targetQty > 0 ? Math.round((outputQty / targetQty) * 1000) / 10 : 0;
           const assignmentInfo = assignmentInfoByWorkerId.get(worker.id);
           const presentDays = assignmentInfo?.presentDays ?? 0;
           const absentDays = assignmentInfo?.absentDays ?? 0;
           const noTargetDays = assignmentInfo?.noTargetDays ?? 0;
-          const rowStatus = achievement.status === 'absent'
-            ? achievement.status
-            : noTargetDays > 0 && (achievement.targetQty <= 0 || !assignmentInfo?.hasProductionTarget)
+          const rowStatus = absentDays > 0 && presentDays === 0
+            ? 'absent'
+            : noTargetDays > 0 && (targetQty <= 0 || !assignmentInfo?.hasProductionTarget)
               ? 'no_target'
-              : achievement.status;
+              : outputQty > targetQty && targetQty > 0
+                ? 'over_target'
+                : targetQty > 0 && outputQty >= targetQty
+                  ? 'achieved'
+                  : outputQty > 0
+                    ? 'below_target'
+                    : 'no_output';
           return {
             العامل: worker.name,
             الكود: worker.code,
-            التاريخ: date,
-            الخط: joinLabels(assignmentInfo?.lineLabels) || getLineName(achievement.lineId),
+            الفترة: rangeStart === rangeEnd ? rangeStart : `${rangeStart} إلى ${rangeEnd}`,
+            الخط: joinLabels(assignmentInfo?.lineLabels) || joinLabels(new Set(achievements.map((achievement) => getLineName(achievement.lineId)).filter(Boolean))),
             'وظيفة الخط': joinLabels(assignmentInfo?.laborRoleLabels),
-            'حالة الحضور': assignmentInfo ? getPresenceLabel(presentDays > 0) : getPresenceLabel(achievement.isPresent !== false),
-            الهدف: rowStatus === 'absent' || rowStatus === 'no_target' ? 'غير مطبق' : achievement.targetQty,
-            الإنتاج: achievement.outputQty,
-            'الإنجاز %': rowStatus === 'absent' || rowStatus === 'no_target' ? 'غير مطبق' : achievement.achievementPercent,
+            'حالة الحضور': assignmentInfo
+              ? getPresenceLabel(presentDays > 0)
+              : getPresenceLabel(achievements.some((achievement) => achievement.isPresent !== false)),
+            الهدف: rowStatus === 'absent' || rowStatus === 'no_target' ? 'غير مطبق' : targetQty,
+            الإنتاج: outputQty,
+            'الإنجاز %': rowStatus === 'absent' || rowStatus === 'no_target' ? 'غير مطبق' : achievementPercent,
             الحالة: STATUS_LABELS[rowStatus] ?? rowStatus,
             'أيام حضور': presentDays,
             'أيام غياب': absentDays,
@@ -254,7 +276,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
             return {
               العامل: assignmentInfo.workerName,
               الكود: assignmentInfo.workerCode,
-              التاريخ: date,
+              الفترة: rangeStart === rangeEnd ? rangeStart : `${rangeStart} إلى ${rangeEnd}`,
               الخط: joinLabels(assignmentInfo.lineLabels),
               'وظيفة الخط': joinLabels(assignmentInfo.laborRoleLabels),
               'حالة الحضور': absentOnly ? 'غائب' : 'حاضر',
@@ -352,7 +374,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
     } finally {
       setLoading(false);
     }
-  }, [canView, kind, date, month, products, productionLines, getLineName, lineProductConfigs, workerSettings]);
+  }, [canView, kind, date, startDate, endDate, month, products, productionLines, getLineName, lineProductConfigs, workerSettings]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -383,7 +405,8 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'تقرير');
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([buf]), `worker_report_${kind}_${kind === 'daily' ? date : month}.xlsx`);
+    const suffix = kind === 'daily' ? `${startDate}_to_${endDate}` : month;
+    saveAs(new Blob([buf]), `worker_report_${kind}_${suffix}.xlsx`);
   };
 
   const exportPdf = async () => {
@@ -392,7 +415,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
     try {
       await new Promise((r) => setTimeout(r, 150));
       const { exportToPDF } = await import('../../../utils/reportExport');
-      const suffix = kind === 'daily' ? date : month;
+      const suffix = kind === 'daily' ? `${startDate}_to_${endDate}` : month;
       await exportToPDF(printRef.current, `worker_report_${kind}_${suffix}`, {
         paperSize: 'a4',
         orientation: 'landscape',
@@ -403,7 +426,10 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
   };
 
   const printColumns = useMemo(() => (filteredRows[0] ? Object.keys(filteredRows[0]) : []), [filteredRows]);
-  const printSubtitle = `${kind === 'daily' ? `التاريخ: ${date}` : `الشهر: ${month}`} | أيام حضور: ${formatNumber(periodPresenceSummary.present)} | أيام غياب: ${formatNumber(periodPresenceSummary.absent)} | أيام بدون هدف: ${formatNumber(periodPresenceSummary.noTarget)}`;
+  const periodLabel = kind === 'daily'
+    ? `الفترة: ${startDate} إلى ${endDate}`
+    : `الشهر: ${month}`;
+  const printSubtitle = `${periodLabel} | أيام حضور: ${formatNumber(periodPresenceSummary.present)} | أيام غياب: ${formatNumber(periodPresenceSummary.absent)} | أيام بدون هدف: ${formatNumber(periodPresenceSummary.noTarget)}`;
 
   if (!canView) {
     return <Card><p className="p-4 text-sm">غير مصرح بعرض تقارير عمال الإنتاج</p></Card>;
@@ -450,7 +476,16 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
             <option value="low_performance">أداء منخفض</option>
           </select>
           {kind === 'daily' ? (
-            <input type="date" className="border rounded-lg p-2" value={date} onChange={(e) => setDate(e.target.value)} />
+            <>
+              <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+                من
+                <input type="date" className="border rounded-lg p-2 text-[var(--color-text)]" value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+              </label>
+              <label className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
+                إلى
+                <input type="date" className="border rounded-lg p-2 text-[var(--color-text)]" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+              </label>
+            </>
           ) : (
             <input type="month" className="border rounded-lg p-2" value={month} onChange={(e) => setMonth(e.target.value)} />
           )}

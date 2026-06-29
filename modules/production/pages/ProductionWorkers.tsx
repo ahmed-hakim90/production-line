@@ -18,6 +18,7 @@ import type {
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
+import { lineAssignmentService } from '../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
 import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
@@ -30,7 +31,12 @@ import {
   shouldShowProductionWorkerForSupervisor,
   UNASSIGNED_LINE_FILTER_VALUE,
 } from '../utils/productionWorkerVisibility';
-import { buildBulkWorkerLineTransferPlans, getWorkersEligibleForLineTransfer } from '../utils/productionWorkerLineTransfer';
+import {
+  buildBulkWorkerLineTransferPlans,
+  getPreviousDateString,
+  getWorkersEligibleForLineTransfer,
+  isProductionWorkerAssignmentActiveOnDate,
+} from '../utils/productionWorkerLineTransfer';
 import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -158,6 +164,7 @@ export const ProductionWorkers: React.FC = () => {
     error: string | null;
   } | null>(null);
   const [lineTransferSaving, setLineTransferSaving] = useState(false);
+  const [unlinkingWorkers, setUnlinkingWorkers] = useState(false);
   const employeeNameById = useMemo(() => {
     const map = new Map<string, string>();
     _rawEmployees.forEach((e) => {
@@ -252,32 +259,35 @@ export const ProductionWorkers: React.FC = () => {
   }, [workers, filterMonth, filterDate, filterLine, targets, products, lineProductConfigs, workerSettings]);
 
   const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? id;
+  const today = getTodayDateString();
 
   const rows: WorkerRow[] = useMemo(() => {
     return workers.map((worker) => {
-      const workerAssignments = assignments.filter((a) => a.workerId === worker.id && a.isActive);
-      const lineIds = normalizeWorkerLineIds([...new Set([
-        ...(worker.lineIds || []),
-        ...workerAssignments.map((a) => a.lineId),
-      ])]);
+      const workerAssignments = assignments.filter((a) => a.workerId === worker.id);
+      const activeAssignmentLineIds = workerAssignments
+        .filter((a) => isProductionWorkerAssignmentActiveOnDate(a, today))
+        .map((a) => a.lineId);
+      const lineIds = normalizeWorkerLineIds(
+        workerAssignments.length > 0 ? activeAssignmentLineIds : (worker.lineIds || []),
+      );
       const activeTargetsCount = targets.filter(
         (t) => t.workerId === worker.id && t.isActive,
       ).length;
       const monthStats = worker.id ? monthStatsMap.get(worker.id) ?? null : null;
-      const today = worker.id ? todayStatsMap.get(worker.id) : undefined;
+      const todayStats = worker.id ? todayStatsMap.get(worker.id) : undefined;
       return {
         ...worker,
         assignedLineIds: lineIds,
         activeTargetsCount,
-        todayOutput: today?.output ?? 0,
-        todayAchievement: today?.achievement ?? 0,
-        todayStatus: today?.status,
+        todayOutput: todayStats?.output ?? 0,
+        todayAchievement: todayStats?.achievement ?? 0,
+        todayStatus: todayStats?.status,
         presentDays: monthStats?.presentDays ?? 0,
         absentDays: monthStats?.absentDays ?? 0,
         monthStats,
       };
     });
-  }, [workers, assignments, targets, monthStatsMap, todayStatsMap]);
+  }, [workers, assignments, targets, monthStatsMap, todayStatsMap, today]);
 
   const scopedRows = useMemo(
     () => rows.filter((row) => shouldShowProductionWorkerForSupervisor(
@@ -417,6 +427,82 @@ export const ProductionWorkers: React.FC = () => {
     return null;
   };
 
+  const syncWorkerLineSnapshot = async (workerId: string) => {
+    const [worker, workerAssignments] = await Promise.all([
+      productionWorkerService.getById(workerId),
+      productionLineWorkerAssignmentService.getByWorker(workerId),
+    ]);
+    if (!worker?.id) return;
+
+    const activeLineIds = Array.from(new Set(
+      workerAssignments
+        .filter((row) => isProductionWorkerAssignmentActiveOnDate(row, getTodayDateString()))
+        .map((row) => String(row.lineId || '').trim())
+        .filter(Boolean),
+    ));
+
+    await productionWorkerService.update(worker.id, {
+      lineIds: activeLineIds,
+      defaultLineId: activeLineIds.includes(String(worker.defaultLineId || '').trim())
+        ? worker.defaultLineId
+        : activeLineIds[0] || '',
+    });
+  };
+
+  const deleteTodayDailyRowsForWorkers = async (workersToUnlink: WorkerRow[]) => {
+    const employeeIds = new Set(
+      workersToUnlink
+        .map((worker) => String(worker.employeeId || '').trim())
+        .filter(Boolean),
+    );
+    if (employeeIds.size === 0) return;
+
+    const dailyRows = await lineAssignmentService.getByDate(getTodayDateString());
+    const idsToDelete = dailyRows
+      .filter((row) => employeeIds.has(String(row.employeeId || '').trim()))
+      .map((row) => row.id)
+      .filter((id): id is string => Boolean(id));
+
+    await Promise.all(idsToDelete.map((id) => lineAssignmentService.delete(id)));
+  };
+
+  const handleBulkUnlinkWorkers = async (selectedWorkers: WorkerRow[]) => {
+    const workersToUnlink = selectedWorkers.filter((worker) => worker.id && worker.assignedLineIds.length > 0);
+    if (workersToUnlink.length === 0 || unlinkingWorkers) return;
+
+    const confirmed = window.confirm(
+      `سيتم فك الربط الدائم لعدد ${workersToUnlink.length} عامل من اليوم.\nسيتم حذف سجلات اليوم فقط إن وجدت، مع الحفاظ على كل السجلات القديمة. هل تريد المتابعة؟`,
+    );
+    if (!confirmed) return;
+
+    setUnlinkingWorkers(true);
+    try {
+      const cancellationDate = getTodayDateString();
+      const endDate = getPreviousDateString(cancellationDate);
+      const workerIds = new Set(workersToUnlink.map((worker) => worker.id!));
+      const activeAssignments = assignments.filter((assignment) => (
+        workerIds.has(assignment.workerId)
+        && isProductionWorkerAssignmentActiveOnDate(assignment, cancellationDate)
+      ));
+
+      await Promise.all(
+        activeAssignments
+          .filter((assignment) => Boolean(assignment.id))
+          .map((assignment) => productionLineWorkerAssignmentService.update(assignment.id!, {
+            isActive: false,
+            endDate,
+          })),
+      );
+      await deleteTodayDailyRowsForWorkers(workersToUnlink);
+      await Promise.all(Array.from(workerIds).map((workerId) => syncWorkerLineSnapshot(workerId)));
+      await loadData();
+    } catch {
+      window.alert('تعذر فك ربط العمال الآن. حاول مرة أخرى.');
+    } finally {
+      setUnlinkingWorkers(false);
+    }
+  };
+
   const workerBulkActions = useMemo<TableBulkAction<WorkerRow>[]>(() => {
     if (!canManage) return [];
     return [
@@ -424,10 +510,17 @@ export const ProductionWorkers: React.FC = () => {
         label: 'نقل المحدد',
         icon: 'swap_horiz',
         action: (items) => openLineTransfer(items),
-        disabled: lineTransferSaving,
+        disabled: lineTransferSaving || unlinkingWorkers,
+      },
+      {
+        label: 'فك ربط المحدد',
+        icon: 'link_off',
+        variant: 'danger',
+        action: (items) => void handleBulkUnlinkWorkers(items),
+        disabled: lineTransferSaving || unlinkingWorkers,
       },
     ];
-  }, [canManage, openLineTransfer, lineTransferSaving]);
+  }, [canManage, openLineTransfer, lineTransferSaving, unlinkingWorkers, assignments, loadData]);
 
   const lineTransferEligibleWorkers = lineTransfer ? getLineTransferEligibleWorkers(lineTransfer) : [];
   const lineTransferValidationError = lineTransfer

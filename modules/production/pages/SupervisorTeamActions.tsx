@@ -1132,7 +1132,7 @@ export const SupervisorTeamActions: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="max-w-full overflow-x-hidden space-y-6">
       <PageHeader
         title="طلبات الإنتاج"
         subtitle="إنشاء طلبات للموظفين ضمن الأقسام المتاحة لك، ثم متابعتها وتصديرها كملف Excel"
@@ -1923,7 +1923,7 @@ export const SupervisorTeamActions: React.FC = () => {
           className="arabic-export-root"
           dir="rtl"
           style={{
-            position: 'absolute',
+            position: 'fixed',
             left: '-10000px',
             top: 0,
             width: '1120px',
