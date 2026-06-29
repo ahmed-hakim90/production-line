@@ -79,6 +79,15 @@ const isPermanentAssignmentActiveOnDate = (row: ProductionLineWorkerAssignment, 
   return true;
 };
 
+const getPreviousDateString = (date: string): string => {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
+  if (!match) return date;
+  const [, year, month, day] = match;
+  const d = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day)));
+  d.setUTCDate(d.getUTCDate() - 1);
+  return d.toISOString().slice(0, 10);
+};
+
 export const LineWorkerAssignment: React.FC = () => {
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
@@ -298,6 +307,46 @@ export const LineWorkerAssignment: React.FC = () => {
     }
   };
 
+  const syncWorkerLineSnapshot = async (workerId?: string) => {
+    if (!workerId) return;
+    const [worker, workerAssignments] = await Promise.all([
+      productionWorkerService.getById(workerId),
+      productionLineWorkerAssignmentService.getByWorker(workerId),
+    ]);
+    if (!worker?.id) return;
+
+    const activeLineIds = Array.from(new Set(
+      workerAssignments
+        .filter((row) => isPermanentAssignmentActiveOnDate(row, getTodayDateString()))
+        .map((row) => String(row.lineId || '').trim())
+        .filter(Boolean),
+    ));
+    const defaultLineId = activeLineIds.includes(String(worker.defaultLineId || '').trim())
+      ? worker.defaultLineId
+      : activeLineIds[0] || '';
+
+    await productionWorkerService.update(worker.id, {
+      lineIds: activeLineIds,
+      defaultLineId,
+    });
+  };
+
+  const deleteCancellationDateDailyRows = async (rowsToCancel: DisplayLineWorkerAssignment[]) => {
+    const cancellationDate = getTodayDateString();
+    const keys = new Set(
+      rowsToCancel.map((assignment) => `${assignment.lineId}_${assignment.employeeId}`),
+    );
+    if (keys.size === 0) return;
+
+    const dailyRows = await lineAssignmentService.getByDate(cancellationDate);
+    const idsToDelete = dailyRows
+      .filter((row) => keys.has(`${row.lineId}_${row.employeeId}`))
+      .map((row) => row.id)
+      .filter((id): id is string => Boolean(id));
+
+    await Promise.all(idsToDelete.map((id) => lineAssignmentService.delete(id)));
+  };
+
   const renderLaborRoleSelect = (
     assignment: DisplayLineWorkerAssignment,
     compact = false,
@@ -417,18 +466,21 @@ export const LineWorkerAssignment: React.FC = () => {
     }
 
     const confirmed = window.confirm(
-      `إلغاء الربط الدائم لـ ${getAssignmentEmployeeName(assignment)} من خط ${getLineName(assignment.lineId)}؟`,
+      `إلغاء الربط الدائم لـ ${getAssignmentEmployeeName(assignment)} من خط ${getLineName(assignment.lineId)} من اليوم؟\nسيتم حذف سجل اليوم فقط إن وجد، مع الحفاظ على كل السجلات القديمة.`,
     );
     if (!confirmed) return;
 
     setEndingPermanentAssignmentId(assignment.permanentAssignmentId);
     try {
+      const cancellationDate = getTodayDateString();
       await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, {
         isActive: false,
-        endDate: getTodayDateString(),
+        endDate: getPreviousDateString(cancellationDate),
       });
+      await deleteCancellationDateDailyRows([assignment]);
+      await syncWorkerLineSnapshot(assignment.permanentWorkerId);
       await loadAssignments();
-      showFeedback('success', 'تم إلغاء الربط الدائم للعامل');
+      showFeedback('success', 'تم إلغاء الربط من اليوم مع الحفاظ على السجلات القديمة');
     } catch {
       showFeedback('error', 'حدث خطأ أثناء إلغاء الربط الدائم');
     } finally {
@@ -456,13 +508,14 @@ export const LineWorkerAssignment: React.FC = () => {
 
     const scopeLabel = selectedLineId ? `خط ${getLineName(selectedLineId)}` : 'كل الخطوط المعروضة';
     const confirmed = window.confirm(
-      `سيتم إلغاء الربط الدائم لعدد ${cancellablePermanentAssignments.length} عامل من ${scopeLabel}. هل تريد المتابعة؟`,
+      `سيتم إلغاء الربط الدائم لعدد ${cancellablePermanentAssignments.length} عامل من ${scopeLabel} من اليوم.\nسيتم حذف سجلات اليوم فقط إن وجدت، مع الحفاظ على كل السجلات القديمة. هل تريد المتابعة؟`,
     );
     if (!confirmed) return;
 
     setClearingPermanentAssignments(true);
     try {
-      const endDate = getTodayDateString();
+      const cancellationDate = getTodayDateString();
+      const endDate = getPreviousDateString(cancellationDate);
       await Promise.all(
         cancellablePermanentAssignments.map((assignment) => (
           productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId!, {
@@ -471,8 +524,15 @@ export const LineWorkerAssignment: React.FC = () => {
           })
         )),
       );
+      await deleteCancellationDateDailyRows(cancellablePermanentAssignments);
+      const workerIds = Array.from(new Set(
+        cancellablePermanentAssignments
+          .map((assignment) => assignment.permanentWorkerId)
+          .filter((workerId): workerId is string => Boolean(workerId)),
+      ));
+      await Promise.all(workerIds.map((workerId) => syncWorkerLineSnapshot(workerId)));
       await loadAssignments();
-      showFeedback('success', selectedLineId ? 'تم إلغاء ربط عمال الخط' : 'تم إلغاء ربط عمال كل الخطوط المعروضة');
+      showFeedback('success', selectedLineId ? 'تم إلغاء ربط عمال الخط من اليوم' : 'تم إلغاء ربط عمال كل الخطوط المعروضة من اليوم');
     } catch {
       showFeedback('error', 'حدث خطأ أثناء إلغاء ربط العمال');
     } finally {
@@ -538,10 +598,26 @@ export const LineWorkerAssignment: React.FC = () => {
     return String(employee?.code || '').trim() || '—';
   };
 
-  const sortedAssignments = useMemo(
-    () => sortAssignmentsByEmployeeCode<DisplayLineWorkerAssignment>(assignments, getAssignmentEmployeeCode),
-    [assignments, _rawEmployees],
+  const currentLinePermanentAssignments = useMemo(
+    () => assignments.filter((assignment) => Boolean(assignment.permanentAssignmentId)),
+    [assignments],
   );
+
+  const currentLineLegacyAssignments = useMemo(
+    () => assignments.filter((assignment) => !assignment.permanentAssignmentId),
+    [assignments],
+  );
+
+  const sortedAssignments = useMemo(
+    () => sortAssignmentsByEmployeeCode<DisplayLineWorkerAssignment>(currentLinePermanentAssignments, getAssignmentEmployeeCode),
+    [currentLinePermanentAssignments, _rawEmployees],
+  );
+
+  const permanentAssignmentsCount = useMemo(
+    () => allDayAssignments.filter((assignment) => Boolean(assignment.permanentAssignmentId)).length,
+    [allDayAssignments],
+  );
+  const legacyAssignmentsCount = Math.max(allDayAssignments.length - permanentAssignmentsCount, 0);
 
   const lineGroups = useMemo(() => {
     const map = new Map<string, DisplayLineWorkerAssignment[]>();
@@ -571,7 +647,11 @@ export const LineWorkerAssignment: React.FC = () => {
   }, [_rawEmployees, workerPositionIds]);
 
   const linkedEmployeeIds = useMemo(
-    () => new Set(allDayAssignments.map((a) => a.employeeId)),
+    () => new Set(
+      allDayAssignments
+        .filter((assignment) => Boolean(assignment.permanentAssignmentId))
+        .map((a) => a.employeeId),
+    ),
     [allDayAssignments]
   );
 
@@ -744,9 +824,14 @@ export const LineWorkerAssignment: React.FC = () => {
               <h3 className="font-bold text-base">
                 عمالة {getLineName(selectedLineId)} المرتبطة دائماً
               </h3>
-              <Badge variant="info">{assignments.length} عامل</Badge>
+              <Badge variant="info">{currentLinePermanentAssignments.length} عامل</Badge>
             </div>
           </div>
+          {currentLineLegacyAssignments.length > 0 && (
+            <div className="mb-4 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
+              يوجد {currentLineLegacyAssignments.length} سجل يومي قديم لهذا الخط. هذه السجلات تظهر في الملخص فقط ولا تعتبر ربطاً دائماً للإلغاء.
+            </div>
+          )}
 
           {loading ? (
             <div className="space-y-3">
@@ -754,7 +839,7 @@ export const LineWorkerAssignment: React.FC = () => {
                 <div key={i} className="h-12 bg-[#f0f2f5] rounded-[var(--border-radius-base)] animate-pulse" />
               ))}
             </div>
-          ) : assignments.length === 0 ? (
+          ) : currentLinePermanentAssignments.length === 0 ? (
             <div className="text-center py-10">
               <span className="material-icons-round text-4xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-2 block">groups</span>
               <p className="page-subtitle">لا يوجد عمال مربوطون دائماً على هذا الخط</p>
@@ -809,17 +894,12 @@ export const LineWorkerAssignment: React.FC = () => {
                           <Button
                             variant="outline"
                             onClick={() => void handleEndPermanentAssignment(a)}
-                            disabled={!a.permanentAssignmentId || ending}
+                            disabled={ending}
                             className="text-xs"
                           >
                             {ending && <span className="material-icons-round animate-spin text-sm">refresh</span>}
                             إلغاء الربط
                           </Button>
-                          {a.source === 'legacy' && (
-                            <p className="mt-1 text-[10px] font-bold text-amber-600">
-                              سجل يومي قديم للقراءة فقط
-                            </p>
-                          )}
                         </td>
                       </tr>
                     );
@@ -836,7 +916,8 @@ export const LineWorkerAssignment: React.FC = () => {
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-primary">summarize</span>
           <h3 className="font-bold text-base">ملخص الربط وحالة اليوم</h3>
-          <Badge variant="info">{allDayAssignments.length} عامل إجمالي</Badge>
+          <Badge variant="info">{permanentAssignmentsCount} ربط دائم</Badge>
+          {legacyAssignmentsCount > 0 && <Badge variant="warning">{legacyAssignmentsCount} سجل يومي قديم</Badge>}
         </div>
 
         {lineGroups.length === 0 ? (
@@ -849,14 +930,18 @@ export const LineWorkerAssignment: React.FC = () => {
             {/* Summary Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
               <div className="bg-primary/5 rounded-[var(--border-radius-lg)] p-3 text-center">
-                <p className="text-2xl font-bold text-primary">{allDayAssignments.length}</p>
-                <p className="text-xs text-[var(--color-text-muted)] font-bold">إجمالي العمالة</p>
+                <p className="text-2xl font-bold text-primary">{permanentAssignmentsCount}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold">ربط دائم</p>
+              </div>
+              <div className="bg-amber-50 rounded-[var(--border-radius-lg)] p-3 text-center">
+                <p className="text-2xl font-bold text-amber-600">{legacyAssignmentsCount}</p>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold">سجلات يومية قديمة</p>
               </div>
               <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] p-3 text-center">
                 <p className="text-2xl font-bold text-emerald-600">{lineGroups.length}</p>
                 <p className="text-xs text-[var(--color-text-muted)] font-bold">تاريخ اليوم</p>
               </div>
-              {lineGroups.slice(0, 2).map((g) => (
+              {lineGroups.slice(0, 1).map((g) => (
                 <div key={g.lineId} className="bg-[#f8f9fa]/50 rounded-[var(--border-radius-lg)] p-3 text-center">
                   <p className="text-2xl font-bold text-[var(--color-text)]">{g.workers.length}</p>
                   <p className="text-xs text-[var(--color-text-muted)] font-bold truncate">{g.lineName}</p>
