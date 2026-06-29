@@ -66,9 +66,12 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     () => getVisibleWorkerOutputRows(value),
     [value],
   );
+  const hasVisibleWorkerRows = visibleRows.length > 0;
+  const hasReportQtyWithoutWorkerRows = reportQty > 0 && !hasVisibleWorkerRows;
 
   const mismatch = settings.performance.productionWorkerOutputMustMatchReportQty
     && reportQty > 0
+    && hasVisibleWorkerRows
     && totalWorkerOutput !== reportQty;
 
   const loadWorkers = useCallback(async () => {
@@ -202,10 +205,22 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
 
       {loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">جاري تحميل العمال...</p>
-      ) : visibleRows.length === 0 ? (
-        <p className="text-sm text-[var(--color-text-muted)]">
-          لا يوجد عمال إنتاج حاضرون على هذا الخط في هذا التاريخ — سجّل الحضور من صفحة «ربط العمالة الدائم»
-        </p>
+      ) : !hasVisibleWorkerRows ? (
+        <div className="space-y-2">
+          <p className="text-sm text-[var(--color-text-muted)]">
+            لا توجد تفاصيل إنتاج عمال محفوظة لهذا التقرير.
+          </p>
+          {hasReportQtyWithoutWorkerRows ? (
+            <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm font-semibold text-amber-800">
+              كمية التقرير ({formatNumber(reportQty)}) محفوظة كإجمالي على التقرير، وليست موزعة على العمال بعد.
+              اضغط «تحديث العمال» أو سجّل عمال الإنتاج ثم أدخل إنتاج كل عامل.
+            </p>
+          ) : (
+            <p className="text-sm text-[var(--color-text-muted)]">
+              لا يوجد عمال إنتاج حاضرون على هذا الخط في هذا التاريخ — سجّل الحضور من صفحة «ربط العمالة الدائم».
+            </p>
+          )}
+        </div>
       ) : (
         <div className="overflow-x-auto">
           <table className="w-full text-sm">

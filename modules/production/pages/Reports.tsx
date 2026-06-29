@@ -651,6 +651,12 @@ export const Reports: React.FC = () => {
   const effectiveFormQuantityProduced = formQuantityDerivedFromWorkerOutputs
     ? formWorkerOutputTotal
     : Number(form.quantityProduced || 0);
+  const formHasContextWorkerOutputs = (form.workerOutputs || []).some((row) => (
+    row.productId === form.productId && row.lineId === form.lineId
+  ));
+  const formWorkerOutputAssignmentDate = editId && formHasContextWorkerOutputs
+    ? form.date
+    : getTodayDateString();
   const formWorkerOutputsContextKey = `${form.reportType}|${form.productId}|${form.lineId}|${form.date}|${formAssemblyMode}|${formWorkerOutputsEnabled}`;
   const lastFormWorkerOutputsContextRef = useRef(formWorkerOutputsContextKey);
 
@@ -902,11 +908,10 @@ export const Reports: React.FC = () => {
 
   useEffect(() => {
     if (!showModal || !form.lineId || !form.date) { setFormLineWorkers([]); return; }
-    const assignmentSourceDate = editId ? form.date : getTodayDateString();
-    loadWorkersForReportDate(form.lineId, form.date, assignmentSourceDate)
+    loadWorkersForReportDate(form.lineId, form.date, formWorkerOutputAssignmentDate)
       .then(setFormLineWorkers)
       .catch(() => setFormLineWorkers([]));
-  }, [showModal, form.lineId, form.date, editId, loadWorkersForReportDate]);
+  }, [showModal, form.lineId, form.date, formWorkerOutputAssignmentDate, loadWorkersForReportDate]);
 
   useEffect(() => {
     lastAutoFilledWorkersCountRef.current = null;
@@ -5000,7 +5005,7 @@ export const Reports: React.FC = () => {
                   lineId={form.lineId}
                   productId={form.productId}
                   date={form.date}
-                  assignmentDate={editId ? form.date : getTodayDateString()}
+                  assignmentDate={formWorkerOutputAssignmentDate}
                   lineName={_rawLines.find((l) => l.id === form.lineId)?.name ?? form.lineId}
                   productName={_rawProducts.find((p) => p.id === form.productId)?.name ?? form.productId}
                   products={_rawProducts}
