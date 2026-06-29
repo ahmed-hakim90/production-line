@@ -19,6 +19,7 @@ type Props = {
   lineId: string;
   productId: string;
   date: string;
+  assignmentDate?: string;
   lineName: string;
   productName: string;
   products: FirestoreProduct[];
@@ -33,6 +34,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
   lineId,
   productId,
   date,
+  assignmentDate,
   lineName,
   productName,
   products,
@@ -73,10 +75,11 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     if (!lineId || !productId || !date || !canShowWorkerTargets) return;
     setLoading(true);
     try {
+      const workerAssignmentDate = assignmentDate || date;
       const [workers, targets, resolvedWorkers] = await Promise.all([
         productionWorkerService.getAll(),
         productionWorkerTargetService.getAll(),
-        lineAssignmentWorkerBridge.resolveWorkersForLineDate(lineId, date),
+        lineAssignmentWorkerBridge.resolveWorkersForLineDate(lineId, workerAssignmentDate),
       ]);
       setWorkerSource(
         resolvedWorkers.length > 0 ? resolvedWorkers[0].source : null,
@@ -97,7 +100,24 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
         productName,
         lineProductConfigs,
       });
-      const contextKey = `${lineId}|${productId}|${date}|${assemblyMode}`;
+      const contextKey = `${lineId}|${productId}|${date}|${workerAssignmentDate}|${assemblyMode}`;
+      const savedContextRows = value.filter((row) => row.productId === productId && row.lineId === lineId);
+      if (rows.length === 0 && savedContextRows.length > 0) {
+        onChange(savedContextRows.map((row) => {
+          const isPresent = row.isPresent ?? true;
+          const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+          return {
+            ...row,
+            lineName: row.lineName || lineName,
+            productName: row.productName || productName,
+            isPresent,
+            outputQty,
+            achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+          };
+        }));
+        lastLoadedContextRef.current = contextKey;
+        return;
+      }
       // On the very first load (e.g. when editing an existing report) the parent
       // already supplies the saved per-worker outputs, so keep them instead of
       // resetting every quantity to zero.
@@ -126,7 +146,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     } finally {
       setLoading(false);
     }
-  }, [lineId, productId, date, products, lineProductConfigs, lineName, productName, onChange, value, canShowWorkerTargets, assemblyMode]);
+  }, [lineId, productId, date, assignmentDate, products, lineProductConfigs, lineName, productName, onChange, value, canShowWorkerTargets, assemblyMode]);
 
   useEffect(() => {
     if (!lineId || !productId || !date || !canShowWorkerTargets) {

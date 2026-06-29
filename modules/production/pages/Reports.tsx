@@ -38,7 +38,7 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
-import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
+import { formatNumber, getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import {
   buildShareStandardVarianceBanner,
   computeProductionReportStandardQtyVariance,
@@ -218,7 +218,18 @@ const normalizeReportWorkerOutputs = (
   rows: ProductionReportWorkerOutput[] = [],
   lineId: string,
   productId: string,
+  context?: {
+    lineName?: string;
+    productName?: string;
+  },
 ): ProductionReportWorkerOutput[] => rows
+  .map((row) => ({
+    ...row,
+    productId: row.productId || productId,
+    productName: row.productName || context?.productName || productId,
+    lineId: row.lineId || lineId,
+    lineName: row.lineName || context?.lineName || lineId,
+  }))
   .filter((row) => row.productId === productId && row.lineId === lineId)
   .map((row) => {
     const isPresent = row.isPresent ?? true;
@@ -633,7 +644,10 @@ export const Reports: React.FC = () => {
       ), 0),
     [form.workerOutputs, form.productId, form.lineId],
   );
-  const formQuantityDerivedFromWorkerOutputs = form.reportType === 'finished_product' && formWorkerOutputEntryEnabled;
+  const hasPositiveFormWorkerOutput = formWorkerOutputTotal > 0;
+  const formQuantityDerivedFromWorkerOutputs = form.reportType === 'finished_product'
+    && formWorkerOutputEntryEnabled
+    && (!editId || hasPositiveFormWorkerOutput);
   const effectiveFormQuantityProduced = formQuantityDerivedFromWorkerOutputs
     ? formWorkerOutputTotal
     : Number(form.quantityProduced || 0);
@@ -750,6 +764,40 @@ export const Reports: React.FC = () => {
     [],
   );
   const lastAutoFilledWorkersCountRef = useRef<number | null>(null);
+  const toReportDateWorkerTemplate = useCallback((workers: LineWorkerAssignment[], reportDate: string) => (
+    workers.map((worker) => ({
+      ...worker,
+      id: undefined,
+      date: reportDate,
+      assignedAt: undefined,
+      assignedBy: undefined,
+    }))
+  ), []);
+  const loadWorkersForReportDate = useCallback(async (
+    lineId: string,
+    reportDate: string,
+    assignmentSourceDate: string,
+  ) => {
+    const sourceWorkers = await lineAssignmentService.getByLineAndDate(lineId, assignmentSourceDate);
+    if (assignmentSourceDate === reportDate) return sourceWorkers;
+
+    const reportDayRows = (await lineAssignmentService.getByDate(reportDate))
+      .filter((row) => row.lineId === lineId && row.employeeId);
+    const reportDayByEmployeeId = new Map(reportDayRows.map((row) => [row.employeeId, row]));
+
+    return toReportDateWorkerTemplate(sourceWorkers, reportDate).map((worker) => {
+      const reportDay = reportDayByEmployeeId.get(worker.employeeId);
+      if (!reportDay) return worker;
+      return {
+        ...worker,
+        id: reportDay.id,
+        laborRole: reportDay.laborRole || worker.laborRole,
+        isPresent: reportDay.isPresent ?? worker.isPresent,
+        assignedAt: reportDay.assignedAt,
+        assignedBy: reportDay.assignedBy,
+      };
+    });
+  }, [toReportDateWorkerTemplate]);
 
   // Work order detail popup
   const [viewWOReport, setViewWOReport] = useState<ProductionReport | null>(null);
@@ -854,10 +902,11 @@ export const Reports: React.FC = () => {
 
   useEffect(() => {
     if (!showModal || !form.lineId || !form.date) { setFormLineWorkers([]); return; }
-    lineAssignmentService.getByLineAndDate(form.lineId, form.date).then((list) => {
-      setFormLineWorkers(list);
-    }).catch(() => setFormLineWorkers([]));
-  }, [showModal, form.lineId, form.date, editId]);
+    const assignmentSourceDate = editId ? form.date : getTodayDateString();
+    loadWorkersForReportDate(form.lineId, form.date, assignmentSourceDate)
+      .then(setFormLineWorkers)
+      .catch(() => setFormLineWorkers([]));
+  }, [showModal, form.lineId, form.date, editId, loadWorkersForReportDate]);
 
   useEffect(() => {
     lastAutoFilledWorkersCountRef.current = null;
@@ -2022,6 +2071,26 @@ export const Reports: React.FC = () => {
     }
     setEditId(report.id!);
     setSaveToast(null);
+    const editLineName = _rawLines.find((line) => line.id === report.lineId)?.name ?? report.lineId;
+    const editProductName = _rawProducts.find((product) => product.id === report.productId)?.name ?? report.productId;
+    const normalizedWorkerOutputs = normalizeReportWorkerOutputs(
+      Array.isArray(report.workerOutputs) ? report.workerOutputs : [],
+      report.lineId,
+      report.productId,
+      { lineName: editLineName, productName: editProductName },
+    );
+    const savedDetailedWorkersTotal =
+      Number(report.workersProductionCount || 0)
+      + Number(report.workersPackagingCount || 0)
+      + Number(report.workersQualityCount || 0)
+      + Number(report.workersMaintenanceCount || 0)
+      + Number(report.workersExternalCount || 0);
+    const presentWorkerOutputCount = normalizedWorkerOutputs.length > 0
+      ? normalizedWorkerOutputs.reduce((sum, row) => (row.isPresent === false ? sum : sum + 1), 0)
+      : null;
+    const fallbackProductionWorkersCount = rt === 'finished_product' && savedDetailedWorkersTotal <= 0
+      ? (presentWorkerOutputCount ?? Number(report.workersCount || 0))
+      : Number(report.workersProductionCount || 0);
     setForm({
       reportType: rt,
       employeeId: report.employeeId,
@@ -2034,7 +2103,7 @@ export const Reports: React.FC = () => {
         : '',
       quantityProduced: report.quantityProduced,
       workersCount: report.workersCount,
-      workersProductionCount: report.workersProductionCount || 0,
+      workersProductionCount: fallbackProductionWorkersCount,
       workersPackagingCount: report.workersPackagingCount || 0,
       workersQualityCount: report.workersQualityCount || 0,
       workersMaintenanceCount: report.workersMaintenanceCount || 0,
@@ -2075,7 +2144,7 @@ export const Reports: React.FC = () => {
             return [{ productId: pid, quantityPieces: q }];
           })()
           : [],
-      workerOutputs: Array.isArray(report.workerOutputs) ? report.workerOutputs : [],
+      workerOutputs: normalizedWorkerOutputs,
     });
     // Pre-seed the worker-outputs context so the reset effect does not wipe the
     // saved per-worker production when the edit modal first opens.
@@ -2424,6 +2493,7 @@ export const Reports: React.FC = () => {
 
   const handleViewWorkers = async (report: ProductionReport) => {
     const { lineId, date } = report;
+    const assignmentSourceDate = report.id ? date : getTodayDateString();
     setViewWorkersLoading(true);
     setViewWorkersError(null);
     setViewWorkersPickerId('');
@@ -2443,10 +2513,10 @@ export const Reports: React.FC = () => {
       },
     });
     try {
-      const workers = await lineAssignmentService.getByLineAndDate(lineId, date);
+      const reportWorkers = await loadWorkersForReportDate(lineId, date, assignmentSourceDate);
       setViewWorkersData((prev) => (
         prev
-          ? { ...prev, lineId, date, workers }
+          ? { ...prev, lineId, date, workers: reportWorkers }
           : null
       ));
     } catch {
@@ -2457,7 +2527,8 @@ export const Reports: React.FC = () => {
   };
 
   const refreshWorkersForLineDate = useCallback(async (lineId: string, date: string) => {
-    const workers = await lineAssignmentService.getByLineAndDate(lineId, date);
+    const assignmentSourceDate = showModal && !editId ? getTodayDateString() : date;
+    const workers = await loadWorkersForReportDate(lineId, date, assignmentSourceDate);
     setViewWorkersData((prev) => (
       prev
         ? { ...prev, lineId, date, workers }
@@ -2466,7 +2537,7 @@ export const Reports: React.FC = () => {
     if (showModal && form.lineId === lineId && form.date === date) {
       setFormLineWorkers(workers);
     }
-  }, [showModal, form.lineId, form.date]);
+  }, [showModal, editId, form.lineId, form.date, loadWorkersForReportDate]);
 
   const addWorkerToLineDate = useCallback(async () => {
     if (!viewWorkersData || !viewWorkersPickerId) return;
@@ -4929,6 +5000,7 @@ export const Reports: React.FC = () => {
                   lineId={form.lineId}
                   productId={form.productId}
                   date={form.date}
+                  assignmentDate={editId ? form.date : getTodayDateString()}
                   lineName={_rawLines.find((l) => l.id === form.lineId)?.name ?? form.lineId}
                   productName={_rawProducts.find((p) => p.id === form.productId)?.name ?? form.productId}
                   products={_rawProducts}

@@ -25,7 +25,7 @@ import { productionLineWorkerAssignmentService } from '../services/productionLin
 import { productionWorkerService } from '../services/productionWorkerService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { rawMaterialService } from '../../inventory/services/rawMaterialService';
-import { formatNumber, getOperationalDateString } from '../../../utils/calculations';
+import { formatNumber, getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import {
   buildShareStandardVarianceBanner,
   computeProductionReportStandardQtyVariance,
@@ -310,6 +310,37 @@ export const QuickAction: React.FC = () => {
   const lastWorkerOutputContextRef = useRef(workerOutputContextKey);
   const restoredStorageKeyRef = useRef<string | null>(null);
   const didShowDraftToastRef = useRef(false);
+  const toReportDateWorkerTemplate = useCallback((workers: LineWorkerAssignment[], reportDate: string) => (
+    workers.map((worker) => ({
+      ...worker,
+      id: undefined,
+      date: reportDate,
+      assignedAt: undefined,
+      assignedBy: undefined,
+    }))
+  ), []);
+  const loadWorkersForReportDate = useCallback(async (lineIdValue: string, reportDate: string) => {
+    const assignmentSourceDate = getTodayDateString();
+    const sourceWorkers = await lineAssignmentService.getByLineAndDate(lineIdValue, assignmentSourceDate);
+    if (assignmentSourceDate === reportDate) return sourceWorkers;
+
+    const reportDayRows = (await lineAssignmentService.getByDate(reportDate))
+      .filter((row) => row.lineId === lineIdValue && row.employeeId);
+    const reportDayByEmployeeId = new Map(reportDayRows.map((row) => [row.employeeId, row]));
+
+    return toReportDateWorkerTemplate(sourceWorkers, reportDate).map((worker) => {
+      const reportDay = reportDayByEmployeeId.get(worker.employeeId);
+      if (!reportDay) return worker;
+      return {
+        ...worker,
+        id: reportDay.id,
+        laborRole: reportDay.laborRole || worker.laborRole,
+        isPresent: reportDay.isPresent ?? worker.isPresent,
+        assignedAt: reportDay.assignedAt,
+        assignedBy: reportDay.assignedBy,
+      };
+    });
+  }, [toReportDateWorkerTemplate]);
 
   const storageKey = useMemo(() => quickActionStorageKey(tenantId, uid), [tenantId, uid]);
   const canCreateFinishedReportsBase = can('reports.create');
@@ -586,9 +617,9 @@ export const QuickAction: React.FC = () => {
     }
     setLoadingWorkersCount(true);
     try {
-      const list = await lineAssignmentService.getByLineAndDate(lineId, today);
+      const reportDateWorkers = await loadWorkersForReportDate(lineId, today);
       setLineWorkers(
-        list
+        reportDateWorkers
           .map((worker, index) => ({ worker, index }))
           .sort((left, right) => (
             compareEmployeeCodes(left.worker.employeeCode, right.worker.employeeCode) || left.index - right.index
@@ -600,7 +631,7 @@ export const QuickAction: React.FC = () => {
     } finally {
       setLoadingWorkersCount(false);
     }
-  }, [lineId, today]);
+  }, [lineId, today, loadWorkersForReportDate]);
 
   const openLineWorkersModal = useCallback(async () => {
     setShowLineWorkers(true);
@@ -1968,6 +1999,7 @@ export const QuickAction: React.FC = () => {
                   lineId={lineId}
                   productId={productId}
                   date={today}
+                  assignmentDate={getTodayDateString()}
                   lineName={getLineName(lineId)}
                   productName={getProductName(productId)}
                   products={_rawProducts}

@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Loader2, Plus, X } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
-import { getOperationalDateString } from '../../../utils/calculations';
+import { getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -117,6 +117,15 @@ export const GlobalCreateReportModal: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [formLineWorkers, setFormLineWorkers] = useState<LineWorkerAssignment[]>([]);
   const lastAutoFilledWorkersCountRef = useRef<number | null>(null);
+  const toReportDateWorkerTemplate = useCallback((workers: LineWorkerAssignment[], reportDate: string) => (
+    workers.map((worker) => ({
+      ...worker,
+      id: undefined,
+      date: reportDate,
+      assignedAt: undefined,
+      assignedBy: undefined,
+    }))
+  ), []);
   const injectionCategoryTokens = useMemo(
     () => parseInjectionCategoryTokens(injectionCategoryKeywords),
     [injectionCategoryKeywords],
@@ -317,10 +326,15 @@ export const GlobalCreateReportModal: React.FC = () => {
       setFormLineWorkers([]);
       return;
     }
-    lineAssignmentService.getByLineAndDate(form.lineId, form.date)
-      .then((list) => setFormLineWorkers(list))
+    const assignmentSourceDate = getTodayDateString();
+    lineAssignmentService.getByLineAndDate(form.lineId, assignmentSourceDate)
+      .then((list) => setFormLineWorkers(
+        assignmentSourceDate === form.date
+          ? list
+          : toReportDateWorkerTemplate(list, form.date),
+      ))
       .catch(() => setFormLineWorkers([]));
-  }, [isOpen, form.lineId, form.date]);
+  }, [isOpen, form.lineId, form.date, toReportDateWorkerTemplate]);
 
   useEffect(() => {
     lastAutoFilledWorkersCountRef.current = null;
