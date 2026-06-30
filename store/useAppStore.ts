@@ -97,6 +97,10 @@ import { scanEventService } from '../modules/production/services/scanEventServic
 import { stockService } from '../modules/inventory/services/stockService';
 import { transferApprovalService } from '../modules/inventory/services/transferApprovalService';
 import { productionInventoryService } from '../modules/inventory/services/productionInventoryService';
+import {
+  removeWorkerDailyPerformanceForReport,
+  syncWorkerDailyPerformanceFromReport,
+} from '../modules/production/utils/syncWorkerDailyPerformanceFromReport';
 import { resolveInventoryRoutingV1Async } from '../modules/inventory/services/inventoryRoutingService';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { catalogRawMaterialService as rawMaterialService } from '../modules/catalog/services/catalogRawMaterialService';
@@ -1310,7 +1314,6 @@ export const useAppStore = create<AppState>((set, get) => ({
           userDisplayName: cachedSession.userDisplayName,
           userProfile: cachedSession.userProfile,
           tenantCompanyName: cachedSession.tenantCompanyName ?? '',
-          loading: false,
         });
         get()._applyRole(cachedSession.role);
       }
@@ -1361,7 +1364,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         userEmail: userDoc.email,
         userDisplayName: userDoc.displayName,
         userProfile: userDoc,
-        loading: false,
       });
 
       get()._applyRole(role);
@@ -3574,6 +3576,11 @@ export const useAppStore = create<AppState>((set, get) => ({
         } catch (snapErr) {
           console.warn('persistProductionReportCostSnapshot (create):', snapErr);
         }
+        try {
+          await syncWorkerDailyPerformanceFromReport(id, { ...reportData, id });
+        } catch (syncErr) {
+          console.warn('syncWorkerDailyPerformanceFromReport (create):', syncErr);
+        }
         if (activePlan) await get().fetchProductionPlans();
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث البيانات المعروضة';
@@ -3767,6 +3774,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch (snapErr) {
         console.warn('persistProductionReportCostSnapshot (update):', snapErr);
       }
+      try {
+        const savedReport = await reportService.getById(id);
+        if (savedReport) {
+          await syncWorkerDailyPerformanceFromReport(id, savedReport);
+        }
+      } catch (syncErr) {
+        console.warn('syncWorkerDailyPerformanceFromReport (update):', syncErr);
+      }
       await get().fetchProductionPlans();
 
       eventBus.emit(SystemEvents.USER_ACTION, {
@@ -3872,6 +3887,12 @@ export const useAppStore = create<AppState>((set, get) => ({
             completedAt: nextStatus === 'completed' ? (linkedWorkOrder.completedAt ?? new Date().toISOString()) : null,
           });
         }
+      }
+
+      try {
+        await removeWorkerDailyPerformanceForReport(id);
+      } catch (syncErr) {
+        console.warn('removeWorkerDailyPerformanceForReport (delete):', syncErr);
       }
 
       await reportService.delete(id);

@@ -22,6 +22,7 @@ import { ProductionReport } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { createReportDuplicateError } from '../utils/reportDuplicateError';
+import { normalizeInjectionShift } from '../utils/injectionReportShift';
 import { resolveReportType } from '../utils/reportTypes';
 import { productionAttendanceService } from './productionAttendanceService';
 
@@ -44,14 +45,63 @@ function isMissingIndexError(error: unknown): boolean {
 const normalizeKeyPart = (value: string) =>
   encodeURIComponent(String(value || '').trim().toLowerCase());
 
-const buildReportUniqueKey = (data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType'>): string =>
-  [
+type ReportUniqueKeySource = Pick<
+  ProductionReport,
+  'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift'
+>;
+
+const buildReportUniqueKey = (data: ReportUniqueKeySource, includeInjectionShift = true): string => {
+  const reportType = resolveReportType(data.reportType);
+  const parts = [
     normalizeKeyPart(data.date),
     normalizeKeyPart(data.lineId),
     normalizeKeyPart(data.employeeId),
     normalizeKeyPart(data.productId),
-    normalizeKeyPart(resolveReportType(data.reportType)),
-  ].join('__');
+    normalizeKeyPart(reportType),
+  ];
+  if (includeInjectionShift && reportType === 'component_injection') {
+    parts.push(normalizeKeyPart(normalizeInjectionShift(data.shift)));
+  }
+  return parts.join('__');
+};
+
+/** Pre-shift-injection reports used a key without a shift segment (treated as morning). */
+const buildLegacyInjectionUniqueKey = (data: ReportUniqueKeySource): string | null => {
+  if (resolveReportType(data.reportType) !== 'component_injection') return null;
+  return buildReportUniqueKey(data, false);
+};
+
+const getInjectionUniqueKeysToCheckOnCreate = (data: ReportUniqueKeySource): string[] => {
+  const keys = [buildReportUniqueKey(data)];
+  const legacyKey = buildLegacyInjectionUniqueKey(data);
+  if (legacyKey && legacyKey !== keys[0] && normalizeInjectionShift(data.shift) === 'morning') {
+    keys.push(legacyKey);
+  }
+  return keys;
+};
+
+const getReportUniqueKeysForCleanup = (data: ReportUniqueKeySource): string[] => {
+  const keys = [buildReportUniqueKey(data)];
+  const legacyKey = buildLegacyInjectionUniqueKey(data);
+  if (legacyKey && legacyKey !== keys[0] && normalizeInjectionShift(data.shift) === 'morning') {
+    keys.push(legacyKey);
+  }
+  return keys;
+};
+
+const buildUniqueDocPayload = (reportId: string, data: ReportUniqueKeySource) => ({
+  tenantId: getCurrentTenantId(),
+  reportId,
+  date: data.date,
+  lineId: data.lineId,
+  employeeId: data.employeeId,
+  productId: data.productId,
+  reportType: resolveReportType(data.reportType),
+  ...(resolveReportType(data.reportType) === 'component_injection'
+    ? { shift: normalizeInjectionShift(data.shift) }
+    : {}),
+  updatedAt: serverTimestamp(),
+});
 
 const skipsReportUniqueConstraint = (rt: ProductionReport['reportType'] | undefined) => {
   const reportType = resolveReportType(rt);
@@ -282,15 +332,29 @@ export const reportService = {
         employeeId: data.employeeId,
         productId: data.productId,
         reportType: data.reportType,
+        shift: data.shift,
       });
       const uniqueRef = doc(db, UNIQUE_COLLECTION, uniqueKey);
+      const injectionKeysToCheck = resolveReportType(data.reportType) === 'component_injection'
+        ? getInjectionUniqueKeysToCheckOnCreate({
+          date: data.date,
+          lineId: data.lineId,
+          employeeId: data.employeeId,
+          productId: data.productId,
+          reportType: data.reportType,
+          shift: data.shift,
+        })
+        : [uniqueKey];
 
       await runTransaction(db, async (tx) => {
         const skipUnique = skipsReportUniqueConstraint(data.reportType);
         if (!skipUnique) {
-          const uniqueSnap = await tx.get(uniqueRef);
-          if (uniqueSnap.exists()) {
-            throw createReportDuplicateError();
+          for (const key of injectionKeysToCheck) {
+            const keyRef = key === uniqueKey ? uniqueRef : doc(db, UNIQUE_COLLECTION, key);
+            const uniqueSnap = await tx.get(keyRef);
+            if (uniqueSnap.exists()) {
+              throw createReportDuplicateError();
+            }
           }
         }
 
@@ -315,15 +379,15 @@ export const reportService = {
         tx.set(reportRef, payload);
         if (!skipUnique) {
           tx.set(uniqueRef, {
-            tenantId: getCurrentTenantId(),
-            reportId: reportRef.id,
-            date: data.date,
-            lineId: data.lineId,
-            employeeId: data.employeeId,
-            productId: data.productId,
-            reportType: resolveReportType(data.reportType),
+            ...buildUniqueDocPayload(reportRef.id, {
+              date: data.date,
+              lineId: data.lineId,
+              employeeId: data.employeeId,
+              productId: data.productId,
+              reportType: data.reportType,
+              shift: data.shift,
+            }),
             createdAt: serverTimestamp(),
-            updatedAt: serverTimestamp(),
           });
         }
       });
@@ -411,31 +475,42 @@ export const reportService = {
         const nextSkipsUnique = skipsReportUniqueConstraint(next.reportType);
 
         if (!oldSkipsUnique && !nextSkipsUnique) {
-          const oldKey = buildReportUniqueKey(current);
+          const oldKeys = getReportUniqueKeysForCleanup(current);
           const nextKey = buildReportUniqueKey(next);
+          const keysChanged = !oldKeys.includes(nextKey) || oldKeys.length > 1;
 
-          if (oldKey !== nextKey) {
-            const nextUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
-            const nextUniqueSnap = await tx.get(nextUniqueRef);
-            if (nextUniqueSnap.exists()) {
-              const ownerId = String((nextUniqueSnap.data() as { reportId?: string })?.reportId || '');
-              if (!ownerId || ownerId !== id) {
-                throw createReportDuplicateError();
+          if (keysChanged) {
+            const keysToCheck = resolveReportType(next.reportType) === 'component_injection'
+              ? getInjectionUniqueKeysToCheckOnCreate(next)
+              : [nextKey];
+            const reservedKeys = new Set(oldKeys);
+            for (const key of keysToCheck) {
+              if (reservedKeys.has(key)) continue;
+              const keySnap = await tx.get(doc(db, UNIQUE_COLLECTION, key));
+              if (keySnap.exists()) {
+                const ownerId = String((keySnap.data() as { reportId?: string })?.reportId || '');
+                if (!ownerId || ownerId !== id) {
+                  throw createReportDuplicateError();
+                }
               }
             }
-            const oldUniqueRef = doc(db, UNIQUE_COLLECTION, oldKey);
-            tx.delete(oldUniqueRef);
+
+            for (const oldKey of oldKeys) {
+              if (oldKey === nextKey) continue;
+              const oldUniqueRef = doc(db, UNIQUE_COLLECTION, oldKey);
+              const oldSnap = await tx.get(oldUniqueRef);
+              if (oldSnap.exists()) {
+                const ownerId = String((oldSnap.data() as { reportId?: string })?.reportId || '');
+                if (ownerId === id) tx.delete(oldUniqueRef);
+              }
+            }
+
+            const nextUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
             tx.set(
               nextUniqueRef,
               {
-                tenantId: getCurrentTenantId(),
-                reportId: id,
-                date: next.date,
-                lineId: next.lineId,
-                employeeId: next.employeeId,
-                productId: next.productId,
-                reportType: resolveReportType(next.reportType),
-                updatedAt: serverTimestamp(),
+                ...buildUniqueDocPayload(id, next),
+                createdAt: serverTimestamp(),
               },
               { merge: true },
             );
@@ -451,34 +526,34 @@ export const reportService = {
             if (ownerId === id) tx.delete(legacyUniqueRef);
           }
           const nextKey = buildReportUniqueKey(next);
-          const nextUniqueRef = doc(db, UNIQUE_COLLECTION, nextKey);
-          const nextUniqueSnap = await tx.get(nextUniqueRef);
-          if (nextUniqueSnap.exists()) {
-            const ownerId = String((nextUniqueSnap.data() as { reportId?: string })?.reportId || '');
-            if (!ownerId || ownerId !== id) {
-              throw createReportDuplicateError();
+          const keysToCheck = resolveReportType(next.reportType) === 'component_injection'
+            ? getInjectionUniqueKeysToCheckOnCreate(next)
+            : [nextKey];
+          for (const key of keysToCheck) {
+            const keySnap = await tx.get(doc(db, UNIQUE_COLLECTION, key));
+            if (keySnap.exists()) {
+              const ownerId = String((keySnap.data() as { reportId?: string })?.reportId || '');
+              if (!ownerId || ownerId !== id) {
+                throw createReportDuplicateError();
+              }
             }
           }
           tx.set(
-            nextUniqueRef,
+            doc(db, UNIQUE_COLLECTION, nextKey),
             {
-              tenantId: getCurrentTenantId(),
-              reportId: id,
-              date: next.date,
-              lineId: next.lineId,
-              employeeId: next.employeeId,
-              productId: next.productId,
-              reportType: resolveReportType(next.reportType),
-              updatedAt: serverTimestamp(),
+              ...buildUniqueDocPayload(id, next),
+              createdAt: serverTimestamp(),
             },
             { merge: true },
           );
         } else if (!oldSkipsUnique && nextSkipsUnique) {
-          const oldUniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
-          const oldSnap = await tx.get(oldUniqueRef);
-          if (oldSnap.exists()) {
-            const ownerId = String((oldSnap.data() as { reportId?: string })?.reportId || '');
-            if (ownerId === id) tx.delete(oldUniqueRef);
+          for (const oldKey of getReportUniqueKeysForCleanup(current)) {
+            const oldUniqueRef = doc(db, UNIQUE_COLLECTION, oldKey);
+            const oldSnap = await tx.get(oldUniqueRef);
+            if (oldSnap.exists()) {
+              const ownerId = String((oldSnap.data() as { reportId?: string })?.reportId || '');
+              if (ownerId === id) tx.delete(oldUniqueRef);
+            }
           }
         }
 
@@ -522,21 +597,41 @@ export const reportService = {
         const snap = await tx.get(reportRef);
         if (!snap.exists()) return;
         const current = { id: snap.id, ...snap.data() } as ProductionReport;
-        const uniqueRef = doc(db, UNIQUE_COLLECTION, buildReportUniqueKey(current));
+        const uniqueKeys = getReportUniqueKeysForCleanup(current);
 
         // Firestore: all tx.get() calls must run before any writes.
         let deleteUniqueDoc = !skipsReportUniqueConstraint(current.reportType);
-        if (skipsReportUniqueConstraint(current.reportType)) {
-          const legacySnap = await tx.get(uniqueRef);
-          if (legacySnap.exists()) {
-            const ownerId = String((legacySnap.data() as { reportId?: string })?.reportId || '');
-            if (ownerId === snap.id) deleteUniqueDoc = true;
+        const uniqueSnaps: Array<{ key: string; ownerId: string }> = [];
+        if (deleteUniqueDoc) {
+          for (const key of uniqueKeys) {
+            const uniqueRef = doc(db, UNIQUE_COLLECTION, key);
+            const uniqueSnap = await tx.get(uniqueRef);
+            if (uniqueSnap.exists()) {
+              uniqueSnaps.push({
+                key,
+                ownerId: String((uniqueSnap.data() as { reportId?: string })?.reportId || ''),
+              });
+            }
+          }
+        } else if (skipsReportUniqueConstraint(current.reportType)) {
+          for (const key of uniqueKeys) {
+            const uniqueRef = doc(db, UNIQUE_COLLECTION, key);
+            const uniqueSnap = await tx.get(uniqueRef);
+            if (uniqueSnap.exists()) {
+              const ownerId = String((uniqueSnap.data() as { reportId?: string })?.reportId || '');
+              if (ownerId === snap.id) deleteUniqueDoc = true;
+              uniqueSnaps.push({ key, ownerId });
+            }
           }
         }
 
         tx.delete(reportRef);
         if (deleteUniqueDoc) {
-          tx.delete(uniqueRef);
+          for (const { key, ownerId } of uniqueSnaps) {
+            if (ownerId === snap.id) {
+              tx.delete(doc(db, UNIQUE_COLLECTION, key));
+            }
+          }
         }
       });
       await productionAttendanceService.deleteForReport(id);

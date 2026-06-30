@@ -39,4 +39,5 @@ export { productionWorkerRatingService } from './services/productionWorkerRating
 export { productionLineWorkerAssignmentService } from './services/productionLineWorkerAssignmentService';
 export { productionWorkerTargetService } from './services/productionWorkerTargetService';
 export { productionWorkerPerformanceService } from './services/productionWorkerPerformanceService';
+export { workerDailyPerformanceLogService } from './services/workerDailyPerformanceLogService';
 export { useSupervisorStore } from './stores/useSupervisorStore';

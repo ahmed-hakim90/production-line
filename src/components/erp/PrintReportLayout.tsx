@@ -27,6 +27,7 @@ interface ReportSection {
     label: string
     value: string | ReactNode
     highlight?: boolean
+    fullWidth?: boolean
   }[]
   progress?: { value: number; label: string }
 }
@@ -273,26 +274,39 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
             <table className="erp-table w-full border-collapse">
               <tbody>
                 {section.rows.map((row, ri) => (
-                  <tr key={ri} className="border-b border-slate-100 last:border-0">
-                    <td
-                      className="!py-1.5 !px-2.5 !text-xs text-slate-500 w-[40%]"
-                      style={{ letterSpacing: "normal" }}
-                    >
-                      {row.label}
-                    </td>
-                    <td
-                      className={cn(
-                        "!py-1.5 !px-2.5 !text-sm text-right",
-                        row.highlight ? "font-bold text-[13px]" : "font-medium text-slate-800",
-                      )}
-                      style={{
-                        letterSpacing: "normal",
-                        ...(row.highlight ? { color: accent } : {}),
-                      }}
-                    >
-                      {row.value}
-                    </td>
-                  </tr>
+                  row.fullWidth ? (
+                    <tr key={ri} className="border-b border-slate-100 last:border-0">
+                      <td colSpan={2} className="!py-2 !px-2.5">
+                        {row.label ? (
+                          <p className="mb-1 text-[9px] font-bold text-slate-400" style={{ letterSpacing: "normal" }}>
+                            {row.label}
+                          </p>
+                        ) : null}
+                        {row.value}
+                      </td>
+                    </tr>
+                  ) : (
+                    <tr key={ri} className="border-b border-slate-100 last:border-0">
+                      <td
+                        className="!py-1.5 !px-2.5 !text-xs text-slate-500 w-[40%]"
+                        style={{ letterSpacing: "normal" }}
+                      >
+                        {row.label}
+                      </td>
+                      <td
+                        className={cn(
+                          "!py-1.5 !px-2.5 !text-sm text-right",
+                          row.highlight ? "font-bold text-[13px]" : "font-medium text-slate-800",
+                        )}
+                        style={{
+                          letterSpacing: "normal",
+                          ...(row.highlight ? { color: accent } : {}),
+                        }}
+                      >
+                        {row.value}
+                      </td>
+                    </tr>
+                  )
                 ))}
 
                 {section.progress && (

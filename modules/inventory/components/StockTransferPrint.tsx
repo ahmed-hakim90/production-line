@@ -239,22 +239,59 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
 
     const printNow = new Date().toLocaleString('ar-EG');
 
-    const itemRows = transferItems.flatMap((item, idx) => {
-      const cartonQty =
-        item.unitLabel === 'كرتونة' ? Number(item.quantity || 0).toLocaleString('ar-EG') : '—';
-      const unitNote = item.unitsPerCarton ? `${item.unitLabel} (${item.unitsPerCarton} قطعة/كرتونة)` : item.unitLabel;
-      return [
-        {
-          label: `صنف ${idx + 1}`,
-          value: `${item.itemName} — ${item.itemCode}`,
-          highlight: true as const,
-        },
-        {
-          label: 'الوحدة / الكراتين / القطع',
-          value: `${unitNote} | كراتين: ${cartonQty} | قطع: ${Number(item.quantityPieces || 0).toLocaleString('ar-EG')}`,
-        },
-      ];
-    });
+    const formatQty = (value: number) => Number(value || 0).toLocaleString('ar-EG');
+    const transferRoute = (
+      <div className="grid grid-cols-[1fr_auto_1fr] items-stretch gap-2">
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <p className="text-[9px] font-bold text-slate-400">من المخزن</p>
+          <p className="mt-1 text-[13px] font-black text-slate-900 leading-snug">{data.fromWarehouseName || '—'}</p>
+        </div>
+        <div className="flex items-center justify-center px-1">
+          <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-[#EDEEF8] text-[16px] font-black text-[#4A55A2]">←</span>
+        </div>
+        <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2">
+          <p className="text-[9px] font-bold text-slate-400">إلى المخزن</p>
+          <p className="mt-1 text-[13px] font-black text-slate-900 leading-snug">{data.toWarehouseName || '—'}</p>
+        </div>
+      </div>
+    );
+    const itemsTable = transferItems.length > 0 ? (
+      <table className="w-full border-collapse overflow-hidden rounded-lg text-right">
+        <thead>
+          <tr className="bg-slate-100 text-[10px] font-bold text-slate-500">
+            <th className="border border-slate-200 px-2 py-1.5 text-center w-9">#</th>
+            <th className="border border-slate-200 px-2 py-1.5">الصنف</th>
+            <th className="border border-slate-200 px-2 py-1.5 text-center w-20">الوحدة</th>
+            <th className="border border-slate-200 px-2 py-1.5 text-center w-24">الكمية</th>
+            <th className="border border-slate-200 px-2 py-1.5 text-center w-24">قطع</th>
+          </tr>
+        </thead>
+        <tbody>
+          {transferItems.map((item, idx) => (
+            <tr key={`${item.itemCode}-${idx}`} className={idx % 2 === 0 ? 'bg-white' : 'bg-slate-50'}>
+              <td className="border border-slate-200 px-2 py-1.5 text-center text-[11px] font-bold text-slate-500">{idx + 1}</td>
+              <td className="border border-slate-200 px-2 py-1.5">
+                <p className="text-[12px] font-black leading-snug text-slate-900">{item.itemName}</p>
+                <p className="mt-0.5 text-[10px] font-semibold text-slate-400">{item.itemCode || '—'}</p>
+              </td>
+              <td className="border border-slate-200 px-2 py-1.5 text-center text-[11px] font-bold text-slate-700">
+                {item.unitsPerCarton ? `${item.unitLabel} / ${item.unitsPerCarton}` : item.unitLabel}
+              </td>
+              <td className="border border-slate-200 px-2 py-1.5 text-center text-[12px] font-black text-[#4A55A2]">
+                {formatQty(Number(item.quantity || 0))}
+              </td>
+              <td className="border border-slate-200 px-2 py-1.5 text-center text-[12px] font-black text-slate-900">
+                {formatQty(Number(item.quantityPieces || 0))}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    ) : (
+      <div className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-3 text-center text-sm font-bold text-slate-500">
+        لا توجد أصناف في هذه التحويلة.
+      </div>
+    );
 
     return (
       <PrintReportLayout
@@ -288,13 +325,14 @@ export const StockTransferShareCard = React.forwardRef<HTMLDivElement, StockTran
           {
             title: 'بيانات التحويل',
             rows: [
+              { label: 'مسار التحويل', value: transferRoute, fullWidth: true },
               { label: 'المنفذ', value: data.createdBy || '—' },
               ...(data.note?.trim() ? [{ label: 'ملاحظة', value: data.note }] : []),
             ],
           },
           {
             title: 'تفاصيل الأصناف',
-            rows: itemRows.length > 0 ? itemRows : [{ label: 'الأصناف', value: 'لا توجد أصناف في هذه التحويلة.' }],
+            rows: [{ label: 'الأصناف', value: itemsTable, fullWidth: true }],
           },
         ]}
       />

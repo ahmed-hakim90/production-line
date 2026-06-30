@@ -90,6 +90,8 @@ const MODAL_WORKSPACE_CLEARED_FLAG = 'erp_modal_workspace_cleared_v1';
 /** One recovery reload per tab session when a lazy chunk 404s (stale SW / cache after deploy). */
 const DYNAMIC_IMPORT_RELOAD_KEY = 'erp_dynamic_import_recovery_v1';
 
+const BOOTSTRAP_SPLASH_SUBTITLE = 'جاري تحميل النظام...';
+
 const isDynamicImportLoadFailure = (reason: unknown): boolean => {
   const msg =
     typeof reason === 'string'
@@ -284,7 +286,7 @@ const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApprov
   }
 
   if (loading) {
-    return <AppSplashScreen subtitle="جاري استعادة الجلسة..." />;
+    return <AppSplashScreen subtitle={BOOTSTRAP_SPLASH_SUBTITLE} />;
   }
 
   if (!isAuthenticated) {
@@ -495,6 +497,50 @@ const defaultTenantResolve: TenantSlugResolveValue = {
   tenantStatus: '',
 };
 
+const applySlugResolutionGate = (
+  r: Awaited<ReturnType<typeof tenantService.resolveSlug>>,
+  setters: {
+    setGate: React.Dispatch<React.SetStateAction<TenantGate>>;
+    setTenantResolve: React.Dispatch<React.SetStateAction<TenantSlugResolveValue>>;
+  },
+) => {
+  if (!r.exists || !r.tenantId) {
+    setters.setTenantResolve({
+      pendingRegistration: false,
+      tenantStatus: 'unknown',
+    });
+    setters.setGate('ready');
+    return;
+  }
+
+  setCurrentTenant(r.tenantId);
+  if (r.pendingRegistration) {
+    setters.setTenantResolve({
+      pendingRegistration: true,
+      tenantStatus: r.status || 'pending',
+    });
+    setters.setGate('ready');
+    return;
+  }
+  if (r.status === 'suspended') {
+    setters.setGate('suspended');
+    return;
+  }
+  if (r.status !== 'active') {
+    setters.setTenantResolve({
+      pendingRegistration: false,
+      tenantStatus: r.status || 'pending',
+    });
+    setters.setGate('inactive');
+    return;
+  }
+  setters.setTenantResolve({
+    pendingRegistration: false,
+    tenantStatus: r.status || 'active',
+  });
+  setters.setGate('ready');
+};
+
 const TenantLayout: React.FC = () => {
   const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
   const location = useLocation();
@@ -504,18 +550,49 @@ const TenantLayout: React.FC = () => {
   const [forbiddenRedirectPath, setForbiddenRedirectPath] = useState<string | null>(null);
   const { isAuthenticated, loading } = useAuthUiSlice();
   const userProfile = useAppStore((s) => s.userProfile);
+  const resolvedSlugRef = useRef('');
 
+  // Resolve tenant slug once per slug change (not on every auth/profile update).
   useEffect(() => {
     let alive = true;
+    resolvedSlugRef.current = tenantSlug;
     setGate('loading');
     setTenantResolve(defaultTenantResolve);
     setForbiddenRequiresLogout(false);
     setForbiddenRedirectPath(null);
     void (async () => {
-      const resolveAuthenticatedTenantFallback = async (): Promise<boolean> => {
-        const loggedInTenantId = String(userProfile?.tenantId || '').trim();
-        if (!isAuthenticated || !loggedInTenantId) return false;
+      try {
+        const r = await tenantService.resolveSlug(tenantSlug);
+        if (!alive || resolvedSlugRef.current !== tenantSlug) return;
+        applySlugResolutionGate(r, { setGate, setTenantResolve });
+      } catch {
+        if (!alive || resolvedSlugRef.current !== tenantSlug) return;
+        setTenantResolve({
+          pendingRegistration: false,
+          tenantStatus: 'unknown',
+        });
+        setGate('ready');
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [tenantSlug]);
 
+  // Auth guard: validate tenant access without resetting slug resolution / splash.
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setForbiddenRequiresLogout(false);
+      setForbiddenRedirectPath(null);
+      return;
+    }
+
+    const loggedInTenantId = String(userProfile?.tenantId || '').trim();
+    if (!loggedInTenantId) return;
+
+    let alive = true;
+    void (async () => {
+      const resolveAuthenticatedTenantFallback = async (): Promise<boolean> => {
         setCurrentTenant(loggedInTenantId);
         try {
           const ownTenant = await tenantService.getById(loggedInTenantId);
@@ -547,8 +624,6 @@ const TenantLayout: React.FC = () => {
           return true;
         } catch {
           if (!alive) return true;
-          // PWA/offline startup can make slug resolution flaky. A valid session tenant
-          // is enough to keep the app mounted instead of bouncing through root redirects.
           setTenantResolve({
             pendingRegistration: false,
             tenantStatus: 'unknown',
@@ -563,86 +638,37 @@ const TenantLayout: React.FC = () => {
         if (!alive) return;
         if (!r.exists || !r.tenantId) {
           if (await resolveAuthenticatedTenantFallback()) return;
-          if (!isAuthenticated) {
-            // Keep slug context for shared links even if slug resolution is temporarily unavailable.
-            setTenantResolve({
-              pendingRegistration: false,
-              tenantStatus: 'unknown',
-            });
-            setGate('ready');
-            return;
-          }
           clearLastVisitedTenantSlugIfMatches(tenantSlug);
           setGate('missing');
           return;
         }
 
-        const loggedInTenantId = String(userProfile?.tenantId || '');
         const isSuperAdmin = Boolean(userProfile?.isSuperAdmin);
-        if (isAuthenticated && !isSuperAdmin && (!loggedInTenantId || loggedInTenantId !== r.tenantId)) {
-          // Keep current tenant during slug correction redirect to avoid breaking services
-          // that synchronously read getCurrentTenantId().
-          if (!loggedInTenantId) {
-            setForbiddenRequiresLogout(true);
-            setForbiddenRedirectPath('/');
-          } else {
-            try {
-              const ownTenant = await tenantService.getById(loggedInTenantId);
-              const ownSlug = String(ownTenant?.slug || '').trim();
-              if (ownSlug) {
-                setForbiddenRequiresLogout(false);
-                setForbiddenRedirectPath(`/t/${encodeURIComponent(ownSlug)}/`);
-              } else {
-                setForbiddenRequiresLogout(true);
-                setForbiddenRedirectPath('/');
-              }
-            } catch {
+        if (!isSuperAdmin && loggedInTenantId !== r.tenantId) {
+          try {
+            const ownTenant = await tenantService.getById(loggedInTenantId);
+            const ownSlug = String(ownTenant?.slug || '').trim();
+            if (ownSlug) {
+              setForbiddenRequiresLogout(false);
+              setForbiddenRedirectPath(`/t/${encodeURIComponent(ownSlug)}/`);
+            } else {
               setForbiddenRequiresLogout(true);
               setForbiddenRedirectPath('/');
             }
+          } catch {
+            setForbiddenRequiresLogout(true);
+            setForbiddenRedirectPath('/');
           }
           setGate('forbidden_slug');
           return;
         }
 
         setCurrentTenant(r.tenantId);
-        if (r.pendingRegistration) {
-          setTenantResolve({
-            pendingRegistration: true,
-            tenantStatus: r.status || 'pending',
-          });
-          setGate('ready');
-          return;
-        }
-        if (r.status === 'suspended') {
-          setGate('suspended');
-          return;
-        }
-        if (r.status !== 'active') {
-          setTenantResolve({
-            pendingRegistration: false,
-            tenantStatus: r.status || 'pending',
-          });
-          setGate('inactive');
-          return;
-        }
-        setTenantResolve({
-          pendingRegistration: false,
-          tenantStatus: r.status || 'active',
-        });
-        setGate('ready');
+        setForbiddenRequiresLogout(false);
+        setForbiddenRedirectPath(null);
       } catch {
         if (!alive) return;
         if (await resolveAuthenticatedTenantFallback()) return;
-        if (!isAuthenticated) {
-          // Public/shared slug links should stay tenant-scoped on transient resolver failures.
-          setTenantResolve({
-            pendingRegistration: false,
-            tenantStatus: 'unknown',
-          });
-          setGate('ready');
-          return;
-        }
         setGate('missing');
       }
     })();
@@ -658,13 +684,17 @@ const TenantLayout: React.FC = () => {
   }, [gate, tenantSlug]);
 
   if (gate === 'loading') {
-    return <AppSplashScreen subtitle="جاري تحميل بيانات الشركة..." />;
+    return (
+      <AppSplashScreen
+        subtitle={loading ? BOOTSTRAP_SPLASH_SUBTITLE : 'جاري تحميل بيانات الشركة...'}
+      />
+    );
   }
 
   if (gate === 'missing') {
     const tenantLoginPath = `/t/${encodeURIComponent(tenantSlug)}/login`;
     if (loading) {
-      return <AppSplashScreen subtitle="جاري استعادة الجلسة..." />;
+      return <AppSplashScreen subtitle={BOOTSTRAP_SPLASH_SUBTITLE} />;
     }
     if (!isAuthenticated && location.pathname !== tenantLoginPath) {
       return <Navigate to={tenantLoginPath} replace />;
@@ -929,7 +959,7 @@ const App: React.FC = () => {
   }, []);
 
   if (!authResolved) {
-    return <AppSplashScreen subtitle="جاري تهيئة النظام..." />;
+    return <AppSplashScreen subtitle={BOOTSTRAP_SPLASH_SUBTITLE} />;
   }
 
   return (

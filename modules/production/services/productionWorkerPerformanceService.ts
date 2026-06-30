@@ -8,6 +8,7 @@ import type {
   ProductionWorkerTarget,
   WorkerDailyAchievement,
   WorkerDailyAchievementStatus,
+  WorkerDailyPerformanceLog,
   WorkerMonthlyAchievement,
 } from '@/types';
 import {
@@ -18,16 +19,17 @@ import { leaveRequestService } from '@/modules/hr/leaveService';
 import { reportService } from './reportService';
 import { productionWorkerService } from './productionWorkerService';
 import { productionWorkerTargetService } from './productionWorkerTargetService';
+import { workerDailyPerformanceLogService } from './workerDailyPerformanceLogService';
 import { workerPerformanceSummaryService } from './workerPerformanceSummaryService';
 import {
   computeAchievementPercent,
   hasLineSpecificWorkerTarget,
-  resolveReportWorkerTarget,
   resolveWorkerTarget,
 } from '../selectors/workerTargetSelector';
 import { calculateBonusEstimate, computePerformanceScore } from './productionBonusEngine';
 import { buildWorkerPresenceRowsFromReports, summarizeWorkerPresenceDays } from '../utils/workerPresence';
 import { isOnApprovedLeave } from '../utils/productionLeaveAvailability';
+import { getTodayDateString } from '@/utils/calculations';
 
 const monthRange = (month: string): { start: string; end: string } => {
   const [y, m] = month.split('-').map(Number);
@@ -115,6 +117,48 @@ function workerPresenceForReports(
   };
 }
 
+function aggregateDailyFromLogs(logs: WorkerDailyPerformanceLog[]): {
+  targetQty: number;
+  outputQty: number;
+  lineId?: string;
+  productId?: string;
+} {
+  if (!logs.length) {
+    return { targetQty: 0, outputQty: 0 };
+  }
+
+  let targetQty = 0;
+  let outputQty = 0;
+  let primary = logs[0];
+  for (const log of logs) {
+    if (log.isPresent === false) continue;
+    targetQty += Number(log.targetQty || 0);
+    outputQty += Number(log.outputQty || 0);
+    if (Number(log.outputQty || 0) > Number(primary.outputQty || 0)) {
+      primary = log;
+    }
+  }
+
+  return {
+    targetQty,
+    outputQty,
+    lineId: primary.lineId,
+    productId: primary.productId,
+  };
+}
+
+function groupLogsByDate(logs: WorkerDailyPerformanceLog[]): Map<string, WorkerDailyPerformanceLog[]> {
+  const grouped = new Map<string, WorkerDailyPerformanceLog[]>();
+  for (const log of logs) {
+    const date = String(log.date || '').trim();
+    if (!date) continue;
+    const bucket = grouped.get(date) ?? [];
+    bucket.push(log);
+    grouped.set(date, bucket);
+  }
+  return grouped;
+}
+
 export const productionWorkerPerformanceService = {
   resolveSettings(settings?: ProductionWorkerSettings | null): ProductionWorkerSettings {
     return {
@@ -146,15 +190,57 @@ export const productionWorkerPerformanceService = {
       reports?: ProductionReport[];
       settings?: ProductionWorkerSettings;
       lineProductConfigs?: LineProductConfig[];
+      attendanceRecords?: Awaited<ReturnType<typeof attendanceProcessingService.getRecordsByEmployee>>;
+      leaveRequests?: Awaited<ReturnType<typeof leaveRequestService.getByEmployee>>;
+      dailyLogs?: WorkerDailyPerformanceLog[];
     },
   ): Promise<WorkerDailyAchievement> {
     const worker = context?.worker ?? await productionWorkerService.getById(workerId);
-    const targets = context?.targets ?? await productionWorkerTargetService.getByWorker(workerId);
     const reports = context?.reports
       ?? await reportService.getByDateRange(date, date);
+    const presence = workerPresenceForReports(reports, workerId, worker?.employeeId, date);
+    const dailyLogs = context?.dailyLogs
+      ?? await workerDailyPerformanceLogService.getByWorkerAndDate(workerId, date);
+
+    let absent = false;
+    let leave = false;
+    if (worker?.employeeId) {
+      const attendanceRecords = context?.attendanceRecords
+        ?? await attendanceProcessingService.getRecordsByEmployee(worker.employeeId);
+      const leaveRequests = context?.leaveRequests
+        ?? await leaveRequestService.getByEmployee(worker.employeeId);
+      const dayAttendance = attendanceRecords.find((r) => r.date === date);
+      absent = dayAttendance?.status === 'absent';
+      leave = isOnApprovedLeave(leaveRequests, date);
+    }
+    absent = absent || presence.operationalAbsent;
+
+    if (dailyLogs.length > 0) {
+      const aggregated = aggregateDailyFromLogs(dailyLogs);
+      const targetQty = presence.operationalAbsent ? 0 : aggregated.targetQty;
+      const outputQty = presence.operationalAbsent ? 0 : aggregated.outputQty;
+      const achievementPercent = presence.operationalAbsent
+        ? 0
+        : computeAchievementPercent(outputQty, targetQty);
+
+      return {
+        workerId,
+        date,
+        lineId: aggregated.lineId,
+        productId: aggregated.productId,
+        targetQty,
+        outputQty,
+        achievementPercent,
+        status: resolveDailyStatus(targetQty, outputQty, { absent, leave }),
+        isPresent: presence.isPresent,
+        presentAssignments: presence.present,
+        absentAssignments: presence.absent,
+      };
+    }
+
+    const targets = context?.targets ?? await productionWorkerTargetService.getByWorker(workerId);
     const outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
     const { lineId, productId } = primaryLineProductForDay(reports, workerId, date);
-    const presence = workerPresenceForReports(reports, workerId, worker?.employeeId, date);
     const product = context?.products?.find((p) => p.id === productId) ?? null;
     const resolved = productId
       ? resolveWorkerTarget({
@@ -169,19 +255,6 @@ export const productionWorkerPerformanceService = {
       : { dailyTargetQty: 0, source: 'missing' as const };
     const targetQty = presence.operationalAbsent ? 0 : resolved.dailyTargetQty;
     const achievementPercent = presence.operationalAbsent ? 0 : computeAchievementPercent(outputQty, targetQty);
-
-    let absent = false;
-    let leave = false;
-    if (worker?.employeeId) {
-      const [attendanceRecords, leaveRequests] = await Promise.all([
-        attendanceProcessingService.getRecordsByEmployee(worker.employeeId),
-        leaveRequestService.getByEmployee(worker.employeeId),
-      ]);
-      const dayAttendance = attendanceRecords.find((r) => r.date === date);
-      absent = dayAttendance?.status === 'absent';
-      leave = isOnApprovedLeave(leaveRequests, date);
-    }
-    absent = absent || presence.operationalAbsent;
 
     return {
       workerId,
@@ -210,23 +283,40 @@ export const productionWorkerPerformanceService = {
       /** When false, skip Firestore summary write (use for list/dashboard batch reads). */
       persistSummary?: boolean;
       lineProductConfigs?: LineProductConfig[];
+      /** Cap aggregation to this date (e.g. today) instead of full calendar month end. */
+      endDate?: string;
+      attendanceRecords?: Awaited<ReturnType<typeof attendanceProcessingService.getRecordsByEmployee>>;
+      leaveRequests?: Awaited<ReturnType<typeof leaveRequestService.getByEmployee>>;
     },
   ): Promise<WorkerMonthlyAchievement> {
     const settings = this.resolveSettings(options?.settings);
     const perf = settings.performance;
     const { start, end } = monthRange(month);
+    const effectiveEnd = options?.endDate && options.endDate < end ? options.endDate : end;
     const worker = options?.worker ?? await productionWorkerService.getById(workerId);
     const targets = options?.targets ?? await productionWorkerTargetService.getByWorker(workerId);
-    const reports = options?.reports ?? await reportService.getByDateRange(start, end);
+    const reports = options?.reports ?? await reportService.getByDateRange(start, effectiveEnd);
+    const monthLogs = await workerDailyPerformanceLogService.getByWorkerAndDateRange(
+      workerId,
+      start,
+      effectiveEnd,
+    );
+    const logsByDate = groupLogsByDate(monthLogs);
 
-    const allDates = listDatesInRange(start, end);
+    const allDates = listDatesInRange(start, effectiveEnd);
     let attendanceRecords: Awaited<ReturnType<typeof attendanceProcessingService.getRecordsByEmployee>> = [];
     let leaveRequests: Awaited<ReturnType<typeof leaveRequestService.getByEmployee>> = [];
     if (worker?.employeeId) {
-      [attendanceRecords, leaveRequests] = await Promise.all([
-        attendanceProcessingService.getRecordsByEmployee(worker.employeeId),
-        leaveRequestService.getByEmployee(worker.employeeId),
-      ]);
+      if (options?.attendanceRecords) {
+        attendanceRecords = options.attendanceRecords;
+      } else {
+        attendanceRecords = await attendanceProcessingService.getRecordsByEmployee(worker.employeeId);
+      }
+      if (options?.leaveRequests) {
+        leaveRequests = options.leaveRequests;
+      } else {
+        leaveRequests = await leaveRequestService.getByEmployee(worker.employeeId);
+      }
     }
 
     let workingDays = 0;
@@ -254,21 +344,37 @@ export const productionWorkerPerformanceService = {
       }
 
       workingDays += 1;
-      const outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
-      const { lineId, productId } = primaryLineProductForDay(reports, workerId, date);
+      const dayLogs = logsByDate.get(date) ?? [];
       const dayPresence = workerPresenceForReports(reports, workerId, worker?.employeeId, date);
-      const product = options?.products?.find((p) => p.id === productId) ?? null;
-      const targetQty = productId
-        ? resolveWorkerTarget({
-          workerId,
-          productId,
-          lineId,
-          date,
-          targets,
-          product,
-          lineProductConfigs: options?.lineProductConfigs,
-        }).dailyTargetQty
-        : 0;
+      let outputQty = 0;
+      let targetQty = 0;
+      let lineId: string | undefined;
+      let productId: string | undefined;
+
+      if (dayLogs.length > 0) {
+        const aggregated = aggregateDailyFromLogs(dayLogs);
+        outputQty = aggregated.outputQty;
+        targetQty = aggregated.targetQty;
+        lineId = aggregated.lineId;
+        productId = aggregated.productId;
+      } else {
+        outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
+        const primary = primaryLineProductForDay(reports, workerId, date);
+        lineId = primary.lineId;
+        productId = primary.productId;
+        const product = options?.products?.find((p) => p.id === productId) ?? null;
+        targetQty = productId
+          ? resolveWorkerTarget({
+            workerId,
+            productId,
+            lineId,
+            date,
+            targets,
+            product,
+            lineProductConfigs: options?.lineProductConfigs,
+          }).dailyTargetQty
+          : 0;
+      }
 
       const absent = dayAttendance?.status === 'absent' || dayPresence.operationalAbsent;
       if (dayPresence.totalDays > 0) {
@@ -364,7 +470,10 @@ export const productionWorkerPerformanceService = {
     const {
       lineId,
       productId,
+      date,
+      products,
       workers,
+      targets,
       assignments,
       lineName,
       productName,
@@ -375,6 +484,7 @@ export const productionWorkerPerformanceService = {
     }
 
     const workerMap = new Map(workers.map((w) => [String(w.id), w]));
+    const product = products.find((item) => item.id === productId) ?? null;
     const activeWorkerAssignments = assignments.map((assignment) => ({
       workerId: assignment.workerId,
       isPresent: assignment.isPresent ?? true,
@@ -382,9 +492,13 @@ export const productionWorkerPerformanceService = {
 
     return activeWorkerAssignments.map(({ workerId, isPresent }) => {
       const worker = workerMap.get(workerId);
-      const resolved = resolveReportWorkerTarget({
+      const resolved = resolveWorkerTarget({
+        workerId,
         productId,
         lineId,
+        date,
+        targets: targets.filter((target) => target.workerId === workerId),
+        product,
         lineProductConfigs,
       });
       return {
@@ -424,14 +538,17 @@ export const productionWorkerPerformanceService = {
       presentAssignments?: number;
       absentAssignments?: number;
     }>;
+    monthReports: ProductionReport[];
   }> {
     const settings = this.resolveSettings(params.settings);
     const { start, end } = monthRange(params.month);
+    const today = getTodayDateString();
+    const rangeEnd = end > today ? today : end;
     const idSet = params.workerIds ? new Set(params.workerIds) : null;
     const workers = params.workers.filter((w) => w.id && (!idSet || idSet.has(w.id)));
 
     const [monthReports, dayReports] = await Promise.all([
-      reportService.getByDateRange(start, end),
+      reportService.getByDateRange(start, rangeEnd),
       reportService.getByDateRange(params.date, params.date),
     ]);
     const scopedMonthReports = params.lineId
@@ -451,39 +568,65 @@ export const productionWorkerPerformanceService = {
       absentAssignments?: number;
     }>();
 
-    // Sequential per-worker compute — avoids dozens of concurrent setDoc writes
-    // that corrupt Firestore persistence batch state (INTERNAL ASSERTION b815/b7de).
-    for (const worker of workers) {
-      const workerId = worker.id!;
-      const workerTargets = params.targets.filter((t) => t.workerId === workerId);
-      const monthly = await this.getMonthlyAchievement(workerId, params.month, {
-        settings,
-        worker,
-        targets: workerTargets,
-        products: params.products,
-        reports: scopedMonthReports,
-        persistSummary: false,
-        lineProductConfigs: params.lineProductConfigs,
-      });
-      const daily = await this.getDailyAchievement(workerId, params.date, {
-        worker,
-        targets: workerTargets,
-        products: params.products,
-        settings,
-        reports: scopedDayReports,
-        lineProductConfigs: params.lineProductConfigs,
-      });
-      monthlyByWorkerId.set(workerId, monthly);
-      dailyByWorkerId.set(workerId, {
-        output: daily.outputQty,
-        achievement: daily.achievementPercent,
-        status: daily.status,
-        isPresent: daily.isPresent,
-        presentAssignments: daily.presentAssignments,
-        absentAssignments: daily.absentAssignments,
-      });
+    const uniqueEmployeeIds = Array.from(new Set(
+      workers.map((worker) => String(worker.employeeId || '').trim()).filter(Boolean),
+    ));
+    const [attendanceEntries, leaveEntries] = await Promise.all([
+      Promise.all(uniqueEmployeeIds.map(async (employeeId) => [
+        employeeId,
+        await attendanceProcessingService.getRecordsByEmployee(employeeId),
+      ] as const)),
+      Promise.all(uniqueEmployeeIds.map(async (employeeId) => [
+        employeeId,
+        await leaveRequestService.getByEmployee(employeeId),
+      ] as const)),
+    ]);
+    const attendanceByEmployeeId = new Map(attendanceEntries);
+    const leaveByEmployeeId = new Map(leaveEntries);
+
+    const BATCH_SIZE = 20;
+    for (let index = 0; index < workers.length; index += BATCH_SIZE) {
+      const batch = workers.slice(index, index + BATCH_SIZE);
+      await Promise.all(batch.map(async (worker) => {
+        const workerId = worker.id!;
+        const workerTargets = params.targets.filter((t) => t.workerId === workerId);
+        const employeeId = String(worker.employeeId || '').trim();
+        const attendanceRecords = employeeId ? attendanceByEmployeeId.get(employeeId) : undefined;
+        const leaveRequests = employeeId ? leaveByEmployeeId.get(employeeId) : undefined;
+        const monthly = await this.getMonthlyAchievement(workerId, params.month, {
+          settings,
+          worker,
+          targets: workerTargets,
+          products: params.products,
+          reports: scopedMonthReports,
+          persistSummary: false,
+          lineProductConfigs: params.lineProductConfigs,
+          endDate: rangeEnd,
+          attendanceRecords,
+          leaveRequests,
+        });
+        const daily = await this.getDailyAchievement(workerId, params.date, {
+          worker,
+          targets: workerTargets,
+          products: params.products,
+          settings,
+          reports: scopedDayReports,
+          lineProductConfigs: params.lineProductConfigs,
+          attendanceRecords,
+          leaveRequests,
+        });
+        monthlyByWorkerId.set(workerId, monthly);
+        dailyByWorkerId.set(workerId, {
+          output: daily.outputQty,
+          achievement: daily.achievementPercent,
+          status: daily.status,
+          isPresent: daily.isPresent,
+          presentAssignments: daily.presentAssignments,
+          absentAssignments: daily.absentAssignments,
+        });
+      }));
     }
 
-    return { monthlyByWorkerId, dailyByWorkerId };
+    return { monthlyByWorkerId, dailyByWorkerId, monthReports: scopedMonthReports };
   },
 };

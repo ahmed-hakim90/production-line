@@ -38,6 +38,12 @@ import {
   isProductionWorkerAssignmentActiveOnDate,
 } from '../utils/productionWorkerLineTransfer';
 import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
+import {
+  buildAssignmentInfoByWorker,
+  listDatesInRange,
+  monthRange,
+  type WorkerAssignmentInfo,
+} from '../utils/workerAssignmentPresence';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -121,6 +127,7 @@ export const ProductionWorkers: React.FC = () => {
   const [targets, setTargets] = useState<ProductionWorkerTarget[]>([]);
   const [monthStatsMap, setMonthStatsMap] = useState<Map<string, WorkerMonthlyAchievement>>(new Map());
   const [todayStatsMap, setTodayStatsMap] = useState<Map<string, { output: number; achievement: number; status: WorkerDailyAchievementStatus }>>(new Map());
+  const [assignmentInfoByWorkerId, setAssignmentInfoByWorkerId] = useState<Map<string, WorkerAssignmentInfo>>(new Map());
   const [supervisorLineIds, setSupervisorLineIds] = useState<Set<string>>(new Set());
   const [supervisorLinesLoaded, setSupervisorLinesLoaded] = useState(true);
 
@@ -225,6 +232,7 @@ export const ProductionWorkers: React.FC = () => {
     if (workers.length === 0) {
       setMonthStatsMap(new Map());
       setTodayStatsMap(new Map());
+      setAssignmentInfoByWorkerId(new Map());
       return;
     }
     let cancelled = false;
@@ -232,8 +240,23 @@ export const ProductionWorkers: React.FC = () => {
       void (async () => {
         setStatsLoading(true);
         try {
-          const { monthlyByWorkerId, dailyByWorkerId } =
-            await productionWorkerPerformanceService.getWorkersListPerformanceSnapshot({
+          const { start, end } = monthRange(filterMonth);
+          const today = getTodayDateString();
+          const rangeEnd = end > today ? today : end;
+          const periodDates = start <= rangeEnd ? listDatesInRange(start, rangeEnd) : [];
+          const monthlyAssignmentsPromise = Promise.all(periodDates.map(async (periodDate) => {
+            const assignments = productionLines.length > 0
+              ? (await Promise.all(
+                productionLines
+                  .filter((line) => line.id)
+                  .map((line) => lineAssignmentService.getByLineAndDate(line.id!, periodDate)),
+              )).flat()
+              : await lineAssignmentService.getByDate(periodDate);
+            return assignments;
+          })).then((groups) => groups.flat());
+
+          const [{ monthlyByWorkerId, dailyByWorkerId, monthReports }, monthlyAssignments] = await Promise.all([
+            productionWorkerPerformanceService.getWorkersListPerformanceSnapshot({
               workers,
               targets,
               month: filterMonth,
@@ -242,10 +265,19 @@ export const ProductionWorkers: React.FC = () => {
               products: products as never[],
               lineId: filterLine && filterLine !== UNASSIGNED_LINE_FILTER_VALUE ? filterLine : undefined,
               lineProductConfigs,
-            });
+            }),
+            monthlyAssignmentsPromise,
+          ]);
+          const assignmentInfo = buildAssignmentInfoByWorker(
+            monthlyAssignments,
+            workers,
+            monthReports,
+            (lineId) => productionLines.find((line) => line.id === lineId)?.name ?? lineId ?? '—',
+          );
           if (!cancelled) {
             setMonthStatsMap(monthlyByWorkerId);
             setTodayStatsMap(dailyByWorkerId);
+            setAssignmentInfoByWorkerId(assignmentInfo);
           }
         } finally {
           if (!cancelled) setStatsLoading(false);
@@ -256,7 +288,7 @@ export const ProductionWorkers: React.FC = () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [workers, filterMonth, filterDate, filterLine, targets, products, lineProductConfigs, workerSettings]);
+  }, [workers, filterMonth, filterDate, filterLine, targets, products, lineProductConfigs, workerSettings, productionLines]);
 
   const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? id;
   const today = getTodayDateString();
@@ -275,6 +307,9 @@ export const ProductionWorkers: React.FC = () => {
       ).length;
       const monthStats = worker.id ? monthStatsMap.get(worker.id) ?? null : null;
       const todayStats = worker.id ? todayStatsMap.get(worker.id) : undefined;
+      const assignmentInfo = worker.id ? assignmentInfoByWorkerId.get(worker.id) : undefined;
+      const presentDays = assignmentInfo?.presentDays ?? monthStats?.presentDays ?? 0;
+      const absentDays = assignmentInfo?.absentDays ?? monthStats?.absentDays ?? 0;
       return {
         ...worker,
         assignedLineIds: lineIds,
@@ -282,12 +317,12 @@ export const ProductionWorkers: React.FC = () => {
         todayOutput: todayStats?.output ?? 0,
         todayAchievement: todayStats?.achievement ?? 0,
         todayStatus: todayStats?.status,
-        presentDays: monthStats?.presentDays ?? 0,
-        absentDays: monthStats?.absentDays ?? 0,
+        presentDays,
+        absentDays,
         monthStats,
       };
     });
-  }, [workers, assignments, targets, monthStatsMap, todayStatsMap, today]);
+  }, [workers, assignments, targets, monthStatsMap, todayStatsMap, assignmentInfoByWorkerId, today]);
 
   const scopedRows = useMemo(
     () => rows.filter((row) => shouldShowProductionWorkerForSupervisor(

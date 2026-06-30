@@ -8,15 +8,17 @@ import { formatNumber, getTodayDateString } from '@/utils/calculations';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
 import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
+import { workerDailyPerformanceLogService } from '../services/workerDailyPerformanceLogService';
 import { reportService } from '../services/reportService';
 import { lineAssignmentService } from '../services/lineAssignmentService';
-import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type LineWorkerAssignment, type ProductionReport, type ProductionWorker } from '@/types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
+import type { ProductionReport, ProductionWorker, WorkerDailyPerformanceLog } from '@/types';
 import { getPresenceLabel } from '../utils/workerPresence';
 import {
-  LINE_WORKER_LABOR_ROLE_LABELS,
-  isProductionLaborRole,
-  resolveLineWorkerLaborRole,
-} from '../utils/lineWorkerLaborRoles';
+  buildAssignmentInfoByWorker,
+  listDatesInRange,
+  monthRange,
+} from '../utils/workerAssignmentPresence';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -25,38 +27,6 @@ type PresenceFilter = 'all' | 'present' | 'absent' | 'no_target';
 
 type ProductionWorkerReportsProps = {
   embedded?: boolean;
-};
-
-type DailyAssignmentInfo = {
-  workerName: string;
-  workerCode: string;
-  laborRoleLabels: Set<string>;
-  lineLabels: Set<string>;
-  presentDays: number;
-  absentDays: number;
-  noTargetDays: number;
-  hasProductionTarget: boolean;
-};
-
-const monthRange = (month: string): { start: string; end: string } => {
-  const [year, rawMonth] = month.split('-').map(Number);
-  const lastDay = new Date(year, rawMonth, 0).getDate();
-  const mm = String(rawMonth).padStart(2, '0');
-  return {
-    start: `${year}-${mm}-01`,
-    end: `${year}-${mm}-${String(lastDay).padStart(2, '0')}`,
-  };
-};
-
-const listDatesInRange = (start: string, end: string): string[] => {
-  const dates: string[] = [];
-  const cursor = new Date(`${start}T00:00:00`);
-  const endDate = new Date(`${end}T00:00:00`);
-  while (cursor <= endDate) {
-    dates.push(`${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`);
-    cursor.setDate(cursor.getDate() + 1);
-  }
-  return dates;
 };
 
 const STATUS_LABELS: Record<string, string> = {
@@ -74,77 +44,83 @@ const joinLabels = (labels?: Set<string>): string => {
   return values.length > 0 ? values.join('، ') : '—';
 };
 
-const buildAssignmentInfoByWorker = (
-  assignments: LineWorkerAssignment[],
+const workerIdsFromReports = (reports: ProductionReport[]): Set<string> => {
+  const ids = new Set<string>();
+  for (const report of reports) {
+    for (const row of report.workerOutputs ?? []) {
+      if (row.workerId) ids.add(row.workerId);
+    }
+  }
+  return ids;
+};
+
+const groupLogsByWorkerAndDate = (
+  logs: WorkerDailyPerformanceLog[],
+): Map<string, Map<string, WorkerDailyPerformanceLog[]>> => {
+  const grouped = new Map<string, Map<string, WorkerDailyPerformanceLog[]>>();
+  for (const log of logs) {
+    const workerId = String(log.workerId || '').trim();
+    const date = String(log.date || '').trim();
+    if (!workerId || !date) continue;
+    const byDate = grouped.get(workerId) ?? new Map<string, WorkerDailyPerformanceLog[]>();
+    const bucket = byDate.get(date) ?? [];
+    bucket.push(log);
+    byDate.set(date, bucket);
+    grouped.set(workerId, byDate);
+  }
+  return grouped;
+};
+
+const buildWorkersForDailyReport = (
   workers: ProductionWorker[],
   reports: ProductionReport[],
-  getLineName: (lineId?: string) => string,
-): Map<string, DailyAssignmentInfo> => {
-  const workerByEmployeeId = new Map(
-    workers
-      .filter((worker) => worker.employeeId)
-      .map((worker) => [worker.employeeId!, worker]),
+  logs: WorkerDailyPerformanceLog[],
+): ProductionWorker[] => {
+  const workersById = new Map(workers.filter((worker) => worker.id).map((worker) => [worker.id!, worker]));
+  const activityWorkerIds = new Set<string>([
+    ...workerIdsFromReports(reports),
+    ...logs.map((log) => log.workerId).filter(Boolean),
+  ]);
+  const activeWorkers = workers.filter((worker) => worker.isActive !== false && worker.id);
+  const inactiveWithActivity = workers.filter(
+    (worker) => worker.id && worker.isActive === false && activityWorkerIds.has(worker.id),
   );
-  const assignmentInfoByWorkerId = new Map<string, DailyAssignmentInfo>();
-  const dayPresenceByWorkerId = new Map<string, Map<string, { hasPresent: boolean; hasAbsent: boolean; hasTarget: boolean; hasNoTargetCandidate: boolean }>>();
-  assignments.forEach((assignment) => {
-    const worker = workerByEmployeeId.get(assignment.employeeId);
-    const workerId = worker?.id;
-    const workerKey = workerId || `employee:${assignment.employeeId || assignment.id || assignment.employeeName}`;
-    const role = resolveLineWorkerLaborRole(assignment.laborRole);
-    const isPresent = assignment.isPresent !== false;
-    const hasTargetOutput = Boolean(workerId) && reports.some((report) => (
-      report.date === assignment.date
-      && report.lineId === assignment.lineId
-      && (report.workerOutputs ?? []).some((row) => (
-        row.workerId === workerId
-        && row.isPresent !== false
-        && Number(row.dailyTargetQty || 0) > 0
-      ))
-    ));
-    const noTarget = isPresent && (!isProductionLaborRole(role) || !hasTargetOutput);
-    const current = assignmentInfoByWorkerId.get(workerKey) ?? {
-      workerName: worker?.name || assignment.employeeName || assignment.employeeId || '—',
-      workerCode: worker?.code || assignment.employeeCode || '',
-      laborRoleLabels: new Set<string>(),
-      lineLabels: new Set<string>(),
-      presentDays: 0,
-      absentDays: 0,
-      noTargetDays: 0,
-      hasProductionTarget: false,
-    };
-    current.workerName = current.workerName || worker?.name || assignment.employeeName || '—';
-    current.workerCode = current.workerCode || worker?.code || assignment.employeeCode || '';
-    current.laborRoleLabels.add(LINE_WORKER_LABOR_ROLE_LABELS[role]);
-    current.lineLabels.add(getLineName(assignment.lineId));
-    current.hasProductionTarget = current.hasProductionTarget || hasTargetOutput;
-    assignmentInfoByWorkerId.set(workerKey, current);
-
-    const workerDays = dayPresenceByWorkerId.get(workerKey) ?? new Map<string, { hasPresent: boolean; hasAbsent: boolean; hasTarget: boolean; hasNoTargetCandidate: boolean }>();
-    const dateKey = assignment.date || assignment.id || `${workerKey}:${workerDays.size}`;
-    const day = workerDays.get(dateKey) ?? { hasPresent: false, hasAbsent: false, hasTarget: false, hasNoTargetCandidate: false };
-    if (isPresent) day.hasPresent = true;
-    else day.hasAbsent = true;
-    day.hasTarget = day.hasTarget || hasTargetOutput;
-    day.hasNoTargetCandidate = day.hasNoTargetCandidate || noTarget;
-    workerDays.set(dateKey, day);
-    dayPresenceByWorkerId.set(workerKey, workerDays);
-  });
-
-  dayPresenceByWorkerId.forEach((workerDays, workerKey) => {
-    const current = assignmentInfoByWorkerId.get(workerKey);
-    if (!current) return;
-    workerDays.forEach((day) => {
-      if (day.hasPresent) {
-        current.presentDays += 1;
-        if (!day.hasTarget && day.hasNoTargetCandidate) current.noTargetDays += 1;
-      } else if (day.hasAbsent) {
-        current.absentDays += 1;
-      }
+  const syntheticWorkers = Array.from(activityWorkerIds)
+    .filter((workerId) => !workersById.has(workerId))
+    .map((workerId) => {
+      const log = logs.find((row) => row.workerId === workerId);
+      const reportRow = reports
+        .flatMap((report) => report.workerOutputs ?? [])
+        .find((row) => row.workerId === workerId);
+      return {
+        id: workerId,
+        employeeId: log?.employeeId,
+        name: log?.workerName || reportRow?.workerName || workerId,
+        code: log?.workerCode || '',
+        isActive: true,
+        workerType: 'production' as const,
+        lineIds: log?.lineId ? [log.lineId] : reportRow?.lineId ? [reportRow.lineId] : [],
+      } satisfies ProductionWorker;
     });
-  });
-  return assignmentInfoByWorkerId;
+
+  const orderedIds: string[] = [];
+  const seen = new Set<string>();
+  const pushWorker = (worker?: ProductionWorker | null) => {
+    if (!worker?.id || seen.has(worker.id)) return;
+    seen.add(worker.id);
+    orderedIds.push(worker.id);
+  };
+  activeWorkers.forEach(pushWorker);
+  inactiveWithActivity.forEach(pushWorker);
+  syntheticWorkers.forEach(pushWorker);
+
+  return orderedIds
+    .map((workerId) => workersById.get(workerId) ?? syntheticWorkers.find((worker) => worker.id === workerId))
+    .filter((worker): worker is ProductionWorker => Boolean(worker?.id));
 };
+
+const DAILY_EMPTY_MESSAGE =
+  'لا توجد بيانات لهذه الفترة. لعرض الإنجاز اليومي: سجّل عمال الإنتاج واربطهم بالموظفين، عيّنهم على خطوط الإنتاج، ثم احفظ تقرير إنتاج منتج تام (وضع individual) يتضمن إنجاز العمال مع تفعيل أهداف العمال على خط/المنتج.';
 
 const currentMonth = (): string => {
   const d = new Date();
@@ -185,6 +161,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
   const [endDate, setEndDate] = useState(getTodayDateString());
   const [month, setMonth] = useState(currentMonth());
   const [rows, setRows] = useState<Record<string, unknown>[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [presenceFilter, setPresenceFilter] = useState<PresenceFilter>('all');
   const [periodPresenceSummary, setPeriodPresenceSummary] = useState({ present: 0, absent: 0, noTarget: 0 });
 
@@ -195,9 +172,10 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
   const load = useCallback(async () => {
     if (!canView) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const workers = await productionWorkerService.getAll();
-      const activeWorkers = workers.filter((w) => w.isActive !== false);
+      const activeWorkers = workers.filter((worker) => worker.isActive !== false);
       if (kind === 'daily') {
         const rangeStart = startDate <= endDate ? startDate : endDate;
         const rangeEnd = startDate <= endDate ? endDate : startDate;
@@ -212,26 +190,43 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
             : await lineAssignmentService.getByDate(periodDate);
           return assignments;
         })).then((groups) => groups.flat());
-        const [targets, reports, dailyAssignments] = await Promise.all([
+        const [targets, reports, dailyAssignments, performanceLogs] = await Promise.all([
           productionWorkerTargetService.getAll(),
           reportService.getByDateRange(rangeStart, rangeEnd),
           assignmentPromise,
+          workerDailyPerformanceLogService.getByDateRange(rangeStart, rangeEnd),
         ]);
+        const workersForReport = buildWorkersForDailyReport(workers, reports, performanceLogs);
+        const logsByWorkerAndDate = groupLogsByWorkerAndDate(performanceLogs);
         const assignmentInfoByWorkerId = buildAssignmentInfoByWorker(dailyAssignments, workers, reports, getLineName);
 
-        const dailyRows = await Promise.all(activeWorkers.map(async (worker) => {
+        const dailyRows = await Promise.all(workersForReport.map(async (worker) => {
           if (!worker.id) return null;
           const workerTargets = targets.filter((target) => target.workerId === worker.id);
-          const achievements = await Promise.all(periodDates.map((periodDate) => (
-            productionWorkerPerformanceService.getDailyAchievement(worker.id!, periodDate, {
-              worker,
-              targets: workerTargets,
-              reports,
-              products: products as never[],
-              settings: workerSettings,
-              lineProductConfigs,
-            })
-          )));
+          const workerLogsByDate = logsByWorkerAndDate.get(worker.id);
+          const achievements = await Promise.all(periodDates.map(async (periodDate) => {
+            try {
+              return await productionWorkerPerformanceService.getDailyAchievement(worker.id!, periodDate, {
+                worker,
+                targets: workerTargets,
+                reports,
+                products: products as never[],
+                settings: workerSettings,
+                lineProductConfigs,
+                dailyLogs: workerLogsByDate?.get(periodDate) ?? [],
+              });
+            } catch (error) {
+              console.error('getDailyAchievement error:', { workerId: worker.id, periodDate, error });
+              return {
+                workerId: worker.id!,
+                date: periodDate,
+                targetQty: 0,
+                outputQty: 0,
+                achievementPercent: 0,
+                status: 'no_output' as const,
+              };
+            }
+          }));
           const targetQty = achievements.reduce((sum, achievement) => sum + Number(achievement.targetQty || 0), 0);
           const outputQty = achievements.reduce((sum, achievement) => sum + Number(achievement.outputQty || 0), 0);
           const achievementPercent = targetQty > 0 ? Math.round((outputQty / targetQty) * 1000) / 10 : 0;
@@ -268,7 +263,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
             'أيام بدون هدف': noTargetDays,
           };
         }));
-        const representedWorkerIds = new Set(activeWorkers.map((worker) => worker.id).filter(Boolean));
+        const representedWorkerIds = new Set(workersForReport.map((worker) => worker.id).filter(Boolean));
         const assignedOnlyRows = Array.from(assignmentInfoByWorkerId.entries())
           .filter(([workerId]) => !representedWorkerIds.has(workerId))
           .map(([, assignmentInfo]) => {
@@ -371,6 +366,11 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           noTarget: result.reduce((sum, row) => sum + Number(row['أيام بدون هدف'] || 0), 0),
         });
       }
+    } catch (error) {
+      console.error('ProductionWorkerReports load error:', error);
+      setLoadError('تعذر تحميل التقرير. حاول التحديث مرة أخرى.');
+      setRows([]);
+      setPeriodPresenceSummary({ present: 0, absent: 0, noTarget: 0 });
     } finally {
       setLoading(false);
     }
@@ -430,6 +430,8 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
     ? `الفترة: ${startDate} إلى ${endDate}`
     : `الشهر: ${month}`;
   const printSubtitle = `${periodLabel} | أيام حضور: ${formatNumber(periodPresenceSummary.present)} | أيام غياب: ${formatNumber(periodPresenceSummary.absent)} | أيام بدون هدف: ${formatNumber(periodPresenceSummary.noTarget)}`;
+  const emptyMessage = loadError
+    ?? (kind === 'daily' ? DAILY_EMPTY_MESSAGE : 'لا توجد بيانات للفترة المحددة.');
 
   if (!canView) {
     return <Card><p className="p-4 text-sm">غير مصرح بعرض تقارير عمال الإنتاج</p></Card>;
@@ -533,7 +535,9 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
                 ))}
               </tbody>
             </table>
-            {filteredRows.length === 0 && <p className="text-sm text-[var(--color-text-muted)]">لا توجد بيانات</p>}
+            {filteredRows.length === 0 && (
+              <p className="text-sm leading-6 text-[var(--color-text-muted)]">{emptyMessage}</p>
+            )}
           </div>
         )}
       </Card>

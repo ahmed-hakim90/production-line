@@ -288,7 +288,7 @@ service cloud.firestore {
         'line_status', 'line_product_config', 'production_plans', 'production_plan_followups',
         'supervisors', 'supervisor_line_assignments', 'supervisorAssignmentLog',
         'production_workers', 'production_line_worker_assignments', 'production_worker_targets',
-        'worker_performance_summaries', 'production_attendance_records',
+        'worker_performance_summaries', 'worker_daily_performance_logs', 'production_attendance_records',
         'work_orders', 'notifications', 'scan_events', 'product_materials',
         'materials', 'boms', 'bom_items', 'material_requirement_runs',
         'production_plan_material_requirements', 'purchase_orders',

@@ -473,6 +473,30 @@ export interface WorkerMonthlyAchievement {
   absentAssignments?: number;
 }
 
+/** Snapshot of a worker's daily target/output saved when a production report is stored. */
+export interface WorkerDailyPerformanceLog {
+  id?: string;
+  tenantId?: string;
+  reportId: string;
+  reportCode?: string;
+  workerId: string;
+  workerName: string;
+  workerCode?: string;
+  employeeId?: string;
+  date: string;
+  lineId: string;
+  lineName: string;
+  productId: string;
+  productName: string;
+  targetQty: number;
+  targetSource?: 'worker_product_line' | 'worker_product' | 'line_product' | 'product_default' | 'missing';
+  outputQty: number;
+  achievementPercent: number;
+  isPresent?: boolean;
+  status: WorkerDailyAchievementStatus;
+  updatedAt?: unknown;
+}
+
 export interface WorkerPerformanceSummary extends WorkerMonthlyAchievement {
   id?: string;
   tenantId?: string;
