@@ -442,16 +442,27 @@ export const productionInventoryService = {
     let producedLine: StockLineIdentity | null = null;
 
     if (isComponentInjection) {
-      const rawMaterials = await rawMaterialService.getAll();
-      const raw = rawMaterials.find((r) => String(r.id) === String(report.productId));
-      if (raw?.id) {
-        producedLine = {
-          itemType: 'raw_material',
-          itemId: raw.id,
-          itemName: raw.name,
-          itemCode: raw.code,
-          unit: raw.unit,
-        };
+      const bundle = await loadManufacturingBundle();
+      const material = bundle.materialsById.get(String(report.productId));
+      if (material?.id) {
+        producedLine = await resolveStockLineForMaterial(
+          material.id,
+          material.name,
+          input.systemSettings,
+          bundle,
+        );
+      } else {
+        const rawMaterials = await rawMaterialService.getAll();
+        const raw = rawMaterials.find((r) => String(r.id) === String(report.productId));
+        if (raw?.id) {
+          producedLine = {
+            itemType: 'raw_material',
+            itemId: raw.id,
+            itemName: raw.name,
+            itemCode: raw.code,
+            unit: raw.unit,
+          };
+        }
       }
     } else {
       const product = products.find((p) => String(p.id) === String(report.productId));

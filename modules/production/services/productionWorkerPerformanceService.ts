@@ -180,38 +180,31 @@ export const productionWorkerPerformanceService = {
     };
   },
 
-  async getDailyAchievement(
+  computeDailyAchievement(
     workerId: string,
     date: string,
-    context?: {
+    context: {
       worker?: ProductionWorker | null;
       targets?: ProductionWorkerTarget[];
       products?: FirestoreProduct[];
-      reports?: ProductionReport[];
-      settings?: ProductionWorkerSettings;
+      reports: ProductionReport[];
       lineProductConfigs?: LineProductConfig[];
       attendanceRecords?: Awaited<ReturnType<typeof attendanceProcessingService.getRecordsByEmployee>>;
       leaveRequests?: Awaited<ReturnType<typeof leaveRequestService.getByEmployee>>;
       dailyLogs?: WorkerDailyPerformanceLog[];
     },
-  ): Promise<WorkerDailyAchievement> {
-    const worker = context?.worker ?? await productionWorkerService.getById(workerId);
-    const reports = context?.reports
-      ?? await reportService.getByDateRange(date, date);
+  ): WorkerDailyAchievement {
+    const worker = context.worker ?? null;
+    const reports = context.reports;
     const presence = workerPresenceForReports(reports, workerId, worker?.employeeId, date);
-    const dailyLogs = context?.dailyLogs
-      ?? await workerDailyPerformanceLogService.getByWorkerAndDate(workerId, date);
+    const dailyLogs = context.dailyLogs ?? [];
 
     let absent = false;
     let leave = false;
     if (worker?.employeeId) {
-      const attendanceRecords = context?.attendanceRecords
-        ?? await attendanceProcessingService.getRecordsByEmployee(worker.employeeId);
-      const leaveRequests = context?.leaveRequests
-        ?? await leaveRequestService.getByEmployee(worker.employeeId);
-      const dayAttendance = attendanceRecords.find((r) => r.date === date);
+      const dayAttendance = context.attendanceRecords?.find((r) => r.date === date);
       absent = dayAttendance?.status === 'absent';
-      leave = isOnApprovedLeave(leaveRequests, date);
+      leave = isOnApprovedLeave(context.leaveRequests ?? [], date);
     }
     absent = absent || presence.operationalAbsent;
 
@@ -238,10 +231,10 @@ export const productionWorkerPerformanceService = {
       };
     }
 
-    const targets = context?.targets ?? await productionWorkerTargetService.getByWorker(workerId);
+    const targets = context.targets ?? [];
     const outputQty = aggregateWorkerOutputsFromReports(reports, workerId, date);
     const { lineId, productId } = primaryLineProductForDay(reports, workerId, date);
-    const product = context?.products?.find((p) => p.id === productId) ?? null;
+    const product = context.products?.find((p) => p.id === productId) ?? null;
     const resolved = productId
       ? resolveWorkerTarget({
         workerId,
@@ -250,7 +243,7 @@ export const productionWorkerPerformanceService = {
         date,
         targets,
         product,
-        lineProductConfigs: context?.lineProductConfigs,
+        lineProductConfigs: context.lineProductConfigs,
       })
       : { dailyTargetQty: 0, source: 'missing' as const };
     const targetQty = presence.operationalAbsent ? 0 : resolved.dailyTargetQty;
@@ -269,6 +262,50 @@ export const productionWorkerPerformanceService = {
       presentAssignments: presence.present,
       absentAssignments: presence.absent,
     };
+  },
+
+  async getDailyAchievement(
+    workerId: string,
+    date: string,
+    context?: {
+      worker?: ProductionWorker | null;
+      targets?: ProductionWorkerTarget[];
+      products?: FirestoreProduct[];
+      reports?: ProductionReport[];
+      settings?: ProductionWorkerSettings;
+      lineProductConfigs?: LineProductConfig[];
+      attendanceRecords?: Awaited<ReturnType<typeof attendanceProcessingService.getRecordsByEmployee>>;
+      leaveRequests?: Awaited<ReturnType<typeof leaveRequestService.getByEmployee>>;
+      dailyLogs?: WorkerDailyPerformanceLog[];
+    },
+  ): Promise<WorkerDailyAchievement> {
+    const worker = context?.worker ?? await productionWorkerService.getById(workerId);
+    const reports = context?.reports
+      ?? await reportService.getByDateRange(date, date);
+    const dailyLogs = context?.dailyLogs
+      ?? await workerDailyPerformanceLogService.getByWorkerAndDate(workerId, date);
+
+    let attendanceRecords = context?.attendanceRecords;
+    let leaveRequests = context?.leaveRequests;
+    if (worker?.employeeId && (!attendanceRecords || !leaveRequests)) {
+      [attendanceRecords, leaveRequests] = await Promise.all([
+        attendanceRecords ?? attendanceProcessingService.getRecordsByEmployee(worker.employeeId),
+        leaveRequests ?? leaveRequestService.getByEmployee(worker.employeeId),
+      ]);
+    }
+
+    const targets = context?.targets ?? await productionWorkerTargetService.getByWorker(workerId);
+
+    return this.computeDailyAchievement(workerId, date, {
+      worker,
+      targets,
+      products: context?.products,
+      reports,
+      lineProductConfigs: context?.lineProductConfigs,
+      attendanceRecords,
+      leaveRequests,
+      dailyLogs,
+    });
   },
 
   async getMonthlyAchievement(

@@ -11,7 +11,7 @@ import { resolveReportType, workOrderMatchesReportType } from '../../../modules/
 import { canonicalPackagingLine } from '../../../modules/production/utils/packagingLine';
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
-import { catalogRawMaterialService } from '../../../modules/catalog/services/catalogRawMaterialService';
+import { loadReportsComponentLabelOptions } from '../../../modules/production/utils/injectionComponentOptions';
 import {
   ProductionLineStatus,
   type PackagingReportLine,
@@ -267,19 +267,10 @@ export const GlobalCreateReportModal: React.FC = () => {
 
   useEffect(() => {
     let mounted = true;
-    catalogRawMaterialService.getAll()
+    loadReportsComponentLabelOptions()
       .then((rows) => {
         if (!mounted) return;
-        setRawMaterialOptions(
-          rows
-            .filter((row) => Boolean(row.id))
-            .map((row) => ({
-              id: String(row.id),
-              name: String(row.name || '').trim(),
-              code: String(row.code || '').trim(),
-              categoryName: String(row.categoryName || '').trim(),
-            })),
-        );
+        setRawMaterialOptions(rows);
       })
       .catch(() => {
         if (!mounted) return;

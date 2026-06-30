@@ -24,7 +24,7 @@ import { lineAssignmentWorkerBridge } from '../services/lineAssignmentWorkerBrid
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
-import { rawMaterialService } from '../../inventory/services/rawMaterialService';
+import { loadReportsComponentLabelOptions } from '../utils/injectionComponentOptions';
 import { formatNumber, getOperationalDateString, getTodayDateString } from '../../../utils/calculations';
 import {
   buildShareStandardVarianceBanner,
@@ -534,21 +534,14 @@ export const QuickAction: React.FC = () => {
 
   useEffect(() => {
     let mounted = true;
-    rawMaterialService.getAll().then((list) => {
-      if (!mounted) return;
-      setRawMaterialOptions(
-        list
-          .filter((m) => m.id && m.isActive !== false)
-          .map((m) => ({
-            id: m.id!,
-            name: m.name,
-            code: m.code || '',
-            categoryName: String(m.categoryName || '').trim(),
-          }))
-      );
-    }).catch(() => {
-      if (mounted) setRawMaterialOptions([]);
-    });
+    loadReportsComponentLabelOptions()
+      .then((list) => {
+        if (!mounted) return;
+        setRawMaterialOptions(list);
+      })
+      .catch(() => {
+        if (mounted) setRawMaterialOptions([]);
+      });
     return () => { mounted = false; };
   }, []);
 

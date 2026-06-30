@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
@@ -9,7 +9,6 @@ import { formatNumber, getTodayDateString } from '@/utils/calculations';
 import { Badge, Button, Card, KPIBox, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '../components/SelectableTable';
 import type {
-  ProductionLineWorkerAssignment,
   ProductionWorker,
   ProductionWorkerTarget,
   WorkerDailyAchievementStatus,
@@ -19,9 +18,7 @@ import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import { productionWorkerService } from '../services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
 import { lineAssignmentService } from '../services/lineAssignmentService';
-import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
-import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
-import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
+import { useProductionWorkersPageQueries } from '../hooks/useProductionWorkersPageQueries';
 import { ProductionWorkerReports } from './ProductionWorkerReports';
 import { ProductionWorkerRatingsReview } from './ProductionWorkerRatingsReview';
 import { SupervisorWorkerEvaluation } from './SupervisorWorkerEvaluation';
@@ -38,12 +35,6 @@ import {
   isProductionWorkerAssignmentActiveOnDate,
 } from '../utils/productionWorkerLineTransfer';
 import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
-import {
-  buildAssignmentInfoByWorker,
-  listDatesInRange,
-  monthRange,
-  type WorkerAssignmentInfo,
-} from '../utils/workerAssignmentPresence';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 
@@ -120,17 +111,6 @@ export const ProductionWorkers: React.FC = () => {
     },
   }), [rawWorkerSettings]);
 
-  const [loading, setLoading] = useState(true);
-  const [statsLoading, setStatsLoading] = useState(false);
-  const [workers, setWorkers] = useState<ProductionWorker[]>([]);
-  const [assignments, setAssignments] = useState<ProductionLineWorkerAssignment[]>([]);
-  const [targets, setTargets] = useState<ProductionWorkerTarget[]>([]);
-  const [monthStatsMap, setMonthStatsMap] = useState<Map<string, WorkerMonthlyAchievement>>(new Map());
-  const [todayStatsMap, setTodayStatsMap] = useState<Map<string, { output: number; achievement: number; status: WorkerDailyAchievementStatus }>>(new Map());
-  const [assignmentInfoByWorkerId, setAssignmentInfoByWorkerId] = useState<Map<string, WorkerAssignmentInfo>>(new Map());
-  const [supervisorLineIds, setSupervisorLineIds] = useState<Set<string>>(new Set());
-  const [supervisorLinesLoaded, setSupervisorLinesLoaded] = useState(true);
-
   const [search, setSearch] = useState('');
   const [filterLine, setFilterLine] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
@@ -180,115 +160,29 @@ export const ProductionWorkers: React.FC = () => {
     return map;
   }, [_rawEmployees]);
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [w, a, t] = await Promise.all([
-        productionWorkerService.getAll(),
-        productionLineWorkerAssignmentService.getAll(),
-        productionWorkerTargetService.getAll(),
-      ]);
-      setWorkers(w);
-      setAssignments(a);
-      setTargets(t);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { void loadData(); }, [loadData]);
-
-  useEffect(() => {
-    let mounted = true;
-    if (!isSupervisorReporter || !currentEmployee?.id) {
-      setSupervisorLineIds(new Set());
-      setSupervisorLinesLoaded(true);
-      return () => { mounted = false; };
-    }
-
-    setSupervisorLinesLoaded(false);
-    supervisorLineAssignmentService
-      .getActiveByDate(filterDate)
-      .then((rows) => {
-        if (!mounted) return;
-        const ids = new Set(
-          rows
-            .filter((row) => String(row.supervisorId || '').trim() === currentEmployee.id)
-            .map((row) => String(row.lineId || '').trim())
-            .filter(Boolean),
-        );
-        setSupervisorLineIds(ids);
-        setSupervisorLinesLoaded(true);
-      })
-      .catch(() => {
-        if (!mounted) return;
-        setSupervisorLineIds(new Set());
-        setSupervisorLinesLoaded(true);
-      });
-    return () => { mounted = false; };
-  }, [isSupervisorReporter, currentEmployee?.id, filterDate]);
-
-  useEffect(() => {
-    if (workers.length === 0) {
-      setMonthStatsMap(new Map());
-      setTodayStatsMap(new Map());
-      setAssignmentInfoByWorkerId(new Map());
-      return;
-    }
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      void (async () => {
-        setStatsLoading(true);
-        try {
-          const { start, end } = monthRange(filterMonth);
-          const today = getTodayDateString();
-          const rangeEnd = end > today ? today : end;
-          const periodDates = start <= rangeEnd ? listDatesInRange(start, rangeEnd) : [];
-          const monthlyAssignmentsPromise = Promise.all(periodDates.map(async (periodDate) => {
-            const assignments = productionLines.length > 0
-              ? (await Promise.all(
-                productionLines
-                  .filter((line) => line.id)
-                  .map((line) => lineAssignmentService.getByLineAndDate(line.id!, periodDate)),
-              )).flat()
-              : await lineAssignmentService.getByDate(periodDate);
-            return assignments;
-          })).then((groups) => groups.flat());
-
-          const [{ monthlyByWorkerId, dailyByWorkerId, monthReports }, monthlyAssignments] = await Promise.all([
-            productionWorkerPerformanceService.getWorkersListPerformanceSnapshot({
-              workers,
-              targets,
-              month: filterMonth,
-              date: filterDate,
-              settings: workerSettings,
-              products: products as never[],
-              lineId: filterLine && filterLine !== UNASSIGNED_LINE_FILTER_VALUE ? filterLine : undefined,
-              lineProductConfigs,
-            }),
-            monthlyAssignmentsPromise,
-          ]);
-          const assignmentInfo = buildAssignmentInfoByWorker(
-            monthlyAssignments,
-            workers,
-            monthReports,
-            (lineId) => productionLines.find((line) => line.id === lineId)?.name ?? lineId ?? '—',
-          );
-          if (!cancelled) {
-            setMonthStatsMap(monthlyByWorkerId);
-            setTodayStatsMap(dailyByWorkerId);
-            setAssignmentInfoByWorkerId(assignmentInfo);
-          }
-        } finally {
-          if (!cancelled) setStatsLoading(false);
-        }
-      })();
-    }, 300);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [workers, filterMonth, filterDate, filterLine, targets, products, lineProductConfigs, workerSettings, productionLines]);
+  const {
+    workers,
+    assignments,
+    targets,
+    monthStatsMap,
+    todayStatsMap,
+    assignmentInfoByWorkerId,
+    loading,
+    statsLoading,
+    supervisorLineIds,
+    supervisorLinesLoaded,
+    refresh,
+  } = useProductionWorkersPageQueries({
+    filterMonth,
+    filterDate,
+    filterLine,
+    productionLines,
+    products: products as never[],
+    lineProductConfigs,
+    workerSettings,
+    isSupervisorReporter,
+    supervisorEmployeeId: currentEmployee?.id,
+  });
 
   const getLineName = (id: string) => productionLines.find((l) => l.id === id)?.name ?? id;
   const today = getTodayDateString();
@@ -428,7 +322,7 @@ export const ProductionWorkers: React.FC = () => {
           defaultLineId: plan.nextDefaultLineId,
         });
       }));
-      await loadData();
+      await refresh();
       setLineTransfer(null);
     } catch {
       setLineTransfer((prev) => prev ? { ...prev, error: 'تعذر نقل العامل الآن. حاول مرة أخرى.' } : prev);
@@ -530,7 +424,7 @@ export const ProductionWorkers: React.FC = () => {
       );
       await deleteTodayDailyRowsForWorkers(workersToUnlink);
       await Promise.all(Array.from(workerIds).map((workerId) => syncWorkerLineSnapshot(workerId)));
-      await loadData();
+      await refresh();
     } catch {
       window.alert('تعذر فك ربط العمال الآن. حاول مرة أخرى.');
     } finally {
@@ -555,7 +449,7 @@ export const ProductionWorkers: React.FC = () => {
         disabled: lineTransferSaving || unlinkingWorkers,
       },
     ];
-  }, [canManage, openLineTransfer, lineTransferSaving, unlinkingWorkers, assignments, loadData]);
+  }, [canManage, openLineTransfer, lineTransferSaving, unlinkingWorkers, assignments, refresh]);
 
   const lineTransferEligibleWorkers = lineTransfer ? getLineTransferEligibleWorkers(lineTransfer) : [];
   const lineTransferValidationError = lineTransfer

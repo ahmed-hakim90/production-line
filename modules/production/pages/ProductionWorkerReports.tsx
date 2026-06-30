@@ -11,6 +11,8 @@ import { productionWorkerPerformanceService } from '../services/productionWorker
 import { workerDailyPerformanceLogService } from '../services/workerDailyPerformanceLogService';
 import { reportService } from '../services/reportService';
 import { lineAssignmentService } from '../services/lineAssignmentService';
+import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
+import { leaveRequestService } from '@/modules/hr/leaveService';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import type { ProductionReport, ProductionWorker, WorkerDailyPerformanceLog } from '@/types';
 import { getPresenceLabel } from '../utils/workerPresence';
@@ -152,6 +154,17 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
     },
   }), [rawWorkerSettings]);
 
+  const productsRef = useRef(products);
+  const productionLinesRef = useRef(productionLines);
+  const lineProductConfigsRef = useRef(lineProductConfigs);
+  const workerSettingsRef = useRef(workerSettings);
+  productsRef.current = products;
+  productionLinesRef.current = productionLines;
+  lineProductConfigsRef.current = lineProductConfigs;
+  workerSettingsRef.current = workerSettings;
+
+  const loadGenerationRef = useRef(0);
+
   const [loading, setLoading] = useState(true);
   const [exportingPdf, setExportingPdf] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
@@ -166,13 +179,18 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
   const [periodPresenceSummary, setPeriodPresenceSummary] = useState({ present: 0, absent: 0, noTarget: 0 });
 
   const getLineName = useCallback((lineId?: string) => (
-    productionLines.find((line) => line.id === lineId)?.name ?? lineId ?? '—'
-  ), [productionLines]);
+    productionLinesRef.current.find((line) => line.id === lineId)?.name ?? lineId ?? '—'
+  ), []);
 
   const load = useCallback(async () => {
     if (!canView) return;
+    const loadGeneration = ++loadGenerationRef.current;
     setLoading(true);
     setLoadError(null);
+    const currentProducts = productsRef.current;
+    const currentProductionLines = productionLinesRef.current;
+    const currentLineProductConfigs = lineProductConfigsRef.current;
+    const currentWorkerSettings = workerSettingsRef.current;
     try {
       const workers = await productionWorkerService.getAll();
       const activeWorkers = workers.filter((worker) => worker.isActive !== false);
@@ -181,9 +199,9 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
         const rangeEnd = startDate <= endDate ? endDate : startDate;
         const periodDates = listDatesInRange(rangeStart, rangeEnd);
         const assignmentPromise = Promise.all(periodDates.map(async (periodDate) => {
-          const assignments = productionLines.length > 0
+          const assignments = currentProductionLines.length > 0
             ? (await Promise.all(
-              productionLines
+              currentProductionLines
                 .filter((line) => line.id)
                 .map((line) => lineAssignmentService.getByLineAndDate(line.id!, periodDate)),
             )).flat()
@@ -196,27 +214,49 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           assignmentPromise,
           workerDailyPerformanceLogService.getByDateRange(rangeStart, rangeEnd),
         ]);
+        if (loadGeneration !== loadGenerationRef.current) return;
         const workersForReport = buildWorkersForDailyReport(workers, reports, performanceLogs);
         const logsByWorkerAndDate = groupLogsByWorkerAndDate(performanceLogs);
         const assignmentInfoByWorkerId = buildAssignmentInfoByWorker(dailyAssignments, workers, reports, getLineName);
 
-        const dailyRows = await Promise.all(workersForReport.map(async (worker) => {
+        const uniqueEmployeeIds = Array.from(new Set(
+          workersForReport.map((worker) => String(worker.employeeId || '').trim()).filter(Boolean),
+        ));
+        const [attendanceEntries, leaveEntries] = await Promise.all([
+          Promise.all(uniqueEmployeeIds.map(async (employeeId) => [
+            employeeId,
+            await attendanceProcessingService.getRecordsByEmployee(employeeId),
+          ] as const)),
+          Promise.all(uniqueEmployeeIds.map(async (employeeId) => [
+            employeeId,
+            await leaveRequestService.getByEmployee(employeeId),
+          ] as const)),
+        ]);
+        if (loadGeneration !== loadGenerationRef.current) return;
+        const attendanceByEmployeeId = new Map(attendanceEntries);
+        const leaveByEmployeeId = new Map(leaveEntries);
+
+        const dailyRows = workersForReport.map((worker) => {
           if (!worker.id) return null;
           const workerTargets = targets.filter((target) => target.workerId === worker.id);
           const workerLogsByDate = logsByWorkerAndDate.get(worker.id);
-          const achievements = await Promise.all(periodDates.map(async (periodDate) => {
+          const employeeId = String(worker.employeeId || '').trim();
+          const attendanceRecords = employeeId ? attendanceByEmployeeId.get(employeeId) : undefined;
+          const leaveRequests = employeeId ? leaveByEmployeeId.get(employeeId) : undefined;
+          const achievements = periodDates.map((periodDate) => {
             try {
-              return await productionWorkerPerformanceService.getDailyAchievement(worker.id!, periodDate, {
+              return productionWorkerPerformanceService.computeDailyAchievement(worker.id!, periodDate, {
                 worker,
                 targets: workerTargets,
                 reports,
-                products: products as never[],
-                settings: workerSettings,
-                lineProductConfigs,
+                products: currentProducts as never[],
+                lineProductConfigs: currentLineProductConfigs,
                 dailyLogs: workerLogsByDate?.get(periodDate) ?? [],
+                attendanceRecords,
+                leaveRequests,
               });
             } catch (error) {
-              console.error('getDailyAchievement error:', { workerId: worker.id, periodDate, error });
+              console.error('computeDailyAchievement error:', { workerId: worker.id, periodDate, error });
               return {
                 workerId: worker.id!,
                 date: periodDate,
@@ -226,7 +266,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
                 status: 'no_output' as const,
               };
             }
-          }));
+          });
           const targetQty = achievements.reduce((sum, achievement) => sum + Number(achievement.targetQty || 0), 0);
           const outputQty = achievements.reduce((sum, achievement) => sum + Number(achievement.outputQty || 0), 0);
           const achievementPercent = targetQty > 0 ? Math.round((outputQty / targetQty) * 1000) / 10 : 0;
@@ -262,7 +302,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
             'أيام غياب': absentDays,
             'أيام بدون هدف': noTargetDays,
           };
-        }));
+        });
         const representedWorkerIds = new Set(workersForReport.map((worker) => worker.id).filter(Boolean));
         const assignedOnlyRows = Array.from(assignmentInfoByWorkerId.entries())
           .filter(([workerId]) => !representedWorkerIds.has(workerId))
@@ -300,9 +340,9 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
         const rangeEnd = end > today ? today : end;
         const periodDates = start <= rangeEnd ? listDatesInRange(start, rangeEnd) : [];
         const monthlyAssignmentsPromise = Promise.all(periodDates.map(async (periodDate) => {
-          const assignments = productionLines.length > 0
+          const assignments = currentProductionLines.length > 0
             ? (await Promise.all(
-              productionLines
+              currentProductionLines
                 .filter((line) => line.id)
                 .map((line) => lineAssignmentService.getByLineAndDate(line.id!, periodDate)),
             )).flat()
@@ -314,16 +354,18 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           monthlyAssignmentsPromise,
           periodDates.length > 0 ? reportService.getByDateRange(start, rangeEnd) : Promise.resolve([]),
         ]);
+        if (loadGeneration !== loadGenerationRef.current) return;
         const { monthlyByWorkerId } =
           await productionWorkerPerformanceService.getWorkersListPerformanceSnapshot({
             workers: activeWorkers,
             targets,
             month,
             date,
-            settings: workerSettings,
-            products: products as never[],
-            lineProductConfigs,
+            settings: currentWorkerSettings,
+            products: currentProducts as never[],
+            lineProductConfigs: currentLineProductConfigs,
           });
+        if (loadGeneration !== loadGenerationRef.current) return;
         const assignmentInfoByWorkerId = buildAssignmentInfoByWorker(monthlyAssignments, workers, monthlyReports, getLineName);
         let result = activeWorkers
           .filter((worker) => worker.id && monthlyByWorkerId.has(worker.id))
@@ -356,9 +398,10 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           result = [...result].sort((a, b) => Number(b['إنجاز الشهر %'] || 0) - Number(a['إنجاز الشهر %'] || 0));
         }
         if (kind === 'low_performance') {
-          const threshold = workerSettings.performance.achievementWarningThreshold ?? 80;
+          const threshold = currentWorkerSettings.performance.achievementWarningThreshold ?? 80;
           result = result.filter((row) => Number(row['إنجاز الشهر %'] || 0) < threshold);
         }
+        if (loadGeneration !== loadGenerationRef.current) return;
         setRows(result);
         setPeriodPresenceSummary({
           present: result.reduce((sum, row) => sum + Number(row['أيام حضور'] || 0), 0),
@@ -367,16 +410,30 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
         });
       }
     } catch (error) {
+      if (loadGeneration !== loadGenerationRef.current) return;
       console.error('ProductionWorkerReports load error:', error);
       setLoadError('تعذر تحميل التقرير. حاول التحديث مرة أخرى.');
       setRows([]);
       setPeriodPresenceSummary({ present: 0, absent: 0, noTarget: 0 });
     } finally {
-      setLoading(false);
+      if (loadGeneration === loadGenerationRef.current) {
+        setLoading(false);
+      }
     }
-  }, [canView, kind, date, startDate, endDate, month, products, productionLines, getLineName, lineProductConfigs, workerSettings]);
+  }, [canView, kind, date, startDate, endDate, month, getLineName]);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      void load().finally(() => {
+        if (cancelled) return;
+      });
+    }, 300);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [load]);
 
   const title = useMemo(() => {
     switch (kind) {

@@ -104,6 +104,7 @@ import {
 import { resolveInventoryRoutingV1Async } from '../modules/inventory/services/inventoryRoutingService';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { catalogRawMaterialService as rawMaterialService } from '../modules/catalog/services/catalogRawMaterialService';
+import { loadReportsComponentLabelOptions } from '../modules/production/utils/injectionComponentOptions';
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
 import { productMaterialService } from '../modules/production/services/productMaterialService';
 import {
@@ -2158,20 +2159,12 @@ export const useAppStore = create<AppState>((set, get) => ({
           stockService.getBalances(),
           warehouseService.getAllWarehouses(),
         ]);
-        const rawRows = await rawMaterialService.getAll();
         const catRows = await categoryService.getByType('product');
         const names = catRows
           .filter((row) => row.isActive !== false)
           .map((row) => String(row.name || '').trim())
           .filter(Boolean);
-        const rawMaterialOptions: ReportsUiRawMaterialOption[] = rawRows
-          .filter((row) => Boolean(row.id))
-          .map((row) => ({
-            id: String(row.id),
-            name: String(row.name || '').trim(),
-            code: String(row.code || '').trim(),
-            categoryName: String(row.categoryName || '').trim(),
-          }));
+        const rawMaterialOptions: ReportsUiRawMaterialOption[] = await loadReportsComponentLabelOptions();
         set({
           reportsUiReferenceCache: {
             stockBalances: balances || [],
