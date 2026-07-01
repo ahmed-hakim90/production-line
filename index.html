@@ -65,6 +65,26 @@
         100% { transform: translateX(350%); }
       }
     </style>
+    <script>
+      (function () {
+        var POLICY = 'no-pwa-precache-v1';
+        var KEY = 'erp_client_cache_stamp';
+        try {
+          var stamp = localStorage.getItem(KEY) || '';
+          if (stamp.indexOf(POLICY) === 0) return;
+          if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.getRegistrations().then(function (regs) {
+              regs.forEach(function (reg) { reg.unregister(); });
+            });
+          }
+          if ('caches' in window) {
+            caches.keys().then(function (keys) {
+              keys.forEach(function (key) { caches.delete(key); });
+            });
+          }
+        } catch (e) { /* ignore */ }
+      })();
+    </script>
 </head>
   <body>
     <div id="html-splash" role="status" aria-live="polite" aria-busy="true" aria-label="جاري التحميل">

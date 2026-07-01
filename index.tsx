@@ -6,20 +6,24 @@ import './src/index.css';
 import './src/i18n';
 import App from './App';
 import { queryClient } from './lib/queryClient';
-import { registerPwaAutoUpdate } from './src/pwaAutoUpdate';
+import { ensureFreshClientWithoutPwaCache } from './src/purgeLegacyPwaCaches';
 
-registerPwaAutoUpdate();
+async function bootstrap() {
+  await ensureFreshClientWithoutPwaCache();
 
-const rootElement = document.getElementById('root');
-if (!rootElement) {
-  throw new Error("Could not find root element to mount to");
+  const rootElement = document.getElementById('root');
+  if (!rootElement) {
+    throw new Error('Could not find root element to mount to');
+  }
+
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(
+    <React.StrictMode>
+      <QueryClientProvider client={queryClient}>
+        <App />
+      </QueryClientProvider>
+    </React.StrictMode>,
+  );
 }
 
-const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </React.StrictMode>
-);
+void bootstrap();

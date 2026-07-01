@@ -27,7 +27,8 @@ export default defineConfig(({ mode }) => {
             ]
           : []),
         VitePWA({
-          registerType: 'autoUpdate',
+          // Manifest only — no Workbox precache / runtime cache (see src/purgeLegacyPwaCaches.ts).
+          injectRegister: false,
           includeAssets: [
             'icons/pwa-icon.svg',
             'icons/pwa-icon-180.png',
@@ -66,41 +67,11 @@ export default defineConfig(({ mode }) => {
               },
             ]
           },
-          // If the browser reports "Expected a JavaScript module but server responded with
-          // text/html" for /assets/*.js, the response body is usually index.html (SPA fallback).
-          // Typical causes: (1) stale index.html referencing an old hashed chunk after deploy,
-          // (2) Service Worker or HTTP cache mixing versions — try hard refresh, clear site data,
-          // or unregister the SW (DevTools → Application). (3) Rare: Vercel asset 404; confirm
-          // the chunk exists in the current deployment output.
           workbox: {
-            navigateFallback: '/index.html',
+            globPatterns: [],
+            runtimeCaching: [],
             cleanupOutdatedCaches: true,
-            skipWaiting: true,
-            clientsClaim: true,
-            // Skip precaching very large hashed chunks; they are still fetched at runtime.
-            maximumFileSizeToCacheInBytes: 4 * 1024 * 1024,
-            globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
-            runtimeCaching: [
-              {
-                urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-                handler: 'StaleWhileRevalidate',
-                options: {
-                  cacheName: 'google-fonts-stylesheets'
-                }
-              },
-              {
-                urlPattern: /^https:\/\/fonts\.gstatic\.com\/.*/i,
-                handler: 'CacheFirst',
-                options: {
-                  cacheName: 'google-fonts-webfonts',
-                  expiration: {
-                    maxEntries: 20,
-                    maxAgeSeconds: 60 * 60 * 24 * 365
-                  }
-                }
-              }
-            ]
-          }
+          },
         })
       ],
       define: {
