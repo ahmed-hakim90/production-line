@@ -320,6 +320,8 @@ export const productionWorkerPerformanceService = {
       /** When false, skip Firestore summary write (use for list/dashboard batch reads). */
       persistSummary?: boolean;
       lineProductConfigs?: LineProductConfig[];
+      /** Override period start instead of calendar month day 1. */
+      startDate?: string;
       /** Cap aggregation to this date (e.g. today) instead of full calendar month end. */
       endDate?: string;
       attendanceRecords?: Awaited<ReturnType<typeof attendanceProcessingService.getRecordsByEmployee>>;
@@ -329,18 +331,19 @@ export const productionWorkerPerformanceService = {
     const settings = this.resolveSettings(options?.settings);
     const perf = settings.performance;
     const { start, end } = monthRange(month);
-    const effectiveEnd = options?.endDate && options.endDate < end ? options.endDate : end;
+    const effectiveStart = options?.startDate ?? start;
+    const effectiveEnd = options?.endDate ?? end;
     const worker = options?.worker ?? await productionWorkerService.getById(workerId);
     const targets = options?.targets ?? await productionWorkerTargetService.getByWorker(workerId);
-    const reports = options?.reports ?? await reportService.getByDateRange(start, effectiveEnd);
+    const reports = options?.reports ?? await reportService.getByDateRange(effectiveStart, effectiveEnd);
     const monthLogs = await workerDailyPerformanceLogService.getByWorkerAndDateRange(
       workerId,
-      start,
+      effectiveStart,
       effectiveEnd,
     );
     const logsByDate = groupLogsByDate(monthLogs);
 
-    const allDates = listDatesInRange(start, effectiveEnd);
+    const allDates = listDatesInRange(effectiveStart, effectiveEnd);
     let attendanceRecords: Awaited<ReturnType<typeof attendanceProcessingService.getRecordsByEmployee>> = [];
     let leaveRequests: Awaited<ReturnType<typeof leaveRequestService.getByEmployee>> = [];
     if (worker?.employeeId) {
@@ -565,6 +568,8 @@ export const productionWorkerPerformanceService = {
     workerIds?: string[];
     lineId?: string;
     lineProductConfigs?: LineProductConfig[];
+    startDate?: string;
+    endDate?: string;
   }): Promise<{
     monthlyByWorkerId: Map<string, WorkerMonthlyAchievement>;
     dailyByWorkerId: Map<string, {
@@ -578,14 +583,16 @@ export const productionWorkerPerformanceService = {
     monthReports: ProductionReport[];
   }> {
     const settings = this.resolveSettings(params.settings);
-    const { start, end } = monthRange(params.month);
+    const calendarRange = monthRange(params.month);
+    const periodStart = params.startDate ?? calendarRange.start;
+    const periodEnd = params.endDate ?? calendarRange.end;
     const today = getTodayDateString();
-    const rangeEnd = end > today ? today : end;
+    const rangeEnd = periodEnd > today ? today : periodEnd;
     const idSet = params.workerIds ? new Set(params.workerIds) : null;
     const workers = params.workers.filter((w) => w.id && (!idSet || idSet.has(w.id)));
 
     const [monthReports, dayReports] = await Promise.all([
-      reportService.getByDateRange(start, rangeEnd),
+      reportService.getByDateRange(periodStart, rangeEnd),
       reportService.getByDateRange(params.date, params.date),
     ]);
     const scopedMonthReports = params.lineId
@@ -638,6 +645,7 @@ export const productionWorkerPerformanceService = {
           reports: scopedMonthReports,
           persistSummary: false,
           lineProductConfigs: params.lineProductConfigs,
+          startDate: periodStart,
           endDate: rangeEnd,
           attendanceRecords,
           leaveRequests,

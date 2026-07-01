@@ -72,6 +72,24 @@ export function mapLineAssignmentsToShiftWorkers(
     }));
 }
 
+export function findOpenGeneralShifts(
+  reports: ProductionReport[],
+  criteria: { employeeId: string; lineIds: Iterable<string> },
+): ProductionReport[] {
+  const lineIdSet = new Set(
+    Array.from(criteria.lineIds).map((id) => String(id || '').trim()).filter(Boolean),
+  );
+  const employeeId = String(criteria.employeeId || '').trim();
+  if (!employeeId || lineIdSet.size === 0) return [];
+
+  return reports.filter((report) => (
+    report.lifecycleStatus === 'open'
+    && report.employeeId === employeeId
+    && report.shiftStartContext === 'general'
+    && lineIdSet.has(report.lineId)
+  ));
+}
+
 export function findOpenProductionShift(
   reports: ProductionReport[],
   criteria: { lineId: string; planId?: string; productId?: string },

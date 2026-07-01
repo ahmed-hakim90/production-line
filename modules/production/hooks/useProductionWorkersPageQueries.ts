@@ -19,7 +19,6 @@ import { supervisorLineAssignmentService } from '../services/supervisorLineAssig
 import {
   buildAssignmentInfoByWorker,
   listDatesInRange,
-  monthRange,
   type WorkerAssignmentInfo,
 } from '../utils/workerAssignmentPresence';
 import { UNASSIGNED_LINE_FILTER_VALUE } from '../utils/productionWorkerVisibility';
@@ -40,7 +39,8 @@ export type ProductionWorkersStatsSnapshot = {
 type StatsQueryParams = {
   workers: ProductionWorker[];
   targets: ProductionWorkerTarget[];
-  filterMonth: string;
+  filterDateFrom: string;
+  filterDateTo: string;
   filterDate: string;
   filterLine: string;
   productionLines: Array<{ id?: string; name?: string }>;
@@ -53,7 +53,8 @@ async function fetchWorkersStats(params: StatsQueryParams): Promise<ProductionWo
   const {
     workers,
     targets,
-    filterMonth,
+    filterDateFrom,
+    filterDateTo,
     filterDate,
     filterLine,
     productionLines,
@@ -70,10 +71,10 @@ async function fetchWorkersStats(params: StatsQueryParams): Promise<ProductionWo
     };
   }
 
-  const { start, end } = monthRange(filterMonth);
   const today = getTodayDateString();
-  const rangeEnd = end > today ? today : end;
-  const periodDates = start <= rangeEnd ? listDatesInRange(start, rangeEnd) : [];
+  const rangeEnd = filterDateTo > today ? today : filterDateTo;
+  const periodDates = filterDateFrom <= rangeEnd ? listDatesInRange(filterDateFrom, rangeEnd) : [];
+  const filterMonth = filterDateTo.slice(0, 7);
 
   const monthlyAssignmentsPromise = Promise.all(periodDates.map(async (periodDate) => {
     const assignments = productionLines.length > 0
@@ -92,6 +93,8 @@ async function fetchWorkersStats(params: StatsQueryParams): Promise<ProductionWo
       targets,
       month: filterMonth,
       date: filterDate,
+      startDate: filterDateFrom,
+      endDate: filterDateTo,
       settings: workerSettings,
       products: products as never[],
       lineId: filterLine && filterLine !== UNASSIGNED_LINE_FILTER_VALUE ? filterLine : undefined,
@@ -124,7 +127,8 @@ function useDebouncedValue<T>(value: T, delayMs: number): T {
 }
 
 export function useProductionWorkersPageQueries(params: {
-  filterMonth: string;
+  filterDateFrom: string;
+  filterDateTo: string;
   filterDate: string;
   filterLine: string;
   productionLines: Array<{ id?: string; name?: string }>;
@@ -135,7 +139,8 @@ export function useProductionWorkersPageQueries(params: {
   supervisorEmployeeId?: string;
 }) {
   const queryClient = useQueryClient();
-  const debouncedFilterMonth = useDebouncedValue(params.filterMonth, 300);
+  const debouncedFilterDateFrom = useDebouncedValue(params.filterDateFrom, 300);
+  const debouncedFilterDateTo = useDebouncedValue(params.filterDateTo, 300);
   const debouncedFilterDate = useDebouncedValue(params.filterDate, 300);
   const debouncedFilterLine = useDebouncedValue(params.filterLine, 300);
 
@@ -153,8 +158,10 @@ export function useProductionWorkersPageQueries(params: {
       ]);
       return { workers, assignments, targets };
     },
-    staleTime: 2 * 60_000,
-    gcTime: 10 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const workers = baseQuery.data?.workers ?? [];
@@ -165,7 +172,8 @@ export function useProductionWorkersPageQueries(params: {
     queryKey: [
       ...PRODUCTION_WORKERS_QUERY_KEY,
       'stats',
-      debouncedFilterMonth,
+      debouncedFilterDateFrom,
+      debouncedFilterDateTo,
       debouncedFilterDate,
       debouncedFilterLine,
       workers.length,
@@ -174,7 +182,8 @@ export function useProductionWorkersPageQueries(params: {
     queryFn: () => fetchWorkersStats({
       workers,
       targets,
-      filterMonth: debouncedFilterMonth,
+      filterDateFrom: debouncedFilterDateFrom,
+      filterDateTo: debouncedFilterDateTo,
       filterDate: debouncedFilterDate,
       filterLine: debouncedFilterLine,
       productionLines: params.productionLines,
@@ -183,8 +192,10 @@ export function useProductionWorkersPageQueries(params: {
       workerSettings: params.workerSettings,
     }),
     enabled: workers.length > 0,
-    staleTime: 2 * 60_000,
-    gcTime: 10 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
     placeholderData: (previous) => previous,
   });
 
@@ -205,8 +216,10 @@ export function useProductionWorkersPageQueries(params: {
       );
     },
     enabled: params.isSupervisorReporter && Boolean(params.supervisorEmployeeId),
-    staleTime: 2 * 60_000,
-    gcTime: 10 * 60_000,
+    staleTime: 10 * 60_000,
+    gcTime: 60 * 60_000,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   const supervisorLineIds = useMemo(() => {
@@ -216,14 +229,15 @@ export function useProductionWorkersPageQueries(params: {
 
   const supervisorLinesLoaded = !params.isSupervisorReporter
     || !params.supervisorEmployeeId
-    || !supervisorQuery.isLoading;
+    || Boolean(supervisorQuery.data)
+    || !supervisorQuery.isPending;
 
   const statsSnapshot = statsQuery.data;
   const monthStatsMap = statsSnapshot?.monthStatsMap ?? new Map();
   const todayStatsMap = statsSnapshot?.todayStatsMap ?? new Map();
   const assignmentInfoByWorkerId = statsSnapshot?.assignmentInfoByWorkerId ?? new Map();
 
-  const statsLoading = statsQuery.isPending || statsQuery.isPlaceholderData;
+  const statsLoading = !statsSnapshot && statsQuery.isFetching;
 
   const refresh = async () => {
     await queryClient.invalidateQueries({ queryKey: PRODUCTION_WORKERS_QUERY_KEY });
@@ -236,7 +250,7 @@ export function useProductionWorkersPageQueries(params: {
     monthStatsMap,
     todayStatsMap,
     assignmentInfoByWorkerId,
-    loading: baseQuery.isLoading,
+    loading: !baseQuery.data && baseQuery.isPending,
     statsLoading,
     supervisorLineIds,
     supervisorLinesLoaded,

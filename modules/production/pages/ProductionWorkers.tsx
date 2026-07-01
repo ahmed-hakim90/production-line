@@ -34,6 +34,7 @@ import {
   getWorkersEligibleForLineTransfer,
   isProductionWorkerAssignmentActiveOnDate,
 } from '../utils/productionWorkerLineTransfer';
+import { getDefaultProductionWorkersPeriod } from '../utils/productionPeriodRange';
 import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
@@ -51,10 +52,7 @@ type WorkerRow = ProductionWorker & {
   monthStats: WorkerMonthlyAchievement | null;
 };
 
-const currentMonth = (): string => {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-};
+const defaultPeriod = getDefaultProductionWorkersPeriod();
 
 const TODAY_STATUS_LABELS: Record<WorkerDailyAchievementStatus, string> = {
   achieved: 'حقق الهدف',
@@ -114,7 +112,8 @@ export const ProductionWorkers: React.FC = () => {
   const [search, setSearch] = useState('');
   const [filterLine, setFilterLine] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
-  const [filterMonth, setFilterMonth] = useState(currentMonth());
+  const [filterDateFrom, setFilterDateFrom] = useState(defaultPeriod.start);
+  const [filterDateTo, setFilterDateTo] = useState(defaultPeriod.end);
   const [filterDate, setFilterDate] = useState(getTodayDateString());
   const [filterActive, setFilterActive] = useState<'' | 'active' | 'inactive'>('');
   const [filterPerformance, setFilterPerformance] = useState<'' | 'below' | 'above' | 'missing_target'>('');
@@ -173,7 +172,8 @@ export const ProductionWorkers: React.FC = () => {
     supervisorLinesLoaded,
     refresh,
   } = useProductionWorkersPageQueries({
-    filterMonth,
+    filterDateFrom,
+    filterDateTo,
     filterDate,
     filterLine,
     productionLines,
@@ -488,7 +488,7 @@ export const ProductionWorkers: React.FC = () => {
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'عمال الإنتاج');
     const buf = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
-    saveAs(new Blob([buf]), `production_workers_${filterMonth}.xlsx`);
+    saveAs(new Blob([buf]), `production_workers_${filterDateFrom}_${filterDateTo}.xlsx`);
   };
 
   const statPlaceholder = statsLoading ? '…' : '0';
@@ -536,15 +536,6 @@ export const ProductionWorkers: React.FC = () => {
   const columns: TableColumn<WorkerRow>[] = [
     { header: 'العامل', render: (row) => row.name },
     { header: 'الكود', render: (row) => row.code },
-    {
-      header: 'الموظف',
-      render: (row) => {
-        if (!row.employeeId) {
-          return <Badge variant="warning">يدوي</Badge>;
-        }
-        return employeeNameById.get(row.employeeId) ?? '—';
-      },
-    },
     {
       header: 'الخطوط',
       render: (row) => row.assignedLineIds.map(getLineName).join('، ') || '—',
@@ -759,12 +750,14 @@ export const ProductionWorkers: React.FC = () => {
           if (key === 'perf') setFilterPerformance(value as typeof filterPerformance);
         }}
         advancedFilters={[
-          { key: 'month', label: 'الشهر', placeholder: 'الشهر', type: 'date', options: [] },
+          { key: 'dateFrom', label: 'من تاريخ', placeholder: '', type: 'date', options: [], width: 'w-[150px]' },
+          { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', type: 'date', options: [], width: 'w-[150px]' },
           { key: 'date', label: 'اليوم', placeholder: 'اليوم', type: 'date', options: [] },
         ]}
-        advancedFilterValues={{ month: filterMonth, date: filterDate }}
+        advancedFilterValues={{ dateFrom: filterDateFrom, dateTo: filterDateTo, date: filterDate }}
         onAdvancedFilterChange={(key, value) => {
-          if (key === 'month') setFilterMonth(value.slice(0, 7));
+          if (key === 'dateFrom') setFilterDateFrom(value);
+          if (key === 'dateTo') setFilterDateTo(value);
           if (key === 'date') setFilterDate(value);
         }}
         extra={(

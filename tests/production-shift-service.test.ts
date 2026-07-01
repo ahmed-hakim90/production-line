@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   buildShiftClosePayload,
+  findOpenGeneralShifts,
   findOpenProductionShift,
   mapLineAssignmentsToShiftWorkers,
 } from '../modules/production/utils/productionShiftLifecycle.ts';
@@ -64,6 +65,21 @@ assert.equal(
 assert.equal(
   findOpenProductionShift([openReport], { lineId: 'line-1', planId: 'other-plan' }),
   null,
+);
+
+const generalOpenReport = {
+  ...openReport,
+  id: 'shift-general-1',
+  shiftStartContext: 'general' as const,
+  productionPlanId: undefined,
+};
+
+assert.deepEqual(
+  findOpenGeneralShifts([generalOpenReport, openReport], {
+    employeeId: 'sup-1',
+    lineIds: ['line-1', 'line-2'],
+  }).map((row) => row.id),
+  ['shift-general-1'],
 );
 
 assert.deepEqual(

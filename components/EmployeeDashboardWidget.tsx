@@ -61,6 +61,7 @@ import {
   shareProductionReportCardToWhatsApp,
 } from '@/modules/production/utils/productionReportShare';
 import {
+  findOpenGeneralShifts,
   findOpenProductionShift,
   mapLineAssignmentsToShiftWorkers,
 } from '@/modules/production/utils/productionShiftLifecycle';
@@ -164,6 +165,17 @@ const formatShiftTime = (value?: string): string => {
   return date.toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' });
 };
 
+const toDatetimeLocalValue = (date: Date): string => {
+  const pad = (value: number) => String(value).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+};
+
+const datetimeLocalToIso = (value: string): string | undefined => {
+  if (!value) return undefined;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? undefined : date.toISOString();
+};
+
 type ShiftPanelContext =
   | { type: 'plan'; plan: ProductionPlan; label: string }
   | { type: 'general'; label: string };
@@ -200,39 +212,83 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   updateReport,
 }) => {
   const fixedPlan = context.type === 'plan' ? context.plan : null;
+  const isGeneralContext = context.type === 'general';
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
   const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
   const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
-  const [selectedLineId, setSelectedLineId] = useState('');
-  const [selectedProductId, setSelectedProductId] = useState('');
+  const [startLineId, setStartLineId] = useState('');
+  const [startProductId, setStartProductId] = useState('');
   const [workers, setWorkers] = useState<ProductionShiftWorkerSnapshot[]>([]);
   const [loadingWorkers, setLoadingWorkers] = useState(false);
   const [saving, setSaving] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [startDialogOpen, setStartDialogOpen] = useState(false);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  const [activeCloseShiftId, setActiveCloseShiftId] = useState<string | null>(null);
   const [startStep, setStartStep] = useState(0);
   const [closeQuantity, setCloseQuantity] = useState('');
   const [closeNotes, setCloseNotes] = useState('');
+  const [closeAt, setCloseAt] = useState('');
   const [closedReport, setClosedReport] = useState<ProductionReport | null>(null);
   const [shareCardRow, setShareCardRow] = useState<ReportPrintRow | null>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
 
-  const lineId = fixedPlan?.lineId || selectedLineId;
-  const productId = fixedPlan?.productId || selectedProductId;
+  const workerLineId = fixedPlan?.lineId || startLineId;
+  const startProductSelectionId = fixedPlan?.productId || startProductId;
   const presentCount = workers.filter((worker) => worker.isPresent !== false).length;
-  const effectiveOpenShift = useMemo(
-    () => openShift || findOpenProductionShift(reports, { lineId, productId }),
-    [openShift, reports, lineId, productId],
+
+  const assignedLineIdSet = useMemo(
+    () => new Set(assignedLines.map((line) => String(line.id || '').trim()).filter(Boolean)),
+    [assignedLines],
   );
-  const closeFlowReport = closedReport || effectiveOpenShift;
+
+  const openGeneralShifts = useMemo(
+    () => (
+      isGeneralContext
+        ? findOpenGeneralShifts(reports, { employeeId, lineIds: assignedLineIdSet })
+        : []
+    ),
+    [assignedLineIdSet, employeeId, isGeneralContext, reports],
+  );
+
+  const planOpenShift = useMemo(
+    () => (
+      fixedPlan
+        ? openShift || findOpenProductionShift(reports, {
+          lineId: fixedPlan.lineId,
+          planId: fixedPlan.id,
+          productId: fixedPlan.productId,
+        })
+        : null
+    ),
+    [fixedPlan, openShift, reports],
+  );
+
+  const activeCloseShift = useMemo(
+    () => reports.find((report) => report.id === activeCloseShiftId) ?? null,
+    [activeCloseShiftId, reports],
+  );
+
+  const closeFlowReport = closedReport || activeCloseShift;
   const closeSucceeded = Boolean(closedReport);
-  const displayLineId = closeFlowReport?.lineId || lineId;
-  const displayProductId = closeFlowReport?.productId || productId;
-  const lineName = lines.find((line) => line.id === displayLineId)?.name ?? '—';
-  const productName = products.find((product) => product.id === displayProductId)?.name ?? '—';
+
+  const getLineName = (id?: string) => lines.find((line) => line.id === id)?.name ?? '—';
+  const getProductName = (id?: string) => products.find((product) => product.id === id)?.name ?? '—';
+  const closeLineName = getLineName(closeFlowReport?.lineId);
+  const closeProductName = getProductName(closeFlowReport?.productId);
+  const startLineName = getLineName(workerLineId);
+  const startProductName = getProductName(startProductSelectionId);
+
+  const linesAvailableForStart = useMemo(
+    () => assignedLines.filter((line) => (
+      !openGeneralShifts.some((shift) => shift.lineId === line.id)
+    )),
+    [assignedLines, openGeneralShifts],
+  );
+
+  const showStartSection = isGeneralContext || !planOpenShift;
   const startSteps = ['السياق', 'حضور العمال', 'تأكيد البدء'];
   const reportLookups = useMemo(() => ({
     getLineName: (id: string) => lines.find((line) => line.id === id)?.name ?? '—',
@@ -263,14 +319,14 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   ]);
 
   useEffect(() => {
-    if (!lineId) {
+    if (!workerLineId) {
       setWorkers([]);
       return;
     }
 
     let cancelled = false;
     setLoadingWorkers(true);
-    lineAssignmentService.getByLineAndDate(lineId, today)
+    lineAssignmentService.getByLineAndDate(workerLineId, today)
       .then((rows) => {
         if (!cancelled) setWorkers(mapLineAssignmentsToShiftWorkers(rows));
       })
@@ -285,7 +341,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
       });
 
     return () => { cancelled = true; };
-  }, [lineId, today]);
+  }, [workerLineId, today]);
 
   const updateWorker = (employeeId: string, patch: Partial<ProductionShiftWorkerSnapshot>) => {
     setWorkers((current) => current.map((worker) => (
@@ -296,8 +352,12 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   };
 
   const handleStart = async () => {
-    if (!lineId || !productId) {
+    if (!workerLineId || !startProductSelectionId) {
       showAppToast('error', 'اختر الخط والمنتج قبل بدء الوردية.');
+      return;
+    }
+    if (findOpenProductionShift(reports, { lineId: workerLineId })) {
+      showAppToast('error', 'يوجد وردية مفتوحة على هذا الخط. تابعها أو أغلقها أولاً.');
       return;
     }
     if (workers.length === 0) {
@@ -309,8 +369,8 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     try {
       const id = await productionShiftService.startShift({
         employeeId,
-        lineId,
-        productId,
+        lineId: workerLineId,
+        productId: startProductSelectionId,
         date: today,
         context: context.type,
         planId: fixedPlan?.id,
@@ -324,6 +384,8 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
       showAppToast('success', 'تم بدء الوردية وتسجيل وقت البداية تلقائياً.');
       setStartDialogOpen(false);
       setStartStep(0);
+      setStartLineId('');
+      setStartProductId('');
       await onStarted();
     } catch (error) {
       showAppToast('error', (error as Error).message || 'تعذر بدء الوردية.');
@@ -333,22 +395,28 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   };
 
   const handleClose = async () => {
-    if (!effectiveOpenShift?.id) return;
+    if (!activeCloseShift?.id) return;
     const produced = Number(closeQuantity || 0);
     if (produced <= 0) {
       showAppToast('error', 'أدخل كمية الإنتاج الفعلية قبل إغلاق الوردية.');
       return;
     }
+    const closedAtIso = datetimeLocalToIso(closeAt);
+    if (!closedAtIso) {
+      showAppToast('error', 'أدخل وقت إغلاق صالح للوردية.');
+      return;
+    }
 
     setSaving(true);
     try {
-      const closePayload = productionShiftService.buildClosePayload(effectiveOpenShift, {
+      const closePayload = productionShiftService.buildClosePayload(activeCloseShift, {
         quantityProduced: produced,
         notes: closeNotes,
         closedByUid: uid,
+        closedAtIso,
       });
-      await updateReport(effectiveOpenShift.id, closePayload);
-      setClosedReport({ ...effectiveOpenShift, ...closePayload, id: effectiveOpenShift.id });
+      await updateReport(activeCloseShift.id, closePayload);
+      setClosedReport({ ...activeCloseShift, ...closePayload, id: activeCloseShift.id });
       showAppToast('success', 'تم إغلاق الوردية وحفظ الإنتاج الفعلي.');
       setCloseQuantity('');
       setCloseNotes('');
@@ -396,7 +464,19 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
 
   const openStartDialog = () => {
     setStartStep(0);
+    setStartLineId('');
+    setStartProductId('');
     setStartDialogOpen(true);
+  };
+
+  const openCloseDialog = (shift: ProductionReport) => {
+    if (!shift.id) return;
+    setActiveCloseShiftId(shift.id);
+    setClosedReport(null);
+    setCloseQuantity('');
+    setCloseNotes('');
+    setCloseAt(toDatetimeLocalValue(new Date()));
+    setCloseDialogOpen(true);
   };
 
   const handleCloseDialogOpenChange = (open: boolean) => {
@@ -405,6 +485,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     if (!open) {
       setClosedReport(null);
       setShareCardRow(null);
+      setActiveCloseShiftId(null);
     }
   };
 
@@ -418,7 +499,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
         {loadingWorkers && <Loader2 size={16} className="animate-spin text-slate-400" />}
       </div>
 
-      {!lineId ? (
+      {!workerLineId ? (
         <p className="text-xs text-[var(--color-text-muted)] bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-base)] p-3">
           اختر الخط أولاً لتحميل عمال اليوم.
         </p>
@@ -514,22 +595,22 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-white p-3">
                     <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{lineName}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{startLineName}</p>
                   </div>
                   <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-white p-3">
                     <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
-                    <p className="text-sm font-bold text-[var(--color-text)]">{productName}</p>
+                    <p className="text-sm font-bold text-[var(--color-text)]">{startProductName}</p>
                   </div>
                 </div>
               ) : (
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <select className="erp-input" value={selectedLineId} onChange={(event) => setSelectedLineId(event.target.value)}>
+                  <select className="erp-input" value={startLineId} onChange={(event) => setStartLineId(event.target.value)}>
                     <option value="">اختر الخط</option>
-                    {assignedLines.map((line) => (
+                    {linesAvailableForStart.map((line) => (
                       <option key={line.id} value={line.id}>{line.name}</option>
                     ))}
                   </select>
-                  <select className="erp-input" value={selectedProductId} onChange={(event) => setSelectedProductId(event.target.value)}>
+                  <select className="erp-input" value={startProductId} onChange={(event) => setStartProductId(event.target.value)}>
                     <option value="">اختر المنتج</option>
                     {products.map((product) => (
                       <option key={product.id} value={product.id}>{product.name}</option>
@@ -547,11 +628,11 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
-                  <p className="text-sm font-bold text-[var(--color-text)]">{lineName}</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{startLineName}</p>
                 </div>
                 <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
-                  <p className="text-sm font-bold text-[var(--color-text)]">{productName}</p>
+                  <p className="text-sm font-bold text-[var(--color-text)]">{startProductName}</p>
                 </div>
                 <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
                   <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">حضور العمال</p>
@@ -588,7 +669,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
             <button
               type="button"
               onClick={() => setStartStep((step) => Math.min(step + 1, 2))}
-              disabled={saving || loadingWorkers || !lineId || !productId || (startStep === 1 && workers.length === 0)}
+              disabled={saving || loadingWorkers || !workerLineId || !startProductSelectionId || (startStep === 1 && workers.length === 0)}
               className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
             >
               التالي
@@ -597,7 +678,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
             <button
               type="button"
               onClick={handleStart}
-              disabled={saving || loadingWorkers || !lineId || !productId || workers.length === 0}
+              disabled={saving || loadingWorkers || !workerLineId || !startProductSelectionId || workers.length === 0}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
             >
               {saving ? <Loader2 size={16} className="animate-spin" /> : <PlayCircle size={16} />}
@@ -609,164 +690,198 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     </Dialog>
   );
 
-  if (closeFlowReport) {
+  const renderOpenShiftCard = (shift: ProductionReport) => {
+    const cardLineName = getLineName(shift.lineId);
+    const cardProductName = getProductName(shift.productId);
     return (
-      <div className="mt-5 rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-900/10 dark:border-emerald-900/30 p-4">
+      <div
+        key={shift.id}
+        className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/70 dark:bg-emerald-900/10 dark:border-emerald-900/30 p-4"
+      >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
           <div>
             <div className="flex items-center gap-2 text-emerald-700 dark:text-emerald-300 font-extrabold">
               <SquareCheckBig size={18} />
-              <span>{closeSucceeded ? 'تم إغلاق الوردية' : 'وردية مفتوحة'}</span>
+              <span>وردية مفتوحة</span>
             </div>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              بدأت الساعة {formatShiftTime(closeFlowReport.shiftStartedAt)} على خط {lineName} لمنتج {productName}
+              بدأت الساعة {formatShiftTime(shift.shiftStartedAt)} على خط {cardLineName} لمنتج {cardProductName}
             </p>
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-            <Badge variant="success">{closeSucceeded ? 'تم الحفظ' : 'مستمرة'}</Badge>
+            <Badge variant="success">مستمرة</Badge>
             <button
               type="button"
-              onClick={() => setCloseDialogOpen(true)}
+              onClick={() => openCloseDialog(shift)}
               className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold"
             >
-              {closeSucceeded ? <Share2 size={16} /> : <Save size={16} />}
-              {closeSucceeded ? 'مشاركة التقرير' : 'متابعة / إغلاق'}
+              <Save size={16} />
+              متابعة / إغلاق
             </button>
           </div>
         </div>
-        <Dialog open={closeDialogOpen} onOpenChange={handleCloseDialogOpenChange}>
-          <DialogContent className="max-w-2xl w-[min(100vw-1.5rem,42rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0" dir="rtl">
-            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
-              <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
-                <SquareCheckBig size={20} className="text-emerald-600" />
-              </div>
-              <div className="pl-8">
-                <DialogTitle className="text-lg font-bold text-[var(--color-text)]">
-                  {closeSucceeded ? 'تم حفظ تقرير الإنتاج' : 'إغلاق الوردية'}
-                </DialogTitle>
-                <p className="text-xs text-[var(--color-text-muted)] font-medium">
-                  {closeSucceeded
-                    ? 'يمكنك مشاركة التقرير بنفس قالب تقارير الإنتاج.'
-                    : 'أدخل الإنتاج الفعلي وأي ملاحظات قبل حفظ الإغلاق.'}
-                </p>
-              </div>
-            </div>
-
-            <div className="p-6 space-y-5">
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
-                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">وقت البدء</p>
-                  <p className="text-sm font-bold text-[var(--color-text)]">{formatShiftTime(closeFlowReport.shiftStartedAt)}</p>
-                </div>
-                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
-                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
-                  <p className="text-sm font-bold text-[var(--color-text)]">{lineName}</p>
-                </div>
-                <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
-                  <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
-                  <p className="text-sm font-bold text-[var(--color-text)]">{productName}</p>
-                </div>
-              </div>
-
-              {closeSucceeded ? (
-                <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 p-4">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-extrabold text-emerald-700">تم تسجيل الإنتاج بنجاح</p>
-                      <p className="text-xs text-emerald-700/80 mt-1">
-                        الكمية: {formatNumber(closeFlowReport.quantityProduced || 0)} وحدة
-                      </p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => void handleShareClosedReport()}
-                      disabled={sharing}
-                      className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
-                    >
-                      {sharing ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
-                      مشاركة واتساب
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                  <input
-                    type="number"
-                    min="0"
-                    value={closeQuantity}
-                    onChange={(event) => setCloseQuantity(event.target.value)}
-                    placeholder="الإنتاج الفعلي"
-                    className="erp-input"
-                  />
-                  <input
-                    value={closeNotes}
-                    onChange={(event) => setCloseNotes(event.target.value)}
-                    placeholder="ملاحظات وتفاصيل الإغلاق"
-                    className="erp-input sm:col-span-2"
-                  />
-                </div>
-              )}
-            </div>
-
-            <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
-              <button
-                type="button"
-                onClick={() => handleCloseDialogOpenChange(false)}
-                disabled={saving || sharing}
-                className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text-muted)] disabled:opacity-60"
-              >
-                {closeSucceeded ? 'إغلاق' : 'إلغاء'}
-              </button>
-              {!closeSucceeded && (
-                <button
-                  type="button"
-                  onClick={handleClose}
-                  disabled={saving}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
-                >
-                  {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-                  إغلاق الوردية
-                </button>
-              )}
-            </DialogFooter>
-          </DialogContent>
-        </Dialog>
-        <ProductionReportShareCardTarget
-          row={shareCardRow}
-          targetRef={shareCardRef}
-          printSettings={printTemplate}
-        />
       </div>
     );
-  }
+  };
 
-  return (
-    <div className="mt-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-4">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2 font-extrabold text-[var(--color-text)]">
-            <PlayCircle size={18} className="text-primary" />
-            <span>{context.label}</span>
+  const closeShiftDialog = closeFlowReport ? (
+    <Dialog open={closeDialogOpen} onOpenChange={handleCloseDialogOpenChange}>
+      <DialogContent className="max-w-2xl w-[min(100vw-1.5rem,42rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0" dir="rtl">
+        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
+          <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
+            <SquareCheckBig size={20} className="text-emerald-600" />
           </div>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            {fixedPlan
-              ? `سيتم استخدام خط ${lineName} ومنتج ${productName} من الخطة مباشرة.`
-              : 'اختر خطاً من الخطوط المرتبطة بك ثم المنتج قبل تسجيل العمال.'}
-          </p>
+          <div className="pl-8">
+            <DialogTitle className="text-lg font-bold text-[var(--color-text)]">
+              {closeSucceeded ? 'تم حفظ تقرير الإنتاج' : 'إغلاق الوردية'}
+            </DialogTitle>
+            <p className="text-xs text-[var(--color-text-muted)] font-medium">
+              {closeSucceeded
+                ? 'يمكنك مشاركة التقرير بنفس قالب تقارير الإنتاج.'
+                : 'أدخل الإنتاج الفعلي ووقت الإغلاق وأي ملاحظات قبل حفظ الإغلاق.'}
+            </p>
+          </div>
         </div>
-        <div className="flex flex-col sm:flex-row sm:items-center gap-2">
-          <Badge variant="info">جاهزة للبدء</Badge>
+
+        <div className="p-6 space-y-5">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">وقت البدء</p>
+              <p className="text-sm font-bold text-[var(--color-text)]">{formatShiftTime(closeFlowReport.shiftStartedAt)}</p>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">خط الإنتاج</p>
+              <p className="text-sm font-bold text-[var(--color-text)]">{closeLineName}</p>
+            </div>
+            <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] p-3">
+              <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">المنتج</p>
+              <p className="text-sm font-bold text-[var(--color-text)]">{closeProductName}</p>
+            </div>
+          </div>
+
+          {closeSucceeded ? (
+            <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50 p-4 space-y-3">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <p className="text-sm font-extrabold text-emerald-700">تم تسجيل الإنتاج بنجاح</p>
+                  <p className="text-xs text-emerald-700/80 mt-1">
+                    الكمية: {formatNumber(closeFlowReport.quantityProduced || 0)} وحدة
+                  </p>
+                  <p className="text-xs text-emerald-700/80 mt-1">
+                    وقت الإغلاق: {formatShiftTime(closeFlowReport.shiftClosedAt)}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleShareClosedReport()}
+                  disabled={sharing}
+                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
+                >
+                  {sharing ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
+                  مشاركة واتساب
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">وقت الإغلاق</label>
+                <input
+                  type="datetime-local"
+                  value={closeAt}
+                  onChange={(event) => setCloseAt(event.target.value)}
+                  className="erp-input"
+                />
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <input
+                  type="number"
+                  min="0"
+                  value={closeQuantity}
+                  onChange={(event) => setCloseQuantity(event.target.value)}
+                  placeholder="الإنتاج الفعلي"
+                  className="erp-input"
+                />
+                <input
+                  value={closeNotes}
+                  onChange={(event) => setCloseNotes(event.target.value)}
+                  placeholder="ملاحظات وتفاصيل الإغلاق"
+                  className="erp-input sm:col-span-2"
+                />
+              </div>
+            </div>
+          )}
+        </div>
+
+        <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
           <button
             type="button"
-            onClick={openStartDialog}
-            className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold"
+            onClick={() => handleCloseDialogOpenChange(false)}
+            disabled={saving || sharing}
+            className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text-muted)] disabled:opacity-60"
           >
-            <PlayCircle size={16} />
-            بدء الوردية
+            {closeSucceeded ? 'إغلاق' : 'إلغاء'}
           </button>
+          {!closeSucceeded && (
+            <button
+              type="button"
+              onClick={handleClose}
+              disabled={saving}
+              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
+            >
+              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
+              إغلاق الوردية
+            </button>
+          )}
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  ) : null;
+
+  return (
+    <div className="mt-5 space-y-3">
+      {isGeneralContext && openGeneralShifts.map(renderOpenShiftCard)}
+      {!isGeneralContext && planOpenShift && renderOpenShiftCard(planOpenShift)}
+
+      {showStartSection && (
+        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <div className="flex items-center gap-2 font-extrabold text-[var(--color-text)]">
+                <PlayCircle size={18} className="text-primary" />
+                <span>{context.label}</span>
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                {fixedPlan
+                  ? `سيتم استخدام خط ${startLineName} ومنتج ${startProductName} من الخطة مباشرة.`
+                  : isGeneralContext && openGeneralShifts.length > 0
+                    ? 'يمكنك بدء وردية جديدة على خط آخر غير المفتوح حالياً.'
+                    : 'اختر خطاً من الخطوط المرتبطة بك ثم المنتج قبل تسجيل العمال.'}
+              </p>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2">
+              <Badge variant="info">جاهزة للبدء</Badge>
+              <button
+                type="button"
+                onClick={openStartDialog}
+                disabled={isGeneralContext && linesAvailableForStart.length === 0}
+                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
+              >
+                <PlayCircle size={16} />
+                بدء الوردية
+              </button>
+            </div>
+          </div>
+          {startDialog}
         </div>
-      </div>
-      {startDialog}
+      )}
+
+      {closeShiftDialog}
+      <ProductionReportShareCardTarget
+        row={shareCardRow}
+        targetRef={shareCardRef}
+        printSettings={printTemplate}
+      />
     </div>
   );
 };
@@ -954,15 +1069,6 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
     [activePlan, todayReports],
   );
 
-  const generalOpenShift = useMemo(
-    () => todayReports.find((report) => (
-      report.employeeId === employeeId
-      && report.lifecycleStatus === 'open'
-      && report.shiftStartContext === 'general'
-    )) ?? null,
-    [employeeId, todayReports],
-  );
-
   const refreshTodayReports = useCallback(async () => {
     await ensureProductionReportsForRange(today, today, { force: true });
   }, [ensureProductionReportsForRange, today]);
@@ -1045,7 +1151,7 @@ export const EmployeeDashboardWidget: React.FC<Props> = ({ employeeId, employeeN
           products={_rawProducts}
           lines={_rawLines}
           assignedLines={assignedLines}
-          openShift={generalOpenShift}
+          openShift={null}
           reports={todayReports}
           onStarted={refreshTodayReports}
           onClosed={refreshTodayReports}
