@@ -2,9 +2,12 @@ import type {
   LineWorkerAssignment,
   LineWorkerLaborRole,
   ProductionReport,
+  ProductionReportWorkerOutput,
   ProductionShiftWorkerSnapshot,
 } from '@/types';
 import { resolveLineWorkerLaborRole } from './lineWorkerLaborRoles';
+import { computeAchievementPercent } from '../selectors/workerTargetSelector';
+import { summarizeWorkerPresenceDays } from './workerPresence';
 
 export type ShiftStartContext = 'plan' | 'general';
 
@@ -116,6 +119,10 @@ export function buildShiftClosePayload(
     closedByUid?: string | null;
     closedAtIso?: string;
     workHours?: number;
+    reportDate?: string;
+    assemblyModeSnapshot?: ProductionReport['assemblyModeSnapshot'];
+    workerTargetsApplied?: boolean;
+    workerOutputs?: ProductionReportWorkerOutput[];
   },
 ): Partial<ProductionReport> {
   const closedAtIso = input.closedAtIso || new Date().toISOString();
@@ -125,8 +132,20 @@ export function buildShiftClosePayload(
     ? Number(((closedMs - startedMs) / 3_600_000).toFixed(2))
     : 0;
   const workers = shift.shiftWorkers || [];
+  const appliedWorkerOutputs = input.workerTargetsApplied
+    ? (input.workerOutputs || []).map((row) => {
+      const isPresent = row.isPresent ?? true;
+      const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+      return {
+        ...row,
+        isPresent,
+        outputQty,
+        achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+      };
+    })
+    : [];
 
-  return {
+  const basePayload: Partial<ProductionReport> = {
     lifecycleStatus: 'closed',
     shiftClosedAt: closedAtIso,
     shiftClosedByUid: input.closedByUid || undefined,
@@ -134,5 +153,25 @@ export function buildShiftClosePayload(
     workHours: Number(input.workHours || 0) > 0 ? Number(input.workHours) : derivedHours,
     notes: String(input.notes || '').trim(),
     ...countPresentShiftWorkers(workers),
+  };
+
+  if (!input.workerTargetsApplied || appliedWorkerOutputs.length === 0) {
+    return basePayload;
+  }
+
+  const workerOutputPresence = summarizeWorkerPresenceDays(appliedWorkerOutputs.map((row) => ({
+    workerId: row.workerId,
+    date: input.reportDate || '',
+    isPresent: row.isPresent,
+  })));
+
+  return {
+    ...basePayload,
+    assemblyModeSnapshot: input.assemblyModeSnapshot,
+    workerTargetsApplied: true,
+    workerTargetSource: 'line_product',
+    workerOutputs: appliedWorkerOutputs,
+    presentAssignments: workerOutputPresence.presentDays,
+    absentAssignments: workerOutputPresence.absentDays,
   };
 }

@@ -44,7 +44,15 @@ import {
   countUniqueDays,
   getTodayDateString,
 } from '../utils/calculations';
-import type { FirestoreProduct, FirestoreProductionLine, ProductionReport, ProductionPlan, ProductionShiftWorkerSnapshot } from '../types';
+import type {
+  FirestoreProduct,
+  FirestoreProductionLine,
+  ProductionReport,
+  ProductionPlan,
+  ProductionReportWorkerOutput,
+  ProductionShiftWorkerSnapshot,
+} from '../types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../types';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import { supervisorLineAssignmentService } from '@/modules/production/services/supervisorLineAssignmentService';
 import { lineAssignmentService } from '@/modules/production/services/lineAssignmentService';
@@ -70,10 +78,12 @@ import {
   LINE_WORKER_LABOR_ROLE_LABELS,
   resolveLineWorkerLaborRole,
 } from '@/modules/production/utils/lineWorkerLaborRoles';
+import { ReportWorkerOutputsSection } from '@/modules/production/components/ReportWorkerOutputsSection';
 import {
-  getShareResultFeedbackMessage,
-  type ShareResult,
-} from '@/utils/reportExport';
+  computeAchievementPercent,
+  getProductAssemblyMode,
+  hasLineSpecificWorkerTarget,
+} from '@/modules/production/selectors/workerTargetSelector';
 
 // ─── Period Filter ───────────────────────────────────────────────────────────
 
@@ -218,6 +228,24 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
   const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
   const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
+  const rawWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
+  const workerSettings = useMemo(() => ({
+    performance: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.performance,
+      ...(rawWorkerSettings?.performance ?? {}),
+    },
+    bonus: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.bonus,
+      ...(rawWorkerSettings?.bonus ?? {}),
+    },
+    supervisorBonus: {
+      ...DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus,
+      ...(rawWorkerSettings?.supervisorBonus ?? {}),
+      tiers: rawWorkerSettings?.supervisorBonus?.tiers?.length
+        ? rawWorkerSettings.supervisorBonus.tiers
+        : DEFAULT_PRODUCTION_WORKER_SETTINGS.supervisorBonus.tiers,
+    },
+  }), [rawWorkerSettings]);
   const [startLineId, setStartLineId] = useState('');
   const [startProductId, setStartProductId] = useState('');
   const [workers, setWorkers] = useState<ProductionShiftWorkerSnapshot[]>([]);
@@ -231,6 +259,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   const [closeQuantity, setCloseQuantity] = useState('');
   const [closeNotes, setCloseNotes] = useState('');
   const [closeAt, setCloseAt] = useState('');
+  const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
   const [closedReport, setClosedReport] = useState<ProductionReport | null>(null);
   const [shareCardRow, setShareCardRow] = useState<ReportPrintRow | null>(null);
   const shareCardRef = useRef<HTMLDivElement>(null);
@@ -278,6 +307,27 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   const getProductName = (id?: string) => products.find((product) => product.id === id)?.name ?? '—';
   const closeLineName = getLineName(closeFlowReport?.lineId);
   const closeProductName = getProductName(closeFlowReport?.productId);
+  const closeLineId = closeFlowReport?.lineId || '';
+  const closeProductId = closeFlowReport?.productId || '';
+  const closeReportDate = closeFlowReport?.date || today;
+  const closeSelectedProduct = useMemo(
+    () => products.find((product) => product.id === closeProductId) ?? null,
+    [closeProductId, products],
+  );
+  const closeAssemblyMode = getProductAssemblyMode(closeSelectedProduct);
+  const closeWorkerOutputsEnabled = Boolean(closeLineId && closeProductId)
+    && closeAssemblyMode === 'individual'
+    && hasLineSpecificWorkerTarget(lineProductConfigs, closeLineId, closeProductId);
+  const closeWorkerOutputEntryEnabled = closeWorkerOutputsEnabled
+    && workerSettings.performance.productionWorkerOutputEnabled;
+  const closeWorkerOutputTotal = useMemo(
+    () => workerOutputs
+      .filter((row) => row.productId === closeProductId && row.lineId === closeLineId)
+      .reduce((sum, row) => (
+        row.isPresent === false ? sum : sum + Number(row.outputQty || 0)
+      ), 0),
+    [workerOutputs, closeProductId, closeLineId],
+  );
   const startLineName = getLineName(workerLineId);
   const startProductName = getProductName(startProductSelectionId);
 
@@ -407,6 +457,19 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
       return;
     }
 
+    const scopedWorkerOutputs = workerOutputs.filter(
+      (row) => row.productId === activeCloseShift.productId && row.lineId === activeCloseShift.lineId,
+    );
+    const hasWorkerOutputRows = closeWorkerOutputEntryEnabled && scopedWorkerOutputs.length > 0;
+    if (
+      hasWorkerOutputRows
+      && workerSettings.performance.productionWorkerOutputMustMatchReportQty
+      && closeWorkerOutputTotal !== produced
+    ) {
+      showAppToast('error', 'مجموع إنتاج العمال يجب أن يطابق كمية التقرير.');
+      return;
+    }
+
     setSaving(true);
     try {
       const closePayload = productionShiftService.buildClosePayload(activeCloseShift, {
@@ -414,12 +477,17 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
         notes: closeNotes,
         closedByUid: uid,
         closedAtIso,
+        reportDate: activeCloseShift.date || today,
+        assemblyModeSnapshot: closeAssemblyMode,
+        workerTargetsApplied: hasWorkerOutputRows,
+        workerOutputs: hasWorkerOutputRows ? scopedWorkerOutputs : undefined,
       });
       await updateReport(activeCloseShift.id, closePayload);
       setClosedReport({ ...activeCloseShift, ...closePayload, id: activeCloseShift.id });
       showAppToast('success', 'تم إغلاق الوردية وحفظ الإنتاج الفعلي.');
       setCloseQuantity('');
       setCloseNotes('');
+      setWorkerOutputs([]);
       await onClosed();
     } catch (error) {
       showAppToast('error', (error as Error).message || 'تعذر إغلاق الوردية.');
@@ -475,6 +543,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     setClosedReport(null);
     setCloseQuantity('');
     setCloseNotes('');
+    setWorkerOutputs(shift.workerOutputs ?? []);
     setCloseAt(toDatetimeLocalValue(new Date()));
     setCloseDialogOpen(true);
   };
@@ -486,6 +555,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
       setClosedReport(null);
       setShareCardRow(null);
       setActiveCloseShiftId(null);
+      setWorkerOutputs([]);
     }
   };
 
@@ -726,7 +796,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
 
   const closeShiftDialog = closeFlowReport ? (
     <Dialog open={closeDialogOpen} onOpenChange={handleCloseDialogOpenChange}>
-      <DialogContent className="max-w-2xl w-[min(100vw-1.5rem,42rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0" dir="rtl">
+      <DialogContent className={`${closeWorkerOutputEntryEnabled ? 'max-w-3xl' : 'max-w-2xl'} w-[min(100vw-1.5rem,48rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0 max-h-[90vh] overflow-y-auto`} dir="rtl">
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
           <div className="w-10 h-10 bg-emerald-50 rounded-[var(--border-radius-base)] flex items-center justify-center">
             <SquareCheckBig size={20} className="text-emerald-600" />
@@ -809,6 +879,22 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                   className="erp-input sm:col-span-2"
                 />
               </div>
+              {closeWorkerOutputEntryEnabled && closeLineId && closeProductId ? (
+                <ReportWorkerOutputsSection
+                  lineId={closeLineId}
+                  productId={closeProductId}
+                  date={closeReportDate}
+                  assignmentDate={closeReportDate}
+                  lineName={closeLineName}
+                  productName={closeProductName}
+                  products={products}
+                  reportQty={Number(closeQuantity || 0)}
+                  settings={workerSettings}
+                  value={workerOutputs}
+                  onChange={setWorkerOutputs}
+                  disabled={saving}
+                />
+              ) : null}
             </div>
           )}
         </div>

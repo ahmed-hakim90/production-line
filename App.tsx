@@ -91,6 +91,20 @@ const MODAL_WORKSPACE_CLEARED_FLAG = 'erp_modal_workspace_cleared_v1';
 const DYNAMIC_IMPORT_RELOAD_KEY = 'erp_dynamic_import_recovery_v1';
 
 const BOOTSTRAP_SPLASH_SUBTITLE = 'جاري تحميل النظام...';
+const APP_BOOTSTRAP_TIMEOUT_MS = 15_000;
+const TENANT_RESOLVE_TIMEOUT_MS = 10_000;
+
+const withTimeout = async <T,>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  message: string,
+): Promise<T> =>
+  Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    }),
+  ]);
 
 const isDynamicImportLoadFailure = (reason: unknown): boolean => {
   const msg =
@@ -562,7 +576,11 @@ const TenantLayout: React.FC = () => {
     setForbiddenRedirectPath(null);
     void (async () => {
       try {
-        const r = await tenantService.resolveSlug(tenantSlug);
+        const r = await withTimeout(
+          tenantService.resolveSlug(tenantSlug),
+          TENANT_RESOLVE_TIMEOUT_MS,
+          'tenant slug resolve timeout',
+        );
         if (!alive || resolvedSlugRef.current !== tenantSlug) return;
         applySlugResolutionGate(r, { setGate, setTenantResolve });
       } catch {
@@ -595,7 +613,11 @@ const TenantLayout: React.FC = () => {
       const resolveAuthenticatedTenantFallback = async (): Promise<boolean> => {
         setCurrentTenant(loggedInTenantId);
         try {
-          const ownTenant = await tenantService.getById(loggedInTenantId);
+          const ownTenant = await withTimeout(
+            tenantService.getById(loggedInTenantId),
+            TENANT_RESOLVE_TIMEOUT_MS,
+            'tenant lookup timeout',
+          );
           if (!alive) return true;
           const ownSlug = String(ownTenant?.slug || '').trim();
           if (ownSlug && tenantSlug && ownSlug !== tenantSlug) {
@@ -634,7 +656,11 @@ const TenantLayout: React.FC = () => {
       };
 
       try {
-        const r = await tenantService.resolveSlug(tenantSlug);
+        const r = await withTimeout(
+          tenantService.resolveSlug(tenantSlug),
+          TENANT_RESOLVE_TIMEOUT_MS,
+          'tenant slug resolve timeout',
+        );
         if (!alive) return;
         if (!r.exists || !r.tenantId) {
           if (await resolveAuthenticatedTenantFallback()) return;
@@ -646,7 +672,11 @@ const TenantLayout: React.FC = () => {
         const isSuperAdmin = Boolean(userProfile?.isSuperAdmin);
         if (!isSuperAdmin && loggedInTenantId !== r.tenantId) {
           try {
-            const ownTenant = await tenantService.getById(loggedInTenantId);
+            const ownTenant = await withTimeout(
+              tenantService.getById(loggedInTenantId),
+              TENANT_RESOLVE_TIMEOUT_MS,
+              'tenant lookup timeout',
+            );
             const ownSlug = String(ownTenant?.slug || '').trim();
             if (ownSlug) {
               setForbiddenRequiresLogout(false);
@@ -851,11 +881,12 @@ const App: React.FC = () => {
         await Promise.race([
           initializeApp(),
           new Promise((_, reject) => {
-            window.setTimeout(() => reject(new Error('initializeApp timeout')), 15000);
+            window.setTimeout(() => reject(new Error('initializeApp timeout')), APP_BOOTSTRAP_TIMEOUT_MS);
           }),
         ]);
       } catch {
         useAppStore.setState({ loading: false });
+        useAuthStore.setState({ loading: false });
         return;
       }
       const state = useAppStore.getState();
