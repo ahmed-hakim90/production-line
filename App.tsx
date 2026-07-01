@@ -94,6 +94,15 @@ const BOOTSTRAP_SPLASH_SUBTITLE = 'جاري تحميل النظام...';
 const APP_BOOTSTRAP_TIMEOUT_MS = 15_000;
 const TENANT_RESOLVE_TIMEOUT_MS = 10_000;
 
+type BootPhase = 'auth' | 'tenant' | 'app-data' | 'ready' | 'error';
+
+type BootDecision = {
+  showSplash: boolean;
+  subtitle: string;
+  allowRoutes: boolean;
+  error?: string;
+};
+
 const withTimeout = async <T,>(
   promise: Promise<T>,
   timeoutMs: number,
@@ -105,6 +114,73 @@ const withTimeout = async <T,>(
       window.setTimeout(() => reject(new Error(message)), timeoutMs);
     }),
   ]);
+
+type TenantSlugResolution = Awaited<ReturnType<typeof tenantService.resolveSlug>>;
+
+const tenantResolveCache = new Map<string, Promise<TenantSlugResolution>>();
+const tenantResolveResultCache = new Map<string, TenantSlugResolution>();
+
+const normalizeTenantSlug = (slug: string): string => slug.trim().toLowerCase();
+
+const resolveTenantSlugOnce = (slug: string): Promise<TenantSlugResolution> => {
+  const normalized = normalizeTenantSlug(slug);
+  if (!normalized) return Promise.resolve({ exists: false });
+  const result = tenantResolveResultCache.get(normalized);
+  if (result) return Promise.resolve(result);
+  const cached = tenantResolveCache.get(normalized);
+  if (cached) return cached;
+  const promise = withTimeout(
+    tenantService.resolveSlug(normalized),
+    TENANT_RESOLVE_TIMEOUT_MS,
+    'tenant slug resolve timeout',
+  )
+    .then((resolution) => {
+      tenantResolveResultCache.set(normalized, resolution);
+      return resolution;
+    })
+    .catch((error) => {
+      tenantResolveCache.delete(normalized);
+      throw error;
+    });
+  tenantResolveCache.set(normalized, promise);
+  return promise;
+};
+
+const getCachedTenantSlugResolution = (slug: string): TenantSlugResolution | undefined =>
+  tenantResolveResultCache.get(normalizeTenantSlug(slug));
+
+const buildBootDecision = (phase: BootPhase, error?: string): BootDecision => {
+  if (phase === 'ready') {
+    return {
+      showSplash: false,
+      subtitle: '',
+      allowRoutes: true,
+      error,
+    };
+  }
+
+  const subtitleByPhase: Record<Exclude<BootPhase, 'ready'>, string> = {
+    auth: BOOTSTRAP_SPLASH_SUBTITLE,
+    tenant: 'جاري تحميل بيانات الشركة...',
+    'app-data': BOOTSTRAP_SPLASH_SUBTITLE,
+    error: error || 'تعذر تحميل النظام. جارٍ فتح التطبيق...',
+  };
+
+  return {
+    showSplash: true,
+    subtitle: subtitleByPhase[phase],
+    allowRoutes: false,
+    error,
+  };
+};
+
+const tenantSlugForInitialBootPath = (pathname: string): string | undefined => {
+  const slug = tenantSlugFromPathname(pathname);
+  if (slug) return slug;
+  return pathname === '/' || pathname === '/login' || pathname === '/setup' || pathname === '/pending'
+    ? DEFAULT_TENANT_SLUG
+    : undefined;
+};
 
 const isDynamicImportLoadFailure = (reason: unknown): boolean => {
   const msg =
@@ -300,7 +376,7 @@ const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApprov
   }
 
   if (loading) {
-    return <AppSplashScreen subtitle={BOOTSTRAP_SPLASH_SUBTITLE} />;
+    return <PageRouteFallback />;
   }
 
   if (!isAuthenticated) {
@@ -511,6 +587,28 @@ const defaultTenantResolve: TenantSlugResolveValue = {
   tenantStatus: '',
 };
 
+const tenantResolveValueFromResolution = (r?: TenantSlugResolution): TenantSlugResolveValue => {
+  if (!r || !r.exists || !r.tenantId) {
+    return {
+      pendingRegistration: false,
+      tenantStatus: r ? 'unknown' : '',
+    };
+  }
+
+  return {
+    pendingRegistration: Boolean(r.pendingRegistration),
+    tenantStatus: r.status || (r.pendingRegistration ? 'pending' : 'active'),
+  };
+};
+
+const tenantGateFromResolution = (r?: TenantSlugResolution): TenantGate => {
+  if (!r) return 'loading';
+  if (!r.exists || !r.tenantId) return 'ready';
+  if (r.status === 'suspended') return 'suspended';
+  if (r.status && r.status !== 'active' && !r.pendingRegistration) return 'inactive';
+  return 'ready';
+};
+
 const applySlugResolutionGate = (
   r: Awaited<ReturnType<typeof tenantService.resolveSlug>>,
   setters: {
@@ -558,8 +656,11 @@ const applySlugResolutionGate = (
 const TenantLayout: React.FC = () => {
   const { tenantSlug = '' } = useParams<{ tenantSlug: string }>();
   const location = useLocation();
-  const [gate, setGate] = useState<TenantGate>('loading');
-  const [tenantResolve, setTenantResolve] = useState<TenantSlugResolveValue>(defaultTenantResolve);
+  const cachedTenantResolution = getCachedTenantSlugResolution(tenantSlug);
+  const [gate, setGate] = useState<TenantGate>(() => tenantGateFromResolution(cachedTenantResolution));
+  const [tenantResolve, setTenantResolve] = useState<TenantSlugResolveValue>(() =>
+    cachedTenantResolution ? tenantResolveValueFromResolution(cachedTenantResolution) : defaultTenantResolve,
+  );
   const [forbiddenRequiresLogout, setForbiddenRequiresLogout] = useState(false);
   const [forbiddenRedirectPath, setForbiddenRedirectPath] = useState<string | null>(null);
   const { isAuthenticated, loading } = useAuthUiSlice();
@@ -570,17 +671,20 @@ const TenantLayout: React.FC = () => {
   useEffect(() => {
     let alive = true;
     resolvedSlugRef.current = tenantSlug;
-    setGate('loading');
-    setTenantResolve(defaultTenantResolve);
     setForbiddenRequiresLogout(false);
     setForbiddenRedirectPath(null);
+    const cached = getCachedTenantSlugResolution(tenantSlug);
+    if (cached) {
+      applySlugResolutionGate(cached, { setGate, setTenantResolve });
+      return () => {
+        alive = false;
+      };
+    }
+    setGate('loading');
+    setTenantResolve(defaultTenantResolve);
     void (async () => {
       try {
-        const r = await withTimeout(
-          tenantService.resolveSlug(tenantSlug),
-          TENANT_RESOLVE_TIMEOUT_MS,
-          'tenant slug resolve timeout',
-        );
+        const r = await resolveTenantSlugOnce(tenantSlug);
         if (!alive || resolvedSlugRef.current !== tenantSlug) return;
         applySlugResolutionGate(r, { setGate, setTenantResolve });
       } catch {
@@ -656,11 +760,7 @@ const TenantLayout: React.FC = () => {
       };
 
       try {
-        const r = await withTimeout(
-          tenantService.resolveSlug(tenantSlug),
-          TENANT_RESOLVE_TIMEOUT_MS,
-          'tenant slug resolve timeout',
-        );
+        const r = await resolveTenantSlugOnce(tenantSlug);
         if (!alive) return;
         if (!r.exists || !r.tenantId) {
           if (await resolveAuthenticatedTenantFallback()) return;
@@ -714,17 +814,13 @@ const TenantLayout: React.FC = () => {
   }, [gate, tenantSlug]);
 
   if (gate === 'loading') {
-    return (
-      <AppSplashScreen
-        subtitle={loading ? BOOTSTRAP_SPLASH_SUBTITLE : 'جاري تحميل بيانات الشركة...'}
-      />
-    );
+    return <PageRouteFallback />;
   }
 
   if (gate === 'missing') {
     const tenantLoginPath = `/t/${encodeURIComponent(tenantSlug)}/login`;
     if (loading) {
-      return <AppSplashScreen subtitle={BOOTSTRAP_SPLASH_SUBTITLE} />;
+      return <PageRouteFallback />;
     }
     if (!isAuthenticated && location.pathname !== tenantLoginPath) {
       return <Navigate to={tenantLoginPath} replace />;
@@ -824,7 +920,12 @@ const App: React.FC = () => {
   const userLanguage = useAppStore((s) => (s.userProfile?.uiPreferences?.language as SupportedLanguage | undefined));
   const activeSessionUidRef = useRef<string | null>(null);
   const cleanupSubsRef = useRef<(() => void) | null>(null);
-  const [authResolved, setAuthResolved] = useState(false);
+  const [bootPhase, setBootPhase] = useState<BootPhase>('auth');
+  const [bootError, setBootError] = useState<string | undefined>();
+  const bootDecision = useMemo(
+    () => buildBootDecision(bootPhase, bootError),
+    [bootPhase, bootError],
+  );
 
   useEffect(() => {
     useAuthStore.setState({
@@ -836,11 +937,11 @@ const App: React.FC = () => {
   }, [legacyIsAuthenticated, legacyIsPendingApproval, legacyLoading, legacyUid]);
 
   useEffect(() => {
-    if (!authResolved) return;
+    if (!bootDecision.allowRoutes) return;
     dismissHtmlSplash();
     const lang = userLanguage ?? 'ar';
     void setAppLanguage(lang);
-  }, [authResolved, userLanguage]);
+  }, [bootDecision.allowRoutes, userLanguage]);
 
   useEffect(() => {
     const clearSubscriptions = () => {
@@ -849,14 +950,18 @@ const App: React.FC = () => {
     };
     const resolveTimer = window.setTimeout(() => {
       // Safety fallback for local/dev if auth callback is delayed.
-      setAuthResolved(true);
+      setBootError('auth state timeout');
       useAppStore.setState({ loading: false });
+      useAuthStore.getState().syncFromLegacyStore();
+      setBootPhase('ready');
     }, 6000);
 
     const unsub = onAuthChange(async (user) => {
       window.clearTimeout(resolveTimer);
-      setAuthResolved(true);
+      setBootError(undefined);
+      const initialTenantSlug = tenantSlugForInitialBootPath(window.location.pathname);
       if (!user) {
+        setBootPhase(initialTenantSlug ? 'tenant' : 'ready');
         clearCachedAppSession();
         sessionTrackerService.stop('auth_logout');
         activeSessionUidRef.current = null;
@@ -867,28 +972,45 @@ const App: React.FC = () => {
           isAuthenticated: false,
           isPendingApproval: false,
         });
+        useAuthStore.getState().syncFromLegacyStore();
+        if (initialTenantSlug) {
+          await resolveTenantSlugOnce(initialTenantSlug).catch((error) => {
+            setBootError((error as Error).message || 'tenant slug resolve failed');
+          });
+        }
+        setBootPhase('ready');
         return;
       }
 
       // Skip duplicate bootstraps for same authenticated session.
-      if (activeSessionUidRef.current === user.uid && useAppStore.getState().isAuthenticated) return;
+      if (activeSessionUidRef.current === user.uid && useAppStore.getState().isAuthenticated) {
+        setBootPhase('ready');
+        return;
+      }
 
+      setBootPhase('app-data');
       useAppStore.setState({ loading: true });
-      useAuthStore.setState({ loading: true });
 
       clearSubscriptions();
       try {
-        await Promise.race([
-          initializeApp(),
-          new Promise((_, reject) => {
-            window.setTimeout(() => reject(new Error('initializeApp timeout')), APP_BOOTSTRAP_TIMEOUT_MS);
-          }),
+        await Promise.all([
+          withTimeout(initializeApp(), APP_BOOTSTRAP_TIMEOUT_MS, 'initializeApp timeout'),
+          initialTenantSlug
+            ? resolveTenantSlugOnce(initialTenantSlug).catch((error) => {
+                setBootError((error as Error).message || 'tenant slug resolve failed');
+                return null;
+              })
+            : Promise.resolve(null),
         ]);
       } catch {
         useAppStore.setState({ loading: false });
-        useAuthStore.setState({ loading: false });
+        useAuthStore.getState().syncFromLegacyStore();
+        setBootError('initializeApp timeout');
+        setBootPhase('ready');
         return;
       }
+      useAuthStore.getState().syncFromLegacyStore();
+      setBootPhase('ready');
       const state = useAppStore.getState();
       if (!state.isAuthenticated || state.isPendingApproval) {
         activeSessionUidRef.current = user.uid;
@@ -989,8 +1111,8 @@ const App: React.FC = () => {
     };
   }, []);
 
-  if (!authResolved) {
-    return <AppSplashScreen subtitle={BOOTSTRAP_SPLASH_SUBTITLE} />;
+  if (bootDecision.showSplash || !bootDecision.allowRoutes) {
+    return <AppSplashScreen subtitle={bootDecision.subtitle} />;
   }
 
   return (
