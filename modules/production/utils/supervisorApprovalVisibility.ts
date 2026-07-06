@@ -182,14 +182,33 @@ export function mergeSupervisorVisibleApprovalRequests(params: {
   return Array.from(merged.values()).sort((a, b) => getCreatedTime(b) - getCreatedTime(a));
 }
 
-export function buildSupervisorApprovalExportRows(requests: FirestoreApprovalRequest[]): Record<string, string | number>[] {
+export function getApprovalRequestEmployeeCode(
+  request: FirestoreApprovalRequest,
+  employeeCodeById?: Map<string, string>,
+): string {
+  const data = request.requestData || {};
+  const fromData = String(data.employeeCode || '').trim();
+  if (fromData) return fromData;
+
+  const employeeId = String(request.employeeId || '').trim();
+  if (employeeId && employeeCodeById?.has(employeeId)) {
+    return employeeCodeById.get(employeeId) || '';
+  }
+  return '';
+}
+
+export function buildSupervisorApprovalExportRows(
+  requests: FirestoreApprovalRequest[],
+  options?: { employeeCodeById?: Map<string, string> },
+): Record<string, string | number>[] {
+  const employeeCodeById = options?.employeeCodeById;
   return requests.map((request) => {
     const data = request.requestData || {};
     const currentStep = getApprovalChain(request)[request.currentStep];
     const status = getProductionApprovalStatusDisplay(request);
 
     return {
-      'رقم الطلب': request.id || '',
+      'كود الموظف': getApprovalRequestEmployeeCode(request, employeeCodeById),
       'نوع الطلب': REQUEST_TYPE_LABELS[request.requestType] || request.requestType,
       'نوع الإجازة': getSupervisorApprovalLeaveTypeLabel(request),
       العامل: request.employeeName || data.employeeName || '',

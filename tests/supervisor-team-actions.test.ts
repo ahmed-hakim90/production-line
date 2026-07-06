@@ -19,6 +19,7 @@ import {
   canSupervisorCancelApprovalRequest,
   canSupervisorActOnApprovalRequest,
   filterProductionApprovalHistory,
+  getApprovalRequestEmployeeCode,
   getApprovalRequestParticipantEmployeeIds,
   getProductionApprovalStatusDisplay,
   isApprovalRequestParticipant,
@@ -928,9 +929,28 @@ assert.equal(
   'بانتظار موافقة الإدارة',
   'Production team requests should not expose HR terminology in status labels',
 );
-const exportRows = buildSupervisorApprovalExportRows(visibleApprovals);
+const exportEmployeeCodeById = new Map([
+  ['worker-1', '1001'],
+  ['worker-2', '1002'],
+  ['worker-5', '5005'],
+]);
+const exportRows = buildSupervisorApprovalExportRows(visibleApprovals, { employeeCodeById: exportEmployeeCodeById });
+assert.ok(
+  !Object.keys(exportRows[0]).includes('رقم الطلب'),
+  'Export rows should not expose internal Firestore request ids',
+);
+assert.ok(
+  Object.keys(exportRows[0]).includes('كود الموظف'),
+  'PDF/Excel export rows should include an employee code column',
+);
+assert.equal(
+  getApprovalRequestEmployeeCode(actionableApproval, exportEmployeeCodeById),
+  '1001',
+  'Employee code should resolve from the employee directory when missing on the request',
+);
 assert.deepEqual(
   exportRows.map((row) => ({
+    employeeCode: row['كود الموظف'],
     type: row['نوع الطلب'],
     leaveType: row['نوع الإجازة'],
     worker: row['العامل'],
@@ -940,6 +960,7 @@ assert.deepEqual(
   })),
   [
     {
+      employeeCode: '1001',
       type: 'إجازة',
       leaveType: 'مرضية',
       worker: 'Worker One',
@@ -948,6 +969,7 @@ assert.deepEqual(
       requester: 'other-user',
     },
     {
+      employeeCode: '5005',
       type: 'جزاء',
       leaveType: '',
       worker: 'Worker Five',
@@ -956,6 +978,7 @@ assert.deepEqual(
       requester: 'Supervisor',
     },
     {
+      employeeCode: '1002',
       type: 'سلفة',
       leaveType: '',
       worker: 'Worker Two',

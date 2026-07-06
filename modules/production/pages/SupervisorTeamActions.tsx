@@ -73,6 +73,7 @@ import {
   canSupervisorCancelApprovalRequest,
   canSupervisorActOnApprovalRequest,
   filterProductionApprovalHistory,
+  getApprovalRequestEmployeeCode,
   getProductionApprovalStatusDisplay,
   getSupervisorApprovalLeaveTypeLabel,
   getApprovalRequestParticipantEmployeeIds,
@@ -110,6 +111,15 @@ const FALLBACK_TYPE_CONFIG = {
   color: 'text-slate-500',
   bg: 'bg-slate-100',
 };
+
+function formatApprovalEmployeeLabel(
+  req: FirestoreApprovalRequest,
+  employeeCodeById: Map<string, string>,
+): string {
+  const code = getApprovalRequestEmployeeCode(req, employeeCodeById);
+  const name = req.employeeName || req.requestData?.employeeName || '—';
+  return code ? `${code} — ${name}` : name;
+}
 
 function getRequestTypeConfig(requestType: string) {
   return TYPE_CONFIG[requestType as ApprovalRequestType] || FALLBACK_TYPE_CONFIG;
@@ -418,6 +428,20 @@ export const SupervisorTeamActions: React.FC = () => {
     })),
     [teamWorkers],
   );
+  const employeeCodeById = useMemo(() => {
+    const map = new Map<string, string>();
+    allEmployees.forEach((employee) => {
+      if (employee.id) {
+        map.set(employee.id, employee.code || employee.acNo || '');
+      }
+    });
+    teamWorkers.forEach((worker) => {
+      if (worker.employeeId && worker.employeeCode) {
+        map.set(worker.employeeId, worker.employeeCode);
+      }
+    });
+    return map;
+  }, [allEmployees, teamWorkers]);
   const teamScopeLabel = useMemo(() => {
     if (teamScope === 'hr_all') return 'النطاق: كل الموظفين';
     if (teamScope === 'production_all') return 'النطاق: كل موظفي الإنتاج';
@@ -456,8 +480,8 @@ export const SupervisorTeamActions: React.FC = () => {
     [approvalRequests, reportFilters],
   );
   const approvalExportRows = useMemo(
-    () => buildSupervisorApprovalExportRows(filteredApprovalRequests),
-    [filteredApprovalRequests],
+    () => buildSupervisorApprovalExportRows(filteredApprovalRequests, { employeeCodeById }),
+    [employeeCodeById, filteredApprovalRequests],
   );
   const approvalExportHeaders = useMemo(
     () => Object.keys(approvalExportRows[0] || {}),
@@ -504,8 +528,8 @@ export const SupervisorTeamActions: React.FC = () => {
       .sort((a, b) => a.label.localeCompare(b.label, 'ar'));
   }, [allEmployees, historyRequests]);
   const historyExportRows = useMemo(
-    () => buildSupervisorApprovalExportRows(filteredHistoryRequests),
-    [filteredHistoryRequests],
+    () => buildSupervisorApprovalExportRows(filteredHistoryRequests, { employeeCodeById }),
+    [employeeCodeById, filteredHistoryRequests],
   );
   const historyExportHeaders = useMemo(
     () => Object.keys(historyExportRows[0] || {}),
@@ -516,8 +540,8 @@ export const SupervisorTeamActions: React.FC = () => {
     [historyRequests, reportFilters],
   );
   const reportExportRows = useMemo(
-    () => buildSupervisorApprovalExportRows(reportExportRequests),
-    [reportExportRequests],
+    () => buildSupervisorApprovalExportRows(reportExportRequests, { employeeCodeById }),
+    [employeeCodeById, reportExportRequests],
   );
   const pdfExportRows = activePageTab === 'history' ? historyExportRows : approvalExportRows;
   const pdfExportHeaders = activePageTab === 'history' ? historyExportHeaders : approvalExportHeaders;
@@ -988,6 +1012,7 @@ export const SupervisorTeamActions: React.FC = () => {
           leaveType,
           leaveTypeLabel,
           employeeName: selectedWorker.employeeName,
+          employeeCode: selectedWorker.employeeCode,
           startDate: leaveStartDate,
           endDate: leaveEndDate,
           totalDays: leaveDays,
@@ -1057,6 +1082,8 @@ export const SupervisorTeamActions: React.FC = () => {
         requestData: {
           loanType,
           loanTypeLabel: LOAN_TYPE_LABELS[loanType],
+          employeeName: selectedWorker.employeeName,
+          employeeCode: selectedWorker.employeeCode,
           loanAmount: amount,
           installmentAmount: isMonthly ? amount : loanInstallmentAmount,
           totalInstallments: installments,
@@ -1108,6 +1135,8 @@ export const SupervisorTeamActions: React.FC = () => {
         departmentId: selectedWorker.employee.departmentId || 'production',
         requestData: {
           penaltyName: penaltyName.trim() || 'جزاء تأديبي',
+          employeeName: selectedWorker.employeeName,
+          employeeCode: selectedWorker.employeeCode,
           penaltyDurationDays: Math.round(durationDays * 1000) / 1000,
           penaltyDurationLabel: durationLabel,
           ...(calculatedAmount ? {
@@ -1393,7 +1422,7 @@ export const SupervisorTeamActions: React.FC = () => {
                           </div>
                           <h4 className="mt-2 text-base font-black text-[var(--color-text)]">{formatRequestSummary(req)}</h4>
                           <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                            <span className="font-bold text-[var(--color-text)]">{req.employeeName}</span> — {formatRequestDetail(req)}
+                            <span className="font-bold text-[var(--color-text)]">{formatApprovalEmployeeLabel(req, employeeCodeById)}</span> — {formatRequestDetail(req)}
                           </p>
                           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
                             مقدم بواسطة: {requesterName} — تاريخ الطلب: {formatApprovalCreatedAt(req.createdAt)}
@@ -1490,7 +1519,7 @@ export const SupervisorTeamActions: React.FC = () => {
                             </div>
                             <h4 className="text-base font-black text-[var(--color-text)] mt-2">{formatRequestSummary(req)}</h4>
                             <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                              <span className="font-bold text-[var(--color-text)]">{req.employeeName}</span> — {formatRequestDetail(req)}
+                              <span className="font-bold text-[var(--color-text)]">{formatApprovalEmployeeLabel(req, employeeCodeById)}</span> — {formatRequestDetail(req)}
                             </p>
                             <p className="text-xs text-[var(--color-text-muted)] mt-1">
                               مقدم بواسطة: {requesterName} — تاريخ الطلب: {formatApprovalCreatedAt(req.createdAt)}
@@ -1511,7 +1540,7 @@ export const SupervisorTeamActions: React.FC = () => {
                         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-sm bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4">
                           <div>
                             <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">العامل</p>
-                            <p className="font-bold text-[var(--color-text)]">{req.employeeName}</p>
+                            <p className="font-bold text-[var(--color-text)]">{formatApprovalEmployeeLabel(req, employeeCodeById)}</p>
                           </div>
                           <div>
                             <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">الخط</p>
