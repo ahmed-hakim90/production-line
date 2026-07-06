@@ -58,6 +58,8 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'employees.view',
           'employees.viewDetails',
           'reports.view',
+          'reports.edit',
+          'reports.componentInjection.manage',
           'reports.componentWaste.create',
           'lineStatus.view',
           'lineProductConfig.view',
@@ -279,6 +281,8 @@ const FACTORY_MANAGER_PRODUCTION_WORKER_PERMS: Permission[] = [
   'production.workerBonus.manage',
   'lineWorkers.view',
   'approval.view',
+  'reports.edit',
+  'reports.componentInjection.manage',
 ];
 
 const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [

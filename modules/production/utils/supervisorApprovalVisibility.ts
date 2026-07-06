@@ -25,7 +25,10 @@ function getApprovalChain(request: FirestoreApprovalRequest) {
 function formatExportDate(value: any): string {
   const date = value?.toDate ? value.toDate() : value?.seconds ? new Date(value.seconds * 1000) : null;
   if (!date || Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function getRequestAmount(request: FirestoreApprovalRequest): number | string {

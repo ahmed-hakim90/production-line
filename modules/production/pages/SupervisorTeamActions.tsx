@@ -151,7 +151,10 @@ function formatApprovalCreatedAt(value: any): string {
 function formatApprovalDateKey(value: any): string {
   const date = value?.toDate ? value.toDate() : value?.seconds ? new Date(value.seconds * 1000) : null;
   if (!date || Number.isNaN(date.getTime())) return '';
-  return date.toISOString().slice(0, 10);
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
 }
 
 function isProductionApprovalRequest(req: FirestoreApprovalRequest): boolean {
@@ -217,6 +220,21 @@ function isRequestInDateRange(req: FirestoreApprovalRequest, from: string, to: s
   if (from && dateKey < from) return false;
   if (to && dateKey > to) return false;
   return true;
+}
+
+function applyProductionRequestReportFilters(
+  requests: FirestoreApprovalRequest[],
+  filters: {
+    dateFrom: string;
+    dateTo: string;
+    requestType: ExportRequestTypeFilter;
+    status: ExportStatusFilter;
+  },
+): FirestoreApprovalRequest[] {
+  return requests
+    .filter((request) => isRequestInDateRange(request, filters.dateFrom, filters.dateTo))
+    .filter((request) => filters.requestType === 'all' || request.requestType === filters.requestType)
+    .filter((request) => filters.status === 'all' || request.status === filters.status);
 }
 
 function mapApprovalStatusToLegacy(status: ApprovalRequestStatus): ApprovalStatus {
@@ -424,21 +442,37 @@ export const SupervisorTeamActions: React.FC = () => {
     () => approvalRequests.filter((req) => canSupervisorActOnApprovalRequest(req, supervisorId)).length,
     [approvalRequests, supervisorId],
   );
+  const reportFilters = useMemo(() => ({
+    dateFrom: exportDateFrom,
+    dateTo: exportDateTo,
+    requestType: exportRequestTypeFilter,
+    status: exportStatusFilter,
+  }), [exportDateFrom, exportDateTo, exportRequestTypeFilter, exportStatusFilter]);
+  const hasActiveReportFilters = Boolean(
+    exportDateFrom || exportDateTo || exportRequestTypeFilter !== 'all' || exportStatusFilter !== 'all',
+  );
+  const filteredApprovalRequests = useMemo(
+    () => applyProductionRequestReportFilters(approvalRequests, reportFilters),
+    [approvalRequests, reportFilters],
+  );
   const approvalExportRows = useMemo(
-    () => buildSupervisorApprovalExportRows(approvalRequests),
-    [approvalRequests],
+    () => buildSupervisorApprovalExportRows(filteredApprovalRequests),
+    [filteredApprovalRequests],
   );
   const approvalExportHeaders = useMemo(
     () => Object.keys(approvalExportRows[0] || {}),
     [approvalExportRows],
   );
   const filteredHistoryRequests = useMemo(
-    () => filterProductionApprovalHistory({
-      requests: historyRequests,
-      status: historyStatusFilter,
-      participantEmployeeId: historyParticipantFilter || undefined,
-    }),
-    [historyParticipantFilter, historyRequests, historyStatusFilter],
+    () => applyProductionRequestReportFilters(
+      filterProductionApprovalHistory({
+        requests: historyRequests,
+        status: historyStatusFilter,
+        participantEmployeeId: historyParticipantFilter || undefined,
+      }),
+      reportFilters,
+    ),
+    [historyParticipantFilter, historyRequests, historyStatusFilter, reportFilters],
   );
   const historyParticipantOptions = useMemo(() => {
     const namesById = new Map<string, string>();
@@ -478,11 +512,8 @@ export const SupervisorTeamActions: React.FC = () => {
     [historyExportRows],
   );
   const reportExportRequests = useMemo(
-    () => historyRequests
-      .filter((request) => isRequestInDateRange(request, exportDateFrom, exportDateTo))
-      .filter((request) => exportRequestTypeFilter === 'all' || request.requestType === exportRequestTypeFilter)
-      .filter((request) => exportStatusFilter === 'all' || request.status === exportStatusFilter),
-    [exportDateFrom, exportDateTo, exportRequestTypeFilter, exportStatusFilter, historyRequests],
+    () => applyProductionRequestReportFilters(historyRequests, reportFilters),
+    [historyRequests, reportFilters],
   );
   const reportExportRows = useMemo(
     () => buildSupervisorApprovalExportRows(reportExportRequests),
@@ -865,14 +896,14 @@ export const SupervisorTeamActions: React.FC = () => {
   }, []);
 
   const handleExportApprovals = useCallback(() => {
-    if (approvalRequests.length === 0) return;
+    if (filteredApprovalRequests.length === 0) return;
     const date = new Date().toISOString().slice(0, 10);
     exportGenericRows(
       approvalExportRows,
       `production-approval-requests-${date}`,
       'طلبات الإنتاج',
     );
-  }, [approvalExportRows, approvalRequests.length]);
+  }, [approvalExportRows, filteredApprovalRequests.length]);
 
   const handleExportHistory = useCallback(() => {
     if (historyExportRows.length === 0) return;
@@ -1181,7 +1212,7 @@ export const SupervisorTeamActions: React.FC = () => {
           <div>
             <h3 className="text-base font-black text-[var(--color-text)]">تقرير Excel للطلبات</h3>
             <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">
-              اختر فترة ونوع الطلب والحالة، ثم صدّر الطلبات الظاهرة لك في ملف واحد.
+              اختر فترة ونوع الطلب والحالة لتصفية القائمة أدناه، ثم صدّر النتائج الظاهرة في ملف واحد.
             </p>
           </div>
           <Button variant="outline" onClick={handleExportFilteredReport} disabled={reportExportRows.length === 0}>
@@ -1241,7 +1272,7 @@ export const SupervisorTeamActions: React.FC = () => {
       <div className="flex flex-wrap gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
         {[
           ...(canCreateProductionRequests ? [{ key: 'create' as const, label: 'إنشاء طلب إنتاج', icon: 'edit_note' }] : []),
-          { key: 'approvals' as const, label: `حالات الطلبات${approvalRequests.length ? ` (${approvalRequests.length})` : ''}`, icon: 'approval' },
+          { key: 'approvals' as const, label: `حالات الطلبات${filteredApprovalRequests.length ? ` (${filteredApprovalRequests.length})` : ''}`, icon: 'approval' },
           { key: 'history' as const, label: `سجل الطلبات${filteredHistoryRequests.length ? ` (${filteredHistoryRequests.length})` : ''}`, icon: 'history' },
         ].map((tab) => (
           <button
@@ -1326,7 +1357,11 @@ export const SupervisorTeamActions: React.FC = () => {
             <div className="text-center py-10">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">history</span>
               <p className="text-sm font-bold text-slate-500">لا توجد طلبات نهائية تطابق الفلاتر الحالية.</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">جرّب تغيير الحالة أو اختيار مشارك آخر في سلسلة الاعتماد.</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                {hasActiveReportFilters
+                  ? 'جرّب توسيع الفترة أو تغيير الفلاتر في قسم التقرير أعلاه.'
+                  : 'جرّب تغيير الحالة أو اختيار مشارك آخر في سلسلة الاعتماد.'}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
@@ -1393,14 +1428,14 @@ export const SupervisorTeamActions: React.FC = () => {
               <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">تابع المرحلة الحالية أو صدّر الطلبات الظاهرة كملف Excel أو PDF.</p>
             </div>
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={handleExportApprovals} disabled={approvalRequests.length === 0}>
+              <Button variant="outline" onClick={handleExportApprovals} disabled={filteredApprovalRequests.length === 0}>
                 <span className="material-icons-round text-sm">download</span>
                 تصدير Excel
               </Button>
               <Button
                 variant="outline"
                 onClick={() => { void handleExportApprovalsPdf(); }}
-                disabled={approvalRequests.length === 0 || exportingApprovalsPdf}
+                disabled={filteredApprovalRequests.length === 0 || exportingApprovalsPdf}
               >
                 <span className="material-icons-round text-sm">{exportingApprovalsPdf ? 'hourglass_empty' : 'picture_as_pdf'}</span>
                 {exportingApprovalsPdf ? 'جاري التصدير...' : 'تصدير PDF'}
@@ -1409,15 +1444,21 @@ export const SupervisorTeamActions: React.FC = () => {
           </div>
           {approvalsLoading ? (
             <div className="text-sm font-bold text-[var(--color-text-muted)] py-8 text-center">جاري تحميل طلبات الاعتماد...</div>
-          ) : approvalRequests.length === 0 ? (
+          ) : filteredApprovalRequests.length === 0 ? (
             <div className="text-center py-10">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">task_alt</span>
-              <p className="text-sm font-bold text-slate-500">لا توجد طلبات إنتاج ظاهرة حالياً.</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">ستظهر هنا طلبات عمال الإنتاج التي أنشأتها، وكذلك الطلبات التي تنتظر قرارك.</p>
+              <p className="text-sm font-bold text-slate-500">
+                {hasActiveReportFilters ? 'لا توجد طلبات تطابق الفلاتر الحالية.' : 'لا توجد طلبات إنتاج ظاهرة حالياً.'}
+              </p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                {hasActiveReportFilters
+                  ? 'جرّب توسيع الفترة أو تغيير نوع الطلب أو الحالة في الفلتر أعلاه.'
+                  : 'ستظهر هنا طلبات عمال الإنتاج التي أنشأتها، وكذلك الطلبات التي تنتظر قرارك.'}
+              </p>
             </div>
           ) : (
             <div className="space-y-4">
-              {approvalRequests.map((req) => {
+              {filteredApprovalRequests.map((req) => {
                 const typeCfg = getRequestTypeConfig(req.requestType);
                 const statusCfg = getProductionApprovalStatusDisplay(req);
                 const requestId = req.id || '';
