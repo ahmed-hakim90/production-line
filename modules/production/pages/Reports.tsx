@@ -87,6 +87,7 @@ import type {
 } from '../../../utils/importExcel';
 import type { ReportsTemplateLookups } from '../../../utils/downloadTemplates';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
+import { productionWorkerService } from '../services/productionWorkerService';
 import {
   buildWorkersCountAutoFillFromAssignments,
   countOperatorsFromAssignments,
@@ -94,12 +95,6 @@ import {
   sumWorkersCountPatch,
 } from '../utils/lineAssignmentWorkersCount';
 import { getPresenceLabel, summarizeWorkerPresenceDays, summarizeWorkerPresenceRows } from '../utils/workerPresence';
-import {
-  LINE_WORKER_LABOR_ROLES,
-  LINE_WORKER_LABOR_ROLE_LABELS,
-  resolveLineWorkerLaborRole,
-} from '../utils/lineWorkerLaborRoles';
-import type { LineWorkerLaborRole } from '../../../types';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
 import { Link, useLocation, useParams } from 'react-router-dom';
@@ -745,6 +740,8 @@ export const Reports: React.FC = () => {
   const [viewWorkersData, setViewWorkersData] = useState<{
     lineId: string;
     date: string;
+    productId?: string;
+    workerOutputs?: ProductionReportWorkerOutput[];
     workers: LineWorkerAssignment[];
     report?: Pick<
       ProductionReport,
@@ -762,8 +759,9 @@ export const Reports: React.FC = () => {
   const [viewWorkersPickerId, setViewWorkersPickerId] = useState('');
   const [viewWorkersBusy, setViewWorkersBusy] = useState(false);
   const [viewWorkersError, setViewWorkersError] = useState<string | null>(null);
-  const [updatingViewWorkerPresenceId, setUpdatingViewWorkerPresenceId] = useState<string | null>(null);
-  const [updatingViewWorkerRoleId, setUpdatingViewWorkerRoleId] = useState<string | null>(null);
+  const [viewWorkersEmployeeOutputs, setViewWorkersEmployeeOutputs] = useState<
+    Map<string, ProductionReportWorkerOutput>
+  >(new Map());
   const getOperatorsCount = useCallback(
     (workers: LineWorkerAssignment[], supervisorId?: string) =>
       countOperatorsFromAssignments(workers, supervisorId),
@@ -2497,14 +2495,25 @@ export const Reports: React.FC = () => {
   }, []);
 
   const handleViewWorkers = async (report: ProductionReport) => {
-    const { lineId, date } = report;
+    const { lineId, date, productId } = report;
     const assignmentSourceDate = report.id ? date : getTodayDateString();
     setViewWorkersLoading(true);
     setViewWorkersError(null);
     setViewWorkersPickerId('');
+    setViewWorkersEmployeeOutputs(new Map());
     setViewWorkersData({
       lineId,
       date,
+      productId,
+      workerOutputs: normalizeReportWorkerOutputs(
+        report.workerOutputs || [],
+        lineId,
+        productId || '',
+        {
+          lineName: getLineName(lineId),
+          productName: getProductName(productId, report.reportType),
+        },
+      ),
       workers: [],
       report: {
         id: report.id,
@@ -2599,81 +2608,52 @@ export const Reports: React.FC = () => {
     }
   }, [viewWorkersData, refreshWorkersForLineDate]);
 
-  const handleViewWorkerPresenceChange = useCallback(async (
-    assignment: LineWorkerAssignment,
-    isPresent: boolean,
-  ) => {
-    if (!viewWorkersData) return;
-    const { lineId, date } = viewWorkersData;
-    if (!assignment.employeeId) {
-      setViewWorkersError('هذا العامل من سجل قديم فقط ولا يمكن تعديل حضوره من هنا.');
+  useEffect(() => {
+    if (!viewWorkersData) {
+      setViewWorkersEmployeeOutputs(new Map());
       return;
     }
-    if (assignment.id && (assignment.isPresent ?? true) === isPresent) return;
 
-    const actionId = assignment.id || assignment.permanentAssignmentId || `${assignment.lineId}_${assignment.employeeId}`;
-    setUpdatingViewWorkerPresenceId(actionId);
-    setViewWorkersError(null);
-    try {
-      if (assignment.id) {
-        await lineAssignmentService.updatePresence(assignment.id, isPresent);
-      } else {
-        await lineAssignmentService.create({
-          lineId,
-          employeeId: assignment.employeeId,
-          employeeCode: assignment.employeeCode,
-          employeeName: assignment.employeeName,
-          date,
-          laborRole: resolveLineWorkerLaborRole(assignment.laborRole),
-          isPresent,
-          assignedBy: uid || '',
-        });
+    let cancelled = false;
+    void (async () => {
+      const outputs = viewWorkersData.workerOutputs || [];
+      if (outputs.length === 0) {
+        if (!cancelled) setViewWorkersEmployeeOutputs(new Map());
+        return;
       }
-      await refreshWorkersForLineDate(lineId, date);
-    } catch {
-      setViewWorkersError('تعذر تحديث حضور العامل الآن. حاول مرة أخرى.');
-    } finally {
-      setUpdatingViewWorkerPresenceId(null);
-    }
-  }, [viewWorkersData, uid, refreshWorkersForLineDate]);
 
-  const handleViewWorkerRoleChange = useCallback(async (
-    assignment: LineWorkerAssignment,
-    laborRole: LineWorkerLaborRole,
-  ) => {
-    if (!viewWorkersData) return;
-    const { lineId, date } = viewWorkersData;
-    if (!assignment.employeeId) {
-      setViewWorkersError('هذا العامل من سجل قديم فقط ولا يمكن تعديل وظيفته من هنا.');
-      return;
-    }
-    if (resolveLineWorkerLaborRole(assignment.laborRole) === laborRole) return;
+      const productionWorkers = await productionWorkerService.getAll();
+      if (cancelled) return;
 
-    const actionId = assignment.id || assignment.permanentAssignmentId || `${assignment.lineId}_${assignment.employeeId}`;
-    setUpdatingViewWorkerRoleId(actionId);
-    setViewWorkersError(null);
-    try {
-      if (assignment.id) {
-        await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
-      } else {
-        await lineAssignmentService.create({
-          lineId,
-          employeeId: assignment.employeeId,
-          employeeCode: assignment.employeeCode,
-          employeeName: assignment.employeeName,
-          date,
-          laborRole,
-          isPresent: assignment.isPresent ?? true,
-          assignedBy: uid || '',
-        });
+      const byWorkerId = new Map(outputs.map((row) => [row.workerId, row]));
+      const byEmployeeId = new Map<string, ProductionReportWorkerOutput>();
+
+      for (const worker of productionWorkers) {
+        if (!worker.employeeId || !worker.id) continue;
+        const row = byWorkerId.get(worker.id);
+        if (row) byEmployeeId.set(worker.employeeId, row);
       }
-      await refreshWorkersForLineDate(lineId, date);
-    } catch {
-      setViewWorkersError('تعذر تحديث وظيفة العامل الآن. حاول مرة أخرى.');
-    } finally {
-      setUpdatingViewWorkerRoleId(null);
-    }
-  }, [viewWorkersData, uid, refreshWorkersForLineDate]);
+
+      for (const assignment of viewWorkersData.workers) {
+        if (!assignment.employeeId || byEmployeeId.has(assignment.employeeId)) continue;
+        const normalizedName = assignment.employeeName.trim();
+        const byName = outputs.find((row) => row.workerName.trim() === normalizedName);
+        if (byName) byEmployeeId.set(assignment.employeeId, byName);
+      }
+
+      setViewWorkersEmployeeOutputs(byEmployeeId);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    viewWorkersData?.lineId,
+    viewWorkersData?.date,
+    viewWorkersData?.productId,
+    viewWorkersData?.workerOutputs,
+    viewWorkersData?.workers,
+  ]);
 
   const availableWorkersForModal = useMemo(
     () => {
@@ -5855,7 +5835,7 @@ export const Reports: React.FC = () => {
             </div>
             <div className="p-4 border-b border-[var(--color-border)] space-y-2">
               <p className="text-[11px] font-bold text-primary leading-relaxed">
-                الحضور والغياب يُسجَّل على تاريخ التقرير ({viewWorkersData.date})، ويُحدّث عدد العمالة في التقرير تلقائياً.
+                عرض عمالة الخط بتاريخ التقرير ({viewWorkersData.date}) مع المحفوظ والإنتاج لكل عامل.
               </p>
               <div className="flex items-center gap-2">
                 <div className="flex-1">
@@ -5952,9 +5932,11 @@ export const Reports: React.FC = () => {
                     {viewWorkersData.workers.map((w, i) => {
                       const isPresent = w.isPresent !== false;
                       const workerActionId = w.id || w.permanentAssignmentId || `${w.lineId}_${w.employeeId}`;
-                      const presenceUpdating = updatingViewWorkerPresenceId === workerActionId;
-                      const roleUpdating = updatingViewWorkerRoleId === workerActionId;
-                      const canEdit = Boolean(w.employeeId);
+                      const outputRow = w.employeeId ? viewWorkersEmployeeOutputs.get(w.employeeId) : undefined;
+                      const savedQty = outputRow ? Number(outputRow.dailyTargetQty || 0) : null;
+                      const productionQty = outputRow
+                        ? (isPresent ? Number(outputRow.outputQty || 0) : 0)
+                        : null;
                       return (
                       <div
                         key={workerActionId || i}
@@ -5994,54 +5976,20 @@ export const Reports: React.FC = () => {
                             <ReportIcon name="delete" className="text-base" />
                           </button>
                         </div>
-                        <div className="mt-2.5 grid grid-cols-1 sm:grid-cols-[1fr_minmax(130px,160px)] gap-2 sm:items-center">
-                          <div className="grid grid-cols-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-1">
-                            <button
-                              type="button"
-                              disabled={!canEdit || presenceUpdating}
-                              onClick={() => void handleViewWorkerPresenceChange(w, true)}
-                              className={cn(
-                                'min-h-9 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
-                                isPresent
-                                  ? 'bg-emerald-600 text-white shadow-sm'
-                                  : 'text-[var(--color-text-muted)] hover:bg-emerald-50 hover:text-emerald-700',
-                              )}
-                              aria-pressed={isPresent}
-                            >
-                              حاضر
-                            </button>
-                            <button
-                              type="button"
-                              disabled={!canEdit || presenceUpdating}
-                              onClick={() => void handleViewWorkerPresenceChange(w, false)}
-                              className={cn(
-                                'min-h-9 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
-                                !isPresent
-                                  ? 'bg-rose-600 text-white shadow-sm'
-                                  : 'text-[var(--color-text-muted)] hover:bg-rose-50 hover:text-rose-700',
-                              )}
-                              aria-pressed={!isPresent}
-                            >
-                              غائب
-                            </button>
+                        <div className="mt-2.5 grid grid-cols-2 gap-2">
+                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-3 py-2 text-center">
+                            <p className="text-[10px] font-bold text-[var(--color-text-muted)]">المحفوظ</p>
+                            <p className="text-sm font-black text-[var(--color-text)] tabular-nums">
+                              {savedQty === null ? '—' : formatNumber(savedQty)}
+                            </p>
                           </div>
-                          <select
-                            value={resolveLineWorkerLaborRole(w.laborRole)}
-                            disabled={!canEdit || roleUpdating}
-                            onChange={(e) => void handleViewWorkerRoleChange(w, e.target.value as LineWorkerLaborRole)}
-                            aria-label="وظيفة العامل"
-                            className="h-9 w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-2 text-xs font-bold bg-[var(--color-card)] disabled:opacity-60"
-                          >
-                            {LINE_WORKER_LABOR_ROLES.map((role) => (
-                              <option key={role} value={role}>
-                                {LINE_WORKER_LABOR_ROLE_LABELS[role]}
-                              </option>
-                            ))}
-                          </select>
+                          <div className="rounded-[var(--border-radius-base)] bg-primary/5 px-3 py-2 text-center">
+                            <p className="text-[10px] font-bold text-[var(--color-text-muted)]">الإنتاج</p>
+                            <p className="text-sm font-black text-primary tabular-nums">
+                              {productionQty === null ? '—' : formatNumber(productionQty)}
+                            </p>
+                          </div>
                         </div>
-                        {(presenceUpdating || roleUpdating) && (
-                          <p className="mt-1.5 text-[11px] font-bold text-primary">جاري الحفظ...</p>
-                        )}
                       </div>
                       );
                     })}
