@@ -12,6 +12,7 @@ import {
   DEFAULT_PRINT_TEMPLATE,
   DEFAULT_THEME,
 } from '../../../utils/dashboardConfig';
+import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import type {
   AlertSettings,
   AlertToggleSettings,
@@ -48,7 +49,14 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     alertSettings: { ...DEFAULT_ALERT_SETTINGS, ...systemSettings.alertSettings } as AlertSettings,
     kpiThresholds: { ...DEFAULT_KPI_THRESHOLDS, ...systemSettings.kpiThresholds } as Record<string, KPIThreshold>,
     printTemplate: { ...DEFAULT_PRINT_TEMPLATE, ...systemSettings.printTemplate } as PrintTemplateSettings,
-    planSettings: { ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings } as PlanSettings,
+    planSettings: syncPlanSettingsWarehouseRouting({
+      ...DEFAULT_PLAN_SETTINGS,
+      ...systemSettings.planSettings,
+      inventoryRouting: {
+        ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+        ...(systemSettings.planSettings?.inventoryRouting ?? {}),
+      },
+    }) as PlanSettings,
     branding: { ...DEFAULT_BRANDING, ...systemSettings.branding } as BrandingSettings,
     theme: { ...DEFAULT_THEME, ...systemSettings.theme } as ThemeSettings,
     dashboardDisplay: { ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay } as DashboardDisplaySettings,
@@ -64,6 +72,11 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     defaultHomeLogicalPath: systemSettings.defaultHomeLogicalPath ?? '',
   }), [systemSettings]);
   const sourceSignature = useMemo(() => JSON.stringify(normalizedSource), [normalizedSource]);
+  const planSettingsSignature = useMemo(
+    () => JSON.stringify(normalizedSource.planSettings),
+    [normalizedSource.planSettings],
+  );
+  const lastHydratedPlanSignatureRef = useRef<string>(planSettingsSignature);
   const initialSourceSignatureRef = useRef<string>(sourceSignature);
   const didInitialHydrationRef = useRef<boolean>(false);
 
@@ -148,8 +161,27 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     setLocalForceClientUpdate(normalizedSource.forceClientUpdate);
     setLocalClientUpdateMessageAr(normalizedSource.clientUpdateMessageAr);
     setLocalDefaultHomePath(normalizedSource.defaultHomeLogicalPath);
+    lastHydratedPlanSignatureRef.current = planSettingsSignature;
     didInitialHydrationRef.current = true;
-  }, [normalizedSource, sourceSignature]);
+  }, [normalizedSource, sourceSignature, planSettingsSignature]);
+
+  // Keep planSettings draft aligned after save / migration fetch when local is still
+  // on the previously hydrated store snapshot (not mid-edit vs that snapshot).
+  useEffect(() => {
+    if (!didInitialHydrationRef.current) return;
+    if (planSettingsSignature === lastHydratedPlanSignatureRef.current) return;
+    setLocalPlanSettings((prev) => {
+      const prevSynced = syncPlanSettingsWarehouseRouting(prev);
+      const prevSig = JSON.stringify(prevSynced);
+      if (prevSig !== lastHydratedPlanSignatureRef.current) {
+        // User has local edits — do not clobber.
+        lastHydratedPlanSignatureRef.current = planSettingsSignature;
+        return prev;
+      }
+      lastHydratedPlanSignatureRef.current = planSettingsSignature;
+      return normalizedSource.planSettings;
+    });
+  }, [planSettingsSignature, normalizedSource.planSettings]);
 
   const normalizeQuickActions = useCallback(
     (items: QuickActionItem[]) => items.map((item, index) => ({ ...item, order: index })),

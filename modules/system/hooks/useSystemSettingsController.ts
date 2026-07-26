@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type Dispatch, type SetStateAction } from 'react';
 import {
   DEFAULT_ALERT_TOGGLES,
   DEFAULT_BRANDING,
@@ -25,6 +25,7 @@ import type {
   ThemeSettings,
   WidgetConfig,
 } from '../../../types';
+import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
 
 export type SettingsSectionKey =
   | 'general'
@@ -46,6 +47,7 @@ type UseSystemSettingsControllerParams = {
   localKPIs: Record<string, KPIThreshold>;
   localPrint: PrintTemplateSettings;
   localPlanSettings: PlanSettings;
+  setLocalPlanSettings: Dispatch<SetStateAction<PlanSettings>>;
   localBranding: BrandingSettings;
   localTheme: ThemeSettings;
   localDashboardDisplay: DashboardDisplaySettings;
@@ -71,6 +73,7 @@ export const useSystemSettingsController = ({
   localKPIs,
   localPrint,
   localPlanSettings,
+  setLocalPlanSettings,
   localBranding,
   localTheme,
   localDashboardDisplay,
@@ -103,7 +106,9 @@ export const useSystemSettingsController = ({
         alertSettings: section === 'alerts' ? localAlerts : systemSettings.alertSettings,
         kpiThresholds: section === 'alerts' ? localKPIs : systemSettings.kpiThresholds,
         printTemplate: section === 'reports' ? localPrint : systemSettings.printTemplate,
-        planSettings: section === 'general' || section === 'production' ? localPlanSettings : (systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS),
+        planSettings: section === 'general' || section === 'production'
+          ? syncPlanSettingsWarehouseRouting(localPlanSettings)
+          : (systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS),
         branding: section === 'appearance' ? localBranding : (systemSettings.branding ?? DEFAULT_BRANDING),
         theme: section === 'appearance' ? localTheme : (systemSettings.theme ?? DEFAULT_THEME),
         dashboardDisplay: section === 'dashboards' ? localDashboardDisplay : (systemSettings.dashboardDisplay ?? DEFAULT_DASHBOARD_DISPLAY),
@@ -124,10 +129,13 @@ export const useSystemSettingsController = ({
             : (systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS),
       };
       await updateSystemSettings(updated);
+      if (section === 'general' || section === 'production') {
+        setLocalPlanSettings(updated.planSettings ?? localPlanSettings);
+      }
       setSaveMessage('تم الحفظ بنجاح');
       setTimeout(() => setSaveMessage(''), 3000);
-    } catch {
-      setSaveMessage('فشل الحفظ');
+    } catch (error) {
+      setSaveMessage((error as Error)?.message || 'فشل الحفظ');
     }
     setSaving(false);
   }, [
@@ -138,6 +146,7 @@ export const useSystemSettingsController = ({
     localKPIs,
     localPrint,
     localPlanSettings,
+    setLocalPlanSettings,
     localBranding,
     localTheme,
     localDashboardDisplay,
@@ -165,7 +174,7 @@ export const useSystemSettingsController = ({
         alertSettings: localAlerts,
         kpiThresholds: localKPIs,
         printTemplate: localPrint,
-        planSettings: localPlanSettings,
+        planSettings: syncPlanSettingsWarehouseRouting(localPlanSettings),
         branding: localBranding,
         theme: localTheme,
         dashboardDisplay: localDashboardDisplay,
@@ -179,10 +188,11 @@ export const useSystemSettingsController = ({
         productionWorkerSettings: localProductionWorkerSettings,
       };
       await updateSystemSettings(updated);
+      setLocalPlanSettings(updated.planSettings ?? localPlanSettings);
       setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
       setTimeout(() => setSaveMessage(''), 3000);
-    } catch {
-      setSaveMessage('فشل حفظ جميع الإعدادات');
+    } catch (error) {
+      setSaveMessage((error as Error)?.message || 'فشل حفظ جميع الإعدادات');
     } finally {
       setSaving(false);
     }
@@ -194,6 +204,7 @@ export const useSystemSettingsController = ({
     localKPIs,
     localPrint,
     localPlanSettings,
+    setLocalPlanSettings,
     localBranding,
     localTheme,
     localDashboardDisplay,
@@ -217,13 +228,27 @@ export const useSystemSettingsController = ({
 
     return {
       general:
-        serialize({ ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings }) !== serialize(localPlanSettings) ||
+        serialize(syncPlanSettingsWarehouseRouting({
+          ...DEFAULT_PLAN_SETTINGS,
+          ...systemSettings.planSettings,
+          inventoryRouting: {
+            ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+            ...(systemSettings.planSettings?.inventoryRouting ?? {}),
+          },
+        })) !== serialize(syncPlanSettingsWarehouseRouting(localPlanSettings)) ||
         (systemSettings.defaultHomeLogicalPath ?? '') !== localDefaultHomePath,
       appearance:
         serialize({ ...DEFAULT_BRANDING, ...systemSettings.branding }) !== serialize(localBranding) ||
         serialize({ ...DEFAULT_THEME, ...systemSettings.theme }) !== serialize(localTheme),
       production:
-        serialize({ ...DEFAULT_PLAN_SETTINGS, ...systemSettings.planSettings }) !== serialize(localPlanSettings) ||
+        serialize(syncPlanSettingsWarehouseRouting({
+          ...DEFAULT_PLAN_SETTINGS,
+          ...systemSettings.planSettings,
+          inventoryRouting: {
+            ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+            ...(systemSettings.planSettings?.inventoryRouting ?? {}),
+          },
+        })) !== serialize(syncPlanSettingsWarehouseRouting(localPlanSettings)) ||
         serialize(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings)) !== serialize(localProductionWorkerSettings),
       dashboards:
         serialize({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay }) !== serialize(localDashboardDisplay) ||

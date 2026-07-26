@@ -227,9 +227,16 @@
   },
   "jobs": {
     "tasks": "المهام",
+    "historyTitle": "سجل المهام",
+    "historySubtitle": "المهام الجارية والمنتهية في النظام",
     "runningOperations": "العمليات الجارية",
+    "finishedOperations": "العمليات المنتهية",
     "activeOperations": "{{count}} عملية نشطة",
+    "finishedCount": "{{count}} عملية",
+    "noActiveJobs": "لا توجد مهام جارية حالياً",
+    "noFinishedJobs": "لا توجد مهام منتهية بعد",
     "allOperationsCompleted": "جميع العمليات منتهية",
+    "resultSummary": "{{added}} مضاف / {{failed}} فشل",
     "hideDetails": "إخفاء التفاصيل",
     "showDetails": "عرض التفاصيل",
     "rowsProgress": "{{processed}} / {{total}} صف",
@@ -238,6 +245,13 @@
     "viewReport": "عرض التقرير",
     "retry": "إعادة المحاولة",
     "remove": "حذف",
+    "columns": {
+      "date": "التاريخ",
+      "type": "النوع",
+      "user": "المستخدم",
+      "status": "الحالة",
+      "result": "النتيجة"
+    },
     "status": {
       "pending": "في الانتظار",
       "uploading": "جاري الرفع",

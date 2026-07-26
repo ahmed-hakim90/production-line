@@ -20,13 +20,16 @@ import { useTranslation } from 'react-i18next';
 import { tenantHomePath } from '@/lib/tenantPaths';
 import { cn } from '@/lib/utils';
 import {
+  ArrowLeftRight,
   BarChart,
+  Bell,
   Check,
   Download,
   Factory,
   FileDown,
   Landmark,
   LayoutDashboard,
+  LayoutGrid,
   Loader2,
   MoreHorizontal,
   Plus,
@@ -39,9 +42,11 @@ import {
   Circle,
   Pencil,
   Package,
+  TriangleAlert,
   Upload,
   User,
   Wallet,
+  Warehouse,
   type LucideIcon,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -58,25 +63,34 @@ import { usePageBackSetter } from '@/src/shared/ui/layout/PageBackContext';
 
 const ICON_MAP: Record<string, LucideIcon> = {
   add: Plus,
+  analytics: BarChart,
   bar_chart: BarChart,
   check: Check,
   delete: Trash2,
   download: Download,
   factory: Factory,
+  fact_check: Check,
   file_download: FileDown,
+  grid_view: LayoutGrid,
+  inventory_2: Package,
   landmark: Landmark,
   layout_dashboard: LayoutDashboard,
   edit: Pencil,
   more_horiz: MoreHorizontal,
+  notifications_active: Bell,
   package: Package,
   print: Printer,
+  receipt_long: FileDown,
   refresh: RefreshCw,
   save: Save,
   search: Search,
   settings: Settings,
+  swap_horiz: ArrowLeftRight,
   upload: Upload,
   user: User,
   wallet: Wallet,
+  warehouse: Warehouse,
+  warning: TriangleAlert,
 };
 
 function renderActionIcon(icon?: string, className?: string, size = 16) {
@@ -129,6 +143,11 @@ export interface PageHeaderProps {
   };
   /** Items collapsed into "⋮ المزيد" dropdown */
   moreActions?: PageHeaderAction[];
+  /**
+   * Custom action nodes (buttons/links) rendered in the header actions row.
+   * Prefer `primaryAction` / `secondaryAction` for simple buttons; use this for composed UI.
+   */
+  actions?: React.ReactNode;
   /** Custom content appended after all buttons */
   extra?: React.ReactNode;
   loading?: boolean;
@@ -144,6 +163,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
   primaryAction,
   secondaryAction,
   moreActions,
+  actions,
   extra,
   loading,
 }) => {
@@ -228,6 +248,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           </span>
         )}
 
+        {actions}
         {extra}
 
         {/* Secondary visible button */}

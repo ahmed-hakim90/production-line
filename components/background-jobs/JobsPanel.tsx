@@ -19,7 +19,8 @@ export const TasksNavButton: React.FC = () => {
       onClick={() => {
         setHistoryOpen(true);
         setPanelHidden(false);
-        setPanelMinimized(true);
+        // Keep the live panel visible when there are active jobs.
+        setPanelMinimized(activeCount === 0);
       }}
       className="relative p-2 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] rounded-full transition-colors"
       title={t('jobs.tasks')}

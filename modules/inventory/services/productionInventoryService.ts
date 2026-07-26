@@ -20,6 +20,7 @@ import { resolveReportType } from '../../production/utils/reportTypes';
 import { rawMaterialService } from './rawMaterialService';
 import { stockService } from './stockService';
 import { transferApprovalService } from './transferApprovalService';
+import { productionIssueService } from './productionIssueService';
 import type {
   CreateStockMovementInput,
   InventoryItemType,
@@ -325,26 +326,60 @@ async function postComponentScrapMovements(params: {
   producedLine?: StockLineIdentity;
   isComponentInjection: boolean;
   deductFromDecomposed?: boolean;
+  settings?: SystemSettings;
 }): Promise<void> {
-  const { reportId, routing, actor, scrapItems, producedLine, isComponentInjection, deductFromDecomposed } = params;
+  const {
+    reportId,
+    routing,
+    actor,
+    scrapItems,
+    producedLine,
+    isComponentInjection,
+    deductFromDecomposed,
+    settings,
+  } = params;
   if (!scrapItems.length || !routing.wasteWarehouseId) return;
 
+  const bundle = settings ? await loadManufacturingBundle() : null;
   const rawMaterials = await rawMaterialService.getAll();
   const rawById = new Map(rawMaterials.filter((r) => r.id).map((r) => [String(r.id), r]));
 
   for (const scrap of scrapItems) {
     const qty = Number(scrap.quantity || 0);
     if (qty <= 0) continue;
-    const raw = rawById.get(scrap.materialId);
-    if (raw?.id) {
-      if (deductFromDecomposed && routing.decomposedWarehouseId) {
-        await stockService.createMovement({
-          warehouseId: routing.decomposedWarehouseId,
+
+    let line: StockLineIdentity | null = null;
+    if (settings && bundle) {
+      line = await resolveStockLineForMaterial(
+        scrap.materialId,
+        scrap.materialName || '',
+        settings,
+        bundle,
+      );
+    }
+    if (!line) {
+      const raw = rawById.get(String(scrap.materialId || '').trim());
+      if (raw?.id) {
+        line = {
           itemType: 'raw_material',
           itemId: raw.id,
           itemName: raw.name,
           itemCode: raw.code,
-          unit: raw.unit,
+          unit: raw.unit || 'unit',
+          minStock: raw.minStock,
+        };
+      }
+    }
+
+    if (line) {
+      if (deductFromDecomposed && routing.decomposedWarehouseId) {
+        await stockService.createMovement({
+          warehouseId: routing.decomposedWarehouseId,
+          itemType: line.itemType,
+          itemId: line.itemId,
+          itemName: line.itemName,
+          itemCode: line.itemCode,
+          unit: line.unit,
           movementType: 'OUT',
           quantity: qty,
           sourceModule: 'production_report',
@@ -356,11 +391,11 @@ async function postComponentScrapMovements(params: {
       }
       await stockService.createMovement({
         warehouseId: routing.wasteWarehouseId,
-        itemType: 'raw_material',
-        itemId: raw.id,
-        itemName: raw.name,
-        itemCode: raw.code,
-        unit: raw.unit,
+        itemType: line.itemType,
+        itemId: line.itemId,
+        itemName: line.itemName,
+        itemCode: line.itemCode,
+        unit: line.unit,
         movementType: 'IN',
         quantity: qty,
         sourceModule: 'production_report',
@@ -434,6 +469,8 @@ export const productionInventoryService = {
           ? componentScrapItems
           : (report.componentScrapItems || []),
         isComponentInjection: false,
+        deductFromDecomposed: true,
+        settings: input.systemSettings,
       });
       return;
     }
@@ -478,15 +515,32 @@ export const productionInventoryService = {
       }
     }
 
+    const hasIssuedProductionComponents = await productionIssueService.hasIssuedForProduction({
+      productionReportId: reportId,
+      workOrderId: report.workOrderId,
+      productionPlanId: report.productionPlanId,
+    });
+
     if (!isComponentInjection && producedQty > 0) {
-      await consumeMaterialsForProduction({
-        productId: report.productId,
-        quantity: producedQty,
-        reportId,
-        routing,
-        settings: input.systemSettings,
-        actor,
-      });
+      if (routing.requireIssuedProductionIssueOnReport && !hasIssuedProductionComponents) {
+        throw new Error(
+          'يجب إنشاء واعتماد إذن صرف إنتاج (حالة: تم الصرف) لهذا التقرير أو أمر الشغل/الخطة قبل ترحيل مخزون تقرير الإنتاج. بعد الاعتماد استخدم إعادة ترحيل المخزون إن لزم.',
+        );
+      }
+      if (
+        !hasIssuedProductionComponents
+        && !routing.requireIssuedProductionIssueOnReport
+        && routing.autoConsumeBomOnProductionReport
+      ) {
+        await consumeMaterialsForProduction({
+          productId: report.productId,
+          quantity: producedQty,
+          reportId,
+          routing,
+          settings: input.systemSettings,
+          actor,
+        });
+      }
     }
 
     if (producedLine && producedQty > 0) {
@@ -555,6 +609,7 @@ export const productionInventoryService = {
         scrapItems: scrapList,
         isComponentInjection: false,
         deductFromDecomposed: product?.autoDeductComponentScrapFromDecomposed === true,
+        settings: input.systemSettings,
       });
     } else if (isComponentInjection && scrapList.length > 0 && producedLine) {
       await postComponentScrapMovements({
@@ -564,6 +619,7 @@ export const productionInventoryService = {
         scrapItems: scrapList,
         producedLine,
         isComponentInjection: true,
+        settings: input.systemSettings,
       });
     } else {
       const wasteQty = getReportWaste({ componentScrapItems: scrapList });

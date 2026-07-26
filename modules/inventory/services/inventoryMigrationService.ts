@@ -5,6 +5,7 @@ import type { InventoryRoutingSettings, PlanSettings, SystemSettings } from '../
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import type { Warehouse, WarehouseRole } from '../types';
 import { buildInventoryRoutingFromLegacy } from '../lib/inventoryRoutingResolver';
+import { syncPlanSettingsWarehouseRouting } from '../lib/syncPlanSettingsWarehouseRouting';
 import { clearInventoryRoutingCache } from './inventoryRoutingService';
 
 const WAREHOUSES = 'warehouses';
@@ -53,8 +54,15 @@ export async function migrateInventoryRoutingV1(): Promise<MigrateInventoryRouti
 
   const plan = settings.planSettings ?? ({} as PlanSettings);
   const alreadyMigrated = Boolean(plan.inventoryRoutingMigratedAt?.trim());
-  const routing = plan.inventoryRouting?.productionWipWarehouseId
-    ? { ...plan.inventoryRouting }
+  const existingRouting = plan.inventoryRouting;
+  const routing = existingRouting?.productionWipWarehouseId
+    ? {
+      ...buildInventoryRoutingFromLegacy(plan),
+      ...existingRouting,
+      // Preserve explicitly configured flags across re-sync.
+      autoConsumeBomOnProductionReport: Boolean(existingRouting.autoConsumeBomOnProductionReport),
+      requireIssuedProductionIssueOnReport: existingRouting.requireIssuedProductionIssueOnReport !== false,
+    }
     : buildInventoryRoutingFromLegacy(plan);
 
   let warehousesUpdated = 0;
@@ -86,11 +94,11 @@ export async function migrateInventoryRoutingV1(): Promise<MigrateInventoryRouti
     await batch.commit();
   }
 
-  const nextPlan: PlanSettings = {
+  const nextPlan: PlanSettings = syncPlanSettingsWarehouseRouting({
     ...plan,
     inventoryRouting: routing,
     inventoryRoutingMigratedAt: plan.inventoryRoutingMigratedAt ?? new Date().toISOString(),
-  };
+  });
 
   const merged: SystemSettings = { ...settings, planSettings: nextPlan };
   await systemSettingsService.set(merged);

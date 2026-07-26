@@ -262,6 +262,8 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
     autoTransferFinishedToFinal: false,
     requireApprovalForProductionEntry: true,
     requireApprovalForAutoTransfers: true,
+    autoConsumeBomOnProductionReport: false,
+    requireIssuedProductionIssueOnReport: true,
   },
 };
 

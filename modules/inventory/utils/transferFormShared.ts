@@ -81,7 +81,7 @@ export function buildTransferRequestLines(
   qtyInPieces: (line: TransferFormLine) => number,
 ): TransferRequestLine[] {
   return transferItems
-    .map((line) => {
+    .map((line): TransferRequestLine | null => {
       const item = getItemById(line.itemId);
       if (!item) return null;
       return {
@@ -91,7 +91,7 @@ export function buildTransferRequestLines(
         itemCode: item.code,
         quantity: qtyInPieces(line),
         requestQuantity: Number(line.quantity || 0),
-        requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
+        requestUnit: (itemType === 'finished_good' ? line.unit : 'unit') as TransferRequestLine['requestUnit'],
         unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
         minStock: item.minStock,
       };

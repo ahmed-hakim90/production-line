@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, PackageX, Share2 } from 'lucide-react';
+import { Loader2, PackageX, Plus, Share2, Trash2 } from 'lucide-react';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { Card, Button, SearchableSelect, Badge } from '../components/UI';
-import { productMaterialService } from '../services/productMaterialService';
+import { loadWasteComponentOptions } from '../utils/wasteComponentOptions';
 import { useAppStore } from '../../../store/useAppStore';
-import type { ProductionReport, ProductMaterial, ReportComponentScrapItem } from '../../../types';
+import type { ProductionReport, ReportComponentScrapItem } from '../../../types';
 import { formatNumber, getMonthDateRange, getOperationalDateString } from '../../../utils/calculations';
 import { getShareResultFeedbackMessage } from '../../../utils/reportExport';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
@@ -15,37 +15,47 @@ type MaterialOption = {
   quantityUsed: number;
 };
 
+type ScrapRow = {
+  key: string;
+  materialId: string;
+  quantity: string;
+};
+
+const createEmptyRow = (): ScrapRow => ({
+  key: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+  materialId: '',
+  quantity: '',
+});
+
 const componentWasteCaption = (input: {
   productName: string;
-  materialName: string;
-  quantity: number;
+  items: ReportComponentScrapItem[];
   date: string;
-}) => [
-  'تقرير هالك مكونات',
-  `المنتج: ${input.productName || '—'}`,
-  `المكون: ${input.materialName || '—'}`,
-  `كمية الهالك: ${formatNumber(input.quantity)}`,
-  `التاريخ: ${input.date || '—'}`,
-].join('\n');
+}) => {
+  const lines = [
+    'تقرير هالك مكونات',
+    `المنتج: ${input.productName || '—'}`,
+    `التاريخ: ${input.date || '—'}`,
+  ];
+  if (input.items.length === 0) {
+    lines.splice(2, 0, 'المكونات: —');
+  } else {
+    lines.splice(2, 0, 'المكونات:');
+    for (const item of input.items) {
+      lines.push(`- ${item.materialName || '—'}: ${formatNumber(Number(item.quantity || 0))}`);
+    }
+  }
+  return lines.join('\n');
+};
 
-function resolveMaterialOptions(rows: ProductMaterial[]): MaterialOption[] {
-  const seen = new Set<string>();
-  return rows
-    .map((row) => ({
-      materialId: String(row.materialId || '').trim(),
-      materialName: String(row.materialName || '').trim(),
-      quantityUsed: Number(row.quantityUsed || 0),
-    }))
-    .filter((row) => {
-      if (!row.materialId || seen.has(row.materialId)) return false;
-      seen.add(row.materialId);
-      return true;
-    });
+function getReportComponents(report: ProductionReport): ReportComponentScrapItem[] {
+  return (report.componentScrapItems || []).filter((row) => Number(row.quantity || 0) > 0);
 }
 
-function getReportComponent(report: ProductionReport): ReportComponentScrapItem | null {
-  const item = report.componentScrapItems?.find((row) => Number(row.quantity || 0) > 0);
-  return item ?? null;
+function formatComponentsLabel(items: ReportComponentScrapItem[]): string {
+  if (items.length === 0) return '—';
+  if (items.length === 1) return items[0].materialName || '—';
+  return items.map((item) => item.materialName || '—').join('، ');
 }
 
 export const ComponentWasteReports: React.FC = () => {
@@ -60,8 +70,7 @@ export const ComponentWasteReports: React.FC = () => {
   const [employeeId, setEmployeeId] = useState('');
   const [lineId, setLineId] = useState('');
   const [productId, setProductId] = useState('');
-  const [materialId, setMaterialId] = useState('');
-  const [quantity, setQuantity] = useState('');
+  const [rows, setRows] = useState<ScrapRow[]>(() => [createEmptyRow()]);
   const [notes, setNotes] = useState('');
   const [materialOptions, setMaterialOptions] = useState<MaterialOption[]>([]);
   const [materialsLoading, setMaterialsLoading] = useState(false);
@@ -88,23 +97,29 @@ export const ComponentWasteReports: React.FC = () => {
   useEffect(() => {
     if (!productId) {
       setMaterialOptions([]);
-      setMaterialId('');
+      setRows([createEmptyRow()]);
       return;
     }
 
     let cancelled = false;
     setMaterialsLoading(true);
-    productMaterialService.getByProduct(productId)
-      .then((rows) => {
+    loadWasteComponentOptions(productId)
+      .then((options) => {
         if (cancelled) return;
-        const options = resolveMaterialOptions(rows);
         setMaterialOptions(options);
-        setMaterialId((prev) => (options.some((opt) => opt.materialId === prev) ? prev : ''));
+        setRows((prev) => {
+          const valid = prev
+            .map((row) => ({
+              ...row,
+              materialId: options.some((opt) => opt.materialId === row.materialId) ? row.materialId : '',
+            }));
+          return valid.length > 0 ? valid : [createEmptyRow()];
+        });
       })
       .catch(() => {
         if (!cancelled) {
           setMaterialOptions([]);
-          setMaterialId('');
+          setRows([createEmptyRow()]);
         }
       })
       .finally(() => {
@@ -146,9 +161,35 @@ export const ComponentWasteReports: React.FC = () => {
     [_rawEmployees],
   );
 
-  const selectedMaterial = useMemo(
-    () => materialOptions.find((option) => option.materialId === materialId) ?? null,
-    [materialOptions, materialId],
+  const materialById = useMemo(
+    () => new Map(materialOptions.map((option) => [option.materialId, option])),
+    [materialOptions],
+  );
+
+  const selectedComponents = useMemo(() => {
+    return rows
+      .map((row) => {
+        const material = materialById.get(row.materialId);
+        if (!material) return null;
+        const quantity = Number(row.quantity || 0);
+        if (quantity <= 0) return null;
+        return {
+          materialId: material.materialId,
+          materialName: material.materialName,
+          quantity,
+        } satisfies ReportComponentScrapItem;
+      })
+      .filter((item): item is ReportComponentScrapItem => Boolean(item));
+  }, [rows, materialById]);
+
+  const hasDuplicate = useMemo(() => {
+    const ids = rows.map((row) => row.materialId).filter(Boolean);
+    return new Set(ids).size !== ids.length;
+  }, [rows]);
+
+  const totalScrapQty = useMemo(
+    () => selectedComponents.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
+    [selectedComponents],
   );
 
   const productNameById = useMemo(
@@ -170,9 +211,9 @@ export const ComponentWasteReports: React.FC = () => {
     setReportsLoading(true);
     try {
       const { start, end } = getMonthDateRange();
-      const rows = await ensureProductionReportsForRange(start, end, { force: true });
+      const reportRows = await ensureProductionReportsForRange(start, end, { force: true });
       setRecentReports(
-        rows
+        reportRows
           .filter((report) => report.reportType === 'component_waste')
           .sort((a, b) => String(b.createdAt?.seconds ?? b.date ?? '').localeCompare(String(a.createdAt?.seconds ?? a.date ?? '')))
           .slice(0, 20),
@@ -187,11 +228,35 @@ export const ComponentWasteReports: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const canSave = Boolean(employeeId && lineId && productId && selectedMaterial && Number(quantity || 0) > 0);
+  const canSave = Boolean(
+    employeeId
+    && lineId
+    && productId
+    && selectedComponents.length > 0
+    && !hasDuplicate,
+  );
+
+  const addRow = () => {
+    if (rows.length >= materialOptions.length) return;
+    setRows((prev) => [...prev, createEmptyRow()]);
+  };
+
+  const updateRow = (key: string, patch: Partial<Pick<ScrapRow, 'materialId' | 'quantity'>>) => {
+    setRows((prev) => prev.map((row) => (row.key === key ? { ...row, ...patch } : row)));
+  };
+
+  const removeRow = (key: string) => {
+    setRows((prev) => {
+      const next = prev.filter((row) => row.key !== key);
+      return next.length > 0 ? next : [createEmptyRow()];
+    });
+  };
 
   const handleSave = async () => {
-    if (!canSave || !selectedMaterial) {
-      showAppToast('error', 'اختر المنتج والمكون والخط وأدخل كمية أكبر من صفر.');
+    if (!canSave) {
+      showAppToast('error', hasDuplicate
+        ? 'لا يمكن تكرار نفس المكون أكثر من مرة.'
+        : 'اختر المنتج والخط وأضف مكوناً واحداً على الأقل بكمية أكبر من صفر.');
       return;
     }
 
@@ -202,11 +267,7 @@ export const ComponentWasteReports: React.FC = () => {
         lineId,
         productId,
         date,
-        component: {
-          materialId: selectedMaterial.materialId,
-          materialName: selectedMaterial.materialName,
-          quantity: Number(quantity || 0),
-        },
+        components: selectedComponents,
         notes,
       });
 
@@ -217,8 +278,7 @@ export const ComponentWasteReports: React.FC = () => {
       }
 
       showAppToast('success', currentStoreError || 'تم حفظ تقرير الهالك وتنفيذ حركة المخزون.');
-      setMaterialId('');
-      setQuantity('');
+      setRows([createEmptyRow()]);
       setNotes('');
       await loadRecentReports();
     } finally {
@@ -235,15 +295,14 @@ export const ComponentWasteReports: React.FC = () => {
       await waitForExportPaint(150);
       if (!shareRef.current) return;
 
-      const item = getReportComponent(report);
+      const items = getReportComponents(report);
       const result = await shareToWhatsApp(
         shareRef.current,
         `تقرير-هالك-مكونات-${report.date}`,
         {
           caption: componentWasteCaption({
             productName: productNameById.get(report.productId) || '',
-            materialName: item?.materialName || '',
-            quantity: Number(item?.quantity || 0),
+            items,
             date: report.date,
           }),
         },
@@ -256,18 +315,19 @@ export const ComponentWasteReports: React.FC = () => {
     }
   };
 
-  const shareItem = shareReport ? getReportComponent(shareReport) : null;
+  const shareItems = shareReport ? getReportComponents(shareReport) : [];
+  const shareTotalQty = shareItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
   return (
     <div className="erp-dashboard-theme space-y-5">
       <PageHeader
         title="تقرير هالك المكونات"
-        subtitle="اختيار منتج ومكون وتسجيل كمية الهالك مع حركة مخزون تلقائية"
+        subtitle="اختيار منتج ومكوّن أو أكثر وتسجيل كميات الهالك مع حركة مخزون تلقائية"
         icon={<PackageX size={18} />}
       />
 
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-4">
-        <Card title="تسجيل هالك مكون">
+        <Card title="تسجيل هالك مكونات">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">التاريخ</label>
@@ -311,49 +371,107 @@ export const ComponentWasteReports: React.FC = () => {
                 onChange={setProductId}
               />
             </div>
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">المكون</label>
-              <SearchableSelect
-                placeholder={materialsLoading ? 'جاري تحميل المكونات...' : 'اختر المكون'}
-                options={materialOptions.map((item) => ({
-                  value: item.materialId,
-                  label: item.quantityUsed > 0
-                    ? `${item.materialName} - ${formatNumber(item.quantityUsed)} / وحدة`
-                    : item.materialName,
-                }))}
-                value={materialId}
-                onChange={setMaterialId}
-              />
-              {!materialsLoading && productId && materialOptions.length === 0 && (
-                <p className="mt-1.5 text-xs text-amber-600">لا توجد مكونات خام مربوطة بهذا المنتج.</p>
-              )}
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">كمية الهالك</label>
-              <input
-                type="number"
-                min={0}
-                step="any"
-                value={quantity}
-                onChange={(e) => setQuantity(e.target.value)}
-                placeholder="0"
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] p-2.5 text-sm outline-none focus:border-primary tabular-nums"
-              />
-            </div>
-            <div className="md:col-span-2">
-              <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">ملاحظات</label>
-              <textarea
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                rows={3}
-                placeholder="سبب الهالك أو أي ملاحظة..."
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] p-2.5 text-sm outline-none focus:border-primary resize-none"
-              />
-            </div>
           </div>
+
+          <div className="mt-5 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-bold">المكونات</p>
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  {materialsLoading
+                    ? 'جاري تحميل المكونات...'
+                    : `${selectedComponents.length} من ${materialOptions.length} مكوّن`}
+                </p>
+              </div>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={addRow}
+                disabled={!productId || materialsLoading || rows.length >= materialOptions.length || materialOptions.length === 0}
+              >
+                <Plus size={14} />
+                إضافة مكون
+              </Button>
+            </div>
+
+            {!materialsLoading && productId && materialOptions.length === 0 && (
+              <p className="text-xs text-amber-600">لا توجد مكونات في BOM هذا المنتج.</p>
+            )}
+
+            <div className="space-y-3">
+              {rows.map((row) => {
+                const selectedIds = new Set(rows.filter((r) => r.key !== row.key).map((r) => r.materialId).filter(Boolean));
+                const rowOptions = materialOptions
+                  .filter((opt) => !selectedIds.has(opt.materialId) || opt.materialId === row.materialId)
+                  .map((item) => ({
+                    value: item.materialId,
+                    label: item.quantityUsed > 0
+                      ? `${item.materialName} - ${formatNumber(item.quantityUsed)} / وحدة`
+                      : item.materialName,
+                  }));
+
+                return (
+                  <div
+                    key={row.key}
+                    className="grid grid-cols-1 md:grid-cols-[1fr_140px_auto] gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-muted)]/15 p-3"
+                  >
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">المكون</label>
+                      <SearchableSelect
+                        placeholder={materialsLoading ? 'جاري التحميل...' : 'اختر المكون'}
+                        options={rowOptions}
+                        value={row.materialId}
+                        onChange={(value) => updateRow(row.key, { materialId: value })}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">كمية الهالك</label>
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={row.quantity}
+                        onChange={(e) => updateRow(row.key, { quantity: e.target.value })}
+                        placeholder="0"
+                        className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] p-2.5 text-sm outline-none focus:border-primary tabular-nums"
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => removeRow(row.key)}
+                        disabled={rows.length <= 1}
+                        className="text-rose-700 border-rose-200 hover:bg-rose-50"
+                      >
+                        <Trash2 size={14} />
+                        حذف
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {hasDuplicate && (
+              <p className="text-xs font-bold text-rose-600">لا يمكن اختيار نفس المكون أكثر من مرة.</p>
+            )}
+          </div>
+
+          <div className="mt-4">
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">ملاحظات</label>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              rows={3}
+              placeholder="سبب الهالك أو أي ملاحظة..."
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[var(--color-bg)] p-2.5 text-sm outline-none focus:border-primary resize-none"
+            />
+          </div>
+
           <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
             <p className="text-xs text-[var(--color-text-muted)]">
-              سيتم خصم الكمية من مخزن المفكك وإضافتها إلى مخزن الهالك.
+              سيتم خصم الكميات من مخزن المفكك وإضافتها إلى مخزن الهالك.
             </p>
             <Button type="button" onClick={handleSave} disabled={!canSave || saving}>
               {saving ? <Loader2 size={16} className="animate-spin" /> : <PackageX size={16} />}
@@ -368,13 +486,27 @@ export const ComponentWasteReports: React.FC = () => {
               <span className="text-[var(--color-text-muted)]">المنتج</span>
               <span className="font-bold text-end">{productNameById.get(productId) || '—'}</span>
             </div>
-            <div className="flex items-center justify-between gap-3">
-              <span className="text-[var(--color-text-muted)]">المكون</span>
-              <span className="font-bold text-end">{selectedMaterial?.materialName || '—'}</span>
+            <div className="space-y-2">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[var(--color-text-muted)]">المكونات</span>
+                <span className="font-bold tabular-nums">{selectedComponents.length || 0}</span>
+              </div>
+              {selectedComponents.length === 0 ? (
+                <p className="text-xs text-[var(--color-text-muted)] text-end">—</p>
+              ) : (
+                <div className="space-y-1.5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5">
+                  {selectedComponents.map((item) => (
+                    <div key={item.materialId} className="flex items-center justify-between gap-3 text-xs">
+                      <span className="font-semibold text-end">{item.materialName}</span>
+                      <span className="font-bold tabular-nums text-rose-600">{formatNumber(item.quantity)}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="text-[var(--color-text-muted)]">كمية الهالك</span>
-              <span className="font-bold tabular-nums">{formatNumber(Number(quantity || 0))}</span>
+              <span className="text-[var(--color-text-muted)]">إجمالي الهالك</span>
+              <span className="font-bold tabular-nums">{formatNumber(totalScrapQty)}</span>
             </div>
             <div className="rounded-[var(--border-radius-lg)] bg-rose-50 border border-rose-100 text-rose-700 p-3 text-xs leading-relaxed">
               التقرير لا يضيف إنتاج ولا ساعات عمل، لكنه يسجل الهالك ويحدث المخزون تلقائياً.
@@ -398,7 +530,7 @@ export const ComponentWasteReports: React.FC = () => {
                 <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)]">
                   <th className="py-2 px-3 text-start">التاريخ</th>
                   <th className="py-2 px-3 text-start">المنتج</th>
-                  <th className="py-2 px-3 text-start">المكون</th>
+                  <th className="py-2 px-3 text-start">المكونات</th>
                   <th className="py-2 px-3 text-center">الكمية</th>
                   <th className="py-2 px-3 text-start">الخط</th>
                   <th className="py-2 px-3 text-start">الموظف</th>
@@ -407,13 +539,21 @@ export const ComponentWasteReports: React.FC = () => {
               </thead>
               <tbody>
                 {recentReports.map((report) => {
-                  const item = getReportComponent(report);
+                  const items = getReportComponents(report);
+                  const qty = items.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
                   return (
                     <tr key={report.id} className="border-b border-[var(--color-border)]/60">
                       <td className="py-2.5 px-3 tabular-nums">{report.date}</td>
                       <td className="py-2.5 px-3 font-semibold">{productNameById.get(report.productId) || '—'}</td>
-                      <td className="py-2.5 px-3">{item?.materialName || '—'}</td>
-                      <td className="py-2.5 px-3 text-center font-bold tabular-nums text-rose-600">{formatNumber(Number(item?.quantity || 0))}</td>
+                      <td className="py-2.5 px-3">
+                        <div className="space-y-0.5">
+                          <p>{formatComponentsLabel(items)}</p>
+                          {items.length > 1 && (
+                            <p className="text-[11px] text-[var(--color-text-muted)]">{items.length} مكونات</p>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-2.5 px-3 text-center font-bold tabular-nums text-rose-600">{formatNumber(qty)}</td>
                       <td className="py-2.5 px-3">{lineNameById.get(report.lineId) || '—'}</td>
                       <td className="py-2.5 px-3">{employeeNameById.get(report.employeeId) || '—'}</td>
                       <td className="py-2.5 px-3 text-center">
@@ -456,13 +596,24 @@ export const ComponentWasteReports: React.FC = () => {
                 <span className="text-slate-500">المنتج</span>
                 <span className="font-bold text-end">{productNameById.get(shareReport.productId) || '—'}</span>
               </div>
-              <div className="flex justify-between gap-4">
-                <span className="text-slate-500">المكون</span>
-                <span className="font-bold text-end">{shareItem?.materialName || '—'}</span>
+              <div className="space-y-2">
+                <span className="text-slate-500">المكونات</span>
+                <div className="rounded-xl border border-slate-200 divide-y divide-slate-100 overflow-hidden">
+                  {shareItems.length === 0 ? (
+                    <div className="px-3 py-2 font-bold">—</div>
+                  ) : (
+                    shareItems.map((item) => (
+                      <div key={item.materialId} className="px-3 py-2 flex justify-between gap-3">
+                        <span className="font-semibold text-end">{item.materialName || '—'}</span>
+                        <span className="font-bold tabular-nums text-rose-700">{formatNumber(Number(item.quantity || 0))}</span>
+                      </div>
+                    ))
+                  )}
+                </div>
               </div>
               <div className="rounded-xl bg-rose-50 border border-rose-100 px-4 py-3 flex justify-between gap-4">
-                <span className="text-rose-700 font-semibold">كمية الهالك</span>
-                <span className="text-2xl font-black text-rose-700 tabular-nums">{formatNumber(Number(shareItem?.quantity || 0))}</span>
+                <span className="text-rose-700 font-semibold">إجمالي الهالك</span>
+                <span className="text-2xl font-black text-rose-700 tabular-nums">{formatNumber(shareTotalQty)}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="text-slate-500">الخط</span>

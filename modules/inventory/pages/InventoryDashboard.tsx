@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { warehouseService } from '../services/warehouseService';
@@ -19,9 +19,11 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 
 export const InventoryDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const { scoped, controlPath } = useMaterialsWarehouseScope();
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -121,6 +123,10 @@ export const InventoryDashboard: React.FC = () => {
     routing.productionWipWarehouseId && routing.finishedStagingWarehouseId,
   );
 
+  if (scoped) {
+    return <Navigate to={withTenantPath(tenantSlug, controlPath)} replace />;
+  }
+
   if (loading && warehouses.length === 0) {
     return <PageContentSkeleton variant="dashboard" kpiCount={8} />;
   }
@@ -132,8 +138,11 @@ export const InventoryDashboard: React.FC = () => {
         subtitle="متابعة فورية للأرصدة والحركات والجرد. مؤشرات KPI من مسح كامل للأرصدة؛ الجدول يعرض أحدث ١٠٠ سطر."
         actions={(
           <div className="flex flex-wrap gap-2">
+            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control#assemblable')}>
+              <PrimaryButton>مخزن المستلزمات · المتاح للتجميع</PrimaryButton>
+            </Link>
             <Link to={withTenantPath(tenantSlug, '/inventory/movements')}>
-              <PrimaryButton>حركة مخزون</PrimaryButton>
+              <GhostButton>حركة مخزون</GhostButton>
             </Link>
             <Link to={withTenantPath(tenantSlug, '/inventory/counts')}>
               <GhostButton>الجرد</GhostButton>

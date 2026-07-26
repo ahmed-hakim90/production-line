@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { transferApprovalService } from '../services/transferApprovalService';
@@ -40,11 +41,21 @@ import {
 } from '@/components/ui/select';
 import { FormField } from '@/components/ui/form-field';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 
 type ItemType = 'finished_good' | 'raw_material';
 const APP_VERSION = __APP_VERSION__;
 
 export const QuickWarehouseTransfer: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const {
+    scoped,
+    warehouseId: scopedWarehouseId,
+    warehouseIds,
+    warehouseSelectLocked,
+    filterWarehouses,
+    resolveScopedWarehouseId,
+  } = useMaterialsWarehouseScope();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { can } = usePermission();
   const products = useAppStore((s) => s.products);
@@ -62,8 +73,12 @@ export const QuickWarehouseTransfer: React.FC = () => {
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
 
-  const [itemType, setItemType] = useState<ItemType>('finished_good');
-  const [warehouseId, setWarehouseId] = useState('');
+  const [itemType, setItemType] = useState<ItemType>(
+    scoped || searchParams.get('itemType') === 'raw_material' ? 'raw_material' : 'finished_good',
+  );
+  const [warehouseId, setWarehouseId] = useState(
+    () => searchParams.get('warehouseId') || scopedWarehouseId || '',
+  );
   const [toWarehouseId, setToWarehouseId] = useState('');
   const [transferItems, setTransferItems] = useState<TransferFormLine[]>([createTransferLine()]);
   const [nextReferenceSeq, setNextReferenceSeq] = useState(1);
@@ -109,6 +124,19 @@ export const QuickWarehouseTransfer: React.FC = () => {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!scoped) return;
+    setWarehouseId((prev) =>
+      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+    );
+    setItemType('raw_material');
+  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
+
+  const fromWarehouseOptions = useMemo(
+    () => filterWarehouses(warehouses),
+    [filterWarehouses, warehouses],
+  );
 
   const referenceNo = useMemo(() => formatInvReference(nextReferenceSeq), [nextReferenceSeq]);
 
@@ -179,11 +207,11 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
   const warehouseSelectOptions = useMemo(
     () =>
-      warehouses.map((w) => ({
+      fromWarehouseOptions.map((w) => ({
         value: w.id || '',
         label: `${w.name} (${w.code})`,
       })),
-    [warehouses],
+    [fromWarehouseOptions],
   );
 
   const toWarehouseSelectOptions = useMemo(
@@ -428,6 +456,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
               <SearchableSelect
                 options={warehouseSelectOptions}
                 value={warehouseId}
+                disabled={warehouseSelectLocked}
                 onChange={setWarehouseId}
                 placeholder="ابحث واختر المخزن"
               />

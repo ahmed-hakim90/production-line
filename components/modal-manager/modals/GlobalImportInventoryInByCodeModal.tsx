@@ -3,10 +3,19 @@ import { FileUp, Loader2, Save } from 'lucide-react';
 import { Button, SearchableSelect } from '../../../modules/inventory/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { warehouseService } from '../../../modules/inventory/services/warehouseService';
+import { warehouseLocationService } from '../../../modules/inventory/services/warehouseLocationService';
 import { stockService } from '../../../modules/inventory/services/stockService';
 import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
-import type { Warehouse, RawMaterial } from '../../../modules/inventory/types';
-import { parseInventoryInByCodeExcel, type InventoryInImportResult } from '../../../utils/importInventoryInByCode';
+import type { Warehouse, WarehouseLocation, RawMaterial } from '../../../modules/inventory/types';
+import {
+  parseInventoryInByCodeExcel,
+  type InventoryInImportResult,
+  type InventoryInLocationLookup,
+} from '../../../utils/importInventoryInByCode';
+import {
+  downloadInventoryInByCodeTemplate,
+  downloadInventoryRawInByCodeTemplate,
+} from '../../../utils/downloadTemplates';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useTranslation } from 'react-i18next';
@@ -32,6 +41,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   const products = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [warehouseId, setWarehouseId] = useState('');
   const [itemType, setItemType] = useState<'finished_good' | 'raw_material'>('finished_good');
@@ -53,12 +63,14 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     setImportResult(null);
     setMessage(null);
     void (async () => {
-      const [warehouseRows, rawRows] = await Promise.all([
+      const [warehouseRows, rawRows, locationRows] = await Promise.all([
         warehouseService.getActiveWarehouses(),
         rawMaterialService.getAll(),
+        warehouseLocationService.getAll(),
       ]);
       setWarehouses(warehouseRows);
       setRawMaterials(rawRows.filter((m) => m.isActive !== false));
+      setLocations(locationRows);
     })();
   }, [isOpen, parsedPayload.warehouseId, parsedPayload.itemType]);
 
@@ -74,6 +86,18 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   const selectedWarehouse = useMemo(
     () => warehouses.find((w) => w.id === warehouseId) || null,
     [warehouses, warehouseId],
+  );
+  const locationLookups = useMemo<InventoryInLocationLookup[]>(
+    () =>
+      locations
+        .filter((loc) => loc.id && loc.code)
+        .map((loc) => ({
+          id: loc.id!,
+          code: loc.code,
+          warehouseId: loc.warehouseId,
+          isActive: loc.isActive,
+        })),
+    [locations],
   );
   const importItems = useMemo(
     () =>
@@ -97,6 +121,11 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     fileInputRef.current?.click();
   };
 
+  const downloadTemplate = () => {
+    if (itemType === 'raw_material') downloadInventoryRawInByCodeTemplate();
+    else downloadInventoryInByCodeTemplate();
+  };
+
   const handleItemTypeChange = (nextType: 'finished_good' | 'raw_material') => {
     if (nextType === itemType) return;
     setItemType(nextType);
@@ -114,7 +143,10 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     setImportResult(null);
     setMessage(null);
     try {
-      const result = await parseInventoryInByCodeExcel(file, importItems, { itemLabel: itemTypeLabel });
+      const result = await parseInventoryInByCodeExcel(file, importItems, {
+        itemLabel: itemTypeLabel,
+        locations: locationLookups,
+      });
       setImportResult(result);
     } catch (error: any) {
       setImportResult({ rows: [], totalRows: 0, validCount: 0, errorCount: 0 });
@@ -135,41 +167,59 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
       setMessage({ type: 'error', text: t('modalManager.importInventoryInByCode.noValidRowsToSave') });
       return;
     }
+
+    const mismatched = validRows.filter(
+      (row) => row.locationId && row.locationWarehouseId && row.locationWarehouseId !== warehouseId,
+    );
+    if (mismatched.length > 0) {
+      setMessage({
+        type: 'error',
+        text: `يوجد ${mismatched.length} صف بلوكيشن لا يتبع المخزن المختار (مثال: ${mismatched[0].locationCode}).`,
+      });
+      return;
+    }
+
     setImportSaving(true);
     setMessage(null);
     try {
       const actor = userDisplayName || 'Current User';
       const baseRef = `IM-${Date.now()}`;
-      // Merge duplicate product rows to reduce Firestore document hot-spot reads/writes.
       type MergedImportRow = {
         productId: string;
         productCode: string;
         productName: string;
         quantity: number;
+        locationId?: string;
+        locationCode?: string;
         count: number;
       };
-      const mergedByProductId: Record<string, MergedImportRow> = {};
+      const mergedByKey: Record<string, MergedImportRow> = {};
       for (const row of validRows) {
-        const existing = mergedByProductId[row.productId];
+        const key = `${row.productId}__${row.locationId || ''}`;
+        const existing = mergedByKey[key];
         if (existing) {
           existing.quantity += Number(row.quantity || 0);
           existing.count += 1;
           continue;
         }
-        mergedByProductId[row.productId] = {
+        mergedByKey[key] = {
           productId: row.productId,
           productCode: row.productCode,
           productName: row.productName,
           quantity: Number(row.quantity || 0),
+          locationId: row.locationId,
+          locationCode: row.locationCode || undefined,
           count: 1,
         };
       }
-      const mergedRows: MergedImportRow[] = Object.values(mergedByProductId);
+      const mergedRows: MergedImportRow[] = Object.values(mergedByKey);
 
       for (let i = 0; i < mergedRows.length; i++) {
         const row = mergedRows[i];
         await stockService.createMovement({
           warehouseId,
+          locationId: row.locationId,
+          locationCode: row.locationCode,
           itemType,
           itemId: row.productId,
           itemName: row.productName,
@@ -214,12 +264,18 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
           onChange={handleImportFileSelected}
         />
 
-        <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+        <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between gap-3">
           <div>
             <h3 className="text-lg font-bold">{t('modalManager.importInventoryInByCode.title', { itemType: itemTypeLabel })}</h3>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{importFileName || '—'}</p>
           </div>
-          {/* Optional header actions intentionally disabled. */}
+          <button
+            type="button"
+            onClick={downloadTemplate}
+            className="text-primary hover:text-primary/80 text-xs font-bold underline shrink-0"
+          >
+            تحميل القالب (مع اللوكيشن)
+          </button>
         </div>
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
@@ -252,7 +308,13 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
               placeholder={t('modalManager.importInventoryInByCode.searchAndSelectWarehouse')}
             />
             <p className="text-xs text-[var(--color-text-muted)] mt-2">
-              {t('modalManager.importInventoryInByCode.currentWarehouse')} <span className="font-bold text-[var(--color-text)]">{selectedWarehouse?.name || t('modalManager.importInventoryInByCode.notSet')}</span>
+              {t('modalManager.importInventoryInByCode.currentWarehouse')}{' '}
+              <span className="font-bold text-[var(--color-text)]">
+                {selectedWarehouse?.name || t('modalManager.importInventoryInByCode.notSet')}
+              </span>
+            </p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              عمود «كود اللوكيشن» اختياري (مثل 20-01-0) ويجب أن يتبع المخزن المختار.
             </p>
           </div>
 
@@ -290,16 +352,18 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
                       <th className="erp-th">{t('modalManager.importInventoryInByCode.table.code')}</th>
                       <th className="erp-th">{t('modalManager.importInventoryInByCode.table.itemName')}</th>
                       <th className="erp-th">{t('modalManager.importInventoryInByCode.table.quantity')}</th>
+                      <th className="erp-th">اللوكيشن</th>
                       <th className="erp-th">{t('modalManager.importInventoryInByCode.table.status')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-[var(--color-border)]">
                     {importResult.rows.map((row) => (
-                      <tr key={`${row.rowIndex}-${row.productCode}`}>
+                      <tr key={`${row.rowIndex}-${row.productCode}-${row.locationCode}`}>
                         <td className="px-3 py-2 text-sm">{row.rowIndex}</td>
                         <td className="px-3 py-2 text-sm font-bold">{row.productCode || '—'}</td>
                         <td className="px-3 py-2 text-sm">{row.productName || '—'}</td>
                         <td className="px-3 py-2 text-sm">{row.quantity || 0}</td>
+                        <td className="px-3 py-2 text-sm font-mono">{row.locationCode || '—'}</td>
                         <td className="px-3 py-2 text-sm">
                           {row.errors.length === 0 ? (
                             <span className="text-emerald-600 font-bold">{t('modalManager.importInventoryInByCode.valid')}</span>
@@ -341,4 +405,3 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     </div>
   );
 };
-

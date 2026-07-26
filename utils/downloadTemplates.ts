@@ -41,6 +41,57 @@ export function downloadProductsTemplate() {
   XLSX.writeFile(wb, 'template_products.xlsx');
 }
 
+/** Combined sheet: product BOM lines + optional location code + component opening balance. */
+export function downloadProductComponentsTemplate() {
+  const wb = XLSX.utils.book_new();
+  const rows: (string | number)[][] = [
+    [
+      'كود المنتج',
+      'كود المادة',
+      'اسم المادة',
+      'الكمية المستخدمة',
+      'تكلفة الوحدة',
+      'كود اللوكيشن',
+      'رصيد المكون',
+    ],
+    ['SK-999N', 'MAT-001', 'موتور نحاس', 1, 18, '20-01-0', 100],
+    ['SK-999N', 'MAT-002', 'هيكل بلاستيك', 1, 7.5, '20-01-0', 50],
+    ['PRD-002', 'MAT-003', 'جلدة مانعة للتسرب', 2, 1.2, '', ''],
+    ['PRD-003', 'MAT-004', 'قماش خارجي', 1.5, 22, '20-02-1', 200],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  // Note under headers as second info row would break parser — keep sample with balances
+  ws['!cols'] = [
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 28 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 16 },
+    { wch: 14 },
+  ];
+  if (!ws['!views']) ws['!views'] = [];
+  (ws['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, ws, 'مكونات المنتجات');
+
+  const guideAoa: (string | number)[][] = [
+    ['العمود', 'إلزامي؟', 'ملاحظات'],
+    ['كود المنتج', 'نعم', 'منتج موجود مسبقاً'],
+    ['كود المادة / اسم المادة', 'نعم', 'كود جديد + اسم = إنشاء مادة تلقائياً'],
+    ['الكمية المستخدمة', 'نعم', 'كمية BOM لكل وحدة منتج'],
+    ['تكلفة الوحدة', 'لا', ''],
+    ['كود اللوكيشن', 'لا', 'مثال: 20-01-0'],
+    ['رصيد المكون', 'لا', 'كمية إدخال مخزون للمادة (اختياري)'],
+  ];
+  const guideWs = XLSX.utils.aoa_to_sheet(guideAoa);
+  guideWs['!cols'] = [{ wch: 28 }, { wch: 10 }, { wch: 40 }];
+  if (!guideWs['!views']) guideWs['!views'] = [];
+  (guideWs['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, guideWs, 'تعليمات');
+
+  XLSX.writeFile(wb, 'template_product_components.xlsx');
+}
+
 export interface ReportsTemplateLookups {
   lines: { name: string }[];
   products: { name: string; code: string }[];
@@ -274,13 +325,13 @@ export function downloadHRTemplate(lookups?: HRTemplateLookups) {
 export function downloadInventoryInByCodeTemplate() {
   const wb = XLSX.utils.book_new();
   const rows: (string | number)[][] = [
-    ['كود المنتج', 'الكمية'],
-    ['SK-999N', 120],
-    ['PRD-002', 45],
-    ['PRD-003', 200],
+    ['كود المنتج', 'الكمية', 'كود اللوكيشن'],
+    ['SK-999N', 120, '20-01-0'],
+    ['PRD-002', 45, '20-01-0'],
+    ['PRD-003', 200, ''],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 20 }, { wch: 14 }];
+  ws['!cols'] = [{ wch: 20 }, { wch: 14 }, { wch: 16 }];
   if (!ws['!views']) ws['!views'] = [];
   (ws['!views'] as any[]).push({ rightToLeft: true });
   XLSX.utils.book_append_sheet(wb, ws, 'إضافة منتج نهائي');
@@ -290,13 +341,13 @@ export function downloadInventoryInByCodeTemplate() {
 export function downloadInventoryRawInByCodeTemplate() {
   const wb = XLSX.utils.book_new();
   const rows: (string | number)[][] = [
-    ['كود المادة الخام', 'الكمية'],
-    ['RM-0001', 300],
-    ['RM-0002', 125],
-    ['RM-0003', 40],
+    ['كود المادة الخام', 'الكمية', 'كود اللوكيشن'],
+    ['RM-0001', 300, '20-01-0'],
+    ['RM-0002', 125, '20-01-0'],
+    ['RM-0003', 40, ''],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
-  ws['!cols'] = [{ wch: 22 }, { wch: 14 }];
+  ws['!cols'] = [{ wch: 22 }, { wch: 14 }, { wch: 16 }];
   if (!ws['!views']) ws['!views'] = [];
   (ws['!views'] as any[]).push({ rightToLeft: true });
   XLSX.utils.book_append_sheet(wb, ws, 'إضافة مواد خام');

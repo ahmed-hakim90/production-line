@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Button, Badge } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
@@ -15,7 +16,21 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+
 export const StockCounts: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const {
+    scoped,
+    warehouseId: scopedWarehouseId,
+    warehouseIds,
+    routingConfigured,
+    warehouseSelectLocked,
+    filterWarehouses,
+    resolveScopedWarehouseId,
+    settingsPath,
+  } = useMaterialsWarehouseScope();
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
@@ -23,7 +38,9 @@ export const StockCounts: React.FC = () => {
   const [sessions, setSessions] = useState<StockCountSession[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
-  const [warehouseId, setWarehouseId] = useState('');
+  const [warehouseId, setWarehouseId] = useState(
+    () => searchParams.get('warehouseId') || scopedWarehouseId || '',
+  );
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string>('');
 
@@ -34,13 +51,20 @@ export const StockCounts: React.FC = () => {
       stockService.getBalances(),
     ]);
     setSessions(ses);
-    setWarehouses(whs);
+    setWarehouses(filterWarehouses(whs));
     setBalances(bals);
   };
 
   useEffect(() => {
     void loadData();
   }, []);
+
+  useEffect(() => {
+    if (!scoped) return;
+    setWarehouseId((prev) =>
+      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+    );
+  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const warehouseNameById = useMemo(
     () => new Map(warehouses.map((w) => [w.id, w.name])),
@@ -97,9 +121,19 @@ export const StockCounts: React.FC = () => {
         <p className="page-subtitle">إنشاء جلسات جرد واعتماد فروق الكميات كتسويات تلقائية.</p>
       </div>
 
+      <MaterialsWarehouseScopeBanner
+        scoped={scoped}
+        routingConfigured={routingConfigured}
+        settingsPath={settingsPath}
+      />
+
       <Card title="فتح جلسة جرد جديدة">
         <div className="flex flex-col sm:flex-row gap-3">
-          <Select value={warehouseId || 'none'} onValueChange={(value) => setWarehouseId(value === 'none' ? '' : value)}>
+          <Select
+            value={warehouseId || 'none'}
+            disabled={warehouseSelectLocked}
+            onValueChange={(value) => setWarehouseId(value === 'none' ? '' : value)}
+          >
             <SelectTrigger className="flex-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa]">
               <SelectValue placeholder="اختر المخزن" />
             </SelectTrigger>

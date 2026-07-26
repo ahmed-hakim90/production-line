@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { Badge, Button, Card } from '../components/UI';
 import { transferApprovalService } from '../services/transferApprovalService';
@@ -15,6 +15,7 @@ import { StockTransferPrint, type StockTransferPrintData } from '../components/S
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/transferUnits';
 import { toast } from '../../../components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import {
   Select,
   SelectContent,
@@ -22,6 +23,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+
+const PAGE_SIZE = 20;
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'قيد الاعتماد',
@@ -38,6 +43,7 @@ function transferAgeDays(row: InventoryTransferRequest): number {
 
 export const TransferApprovals: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
   const uid = useAppStore((s) => s.uid);
@@ -69,12 +75,26 @@ export const TransferApprovals: React.FC = () => {
   const [requests, setRequests] = useState<InventoryTransferRequest[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'>('pending');
+  const [warehouseFilter, setWarehouseFilter] = useState(
+    () => searchParams.get('warehouseId') || '',
+  );
+  const {
+    scoped,
+    warehouseId: scopedWarehouseId,
+    warehouseIds,
+    routingConfigured,
+    warehouseSelectLocked,
+    filterWarehouses,
+    resolveScopedWarehouseId,
+    settingsPath,
+  } = useMaterialsWarehouseScope();
   const [slaOnly, setSlaOnly] = useState(false);
   const transferSlaDays = useAppStore((s) => Number(s.systemSettings.planSettings?.transferSlaWarningDays || 2));
   const [typeTab, setTypeTab] = useState<
     'all' | 'manual' | 'production_entry' | 'production_auto' | 'finished_final' | 'packaging'
   >('all');
   const [loading, setLoading] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
   const [bulkApproving, setBulkApproving] = useState(false);
   const [processingId, setProcessingId] = useState<string>('');
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
@@ -84,6 +104,13 @@ export const TransferApprovals: React.FC = () => {
     printSettings: printTemplate,
     documentTitle: 'pending-transfer-approval',
   });
+
+  useEffect(() => {
+    if (!scoped) return;
+    setWarehouseFilter((prev) =>
+      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+    );
+  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const canApprove = can(transferApprovalPermission as any);
   const canApproveNegativeFinishedTransfer = can('inventory.finishedStock.allowNegativeApprove');
@@ -131,7 +158,7 @@ export const TransferApprovals: React.FC = () => {
           warehouseService.getWarehousesForReportingFilters(),
         ]);
         setRequests(rows);
-        setWarehouses(whs);
+        setWarehouses(filterWarehouses(whs));
       } else {
         const rows = await transferApprovalService.getAll();
         setRequests(rows);
@@ -153,7 +180,7 @@ export const TransferApprovals: React.FC = () => {
     () => new Map(rawProducts.map((p) => [p.id || '', Number(p.unitsPerCarton || 0)])),
     [rawProducts],
   );
-  const withResolvedUnitsPerCarton = <T extends { itemType: 'finished_good' | 'raw_material'; itemId: string; unitsPerCarton?: number }>(line: T): T => {
+  const withResolvedUnitsPerCarton = <T extends { itemType: InventoryTransferRequest['lines'][number]['itemType']; itemId: string; quantity: number; unitsPerCarton?: number }>(line: T): T => {
     if (line.itemType !== 'finished_good') return line;
     const resolved = Number(line.unitsPerCarton || unitsPerCartonByProductId.get(line.itemId) || 0);
     return { ...line, unitsPerCarton: resolved };
@@ -173,10 +200,25 @@ export const TransferApprovals: React.FC = () => {
   const filtered = useMemo(() => {
     return requests.filter((row) => {
       const statusOk = statusFilter === 'all' || row.status === statusFilter;
+      const warehouseOk =
+        !warehouseFilter ||
+        row.fromWarehouseId === warehouseFilter ||
+        row.toWarehouseId === warehouseFilter;
       const slaOk = !slaOnly || (row.status === 'pending' && transferAgeDays(row) >= transferSlaDays);
-      return statusOk && matchesTypeTab(row) && slaOk;
+      return statusOk && warehouseOk && matchesTypeTab(row) && slaOk;
     });
-  }, [requests, statusFilter, typeTab, slaOnly, transferSlaDays]);
+  }, [requests, statusFilter, warehouseFilter, typeTab, slaOnly, transferSlaDays]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
+  const pagedRows = useMemo(
+    () => filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [filtered, page],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [statusFilter, warehouseFilter, typeTab, slaOnly]);
 
   const bulkApproveEligible = useMemo(
     () => requests.filter((r) => r.status === 'pending' && r.id && !isSelfProductionEntryRequest(r)),
@@ -373,6 +415,21 @@ export const TransferApprovals: React.FC = () => {
               <SelectItem value="cancelled">ملغاة</SelectItem>
             </SelectContent>
           </Select>
+          <Select
+            value={warehouseFilter || 'all'}
+            disabled={warehouseSelectLocked}
+            onValueChange={(v) => setWarehouseFilter(v === 'all' ? '' : v)}
+          >
+            <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm min-w-[180px]">
+              <SelectValue placeholder="كل المخازن" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">كل المخازن</SelectItem>
+              {warehouses.map((w) => (
+                <SelectItem key={w.id} value={w.id || ''}>{w.name}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {canApprove && bulkApproveEligible.length > 0 && (
             <Button
               variant="primary"
@@ -389,6 +446,12 @@ export const TransferApprovals: React.FC = () => {
           </Button>
         </div>
       </div>
+
+      <MaterialsWarehouseScopeBanner
+        scoped={scoped}
+        routingConfigured={routingConfigured}
+        settingsPath={settingsPath}
+      />
 
       <div className="flex flex-wrap gap-2">
         {([
@@ -439,7 +502,7 @@ export const TransferApprovals: React.FC = () => {
         ) : (
           <div className="space-y-2.5">
             <div className="md:hidden space-y-2.5 p-3">
-              {filtered.map((row) => {
+              {pagedRows.map((row) => {
                 const requestType = row.requestType || 'transfer';
                 const fromName = requestType === 'production_entry'
                   ? (row.fromWarehouseName || 'تقارير الإنتاج')
@@ -493,7 +556,7 @@ export const TransferApprovals: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--color-border)]">
-                {filtered.map((row) => {
+                {pagedRows.map((row) => {
                   const rowProcessing = processingId === row.id || bulkApproving;
                   const requestType = row.requestType || 'transfer';
                   const rowIsSelfProductionEntry = isSelfProductionEntryRequest(row);
@@ -612,6 +675,13 @@ export const TransferApprovals: React.FC = () => {
               </tbody>
             </table>
             </div>
+            <DataPaginationFooter
+              page={page}
+              totalPages={totalPages}
+              totalItems={filtered.length}
+              onPageChange={setCurrentPage}
+              itemLabel="طلب"
+            />
           </div>
         )}
       </Card>
@@ -623,4 +693,3 @@ export const TransferApprovals: React.FC = () => {
     </div>
   );
 };
-

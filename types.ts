@@ -1209,6 +1209,16 @@ export interface InventoryRoutingSettings {
   autoTransferFinishedToFinal?: boolean;
   requireApprovalForProductionEntry?: boolean;
   requireApprovalForAutoTransfers?: boolean;
+  /**
+   * When true, saving a production report deducts BOM components directly
+   * (without a production issue order). Prefer off + صرف إنتاج.
+   */
+  autoConsumeBomOnProductionReport?: boolean;
+  /**
+   * When true (default), finished-product report inventory posting requires an
+   * issued/approved production issue for the report or its work order / plan.
+   */
+  requireIssuedProductionIssueOnReport?: boolean;
 }
 
 export interface PlanSettings {
@@ -1540,7 +1550,8 @@ export type FirestoreRoleKey =
   | 'hall_supervisor'
   | 'supervisor'
   | 'hr_manager'
-  | 'accountant';
+  | 'accountant'
+  | 'materials_warehouse';
 
 export interface FirestoreRole {
   id?: string;

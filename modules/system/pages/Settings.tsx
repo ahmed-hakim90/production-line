@@ -37,6 +37,7 @@ import { ProductionWorkerSettingsSection } from '@/modules/production/components
 import { GeneralSystemBehaviorSection } from '../components/settings/GeneralSystemBehaviorSection';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionWorkerSettings } from '@/types';
 import { InventoryRoutingSettingsSection } from '../components/settings/InventoryRoutingSettingsSection';
+import { WarehouseLocationSettingsSection } from '../components/settings/WarehouseLocationSettingsSection';
 import { ProductionRequestRoutingSettingsSection } from '../components/settings/ProductionRequestRoutingSettingsSection';
 import { GeneralDashboardDisplaySection } from '../components/settings/GeneralDashboardDisplaySection';
 import { GeneralAlertsSection } from '../components/settings/GeneralAlertsSection';
@@ -351,6 +352,7 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     setSaveMessage,
     hasUnsavedChanges,
     handleSave,
+    handleSaveAll,
   } = useSystemSettingsController({
     systemSettings,
     updateSystemSettings,
@@ -360,6 +362,7 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     localKPIs,
     localPrint,
     localPlanSettings,
+    setLocalPlanSettings,
     localBranding,
     localTheme,
     localDashboardDisplay,
@@ -776,7 +779,7 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
           <GeneralSettingsHeader
             isAdmin={isAdmin}
             saving={saving}
-            onSave={() => handleSave('general')}
+            onSave={handleSaveAll}
           />
 
           {can('settings.edit') && (
@@ -850,6 +853,11 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             isAdmin={isAdmin}
             localPlanSettings={localPlanSettings}
             setLocalPlanSettings={setLocalPlanSettings}
+            inventoryWarehouses={inventoryWarehouses}
+          />
+
+          <WarehouseLocationSettingsSection
+            isAdmin={isAdmin}
             inventoryWarehouses={inventoryWarehouses}
           />
         </>

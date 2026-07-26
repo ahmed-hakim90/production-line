@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import type { InventoryRoutingSettings, PlanSettings } from '../../../../types';
 import type { Warehouse } from '../../../inventory/types';
 import { migrateInventoryRoutingV1 } from '../../../inventory/services/inventoryMigrationService';
+import { syncPlanSettingsWarehouseRouting } from '../../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import { useAppStore } from '../../../../store/useAppStore';
 
 const WAREHOUSE_ROLE_LABELS: Record<string, string> = {
@@ -35,6 +36,8 @@ const emptyRouting = (): InventoryRoutingSettings => ({
   autoTransferFinishedToFinal: false,
   requireApprovalForProductionEntry: true,
   requireApprovalForAutoTransfers: true,
+  autoConsumeBomOnProductionReport: false,
+  requireIssuedProductionIssueOnReport: true,
 });
 
 export const InventoryRoutingSettingsSection: React.FC<Props> = ({
@@ -49,13 +52,16 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
 
   if (!isAdmin) return null;
 
-  const routing = { ...emptyRouting(), ...localPlanSettings.inventoryRouting };
+  const synced = syncPlanSettingsWarehouseRouting(localPlanSettings);
+  const routing = { ...emptyRouting(), ...synced.inventoryRouting };
 
   const patchRouting = (patch: Partial<InventoryRoutingSettings>) => {
-    setLocalPlanSettings((prev) => ({
-      ...prev,
-      inventoryRouting: { ...emptyRouting(), ...prev.inventoryRouting, ...patch },
-    }));
+    setLocalPlanSettings((prev) =>
+      syncPlanSettingsWarehouseRouting({
+        ...prev,
+        inventoryRouting: { ...emptyRouting(), ...prev.inventoryRouting, ...patch },
+      }),
+    );
   };
 
   const runMigration = async () => {
@@ -64,6 +70,18 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
     try {
       const result = await migrateInventoryRoutingV1();
       await fetchSystemSettings();
+      const freshPlan = useAppStore.getState().systemSettings.planSettings;
+      if (freshPlan) {
+        setLocalPlanSettings(syncPlanSettingsWarehouseRouting({
+          ...localPlanSettings,
+          ...freshPlan,
+          inventoryRouting: {
+            ...emptyRouting(),
+            ...localPlanSettings.inventoryRouting,
+            ...freshPlan.inventoryRouting,
+          },
+        }));
+      }
       setMigrateMsg(
         result.alreadyMigrated
           ? 'تمت المزامنة مسبقاً — تم التأكد من الإعدادات والأدوار.'
@@ -139,8 +157,8 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
       {migrateMsg && <p className="text-sm font-medium text-slate-600">{migrateMsg}</p>}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {select('مخزن المواد الخام', 'استهلاك الخامات والمستهلكات من BOM.', routing.rawMaterialWarehouseId, (v) => patchRouting({ rawMaterialWarehouseId: v }), WAREHOUSE_ROLE_LABELS.raw_material)}
-        {select('مخزن المفكك', 'خصم المكونات ونصف المصنع.', routing.decomposedWarehouseId, (v) => patchRouting({ decomposedWarehouseId: v }), WAREHOUSE_ROLE_LABELS.decomposed)}
+        {select('مخزن المواد الخام', 'مخزن الخامات الوارد/الشراء. يُستخدم كاحتياطي فقط إذا لم يُحدد مخزن المفكك.', routing.rawMaterialWarehouseId, (v) => patchRouting({ rawMaterialWarehouseId: v }), WAREHOUSE_ROLE_LABELS.raw_material)}
+        {select('مخزن المفكك (مستلزم إنتاج)', 'رصيد مكونات BOM للصرف والإنتاج — مصدر خصم صرف الإنتاج وخصم BOM التلقائي.', routing.decomposedWarehouseId, (v) => patchRouting({ decomposedWarehouseId: v }), WAREHOUSE_ROLE_LABELS.decomposed)}
         {select('مخزن إنتاج تحت التشغيل (WIP)', 'أول استقبال للكمية المنتجة من التقرير.', routing.productionWipWarehouseId, (v) => patchRouting({ productionWipWarehouseId: v }), WAREHOUSE_ROLE_LABELS.production_wip)}
         {select('مخزن تم الصنع', 'مرحلة ما بعد الإنتاج قبل التام.', routing.finishedStagingWarehouseId, (v) => patchRouting({ finishedStagingWarehouseId: v }), WAREHOUSE_ROLE_LABELS.finished_staging)}
         {select('مخزن المنتج التام', 'مخزن البيع / التسليم.', routing.finalProductWarehouseId, (v) => patchRouting({ finalProductWarehouseId: v }), WAREHOUSE_ROLE_LABELS.final_product)}
@@ -154,7 +172,39 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
         {toggle('تحويل تلقائي تم الصنع → منتج تام', 'نقل اختياري إلى مخزن المنتج التام.', Boolean(routing.autoTransferFinishedToFinal), () => patchRouting({ autoTransferFinishedToFinal: !routing.autoTransferFinishedToFinal }))}
         {toggle('اعتماد إدخال الإنتاج', 'إدخال WIP يتطلب اعتماداً قبل الترحيل.', routing.requireApprovalForProductionEntry !== false, () => patchRouting({ requireApprovalForProductionEntry: !routing.requireApprovalForProductionEntry }))}
         {toggle('اعتماد التحويلات التلقائية', 'التحويلات التلقائية تمر باعتماد التحويلات.', routing.requireApprovalForAutoTransfers !== false, () => patchRouting({ requireApprovalForAutoTransfers: !routing.requireApprovalForAutoTransfers }))}
+        {toggle(
+          'إلزام صرف إنتاج معتمد قبل ترحيل مخزون التقرير',
+          'تقرير المنتج التام لا يرحّل للمخزن إلا بعد اعتماد وإصدار إذن صرف إنتاج. بعد الاعتماد يمكن إعادة ترحيل المخزون.',
+          routing.requireIssuedProductionIssueOnReport !== false,
+          () => patchRouting({ requireIssuedProductionIssueOnReport: !(routing.requireIssuedProductionIssueOnReport !== false) }),
+        )}
+        {toggle(
+          'خصم BOM تلقائي عند حفظ التقرير',
+          'يعمل فقط إذا كان إلزام صرف الإنتاج مطفأ. عند التفعيل يخصم المكونات مباشرة بدون أمر صرف.',
+          Boolean(routing.autoConsumeBomOnProductionReport),
+          () => patchRouting({ autoConsumeBomOnProductionReport: !routing.autoConsumeBomOnProductionReport }),
+        )}
       </div>
+
+      {routing.requireIssuedProductionIssueOnReport !== false && (
+        <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          <p className="font-bold">مسار صرف الإنتاج مفعّل</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            أنشئ إذن صرف من صفحة «صرف إنتاج»، ثم اعتمده (تم الصرف). بعدها يُسمح بترحيل مخزون تقرير الإنتاج.
+            خصم BOM التلقائي يُتجاهل طالما هذا الخيار مفعّل.
+          </p>
+        </div>
+      )}
+
+      {Boolean(routing.autoConsumeBomOnProductionReport) && routing.requireIssuedProductionIssueOnReport === false && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-bold">تنبيه: خصم مباشر من التقرير</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            حفظ تقرير الإنتاج سيخصم مكونات الـ BOM من مخزن المستلزم/المفكك فوراً إذا لم يوجد أمر صرف صادر.
+            قد يحدث خصم مزدوج إن استخدمت أيضاً «صرف إنتاج».
+          </p>
+        </div>
+      )}
 
       {localPlanSettings.inventoryRoutingMigratedAt && (
         <p className="text-xs text-emerald-700 font-medium">

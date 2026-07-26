@@ -227,7 +227,7 @@
         'production_report_uniques', 'product_categories', 'material_categories', 'automation_runs', 'backups',
         'production_routing_plans', 'production_routing_steps',
         'supply_cycles', 'supply_cycle_waste_lines',
-        'entity_code_counters', 'inventory_counters'
+        'entity_code_counters', 'entity_code_claims', 'inventory_counters'
       ];
     }
 

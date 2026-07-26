@@ -22,7 +22,8 @@ export type Permission =
   | 'manufacturing.purchaseGap.view'
   | 'catalog.categories.view' | 'catalog.categories.create' | 'catalog.categories.edit' | 'catalog.categories.delete'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
-  | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove'
+  | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.locations.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove' | 'inventory.disassembly.manage'
+  | 'productionIssue.create' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
@@ -207,9 +208,16 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'inventory.transactions.delete', label: 'حذف حركات المخزون' },
       { key: 'inventory.counts.manage', label: 'إدارة الجرد واعتماد الفروق' },
       { key: 'inventory.warehouses.manage', label: 'إدارة المخازن' },
+      { key: 'inventory.locations.manage', label: 'إدارة لوكيشنات المخازن' },
       { key: 'inventory.items.manage', label: 'إدارة الأصناف الخام' },
       { key: 'inventory.transfers.approve', label: 'اعتماد تحويلات المخازن' },
       { key: 'inventory.finishedStock.allowNegativeApprove', label: 'الموافقة على تحويل بالسالب (تم الصنع أو مخزن المفكك)' },
+      { key: 'productionIssue.create', label: 'إنشاء أوامر صرف إنتاج' },
+      { key: 'productionIssue.approve', label: 'اعتماد صرف الإنتاج' },
+      { key: 'productionIssue.print', label: 'طباعة إذن صرف إنتاج' },
+      { key: 'productionIssue.return', label: 'تسجيل مرتجع مكونات' },
+      { key: 'productionIssue.compensate', label: 'تسجيل تعويض مكونات' },
+      { key: 'inventory.disassembly.manage', label: 'إدارة التفكيك العكسي' },
     ],
   },
   {
@@ -418,6 +426,30 @@ export function checkPermission(
   }
   if (permission === 'inventory.analytics.view' || permission === 'inventory.exceptions.view') {
     return permissions['inventory.view'] === true;
+  }
+  if (permission === 'inventory.locations.manage') {
+    return permissions['inventory.warehouses.manage'] === true;
+  }
+  // Legacy roles had inventory.items.manage before materials.manage existed.
+  if (permission === 'materials.manage') {
+    return permissions['inventory.items.manage'] === true || permissions['products.createRawMaterial'] === true;
+  }
+  if (permission === 'materials.view') {
+    return (
+      permissions['materials.manage'] === true
+      || permissions['inventory.items.manage'] === true
+      || permissions['products.rawMaterials.view'] === true
+      || permissions['inventory.view'] === true
+    );
+  }
+  if (permission === 'productionIssue.create' || permission === 'productionIssue.print' || permission === 'productionIssue.return') {
+    return permissions['inventory.transactions.create'] === true;
+  }
+  if (permission === 'productionIssue.approve' || permission === 'productionIssue.compensate') {
+    return permissions['inventory.transfers.approve'] === true || permissions['inventory.transactions.create'] === true;
+  }
+  if (permission === 'inventory.disassembly.manage') {
+    return permissions['inventory.transactions.create'] === true;
   }
   if (permission === 'manufacturing.purchaseGap.view') {
     return permissions['planning.materialRequirements.view'] === true;

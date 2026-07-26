@@ -124,26 +124,36 @@ export const manufacturingMigrationService = {
         continue;
       }
 
-      const materialId = await materialService.create({
-        code: raw.code || `RM-${raw.id.slice(0, 6)}`,
-        name: raw.name,
-        type: 'raw_material',
-        baseUnit: normalizeLegacyUnit(raw.unit),
-        purchaseUnit: raw.unit,
-        conversionRate: 1,
-        purchaseCost: 0,
-        wastePercent: 0,
-        isManufacturedInternally: false,
-        linkedCostCenterIds: [],
-        legacyRawMaterialId: raw.id,
-        categoryName: raw.categoryName,
-        minStock: Number(raw.minStock ?? 0),
-        isActive: raw.isActive !== false,
-      });
+      const code = raw.code || `RM-${raw.id.slice(0, 6)}`;
+      const byCode = await materialService.getByCode(code);
+      if (byCode?.id) {
+        legacyIdToMaterialId.set(raw.id, byCode.id);
+        result.materialsSkipped += 1;
+        continue;
+      }
 
-      if (materialId) {
+      try {
+        const { id: materialId, created } = await materialService.createOrGetByCode({
+          code,
+          name: raw.name,
+          type: 'raw_material',
+          baseUnit: normalizeLegacyUnit(raw.unit),
+          purchaseUnit: raw.unit,
+          conversionRate: 1,
+          purchaseCost: 0,
+          wastePercent: 0,
+          isManufacturedInternally: false,
+          linkedCostCenterIds: [],
+          legacyRawMaterialId: raw.id,
+          categoryName: raw.categoryName,
+          minStock: Number(raw.minStock ?? 0),
+          isActive: raw.isActive !== false,
+        });
         legacyIdToMaterialId.set(raw.id, materialId);
-        result.materialsCreated += 1;
+        if (created) result.materialsCreated += 1;
+        else result.materialsSkipped += 1;
+      } catch {
+        result.materialsSkipped += 1;
       }
     }
 
@@ -175,20 +185,25 @@ export const manufacturingMigrationService = {
           materialId = byName?.id;
         }
         if (!materialId && row.materialName) {
-          const created = await materialService.create({
-            code: `MIG-${productId.slice(0, 6)}-${sortOrder}`,
-            name: row.materialName,
-            type: 'raw_material',
-            baseUnit: 'piece',
-            conversionRate: 1,
-            purchaseCost: Number(row.unitCost || 0),
-            isActive: true,
-            isManufacturedInternally: false,
-          });
-          materialId = created ?? undefined;
-          if (materialId && row.materialId) {
-            legacyIdToMaterialId.set(row.materialId, materialId);
-            result.materialsCreated += 1;
+          try {
+            const { id: created, created: wasCreated } = await materialService.createOrGetByCode({
+              code: `MIG-${productId.slice(0, 6)}-${sortOrder}`,
+              name: row.materialName,
+              type: 'raw_material',
+              baseUnit: 'piece',
+              conversionRate: 1,
+              purchaseCost: Number(row.unitCost || 0),
+              isActive: true,
+              isManufacturedInternally: false,
+            });
+            materialId = created;
+            if (materialId && row.materialId) {
+              legacyIdToMaterialId.set(row.materialId, materialId);
+              if (wasCreated) result.materialsCreated += 1;
+              else result.materialsSkipped += 1;
+            }
+          } catch {
+            // skip BOM line if material cannot be created
           }
         } else if (materialId && row.unitCost) {
           await materialService.update(materialId, {

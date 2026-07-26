@@ -207,6 +207,7 @@ interface SearchableSelectProps {
   onChange: (value: string) => void;
   placeholder?: string;
   className?: string;
+  disabled?: boolean;
 }
 
 export const SearchableSelect: React.FC<SearchableSelectProps> = ({
@@ -215,6 +216,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   onChange,
   placeholder,
   className = '',
+  disabled = false,
 }) => {
   const { t } = useTranslation();
   const resolvedPlaceholder = placeholder ?? t('shared.selectPlaceholder');
@@ -236,15 +238,17 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={disabled ? false : open} onOpenChange={(next) => !disabled && setOpen(next)}>
       <PopoverTrigger asChild>
         <UiButton
           type="button"
           variant="outline"
           role="combobox"
           aria-expanded={open}
+          disabled={disabled}
           className={cn(
             'w-full justify-between h-10 text-[13px] font-medium border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
+            disabled && 'opacity-70 cursor-not-allowed',
             className
           )}
         >

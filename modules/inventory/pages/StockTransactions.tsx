@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { Card, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
@@ -19,6 +20,7 @@ import {
 } from '../../../utils/reportExport';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { toast } from '../../../components/Toast';
 import {
   Select,
@@ -35,8 +37,23 @@ import { sourceModuleLabel } from '../lib/stockLabels';
 import { StockTransactionsTable } from './stockTransactions/StockTransactionsTable';
 import { StockTransactionsDialogs } from './stockTransactions/StockTransactionsDialogs';
 import { movementLabel } from './stockTransactions/types';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+
+const PAGE_SIZE = 25;
 const APP_VERSION = __APP_VERSION__;
 export const StockTransactions: React.FC = () => {
+  const [searchParams] = useSearchParams();
+  const {
+    scoped,
+    warehouseId: scopedWarehouseId,
+    warehouseIds,
+    routingConfigured,
+    warehouseSelectLocked,
+    filterWarehouses,
+    resolveScopedWarehouseId,
+    settingsPath,
+  } = useMaterialsWarehouseScope();
   const transferShareExportRootId = `stock-transfer-share-${useId().replace(/:/g, '')}`;
   const { can } = usePermission();
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
@@ -53,12 +70,15 @@ export const StockTransactions: React.FC = () => {
   const [pendingTransfers, setPendingTransfers] = useState<InventoryTransferRequest[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const { openModal } = useGlobalModalManager();
-  const [warehouseFilter, setWarehouseFilter] = useState('');
+  const [warehouseFilter, setWarehouseFilter] = useState(
+    () => searchParams.get('warehouseId') || scopedWarehouseId || '',
+  );
   const [movementFilter, setMovementFilter] = useState('');
   const [sourceModuleFilter, setSourceModuleFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [search, setSearch] = useState('');
+  const [currentPage, setCurrentPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<'export' | 'delete' | ''>('');
   const [processing, setProcessing] = useState(false);
@@ -105,7 +125,7 @@ export const StockTransactions: React.FC = () => {
       const pending = (await transferApprovalService.getAll()).filter((row) => row.status === 'pending');
       setTransactions(txs);
       setPendingTransfers(pending);
-      setWarehouses(whs);
+      setWarehouses(filterWarehouses(whs));
       setSelectedIds([]);
     } finally {
       setLoading(false);
@@ -115,6 +135,13 @@ export const StockTransactions: React.FC = () => {
   useEffect(() => {
     void loadData();
   }, [sourceModuleFilter, dateFrom, dateTo]);
+
+  useEffect(() => {
+    if (!scoped) return;
+    setWarehouseFilter((prev) =>
+      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+    );
+  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const warehouseMap = useMemo(() => new Map(warehouses.map((w) => [w.id, w.name])), [warehouses]);
   const unitsPerCartonByProductId = useMemo(
@@ -129,7 +156,12 @@ export const StockTransactions: React.FC = () => {
   const filtered = useMemo(() => transactions.filter((tx) => {
     const q = search.trim().toLowerCase();
     const matchesSearch = !q || tx.itemName.toLowerCase().includes(q) || tx.itemCode.toLowerCase().includes(q);
-    const matchesWarehouse = !warehouseFilter || tx.warehouseId === warehouseFilter;
+    const matchesWarehouse = scoped
+      ? warehouseIds.length > 0 &&
+        (warehouseFilter
+          ? tx.warehouseId === warehouseFilter
+          : warehouseIds.includes(tx.warehouseId))
+      : !warehouseFilter || tx.warehouseId === warehouseFilter;
     const matchesMovement = !movementFilter || tx.movementType === movementFilter;
     const matchesSource = !sourceModuleFilter
       || (sourceModuleFilter === 'legacy' ? !tx.sourceModule : tx.sourceModule === sourceModuleFilter);
@@ -137,25 +169,31 @@ export const StockTransactions: React.FC = () => {
     const matchesFrom = !dateFrom || createdMs >= new Date(dateFrom).getTime();
     const matchesTo = !dateTo || createdMs <= new Date(`${dateTo}T23:59:59`).getTime();
     return matchesSearch && matchesWarehouse && matchesMovement && matchesSource && matchesFrom && matchesTo;
-  }), [transactions, search, warehouseFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo]);
+  }), [transactions, search, warehouseFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo, scoped, warehouseIds]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedRows = useMemo(
     () => filtered.filter((row) => row.id && selectedSet.has(row.id)),
     [filtered, selectedSet],
   );
-  const allFilteredSelected = filtered.length > 0 && filtered.every((row) => row.id && selectedSet.has(row.id));
   const effectiveExportRows = selectedRows.length > 0 ? selectedRows : filtered;
   const pendingFiltered = useMemo(
     () =>
       pendingTransfers.filter((row) => {
         const q = search.trim().toLowerCase();
-        const matchesWarehouse = !warehouseFilter || row.fromWarehouseId === warehouseFilter || row.toWarehouseId === warehouseFilter;
+        const matchesWarehouse = scoped
+          ? warehouseIds.length > 0 &&
+            (warehouseFilter
+              ? row.fromWarehouseId === warehouseFilter || row.toWarehouseId === warehouseFilter
+              : warehouseIds.has
+                ? false
+                : warehouseIds.includes(row.fromWarehouseId) || warehouseIds.includes(row.toWarehouseId))
+          : !warehouseFilter || row.fromWarehouseId === warehouseFilter || row.toWarehouseId === warehouseFilter;
         const matchesMovement = !movementFilter || movementFilter === 'TRANSFER';
         const linesText = row.lines.map((line) => `${line.itemName} ${line.itemCode}`).join(' ').toLowerCase();
         const matchesSearch = !q || row.referenceNo.toLowerCase().includes(q) || linesText.includes(q);
         return matchesWarehouse && matchesMovement && matchesSearch;
       }),
-    [pendingTransfers, search, warehouseFilter, movementFilter],
+    [pendingTransfers, search, warehouseFilter, movementFilter, scoped, warehouseIds],
   );
   const combinedRows = useMemo(() => {
     const nonTransferRows = filtered.filter((tx) => tx.movementType !== 'TRANSFER');
@@ -198,6 +236,28 @@ export const StockTransactions: React.FC = () => {
     return [...txRows, ...approvedTransferRows, ...pendingRows].sort((a, b) => b.sortAt - a.sortAt);
   }, [filtered, pendingFiltered]);
 
+  const totalPages = Math.max(1, Math.ceil(combinedRows.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
+  const pagedCombinedRows = useMemo(
+    () => combinedRows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [combinedRows, page],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, warehouseFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo]);
+
+  const visibleSelectableIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const entry of pagedCombinedRows) {
+      if (entry.kind === 'transaction' && entry.tx.id) ids.push(entry.tx.id);
+    }
+    return ids;
+  }, [pagedCombinedRows]);
+
+  const allFilteredSelected =
+    visibleSelectableIds.length > 0 && visibleSelectableIds.every((id) => selectedSet.has(id));
+
   const toExportRows = (rows: StockTransaction[]) =>
     rows.map((tx) => ({
       'التاريخ': new Date(tx.createdAt).toLocaleString('ar-EG'),
@@ -212,6 +272,8 @@ export const StockTransactions: React.FC = () => {
           ? `${formatNumber(getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit).quantity)} ${getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit).unitLabel}`
           : tx.quantity,
       'المخزن': warehouseMap.get(tx.warehouseId) ?? tx.warehouseId,
+      'اللوكيشن': tx.locationCode ?? '—',
+      'لوكيشن الوجهة': tx.toLocationCode ?? '—',
       'رقم المرجع': tx.referenceNo ?? '—',
       'المنفذ': tx.createdBy,
     }));
@@ -229,11 +291,11 @@ export const StockTransactions: React.FC = () => {
 
   const toggleSelectAllFiltered = () => {
     if (allFilteredSelected) {
-      setSelectedIds((prev) => prev.filter((id) => !filtered.some((row) => row.id === id)));
+      setSelectedIds((prev) => prev.filter((id) => !visibleSelectableIds.includes(id)));
       return;
     }
     const merged = new Set(selectedIds);
-    filtered.forEach((row) => row.id && merged.add(row.id));
+    visibleSelectableIds.forEach((id) => merged.add(id));
     setSelectedIds(Array.from(merged));
   };
 
@@ -578,6 +640,12 @@ export const StockTransactions: React.FC = () => {
         ]}
       />
 
+      <MaterialsWarehouseScopeBanner
+        scoped={scoped}
+        routingConfigured={routingConfigured}
+        settingsPath={settingsPath}
+      />
+
       <Card className="!p-4">
         <SmartFilterBar
           searchPlaceholder="ابحث بالاسم أو الكود..."
@@ -617,6 +685,9 @@ export const StockTransactions: React.FC = () => {
                 'stock_count',
                 'packaging',
                 'work_order',
+                'production_issue',
+                'disassembly',
+                'supplies_receipt',
                 'legacy',
               ] as StockSourceModule[]).map((value) => ({
                 value,
@@ -630,7 +701,11 @@ export const StockTransactions: React.FC = () => {
             sourceModule: sourceModuleFilter || 'all',
           }}
           onAdvancedFilterChange={(key, value) => {
-            if (key === 'warehouse') setWarehouseFilter(value === 'all' ? '' : value);
+            if (key === 'warehouse') {
+              if (warehouseSelectLocked) return;
+              if (scoped && value !== 'all' && !warehouseIds.includes(value)) return;
+              setWarehouseFilter(value === 'all' ? '' : value);
+            }
             if (key === 'sourceModule') setSourceModuleFilter(value === 'all' ? '' : value);
           }}
           onApply={() => undefined}
@@ -689,7 +764,7 @@ export const StockTransactions: React.FC = () => {
       <Card className="!p-0 overflow-hidden">
         <StockTransactionsTable
           loading={loading}
-          combinedRows={combinedRows}
+          combinedRows={pagedCombinedRows}
           selectedSet={selectedSet}
           allFilteredSelected={allFilteredSelected}
           toggleSelectAllFiltered={toggleSelectAllFiltered}
@@ -745,6 +820,15 @@ export const StockTransactions: React.FC = () => {
           onSharePending={(row) => void sharePendingTransfer(row)}
           onOpenPendingEdit={openPendingForEdit}
         />
+        {!loading && (
+          <DataPaginationFooter
+            page={page}
+            totalPages={totalPages}
+            totalItems={combinedRows.length}
+            onPageChange={setCurrentPage}
+            itemLabel="سجل"
+          />
+        )}
       </Card>
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />

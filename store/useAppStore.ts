@@ -104,6 +104,7 @@ import {
 import { resolveInventoryRoutingV1Async } from '../modules/inventory/services/inventoryRoutingService';
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { catalogRawMaterialService as rawMaterialService } from '../modules/catalog/services/catalogRawMaterialService';
+import { materialService } from '../modules/manufacturing/services/materialService';
 import { loadReportsComponentLabelOptions } from '../modules/production/utils/injectionComponentOptions';
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
 import { productMaterialService } from '../modules/production/services/productMaterialService';
@@ -121,7 +122,7 @@ import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
 import { ALL_PERMISSIONS } from '../utils/permissions';
-import { DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
+import { DEFAULT_PLAN_SETTINGS, DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
 import {
   applyAppTheme,
   cacheTenantTheme,
@@ -652,7 +653,7 @@ export type CreateComponentWasteReportInput = {
   lineId: string;
   productId: string;
   date: string;
-  component: ReportComponentScrapItem;
+  components: ReportComponentScrapItem[];
   notes?: string;
 };
 
@@ -822,6 +823,7 @@ interface AppState {
   createComponentWasteReport: (data: CreateComponentWasteReportInput) => Promise<string | null>;
   updateReport: (id: string, data: Partial<ProductionReport>) => Promise<void>;
   deleteReport: (id: string) => Promise<void>;
+  reapplyReportInventory: (id: string) => Promise<void>;
   syncMissingProductionEntryTransfers: (
     startDate: string,
     endDate: string
@@ -1480,6 +1482,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       ? {
           ...DEFAULT_SYSTEM_SETTINGS,
           ...systemSettingsRaw,
+          planSettings: {
+            ...DEFAULT_PLAN_SETTINGS,
+            ...(systemSettingsRaw.planSettings || {}),
+            inventoryRouting: {
+              ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+              ...(systemSettingsRaw.planSettings?.inventoryRouting || {}),
+            },
+          },
           attendanceIntegration: {
             ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
             ...(systemSettingsRaw.attendanceIntegration || {}),
@@ -2939,19 +2949,31 @@ export const useAppStore = create<AppState>((set, get) => ({
       const lineId = String(data.lineId || '').trim();
       const productId = String(data.productId || '').trim();
       const date = String(data.date || '').trim();
-      const component: ReportComponentScrapItem = {
-        materialId: String(data.component?.materialId || '').trim(),
-        materialName: String(data.component?.materialName || '').trim(),
-        quantity: Number(data.component?.quantity || 0),
-      };
+      const inputComponents = Array.isArray(data.components) ? data.components : [];
 
       if (!employeeId || !lineId || !productId || !date) {
         const msg = 'أكمل بيانات الموظف والخط والمنتج والتاريخ.';
         set({ error: msg });
         return null;
       }
-      if (!component.materialId || component.quantity <= 0) {
-        const msg = 'اختر مكوناً وأدخل كمية هالك أكبر من صفر.';
+
+      const normalizedInputs = inputComponents
+        .map((item) => ({
+          materialId: String(item?.materialId || '').trim(),
+          materialName: String(item?.materialName || '').trim(),
+          quantity: Number(item?.quantity || 0),
+        }))
+        .filter((item) => item.materialId && item.quantity > 0);
+
+      if (normalizedInputs.length === 0) {
+        const msg = 'أضف مكوناً واحداً على الأقل بكمية هالك أكبر من صفر.';
+        set({ error: msg });
+        return null;
+      }
+
+      const uniqueIds = new Set(normalizedInputs.map((item) => item.materialId));
+      if (uniqueIds.size !== normalizedInputs.length) {
+        const msg = 'لا يمكن تكرار نفس المكون أكثر من مرة في التقرير.';
         set({ error: msg });
         return null;
       }
@@ -2964,13 +2986,31 @@ export const useAppStore = create<AppState>((set, get) => ({
         return null;
       }
 
-      const rawMaterials = await rawMaterialService.getAll();
-      const raw = rawMaterials.find((row) => String(row.id) === component.materialId);
-      if (!raw?.id) {
-        const msg = 'المكون المختار غير موجود في المواد الخام.';
-        set({ error: msg });
-        return null;
+      const [rawMaterials, materials] = await Promise.all([
+        rawMaterialService.getAll(),
+        materialService.getAll(),
+      ]);
+      const rawById = new Map(rawMaterials.filter((row) => row.id).map((row) => [String(row.id), row]));
+      const materialById = new Map(
+        materials.filter((row) => row.id && row.isActive !== false).map((row) => [String(row.id), row]),
+      );
+      const componentScrapItems: ReportComponentScrapItem[] = [];
+      for (const item of normalizedInputs) {
+        const material = materialById.get(item.materialId);
+        const raw = rawById.get(item.materialId);
+        if (!material?.id && !raw?.id) {
+          const msg = `المكون «${item.materialName || item.materialId}» غير موجود في المكونات أو المواد الخام.`;
+          set({ error: msg });
+          return null;
+        }
+        componentScrapItems.push({
+          materialId: material?.id || raw!.id!,
+          materialName: item.materialName || material?.name || raw!.name,
+          quantity: item.quantity,
+        });
       }
+
+      const totalScrapQty = componentScrapItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
       const reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
         employeeId,
@@ -2989,11 +3029,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         workOrderId: '',
         reportType: 'component_waste',
         packagingLines: [],
-        componentScrapItems: [{
-          materialId: raw.id,
-          materialName: component.materialName || raw.name,
-          quantity: component.quantity,
-        }],
+        componentScrapItems,
       };
 
       trackedOperation = actionTrackerService.startOperation({
@@ -3008,8 +3044,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         metadata: {
           lineId,
           productId,
-          materialId: raw.id,
-          quantity: component.quantity,
+          materialIds: componentScrapItems.map((item) => item.materialId),
+          quantity: totalScrapQty,
+          componentsCount: componentScrapItems.length,
           reportType: 'component_waste',
         },
         description: 'Create component waste report',
@@ -3087,8 +3124,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           metadata: {
             lineId,
             productId,
-            materialId: raw.id,
-            quantity: component.quantity,
+            materialIds: componentScrapItems.map((item) => item.materialId),
+            quantity: totalScrapQty,
+            componentsCount: componentScrapItems.length,
             reportType: 'component_waste',
           },
         });
@@ -3118,7 +3156,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           metadata: {
             lineId: data.lineId,
             productId: data.productId,
-            materialId: data.component?.materialId,
+            materialIds: (data.components || []).map((item) => item?.materialId).filter(Boolean),
           },
         });
       }
@@ -3493,6 +3531,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         });
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
+        set({ error: postSaveWarning });
       }
 
       const skipWoProgress = isPackagingThroughputReport(
@@ -3957,6 +3996,68 @@ export const useAppStore = create<AppState>((set, get) => ({
         },
       });
       const message = (error as Error)?.message || 'تعذر حذف التقرير.';
+      set({ error: message });
+      throw error;
+    }
+  },
+
+  reapplyReportInventory: async (id) => {
+    set({ error: null });
+    try {
+      const reportId = String(id || '').trim();
+      if (!reportId) {
+        throw new Error('معرف التقرير غير متوفر.');
+      }
+      if (!hasPermission(get().userPermissions, 'inventory.transactions.create')) {
+        throw new Error('غير مصرح لك بإنشاء حركات مخزون.');
+      }
+
+      const report = await reportService.getById(reportId);
+      if (!report) {
+        throw new Error('التقرير غير موجود أو تم حذفه بالفعل.');
+      }
+
+      const [productionTx, packagingTx, linkedRequests] = await Promise.all([
+        stockService.getTransactionsBySource({ sourceModule: 'production_report', sourceId: reportId }),
+        stockService.getTransactionsBySource({ sourceModule: 'packaging', sourceId: reportId }),
+        transferApprovalService.getBySourceReportId(reportId),
+      ]);
+      const activeRequests = linkedRequests.filter((request) => (
+        request.status !== 'rejected' && request.status !== 'cancelled'
+      ));
+      if (productionTx.length > 0 || packagingTx.length > 0 || activeRequests.length > 0) {
+        throw new Error('لا يمكن إعادة ترحيل المخزون لهذا التقرير لأن له حركات أو طلبات اعتماد مخزنية مرتبطة بالفعل.');
+      }
+
+      await productionInventoryService.applyProductionReportInventory({
+        reportId,
+        report,
+        systemSettings: get().systemSettings,
+        actor: {
+          name: get().userDisplayName || get().userEmail || 'System',
+          userId: get().uid || undefined,
+        },
+        products: get()._rawProducts,
+        componentScrapItems: report.componentScrapItems || [],
+      });
+
+      eventBus.emit(SystemEvents.USER_ACTION, {
+        module: 'inventory',
+        entityType: 'production_report',
+        entityId: reportId,
+        action: 'update',
+        description: 'Production report inventory reapplied',
+        actor: {
+          userId: get().uid ?? undefined,
+          userName: get().userDisplayName ?? get().userEmail ?? undefined,
+        },
+        metadata: {
+          reportId,
+          reportCode: report.reportCode || '',
+        },
+      });
+    } catch (error) {
+      const message = (error as Error)?.message || 'تعذر إعادة ترحيل مخزون التقرير.';
       set({ error: message });
       throw error;
     }
@@ -4546,6 +4647,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         const merged = {
           ...DEFAULT_SYSTEM_SETTINGS,
           ...data,
+          planSettings: {
+            ...DEFAULT_PLAN_SETTINGS,
+            ...(data.planSettings || {}),
+            inventoryRouting: {
+              ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+              ...(data.planSettings?.inventoryRouting || {}),
+            },
+          },
           attendanceIntegration: {
             ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
             ...(data.attendanceIntegration || {}),
@@ -4562,9 +4671,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateSystemSettings: async (data: SystemSettings) => {
     try {
+      const mergedPlan = {
+        ...DEFAULT_PLAN_SETTINGS,
+        ...(data.planSettings || {}),
+        inventoryRouting: {
+          ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+          ...(data.planSettings?.inventoryRouting || {}),
+        },
+      };
       const merged: SystemSettings = {
         ...DEFAULT_SYSTEM_SETTINGS,
         ...data,
+        planSettings: mergedPlan,
         attendanceIntegration: {
           ...DEFAULT_SYSTEM_SETTINGS.attendanceIntegration,
           ...(data.attendanceIntegration || {}),

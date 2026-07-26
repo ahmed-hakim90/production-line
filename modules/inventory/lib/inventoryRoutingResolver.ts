@@ -42,6 +42,10 @@ export function resolveInventoryRoutingV1(systemSettings: SystemSettings): Resol
       nested.requireApprovalForAutoTransfers !== undefined
         ? Boolean(nested.requireApprovalForAutoTransfers)
         : true,
+    // Off by default — prefer صرف إنتاج; enable only when explicitly configured.
+    autoConsumeBomOnProductionReport: Boolean(nested.autoConsumeBomOnProductionReport),
+    // On by default — report inventory waits for issued/approved production issue.
+    requireIssuedProductionIssueOnReport: nested.requireIssuedProductionIssueOnReport !== false,
     allowNegativeDecomposedStock: Boolean(plan?.allowNegativeDecomposedStock),
     allowNegativeFinishedTransferStock: Boolean(plan?.allowNegativeFinishedTransferStock),
     enablePackagingStockTransfer: Boolean(plan?.enablePackagingStockTransfer),
@@ -80,7 +84,7 @@ export function assertRoutingConfigured(
     staging: 'مخزن تم الصنع',
     final: 'مخزن المنتج التام',
     raw: 'مخزن المواد الخام',
-    decomposed: 'مخزن المفكك',
+    decomposed: 'مخزن المفكك (مستلزم إنتاج)',
     waste: 'مخزن الهالك',
     packagingSource: 'مخزن التغليف (مصدر)',
     packagingTarget: 'مخزن التغليف (هدف)',
@@ -88,18 +92,21 @@ export function assertRoutingConfigured(
   throw new Error(`حدد ${missing.map((m) => labels[m]).join(' و ')} من إعدادات توجيه المخزون.`);
 }
 
+/**
+ * Warehouse for BOM component consumption on production.
+ * مستلزم إنتاج (مفكك) is the operational stock of BOM components;
+ * raw-material warehouse is only a fallback when decomposed is unset.
+ * Packaging keeps its dedicated source when configured.
+ */
 export function pickConsumptionWarehouse(
   material: Pick<Material, 'type'> | null | undefined,
   routing: ResolvedInventoryRouting,
 ): string {
   const type = material?.type ?? 'raw_material';
   if (type === 'packaging') {
-    return routing.packagingSourceWarehouseId || routing.decomposedWarehouseId;
+    return routing.packagingSourceWarehouseId || routing.decomposedWarehouseId || routing.rawMaterialWarehouseId;
   }
-  if (type === 'semi_finished' || type === 'consumable') {
-    return routing.decomposedWarehouseId || routing.rawMaterialWarehouseId;
-  }
-  return routing.rawMaterialWarehouseId || routing.decomposedWarehouseId;
+  return routing.decomposedWarehouseId || routing.rawMaterialWarehouseId;
 }
 
 export function buildInventoryRoutingFromLegacy(plan: import('../../../types').PlanSettings): InventoryRoutingSettings {
@@ -118,5 +125,7 @@ export function buildInventoryRoutingFromLegacy(plan: import('../../../types').P
     autoTransferFinishedToFinal: false,
     requireApprovalForProductionEntry: plan.requireFinishedStockApprovalForReports !== false,
     requireApprovalForAutoTransfers: true,
+    autoConsumeBomOnProductionReport: false,
+    requireIssuedProductionIssueOnReport: true,
   };
 }

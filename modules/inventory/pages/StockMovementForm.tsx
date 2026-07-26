@@ -1,13 +1,14 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
-import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
-import type { RawMaterial, StockAdjustmentReason, Warehouse, StockItemBalance } from '../types';
+import { warehouseLocationService } from '../services/warehouseLocationService';
+import { warehouseRackService } from '../services/warehouseRackService';
+import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack } from '../types';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { StockAvailabilityHint } from '../components/StockAvailabilityHint';
 import { usePermission } from '../../../utils/permissions';
@@ -40,6 +41,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
@@ -48,9 +50,16 @@ const APP_VERSION = __APP_VERSION__;
 
 export const StockMovementForm: React.FC = () => {
   const location = useLocation();
-  const navigate = useTenantNavigate();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { openModal } = useGlobalModalManager();
+  const {
+    scoped,
+    warehouseId: scopedWarehouseId,
+    warehouseIds,
+    warehouseSelectLocked,
+    filterWarehouses,
+    resolveScopedWarehouseId,
+  } = useMaterialsWarehouseScope();
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const uid = useAppStore((s) => s.uid);
@@ -66,14 +75,29 @@ export const StockMovementForm: React.FC = () => {
   const { can } = usePermission();
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [warehouseLocations, setWarehouseLocations] = useState<WarehouseLocation[]>([]);
+  const [warehouseRacks, setWarehouseRacks] = useState<WarehouseRack[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
 
-  const [itemType, setItemType] = useState<ItemType>('finished_good');
+  const initialSearch = useMemo(() => new URLSearchParams(location.search), [location.search]);
+  const initialMovement = initialSearch.get('movementType');
+  const initialItemType = initialSearch.get('itemType');
+  const [itemType, setItemType] = useState<ItemType>(
+    scoped || initialItemType === 'raw_material' ? 'raw_material' : 'finished_good',
+  );
   const [itemId, setItemId] = useState('');
-  const [warehouseId, setWarehouseId] = useState('');
+  const [warehouseId, setWarehouseId] = useState(
+    () => initialSearch.get('warehouseId') || scopedWarehouseId || '',
+  );
+  const [locationId, setLocationId] = useState('');
+  const [toLocationId, setToLocationId] = useState('');
   const [toWarehouseId, setToWarehouseId] = useState('');
-  const [movementType, setMovementType] = useState<MovementType>('IN');
+  const [movementType, setMovementType] = useState<MovementType>(
+    initialMovement === 'OUT' || initialMovement === 'TRANSFER' || initialMovement === 'ADJUSTMENT'
+      ? initialMovement
+      : 'IN',
+  );
   const [adjustmentReason, setAdjustmentReason] = useState<StockAdjustmentReason>('manual_correction');
   const [quantity, setQuantity] = useState<number>(0);
   const [transferItems, setTransferItems] = useState<TransferLine[]>([createTransferLine()]);
@@ -94,15 +118,19 @@ export const StockMovementForm: React.FC = () => {
   });
 
   const loadData = useCallback(async () => {
-    const [whs, rms, peekRef, bals] = await Promise.all([
+    const [whs, rms, peekRef, bals, locs, racks] = await Promise.all([
       warehouseService.getActiveWarehouses(),
       rawMaterialService.getAll(),
       stockService.getNextInvReferenceNo(),
       stockService.getBalances(),
+      warehouseLocationService.getAll(),
+      warehouseRackService.getAll(),
     ]);
     setWarehouses(whs);
     setRawMaterials(rms.filter((m) => m.isActive !== false));
     setBalances(bals);
+    setWarehouseLocations(locs);
+    setWarehouseRacks(racks);
     const match = peekRef.trim().match(INV_REF_REGEX);
     setNextReferenceSeq(match ? Number(match[1] || 0) : 1);
   }, []);
@@ -110,6 +138,19 @@ export const StockMovementForm: React.FC = () => {
   useEffect(() => {
     void loadData();
   }, [loadData]);
+
+  useEffect(() => {
+    if (!scoped) return;
+    setWarehouseId((prev) =>
+      resolveScopedWarehouseId(prev, [initialSearch.get('warehouseId') || '', scopedWarehouseId]),
+    );
+    setItemType('raw_material');
+  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, initialSearch, resolveScopedWarehouseId]);
+
+  const sourceWarehouses = useMemo(
+    () => filterWarehouses(warehouses),
+    [filterWarehouses, warehouses],
+  );
 
   const openImportInByCodeModal = useCallback((nextItemType: 'finished_good' | 'raw_material' = 'finished_good') => {
     openModal(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE, {
@@ -123,18 +164,12 @@ export const StockMovementForm: React.FC = () => {
 
   useEffect(() => {
     const action = new URLSearchParams(location.search).get('action');
-    if (action === 'create-warehouse' && can('inventory.warehouses.manage')) {
-      openModal(MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE);
-    }
-    if (action === 'create-raw-material' && can('materials.manage')) {
-      navigate('/manufacturing/materials?action=create');
-    }
     if (action === 'import-in-by-code' && can('inventory.transactions.create')) {
       const itemTypeParam = new URLSearchParams(location.search).get('itemType');
       const importItemType = itemTypeParam === 'raw_material' ? 'raw_material' : 'finished_good';
       openImportInByCodeModal(importItemType);
     }
-  }, [location.search, can, openModal, openImportInByCodeModal, navigate]);
+  }, [location.search, can, openImportInByCodeModal]);
 
   const referenceNo = useMemo(() => formatInvReference(nextReferenceSeq), [nextReferenceSeq]);
 
@@ -188,6 +223,26 @@ export const StockMovementForm: React.FC = () => {
     : warehouseId;
   const selectedFromWarehouse = warehouses.find((w) => w.id === effectiveWarehouseId);
   const selectedToWarehouse = warehouses.find((w) => w.id === toWarehouseId);
+  const selectedLocation = warehouseLocations.find((loc) => loc.id === locationId);
+  const selectedToLocation = warehouseLocations.find((loc) => loc.id === toLocationId);
+  const isShelfTransfer =
+    movementType === 'TRANSFER' &&
+    Boolean(effectiveWarehouseId) &&
+    toWarehouseId === effectiveWarehouseId;
+  const inactiveRackIds = useMemo(
+    () => new Set(warehouseRacks.filter((rack) => rack.isActive === false).map((rack) => rack.id).filter(Boolean)),
+    [warehouseRacks],
+  );
+  const locationSelectOptions = useMemo(
+    () =>
+      warehouseLocations
+        .filter((loc) => loc.warehouseId === effectiveWarehouseId && loc.isActive !== false && (!loc.rackId || !inactiveRackIds.has(loc.rackId)))
+        .map((loc) => ({
+          value: loc.id || '',
+          label: `${loc.code} (راك ${loc.rackName || loc.rack} / رف ${loc.shelfName || loc.shelf})`,
+        })),
+    [warehouseLocations, effectiveWarehouseId, inactiveRackIds],
+  );
   const itemSelectOptions = useMemo(
     () =>
       itemOptions.map((opt) => {
@@ -207,21 +262,29 @@ export const StockMovementForm: React.FC = () => {
   );
   const warehouseSelectOptions = useMemo(
     () =>
-      warehouses.map((w) => ({
+      sourceWarehouses.map((w) => ({
         value: w.id || '',
         label: `${w.name} (${w.code})`,
       })),
-    [warehouses],
+    [sourceWarehouses],
   );
   const toWarehouseSelectOptions = useMemo(
-    () =>
-      warehouses
-        .filter((w) => w.id !== effectiveWarehouseId)
+    () => {
+      const same = selectedFromWarehouse?.id
+        ? [{
+            value: selectedFromWarehouse.id,
+            label: `${selectedFromWarehouse.name} (${selectedFromWarehouse.code}) — نقل رف → رف`,
+          }]
+        : [];
+      const others = warehouses
+        .filter((w) => w.id && w.id !== effectiveWarehouseId)
         .map((w) => ({
           value: w.id || '',
           label: `${w.name} (${w.code})`,
-        })),
-    [warehouses, effectiveWarehouseId],
+        }));
+      return [...same, ...others];
+    },
+    [warehouses, effectiveWarehouseId, selectedFromWarehouse],
   );
 
   const getItemById = (id: string) => itemOptions.find((item) => item.id === id);
@@ -250,6 +313,8 @@ export const StockMovementForm: React.FC = () => {
   const resetForm = (nextMovementType: MovementType = 'IN') => {
     setItemId('');
     setWarehouseId('');
+    setLocationId('');
+    setToLocationId('');
     setToWarehouseId('');
     setMovementType(nextMovementType);
     setQuantity(0);
@@ -301,6 +366,16 @@ export const StockMovementForm: React.FC = () => {
       setMessage({ type: 'error', text: 'اختر مخزن الوجهة للتحويل.' });
       return;
     }
+    if (movementType === 'TRANSFER' && toWarehouseId === effectiveWarehouseId) {
+      if (!locationId || !toLocationId) {
+        setMessage({ type: 'error', text: 'حدد رف المصدر ورف الوجهة لنقل داخل نفس المخزن.' });
+        return;
+      }
+      if (locationId === toLocationId) {
+        setMessage({ type: 'error', text: 'رف المصدر ورف الوجهة يجب أن يكونا مختلفين.' });
+        return;
+      }
+    }
 
     setSaving(true);
     setMessage(null);
@@ -316,30 +391,61 @@ export const StockMovementForm: React.FC = () => {
           return;
         }
 
-        const requestLines = buildTransferRequestLines(
-          transferItems,
-          itemType,
-          getItemById,
-          lineQuantityInPieces,
-        );
-        if (!requestLines.length) {
-          setMessage({ type: 'error', text: 'تعذر تجهيز أصناف طلب التحويل.' });
-          return;
-        }
+        if (toWarehouseId === effectiveWarehouseId) {
+          for (const line of transferItems) {
+            const item = getItemById(line.itemId);
+            if (!item) continue;
+            const qty = lineQuantityInPieces(line);
+            txId = await stockService.createMovement({
+              warehouseId: effectiveWarehouseId,
+              toWarehouseId: effectiveWarehouseId,
+              locationId,
+              locationCode: selectedLocation?.code,
+              toLocationId,
+              toLocationCode: selectedToLocation?.code,
+              itemType,
+              itemId: item.id,
+              itemName: item.name,
+              itemCode: item.code,
+              movementType: 'TRANSFER',
+              quantity: qty,
+              unit: itemType === 'finished_good' ? line.unit : 'unit',
+              requestQuantity: Number(line.quantity || 0),
+              requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
+              unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
+              minStock: item.minStock,
+              referenceNo: resolvedReferenceNo,
+              note: 'نقل رف → رف داخل نفس المخزن',
+              sourceModule: 'manual_movement',
+              createdBy: userDisplayName || 'Current User',
+            });
+          }
+        } else {
+          const requestLines = buildTransferRequestLines(
+            transferItems,
+            itemType,
+            getItemById,
+            lineQuantityInPieces,
+          );
+          if (!requestLines.length) {
+            setMessage({ type: 'error', text: 'تعذر تجهيز أصناف طلب التحويل.' });
+            return;
+          }
 
-        txId = await transferApprovalService.createRequest({
-          requestType: 'manual_transfer',
-          fromWarehouseId: effectiveWarehouseId,
-          fromWarehouseName: selectedFromWarehouse?.name || '',
-          toWarehouseId,
-          toWarehouseName: selectedToWarehouse?.name || '',
-          referenceNo: resolvedReferenceNo,
-          lines: requestLines,
-          note: '',
-          sourceModule: 'manual_movement',
-          createdBy: userDisplayName || userEmail || 'Current User',
-          createdByUserId: uid || undefined,
-        });
+          txId = await transferApprovalService.createRequest({
+            requestType: 'manual_transfer',
+            fromWarehouseId: effectiveWarehouseId,
+            fromWarehouseName: selectedFromWarehouse?.name || '',
+            toWarehouseId,
+            toWarehouseName: selectedToWarehouse?.name || '',
+            referenceNo: resolvedReferenceNo,
+            lines: requestLines,
+            note: '',
+            sourceModule: 'manual_movement',
+            createdBy: userDisplayName || userEmail || 'Current User',
+            createdByUserId: uid || undefined,
+          });
+        }
       } else {
         if (!selectedItem) {
           setMessage({ type: 'error', text: 'اختر الصنف أولًا.' });
@@ -351,6 +457,10 @@ export const StockMovementForm: React.FC = () => {
         }
         if (movementType === 'ADJUSTMENT' && quantity === 0) {
           setMessage({ type: 'error', text: 'كمية التسوية لا يمكن أن تساوي صفر.' });
+          return;
+        }
+        if (itemType === 'raw_material' && locationSelectOptions.length > 0 && !locationId) {
+          setMessage({ type: 'error', text: 'حدد اللوكيشن قبل تسجيل حركة مكون.' });
           return;
         }
         const available = getAvailableForItem(selectedItem.id);
@@ -369,6 +479,8 @@ export const StockMovementForm: React.FC = () => {
 
         txId = await stockService.createMovement({
           warehouseId: effectiveWarehouseId,
+          locationId: locationId || undefined,
+          locationCode: selectedLocation?.code,
           toWarehouseId: undefined,
           itemType,
           itemId: selectedItem.id,
@@ -386,11 +498,13 @@ export const StockMovementForm: React.FC = () => {
       setMessage({
         type: 'success',
         text: movementType === 'TRANSFER'
-          ? 'تم إرسال التحويلة للاعتماد. سيتم ترحيل المخزون بعد الموافقة.'
+          ? (isShelfTransfer
+            ? 'تم نقل الأصناف من رف إلى رف بنجاح.'
+            : 'تم إرسال التحويلة للاعتماد. سيتم ترحيل المخزون بعد الموافقة.')
           : 'تم تسجيل الحركة بنجاح.',
       });
 
-      if (movementType === 'TRANSFER' && afterSaveAction !== 'none') {
+      if (movementType === 'TRANSFER' && !isShelfTransfer && afterSaveAction !== 'none') {
         const payload = buildTransferPrintData(resolvedReferenceNo, txId);
         if (afterSaveAction === 'preview') {
           setPreviewData(payload);
@@ -558,8 +672,9 @@ export const StockMovementForm: React.FC = () => {
           {/* Item type */}
           <div>
             <label className={labelClass}>نوع الصنف</label>
-            <Select
+              <Select
               value={itemType}
+              disabled={scoped}
               onValueChange={(value) => {
                 const nextType = value as ItemType;
                 setItemType(nextType);
@@ -589,13 +704,29 @@ export const StockMovementForm: React.FC = () => {
               </div>
             ) : (
               <SearchableSelect
-                options={warehouseSelectOptions}
-                value={warehouseId}
-                onChange={(value) => setWarehouseId(value)}
-                placeholder="ابحث واختر المخزن"
+                  options={warehouseSelectOptions}
+                  value={warehouseId}
+                  disabled={warehouseSelectLocked}
+                  onChange={(value) => {
+                    setWarehouseId(value);
+                    setLocationId('');
+                  }}
+                  placeholder="ابحث واختر المخزن"
+                />
+              )}
+            </div>
+
+          {movementType !== 'TRANSFER' && locationSelectOptions.length > 0 && (
+            <div>
+              <label className={labelClass}>اللوكيشن</label>
+              <SearchableSelect
+                options={locationSelectOptions}
+                value={locationId}
+                onChange={(value) => setLocationId(value)}
+                placeholder="اختياري للمنتجات - مطلوب للمكونات"
               />
-            )}
-          </div>
+            </div>
+          )}
 
           {/* Destination warehouse (TRANSFER only) */}
           {movementType === 'TRANSFER' && (
@@ -604,10 +735,37 @@ export const StockMovementForm: React.FC = () => {
               <SearchableSelect
                 options={toWarehouseSelectOptions}
                 value={toWarehouseId}
-                onChange={(value) => setToWarehouseId(value)}
-                placeholder="ابحث واختر مخزن الوجهة"
+                onChange={(value) => {
+                  setToWarehouseId(value);
+                  setLocationId('');
+                  setToLocationId('');
+                }}
+                placeholder="ابحث واختر مخزن الوجهة أو نفس المخزن لنقل رف"
               />
             </div>
+          )}
+
+          {isShelfTransfer && locationSelectOptions.length > 0 && (
+            <>
+              <div>
+                <label className={labelClass}>رف المصدر</label>
+                <SearchableSelect
+                  options={locationSelectOptions}
+                  value={locationId}
+                  onChange={(value) => setLocationId(value)}
+                  placeholder="اختر رف المصدر"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>رف الوجهة</label>
+                <SearchableSelect
+                  options={locationSelectOptions.filter((opt) => opt.value !== locationId)}
+                  value={toLocationId}
+                  onChange={(value) => setToLocationId(value)}
+                  placeholder="اختر رف الوجهة"
+                />
+              </div>
+            </>
           )}
 
           {/* Item (non-TRANSFER) */}

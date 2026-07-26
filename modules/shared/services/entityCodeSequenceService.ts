@@ -2,9 +2,13 @@ import { doc, getDoc, getDocs, type Firestore, type Transaction } from 'firebase
 import { db } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
-
-/** Thrown when saving an entity whose business code already exists for the tenant. */
-export const DUPLICATE_ENTITY_CODE = 'DUPLICATE_ENTITY_CODE';
+export {
+  DUPLICATE_ENTITY_CODE,
+  ENTITY_CODE_CLAIMS_COLLECTION,
+  buildEntityCodeClaimId,
+  isDuplicateEntityCodeError,
+  throwDuplicateEntityCode,
+} from '../lib/entityCodeClaim';
 
 export const ENTITY_CODE_COUNTER_KEYS = {
   product: 'product',

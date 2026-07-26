@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
@@ -17,25 +18,44 @@ import {
 import { exportHRData } from '../../../utils/exportExcel';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+
+const PAGE_SIZE = 25;
 
 export const StockBalances: React.FC = () => {
   const navigate = useTenantNavigate();
+  const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
+  const {
+    scoped,
+    warehouseId: scopedWarehouseId,
+    warehouseIds,
+    routingConfigured,
+    warehouseSelectLocked,
+    filterWarehouses,
+    resolveScopedWarehouseId,
+    settingsPath,
+  } = useMaterialsWarehouseScope();
   const rawProducts = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [lastMovementByKey, setLastMovementByKey] = useState<Record<string, string>>({});
-  const [warehouseFilter, setWarehouseFilter] = useState('');
+  const [warehouseFilter, setWarehouseFilter] = useState(
+    () => searchParams.get('warehouseId') || scopedWarehouseId || '',
+  );
   const [roleFilter, setRoleFilter] = useState('');
   const [itemTypeFilter, setItemTypeFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
   const [negativeOnly, setNegativeOnly] = useState(false);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   const reload = async () => {
     setLoading(true);
@@ -53,7 +73,7 @@ export const StockBalances: React.FC = () => {
       }
     });
     setBalances(bals);
-    setWarehouses(whs);
+    setWarehouses(filterWarehouses(whs));
     setLastMovementByKey(movementMap);
     setLoading(false);
   };
@@ -61,6 +81,13 @@ export const StockBalances: React.FC = () => {
   useEffect(() => {
     void reload();
   }, []);
+
+  useEffect(() => {
+    if (!scoped) return;
+    setWarehouseFilter((prev) =>
+      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+    );
+  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const warehouseNameById = useMemo(
     () => new Map(warehouses.map((w) => [w.id, w.name])),
@@ -75,25 +102,58 @@ export const StockBalances: React.FC = () => {
     [rawProducts],
   );
 
-  const rows = useMemo(() => balances.filter((row) => {
-    const matchesWarehouse = !warehouseFilter || row.warehouseId === warehouseFilter;
-    const rowRole = warehouseRoleById.get(row.warehouseId) || 'general';
-    const matchesRole = !roleFilter || rowRole === roleFilter;
-    const matchesType = !itemTypeFilter || row.itemType === itemTypeFilter;
-    const isLow = row.minStock > 0 && row.quantity <= row.minStock;
-    const isOut = row.quantity <= 0;
-    const isNegative = Number(row.quantity || 0) < 0;
-    const matchesStatus = !statusFilter
-      || (statusFilter === 'low' && isLow)
-      || (statusFilter === 'out' && isOut)
-      || (statusFilter === 'ok' && !isLow && !isOut);
-    const matchesNegative = !negativeOnly || isNegative;
-    const q = search.trim().toLowerCase();
-    const matchesSearch = !q
-      || row.itemName.toLowerCase().includes(q)
-      || row.itemCode.toLowerCase().includes(q);
-    return matchesWarehouse && matchesRole && matchesType && matchesStatus && matchesNegative && matchesSearch;
-  }), [balances, warehouseFilter, roleFilter, itemTypeFilter, statusFilter, negativeOnly, search, warehouseRoleById]);
+  const rows = useMemo(() => {
+    const filtered = balances.filter((row) => {
+      const matchesWarehouse = scoped
+        ? warehouseIds.length > 0 &&
+          (warehouseFilter
+            ? row.warehouseId === warehouseFilter
+            : warehouseIds.includes(row.warehouseId))
+        : !warehouseFilter || row.warehouseId === warehouseFilter;
+      const rowRole = warehouseRoleById.get(row.warehouseId) || 'general';
+      const matchesRole = !roleFilter || rowRole === roleFilter;
+      const matchesType = !itemTypeFilter
+        || row.itemType === itemTypeFilter
+        // استيراد المكونات يحفظ كـ material بعد ترحيل التصنيع — اعتبرها ضمن «مادة خام» للعرض.
+        || (itemTypeFilter === 'raw_material' && row.itemType === 'material');
+      const isLow = row.minStock > 0 && row.quantity <= row.minStock;
+      const isOut = row.quantity <= 0;
+      const isNegative = Number(row.quantity || 0) < 0;
+      const matchesStatus = !statusFilter
+        || (statusFilter === 'low' && isLow)
+        || (statusFilter === 'out' && isOut)
+        || (statusFilter === 'ok' && !isLow && !isOut);
+      const matchesNegative = !negativeOnly || isNegative;
+      const q = search.trim().toLowerCase();
+      const matchesSearch = !q
+        || row.itemName.toLowerCase().includes(q)
+        || row.itemCode.toLowerCase().includes(q);
+      return matchesWarehouse && matchesRole && matchesType && matchesStatus && matchesNegative && matchesSearch;
+    });
+
+    return filtered.sort((a, b) => {
+      const codeCmp = String(a.itemCode || '').localeCompare(String(b.itemCode || ''), 'ar', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+      if (codeCmp !== 0) return codeCmp;
+      return String(a.itemName || '').localeCompare(String(b.itemName || ''), 'ar', {
+        numeric: true,
+        sensitivity: 'base',
+      });
+    });
+  }, [balances, warehouseFilter, roleFilter, itemTypeFilter, statusFilter, negativeOnly, search, warehouseRoleById, scoped, warehouseIds]);
+
+  const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
+  const pagedRows = useMemo(
+    () => rows.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [rows, page],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, warehouseFilter, roleFilter, itemTypeFilter, statusFilter, negativeOnly]);
 
   const exportBalancesExcel = () => {
     if (rows.length === 0) return;
@@ -133,6 +193,13 @@ export const StockBalances: React.FC = () => {
         icon="warehouse"
         moreActions={[
           {
+            label: 'المتاح للتجميع',
+            icon: 'precision_manufacturing',
+            group: 'عرض',
+            hidden: !can('inventory.view'),
+            onClick: () => navigate('/inventory/raw-materials/control#assemblable'),
+          },
+          {
             label: 'تصدير الأرصدة Excel',
             icon: 'table_view',
             group: 'تصدير',
@@ -154,13 +221,26 @@ export const StockBalances: React.FC = () => {
             onClick: downloadInventoryRawInByCodeTemplate,
           },
           {
-            label: 'استيراد بالكود والكمية',
+            label: 'استيراد منتجات نهائية',
             icon: 'upload_file',
             group: 'استيراد',
             hidden: !can('inventory.transactions.create'),
-            onClick: () => navigate('/inventory/movements?action=import-in-by-code'),
+            onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=finished_good'),
+          },
+          {
+            label: 'استيراد مواد خام',
+            icon: 'upload_file',
+            group: 'استيراد',
+            hidden: !can('inventory.transactions.create'),
+            onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=raw_material'),
           },
         ]}
+      />
+
+      <MaterialsWarehouseScopeBanner
+        scoped={scoped}
+        routingConfigured={routingConfigured}
+        settingsPath={settingsPath}
       />
 
       <Card className="!p-0 overflow-hidden">
@@ -198,7 +278,11 @@ export const StockBalances: React.FC = () => {
             role: roleFilter || 'all',
           }}
           onQuickFilterChange={(key, value) => {
-            if (key === 'warehouse') setWarehouseFilter(value === 'all' ? '' : value);
+            if (key === 'warehouse') {
+              if (warehouseSelectLocked) return;
+              if (scoped && value !== 'all' && !warehouseIds.includes(value)) return;
+              setWarehouseFilter(value === 'all' ? '' : value);
+            }
             if (key === 'status') setStatusFilter(value === 'all' ? '' : value);
             if (key === 'role') setRoleFilter(value === 'all' ? '' : value);
           }}
@@ -209,8 +293,8 @@ export const StockBalances: React.FC = () => {
               placeholder: 'كل الأنواع',
               options: [
                 { value: 'finished_good', label: 'منتج نهائي' },
-                { value: 'raw_material', label: 'مادة خام' },
-                { value: 'material', label: 'مادة تصنيع' },
+                { value: 'raw_material', label: 'مادة خام / تصنيع' },
+                { value: 'material', label: 'مادة تصنيع فقط' },
               ],
             },
             {
@@ -232,11 +316,9 @@ export const StockBalances: React.FC = () => {
           applyLabel="تطبيق"
           className="mb-0 border-0 rounded-none"
         />
-      </Card>
 
-      <Card className="!p-0 overflow-hidden">
         <div className="overflow-x-auto erp-table-scroll">
-          <table className="erp-table w-full text-right border-collapse">
+          <table className="erp-table w-full min-w-[1100px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الصنف</th>
@@ -254,17 +336,24 @@ export const StockBalances: React.FC = () => {
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
-              {loading && Array.from({ length: 6 }).map((_, i) => (
+              {loading && Array.from({ length: 8 }).map((_, i) => (
                 <tr key={`balance-skeleton-${i}`}>
-                  <td className="px-4 py-3" colSpan={11}>
+                  <td className="px-4 py-3" colSpan={can('inventory.transactions.create') ? 12 : 11}>
                     <Skeleton className="h-5 w-full rounded-md" />
                   </td>
                 </tr>
               ))}
               {!loading && rows.length === 0 && (
-                <tr><td className="px-4 py-10 text-center text-slate-400" colSpan={11}>لا توجد بيانات مطابقة.</td></tr>
+                <tr>
+                  <td
+                    className="px-4 py-12 text-center text-slate-400"
+                    colSpan={can('inventory.transactions.create') ? 12 : 11}
+                  >
+                    لا توجد بيانات مطابقة.
+                  </td>
+                </tr>
               )}
-              {!loading && rows.map((row) => {
+              {!loading && pagedRows.map((row) => {
                 const isLow = row.minStock > 0 && row.quantity <= row.minStock;
                 const isOut = row.quantity <= 0;
                 const isNegative = Number(row.quantity || 0) < 0;
@@ -328,6 +417,16 @@ export const StockBalances: React.FC = () => {
             </tbody>
           </table>
         </div>
+
+        {!loading && (
+          <DataPaginationFooter
+            page={page}
+            totalPages={totalPages}
+            totalItems={rows.length}
+            onPageChange={setCurrentPage}
+            itemLabel="رصيد"
+          />
+        )}
       </Card>
     </div>
   );

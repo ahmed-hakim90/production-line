@@ -10,6 +10,7 @@ import {
   ChevronUp,
   ChevronsUpDown,
   CirclePlus,
+  ClipboardList,
   Cog,
   Download,
   Eye,
@@ -35,6 +36,9 @@ import {
 import { useLocation } from 'react-router-dom';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
+import { type ProductBomCountCard } from '../components/ProductBomCountCardPrint';
+import { ProductBomCountCardPreviewModal } from '../components/ProductBomCountCardPreviewModal';
+import { buildProductBomCountCards } from '../lib/buildProductBomCountCards';
 import { formatNumber } from '../../../utils/calculations';
 import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
 import type { Product, ProductionReport } from '../../../types';
@@ -46,7 +50,16 @@ import {
   type ProductImportResult,
   type ProductImportMaterialCatalogItem,
 } from '../../../utils/importProducts';
-import { downloadProductsTemplate } from '../../../utils/downloadTemplates';
+import { downloadProductsTemplate, downloadProductComponentsTemplate } from '../../../utils/downloadTemplates';
+import {
+  applySkipExistingProductComponents,
+  bomExistKey,
+  parseProductComponentsExcel,
+  stockExistKeyAny,
+  stockExistKeyForLocation,
+  stockExistKeyForWarehouse,
+  type ProductComponentsImportResult,
+} from '../../../utils/importProductComponents';
 import { exportAllProducts } from '../../../utils/exportExcel';
 import type { ProductExportOptions } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
@@ -55,9 +68,11 @@ import { productMaterialService } from '../services/productMaterialService';
 import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { BomItem } from '../../manufacturing/types';
-import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
+import { useJobsStore, isBackgroundJobCancelled } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';
+import { warehouseLocationService } from '../../inventory/services/warehouseLocationService';
+import { defaultItemLocationService } from '../../inventory/services/defaultItemLocationService';
 import type { StockItemBalance } from '../../inventory/types';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
@@ -65,6 +80,7 @@ import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { Warehouse as InventoryWarehouse } from '../../inventory/types';
+import { useRawMaterialWarehouse } from '../../inventory/hooks/useRawMaterialWarehouse';
 import { categoryService, isProductCategoryRow } from '../../catalog/services/categoryService';
 import { flattenCategoryTree, formatCategoryBreadcrumb } from '../../catalog/lib/categoryTree';
 import { monthlyProductionCostService } from '../../costs/services/monthlyProductionCostService';
@@ -243,6 +259,9 @@ export const Products: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
+  const stockItemTypeForMaterials = Boolean(planSettings?.manufacturingMigratedAt?.trim())
+    ? 'material'
+    : 'raw_material';
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   const { can } = usePermission();
@@ -291,6 +310,16 @@ export const Products: React.FC = () => {
   const [importFileName, setImportFileName] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Combined product components import (BOM + optional location/balance)
+  const [showComponentsImportModal, setShowComponentsImportModal] = useState(false);
+  const [componentsImportResult, setComponentsImportResult] = useState<ProductComponentsImportResult | null>(null);
+  const [componentsImportParsing, setComponentsImportParsing] = useState(false);
+  const [componentsImportSaving, setComponentsImportSaving] = useState(false);
+  const [componentsImportProgress, setComponentsImportProgress] = useState({ done: 0, total: 0 });
+  const [componentsImportFileName, setComponentsImportFileName] = useState('');
+  const [componentsFallbackWarehouseId, setComponentsFallbackWarehouseId] = useState('');
+  const componentsFileInputRef = useRef<HTMLInputElement>(null);
+
 
   // Search & Filters
   const [search, setSearch] = useState('');
@@ -314,11 +343,19 @@ export const Products: React.FC = () => {
   const [exportingProducts, setExportingProducts] = useState(false);
 
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const {
+    warehouseId: suppliesWarehouseId,
+    warehouseName: suppliesWarehouseName,
+  } = useRawMaterialWarehouse();
   const [detailDrawerProductId, setDetailDrawerProductId] = useState<string | null>(null);
   const [drawerMaterials, setDrawerMaterials] = useState<ProductMaterial[]>([]);
   const [drawerMaterialsLoading, setDrawerMaterialsLoading] = useState(false);
   const [drawerShareBusy, setDrawerShareBusy] = useState(false);
   const productDetailPrintRef = useRef<HTMLDivElement>(null);
+  const [countCardPreviewOpen, setCountCardPreviewOpen] = useState(false);
+  const [countCardPreviewData, setCountCardPreviewData] = useState<ProductBomCountCard[]>([]);
+  const [countCardPreviewBusy, setCountCardPreviewBusy] = useState(false);
+  const [countCardPreviewWarning, setCountCardPreviewWarning] = useState<string | null>(null);
 
   const detailDrawerProduct = useMemo(
     () => (detailDrawerProductId ? products.find((p) => p.id === detailDrawerProductId) ?? null : null),
@@ -330,6 +367,44 @@ export const Products: React.FC = () => {
     printSettings: printTemplate,
     documentTitle: detailDrawerProduct?.name ?? 'ملخص المنتج',
   });
+
+  const openProductBomCountCardPreview = async (productIds: string[]) => {
+    if (countCardPreviewBusy) return;
+    setCountCardPreviewBusy(true);
+    setCountCardPreviewWarning(null);
+    setCountCardPreviewOpen(true);
+    setCountCardPreviewData([]);
+    try {
+      const { cards, skippedWithoutBom } = await buildProductBomCountCards({
+        productIds,
+        products,
+        warehouseId: suppliesWarehouseId,
+        warehouseName: suppliesWarehouseName,
+      });
+      if (cards.length === 0) {
+        setCountCardPreviewOpen(false);
+        setSaveMsg({
+          type: 'error',
+          text:
+            skippedWithoutBom.length > 0
+              ? `لا يمكن العرض: لا يوجد BOM للمحدد (${skippedWithoutBom.slice(0, 5).join('، ')}${skippedWithoutBom.length > 5 ? '…' : ''}).`
+              : 'لا توجد منتجات صالحة لكارت الجرد.',
+        });
+        return;
+      }
+      if (skippedWithoutBom.length > 0) {
+        setCountCardPreviewWarning(
+          `تم تخطي ${skippedWithoutBom.length} بدون BOM: ${skippedWithoutBom.slice(0, 5).join('، ')}${skippedWithoutBom.length > 5 ? '…' : ''}`,
+        );
+      }
+      setCountCardPreviewData(cards);
+    } catch {
+      setCountCardPreviewOpen(false);
+      setSaveMsg({ type: 'error', text: 'تعذر تجهيز كارت الجرد للمعاينة.' });
+    } finally {
+      setCountCardPreviewBusy(false);
+    }
+  };
 
   useEffect(() => {
     if (!detailDrawerProductId) {
@@ -985,6 +1060,465 @@ export const Products: React.FC = () => {
     setImportSaving(false);
   };
 
+  const handleComponentsFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    e.target.value = '';
+    setComponentsImportFileName(file.name);
+    setComponentsImportParsing(true);
+    setShowComponentsImportModal(true);
+    setComponentsImportResult(null);
+    setComponentsFallbackWarehouseId('');
+    try {
+      let manufacturingMaterials: ProductImportMaterialCatalogItem[] = [];
+      let materialCatalogError = false;
+      let locations: Array<{ id: string; code: string; warehouseId: string; warehouseName?: string; isActive?: boolean }> = [];
+      let locationsError = false;
+      try {
+        manufacturingMaterials = await materialService.getAll();
+      } catch {
+        materialCatalogError = true;
+      }
+      try {
+        const warehouseRows = warehouses.length > 0 ? warehouses : await warehouseService.getActiveWarehouses();
+        if (warehouses.length === 0 && warehouseRows.length > 0) setWarehouses(warehouseRows);
+        const warehouseNameById = new Map(warehouseRows.map((w) => [w.id || '', w.name]));
+        const locationRows = await warehouseLocationService.getAll();
+        locations = locationRows
+          .filter((loc) => loc.id && loc.code)
+          .map((loc) => ({
+            id: loc.id!,
+            code: loc.code,
+            warehouseId: loc.warehouseId,
+            warehouseName: warehouseNameById.get(loc.warehouseId),
+            isActive: loc.isActive,
+          }));
+      } catch {
+        locationsError = true;
+      }
+      const result = await parseProductComponentsExcel(file, _rawProducts, {
+        manufacturingMaterials,
+        locations,
+      });
+      if (materialCatalogError) {
+        result.fileErrors = [
+          ...result.fileErrors,
+          'تعذر تحميل كتالوج مواد التصنيع؛ سيتم رفض صفوف المواد حتى يتم تحميل الكتالوج بنجاح.',
+        ];
+      }
+      if (locationsError) {
+        result.fileErrors = [
+          ...result.fileErrors,
+          'تعذر تحميل اللوكيشنات؛ أي كود لوكيشن في الملف سيُرفض حتى يتم التحميل بنجاح.',
+        ];
+      }
+
+      // Skip BOM/stock that already exists so re-import does not double balances.
+      const bomKeys = new Set<string>();
+      const stockKeys = new Set<string>();
+      try {
+        const productIds = [
+          ...new Set(
+            result.rows
+              .filter((r) => r.errors.length === 0 && r.productId)
+              .map((r) => r.productId),
+          ),
+        ];
+        await Promise.all(
+          productIds.map(async (productId) => {
+            const { items } = await bomService.getActiveBomWithLegacyFallback('product', productId);
+            for (const item of items) {
+              if (item.itemType === 'material' && item.itemId) {
+                bomKeys.add(bomExistKey(productId, item.itemId));
+              }
+            }
+          }),
+        );
+      } catch {
+        result.fileErrors = [
+          ...result.fileErrors,
+          'تعذر التحقق من BOM الحالي؛ قد تُعاد كتابة مكونات موجودة.',
+        ];
+      }
+      try {
+        const [locationBalances, warehouseBalances] = await Promise.all([
+          stockService.getLocationBalances(),
+          stockService.getBalances(),
+        ]);
+        for (const bal of locationBalances) {
+          if (!bal.itemId || Number(bal.quantity || 0) <= 0) continue;
+          if (bal.locationId) {
+            stockKeys.add(stockExistKeyForLocation(bal.itemId, bal.locationId));
+          }
+          if (bal.warehouseId) {
+            stockKeys.add(stockExistKeyForWarehouse(bal.itemId, bal.warehouseId));
+          }
+          stockKeys.add(stockExistKeyAny(bal.itemId));
+        }
+        for (const bal of warehouseBalances) {
+          if (!bal.itemId || Number(bal.quantity || 0) <= 0) continue;
+          stockKeys.add(stockExistKeyAny(bal.itemId));
+          if (bal.warehouseId) {
+            stockKeys.add(stockExistKeyForWarehouse(bal.itemId, bal.warehouseId));
+          }
+        }
+      } catch {
+        result.fileErrors = [
+          ...result.fileErrors,
+          'تعذر التحقق من الأرصدة الحالية؛ قد تُضاف أرصدة مكررة.',
+        ];
+      }
+
+      setComponentsImportResult(
+        applySkipExistingProductComponents(result, { bomKeys, stockKeys }),
+      );
+    } catch {
+      setComponentsImportResult({
+        rows: [],
+        totalRows: 0,
+        validCount: 0,
+        errorCount: 0,
+        bomGroupCount: 0,
+        stockMovementCount: 0,
+        newMaterialCount: 0,
+        skippedBomCount: 0,
+        skippedStockCount: 0,
+        needsFallbackWarehouse: false,
+        bomGroups: [],
+        stockMovements: [],
+        materialsToCreate: [],
+        fileErrors: ['فشل تحليل الملف.'],
+      });
+    } finally {
+      setComponentsImportParsing(false);
+    }
+  };
+
+  const saveBomItemsForProduct = async (
+    productId: string,
+    items: Array<{
+      materialId: string;
+      materialName: string;
+      materialUnit?: string;
+      quantityUsed: number;
+      unitCost: number;
+    }>,
+  ) => {
+    if (items.length === 0) return;
+    const bomId = await bomService.ensureActiveBom('product', productId);
+    const existingItems = await bomService.getItemsByBomId(bomId);
+    let nextSortOrder = existingItems.reduce((max, item) => Math.max(max, Number(item.sortOrder ?? -1)), -1) + 1;
+
+    for (const material of items) {
+      const payload: Omit<BomItem, 'id' | 'tenantId' | 'bomId'> = {
+        itemId: material.materialId,
+        itemType: 'material',
+        itemName: material.materialName,
+        qtyPerUnit: Number(material.quantityUsed || 0),
+        unit: material.materialUnit || 'piece',
+        wastePercent: 0,
+        costBehavior: 'direct',
+        directCostPerUnit: Number(material.unitCost || 0),
+        indirectCostPerUnit: 0,
+      };
+      const existing = existingItems.find(
+        (item) => item.itemType === 'material' && item.itemId === material.materialId,
+      );
+      if (existing?.id) {
+        await bomService.updateItem(existing.id, payload);
+      } else {
+        const sortOrder = nextSortOrder++;
+        const addedItemId = await bomService.addItem(bomId, { ...payload, sortOrder });
+        if (addedItemId) {
+          existingItems.push({ ...payload, id: addedItemId, bomId, sortOrder });
+        }
+      }
+    }
+  };
+
+  const handleComponentsImportSave = async () => {
+    if (!componentsImportResult) return;
+    const validRows = componentsImportResult.rows.filter((r) => r.errors.length === 0);
+    if (validRows.length === 0) return;
+
+    if (
+      componentsImportResult.bomGroupCount === 0 &&
+      componentsImportResult.stockMovementCount === 0 &&
+      componentsImportResult.newMaterialCount === 0
+    ) {
+      setSaveMsg({ type: 'error', text: 'لا يوجد جديد للحفظ — كل المكونات/الأرصدة موجودة مسبقًا.' });
+      return;
+    }
+
+    if (componentsImportResult.needsFallbackWarehouse && !componentsFallbackWarehouseId) {
+      setSaveMsg({ type: 'error', text: 'اختر المخزن للصفوف التي فيها رصيد بدون كود لوكيشن.' });
+      return;
+    }
+
+    const materialsToCreate = componentsImportResult.materialsToCreate;
+    const bomGroups = componentsImportResult.bomGroups.map((g) => ({
+      ...g,
+      items: g.items.map((item) => ({ ...item })),
+    }));
+    const stockMovements = componentsImportResult.stockMovements.map((m) => ({ ...m }));
+    const bomGroupCount = componentsImportResult.bomGroupCount;
+    const stockMovementCount = componentsImportResult.stockMovementCount;
+    const newMaterialCount = materialsToCreate.length;
+    const fallbackWarehouseId = componentsFallbackWarehouseId;
+    const fallbackWarehouse = warehouses.find((w) => w.id === fallbackWarehouseId);
+    const totalSteps = materialsToCreate.length + bomGroups.length + stockMovements.length;
+    const jobId = addJob({
+      fileName: componentsImportFileName || 'product_components.xlsx',
+      jobType: 'Product Components Import',
+      totalRows: totalSteps,
+      startedBy: userDisplayName || 'Current User',
+    });
+
+    setComponentsImportSaving(true);
+    setComponentsImportProgress({ done: 0, total: totalSteps });
+    startJob(jobId, 'Creating materials and saving BOM...');
+    setShowComponentsImportModal(false);
+    setComponentsImportResult(null);
+    setComponentsImportFileName('');
+    setComponentsFallbackWarehouseId('');
+
+    let done = 0;
+    let failed = 0;
+    let stockFailed = 0;
+    let stockSaved = 0;
+    const stockErrorSamples: string[] = [];
+    const createdMaterialIds = new Map<string, string>();
+
+    for (const material of materialsToCreate) {
+      if (isBackgroundJobCancelled(jobId)) {
+        failJob(jobId, 'Cancelled by user', 'Cancelled');
+        setComponentsImportSaving(false);
+        setSaveMsg({ type: 'error', text: 'تم إلغاء استيراد المكونات.' });
+        return;
+      }
+      try {
+        const { id } = await materialService.createOrGetByCode({
+          code: material.code,
+          name: material.name,
+          type: 'raw_material',
+          baseUnit: 'piece',
+          purchaseCost: material.purchaseCost,
+          wastePercent: 0,
+          conversionRate: 1,
+          isActive: true,
+          linkedCostCenterIds: [],
+        });
+        createdMaterialIds.set(material.code.toUpperCase(), id);
+      } catch (error) {
+        failed++;
+        console.error('[components-import] Failed creating material', material.code, error);
+      }
+      done++;
+      setComponentsImportProgress({ done, total: totalSteps });
+      setJobProgress(jobId, {
+        processedRows: done,
+        totalRows: totalSteps,
+        statusText: 'Creating materials...',
+        status: 'processing',
+      });
+    }
+
+    const resolveMaterialId = (materialId: string, materialCode: string, willCreate?: boolean) => {
+      if (!willCreate && materialId && !materialId.startsWith('pending:')) return materialId;
+      const code = materialCode.trim().toUpperCase();
+      return createdMaterialIds.get(code) || '';
+    };
+
+    for (const group of bomGroups) {
+      if (isBackgroundJobCancelled(jobId)) {
+        failJob(jobId, 'Cancelled by user', 'Cancelled');
+        setComponentsImportSaving(false);
+        setSaveMsg({ type: 'error', text: 'تم إلغاء استيراد المكونات.' });
+        return;
+      }
+      try {
+        const items = group.items
+          .map((item) => {
+            const materialId = resolveMaterialId(item.materialId, item.materialCode, item.willCreateMaterial);
+            if (!materialId) return null;
+            return {
+              materialId,
+              materialName: item.materialName,
+              materialUnit: item.materialUnit || 'piece',
+              quantityUsed: item.quantityUsed,
+              unitCost: item.unitCost,
+            };
+          })
+          .filter((item): item is NonNullable<typeof item> => Boolean(item));
+        if (items.length === 0) throw new Error('لا توجد مواد صالحة لحفظ BOM');
+        await saveBomItemsForProduct(group.productId, items);
+      } catch (error) {
+        failed++;
+        console.error('[components-import] Failed BOM for product', group.productCode, error);
+      }
+      done++;
+      setComponentsImportProgress({ done, total: totalSteps });
+      setJobProgress(jobId, {
+        processedRows: done,
+        totalRows: totalSteps,
+        statusText: 'Saving BOM...',
+        status: 'processing',
+      });
+    }
+
+    const defaultsSet = new Set<string>();
+    const importBatchId = `PCI-${Date.now()}`;
+    const STOCK_STEP_TIMEOUT_MS = 45_000;
+
+    const withTimeout = async <T,>(promise: Promise<T>, label: string): Promise<T> => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          promise,
+          new Promise<T>((_, reject) => {
+            timer = setTimeout(
+              () => reject(new Error(`انتهت المهلة (45ث): ${label}`)),
+              STOCK_STEP_TIMEOUT_MS,
+            );
+          }),
+        ]);
+      } finally {
+        if (timer) clearTimeout(timer);
+      }
+    };
+
+    for (let movementIndex = 0; movementIndex < stockMovements.length; movementIndex++) {
+      if (isBackgroundJobCancelled(jobId)) {
+        failJob(jobId, 'Cancelled by user', 'Cancelled');
+        setComponentsImportSaving(false);
+        setSaveMsg({ type: 'error', text: 'تم إلغاء استيراد المكونات.' });
+        return;
+      }
+
+      const movement = stockMovements[movementIndex];
+      try {
+        const materialId = resolveMaterialId(
+          movement.materialId,
+          movement.materialCode,
+          movement.willCreateMaterial,
+        );
+        if (!materialId) throw new Error(`تعذر تحديد المادة ${movement.materialCode}`);
+        const warehouseId = movement.warehouseId || fallbackWarehouseId;
+        if (!warehouseId) {
+          throw new Error('المخزن مطلوب لحركة الرصيد.');
+        }
+        const warehouseName =
+          movement.warehouseName ||
+          fallbackWarehouse?.name ||
+          warehouses.find((w) => w.id === warehouseId)?.name;
+
+        // Pre-assign reference to skip INV counter allocation (avoids hangs under load).
+        const movementId = await withTimeout(
+          stockService.createMovement({
+            warehouseId,
+            locationId: movement.locationId,
+            locationCode: movement.locationCode,
+            itemType: stockItemTypeForMaterials,
+            itemId: materialId,
+            itemName: movement.materialName,
+            itemCode: movement.materialCode,
+            movementType: 'IN',
+            quantity: movement.quantity,
+            unit: movement.materialUnit || 'piece',
+            referenceNo: `${importBatchId}-${movementIndex + 1}`,
+            note: 'استيراد مكونات المنتجات',
+            sourceModule: 'manual_movement',
+            createdBy: userDisplayName || 'Current User',
+          }),
+          movement.materialCode || `row ${movementIndex + 1}`,
+        );
+        if (!movementId) {
+          throw new Error(`تعذر حفظ رصيد ${movement.materialCode}`);
+        }
+        stockSaved++;
+
+        if (movement.locationId && movement.locationCode) {
+          const defaultKey = `${warehouseId}__${stockItemTypeForMaterials}__${materialId}`;
+          if (!defaultsSet.has(defaultKey)) {
+            defaultsSet.add(defaultKey);
+            try {
+              await withTimeout(
+                defaultItemLocationService.set({
+                  warehouseId,
+                  warehouseName,
+                  itemType: stockItemTypeForMaterials,
+                  itemId: materialId,
+                  itemName: movement.materialName,
+                  itemCode: movement.materialCode,
+                  locationId: movement.locationId,
+                  locationCode: movement.locationCode,
+                }),
+                `default-loc ${movement.materialCode}`,
+              );
+            } catch (defaultErr) {
+              console.warn('[components-import] default location skipped', defaultErr);
+            }
+          }
+        }
+      } catch (error) {
+        failed++;
+        stockFailed++;
+        const msg = error instanceof Error ? error.message : String(error || 'unknown');
+        if (stockErrorSamples.length < 3) {
+          stockErrorSamples.push(`${movement.materialCode || `#${movementIndex + 1}`}: ${msg}`);
+        }
+        console.error('[components-import] Failed stock movement', movement.materialCode, error);
+      }
+      done++;
+      setComponentsImportProgress({ done, total: totalSteps });
+      setJobProgress(jobId, {
+        processedRows: done,
+        totalRows: totalSteps,
+        statusText: `Saving stock... ${movement.materialCode || ''}`.trim(),
+        status: 'processing',
+      });
+    }
+
+    if (isBackgroundJobCancelled(jobId)) {
+      failJob(jobId, 'Cancelled by user', 'Cancelled');
+      setComponentsImportSaving(false);
+      setSaveMsg({ type: 'error', text: 'تم إلغاء استيراد المكونات.' });
+      return;
+    }
+
+    const addedRows = Math.max(0, done - failed);
+    const stockErrorHint =
+      stockErrorSamples.length > 0 ? ` السبب: ${stockErrorSamples.join(' | ')}` : '';
+    if (stockMovements.length > 0 && stockSaved === 0) {
+      failJob(
+        jobId,
+        `BOM قد يُحفظ لكن الرصيد فشل بالكامل (${stockFailed} حركة). أعد الرفع.${stockErrorHint}`,
+        'Stock failed',
+      );
+    } else if (addedRows === 0 && failed > 0) {
+      failJob(jobId, `All rows failed during save.${stockErrorHint}`, 'Failed');
+    } else {
+      completeJob(jobId, {
+        addedRows,
+        failedRows: failed,
+        statusText: stockFailed > 0 ? `Completed with ${stockFailed} stock errors` : 'Completed',
+      });
+    }
+    setComponentsImportSaving(false);
+    setSaveMsg({
+      type: stockSaved === 0 && stockMovements.length > 0 ? 'error' : failed > 0 ? 'error' : 'success',
+      text:
+        stockMovements.length > 0 && stockSaved === 0
+          ? `فشل حفظ الرصيد بالكامل (${stockFailed}). المكونات/BOM قد تكون اتحفظت — أعد رفع الشيت للرصيد.${stockErrorHint}`
+          : failed > 0
+            ? `تم الحفظ مع ${failed} فشل (رصيد نجح: ${stockSaved}/${stockMovements.length}).${stockErrorHint}`
+            : `تم حفظ ${bomGroupCount} منتج` +
+              (newMaterialCount > 0 ? ` و${newMaterialCount} مادة جديدة` : '') +
+              (stockMovementCount > 0 ? ` و${stockMovementCount} رصيد` : '') +
+              '.',
+    });
+  };
+
   const doExportProducts = async (warehouseId?: string) => {
     setExportingProducts(true);
     try {
@@ -1245,6 +1779,13 @@ export const Products: React.FC = () => {
     <div className="space-y-6">
       {/* Hidden file input */}
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileSelect} />
+      <input
+        ref={componentsFileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={handleComponentsFileSelect}
+      />
 
       {/* â”€â”€ Page Header â”€â”€ */}
       <PageHeader
@@ -1302,6 +1843,20 @@ export const Products: React.FC = () => {
             group: 'استيراد',
             hidden: !canImportFromPage,
             onClick: () => fileInputRef.current?.click(),
+          },
+          {
+            label: 'تحميل قالب المكونات',
+            icon: 'file_download',
+            group: 'استيراد',
+            hidden: !canImportFromPage,
+            onClick: downloadProductComponentsTemplate,
+          },
+          {
+            label: 'رفع مكونات المنتجات',
+            icon: 'upload_file',
+            group: 'استيراد',
+            hidden: !canImportFromPage,
+            onClick: () => componentsFileInputRef.current?.click(),
           },
         ]}
       />
@@ -1440,6 +1995,19 @@ export const Products: React.FC = () => {
                 </button>
               </>
             )}
+            <button
+              className="btn btn-secondary btn-sm gap-1"
+              disabled={countCardPreviewBusy}
+              onClick={() => void openProductBomCountCardPreview([...selectedIds])}
+              title="معاينة وطباعة كروت جرد بالمكونات والأرصدة للمنتجات المحددة"
+            >
+              {countCardPreviewBusy ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Printer className="size-3.5" />
+              )}
+              كروت الجرد
+            </button>
             <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(new Set())}>
               <ProductIcon name="close" className="text-[15px]" />
               إلغاء التحديد
@@ -1766,6 +2334,19 @@ export const Products: React.FC = () => {
                   </button>
                   <button
                     type="button"
+                    title="معاينة كارت جرد"
+                    disabled={countCardPreviewBusy}
+                    onClick={() => void openProductBomCountCardPreview([p.id])}
+                    className="p-2 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] hover:bg-primary/10 hover:text-primary disabled:opacity-40"
+                  >
+                    {countCardPreviewBusy ? (
+                      <Loader2 className="size-[18px] animate-spin" />
+                    ) : (
+                      <ClipboardList className="size-[18px]" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
                     title="مشاركة كصورة"
                     disabled={drawerShareBusy}
                     onClick={() => void handleShareProductDetail()}
@@ -1940,7 +2521,7 @@ export const Products: React.FC = () => {
         </div>
       )}
 
-      {/* â”€â”€ Import Excel Modal â”€â”€ */}
+      {/* Import Excel Modal */}
       {showImportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -2107,7 +2688,289 @@ export const Products: React.FC = () => {
         </div>
       )}
 
-      {/* â”€â”€ Export Warehouse Selector Modal â”€â”€ */}
+      {/* Product Components Import Modal */}
+      {showComponentsImportModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => {
+            setShowComponentsImportModal(false);
+            setComponentsImportResult(null);
+            setComponentsFallbackWarehouseId('');
+          }}
+        >
+          <div
+            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-6xl border border-[var(--color-border)] max-h-[85vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
+              <div className="flex items-center gap-4">
+                <h3 className="text-lg font-bold">رفع مكونات المنتجات</h3>
+                <button
+                  onClick={downloadProductComponentsTemplate}
+                  className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline"
+                >
+                  <ProductIcon name="download" className="text-sm" />
+                  تحميل القالب
+                </button>
+              </div>
+              <button
+                onClick={() => {
+                  setShowComponentsImportModal(false);
+                  setComponentsImportResult(null);
+                  setComponentsFallbackWarehouseId('');
+                }}
+                className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
+              >
+                <ProductIcon name="close" />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto flex-1">
+              {componentsImportParsing && (
+                <div className="text-center py-12">
+                  <ProductIcon name="refresh" className="animate-spin text-4xl text-primary mb-3 block" />
+                  <p className="font-bold text-slate-600">جاري تحليل الملف...</p>
+                </div>
+              )}
+
+              {!componentsImportParsing && componentsImportResult && componentsImportResult.totalRows === 0 && (
+                <div className="text-center py-12">
+                  <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
+                  <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
+                  <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                    الأعمدة: كود المنتج، كود/اسم المادة، الكمية المستخدمة، وكود اللوكيشن ورصيد المكون اختياريان.
+                    كود مادة جديد + اسم المادة ينشئ المادة تلقائياً.
+                  </p>
+                  <button
+                    onClick={downloadProductComponentsTemplate}
+                    className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto"
+                  >
+                    <ProductIcon name="download" className="text-sm" />
+                    تحميل قالب المكونات
+                  </button>
+                </div>
+              )}
+
+              {!componentsImportParsing && componentsImportResult && componentsImportResult.totalRows > 0 && (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap gap-3">
+                    <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold">
+                      الإجمالي: <span className="text-primary">{componentsImportResult.totalRows}</span>
+                    </div>
+                    <div className="bg-emerald-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-emerald-600">
+                      صالح: {componentsImportResult.validCount}
+                    </div>
+                    <div className="bg-blue-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-blue-600">
+                      منتجات BOM: {componentsImportResult.bomGroupCount}
+                    </div>
+                    {componentsImportResult.newMaterialCount > 0 && (
+                      <div className="bg-indigo-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-indigo-600">
+                        مواد جديدة: {componentsImportResult.newMaterialCount}
+                      </div>
+                    )}
+                    <div className="bg-violet-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-violet-600">
+                      حركات رصيد: {componentsImportResult.stockMovementCount}
+                    </div>
+                    {(componentsImportResult.skippedBomCount > 0 ||
+                      componentsImportResult.skippedStockCount > 0) && (
+                      <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-700">
+                        متخطى: {componentsImportResult.skippedBomCount} BOM
+                        {componentsImportResult.skippedStockCount > 0
+                          ? ` + ${componentsImportResult.skippedStockCount} رصيد`
+                          : ''}
+                      </div>
+                    )}
+                    {componentsImportResult.errorCount > 0 && (
+                      <div className="bg-rose-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-rose-500">
+                        أخطاء: {componentsImportResult.errorCount}
+                      </div>
+                    )}
+                  </div>
+
+                  {(componentsImportResult.skippedBomCount > 0 ||
+                    componentsImportResult.skippedStockCount > 0) && (
+                    <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
+                      سيتم تخطي المكونات/الأرصدة الموجودة مسبقًا حتى لا يتكرر الإدخال.
+                    </div>
+                  )}
+
+                  {componentsImportResult.fileErrors.length > 0 && (
+                    <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
+                      <ul className="space-y-0.5">
+                        {componentsImportResult.fileErrors.map((err, i) => (
+                          <li key={i}>• {err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {componentsImportResult.needsFallbackWarehouse && (
+                    <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3">
+                      <label className="block text-sm font-bold mb-2">
+                        مخزن الرصيد (للصفوف بدون كود لوكيشن)
+                      </label>
+                      <select
+                        className="w-full max-w-md rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm"
+                        value={componentsFallbackWarehouseId}
+                        onChange={(e) => setComponentsFallbackWarehouseId(e.target.value)}
+                      >
+                        <option value="">اختر المخزن...</option>
+                        {warehouses.map((w) => (
+                          <option key={w.id} value={w.id}>
+                            {w.name} ({w.code})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
+                    <table className="erp-table w-full text-right text-sm border-collapse">
+                      <thead className="erp-thead">
+                        <tr>
+                          <th className="erp-th">صف</th>
+                          <th className="erp-th">الحالة</th>
+                          <th className="erp-th">المنتج</th>
+                          <th className="erp-th">المادة</th>
+                          <th className="erp-th">كمية BOM</th>
+                          <th className="erp-th">تكلفة</th>
+                          <th className="erp-th">اللوكيشن</th>
+                          <th className="erp-th">رصيد</th>
+                          <th className="erp-th">التفاصيل</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[var(--color-border)]">
+                        {componentsImportResult.rows.map((row) => (
+                          <tr
+                            key={row.rowIndex}
+                            className={
+                              row.errors.length > 0
+                                ? 'bg-rose-50/50 dark:bg-rose-900/10'
+                                : row.skipBom || row.skipStock
+                                  ? 'bg-amber-50/40 dark:bg-amber-900/10'
+                                  : ''
+                            }
+                          >
+                            <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.rowIndex}</td>
+                            <td className="px-3 py-2.5">
+                              {row.errors.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
+                                  <ProductIcon name="error" className="text-sm" /> خطأ
+                                </span>
+                              ) : row.skipBom && row.skipStock ? (
+                                <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold">
+                                  <ProductIcon name="remove_done" className="text-sm" /> متخطى
+                                </span>
+                              ) : row.skipBom || row.skipStock ? (
+                                <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold">
+                                  <ProductIcon name="warning" className="text-sm" /> جزئي
+                                </span>
+                              ) : row.willCreateMaterial ? (
+                                <span className="inline-flex items-center gap-1 text-indigo-600 text-xs font-bold">
+                                  <ProductIcon name="add_circle" className="text-sm" /> مادة جديدة
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 text-emerald-600 text-xs font-bold">
+                                  <ProductIcon name="check_circle" className="text-sm" /> جاهز
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="font-medium">{row.productName || '—'}</div>
+                              <div className="font-mono text-xs text-slate-500">{row.productCode || '—'}</div>
+                            </td>
+                            <td className="px-3 py-2.5">
+                              <div className="font-medium">{row.matchedMaterialName || row.materialName || '—'}</div>
+                              <div className="font-mono text-xs text-slate-500">
+                                {row.matchedMaterialCode || row.materialCode || '—'}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2.5 font-mono">{row.quantityUsed || '—'}</td>
+                            <td className="px-3 py-2.5 font-mono">{row.unitCost || '—'}</td>
+                            <td className="px-3 py-2.5 font-mono">{row.locationCode || '—'}</td>
+                            <td className="px-3 py-2.5 font-mono">{row.balanceQty > 0 ? row.balanceQty : '—'}</td>
+                            <td className="px-3 py-2.5">
+                              {row.errors.length > 0 ? (
+                                <ul className="text-xs text-rose-500 space-y-0.5">
+                                  {row.errors.map((err, i) => (
+                                    <li key={i}>• {err}</li>
+                                  ))}
+                                </ul>
+                              ) : row.skipNotes && row.skipNotes.length > 0 ? (
+                                <ul className="text-xs text-amber-700 space-y-0.5">
+                                  {row.skipNotes.map((note, i) => (
+                                    <li key={i}>• {note}</li>
+                                  ))}
+                                </ul>
+                              ) : null}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between shrink-0">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setShowComponentsImportModal(false);
+                  setComponentsImportResult(null);
+                  setComponentsFallbackWarehouseId('');
+                }}
+              >
+                إلغاء
+              </Button>
+              {componentsImportResult &&
+                componentsImportResult.validCount > 0 &&
+                (componentsImportResult.bomGroupCount > 0 ||
+                  componentsImportResult.stockMovementCount > 0 ||
+                  componentsImportResult.newMaterialCount > 0) && (
+                <Button
+                  variant="primary"
+                  onClick={handleComponentsImportSave}
+                  disabled={
+                    componentsImportSaving ||
+                    (componentsImportResult.needsFallbackWarehouse && !componentsFallbackWarehouseId)
+                  }
+                >
+                  {componentsImportSaving ? (
+                    <>
+                      <ProductIcon name="refresh" className="animate-spin text-sm" />
+                      {componentsImportProgress.done} / {componentsImportProgress.total}
+                    </>
+                  ) : (
+                    <>
+                      <ProductIcon name="save" className="text-sm" />
+                      حفظ {componentsImportResult.bomGroupCount} BOM
+                      {componentsImportResult.stockMovementCount > 0
+                        ? ` + ${componentsImportResult.stockMovementCount} رصيد`
+                        : ''}
+                      {componentsImportResult.skippedBomCount +
+                        componentsImportResult.skippedStockCount >
+                      0
+                        ? ' (مع تخطي الموجود)'
+                        : ''}
+                    </>
+                  )}
+                </Button>
+              )}
+              {componentsImportResult &&
+                componentsImportResult.validCount > 0 &&
+                componentsImportResult.bomGroupCount === 0 &&
+                componentsImportResult.stockMovementCount === 0 &&
+                componentsImportResult.newMaterialCount === 0 && (
+                <p className="text-sm font-bold text-amber-700">كل الصفوف موجودة مسبقًا — لا يوجد ما يُحفظ.</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Export Warehouse Selector Modal */}
       {showWarehouseExportModal && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
@@ -2331,6 +3194,19 @@ export const Products: React.FC = () => {
           </div>
         </div>
       )}
+
+      <ProductBomCountCardPreviewModal
+        open={countCardPreviewOpen}
+        cards={countCardPreviewData}
+        printSettings={printTemplate}
+        loading={countCardPreviewBusy}
+        warningText={countCardPreviewWarning}
+        onClose={() => {
+          setCountCardPreviewOpen(false);
+          setCountCardPreviewData([]);
+          setCountCardPreviewWarning(null);
+        }}
+      />
     </div>
   );
 };

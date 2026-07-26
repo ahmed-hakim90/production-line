@@ -293,8 +293,10 @@ service cloud.firestore {
         'materials', 'boms', 'bom_items', 'material_requirement_runs',
         'production_plan_material_requirements', 'purchase_orders',
         'cost_deviation_analysis',
-        'line_worker_assignments', 'warehouses', 'raw_materials', 'stock_items', 'stock_transactions',
-        'stock_counts', 'inventory_transfer_requests', 'cost_centers', 'cost_center_values',
+        'line_worker_assignments', 'warehouses', 'warehouse_racks', 'warehouse_locations', 'warehouse_location_settings', 'default_item_locations', 'raw_materials',
+        'stock_items', 'stock_location_balances', 'stock_transactions',
+        'stock_counts', 'inventory_transfer_requests', 'production_issue_orders',
+        'component_compensation_requests', 'component_return_records', 'component_scrap_records', 'disassembly_orders', 'supplies_receipt_orders', 'cost_centers', 'cost_center_values',
         'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations',
         'activity_logs', 'departments', 'job_positions', 'shifts', 'hr_settings',
         'penalty_rules', 'late_rules', 'allowance_types', 'attendance_raw_logs', 'attendance_logs',
@@ -307,7 +309,7 @@ service cloud.firestore {
         'production_report_uniques', 'product_categories', 'material_categories', 'automation_runs', 'backups',
         'production_routing_plans', 'production_routing_steps',
         'supply_cycles', 'supply_cycle_waste_lines',
-        'entity_code_counters', 'inventory_counters'
+        'entity_code_counters', 'entity_code_claims', 'inventory_counters'
       ];
     }
 

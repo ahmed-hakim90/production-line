@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { Card } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
 import type { Warehouse, WarehouseRole } from '../types';
 
@@ -18,7 +18,7 @@ import { usePermission } from '../../../utils/permissions';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '@/components/modal-manager/modalKeys';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Pencil, Plus, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 
@@ -42,7 +42,7 @@ export const Warehouses: React.FC = () => {
       if (!prev.includes(label)) map.set(id, [...prev, label]);
     };
     add(routing.rawMaterialWarehouseId, 'مواد خام');
-    add(routing.decomposedWarehouseId, 'مفكك');
+    add(routing.decomposedWarehouseId, 'مستلزم / مفكك');
     add(routing.productionWipWarehouseId, 'WIP');
     add(routing.finishedStagingWarehouseId, 'تم الصنع');
     add(routing.finalProductWarehouseId, 'منتج تام');
@@ -130,13 +130,15 @@ export const Warehouses: React.FC = () => {
       <PageHeader
         title="المخازن"
         subtitle="عرض المخازن وتعديلها. عند الحذف يُزال المخزن مع كل الحركات والأرصدة والطلبات المرتبطة به نهائيًا."
-        actions={
-          canManage ? (
-            <Button variant="primary" onClick={openCreate}>
-              <Plus size={16} />
-              إضافة مخزن
-            </Button>
-          ) : null
+        primaryAction={
+          canManage
+            ? {
+                label: 'إضافة مخزن',
+                icon: 'add',
+                onClick: openCreate,
+                dataModalKey: MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE,
+              }
+            : undefined
         }
       />
 

@@ -1,6 +1,7 @@
 import {
   doc,
   getDoc,
+  setDoc,
   type Firestore,
   type Transaction,
   getDocs,
@@ -40,6 +41,9 @@ function counterRef(dbInst: Firestore, tenantId: string) {
 /**
  * Allocate the next INV- reference inside an existing Firestore transaction.
  * Persists `lastInvSeq` on `inventory_counters/{tenantId}`.
+ *
+ * Note: Firestore transactions cannot run collection queries. If the counter
+ * doc is missing we start at 1 (or a pre-seeded value from `ensureInvCounter`).
  */
 export async function allocateInvReferenceInTransaction(t: Transaction): Promise<string> {
   const tenantId = getCurrentTenantId();
@@ -49,16 +53,7 @@ export async function allocateInvReferenceInTransaction(t: Transaction): Promise
   if (cSnap.exists()) {
     nextSeq = Math.max(1, Math.floor(Number(cSnap.data().lastInvSeq || 0))) + 1;
   } else {
-    const txQ = tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500));
-    const trQ = tenantQuery(db, TRANSFER_REQUESTS_COLLECTION, orderBy('createdAt', 'desc'), limit(500));
-    const txSnap = await (t as { get: (q: unknown) => Promise<{ docs: { data: () => Record<string, unknown> }[] }> }).get(
-      txQ,
-    );
-    const trSnap = await (t as { get: (q: unknown) => Promise<{ docs: { data: () => Record<string, unknown> }[] }> }).get(
-      trQ,
-    );
-    const maxLegacy = Math.max(maxInvFromDocs(txSnap.docs), maxInvFromDocs(trSnap.docs));
-    nextSeq = Math.max(1, maxLegacy + 1);
+    nextSeq = 1;
   }
   t.set(
     cref,
@@ -70,6 +65,29 @@ export async function allocateInvReferenceInTransaction(t: Transaction): Promise
     { merge: true },
   );
   return formatInvReference(nextSeq);
+}
+
+/** Seed counter from recent docs when missing (outside a transaction). */
+export async function ensureInvCounter(): Promise<void> {
+  const tenantId = getCurrentTenantId();
+  const cref = counterRef(db, tenantId);
+  const snap = await getDoc(cref);
+  if (snap.exists()) return;
+  const [txSnap, trSnap] = await Promise.all([
+    getDocs(tenantQuery(db, TRANSACTIONS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),
+    getDocs(tenantQuery(db, TRANSFER_REQUESTS_COLLECTION, orderBy('createdAt', 'desc'), limit(500))),
+  ]);
+  const maxLegacy = Math.max(maxInvFromDocs(txSnap.docs), maxInvFromDocs(trSnap.docs));
+  const lastInvSeq = Math.max(0, maxLegacy);
+  await setDoc(
+    cref,
+    {
+      tenantId,
+      lastInvSeq,
+      updatedAt: new Date().toISOString(),
+    },
+    { merge: true },
+  );
 }
 
 /** Best-effort next INV for display only (not reserved). */

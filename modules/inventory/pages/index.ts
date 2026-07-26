@@ -1,7 +1,10 @@
 export { InventoryDashboard } from './InventoryDashboard';
+export { RawMaterialWarehouseControl } from './RawMaterialWarehouseControl';
+export { RawMaterialWarehouseAlerts } from './RawMaterialWarehouseAlerts';
 export { StockBalances } from './StockBalances';
 export { StockTransactions } from './StockTransactions';
 export { StockMovementForm } from './StockMovementForm';
 export { StockCounts } from './StockCounts';
 export { TransferApprovals } from './TransferApprovals';
 export { QuickWarehouseTransfer } from './QuickWarehouseTransfer';
+export { SuppliesReceipt } from './SuppliesReceipt';

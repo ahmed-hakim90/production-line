@@ -80,6 +80,7 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
           <th className="erp-th">المصدر</th>
           <th className="erp-th text-center">الكمية</th>
           <th className="erp-th">المخزن</th>
+          <th className="erp-th">اللوكيشن</th>
           <th className="erp-th">المرجع</th>
           <th className="erp-th">المنفذ</th>
           <th className="erp-th">إجراءات</th>
@@ -89,14 +90,14 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
         {loading &&
           Array.from({ length: 6 }).map((_, i) => (
             <tr key={`tx-skeleton-${i}`}>
-              <td colSpan={10} className="px-4 py-3">
+              <td colSpan={11} className="px-4 py-3">
                 <Skeleton className="h-6 w-full rounded-md" />
               </td>
             </tr>
           ))}
         {!loading && combinedRows.length === 0 && (
           <tr>
-            <td colSpan={10} className="px-4 py-10 text-center text-slate-400">
+            <td colSpan={11} className="px-4 py-10 text-center text-slate-400">
               لا توجد حركات مطابقة.
             </td>
           </tr>
@@ -140,6 +141,10 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                     )}
                   </td>
                   <td className="px-4 py-3 text-sm">{warehouseMap.get(tx.warehouseId) ?? tx.warehouseId}</td>
+                  <td className="px-4 py-3 text-xs text-slate-500">
+                    {tx.locationCode || '—'}
+                    {tx.toLocationCode ? ` → ${tx.toLocationCode}` : ''}
+                  </td>
                   <td className="px-4 py-3 text-xs font-mono text-slate-500">
                     {tx.sourceId || tx.referenceNo || '—'}
                   </td>
@@ -248,6 +253,9 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <td className="px-4 py-3 text-sm">
                     {fromName} ← {toName}
                   </td>
+                  <td className="px-4 py-3 text-xs text-slate-500">
+                    {group.lines.map((line) => line.locationCode || line.toLocationCode).filter(Boolean).slice(0, 2).join('، ') || '—'}
+                  </td>
                   <td className="px-4 py-3 text-xs font-mono text-slate-500">{group.referenceNo}</td>
                   <td className="px-4 py-3 text-sm">{group.createdBy}</td>
                   <td className="px-4 py-3">
@@ -348,6 +356,9 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                 </td>
                 <td className="px-4 py-3 text-sm">
                   {fromName} ← {toName}
+                </td>
+                <td className="px-4 py-3 text-xs text-slate-500">
+                  {row.lines.map((line) => line.locationCode || line.toLocationCode).filter(Boolean).slice(0, 2).join('، ') || '—'}
                 </td>
                 <td className="px-4 py-3 text-xs font-mono text-slate-500">{row.sourceId || row.referenceNo}</td>
                 <td className="px-4 py-3 text-sm">{row.createdBy}</td>

@@ -2,6 +2,7 @@ import React from 'react';
 import { Card } from '../UI';
 import type { PlanSettings } from '../../../../types';
 import type { Warehouse } from '../../../inventory/types';
+import { syncPlanSettingsWarehouseRouting } from '../../../inventory/lib/syncPlanSettingsWarehouseRouting';
 
 type GeneralSystemBehaviorSectionProps = {
   isAdmin: boolean;
@@ -236,7 +237,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
           <select
             className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
             value={localPlanSettings.defaultProductionWarehouseId ?? ''}
-            onChange={(e) => setLocalPlanSettings((p) => ({ ...p, defaultProductionWarehouseId: e.target.value }))}
+            onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+              ...p,
+              defaultProductionWarehouseId: e.target.value,
+              inventoryRouting: {
+                ...p.inventoryRouting,
+                productionWipWarehouseId: e.target.value,
+              },
+            }))}
           >
             <option value="">بدون ترحيل تلقائي</option>
             {inventoryWarehouses.map((w) => (
@@ -257,7 +265,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
               value={localPlanSettings.rawMaterialWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => ({ ...p, rawMaterialWarehouseId: e.target.value }))}
+              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+                ...p,
+                rawMaterialWarehouseId: e.target.value,
+                inventoryRouting: {
+                  ...p.inventoryRouting,
+                  rawMaterialWarehouseId: e.target.value,
+                },
+              }))}
             >
               <option value="">غير محدد</option>
               {inventoryWarehouses.map((w) => (
@@ -269,15 +284,22 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
           <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2 mb-3">
               <span className="material-icons-round text-primary text-lg">call_split</span>
-              <p className="text-sm font-bold text-[var(--color-text)]">مخزن المفكك (خصم الخامات)</p>
+              <p className="text-sm font-bold text-[var(--color-text)]">مخزن المفكك (مستلزم إنتاج)</p>
             </div>
             <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              عند تسجيل تقرير إنتاج، يُخصم مكونات المنتج (الخامات) من هذا المخزن.
+              رصيد مكونات BOM المتاح للصرف والإنتاج. صرف الإنتاج وخصم BOM يخصمان من هذا المخزن.
             </p>
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
               value={localPlanSettings.decomposedSourceWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => ({ ...p, decomposedSourceWarehouseId: e.target.value }))}
+              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+                ...p,
+                decomposedSourceWarehouseId: e.target.value,
+                inventoryRouting: {
+                  ...p.inventoryRouting,
+                  decomposedWarehouseId: e.target.value,
+                },
+              }))}
             >
               <option value="">غير محدد</option>
               {inventoryWarehouses.map((w) => (
@@ -297,7 +319,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
               value={localPlanSettings.finishedReceiveWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => ({ ...p, finishedReceiveWarehouseId: e.target.value }))}
+              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+                ...p,
+                finishedReceiveWarehouseId: e.target.value,
+                inventoryRouting: {
+                  ...p.inventoryRouting,
+                  finishedStagingWarehouseId: e.target.value,
+                },
+              }))}
             >
               <option value="">غير محدد</option>
               {inventoryWarehouses.map((w) => (
@@ -317,7 +346,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
               value={localPlanSettings.wasteReceiveWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => ({ ...p, wasteReceiveWarehouseId: e.target.value }))}
+              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+                ...p,
+                wasteReceiveWarehouseId: e.target.value,
+                inventoryRouting: {
+                  ...p.inventoryRouting,
+                  wasteWarehouseId: e.target.value,
+                },
+              }))}
             >
               <option value="">غير محدد</option>
               {inventoryWarehouses.map((w) => (
@@ -337,7 +373,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
               value={localPlanSettings.finalProductWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => ({ ...p, finalProductWarehouseId: e.target.value }))}
+              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+                ...p,
+                finalProductWarehouseId: e.target.value,
+                inventoryRouting: {
+                  ...p.inventoryRouting,
+                  finalProductWarehouseId: e.target.value,
+                },
+              }))}
             >
               <option value="">غير محدد</option>
               {inventoryWarehouses.map((w) => (
@@ -373,7 +416,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <select
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                 value={localPlanSettings.packagingSourceWarehouseId ?? ''}
-                onChange={(e) => setLocalPlanSettings((p) => ({ ...p, packagingSourceWarehouseId: e.target.value }))}
+                onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+                  ...p,
+                  packagingSourceWarehouseId: e.target.value,
+                  inventoryRouting: {
+                    ...p.inventoryRouting,
+                    packagingSourceWarehouseId: e.target.value,
+                  },
+                }))}
               >
                 <option value="">غير محدد</option>
                 {inventoryWarehouses.map((w) => (
@@ -387,7 +437,14 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <select
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
                 value={localPlanSettings.packagingTargetWarehouseId ?? ''}
-                onChange={(e) => setLocalPlanSettings((p) => ({ ...p, packagingTargetWarehouseId: e.target.value }))}
+                onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
+                  ...p,
+                  packagingTargetWarehouseId: e.target.value,
+                  inventoryRouting: {
+                    ...p.inventoryRouting,
+                    packagingTargetWarehouseId: e.target.value,
+                  },
+                }))}
               >
                 <option value="">غير محدد</option>
                 {inventoryWarehouses.map((w) => (

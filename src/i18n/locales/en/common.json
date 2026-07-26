@@ -227,9 +227,16 @@
   },
   "jobs": {
     "tasks": "Tasks",
+    "historyTitle": "Tasks History",
+    "historySubtitle": "Running and finished background jobs across the ERP",
     "runningOperations": "Running operations",
+    "finishedOperations": "Finished operations",
     "activeOperations": "{{count}} active operations",
+    "finishedCount": "{{count}} jobs",
+    "noActiveJobs": "No active jobs right now",
+    "noFinishedJobs": "No finished jobs yet",
     "allOperationsCompleted": "All operations completed",
+    "resultSummary": "{{added}} added / {{failed}} failed",
     "hideDetails": "Hide details",
     "showDetails": "Show details",
     "rowsProgress": "{{processed}} / {{total}} rows",
@@ -238,6 +245,13 @@
     "viewReport": "View report",
     "retry": "Retry",
     "remove": "Remove",
+    "columns": {
+      "date": "Date",
+      "type": "Type",
+      "user": "User",
+      "status": "Status",
+      "result": "Result"
+    },
     "status": {
       "pending": "Pending",
       "uploading": "Uploading",

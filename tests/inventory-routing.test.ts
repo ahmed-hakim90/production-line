@@ -52,10 +52,50 @@ function testPickConsumptionWarehouse() {
   } as SystemSettings);
   assert.equal(pickConsumptionWarehouse({ type: 'packaging' }, routing), 'pkg-1');
   assert.equal(pickConsumptionWarehouse({ type: 'semi_finished' }, routing), 'dec-1');
-  assert.equal(pickConsumptionWarehouse({ type: 'raw_material' }, routing), 'raw-1');
+  // BOM raw/consumable leaves issue from مستلزم إنتاج (مفكك), not upstream raw warehouse.
+  assert.equal(pickConsumptionWarehouse({ type: 'raw_material' }, routing), 'dec-1');
+  assert.equal(pickConsumptionWarehouse({ type: 'consumable' }, routing), 'dec-1');
+}
+
+function testAutoConsumeBomDefaultOff() {
+  const off = resolveInventoryRoutingV1({
+    planSettings: {
+      ...DEFAULT_PLAN_SETTINGS,
+      inventoryRouting: {},
+    },
+  } as SystemSettings);
+  assert.equal(off.autoConsumeBomOnProductionReport, false);
+
+  const on = resolveInventoryRoutingV1({
+    planSettings: {
+      ...DEFAULT_PLAN_SETTINGS,
+      inventoryRouting: { autoConsumeBomOnProductionReport: true },
+    },
+  } as SystemSettings);
+  assert.equal(on.autoConsumeBomOnProductionReport, true);
+}
+
+function testRequireIssuedProductionIssueDefaultOn() {
+  const defaults = resolveInventoryRoutingV1({
+    planSettings: {
+      ...DEFAULT_PLAN_SETTINGS,
+      inventoryRouting: {},
+    },
+  } as SystemSettings);
+  assert.equal(defaults.requireIssuedProductionIssueOnReport, true);
+
+  const off = resolveInventoryRoutingV1({
+    planSettings: {
+      ...DEFAULT_PLAN_SETTINGS,
+      inventoryRouting: { requireIssuedProductionIssueOnReport: false },
+    },
+  } as SystemSettings);
+  assert.equal(off.requireIssuedProductionIssueOnReport, false);
 }
 
 testLegacyFallback();
 testNestedRoutingPreferred();
 testPickConsumptionWarehouse();
+testAutoConsumeBomDefaultOff();
+testRequireIssuedProductionIssueDefaultOn();
 console.log('inventory-routing tests passed');

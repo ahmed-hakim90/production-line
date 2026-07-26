@@ -6,6 +6,7 @@ import { MODAL_KEYS } from '../modalKeys';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import type { PlanSettings, Warehouse } from '../../../types';
 import { migrateInventoryRoutingV1 } from '../../../modules/inventory/services/inventoryMigrationService';
+import { syncPlanSettingsWarehouseRouting } from '../../../modules/inventory/lib/syncPlanSettingsWarehouseRouting';
 import { useAppStore } from '../../../store/useAppStore';
 
 type Payload = GlobalModalPayload & {
@@ -26,10 +27,12 @@ export const GlobalProductionRoutingSettingsModal: React.FC = () => {
 
   const routing = { ...data.localPlanSettings.inventoryRouting };
   const patch = (p: Partial<NonNullable<PlanSettings['inventoryRouting']>>) => {
-    data.setLocalPlanSettings((prev) => ({
-      ...prev,
-      inventoryRouting: { ...prev.inventoryRouting, ...p },
-    }));
+    data.setLocalPlanSettings((prev) =>
+      syncPlanSettingsWarehouseRouting({
+        ...prev,
+        inventoryRouting: { ...prev.inventoryRouting, ...p },
+      }),
+    );
   };
 
   const runMigration = async () => {
@@ -69,6 +72,27 @@ export const GlobalProductionRoutingSettingsModal: React.FC = () => {
           <label className="flex items-center gap-2 font-bold">
             <input type="checkbox" checked={routing?.requireApprovalForAutoTransfers !== false} onChange={() => patch({ requireApprovalForAutoTransfers: !routing?.requireApprovalForAutoTransfers })} />
             اعتماد التحويلات التلقائية
+          </label>
+          <label className="flex flex-col gap-1 font-bold">
+            <span className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={routing?.requireIssuedProductionIssueOnReport !== false}
+                onChange={() => patch({ requireIssuedProductionIssueOnReport: !(routing?.requireIssuedProductionIssueOnReport !== false) })}
+              />
+              إلزام صرف إنتاج معتمد قبل ترحيل مخزون التقرير
+            </span>
+          </label>
+          <label className="flex flex-col gap-1 font-bold">
+            <span className="flex items-center gap-2">
+              <input type="checkbox" checked={Boolean(routing?.autoConsumeBomOnProductionReport)} onChange={() => patch({ autoConsumeBomOnProductionReport: !routing?.autoConsumeBomOnProductionReport })} />
+              خصم BOM تلقائي عند حفظ التقرير
+            </span>
+            {Boolean(routing?.autoConsumeBomOnProductionReport) && routing?.requireIssuedProductionIssueOnReport === false && (
+              <span className="text-xs font-medium text-amber-700 leading-relaxed">
+                تنبيه: سيخصم من المخزن مباشرة عند حفظ التقرير بدون أمر صرف. المفضّل إيقافه واستخدام «صرف إنتاج».
+              </span>
+            )}
           </label>
           <p className="text-xs text-slate-500">لتعديل المخازن بالكامل استخدم صفحة الإعدادات الرئيسية.</p>
         </div>

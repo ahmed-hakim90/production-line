@@ -18,6 +18,8 @@ export interface BackgroundJob {
   addedRows: number;
   failedRows: number;
   errorMessage?: string;
+  /** User clicked cancel — runners should stop between steps. */
+  cancelled?: boolean;
 }
 
 interface NewJobInput {
@@ -88,7 +90,7 @@ export const useJobsStore = create<JobsStore>()(
         set((state) => ({
           jobs: [created, ...state.jobs].slice(0, 120),
           panelHidden: false,
-          panelMinimized: true,
+          panelMinimized: false,
         }));
         return id;
       },
@@ -117,7 +119,7 @@ export const useJobsStore = create<JobsStore>()(
               : job
           ),
           panelHidden: false,
-          panelMinimized: true,
+          panelMinimized: false,
         }));
       },
 
@@ -170,6 +172,7 @@ export const useJobsStore = create<JobsStore>()(
                   status: 'failed',
                   statusText,
                   errorMessage,
+                  cancelled: job.cancelled,
                   updatedAt: now(),
                 }
               : job
@@ -199,8 +202,9 @@ export const useJobsStore = create<JobsStore>()(
               ? {
                   ...job,
                   status: 'failed',
-                  statusText: 'Failed',
+                  statusText: 'Cancelled',
                   errorMessage: 'Cancelled by user',
+                  cancelled: true,
                   updatedAt: now(),
                 }
               : job
@@ -221,12 +225,13 @@ export const useJobsStore = create<JobsStore>()(
                   addedRows: 0,
                   failedRows: 0,
                   errorMessage: '',
+                  cancelled: false,
                   updatedAt: now(),
                 }
               : job
           ),
           panelHidden: false,
-          panelMinimized: true,
+          panelMinimized: false,
         }));
       },
 
@@ -262,6 +267,29 @@ export const useJobsStore = create<JobsStore>()(
         panelMinimized: state.panelMinimized,
         panelHidden: state.panelHidden,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state) return;
+        const STALE_MS = 15 * 60 * 1000;
+        const ts = Date.now();
+        state.jobs = state.jobs.map((job) => {
+          const isActive =
+            job.status === 'pending' || job.status === 'uploading' || job.status === 'processing';
+          if (!isActive) return job;
+          if (ts - (job.updatedAt || job.createdAt) < STALE_MS) return job;
+          return {
+            ...job,
+            status: 'failed' as const,
+            statusText: 'Interrupted',
+            errorMessage: 'توقفت المهمة (تم تحديث الصفحة أو انقطع الاتصال). أعد رفع الملف.',
+            updatedAt: ts,
+          };
+        });
+      },
     }
   )
 );
+
+export function isBackgroundJobCancelled(jobId: string): boolean {
+  const job = useJobsStore.getState().jobs.find((j) => j.id === jobId);
+  return Boolean(job?.cancelled);
+}

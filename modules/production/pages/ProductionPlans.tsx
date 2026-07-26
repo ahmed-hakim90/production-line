@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button, KPIBox } from '../components/UI';
+import { Card, Badge, Button, KPIBox, SearchableSelect } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import {
@@ -160,7 +160,6 @@ export const ProductionPlans: React.FC = () => {
 
   // â”€â”€ Form state â”€â”€
   const [formProductId, setFormProductId] = useState(searchParams.get('productId') || '');
-  const [formProductInput, setFormProductInput] = useState('');
   const [formLineId, setFormLineId] = useState('');
   const [formQuantity, setFormQuantity] = useState<number>(Number(searchParams.get('quantity')) || 0);
   const [formDailyTarget, setFormDailyTarget] = useState<number>(0);
@@ -230,16 +229,12 @@ export const ProductionPlans: React.FC = () => {
     product.code ? `${product.code} - ${product.name}` : (product.name ?? '')
   );
 
-  useEffect(() => {
-    if (!formProductId) {
-      if (formProductInput) setFormProductInput('');
-      return;
-    }
-    const selected = products.find((p) => p.id === formProductId);
-    if (!selected) return;
-    const label = getProductOptionLabel(selected);
-    if (formProductInput !== label) setFormProductInput(label);
-  }, [formProductId, products]);
+  const formProductSelectOptions = useMemo(
+    () => products
+      .filter((p) => Boolean(p.id))
+      .map((p) => ({ value: p.id!, label: getProductOptionLabel(p) })),
+    [products],
+  );
 
   // â”€â”€ Dynamic calculations â”€â”€
   const calculations = useMemo(() => {
@@ -297,17 +292,6 @@ export const ProductionPlans: React.FC = () => {
       usesManualDailyTarget: manualDailyTarget > 0,
     };
   }, [formProductId, formLineId, formQuantity, formDailyTarget, formStartDate, productReports, _rawLines, lineProductConfigs, routingVarianceBasisSecondsByProduct, routingTotalTimeSecondsByProduct, laborSettings, products]);
-
-  const formProductOptions = useMemo(() => {
-    const q = formProductInput.trim().toLowerCase();
-    if (!q) return products;
-    return products.filter((p) => {
-      const name = (p.name ?? '').toLowerCase();
-      const code = (p.code ?? '').toLowerCase();
-      const label = getProductOptionLabel(p).toLowerCase();
-      return name.includes(q) || code.includes(q) || label.includes(q);
-    });
-  }, [products, formProductInput]);
 
   // â”€â”€ Enriched plans with computed metrics â”€â”€
   const enrichedPlans = useMemo<EnrichedPlan[]>(() => {
@@ -612,7 +596,6 @@ export const ProductionPlans: React.FC = () => {
       createdBy: uid,
     });
     setFormProductId('');
-    setFormProductInput('');
     setFormLineId('');
     setFormQuantity(0);
     setFormDailyTarget(0);
@@ -823,43 +806,13 @@ export const ProductionPlans: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج *</label>
-              <div className="relative">
-                <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] text-lg pointer-events-none">search</span>
-                <input
-                  type="text"
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 pr-10 outline-none font-medium transition-all"
-                  value={formProductInput}
-                  list="production-plan-product-options"
-                  onChange={(e) => {
-                    const value = e.target.value;
-                    setFormProductInput(value);
-                    const normalized = value.trim().toLowerCase();
-                    if (!normalized) {
-                      setFormProductId('');
-                      return;
-                    }
-                    const matched = products.find((p) => {
-                      const name = (p.name ?? '').toLowerCase();
-                      const code = (p.code ?? '').toLowerCase();
-                      const label = getProductOptionLabel(p).toLowerCase();
-                      return normalized === label || normalized === name || normalized === code;
-                    });
-                    setFormProductId(matched?.id ?? '');
-                  }}
-                  placeholder="ابحث باسم المنتج أو الكود..."
-                />
-                <datalist id="production-plan-product-options">
-                  {formProductOptions.map((p) => (
-                    <option key={p.id} value={getProductOptionLabel(p)} />
-                  ))}
-                </datalist>
-              </div>
-              {formProductInput && !formProductId && formProductOptions.length > 0 && (
-                <p className="text-xs text-blue-600 font-medium">اختر المنتج من الاقتراحات لإتمام الاختيار</p>
-              )}
-              {formProductInput && formProductOptions.length === 0 && (
-                <p className="text-xs text-amber-600 font-medium">لا توجد نتائج مطابقة</p>
-              )}
+              <SearchableSelect
+                options={formProductSelectOptions}
+                value={formProductId}
+                onChange={setFormProductId}
+                placeholder="ابحث واختر المنتج..."
+                className="h-auto min-h-12 p-3.5 rounded-[var(--border-radius-lg)] bg-[var(--color-card)]"
+              />
             </div>
 
             <div className="space-y-2">

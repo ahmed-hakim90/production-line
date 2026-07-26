@@ -541,6 +541,7 @@ export const Reports: React.FC = () => {
   const createReport = useAppStore((s) => s.createReport);
   const updateReport = useAppStore((s) => s.updateReport);
   const deleteReport = useAppStore((s) => s.deleteReport);
+  const reapplyReportInventory = useAppStore((s) => s.reapplyReportInventory);
   const fetchReportsFromStore = useAppStore((s) => s.fetchReports);
   const syncMissingProductionEntryTransfers = useAppStore((s) => s.syncMissingProductionEntryTransfers);
   const backfillUnlinkedReportsWorkOrders = useAppStore((s) => s.backfillUnlinkedReportsWorkOrders);
@@ -688,6 +689,7 @@ export const Reports: React.FC = () => {
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [reapplyingReportInventoryId, setReapplyingReportInventoryId] = useState<string | null>(null);
   const [exporting, setExporting] = useState(false);
   const setShareToast = useCallback((message: string | null) => {
     if (message) showAppToast('info', message, { duration: 8000 });
@@ -2494,6 +2496,37 @@ export const Reports: React.FC = () => {
     setDeleteConfirmId(reportId);
   }, []);
 
+  const handleReapplyReportInventory = useCallback(async (report: ProductionReport) => {
+    const reportId = String(report.id || '').trim();
+    if (!reportId) {
+      setSaveToastType('error');
+      setSaveToast('معرف التقرير غير متوفر.');
+      return;
+    }
+    if (!can('inventory.transactions.create')) {
+      setSaveToastType('error');
+      setSaveToast('غير مصرح لك بإنشاء حركات مخزون.');
+      return;
+    }
+    const confirmed = window.confirm(
+      'سيتم إعادة ترحيل هذا التقرير على المخزون: خصم المكونات وتسجيل دخول/تحويل المنتج حسب إعدادات المخزون. هل تريد المتابعة؟',
+    );
+    if (!confirmed) return;
+
+    setReapplyingReportInventoryId(reportId);
+    try {
+      await reapplyReportInventory(reportId);
+      setSaveToastType('success');
+      setSaveToast('تم ترحيل مخزون التقرير بنجاح.');
+      setSelectedReportDrawer(null);
+    } catch (error: any) {
+      setSaveToastType('error');
+      setSaveToast(error?.message || 'تعذر إعادة ترحيل مخزون التقرير.');
+    } finally {
+      setReapplyingReportInventoryId(null);
+    }
+  }, [can, reapplyReportInventory, setSaveToast, setSaveToastType]);
+
   const handleViewWorkers = async (report: ProductionReport) => {
     const { lineId, date, productId } = report;
     const assignmentSourceDate = report.id ? date : getTodayDateString();
@@ -4112,6 +4145,7 @@ export const Reports: React.FC = () => {
           : row.reportType === 'packaging'
             ? 'تقرير تغليف'
             : 'تقرير منتج نهائي';
+        const reapplyingInventory = Boolean(row.id && reapplyingReportInventoryId === row.id);
         return (
           <>
             <div
@@ -4295,7 +4329,7 @@ export const Reports: React.FC = () => {
                 )}
               </div>
 
-              <div className="sticky bottom-10 bg-[var(--color-card)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[var(--color-border)] grid grid-cols-3 gap-2">
+              <div className="sticky bottom-10 bg-[var(--color-card)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[var(--color-border)] grid grid-cols-4 gap-2">
                 <button
                   type="button"
                   onClick={() => {
@@ -4304,6 +4338,14 @@ export const Reports: React.FC = () => {
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
                 >
                   طباعة
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleReapplyReportInventory(row)}
+                  disabled={reapplyingInventory || !row.id || !can('inventory.transactions.create')}
+                  className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold disabled:opacity-50"
+                >
+                  {reapplyingInventory ? 'جاري...' : 'ترحيل'}
                 </button>
                 <button
                   type="button"

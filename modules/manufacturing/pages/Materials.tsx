@@ -4,6 +4,10 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { MaterialCategoryTreeSelect } from '../components/MaterialCategoryTreeSelect';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { usePermission } from '@/utils/permissions';
 import { useMaterials, useMaterialMutations } from '../hooks/useMaterials';
 import {
@@ -15,11 +19,22 @@ import {
 } from '../types';
 import { manufacturingMigrationService } from '../services/manufacturingMigrationService';
 import { formatMigrationError } from '../lib/migrationErrors';
+import { isDuplicateEntityCodeError } from '../services/materialService';
 import { useAppStore } from '@/store/useAppStore';
 import { roleService } from '@/modules/system/services/roleService';
-import { Loader2, Plus, Pencil, Trash2 } from 'lucide-react';
+import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2, Pencil, Trash2 } from 'lucide-react';
 
-const arNum = (n: number) => n.toLocaleString('ar-EG');
+const PAGE_SIZE = 20;
+
+const arNum = (n: number) =>
+  n.toLocaleString('ar-EG', {
+    minimumFractionDigits: n % 1 === 0 ? 0 : 2,
+    maximumFractionDigits: 2,
+  });
+
+type SortKey = 'code' | 'name' | 'type' | 'purchaseCost' | 'wastePercent';
+type StatusFilter = 'all' | 'active' | 'inactive';
+type ManufacturedFilter = 'all' | 'internal' | 'external';
 
 const EMPTY_FORM = {
   code: '',
@@ -35,6 +50,22 @@ const EMPTY_FORM = {
   isActive: true,
 };
 
+const TYPE_BADGE: Record<MaterialType, 'info' | 'warning' | 'muted' | 'success'> = {
+  raw_material: 'info',
+  semi_finished: 'warning',
+  consumable: 'muted',
+  packaging: 'success',
+};
+
+function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
+  if (!active) return <ChevronsUpDown className="h-3.5 w-3.5 text-muted-foreground/70" />;
+  return dir === 'asc' ? (
+    <ArrowUp className="h-3.5 w-3.5 text-primary" />
+  ) : (
+    <ArrowDown className="h-3.5 w-3.5 text-primary" />
+  );
+}
+
 export const Materials: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
@@ -49,6 +80,8 @@ export const Materials: React.FC = () => {
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<MaterialType | 'all'>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [manufacturedFilter, setManufacturedFilter] = useState<ManufacturedFilter>('all');
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
@@ -56,18 +89,66 @@ export const Materials: React.FC = () => {
   const [migrating, setMigrating] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [sortKey, setSortKey] = useState<SortKey>('code');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('asc');
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     return rows.filter((r) => {
       if (typeFilter !== 'all' && r.type !== typeFilter) return false;
+      if (statusFilter === 'active' && r.isActive === false) return false;
+      if (statusFilter === 'inactive' && r.isActive !== false) return false;
+      if (manufacturedFilter === 'internal' && !r.isManufacturedInternally) return false;
+      if (manufacturedFilter === 'external' && r.isManufacturedInternally) return false;
       if (!q) return true;
+      const category = String(r.categoryName || '').toLowerCase();
       return (
         r.name.toLowerCase().includes(q) ||
-        r.code.toLowerCase().includes(q)
+        r.code.toLowerCase().includes(q) ||
+        category.includes(q)
       );
     });
-  }, [rows, search, typeFilter]);
+  }, [rows, search, typeFilter, statusFilter, manufacturedFilter]);
+
+  const sorted = useMemo(() => {
+    const list = [...filtered];
+    list.sort((a, b) => {
+      let cmp = 0;
+      if (sortKey === 'code' || sortKey === 'name') {
+        cmp = String(a[sortKey] || '').localeCompare(String(b[sortKey] || ''), 'ar', {
+          numeric: true,
+          sensitivity: 'base',
+        });
+      } else if (sortKey === 'type') {
+        cmp = MATERIAL_TYPE_LABELS[a.type].localeCompare(MATERIAL_TYPE_LABELS[b.type], 'ar');
+      } else if (sortKey === 'purchaseCost' || sortKey === 'wastePercent') {
+        cmp = Number(a[sortKey] ?? 0) - Number(b[sortKey] ?? 0);
+      }
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+    return list;
+  }, [filtered, sortKey, sortDir]);
+
+  const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
+  const paged = useMemo(
+    () => sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sorted, page],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [search, typeFilter, statusFilter, manufacturedFilter, sortKey, sortDir]);
+
+  const handleSort = (key: SortKey) => {
+    if (sortKey === key) {
+      setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+      return;
+    }
+    setSortKey(key);
+    setSortDir('asc');
+  };
 
   const openCreate = () => {
     setEditing(null);
@@ -123,7 +204,11 @@ export const Materials: React.FC = () => {
       setShowForm(false);
       await refetch();
     } catch (e) {
-      setFeedback(e instanceof Error ? e.message : 'تعذر الحفظ');
+      if (isDuplicateEntityCodeError(e)) {
+        setFeedback('كود المادة مستخدم بالفعل — اختر كودًا آخر.');
+      } else {
+        setFeedback(e instanceof Error ? e.message : 'تعذر الحفظ');
+      }
     } finally {
       setSaving(false);
     }
@@ -171,13 +256,15 @@ export const Materials: React.FC = () => {
     return <p className="p-8 text-center text-muted-foreground">لا توجد صلاحية لعرض المواد</p>;
   }
 
+  const colCount = canManage ? 10 : 9;
+
   return (
-    <div className="space-y-6 p-4 md:p-6">
+    <div className="erp-ds-clean space-y-5 p-4 md:p-6">
       <PageHeader
         title="المواد التصنيعية"
         subtitle="إدارة المواد الخام، نصف المصنع، المستهلكات، والتعبئة"
         primaryAction={
-          canManage ? { label: 'مادة جديدة', onClick: openCreate, icon: 'add' } : undefined
+          canManage ? { label: 'إضافة مادة', onClick: openCreate, icon: 'add' } : undefined
         }
         moreActions={
           canManage
@@ -193,89 +280,190 @@ export const Materials: React.FC = () => {
       />
 
       {feedback && (
-        <p className="rounded-md border border-border bg-muted/50 px-3 py-2 text-sm">{feedback}</p>
+        <p className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm">{feedback}</p>
       )}
 
-      <div className="flex flex-wrap gap-2">
-        <input
-          className="min-w-[200px] flex-1 rounded border border-border px-3 py-2 text-sm"
-          placeholder="بحث بالاسم أو الكود"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      <div className="overflow-hidden rounded-xl border border-border bg-card">
+        <SmartFilterBar
+          searchPlaceholder="بحث بالاسم أو الكود أو الفئة"
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'type',
+              placeholder: 'كل الأنواع',
+              options: (Object.keys(MATERIAL_TYPE_LABELS) as MaterialType[]).map((t) => ({
+                value: t,
+                label: MATERIAL_TYPE_LABELS[t],
+              })),
+            },
+            {
+              key: 'status',
+              placeholder: 'كل الحالات',
+              options: [
+                { value: 'active', label: 'نشط' },
+                { value: 'inactive', label: 'موقوف' },
+              ],
+            },
+            {
+              key: 'manufactured',
+              placeholder: 'كل التصنيع',
+              options: [
+                { value: 'internal', label: 'يُصنع داخلياً' },
+                { value: 'external', label: 'شراء خارجي' },
+              ],
+            },
+          ]}
+          quickFilterValues={{
+            type: typeFilter,
+            status: statusFilter,
+            manufactured: manufacturedFilter,
+          }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'type') setTypeFilter(value as MaterialType | 'all');
+            if (key === 'status') setStatusFilter(value as StatusFilter);
+            if (key === 'manufactured') setManufacturedFilter(value as ManufacturedFilter);
+          }}
+          onApply={() => undefined}
+          applyLabel="تطبيق"
+          className="mb-0 border-0 rounded-none"
         />
-        <select
-          className="rounded border border-border px-3 py-2 text-sm"
-          value={typeFilter}
-          onChange={(e) => setTypeFilter(e.target.value as MaterialType | 'all')}
-        >
-          <option value="all">كل الأنواع</option>
-          {(Object.keys(MATERIAL_TYPE_LABELS) as MaterialType[]).map((t) => (
-            <option key={t} value={t}>
-              {MATERIAL_TYPE_LABELS[t]}
-            </option>
-          ))}
-        </select>
-      </div>
 
-      {isLoading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      ) : (
-        <div className="overflow-x-auto rounded-lg border border-border">
-          <table className="erp-table w-full min-w-[900px] text-right">
-            <thead>
-              <tr className="border-b bg-muted/50">
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الكود</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الاسم</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الفئة</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">النوع</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">الوحدة</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">تكلفة الشراء</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">هالك %</th>
-                <th className="px-3 py-2 text-xs font-medium text-muted-foreground">إجراء</th>
+        <div className="overflow-x-auto erp-table-scroll">
+          <table className="erp-table w-full min-w-[980px] border-collapse text-right">
+            <thead className="erp-thead">
+              <tr>
+                {(
+                  [
+                    { key: 'code' as const, label: 'الكود', sortable: true },
+                    { key: 'name' as const, label: 'المادة', sortable: true },
+                    { key: null, label: 'الفئة', sortable: false },
+                    { key: 'type' as const, label: 'النوع', sortable: true },
+                    { key: null, label: 'الوحدة', sortable: false },
+                    { key: 'purchaseCost' as const, label: 'تكلفة الشراء', sortable: true },
+                    { key: 'wastePercent' as const, label: 'هالك %', sortable: true },
+                    { key: null, label: 'التصنيع', sortable: false },
+                    { key: null, label: 'الحالة', sortable: false },
+                  ] as const
+                ).map((col) => (
+                  <th key={col.label} className="erp-th">
+                    {col.sortable && col.key ? (
+                      <button
+                        type="button"
+                        className="inline-flex items-center gap-1 font-medium"
+                        onClick={() => handleSort(col.key)}
+                      >
+                        {col.label}
+                        <SortIcon active={sortKey === col.key} dir={sortDir} />
+                      </button>
+                    ) : (
+                      col.label
+                    )}
+                  </th>
+                ))}
+                {canManage && <th className="erp-th text-center">إجراء</th>}
               </tr>
             </thead>
-            <tbody>
-              {filtered.map((row) => (
-                <tr key={row.id} className="border-b border-border/80">
-                  <td className="px-3 py-2 font-mono text-sm">{row.code}</td>
-                  <td className="px-3 py-2 text-sm">{row.name}</td>
-                  <td className="px-3 py-2 text-xs text-muted-foreground">{row.categoryName || '—'}</td>
-                  <td className="px-3 py-2 text-sm">{MATERIAL_TYPE_LABELS[row.type]}</td>
-                  <td className="px-3 py-2 text-sm">{MATERIAL_UNIT_LABELS[row.baseUnit]}</td>
-                  <td className="px-3 py-2 text-sm">{arNum(Number(row.purchaseCost ?? 0))}</td>
-                  <td className="px-3 py-2 text-sm">{arNum(Number(row.wastePercent ?? 0))}</td>
-                  <td className="px-3 py-2">
-                    <div className="flex gap-1">
-                      {row.type === 'semi_finished' && row.id && (
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => navigate(`/manufacturing/materials/${row.id}`)}
-                        >
-                          BOM
-                        </Button>
-                      )}
-                      {canManage && (
-                        <>
-                          <Button type="button" variant="ghost" size="icon" onClick={() => openEdit(row)}>
-                            <Pencil className="h-4 w-4" />
-                          </Button>
-                          <Button type="button" variant="ghost" size="icon" onClick={() => void handleDelete(row)}>
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          </Button>
-                        </>
-                      )}
-                    </div>
+            <tbody className="divide-y divide-[var(--color-border)]">
+              {isLoading &&
+                Array.from({ length: 8 }).map((_, i) => (
+                  <tr key={`mat-skel-${i}`}>
+                    <td className="px-4 py-3" colSpan={colCount}>
+                      <Skeleton className="h-5 w-full rounded-md" />
+                    </td>
+                  </tr>
+                ))}
+
+              {!isLoading && sorted.length === 0 && (
+                <tr>
+                  <td className="px-4 py-12 text-center text-muted-foreground" colSpan={colCount}>
+                    لا توجد مواد مطابقة للبحث أو الفلاتر.
                   </td>
                 </tr>
-              ))}
+              )}
+
+              {!isLoading &&
+                paged.map((row) => {
+                  const active = row.isActive !== false;
+                  return (
+                    <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
+                      <td className="px-4 py-3 font-mono text-sm tabular-nums">{row.code}</td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm font-bold text-[var(--color-text)]">{row.name}</p>
+                        {row.type === 'semi_finished' && row.id && (
+                          <button
+                            type="button"
+                            className="mt-0.5 text-xs font-semibold text-primary hover:underline"
+                            onClick={() => navigate(`/manufacturing/materials/${row.id}`)}
+                          >
+                            عرض قائمة المواد (BOM)
+                          </button>
+                        )}
+                      </td>
+                      <td className="px-4 py-3 text-sm text-muted-foreground">
+                        {row.categoryName || '—'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge label={MATERIAL_TYPE_LABELS[row.type]} type={TYPE_BADGE[row.type]} />
+                      </td>
+                      <td className="px-4 py-3 text-sm">{MATERIAL_UNIT_LABELS[row.baseUnit]}</td>
+                      <td className="px-4 py-3 text-sm tabular-nums font-semibold">
+                        {arNum(Number(row.purchaseCost ?? 0))}
+                      </td>
+                      <td className="px-4 py-3 text-sm tabular-nums text-center">
+                        {arNum(Number(row.wastePercent ?? 0))}
+                      </td>
+                      <td className="px-4 py-3">
+                        {row.isManufacturedInternally ? (
+                          <StatusBadge label="داخلي" type="warning" />
+                        ) : (
+                          <StatusBadge label="شراء" type="muted" />
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <StatusBadge label={active ? 'نشط' : 'موقوف'} type={active ? 'success' : 'danger'} />
+                      </td>
+                      {canManage && (
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              title="تعديل"
+                              onClick={() => openEdit(row)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              title="حذف"
+                              onClick={() => void handleDelete(row)}
+                            >
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
             </tbody>
           </table>
         </div>
-      )}
+
+        {!isLoading && (
+          <DataPaginationFooter
+            page={page}
+            totalPages={totalPages}
+            totalItems={sorted.length}
+            onPageChange={setCurrentPage}
+            itemLabel="مادة"
+          />
+        )}
+      </div>
 
       {showForm && canManage && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
@@ -342,6 +530,13 @@ export const Materials: React.FC = () => {
                   onChange={(e) => setForm((f) => ({ ...f, conversionRate: Number(e.target.value) }))}
                 />
               </div>
+              <input
+                type="number"
+                className="w-full rounded border px-3 py-2 text-sm"
+                placeholder="نسبة الهالك %"
+                value={form.wastePercent || ''}
+                onChange={(e) => setForm((f) => ({ ...f, wastePercent: Number(e.target.value) }))}
+              />
               <label className="flex items-center gap-2 text-sm">
                 <input
                   type="checkbox"
@@ -349,6 +544,14 @@ export const Materials: React.FC = () => {
                   onChange={(e) => setForm((f) => ({ ...f, isManufacturedInternally: e.target.checked }))}
                 />
                 يُصنع داخلياً (يدعم BOM فرعي)
+              </label>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={form.isActive}
+                  onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                />
+                المادة نشطة
               </label>
             </div>
             <div className="mt-4 flex gap-2">

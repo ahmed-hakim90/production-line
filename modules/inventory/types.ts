@@ -15,6 +15,11 @@ export type StockSourceModule =
   | 'stock_count'
   | 'packaging'
   | 'work_order'
+  | 'production_issue'
+  | 'component_compensation'
+  | 'component_return'
+  | 'disassembly'
+  | 'supplies_receipt'
   | 'legacy';
 
 export type StockAdjustmentReason =
@@ -74,12 +79,111 @@ export interface StockItemBalance {
   lastMovementAt?: string;
 }
 
+export interface WarehouseLocation {
+  id?: string;
+  warehouseId: string;
+  warehouseName?: string;
+  rackId?: string;
+  rackName?: string;
+  rackCode?: string;
+  rack: string;
+  shelfName?: string;
+  shelfCode?: string;
+  shelf: string;
+  code: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  tenantId?: string;
+}
+
+export interface WarehouseRack {
+  id?: string;
+  warehouseId: string;
+  warehouseName?: string;
+  warehouseCode?: string;
+  name: string;
+  code: string;
+  isActive: boolean;
+  sortOrder?: number;
+  createdAt: string;
+  updatedAt?: string;
+  tenantId?: string;
+}
+
+export interface WarehouseLocationSettings {
+  id?: string;
+  warehouseId: string;
+  warehouseName?: string;
+  requireComponentLocation: boolean;
+  requireFinishedGoodLocation: boolean;
+  autoGenerateLocationCode: boolean;
+  allowSuggestedLocationOverride: boolean;
+  createdAt: string;
+  updatedAt?: string;
+  tenantId?: string;
+}
+
+export interface StockLocationBalance {
+  id?: string;
+  warehouseId: string;
+  warehouseName?: string;
+  locationId: string;
+  locationCode: string;
+  rackId?: string;
+  rackName?: string;
+  rackCode?: string;
+  rack?: string;
+  shelfName?: string;
+  shelfCode?: string;
+  shelf?: string;
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  quantity: number;
+  unit?: string;
+  minStock: number;
+  updatedAt: string;
+  lastMovementAt?: string;
+  tenantId?: string;
+}
+
+export interface DefaultItemLocation {
+  id?: string;
+  warehouseId: string;
+  warehouseName?: string;
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  locationId: string;
+  locationCode: string;
+  createdAt: string;
+  updatedAt?: string;
+  tenantId?: string;
+}
+
 export interface StockTransaction {
   id?: string;
   warehouseId: string;
   warehouseName?: string;
+  locationId?: string;
+  locationCode?: string;
+  rackId?: string;
+  rackName?: string;
+  rackCode?: string;
+  shelfName?: string;
+  shelfCode?: string;
   toWarehouseId?: string;
   toWarehouseName?: string;
+  toLocationId?: string;
+  toLocationCode?: string;
+  toRackId?: string;
+  toRackName?: string;
+  toRackCode?: string;
+  toShelfName?: string;
+  toShelfCode?: string;
   itemType: InventoryItemType;
   itemId: string;
   itemName: string;
@@ -96,6 +200,10 @@ export interface StockTransaction {
   transferDirection?: 'OUT' | 'IN';
   sourceModule?: StockSourceModule;
   sourceId?: string;
+  sourceReportId?: string;
+  sourceIssueOrderId?: string;
+  sourceWorkOrderId?: string;
+  sourcePlanId?: string;
   adjustmentReason?: StockAdjustmentReason;
   createdAt: string;
   createdBy: string;
@@ -126,7 +234,21 @@ export interface StockCountSession {
 
 export interface CreateStockMovementInput {
   warehouseId: string;
+  locationId?: string;
+  locationCode?: string;
+  rackId?: string;
+  rackName?: string;
+  rackCode?: string;
+  shelfName?: string;
+  shelfCode?: string;
   toWarehouseId?: string;
+  toLocationId?: string;
+  toLocationCode?: string;
+  toRackId?: string;
+  toRackName?: string;
+  toRackCode?: string;
+  toShelfName?: string;
+  toShelfCode?: string;
   itemType: InventoryItemType;
   itemId: string;
   itemName: string;
@@ -142,6 +264,10 @@ export interface CreateStockMovementInput {
   referenceNo?: string;
   sourceModule?: StockSourceModule;
   sourceId?: string;
+  sourceReportId?: string;
+  sourceIssueOrderId?: string;
+  sourceWorkOrderId?: string;
+  sourcePlanId?: string;
   adjustmentReason?: StockAdjustmentReason;
   createdBy: string;
   allowNegative?: boolean;
@@ -162,6 +288,10 @@ export interface TransferRequestLine {
   itemId: string;
   itemName: string;
   itemCode: string;
+  locationId?: string;
+  locationCode?: string;
+  toLocationId?: string;
+  toLocationCode?: string;
   quantity: number;
   unit?: string;
   requestQuantity?: number;
@@ -204,6 +334,268 @@ export interface InventoryTransferRequest {
   cancellationReason?: string;
 }
 
+export type ProductionIssueOrderStatus = 'draft' | 'submitted' | 'issued' | 'cancelled';
+export type ProductionIssueSourceType = 'work_order' | 'production_plan' | 'production_report';
+
+export interface ProductionIssueAllocation {
+  locationId: string;
+  locationCode: string;
+  rack?: string;
+  shelf?: string;
+  quantity: number;
+}
+
+export interface ProductionIssueOrderLine {
+  materialId: string;
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  qtyPerUnit: number;
+  baseRequiredQty: number;
+  wastePercent: number;
+  plannedWasteQty: number;
+  requiredQty: number;
+  issuedQty?: number;
+  returnedQty?: number;
+  compensatedQty?: number;
+  actualScrapQty?: number;
+  availableQty: number;
+  shortageQty: number;
+  allocations: ProductionIssueAllocation[];
+}
+
+export interface ProductionIssueOrder {
+  id?: string;
+  referenceNo: string;
+  sourceType: ProductionIssueSourceType;
+  workOrderId?: string;
+  productionPlanId?: string;
+  /** When source is a specific production report (past or current). */
+  productionReportId?: string;
+  productionReportCode?: string;
+  productionReportDate?: string;
+  productId: string;
+  productName: string;
+  productCode?: string;
+  lineId?: string;
+  quantity: number;
+  sourceWarehouseId: string;
+  sourceWarehouseName?: string;
+  status: ProductionIssueOrderStatus;
+  lines: ProductionIssueOrderLine[];
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  submittedAt?: string;
+  issuedAt?: string;
+  issuedBy?: string;
+  note?: string;
+  tenantId?: string;
+}
+
+export type ProductionIssueShortageKind =
+  | 'insufficient_allocation'
+  | 'inactive_location'
+  | 'stale_balance';
+
+export interface ProductionIssueShortageRow {
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  requiredQty: number;
+  availableQty: number;
+  kind: ProductionIssueShortageKind;
+  locationCode?: string;
+}
+
+export type ComponentCompensationReason = 'scrap' | 'shortage' | 'damage' | 'correction';
+export type ComponentCompensationStatus = 'pending' | 'approved' | 'rejected';
+export type ComponentReturnReason = 'unused' | 'over_issue' | 'production_cancelled' | 'correction';
+
+export interface ComponentCompensationRequest {
+  id?: string;
+  issueOrderId: string;
+  referenceNo: string;
+  reason: ComponentCompensationReason;
+  warehouseId: string;
+  warehouseName?: string;
+  line: ProductionIssueOrderLine;
+  quantity: number;
+  locationId: string;
+  locationCode: string;
+  status: ComponentCompensationStatus;
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  resolvedBy?: string;
+  resolvedAt?: string;
+  note?: string;
+  tenantId?: string;
+}
+
+export interface ComponentReturnRecord {
+  id?: string;
+  issueOrderId: string;
+  referenceNo: string;
+  warehouseId: string;
+  warehouseName?: string;
+  locationId: string;
+  locationCode: string;
+  line: ProductionIssueOrderLine;
+  quantity: number;
+  reason: ComponentReturnReason;
+  returnedBy: string;
+  returnedByUserId?: string;
+  receivedBy: string;
+  receivedByUserId?: string;
+  createdAt: string;
+  note?: string;
+  tenantId?: string;
+}
+
+export interface ComponentScrapRecord {
+  id?: string;
+  issueOrderId: string;
+  workOrderId?: string;
+  productionPlanId?: string;
+  referenceNo: string;
+  line: ProductionIssueOrderLine;
+  quantity: number;
+  reason: ComponentCompensationReason;
+  needsCompensation?: boolean;
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  note?: string;
+  tenantId?: string;
+}
+
+export interface ComponentReturnInput {
+  issueOrderId: string;
+  warehouseId: string;
+  warehouseName?: string;
+  locationId: string;
+  locationCode: string;
+  line: ProductionIssueOrderLine;
+  quantity: number;
+  reason?: ComponentReturnReason;
+  returnedBy?: string;
+  returnedByUserId?: string;
+  receivedBy?: string;
+  receivedByUserId?: string;
+  createdBy: string;
+  createdByUserId?: string;
+  note?: string;
+}
+
+export interface DisassemblyLine {
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  quantity: number;
+  wasteQty?: number;
+  defaultLocationId?: string;
+  defaultLocationCode?: string;
+  locationId: string;
+  locationCode: string;
+}
+
+export type DisassemblyOrderStatus = 'draft' | 'submitted' | 'approved' | 'executed' | 'rejected' | 'cancelled';
+
+export interface DisassemblyOrder {
+  id?: string;
+  referenceNo: string;
+  status: DisassemblyOrderStatus;
+  sourceWarehouseId: string;
+  sourceWarehouseName?: string;
+  sourceLocationId?: string;
+  sourceLocationCode?: string;
+  targetWarehouseId: string;
+  targetWarehouseName?: string;
+  productId: string;
+  productName: string;
+  productCode?: string;
+  quantity: number;
+  lines: DisassemblyLine[];
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByUserId?: string;
+  executedAt?: string;
+  executedBy?: string;
+  executedByUserId?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedByUserId?: string;
+  rejectionReason?: string;
+  note?: string;
+  tenantId?: string;
+}
+
+export interface SuppliesReceiptLine {
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  quantity: number;
+  suggestedQty?: number;
+  defaultLocationId?: string;
+  defaultLocationCode?: string;
+  locationId: string;
+  locationCode: string;
+}
+
+export interface SuppliesReceiptProductGroup {
+  productId: string;
+  productName: string;
+  productCode?: string;
+  quantity: number;
+  lines: SuppliesReceiptLine[];
+}
+
+export type SuppliesReceiptOrderStatus =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'executed'
+  | 'rejected'
+  | 'cancelled';
+
+export interface SuppliesReceiptOrder {
+  id?: string;
+  referenceNo: string;
+  status: SuppliesReceiptOrderStatus;
+  warehouseId: string;
+  warehouseName?: string;
+  containerRef?: string;
+  groups: SuppliesReceiptProductGroup[];
+  standaloneLines: SuppliesReceiptLine[];
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  submittedAt?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByUserId?: string;
+  executedAt?: string;
+  executedBy?: string;
+  executedByUserId?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedByUserId?: string;
+  rejectionReason?: string;
+  note?: string;
+  tenantId?: string;
+}
+
 export interface InventoryRoutingSettings {
   rawMaterialWarehouseId?: string;
   decomposedWarehouseId?: string;
@@ -217,6 +609,8 @@ export interface InventoryRoutingSettings {
   autoTransferFinishedToFinal?: boolean;
   requireApprovalForProductionEntry?: boolean;
   requireApprovalForAutoTransfers?: boolean;
+  autoConsumeBomOnProductionReport?: boolean;
+  requireIssuedProductionIssueOnReport?: boolean;
 }
 
 export interface ResolvedInventoryRouting {
@@ -232,6 +626,10 @@ export interface ResolvedInventoryRouting {
   autoTransferFinishedToFinal: boolean;
   requireApprovalForProductionEntry: boolean;
   requireApprovalForAutoTransfers: boolean;
+  /** Direct BOM deduction on report save (optional; prefer production issues). */
+  autoConsumeBomOnProductionReport: boolean;
+  /** Finished report stock posts only after an issued production issue. */
+  requireIssuedProductionIssueOnReport: boolean;
   allowNegativeDecomposedStock: boolean;
   allowNegativeFinishedTransferStock: boolean;
   enablePackagingStockTransfer: boolean;

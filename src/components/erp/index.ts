@@ -1,5 +1,6 @@
 export * from "./ActionButton"
 export * from "./DataTable"
+export * from "./DataPaginationFooter"
 export * from "./KPICard"
 export * from "./PageHeader"
 export * from "./PrintReportLayout"

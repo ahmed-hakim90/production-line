@@ -22,15 +22,19 @@ import type {
   StockCountLine,
   StockCountSession,
   StockItemBalance,
+  StockLocationBalance,
   StockTransaction,
 } from '../types';
 import {
   allocateInvReferenceInTransaction,
+  ensureInvCounter,
   formatInvReference,
   peekNextInvReferenceNo,
 } from './inventoryInvSequence';
 
 const BALANCES_COLLECTION = 'stock_items';
+const LOCATION_BALANCES_COLLECTION = 'stock_location_balances';
+const WAREHOUSE_LOCATIONS_COLLECTION = 'warehouse_locations';
 const TRANSACTIONS_COLLECTION = 'stock_transactions';
 const COUNTS_COLLECTION = 'stock_counts';
 const TRANSFER_REQUESTS_COLLECTION = 'inventory_transfer_requests';
@@ -55,6 +59,8 @@ interface StockPageResult<T> {
 
 const balanceDocId = (warehouseId: string, itemType: InventoryItemType, itemId: string) =>
   `${warehouseId}__${itemType}__${itemId}`;
+const locationBalanceDocId = (warehouseId: string, locationId: string, itemType: InventoryItemType, itemId: string) =>
+  `${warehouseId}__${locationId}__${itemType}__${itemId}`;
 
 const toIsoNow = () => new Date().toISOString();
 const stripUndefined = <T extends Record<string, any>>(obj: T): Partial<T> =>
@@ -66,6 +72,68 @@ const chunkArray = <T>(items: T[], size: number): T[][] => {
   }
   return chunks;
 };
+const locationMeta = async (locationId?: string): Promise<Record<string, any>> => {
+  if (!isConfigured || !locationId) return {};
+  const snap = await getDoc(doc(db, WAREHOUSE_LOCATIONS_COLLECTION, locationId));
+  if (!snap.exists()) return {};
+  const data = snap.data();
+  return stripUndefined({
+    locationCode: data.code,
+    rackId: data.rackId,
+    rackName: data.rackName || data.rack,
+    rackCode: data.rackCode,
+    rack: data.rackName || data.rack,
+    shelfName: data.shelfName || data.shelf,
+    shelfCode: data.shelfCode,
+    shelf: data.shelfName || data.shelf,
+  });
+};
+
+/** Firestore rejects `undefined` field values — always strip before location-balance writes. */
+const locationBalanceWrite = (fields: {
+  warehouseId: string;
+  locationId: string;
+  locationCode?: string;
+  rackId?: string;
+  rackName?: string;
+  rackCode?: string;
+  rack?: string;
+  shelfName?: string;
+  shelfCode?: string;
+  shelf?: string;
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName?: string;
+  itemCode?: string;
+  unit?: string;
+  minStock?: number;
+  quantity: number;
+  updatedAt: string;
+  lastMovementAt: string;
+  tenantId: string;
+}) =>
+  stripUndefined({
+    warehouseId: fields.warehouseId,
+    locationId: fields.locationId,
+    locationCode: fields.locationCode || fields.locationId,
+    rackId: fields.rackId,
+    rackName: fields.rackName,
+    rackCode: fields.rackCode,
+    rack: fields.rack,
+    shelfName: fields.shelfName,
+    shelfCode: fields.shelfCode,
+    shelf: fields.shelf,
+    itemType: fields.itemType,
+    itemId: fields.itemId,
+    itemName: fields.itemName,
+    itemCode: fields.itemCode,
+    unit: fields.unit,
+    minStock: fields.minStock ?? 0,
+    quantity: fields.quantity,
+    updatedAt: fields.updatedAt,
+    lastMovementAt: fields.lastMovementAt,
+    tenantId: fields.tenantId,
+  });
 
 export const stockService = {
   async getBalancesPaged(params?: {
@@ -156,7 +224,8 @@ export const stockService = {
     if (!isConfigured) return [];
     const rows: StockItemBalance[] = [];
     let cursor: FirestoreCursor = null;
-    const maxPages = 10;
+    // Match KPI scan depth so balances pages aren't silently truncated after large imports.
+    const maxPages = KPI_MAX_PAGES;
     for (let page = 0; page < maxPages; page += 1) {
       const res = await this.getBalancesPaged({ warehouseId, limit: MAX_PAGE_SIZE, cursor });
       rows.push(...res.items);
@@ -164,6 +233,23 @@ export const stockService = {
       cursor = res.nextCursor;
     }
     return rows;
+  },
+
+  async getLocationBalances(params?: {
+    warehouseId?: string;
+    locationId?: string;
+    itemType?: InventoryItemType;
+    itemId?: string;
+  }): Promise<StockLocationBalance[]> {
+    if (!isConfigured) return [];
+    const constraints: any[] = [orderBy('updatedAt', 'desc'), limit(1000)];
+    if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
+    if (params?.locationId) constraints.unshift(where('locationId', '==', params.locationId));
+    if (params?.itemType) constraints.unshift(where('itemType', '==', params.itemType));
+    if (params?.itemId) constraints.unshift(where('itemId', '==', params.itemId));
+    const q = tenantQuery(db, LOCATION_BALANCES_COLLECTION, ...constraints);
+    const snap = await getDocs(q);
+    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockLocationBalance));
   },
 
   async getTransactions(warehouseId?: string): Promise<StockTransaction[]> {
@@ -281,11 +367,199 @@ export const stockService = {
       throw new Error('الكمية يجب أن تكون أكبر من صفر.');
     }
 
+    if (!input.referenceNo?.trim()) {
+      await ensureInvCounter();
+    }
+
     const tenantId = getCurrentTenantId();
     const txRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+    const sourceLocMeta = await locationMeta(input.locationId);
+    const targetLocMeta = await locationMeta(input.toLocationId);
+    const sourceLocationFields = stripUndefined({
+      locationCode: input.locationCode || sourceLocMeta.locationCode,
+      rackId: input.rackId || sourceLocMeta.rackId,
+      rackName: input.rackName || sourceLocMeta.rackName,
+      rackCode: input.rackCode || sourceLocMeta.rackCode,
+      shelfName: input.shelfName || sourceLocMeta.shelfName,
+      shelfCode: input.shelfCode || sourceLocMeta.shelfCode,
+    });
+    const targetLocationFields = stripUndefined({
+      locationCode: input.toLocationCode || targetLocMeta.locationCode,
+      rackId: input.toRackId || targetLocMeta.rackId,
+      rackName: input.toRackName || targetLocMeta.rackName,
+      rackCode: input.toRackCode || targetLocMeta.rackCode,
+      shelfName: input.toShelfName || targetLocMeta.shelfName,
+      shelfCode: input.toShelfCode || targetLocMeta.shelfCode,
+    });
 
     if (input.movementType === 'TRANSFER') {
-      if (!input.toWarehouseId || input.toWarehouseId === input.warehouseId) {
+      const isSameWarehouse =
+        !input.toWarehouseId || input.toWarehouseId === input.warehouseId;
+
+      if (isSameWarehouse) {
+        if (!input.locationId || !input.toLocationId) {
+          throw new Error('حدد رف المصدر ورف الوجهة لنقل داخل نفس المخزن.');
+        }
+        if (input.locationId === input.toLocationId) {
+          throw new Error('رف المصدر ورف الوجهة يجب أن يكونا مختلفين.');
+        }
+
+        const linkedRef = doc(collection(db, TRANSACTIONS_COLLECTION));
+        await runTransaction(db, async (t) => {
+          const resolvedReferenceNo =
+            input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
+          const sourceLocationRef = doc(
+            db,
+            LOCATION_BALANCES_COLLECTION,
+            locationBalanceDocId(input.warehouseId, input.locationId!, input.itemType, input.itemId),
+          );
+          const targetLocationRef = doc(
+            db,
+            LOCATION_BALANCES_COLLECTION,
+            locationBalanceDocId(input.warehouseId, input.toLocationId!, input.itemType, input.itemId),
+          );
+
+          const sourceLocationSnap = await t.get(sourceLocationRef);
+          const sourceLocationQty = sourceLocationSnap.exists()
+            ? Number(sourceLocationSnap.data().quantity || 0)
+            : 0;
+          const nextSourceLocation = sourceLocationQty - input.quantity;
+          if (nextSourceLocation < 0 && !input.allowNegative) {
+            throw new Error('لا يمكن تنفيذ النقل: الرصيد غير كافٍ في رف المصدر.');
+          }
+          const targetLocationSnap = await t.get(targetLocationRef);
+          const targetLocationQty = targetLocationSnap.exists()
+            ? Number(targetLocationSnap.data().quantity || 0)
+            : 0;
+          const nextTargetLocation = targetLocationQty + input.quantity;
+          const now = toIsoNow();
+
+          const lineage = {
+            unit: input.unit,
+            sourceModule: input.sourceModule,
+            sourceId: input.sourceId,
+            sourceIssueOrderId: input.sourceIssueOrderId,
+            sourceWorkOrderId: input.sourceWorkOrderId,
+            sourcePlanId: input.sourcePlanId,
+            adjustmentReason: input.adjustmentReason,
+          };
+          const outPayload: StockTransaction = {
+            warehouseId: input.warehouseId,
+            locationId: input.locationId,
+            locationCode: sourceLocationFields.locationCode,
+            rackId: sourceLocationFields.rackId,
+            rackName: sourceLocationFields.rackName,
+            rackCode: sourceLocationFields.rackCode,
+            shelfName: sourceLocationFields.shelfName,
+            shelfCode: sourceLocationFields.shelfCode,
+            toWarehouseId: input.warehouseId,
+            toLocationId: input.toLocationId,
+            toLocationCode: targetLocationFields.locationCode,
+            toRackId: targetLocationFields.rackId,
+            toRackName: targetLocationFields.rackName,
+            toRackCode: targetLocationFields.rackCode,
+            toShelfName: targetLocationFields.shelfName,
+            toShelfCode: targetLocationFields.shelfCode,
+            itemType: input.itemType,
+            itemId: input.itemId,
+            itemName: input.itemName,
+            itemCode: input.itemCode,
+            movementType: 'TRANSFER',
+            quantity: input.quantity,
+            requestQuantity: input.requestQuantity,
+            requestUnit: input.requestUnit,
+            unitsPerCarton: input.unitsPerCarton,
+            note: input.note,
+            referenceNo: resolvedReferenceNo,
+            relatedTransactionId: linkedRef.id,
+            transferDirection: 'OUT',
+            createdBy: input.createdBy,
+            createdAt: now,
+            ...lineage,
+          };
+          const inPayload: StockTransaction = {
+            ...outPayload,
+            warehouseId: input.warehouseId,
+            locationId: input.toLocationId,
+            locationCode: targetLocationFields.locationCode,
+            rackId: targetLocationFields.rackId,
+            rackName: targetLocationFields.rackName,
+            rackCode: targetLocationFields.rackCode,
+            shelfName: targetLocationFields.shelfName,
+            shelfCode: targetLocationFields.shelfCode,
+            toWarehouseId: input.warehouseId,
+            toLocationId: input.locationId,
+            toLocationCode: sourceLocationFields.locationCode,
+            toRackId: sourceLocationFields.rackId,
+            toRackName: sourceLocationFields.rackName,
+            toRackCode: sourceLocationFields.rackCode,
+            toShelfName: sourceLocationFields.shelfName,
+            toShelfCode: sourceLocationFields.shelfCode,
+            relatedTransactionId: txRef.id,
+            transferDirection: 'IN',
+          };
+
+          t.set(txRef, stripUndefined({ ...outPayload, tenantId }));
+          t.set(linkedRef, stripUndefined({ ...inPayload, tenantId }));
+
+          t.set(
+            sourceLocationRef,
+            locationBalanceWrite({
+              warehouseId: input.warehouseId,
+              locationId: input.locationId!,
+              locationCode: sourceLocationFields.locationCode,
+              rackId: sourceLocationFields.rackId,
+              rackName: sourceLocationFields.rackName,
+              rackCode: sourceLocationFields.rackCode,
+              rack: sourceLocMeta.rack,
+              shelfName: sourceLocationFields.shelfName,
+              shelfCode: sourceLocationFields.shelfCode,
+              shelf: sourceLocMeta.shelf,
+              itemType: input.itemType,
+              itemId: input.itemId,
+              itemName: input.itemName,
+              itemCode: input.itemCode,
+              unit: input.unit,
+              minStock: input.minStock,
+              quantity: nextSourceLocation,
+              updatedAt: now,
+              lastMovementAt: now,
+              tenantId,
+            }),
+            { merge: true },
+          );
+
+          t.set(
+            targetLocationRef,
+            locationBalanceWrite({
+              warehouseId: input.warehouseId,
+              locationId: input.toLocationId!,
+              locationCode: targetLocationFields.locationCode,
+              rackId: targetLocationFields.rackId,
+              rackName: targetLocationFields.rackName,
+              rackCode: targetLocationFields.rackCode,
+              rack: targetLocMeta.rack,
+              shelfName: targetLocationFields.shelfName,
+              shelfCode: targetLocationFields.shelfCode,
+              shelf: targetLocMeta.shelf,
+              itemType: input.itemType,
+              itemId: input.itemId,
+              itemName: input.itemName,
+              itemCode: input.itemCode,
+              unit: input.unit,
+              minStock: input.minStock,
+              quantity: nextTargetLocation,
+              updatedAt: now,
+              lastMovementAt: now,
+              tenantId,
+            }),
+            { merge: true },
+          );
+        });
+        return txRef.id;
+      }
+
+      if (!input.toWarehouseId) {
         throw new Error('اختر مخزن وجهة مختلف للتحويل.');
       }
 
@@ -303,6 +577,20 @@ export const stockService = {
           BALANCES_COLLECTION,
           balanceDocId(input.toWarehouseId!, input.itemType, input.itemId),
         );
+        const sourceLocationRef = input.locationId
+          ? doc(
+            db,
+            LOCATION_BALANCES_COLLECTION,
+            locationBalanceDocId(input.warehouseId, input.locationId, input.itemType, input.itemId),
+          )
+          : null;
+        const targetLocationRef = input.toLocationId
+          ? doc(
+            db,
+            LOCATION_BALANCES_COLLECTION,
+            locationBalanceDocId(input.toWarehouseId!, input.toLocationId, input.itemType, input.itemId),
+          )
+          : null;
 
         const sourceSnap = await t.get(sourceBalanceRef);
         const sourceQty = sourceSnap.exists() ? Number(sourceSnap.data().quantity || 0) : 0;
@@ -314,17 +602,43 @@ export const stockService = {
         const targetSnap = await t.get(targetBalanceRef);
         const targetQty = targetSnap.exists() ? Number(targetSnap.data().quantity || 0) : 0;
         const nextTarget = targetQty + input.quantity;
+        const sourceLocationSnap = sourceLocationRef ? await t.get(sourceLocationRef) : null;
+        const sourceLocationQty = sourceLocationSnap?.exists() ? Number(sourceLocationSnap.data().quantity || 0) : 0;
+        const nextSourceLocation = sourceLocationQty - input.quantity;
+        if (sourceLocationRef && nextSourceLocation < 0 && !input.allowNegative) {
+          throw new Error('لا يمكن تنفيذ التحويل: الرصيد غير كافٍ في اللوكيشن المصدر.');
+        }
+        const targetLocationSnap = targetLocationRef ? await t.get(targetLocationRef) : null;
+        const targetLocationQty = targetLocationSnap?.exists() ? Number(targetLocationSnap.data().quantity || 0) : 0;
+        const nextTargetLocation = targetLocationQty + input.quantity;
         const now = toIsoNow();
 
         const lineage = {
           unit: input.unit,
           sourceModule: input.sourceModule,
           sourceId: input.sourceId,
+          sourceIssueOrderId: input.sourceIssueOrderId,
+          sourceWorkOrderId: input.sourceWorkOrderId,
+          sourcePlanId: input.sourcePlanId,
           adjustmentReason: input.adjustmentReason,
         };
         const outPayload: StockTransaction = {
           warehouseId: input.warehouseId,
+          locationId: input.locationId,
+          locationCode: sourceLocationFields.locationCode,
+          rackId: sourceLocationFields.rackId,
+          rackName: sourceLocationFields.rackName,
+          rackCode: sourceLocationFields.rackCode,
+          shelfName: sourceLocationFields.shelfName,
+          shelfCode: sourceLocationFields.shelfCode,
           toWarehouseId: input.toWarehouseId,
+          toLocationId: input.toLocationId,
+          toLocationCode: targetLocationFields.locationCode,
+          toRackId: targetLocationFields.rackId,
+          toRackName: targetLocationFields.rackName,
+          toRackCode: targetLocationFields.rackCode,
+          toShelfName: targetLocationFields.shelfName,
+          toShelfCode: targetLocationFields.shelfCode,
           itemType: input.itemType,
           itemId: input.itemId,
           itemName: input.itemName,
@@ -345,7 +659,21 @@ export const stockService = {
         const inPayload: StockTransaction = {
           ...outPayload,
           warehouseId: input.toWarehouseId!,
+          locationId: input.toLocationId,
+          locationCode: targetLocationFields.locationCode,
+          rackId: targetLocationFields.rackId,
+          rackName: targetLocationFields.rackName,
+          rackCode: targetLocationFields.rackCode,
+          shelfName: targetLocationFields.shelfName,
+          shelfCode: targetLocationFields.shelfCode,
           toWarehouseId: input.warehouseId,
+          toLocationId: input.locationId,
+          toLocationCode: sourceLocationFields.locationCode,
+          toRackId: sourceLocationFields.rackId,
+          toRackName: sourceLocationFields.rackName,
+          toRackCode: sourceLocationFields.rackCode,
+          toShelfName: sourceLocationFields.shelfName,
+          toShelfCode: sourceLocationFields.shelfCode,
           relatedTransactionId: txRef.id,
           transferDirection: 'IN',
         };
@@ -376,6 +704,62 @@ export const stockService = {
           updatedAt: now,
           tenantId,
         }, { merge: true });
+        if (sourceLocationRef && input.locationId) {
+          t.set(
+            sourceLocationRef,
+            locationBalanceWrite({
+              warehouseId: input.warehouseId,
+              locationId: input.locationId,
+              locationCode: sourceLocationFields.locationCode,
+              rackId: sourceLocationFields.rackId,
+              rackName: sourceLocationFields.rackName,
+              rackCode: sourceLocationFields.rackCode,
+              rack: sourceLocMeta.rack,
+              shelfName: sourceLocationFields.shelfName,
+              shelfCode: sourceLocationFields.shelfCode,
+              shelf: sourceLocMeta.shelf,
+              itemType: input.itemType,
+              itemId: input.itemId,
+              itemName: input.itemName,
+              itemCode: input.itemCode,
+              unit: input.unit,
+              minStock: input.minStock,
+              quantity: nextSourceLocation,
+              updatedAt: now,
+              lastMovementAt: now,
+              tenantId,
+            }),
+            { merge: true },
+          );
+        }
+        if (targetLocationRef && input.toLocationId) {
+          t.set(
+            targetLocationRef,
+            locationBalanceWrite({
+              warehouseId: input.toWarehouseId!,
+              locationId: input.toLocationId,
+              locationCode: targetLocationFields.locationCode,
+              rackId: targetLocationFields.rackId,
+              rackName: targetLocationFields.rackName,
+              rackCode: targetLocationFields.rackCode,
+              rack: targetLocMeta.rack,
+              shelfName: targetLocationFields.shelfName,
+              shelfCode: targetLocationFields.shelfCode,
+              shelf: targetLocMeta.shelf,
+              itemType: input.itemType,
+              itemId: input.itemId,
+              itemName: input.itemName,
+              itemCode: input.itemCode,
+              unit: input.unit,
+              minStock: input.minStock,
+              quantity: nextTargetLocation,
+              updatedAt: now,
+              lastMovementAt: now,
+              tenantId,
+            }),
+            { merge: true },
+          );
+        }
       });
       return txRef.id;
     }
@@ -384,6 +768,13 @@ export const stockService = {
       const resolvedReferenceNo =
         input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
       const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(input.warehouseId, input.itemType, input.itemId));
+      const locRef = input.locationId
+        ? doc(
+          db,
+          LOCATION_BALANCES_COLLECTION,
+          locationBalanceDocId(input.warehouseId, input.locationId, input.itemType, input.itemId),
+        )
+        : null;
       const balSnap = await t.get(balRef);
       const currentQty = balSnap.exists() ? Number(balSnap.data().quantity || 0) : 0;
       let delta = input.quantity;
@@ -394,10 +785,23 @@ export const stockService = {
       if (nextQty < 0 && !input.allowNegative) {
         throw new Error('لا يمكن تنفيذ العملية: الرصيد الحالي لا يسمح بهذه الحركة.');
       }
+      const locSnap = locRef ? await t.get(locRef) : null;
+      const currentLocQty = locSnap?.exists() ? Number(locSnap.data().quantity || 0) : 0;
+      const nextLocQty = currentLocQty + delta;
+      if (locRef && nextLocQty < 0 && !input.allowNegative) {
+        throw new Error('لا يمكن تنفيذ العملية: رصيد اللوكيشن الحالي لا يسمح بهذه الحركة.');
+      }
 
       const now = toIsoNow();
       const payload: StockTransaction = {
         warehouseId: input.warehouseId,
+        locationId: input.locationId,
+        locationCode: sourceLocationFields.locationCode,
+        rackId: sourceLocationFields.rackId,
+        rackName: sourceLocationFields.rackName,
+        rackCode: sourceLocationFields.rackCode,
+        shelfName: sourceLocationFields.shelfName,
+        shelfCode: sourceLocationFields.shelfCode,
         itemType: input.itemType,
         itemId: input.itemId,
         itemName: input.itemName,
@@ -409,6 +813,10 @@ export const stockService = {
         referenceNo: resolvedReferenceNo,
         sourceModule: input.sourceModule,
         sourceId: input.sourceId,
+        sourceReportId: input.sourceReportId,
+        sourceIssueOrderId: input.sourceIssueOrderId,
+        sourceWorkOrderId: input.sourceWorkOrderId,
+        sourcePlanId: input.sourcePlanId,
         adjustmentReason: input.adjustmentReason,
         createdBy: input.createdBy,
         createdAt: now,
@@ -430,6 +838,34 @@ export const stockService = {
         },
         { merge: true },
       );
+      if (locRef && input.locationId) {
+        t.set(
+          locRef,
+          locationBalanceWrite({
+            warehouseId: input.warehouseId,
+            locationId: input.locationId,
+            locationCode: sourceLocationFields.locationCode,
+            rackId: sourceLocationFields.rackId,
+            rackName: sourceLocationFields.rackName,
+            rackCode: sourceLocationFields.rackCode,
+            rack: sourceLocMeta.rack,
+            shelfName: sourceLocationFields.shelfName,
+            shelfCode: sourceLocationFields.shelfCode,
+            shelf: sourceLocMeta.shelf,
+            itemType: input.itemType,
+            itemId: input.itemId,
+            itemName: input.itemName,
+            itemCode: input.itemCode,
+            unit: input.unit,
+            minStock: input.minStock,
+            quantity: nextLocQty,
+            updatedAt: now,
+            lastMovementAt: now,
+            tenantId,
+          }),
+          { merge: true },
+        );
+      }
     });
 
     return txRef.id;

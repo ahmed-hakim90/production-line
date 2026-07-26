@@ -1,8 +1,10 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '@/src/components/erp/PageHeader';
-import { PrimaryButton } from '@/src/components/erp/ActionButton';
+import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { withTenantPath } from '@/lib/tenantPaths';
 import { stockService } from '../services/stockService';
 import { useAppStore } from '../../../store/useAppStore';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
@@ -18,6 +20,7 @@ type ExceptionRow = {
 };
 
 export const InventoryExceptions: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { openModal } = useGlobalModalManager();
   const threshold = useAppStore(
     (s) => Number(s.systemSettings.planSettings?.inventoryExceptionManualThreshold || 500),
@@ -83,7 +86,14 @@ export const InventoryExceptions: React.FC = () => {
       <PageHeader
         title="استثناءات المخزون"
         subtitle={`أرصدة سالبة، منخفضة، وحركات يدوية ≥ ${threshold}`}
-        actions={<PrimaryButton onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>}
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')}>
+              <GhostButton>تنبيهات المستلزمات</GhostButton>
+            </Link>
+            <PrimaryButton onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
+          </div>
+        )}
       />
 
       {loading ? (

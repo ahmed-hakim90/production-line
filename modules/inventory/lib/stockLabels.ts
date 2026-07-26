@@ -3,7 +3,7 @@ import type { InventoryItemType, StockSourceModule, TransferRequestType, Warehou
 export const WAREHOUSE_ROLE_LABELS: Record<WarehouseRole, string> = {
   general: 'عام',
   raw_material: 'مواد خام',
-  decomposed: 'مفكك',
+  decomposed: 'مفكك / مستلزم إنتاج',
   production_wip: 'WIP',
   finished_staging: 'تم الصنع',
   final_product: 'منتج تام',
@@ -18,6 +18,11 @@ export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {
   stock_count: 'جرد',
   packaging: 'تغليف',
   work_order: 'أمر شغل',
+  production_issue: 'صرف إنتاج',
+  component_compensation: 'تعويض مكون',
+  component_return: 'مرتجع مكون',
+  disassembly: 'تفكيك',
+  supplies_receipt: 'استلام مستلزمات',
   legacy: 'قديم',
 };
 
