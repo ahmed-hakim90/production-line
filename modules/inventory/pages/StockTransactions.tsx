@@ -184,9 +184,7 @@ export const StockTransactions: React.FC = () => {
           ? warehouseIds.length > 0 &&
             (warehouseFilter
               ? row.fromWarehouseId === warehouseFilter || row.toWarehouseId === warehouseFilter
-              : warehouseIds.has
-                ? false
-                : warehouseIds.includes(row.fromWarehouseId) || warehouseIds.includes(row.toWarehouseId))
+              : warehouseIds.includes(row.fromWarehouseId) || warehouseIds.includes(row.toWarehouseId))
           : !warehouseFilter || row.fromWarehouseId === warehouseFilter || row.toWarehouseId === warehouseFilter;
         const matchesMovement = !movementFilter || movementFilter === 'TRANSFER';
         const linesText = row.lines.map((line) => `${line.itemName} ${line.itemCode}`).join(' ').toLowerCase();
