@@ -449,4 +449,48 @@ export const productionIssueService = {
     ));
     await updateDoc(doc(db, COLLECTION, order.id), { lines });
   },
+
+  /**
+   * Cancels a production issue order.
+   * - draft/submitted: mark cancelled (no stock impact)
+   * - issued: reverse linked OUT movements (warehouse + location) then mark cancelled
+   * Blocks if the order already has returns, compensation, or scrap recorded.
+   */
+  async cancel(id: string, actor: string): Promise<void> {
+    if (!isConfigured || !id.trim()) throw new Error('معرّف أمر الصرف غير صالح.');
+    const order = await this.getById(id);
+    if (!order?.id) throw new Error('أمر الصرف غير موجود.');
+    if (order.status === 'cancelled') return;
+
+    const hasFollowUp = order.lines.some((line) =>
+      Number(line.returnedQty || 0) > 0
+      || Number(line.compensatedQty || 0) > 0
+      || Number(line.actualScrapQty || 0) > 0);
+    if (hasFollowUp) {
+      throw new Error(
+        'لا يمكن إلغاء أمر صرف عليه مرتجعات أو تعويض أو هالك. ألغِ السجلات المرتبطة أولاً أو سجّل مرتجع كامل.',
+      );
+    }
+
+    if (order.status === 'issued') {
+      const movements = await stockService.getTransactionsBySource({
+        sourceModule: 'production_issue',
+        sourceId: order.id,
+      });
+      if (movements.length > 0) {
+        await stockService.deleteMovements(movements);
+      }
+    }
+
+    const lines = order.lines.map((line) => ({
+      ...line,
+      issuedQty: 0,
+    }));
+    await updateDoc(doc(db, COLLECTION, order.id), {
+      status: 'cancelled',
+      cancelledAt: toIsoNow(),
+      cancelledBy: actor,
+      lines,
+    });
+  },
 };

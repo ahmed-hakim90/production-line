@@ -1634,6 +1634,7 @@ export const Products: React.FC = () => {
                 exportRows.push({
                   ...base,
                   locationCode: lb.locationCode,
+                  previousLocationCode: lb.locationCode,
                   balanceQty: lb.quantity,
                 });
               }
@@ -1667,7 +1668,7 @@ export const Products: React.FC = () => {
       exportProductBomExcel(exportRows);
       setSaveMsg({
         type: 'success',
-        text: `تم تصدير ${exportRows.length} صف مكونات. عدّل الشيت ثم ارفعه من «رفع مكونات المنتجات».`,
+        text: `تم تصدير ${exportRows.length} صف مكونات. عدّل الشيت ثم ارفعه من «رفع/تحديث مكونات المنتجات».`,
       });
     } catch (error) {
       console.error('[products] BOM export failed', error);
@@ -1958,7 +1959,7 @@ export const Products: React.FC = () => {
         } : undefined}
         moreActions={[
           {
-            label: 'تصدير Excel',
+            label: 'تصدير المنتجات (Excel)',
             icon: 'table_chart',
             group: 'تصدير',
             hidden: !canExportFromPage || products.length === 0,
@@ -1970,7 +1971,7 @@ export const Products: React.FC = () => {
             },
           },
           {
-            label: 'شيت منتجات اشتغلت هذا الشهر (Excel)',
+            label: 'تصدير منتجات بإنتاج الشهر',
             icon: 'table_chart',
             group: 'تصدير',
             hidden: !canExportFromPage || products.length === 0,
@@ -1982,30 +1983,31 @@ export const Products: React.FC = () => {
             },
           },
           {
-            label: 'تصدير مكونات المنتجات',
+            label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير مكونات المنتجات (BOM)',
             icon: 'table_chart',
             group: 'تصدير',
             hidden: !canExportFromPage || _rawProducts.length === 0,
             onClick: () => {
+              if (exportingBom) return;
               void handleExportProductBom();
             },
           },
           {
-            label: 'إدارة الأعمدة',
+            label: 'إدارة الأعمدة الظاهرة',
             icon: 'view_column',
             group: 'تصدير',
             hidden: !canExportFromPage,
             onClick: () => setShowColumnsModal(true),
           },
           {
-            label: 'تحميل القالب',
+            label: 'تحميل قالب المنتجات',
             icon: 'file_download',
             group: 'استيراد',
             hidden: !canImportFromPage,
             onClick: downloadProductsTemplate,
           },
           {
-            label: 'رفع Excel',
+            label: 'رفع المنتجات (Excel)',
             icon: 'upload_file',
             group: 'استيراد',
             hidden: !canImportFromPage,
@@ -2019,7 +2021,7 @@ export const Products: React.FC = () => {
             onClick: downloadProductComponentsTemplate,
           },
           {
-            label: 'رفع مكونات المنتجات',
+            label: 'رفع/تحديث مكونات المنتجات',
             icon: 'upload_file',
             group: 'استيراد',
             hidden: !canImportFromPage,
@@ -2696,11 +2698,11 @@ export const Products: React.FC = () => {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-4">
                   <ProductIcon name="drag_indicator" className="text-[var(--color-text-muted)] cursor-move select-none" aria-hidden="true" />
-                  <h3 className="text-lg font-bold">رفع منتجات من Excel</h3>
+                  <h3 className="text-lg font-bold">رفع المنتجات (Excel)</h3>
                 </div>
                 <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
                   <ProductIcon name="download" className="text-sm" />
-                  تحميل نموذج
+                  تحميل قالب المنتجات
                 </button>
               </div>
                 <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
@@ -2723,7 +2725,7 @@ export const Products: React.FC = () => {
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد من وجود شيت المنتجات (اسم المنتج، الكود...) ويمكن إضافة شيت المواد الخام اختياريًا</p>
                   <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
                     <ProductIcon name="download" className="text-sm" />
-                    تحميل نموذج المنتجات
+                    تحميل قالب المنتجات
                   </button>
                 </div>
               )}
@@ -2871,13 +2873,13 @@ export const Products: React.FC = () => {
           >
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
-                <h3 className="text-lg font-bold">رفع مكونات المنتجات</h3>
+                <h3 className="text-lg font-bold">رفع/تحديث مكونات المنتجات</h3>
                 <button
                   onClick={downloadProductComponentsTemplate}
                   className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline"
                 >
                   <ProductIcon name="download" className="text-sm" />
-                  تحميل القالب
+                  تحميل قالب المكونات
                 </button>
               </div>
               <button
@@ -2905,7 +2907,8 @@ export const Products: React.FC = () => {
                   <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                    الأعمدة: كود المنتج، كود/اسم المادة، الكمية المستخدمة. رصيد المكون اختياري = الكمية الفعلية (جرد)؛ اتركه فاضي لتحديث BOM فقط.
+                    صدّر المكونات أولاً أو حمّل القالب. الأعمدة: كود المنتج، كود/اسم المادة، الكمية المستخدمة.
+                    رصيد المكون اختياري = الكمية الفعلية (جرد). كود اللوكيشن السابق = للنقل وتصفير اللوكيشن القديم.
                   </p>
                   <button
                     onClick={downloadProductComponentsTemplate}
@@ -2949,9 +2952,19 @@ export const Products: React.FC = () => {
                     )}
                   </div>
 
-                  {componentsImportResult.skippedStockCount > 0 && (
-                    <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
-                      رصيد المكون اختياري: القيمة المكتوبة = الكمية الفعلية بعد الجرد (تسوية). الصفوف ذات الرصيد المطابق لن تُنشئ حركة.
+                  {componentsImportResult.stockMovementCount > 0 ||
+                  componentsImportResult.skippedStockCount > 0 ||
+                  componentsImportResult.rows.some(
+                    (r) => r.previousLocationId && r.previousLocationId !== r.locationId,
+                  ) ? (
+                    <div className="rounded-[var(--border-radius-lg)] border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-bold text-sky-900 space-y-1">
+                      <p>تحديث BOM للموجود + إضافة الجديد. الرصيد المكتوب = الكمية الفعلية (تسوية).</p>
+                      <p>نقل لوكيشن: غيّر «كود اللوكيشن» واترك «كود اللوكيشن السابق» — يُصفَّر القديم ويُضبط الجديد.</p>
+                      <p>رصيد فاضي = تحديث المكونات فقط بدون لمس المخزون (إلا تصفير السابق عند تغيير اللوكيشن).</p>
+                    </div>
+                  ) : (
+                    <div className="rounded-[var(--border-radius-lg)] border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-bold text-sky-900">
+                      سيتم تحديث/إضافة مكونات BOM. اترك رصيد المكون فاضي إن لم ترد تعديل المخزون.
                     </div>
                   )}
 
@@ -2996,6 +3009,7 @@ export const Products: React.FC = () => {
                           <th className="erp-th">كمية BOM</th>
                           <th className="erp-th">تكلفة</th>
                           <th className="erp-th">اللوكيشن</th>
+                          <th className="erp-th">سابق</th>
                           <th className="erp-th">رصيد</th>
                           <th className="erp-th">التفاصيل</th>
                         </tr>
@@ -3051,7 +3065,15 @@ export const Products: React.FC = () => {
                             <td className="px-3 py-2.5 font-mono">{row.quantityUsed || '—'}</td>
                             <td className="px-3 py-2.5 font-mono">{row.unitCost || '—'}</td>
                             <td className="px-3 py-2.5 font-mono">{row.locationCode || '—'}</td>
-                            <td className="px-3 py-2.5 font-mono">{row.balanceQty > 0 ? row.balanceQty : '—'}</td>
+                            <td className="px-3 py-2.5 font-mono text-[var(--color-text-muted)]">
+                              {row.previousLocationCode &&
+                              row.previousLocationId !== row.locationId
+                                ? row.previousLocationCode
+                                : '—'}
+                            </td>
+                            <td className="px-3 py-2.5 font-mono">
+                              {row.balanceProvided ? row.balanceQty : '—'}
+                            </td>
                             <td className="px-3 py-2.5">
                               {row.errors.length > 0 ? (
                                 <ul className="text-xs text-rose-500 space-y-0.5">
@@ -3108,7 +3130,7 @@ export const Products: React.FC = () => {
                   ) : (
                     <>
                       <ProductIcon name="save" className="text-sm" />
-                      حفظ {componentsImportResult.bomGroupCount} BOM
+                      حفظ/تحديث {componentsImportResult.bomGroupCount} BOM
                       {componentsImportResult.stockMovementCount > 0
                         ? ` + ${componentsImportResult.stockMovementCount} تسوية`
                         : ''}
@@ -3139,8 +3161,8 @@ export const Products: React.FC = () => {
                 <ProductIcon name="warehouse" className="text-primary" />
                 <h3 className="text-lg font-bold">
                   {exportScope === 'current_month'
-                    ? 'تصدير منتجات بإنتاج تصنيع في الشهر'
-                    : 'تصدير المنتجات'}
+                    ? 'تصدير منتجات بإنتاج الشهر'
+                    : 'تصدير المنتجات (Excel)'}
                 </h3>
               </div>
               <button type="button" onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
@@ -3275,7 +3297,7 @@ export const Products: React.FC = () => {
                 }}
               >
                 <ProductIcon name="download" className="text-sm" />
-                {exportingProducts ? 'جاري التصدير...' : 'تصدير Excel'}
+                {exportingProducts ? 'جاري التصدير...' : 'تصدير المنتجات'}
               </Button>
             </div>
           </div>
@@ -3289,7 +3311,7 @@ export const Products: React.FC = () => {
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ProductIcon name="tune" className="text-primary" />
-                <h3 className="text-lg font-bold">إدارة الأعمدة</h3>
+                <h3 className="text-lg font-bold">إدارة الأعمدة الظاهرة</h3>
               </div>
               <button onClick={() => setShowColumnsModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600">
                 <ProductIcon name="close" />

@@ -890,6 +890,8 @@ export interface ProductBomExportRow {
   qtyPerUnit: number;
   unitCost?: number;
   locationCode?: string;
+  /** Filled on export with current location; change كود اللوكيشن and keep this to zero the old one. */
+  previousLocationCode?: string;
   /** فارغ = بدون رصيد في الشيت؛ رقم بما فيه 0 = الرصيد الحالي/الفعلي */
   balanceQty?: number | '';
 }
@@ -908,6 +910,7 @@ export function exportProductBomExcel(rows: ProductBomExportRow[]) {
         ? ''
         : Number(r.unitCost),
     'كود اللوكيشن': r.locationCode || '',
+    'كود اللوكيشن السابق': r.previousLocationCode || r.locationCode || '',
     'رصيد المكون':
       r.balanceQty === undefined || r.balanceQty === '' ? '' : Number(r.balanceQty),
   }));
@@ -923,6 +926,7 @@ export function exportProductBomExcel(rows: ProductBomExportRow[]) {
             'الكمية المستخدمة': '',
             'تكلفة الوحدة': '',
             'كود اللوكيشن': '',
+            'كود اللوكيشن السابق': '',
             'رصيد المكون': '',
           },
         ],
@@ -972,3 +976,49 @@ export function exportSupplyCycleDetailExcel(
   const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
   saveAs(blob, `دورة-توريد-${safeCode}-${dateLabel}.xlsx`);
 }
+
+export type ManufacturingMaterialExportRow = {
+  code: string;
+  name: string;
+  categoryName?: string;
+  type: string;
+  baseUnit: string;
+  purchaseUnit?: string;
+  conversionRate?: number;
+  purchaseCost?: number;
+  wastePercent?: number;
+  minStock?: number;
+  isManufacturedInternally?: boolean;
+  manufacturedProductCode?: string;
+  isActive?: boolean;
+};
+
+/**
+ * Round-trip export for manufacturing materials master.
+ * Headers match importMaterials parser (الكود الحالي + الكود الجديد).
+ */
+export const exportManufacturingMaterials = (
+  rows: ManufacturingMaterialExportRow[],
+  fileName?: string,
+) => {
+  if (!rows.length) return;
+  const date = new Date().toISOString().slice(0, 10);
+  const excelRows = rows.map((r) => ({
+    'الكود الحالي': r.code,
+    // Pre-filled with current code so the user can edit this cell to rename on re-upload.
+    'الكود الجديد': r.code,
+    'اسم المادة': r.name,
+    'الفئة': r.categoryName || '',
+    'النوع': r.type,
+    'الوحدة الأساسية': r.baseUnit,
+    'وحدة الشراء': r.purchaseUnit || r.baseUnit,
+    'معامل التحويل': Number(r.conversionRate ?? 1) || 1,
+    'تكلفة الشراء': Number(r.purchaseCost ?? 0),
+    'هالك %': Number(r.wastePercent ?? 0),
+    'الحد الأدنى للمخزون': Number(r.minStock ?? 0),
+    'يُصنع داخلياً': r.isManufacturedInternally ? 'نعم' : 'لا',
+    'كود المنتج المرتبط': r.manufacturedProductCode || '',
+    'الحالة': r.isActive === false ? 'موقوف' : 'نشط',
+  }));
+  downloadExcel(excelRows, 'المواد التصنيعية', fileName || `مواد-تصنيعية-${date}`);
+};

@@ -39,7 +39,7 @@ export const GlobalStockCountSessionModal: React.FC = () => {
     try {
       await stockService.saveCountLines(session.id, session.lines);
       await data.onUpdated?.();
-      setMsg('تم حفظ كميات الجرد.');
+      setMsg('تم حفظ الكميات الفعلية. راجع فروق المطابقة ثم اعتمد.');
     } finally {
       setSaving(false);
     }
@@ -67,8 +67,21 @@ export const GlobalStockCountSessionModal: React.FC = () => {
       >
         <div className="px-5 py-4 border-b flex justify-between items-center">
           <div>
-            <h3 className="font-bold text-lg">جلسة جرد: {session.warehouseName}</h3>
-            <p className="text-xs text-slate-500">{session.status} · {new Date(session.createdAt).toLocaleString('ar-EG')}</p>
+            <h3 className="font-bold text-lg">جرد ومطابقة: {session.warehouseName}</h3>
+            <p className="text-xs text-slate-500">
+              {session.status === 'approved'
+                ? 'مطابق ومعتمد'
+                : session.status === 'counted'
+                  ? 'جاهز للمطابقة'
+                  : 'مفتوح للعد'}
+              {' · '}
+              {new Date(session.createdAt).toLocaleString('ar-EG')}
+            </p>
+            {session.status !== 'approved' && (
+              <p className="text-xs text-slate-500 mt-1">
+                أدخل الكميات الفعلية ثم طابق الفروقات واعتمدها كتسويات مخزنية.
+              </p>
+            )}
           </div>
           <button type="button" onClick={() => close()}><X size={18} /></button>
         </div>
@@ -77,9 +90,9 @@ export const GlobalStockCountSessionModal: React.FC = () => {
             <thead>
               <tr className="border-b bg-slate-50">
                 <th className="px-2 py-2">الصنف</th>
-                <th className="px-2 py-2 text-center">متوقع</th>
-                <th className="px-2 py-2 text-center">معدود</th>
-                <th className="px-2 py-2 text-center">فرق</th>
+                <th className="px-2 py-2 text-center">رصيد النظام</th>
+                <th className="px-2 py-2 text-center">الفعلي</th>
+                <th className="px-2 py-2 text-center">فرق المطابقة</th>
               </tr>
             </thead>
             <tbody>
@@ -136,8 +149,8 @@ export const GlobalStockCountSessionModal: React.FC = () => {
           <Button variant="outline" onClick={() => close()}>إغلاق</Button>
           {session.status !== 'approved' && data.canManage && (
             <>
-              <Button variant="outline" onClick={() => void saveLines()} disabled={saving}>حفظ</Button>
-              <Button variant="primary" onClick={() => void approve()} disabled={saving}>اعتماد وترحيل</Button>
+              <Button variant="outline" onClick={() => void saveLines()} disabled={saving}>حفظ الكميات</Button>
+              <Button variant="primary" onClick={() => void approve()} disabled={saving}>مطابقة واعتماد الفروقات</Button>
             </>
           )}
         </div>

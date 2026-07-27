@@ -30,6 +30,11 @@ export interface ParsedProductComponentRow {
   locationId?: string;
   locationWarehouseId?: string;
   locationWarehouseName?: string;
+  /** Optional: location to zero when moving stock to a new location. */
+  previousLocationCode: string;
+  previousLocationId?: string;
+  previousLocationWarehouseId?: string;
+  previousLocationWarehouseName?: string;
   /** True when «رصيد المكون» cell was filled (including 0). */
   balanceProvided: boolean;
   balanceQty: number;
@@ -148,7 +153,9 @@ function resolveCurrentStockQty(
 
 /**
  * Annotates existing BOM lines (update, not skip) and builds absolute stock adjustment plans.
- * Empty رصيد المكون → no stock plan. Filled (incl. 0) → target qty; delta 0 → skipStock.
+ * - Empty رصيد → no target adjustment (unless تصفير لوكيشن سابق).
+ * - Filled رصيد → target qty on كود اللوكيشن; delta 0 → no movement there.
+ * - كود اللوكيشن السابق مختلف → تصفير رصيد اللوكيشن السابق.
  * Rebuilds bomGroups + stockMovements from actionable rows.
  */
 export function applySkipExistingProductComponents(
@@ -169,8 +176,28 @@ export function applySkipExistingProductComponents(
 
     if (materialRef && !materialRef.startsWith('pending:') && row.productId) {
       if (existing.bomKeys.has(bomExistKey(row.productId, materialRef))) {
-        // Keep in bomGroups for upsert — note only (skipBom stays false).
         skipNotes.push('مكون BOM موجود — سيتم تحديث الكمية/التكلفة');
+      }
+    }
+
+    const previousDiffers = Boolean(
+      row.previousLocationId && row.previousLocationId !== row.locationId,
+    );
+    let previousNeedsZero = false;
+    if (previousDiffers && materialRef && !materialRef.startsWith('pending:')) {
+      const prevQty = resolveCurrentStockQty(
+        existing,
+        materialRef,
+        row.previousLocationId,
+        row.previousLocationWarehouseId,
+      );
+      if (prevQty !== 0) {
+        previousNeedsZero = true;
+        skipNotes.push(
+          `تصفير اللوكيشن السابق ${row.previousLocationCode} (الحالي ${prevQty})`,
+        );
+      } else {
+        skipNotes.push(`اللوكيشن السابق ${row.previousLocationCode} بالفعل صفر`);
       }
     }
 
@@ -183,8 +210,10 @@ export function applySkipExistingProductComponents(
       );
       const delta = Number(row.balanceQty) - currentQty;
       if (delta === 0) {
-        skipStock = true;
-        skipNotes.push('الرصيد مطابق للحالي — لا تسوية');
+        if (!previousNeedsZero) {
+          skipStock = true;
+        }
+        skipNotes.push('الرصيد على اللوكيشن الجديد مطابق — لا تسوية هناك');
       } else {
         skipNotes.push(
           `تسوية رصيد إلى ${row.balanceQty} (الحالي ${currentQty}، فرق ${delta > 0 ? '+' : ''}${delta})`,
@@ -234,14 +263,65 @@ export function applySkipExistingProductComponents(
   }
 
   const stockByKey = new Map<string, ProductComponentStockMovementPlan>();
+  const upsertStockPlan = (plan: ProductComponentStockMovementPlan) => {
+    const existingPlan = stockByKey.get(plan.key);
+    if (!existingPlan) {
+      stockByKey.set(plan.key, plan);
+      return;
+    }
+    existingPlan.sourceRowIndexes.push(...plan.sourceRowIndexes);
+    if (existingPlan.quantity !== plan.quantity) {
+      // Keep first target; conflicting targets should already be errors at parse for same key.
+      return;
+    }
+  };
+
   for (const row of actionable) {
-    if (!row.balanceProvided || row.skipStock) continue;
     const materialRef =
       row.matchedMaterialId ||
       (row.willCreateMaterial && row.matchedMaterialCode
         ? pendingMaterialRef(row.matchedMaterialCode)
         : '');
     if (!materialRef) continue;
+
+    const baseMeta = {
+      materialId: materialRef,
+      materialName: row.matchedMaterialName || row.materialName,
+      materialCode: row.matchedMaterialCode || row.materialCode,
+      materialUnit: row.matchedMaterialUnit,
+      willCreateMaterial: row.willCreateMaterial,
+    };
+
+    // تصفير اللوكيشن السابق عند تغيير اللوكيشن
+    if (
+      row.previousLocationId &&
+      row.previousLocationId !== row.locationId &&
+      !materialRef.startsWith('pending:')
+    ) {
+      const currentQuantity = resolveCurrentStockQty(
+        existing,
+        materialRef,
+        row.previousLocationId,
+        row.previousLocationWarehouseId,
+      );
+      if (currentQuantity !== 0) {
+        upsertStockPlan({
+          key: stockKey(materialRef, row.previousLocationId, row.previousLocationCode),
+          ...baseMeta,
+          quantity: 0,
+          currentQuantity,
+          deltaQuantity: -currentQuantity,
+          locationId: row.previousLocationId,
+          locationCode: row.previousLocationCode || undefined,
+          warehouseId: row.previousLocationWarehouseId,
+          warehouseName: row.previousLocationWarehouseName,
+          sourceRowIndexes: [row.rowIndex],
+        });
+      }
+    }
+
+    // تسوية اللوكيشن/المخزن الهدف عند وجود رصيد مكتوب
+    if (!row.balanceProvided) continue;
     const currentQuantity = materialRef.startsWith('pending:')
       ? 0
       : resolveCurrentStockQty(
@@ -254,28 +334,18 @@ export function applySkipExistingProductComponents(
     const deltaQuantity = targetQuantity - currentQuantity;
     if (deltaQuantity === 0) continue;
 
-    const key = stockKey(materialRef, row.locationId, row.locationCode);
-    const existingPlan = stockByKey.get(key);
-    if (!existingPlan) {
-      stockByKey.set(key, {
-        key,
-        materialId: materialRef,
-        materialName: row.matchedMaterialName || row.materialName,
-        materialCode: row.matchedMaterialCode || row.materialCode,
-        materialUnit: row.matchedMaterialUnit,
-        quantity: targetQuantity,
-        currentQuantity,
-        deltaQuantity,
-        locationId: row.locationId,
-        locationCode: row.locationCode || undefined,
-        warehouseId: row.locationWarehouseId,
-        warehouseName: row.locationWarehouseName,
-        willCreateMaterial: row.willCreateMaterial,
-        sourceRowIndexes: [row.rowIndex],
-      });
-    } else {
-      existingPlan.sourceRowIndexes.push(row.rowIndex);
-    }
+    upsertStockPlan({
+      key: stockKey(materialRef, row.locationId, row.locationCode),
+      ...baseMeta,
+      quantity: targetQuantity,
+      currentQuantity,
+      deltaQuantity,
+      locationId: row.locationId,
+      locationCode: row.locationCode || undefined,
+      warehouseId: row.locationWarehouseId,
+      warehouseName: row.locationWarehouseName,
+      sourceRowIndexes: [row.rowIndex],
+    });
   }
 
   const bomGroups = Array.from(bomMap.values()).filter((g) => g.items.length > 0);
@@ -351,6 +421,15 @@ const HEADER_MAP: Record<string, string> = {
   'locationcode': 'locationCode',
   'location': 'locationCode',
   'shelf code': 'locationCode',
+  'كود اللوكيشن السابق': 'previousLocationCode',
+  'اللوكيشن السابق': 'previousLocationCode',
+  'لوكيشن سابق': 'previousLocationCode',
+  'من لوكيشن': 'previousLocationCode',
+  'كود الموقع السابق': 'previousLocationCode',
+  'previous location': 'previousLocationCode',
+  'previous location code': 'previousLocationCode',
+  'from location': 'previousLocationCode',
+  'old location': 'previousLocationCode',
   'رصيد المكون': 'balanceQty',
   'رصيد المادة': 'balanceQty',
   'رصيد الخامة': 'balanceQty',
@@ -391,7 +470,8 @@ function mapHeader(raw: string): string | undefined {
   if (/رصيد|افتتاح|stock|balance|opening/.test(norm) && !/تكلفة|سعر|cost|price/.test(norm)) {
     return 'balanceQty';
   }
-  if (/لوكيشن|location|shelf|رف/.test(norm) && /كود|code/.test(norm)) {
+  if (/لوكيشن|location|shelf|رف/.test(norm) && (/كود|code/.test(norm) || /سابق|قديم|previous|from|old/.test(norm))) {
+    if (/سابق|قديم|previous|from|old/.test(norm)) return 'previousLocationCode';
     return 'locationCode';
   }
   if (/^كمية$|^qty$|^quantity$/.test(norm)) {
@@ -567,6 +647,7 @@ export function parseProductComponentsFromBuffer(
         ? 0
         : parseNumericCell(unitCostRaw);
     const locationCode = normalizeLocationCode(get('locationCode'));
+    const previousLocationCode = normalizeLocationCode(get('previousLocationCode'));
     const balanceRaw = get('balanceQty');
     const balanceEmpty = balanceRaw === undefined || String(balanceRaw).trim() === '';
     const balanceQty = balanceEmpty ? 0 : parseNumericCell(balanceRaw);
@@ -635,6 +716,31 @@ export function parseProductComponentsFromBuffer(
       }
     }
 
+    let previousLocationId: string | undefined;
+    let previousLocationWarehouseId: string | undefined;
+    let previousLocationWarehouseName: string | undefined;
+    if (previousLocationCode) {
+      const prevLoc = locationsByCode.get(previousLocationCode);
+      if (!prevLoc) {
+        errors.push(`كود اللوكيشن السابق غير موجود: ${previousLocationCode}`);
+      } else if (prevLoc.isActive === false) {
+        errors.push(`اللوكيشن السابق موقوف: ${previousLocationCode}`);
+      } else {
+        previousLocationId = prevLoc.id;
+        previousLocationWarehouseId = prevLoc.warehouseId;
+        previousLocationWarehouseName = prevLoc.warehouseName;
+      }
+    }
+
+    if (
+      previousLocationId &&
+      previousLocationId !== locationId &&
+      balanceProvided &&
+      !locationId
+    ) {
+      errors.push('عند النقل مع رصيد: اكتب كود اللوكيشن الجديد (أو اترك الرصيد فاضي لتصفير السابق فقط).');
+    }
+
     const resolvedCode = (matchedMaterial?.code || materialCode).trim().toUpperCase();
     rows.push({
       rowIndex: idx + 2,
@@ -649,6 +755,10 @@ export function parseProductComponentsFromBuffer(
       locationId,
       locationWarehouseId,
       locationWarehouseName,
+      previousLocationCode,
+      previousLocationId,
+      previousLocationWarehouseId,
+      previousLocationWarehouseName,
       balanceProvided,
       balanceQty: Number.isFinite(balanceQty) ? balanceQty : 0,
       matchedMaterialId: matchedMaterial?.id,

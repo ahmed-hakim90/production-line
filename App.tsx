@@ -46,6 +46,7 @@ import { sessionTrackerService } from './modules/system/audit';
 import { userService } from './services/userService';
 import { ForcedClientUpdateGate } from './components/ForcedClientUpdateGate';
 import { NotificationPopupOverlay } from './components/NotificationPopupOverlay';
+import { EnglishDigitsInputGuard } from './components/EnglishDigitsInputGuard';
 import { setCurrentTenant } from './lib/currentTenant';
 import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
 import {
@@ -1117,6 +1118,7 @@ const App: React.FC = () => {
 
   return (
     <GlobalModalManagerProvider>
+      <EnglishDigitsInputGuard />
       <UiDensityBootstrap />
       <AuthUiStateGuard />
       <ModalWorkspaceMigration />

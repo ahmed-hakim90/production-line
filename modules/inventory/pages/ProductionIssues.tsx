@@ -318,7 +318,6 @@ export const ProductionIssues: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!scoped) return;
     setWarehouseId((prev) => resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]));
   }, [scoped, warehouseIds.join('|'), queryWarehouseId, scopedWarehouseId, resolveScopedWarehouseId]);
 
@@ -465,6 +464,27 @@ export const ProductionIssues: React.FC = () => {
       } else {
         setMessage(error?.message || 'تعذر اعتماد الصرف.');
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cancelOrder = async (order: ProductionIssueOrder) => {
+    if (!order.id || order.status === 'cancelled') return;
+    const confirmMsg = order.status === 'issued'
+      ? `إلغاء أمر الصرف ${order.referenceNo}؟ سيتم إرجاع الكميات للمخزن واللوكيشن وحذف حركات الصرف.`
+      : `إلغاء أمر الصرف ${order.referenceNo}؟`;
+    if (!window.confirm(confirmMsg)) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      await productionIssueService.cancel(order.id, actor);
+      setMessage(order.status === 'issued'
+        ? 'تم إلغاء أمر الصرف وإرجاع الكميات للمخزن.'
+        : 'تم إلغاء أمر الصرف.');
+      await load();
+    } catch (error: any) {
+      setMessage(error?.message || 'تعذر إلغاء أمر الصرف.');
     } finally {
       setBusy(false);
     }
@@ -716,7 +736,14 @@ export const ProductionIssues: React.FC = () => {
           {selectedOrder && (
             <>
               <div className="flex flex-wrap gap-2 p-4 border-b">
-                <Button disabled={busy || selectedOrder.status === 'issued' || !can('productionIssue.approve')} onClick={() => void submitAndIssue(selectedOrder)}>اعتماد وصرف</Button>
+                <Button disabled={busy || selectedOrder.status === 'issued' || selectedOrder.status === 'cancelled' || !can('productionIssue.approve')} onClick={() => void submitAndIssue(selectedOrder)}>اعتماد وصرف</Button>
+                <Button
+                  variant="secondary"
+                  disabled={busy || selectedOrder.status === 'cancelled' || !can('productionIssue.approve')}
+                  onClick={() => void cancelOrder(selectedOrder)}
+                >
+                  إلغاء الأمر
+                </Button>
                 <Button variant="secondary" disabled={!can('productionIssue.print')} onClick={() => void print(selectedOrder)}>طباعة PDF</Button>
                 <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white text-xs font-bold">
                   {(['a4', 'a5'] as PaperSize[]).map((size) => (

@@ -206,7 +206,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'inventory.transactions.print', label: 'طباعة حركات المخزون' },
       { key: 'inventory.transactions.export', label: 'تصدير حركات المخزون' },
       { key: 'inventory.transactions.delete', label: 'حذف حركات المخزون' },
-      { key: 'inventory.counts.manage', label: 'إدارة الجرد واعتماد الفروق' },
+      { key: 'inventory.counts.manage', label: 'إدارة الجرد والمطابقة واعتماد الفروق' },
       { key: 'inventory.warehouses.manage', label: 'إدارة المخازن' },
       { key: 'inventory.locations.manage', label: 'إدارة لوكيشنات المخازن' },
       { key: 'inventory.items.manage', label: 'إدارة الأصناف الخام' },

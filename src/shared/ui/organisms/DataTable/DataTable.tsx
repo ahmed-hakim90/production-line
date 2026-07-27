@@ -33,6 +33,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { TableSkeleton } from '@/src/shared/ui/skeletons';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { binaryFilterItems, buildBinarySearchIndex } from '@/utils/binarySearch';
 import type { DataTableProps } from './DataTable.types';
 
 function asComparableValue(value: unknown): string | number {
@@ -138,15 +139,24 @@ export function DataTable<T>({
     [resolvedColumns],
   );
 
-  const filteredRows = useMemo(() => {
-    const q = searchTerm.trim().toLowerCase();
-    if (!q) return data;
-    return data.filter((row) =>
-      visibleColumns.some((column) =>
-        String(column.accessor(row) ?? '').toLowerCase().includes(q),
+  const rowSearchIndex = useMemo(
+    () =>
+      buildBinarySearchIndex(data, (row) =>
+        visibleColumns.map((column) => String(column.accessor(row) ?? '')),
       ),
-    );
-  }, [data, searchTerm, visibleColumns]);
+    [data, visibleColumns],
+  );
+
+  const filteredRows = useMemo(
+    () =>
+      binaryFilterItems(
+        data,
+        searchTerm,
+        (row) => visibleColumns.map((column) => String(column.accessor(row) ?? '')),
+        { index: rowSearchIndex },
+      ),
+    [data, searchTerm, visibleColumns, rowSearchIndex],
+  );
 
   const sortedRows = useMemo(() => {
     if (!sortColumnId) return filteredRows;

@@ -32,14 +32,31 @@ import type { Product } from '../../../types';
 
 const ASSEMBLE_PAGE_SIZE = 20;
 
-type Shortcut = {
+type OpLink = {
+  label: string;
+  path: string;
+  permission?: Parameters<ReturnType<typeof usePermission>['can']>[0];
+  badge?: number;
+  primary?: boolean;
+};
+
+type OpCard = {
+  key: string;
+  step: number;
+  label: string;
+  description: string;
+  icon: string;
+  permission?: Parameters<ReturnType<typeof usePermission>['can']>[0];
+  links: OpLink[];
+};
+
+type ToolLink = {
   key: string;
   label: string;
   description: string;
   icon: string;
   path: string;
   permission?: Parameters<ReturnType<typeof usePermission>['can']>[0];
-  primary?: boolean;
 };
 
 export const RawMaterialWarehouseControl: React.FC = () => {
@@ -70,6 +87,8 @@ export const RawMaterialWarehouseControl: React.FC = () => {
   const [assemblablePage, setAssemblablePage] = useState(1);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
   const [assemblableError, setAssemblableError] = useState<string | null>(null);
+  const [assemblableOpen, setAssemblableOpen] = useState(false);
+  const [toolsOpen, setToolsOpen] = useState(false);
   const [countCardPreviewOpen, setCountCardPreviewOpen] = useState(false);
   const [countCardPreviewData, setCountCardPreviewData] = useState<ProductBomCountCard[]>([]);
   const [countCardPreviewBusy, setCountCardPreviewBusy] = useState(false);
@@ -137,7 +156,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
       try {
         let products: Product[] = storeProducts;
         if (!products.length) {
-          products = await productService.getAll();
+          products = (await productService.getAll()) as unknown as Product[];
         }
         const { cards, skippedWithoutBom } = await buildProductBomCountCards({
           productIds,
@@ -173,6 +192,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (window.location.hash !== '#assemblable') return;
+    setAssemblableOpen(true);
     const timer = window.setTimeout(() => {
       document.getElementById('assemblable')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 120);
@@ -272,76 +292,142 @@ export const RawMaterialWarehouseControl: React.FC = () => {
     [balances],
   );
 
-  const shortcuts = useMemo((): Shortcut[] => {
+  const opCards = useMemo((): OpCard[] => {
     if (!warehouseId) return [];
     const wh = encodeURIComponent(warehouseId);
     return [
       {
-        key: 'in',
-        label: 'إدخال مخزون',
-        description: 'تسجيل وارد للمستلزمات',
-        icon: 'add_circle',
-        path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=IN`,
-        permission: 'inventory.transactions.create',
-        primary: true,
+        key: 'balances',
+        step: 1,
+        label: 'الأرصدة',
+        description: 'عرض أرصدة مكونات مخزن المستلزمات',
+        icon: 'inventory_2',
+        permission: 'inventory.view',
+        links: [
+          {
+            label: 'فتح الأرصدة',
+            path: `/inventory/balances?warehouseId=${wh}&itemType=raw_material`,
+            permission: 'inventory.view',
+            primary: true,
+          },
+        ],
       },
       {
         key: 'receive',
-        label: 'استلام مستلزمات',
-        description: 'استلام منتج مفكك أو مكونات مع اعتماد',
+        step: 2,
+        label: 'استلام مكونات',
+        description: 'استلام مستلزمات أو إدخال وارد للمكونات',
         icon: 'inventory',
-        path: `/inventory/raw-materials/receive?warehouseId=${wh}`,
         permission: 'inventory.transactions.create',
-        primary: true,
-      },
-      {
-        key: 'out',
-        label: 'صرف يدوي',
-        description: 'خروج مخزني من مخزن المستلزمات',
-        icon: 'remove_circle',
-        path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=OUT`,
-        permission: 'inventory.transactions.create',
-      },
-      {
-        key: 'transfer',
-        label: 'تحويل',
-        description: 'تحويل من/إلى مخزن المستلزمات',
-        icon: 'sync_alt',
-        path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=TRANSFER`,
-        permission: 'inventory.transactions.create',
+        links: [
+          {
+            label: 'استلام مستلزمات',
+            path: `/inventory/raw-materials/receive?warehouseId=${wh}`,
+            permission: 'inventory.transactions.create',
+            primary: true,
+          },
+          {
+            label: 'إدخال يدوي',
+            path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=IN`,
+            permission: 'inventory.transactions.create',
+          },
+        ],
       },
       {
         key: 'issue',
-        label: 'صرف إنتاج',
-        description: 'أوامر صرف المواد للإنتاج',
+        step: 3,
+        label: 'صرف',
+        description: 'صرف إنتاج للمكونات أو صرف يدوي من المخزن',
         icon: 'fact_check',
-        path: `/inventory/production-issues?warehouseId=${wh}`,
         permission: 'inventory.view',
-        primary: true,
+        links: [
+          {
+            label: 'صرف إنتاج',
+            path: `/inventory/production-issues?warehouseId=${wh}`,
+            permission: 'inventory.view',
+            primary: true,
+            badge: pendingIssues,
+          },
+          {
+            label: 'صرف يدوي',
+            path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=OUT`,
+            permission: 'inventory.transactions.create',
+          },
+        ],
       },
       {
-        key: 'balances',
-        label: 'الأرصدة',
-        description: 'عرض أرصدة مخزن المستلزمات',
-        icon: 'inventory_2',
-        path: `/inventory/balances?warehouseId=${wh}`,
-        permission: 'inventory.view',
-      },
-      {
-        key: 'txs',
-        label: 'الحركات',
-        description: 'سجل حركات المخزن',
-        icon: 'receipt_long',
-        path: `/inventory/transactions?warehouseId=${wh}`,
-        permission: 'inventory.view',
+        key: 'transfer',
+        step: 4,
+        label: 'تحويل',
+        description: 'تحويل مكونات من/إلى مخزن المستلزمات',
+        icon: 'sync_alt',
+        permission: 'inventory.transactions.create',
+        links: [
+          {
+            label: 'تحويل',
+            path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=TRANSFER`,
+            permission: 'inventory.transactions.create',
+            primary: true,
+          },
+          {
+            label: 'تحويل سريع',
+            path: `/quick-inventory-transfer?warehouseId=${wh}&itemType=raw_material`,
+            permission: 'inventory.transactions.create',
+          },
+          {
+            label: 'اعتماد التحويلات',
+            path: `/inventory/transfer-approvals?warehouseId=${wh}`,
+            permission: 'inventory.view',
+            badge: pendingTransfers,
+          },
+        ],
       },
       {
         key: 'counts',
-        label: 'الجرد',
-        description: 'بدء جلسة جرد للمخزن',
+        step: 5,
+        label: 'جرد ومطابقة',
+        description: 'عدّ الكميات الفعلية ← طابق مع النظام ← اعتمد الفروقات',
         icon: 'checklist',
-        path: `/inventory/counts?warehouseId=${wh}`,
         permission: 'inventory.counts.manage',
+        links: [
+          {
+            label: 'بدء الجرد والمطابقة',
+            path: `/inventory/counts?warehouseId=${wh}&from=supplies`,
+            permission: 'inventory.counts.manage',
+            primary: true,
+          },
+        ],
+      },
+      {
+        key: 'txs',
+        step: 6,
+        label: 'الحركات',
+        description: 'سجل حركات الصرف والاستلام والتحويل',
+        icon: 'receipt_long',
+        permission: 'inventory.view',
+        links: [
+          {
+            label: 'فتح الحركات',
+            path: `/inventory/transactions?warehouseId=${wh}&itemType=raw_material`,
+            permission: 'inventory.view',
+            primary: true,
+          },
+        ],
+      },
+    ];
+  }, [warehouseId, pendingIssues, pendingTransfers]);
+
+  const toolLinks = useMemo((): ToolLink[] => {
+    if (!warehouseId) return [];
+    const wh = encodeURIComponent(warehouseId);
+    return [
+      {
+        key: 'alerts',
+        label: 'تنبيهات المخزن',
+        description: 'منخفض / نفاد / معلّق',
+        icon: 'notifications_active',
+        path: '/inventory/raw-materials/alerts',
+        permission: 'inventory.view',
       },
       {
         key: 'locations',
@@ -352,14 +438,6 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         permission: 'inventory.view',
       },
       {
-        key: 'approvals',
-        label: 'اعتماد التحويلات',
-        description: 'تحويلات معلّقة تخص المخزن',
-        icon: 'verified_user',
-        path: `/inventory/transfer-approvals?warehouseId=${wh}`,
-        permission: 'inventory.view',
-      },
-      {
         key: 'import',
         label: 'استيراد بالمكوّن',
         description: 'إدخال سريع بالكود',
@@ -367,30 +445,14 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         path: `/inventory/movements?action=import-in-by-code&itemType=raw_material&warehouseId=${wh}`,
         permission: 'inventory.transactions.create',
       },
-      {
-        key: 'alerts',
-        label: 'تنبيهات المخزن',
-        description: 'منخفض / نفاد / معلّق',
-        icon: 'notifications_active',
-        path: '/inventory/raw-materials/alerts',
-        permission: 'inventory.view',
-        primary: true,
-      },
-      {
-        key: 'quick-transfer',
-        label: 'تحويل سريع',
-        description: 'تحويل سريع بين المخازن',
-        icon: 'bolt',
-        path: `/quick-inventory-transfer?warehouseId=${wh}&itemType=raw_material`,
-        permission: 'inventory.transactions.create',
-      },
     ];
   }, [warehouseId]);
 
-  const visibleShortcuts = shortcuts.filter((s) => !s.permission || can(s.permission));
+  const visibleOpCards = opCards.filter((card) => !card.permission || can(card.permission));
+  const visibleTools = toolLinks.filter((t) => !t.permission || can(t.permission));
 
   if (loadingWarehouse || (loading && configured && balances.length === 0 && transactions.length === 0)) {
-    return <PageContentSkeleton variant="dashboard" kpiCount={8} />;
+    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
   if (!configured) {
@@ -410,7 +472,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
               <PrimaryButton>فتح إعدادات التوجيه</PrimaryButton>
             </Link>
             <p className="text-xs text-[var(--color-text-muted)]">
-              بعد الحفظ ستظهر لوحة التحكم والتنبيهات والاختصارات التشغيلية لهذا المخزن.
+              بعد الحفظ ستظهر لوحة التشغيل اليومية لهذا المخزن.
             </p>
           </CardContent>
         </Card>
@@ -422,7 +484,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
     <div className="erp-ds-clean erp-dashboard-theme space-y-6">
       <PageHeader
         title="تحكم مخزن المستلزمات"
-        subtitle={`لوحة تشغيل مخزن المستلزمات: ${warehouseName}`}
+        subtitle={`تشغيل يومي بسيط: ${warehouseName}`}
         icon={<Package size={18} />}
         actions={(
           <div className="flex flex-wrap gap-2 items-center">
@@ -456,47 +518,19 @@ export const RawMaterialWarehouseControl: React.FC = () => {
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <KPICard label="أصناف في المخزن" value={kpis.skuCount} iconType="metric" color="indigo" loading={loading} />
         <KPICard label="إجمالي الكمية" value={formatNumber(kpis.totalQty)} iconType="metric" color="green" loading={loading} />
+        <KPICard label="تنبيهات الرصيد" value={kpis.alertCount} iconType="trend" color="amber" loading={loading} />
         <KPICard
-          label="منتجات قابلة للتجميع"
-          value={kpis.canAssembleProducts}
+          label="معلّقات"
+          value={pendingTransfers + pendingIssues}
           iconType="metric"
-          color="green"
+          color="amber"
           loading={loading}
         />
-        <KPICard
-          label="أعلى كمية تجميع"
-          value={formatNumber(kpis.topAssemblable)}
-          iconType="trend"
-          color="indigo"
-          loading={loading}
-        />
-        <KPICard label="رصيد منخفض" value={kpis.low} iconType="trend" color="amber" loading={loading} />
-        <KPICard label="نفاد" value={kpis.out} iconType="metric" color="red" loading={loading} />
-        <KPICard label="تحويلات معلّقة" value={pendingTransfers} iconType="trend" color="amber" loading={loading} />
-        <KPICard label="صرف إنتاج معلّق" value={pendingIssues} iconType="metric" color="amber" loading={loading} />
       </div>
-
-      {kpis.topProductName && kpis.topAssemblable > 0 && (
-        <p className="text-sm text-[var(--color-text-muted)] -mt-2">
-          أعلى قابلية تجميع:{' '}
-          <span className="font-medium text-[var(--color-text)]">{kpis.topProductName}</span>
-          {kpis.topProductCode ? (
-            <span className="font-mono text-xs ms-1">({kpis.topProductCode})</span>
-          ) : null}
-          {' — '}
-          {formatNumber(kpis.topAssemblable)} وحدة
-        </p>
-      )}
 
       {kpis.negative > 0 && (
         <p className="text-sm font-medium text-red-700 bg-red-50 border border-red-100 rounded-lg px-4 py-3">
           يوجد {kpis.negative} رصيد سالب في مخزن المستلزمات. راجع شاشة التنبيهات.
-        </p>
-      )}
-
-      {assemblableError && (
-        <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
-          تعذر حساب المتاح للتجميع: {assemblableError}
         </p>
       )}
 
@@ -506,225 +540,313 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         </p>
       )}
 
-      <Card id="assemblable" className="border-slate-200 shadow-none overflow-hidden scroll-mt-24">
-        <CardHeader className="pb-2">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-sm font-medium text-slate-800">المتاح للتجميع حسب المنتج</CardTitle>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                أقصى عدد وحدات تامة يمكن تجميعها من أرصدة هذا المخزن حسب BOM (العنق الزجاجي = أضعف مكوّن).
-                افتح كارت الجرد لمعاينة المكونات والرصيد قبل الطباعة.
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <GhostButton
-                onClick={exportAssemblable}
-                disabled={loading || filteredAssemblable.length === 0}
-              >
-                تصدير Excel
-              </GhostButton>
-              <GhostButton
-                onClick={() =>
-                  void openCountCardPreview(pagedAssemblable.map((row) => row.productId))
-                }
-                disabled={loading || countCardPreviewBusy || pagedAssemblable.length === 0 || !warehouseId}
-              >
-                {countCardPreviewBusy ? 'جاري التحميل…' : 'كروت جرد الصفحة'}
-              </GhostButton>
-              {warehouseId && (
-                <Link to={withTenantPath(tenantSlug, `/inventory/production-issues?warehouseId=${encodeURIComponent(warehouseId)}`)}>
-                  <PrimaryButton>صرف إنتاج</PrimaryButton>
-                </Link>
-              )}
-            </div>
-          </div>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="px-4 pb-3">
-            <SmartFilterBar
-              searchValue={assemblableSearch}
-              onSearchChange={setAssemblableSearch}
-              searchPlaceholder="بحث بالمنتج أو كود المكوّن…"
-            />
-          </div>
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full">
-              <thead className="erp-thead">
-                <tr>
-                  <th className="erp-th text-start w-10" />
-                  <th className="erp-th text-start">المنتج</th>
-                  <th className="erp-th text-center">مكوّنات</th>
-                  <th className="erp-th text-center">قابل للتجميع</th>
-                  <th className="erp-th text-start">العنق الزجاجي</th>
-                  <th className="erp-th text-center">متاح المكوّن</th>
-                  <th className="erp-th text-center w-16">كارت</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  Array.from({ length: 5 }).map((_, i) => (
-                    <tr key={`sk-${i}`} className="border-b border-[var(--color-border)]">
-                      <td className="px-4 py-3" colSpan={7}>
-                        <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
-                      </td>
-                    </tr>
-                  ))
-                ) : pagedAssemblable.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
-                      {assemblableRows.length === 0
-                        ? 'لا توجد منتجات بـ BOM مرتبطة بأصناف في هذا المخزن.'
-                        : 'لا نتائج مطابقة للبحث.'}
-                    </td>
-                  </tr>
-                ) : (
-                  pagedAssemblable.map((row) => {
-                    const bn = row.bottleneck;
-                    const expanded = expandedProductId === row.productId;
-                    return (
-                      <React.Fragment key={row.productId}>
-                        <tr className="border-b border-[var(--color-border)]">
-                          <td className="px-2 py-3 text-center">
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
-                              aria-label={expanded ? 'إخفاء المكوّنات' : 'عرض المكوّنات'}
-                              onClick={() =>
-                                setExpandedProductId((prev) => (prev === row.productId ? null : row.productId))
-                              }
-                            >
-                              <span className="material-icons-round text-[20px]">
-                                {expanded ? 'expand_less' : 'expand_more'}
-                              </span>
-                            </button>
-                          </td>
-                          <td className="px-4 py-3">
-                            <p className="text-sm font-medium text-[var(--color-text)]">{row.productName}</p>
-                            <p className="text-xs text-slate-400 font-mono">{row.productCode || '—'}</p>
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm tabular-nums">{row.componentCount}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="text-base font-bold tabular-nums text-indigo-700">
-                              {formatNumber(row.maxAssemblable)}
-                            </span>
-                          </td>
-                          <td className="px-4 py-3">
-                            {bn ? (
-                              <>
-                                <p className="text-sm text-[var(--color-text)]">{bn.materialName}</p>
-                                <p className="text-xs text-slate-400 font-mono">{bn.materialCode || '—'}</p>
-                              </>
-                            ) : (
-                              <span className="text-sm text-slate-400">—</span>
-                            )}
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm tabular-nums text-slate-600">
-                            {bn ? formatNumber(bn.availableQty) : '—'}
-                          </td>
-                          <td className="px-2 py-3 text-center">
-                            <button
-                              type="button"
-                              className="inline-flex h-8 w-8 items-center justify-center rounded-md text-indigo-600 hover:bg-indigo-50 disabled:opacity-40"
-                              title="معاينة كارت جرد"
-                              disabled={countCardPreviewBusy || !warehouseId}
-                              onClick={() => void openCountCardPreview([row.productId])}
-                            >
-                              {countCardPreviewBusy ? (
-                                <Loader2 className="size-4 animate-spin" />
-                              ) : (
-                                <ClipboardList className="size-4" />
-                              )}
-                            </button>
-                          </td>
-                        </tr>
-                        {expanded && (
-                          <tr className="border-b border-[var(--color-border)] bg-slate-50/80 dark:bg-slate-900/30">
-                            <td colSpan={7} className="px-4 py-3">
-                              <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-white dark:bg-slate-950">
-                                <table className="w-full text-sm">
-                                  <thead>
-                                    <tr className="border-b bg-slate-50 dark:bg-slate-900">
-                                      <th className="px-3 py-2 text-start font-medium">المكوّن</th>
-                                      <th className="px-3 py-2 text-center font-medium">مطلوب/وحدة</th>
-                                      <th className="px-3 py-2 text-center font-medium">متاح</th>
-                                      <th className="px-3 py-2 text-center font-medium">حد التجميع</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {row.components.map((component) => {
-                                      const isBottleneck = bn?.materialId === component.materialId;
-                                      return (
-                                        <tr
-                                          key={`${row.productId}-${component.materialId}`}
-                                          className={isBottleneck ? 'bg-amber-50/80 dark:bg-amber-950/20' : ''}
-                                        >
-                                          <td className="px-3 py-2">
-                                            <span className="font-medium">{component.materialName}</span>
-                                            {isBottleneck && (
-                                              <StatusBadge label="عنق زجاجي" type="warning" className="ms-2" />
-                                            )}
-                                            <p className="text-xs text-slate-400 font-mono">{component.materialCode || '—'}</p>
-                                          </td>
-                                          <td className="px-3 py-2 text-center tabular-nums">
-                                            {formatNumber(component.requiredPerUnit)}
-                                          </td>
-                                          <td className="px-3 py-2 text-center tabular-nums">
-                                            {formatNumber(component.availableQty)}
-                                          </td>
-                                          <td className="px-3 py-2 text-center font-bold tabular-nums">
-                                            {formatNumber(component.maxAssemblable)}
-                                          </td>
-                                        </tr>
-                                      );
-                                    })}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </React.Fragment>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-          <DataPaginationFooter
-            page={safeAssemblablePage}
-            totalPages={assemblableTotalPages}
-            totalItems={filteredAssemblable.length}
-            onPageChange={setAssemblablePage}
-            itemLabel="منتج"
-          />
-        </CardContent>
-      </Card>
-
       <Card className="border-slate-200 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-slate-800">اختصارات التشغيل</CardTitle>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-slate-800">خطوات التشغيل اليومية</CardTitle>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            أرصدة → استلام → صرف أو تحويل → جرد ومطابقة → مراجعة الحركات
+          </p>
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
-            {visibleShortcuts.map((item) => (
-              <Link
-                key={item.key}
-                to={withTenantPath(tenantSlug, item.path)}
-                className={`flex items-start gap-3 rounded-[var(--border-radius-lg)] border px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/40 ${
-                  item.primary
-                    ? 'border-indigo-200 bg-indigo-50/50 dark:border-indigo-900/40 dark:bg-indigo-950/20'
-                    : 'border-[var(--color-border)]'
-                }`}
-              >
-                <span className="material-icons-round text-[22px] text-indigo-600 mt-0.5">{item.icon}</span>
-                <span>
-                  <span className="block text-sm font-bold text-[var(--color-text)]">{item.label}</span>
-                  <span className="block text-xs text-[var(--color-text-muted)] mt-0.5">{item.description}</span>
-                </span>
-              </Link>
-            ))}
+            {visibleOpCards.map((card) => {
+              const links = card.links.filter((link) => !link.permission || can(link.permission));
+              if (links.length === 0) return null;
+              return (
+                <div
+                  key={card.key}
+                  className="flex flex-col gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-4 py-3"
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-indigo-50 text-xs font-bold text-indigo-700">
+                      {card.step}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <span className="material-icons-round text-[18px] text-indigo-600">{card.icon}</span>
+                        <p className="text-sm font-bold text-[var(--color-text)]">{card.label}</p>
+                      </div>
+                      <p className="text-xs text-[var(--color-text-muted)] mt-1">{card.description}</p>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {links.map((link) => (
+                      <Link key={link.path} to={withTenantPath(tenantSlug, link.path)}>
+                        {link.primary ? (
+                          <PrimaryButton className="!text-xs !px-3 !py-1.5">
+                            {link.label}
+                            {link.badge && link.badge > 0 ? ` (${link.badge})` : ''}
+                          </PrimaryButton>
+                        ) : (
+                          <GhostButton className="!text-xs !px-3 !py-1.5">
+                            {link.label}
+                            {link.badge && link.badge > 0 ? ` (${link.badge})` : ''}
+                          </GhostButton>
+                        )}
+                      </Link>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
+      </Card>
+
+      {visibleTools.length > 0 && (
+        <Card className="border-slate-200 shadow-none">
+          <CardHeader className="pb-2">
+            <button
+              type="button"
+              className="flex w-full items-center justify-between gap-3 text-start"
+              onClick={() => setToolsOpen((open) => !open)}
+              aria-expanded={toolsOpen}
+            >
+              <div>
+                <CardTitle className="text-sm font-medium text-slate-800">أدوات إضافية</CardTitle>
+                <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                  تنبيهات، لوكيشنات، واستيراد سريع بالكود
+                </p>
+              </div>
+              <span className="material-icons-round text-[22px] text-slate-500">
+                {toolsOpen ? 'expand_less' : 'expand_more'}
+              </span>
+            </button>
+          </CardHeader>
+          {toolsOpen && (
+            <CardContent>
+              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
+                {visibleTools.map((item) => (
+                  <Link
+                    key={item.key}
+                    to={withTenantPath(tenantSlug, item.path)}
+                    className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-4 py-3 transition-colors hover:bg-slate-50 dark:hover:bg-slate-900/40"
+                  >
+                    <span className="material-icons-round text-[22px] text-indigo-600 mt-0.5">{item.icon}</span>
+                    <span>
+                      <span className="block text-sm font-bold text-[var(--color-text)]">{item.label}</span>
+                      <span className="block text-xs text-[var(--color-text-muted)] mt-0.5">{item.description}</span>
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </CardContent>
+          )}
+        </Card>
+      )}
+
+      <Card id="assemblable" className="border-slate-200 shadow-none overflow-hidden scroll-mt-24">
+        <CardHeader className="pb-2">
+          <button
+            type="button"
+            className="flex w-full items-start justify-between gap-3 text-start"
+            onClick={() => setAssemblableOpen((open) => !open)}
+            aria-expanded={assemblableOpen}
+          >
+            <div>
+              <CardTitle className="text-sm font-medium text-slate-800">المتاح للتجميع حسب المنتج</CardTitle>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                قسم ثانوي: أقصى وحدات تامة من أرصدة هذا المخزن حسب BOM
+                {kpis.canAssembleProducts > 0
+                  ? ` — ${kpis.canAssembleProducts} منتج قابل للتجميع`
+                  : ''}
+                {kpis.topProductName && kpis.topAssemblable > 0
+                  ? ` · أعلى: ${kpis.topProductName} (${formatNumber(kpis.topAssemblable)})`
+                  : ''}
+              </p>
+            </div>
+            <span className="material-icons-round text-[22px] text-slate-500 mt-0.5">
+              {assemblableOpen ? 'expand_less' : 'expand_more'}
+            </span>
+          </button>
+        </CardHeader>
+        {assemblableOpen && (
+          <CardContent className="p-0">
+            {assemblableError && (
+              <p className="mx-4 mb-3 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
+                تعذر حساب المتاح للتجميع: {assemblableError}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
+              <SmartFilterBar
+                searchValue={assemblableSearch}
+                onSearchChange={setAssemblableSearch}
+                searchPlaceholder="بحث بالمنتج أو كود المكوّن…"
+              />
+              <div className="flex flex-wrap gap-2">
+                <GhostButton
+                  onClick={exportAssemblable}
+                  disabled={loading || filteredAssemblable.length === 0}
+                >
+                  تصدير Excel
+                </GhostButton>
+                <GhostButton
+                  onClick={() =>
+                    void openCountCardPreview(pagedAssemblable.map((row) => row.productId))
+                  }
+                  disabled={loading || countCardPreviewBusy || pagedAssemblable.length === 0 || !warehouseId}
+                >
+                  {countCardPreviewBusy ? 'جاري التحميل…' : 'كروت جرد الصفحة'}
+                </GhostButton>
+                {warehouseId && (
+                  <Link to={withTenantPath(tenantSlug, `/inventory/production-issues?warehouseId=${encodeURIComponent(warehouseId)}`)}>
+                    <PrimaryButton>صرف إنتاج</PrimaryButton>
+                  </Link>
+                )}
+              </div>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="erp-table w-full">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th text-start w-10" />
+                    <th className="erp-th text-start">المنتج</th>
+                    <th className="erp-th text-center">مكوّنات</th>
+                    <th className="erp-th text-center">قابل للتجميع</th>
+                    <th className="erp-th text-start">العنق الزجاجي</th>
+                    <th className="erp-th text-center">متاح المكوّن</th>
+                    <th className="erp-th text-center w-16">كارت</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    Array.from({ length: 5 }).map((_, i) => (
+                      <tr key={`sk-${i}`} className="border-b border-[var(--color-border)]">
+                        <td className="px-4 py-3" colSpan={7}>
+                          <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                        </td>
+                      </tr>
+                    ))
+                  ) : pagedAssemblable.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
+                        {assemblableRows.length === 0
+                          ? 'لا توجد منتجات بـ BOM مرتبطة بأصناف في هذا المخزن.'
+                          : 'لا نتائج مطابقة للبحث.'}
+                      </td>
+                    </tr>
+                  ) : (
+                    pagedAssemblable.map((row) => {
+                      const bn = row.bottleneck;
+                      const expanded = expandedProductId === row.productId;
+                      return (
+                        <React.Fragment key={row.productId}>
+                          <tr className="border-b border-[var(--color-border)]">
+                            <td className="px-2 py-3 text-center">
+                              <button
+                                type="button"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-slate-500 hover:bg-slate-100"
+                                aria-label={expanded ? 'إخفاء المكوّنات' : 'عرض المكوّنات'}
+                                onClick={() =>
+                                  setExpandedProductId((prev) => (prev === row.productId ? null : row.productId))
+                                }
+                              >
+                                <span className="material-icons-round text-[20px]">
+                                  {expanded ? 'expand_less' : 'expand_more'}
+                                </span>
+                              </button>
+                            </td>
+                            <td className="px-4 py-3">
+                              <p className="text-sm font-medium text-[var(--color-text)]">{row.productName}</p>
+                              <p className="text-xs text-slate-400 font-mono">{row.productCode || '—'}</p>
+                            </td>
+                            <td className="px-4 py-3 text-center text-sm tabular-nums">{row.componentCount}</td>
+                            <td className="px-4 py-3 text-center">
+                              <span className="text-base font-bold tabular-nums text-indigo-700">
+                                {formatNumber(row.maxAssemblable)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
+                              {bn ? (
+                                <>
+                                  <p className="text-sm text-[var(--color-text)]">{bn.materialName}</p>
+                                  <p className="text-xs text-slate-400 font-mono">{bn.materialCode || '—'}</p>
+                                </>
+                              ) : (
+                                <span className="text-sm text-slate-400">—</span>
+                              )}
+                            </td>
+                            <td className="px-4 py-3 text-center text-sm tabular-nums text-slate-600">
+                              {bn ? formatNumber(bn.availableQty) : '—'}
+                            </td>
+                            <td className="px-2 py-3 text-center">
+                              <button
+                                type="button"
+                                className="inline-flex h-8 w-8 items-center justify-center rounded-md text-indigo-600 hover:bg-indigo-50 disabled:opacity-40"
+                                title="معاينة كارت جرد"
+                                disabled={countCardPreviewBusy || !warehouseId}
+                                onClick={() => void openCountCardPreview([row.productId])}
+                              >
+                                {countCardPreviewBusy ? (
+                                  <Loader2 className="size-4 animate-spin" />
+                                ) : (
+                                  <ClipboardList className="size-4" />
+                                )}
+                              </button>
+                            </td>
+                          </tr>
+                          {expanded && (
+                            <tr className="border-b border-[var(--color-border)] bg-slate-50/80 dark:bg-slate-900/30">
+                              <td colSpan={7} className="px-4 py-3">
+                                <div className="overflow-x-auto rounded-lg border border-[var(--color-border)] bg-white dark:bg-slate-950">
+                                  <table className="w-full text-sm">
+                                    <thead>
+                                      <tr className="border-b bg-slate-50 dark:bg-slate-900">
+                                        <th className="px-3 py-2 text-start font-medium">المكوّن</th>
+                                        <th className="px-3 py-2 text-center font-medium">مطلوب/وحدة</th>
+                                        <th className="px-3 py-2 text-center font-medium">متاح</th>
+                                        <th className="px-3 py-2 text-center font-medium">حد التجميع</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {row.components.map((component) => {
+                                        const isBottleneck = bn?.materialId === component.materialId;
+                                        return (
+                                          <tr
+                                            key={`${row.productId}-${component.materialId}`}
+                                            className={isBottleneck ? 'bg-amber-50/80 dark:bg-amber-950/20' : ''}
+                                          >
+                                            <td className="px-3 py-2">
+                                              <span className="font-medium">{component.materialName}</span>
+                                              {isBottleneck && (
+                                                <StatusBadge label="عنق زجاجي" type="warning" className="ms-2" />
+                                              )}
+                                              <p className="text-xs text-slate-400 font-mono">{component.materialCode || '—'}</p>
+                                            </td>
+                                            <td className="px-3 py-2 text-center tabular-nums">
+                                              {formatNumber(component.requiredPerUnit)}
+                                            </td>
+                                            <td className="px-3 py-2 text-center tabular-nums">
+                                              {formatNumber(component.availableQty)}
+                                            </td>
+                                            <td className="px-3 py-2 text-center font-bold tabular-nums">
+                                              {formatNumber(component.maxAssemblable)}
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </React.Fragment>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+            <DataPaginationFooter
+              page={safeAssemblablePage}
+              totalPages={assemblableTotalPages}
+              totalItems={filteredAssemblable.length}
+              onPageChange={setAssemblablePage}
+              itemLabel="منتج"
+            />
+          </CardContent>
+        )}
       </Card>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">

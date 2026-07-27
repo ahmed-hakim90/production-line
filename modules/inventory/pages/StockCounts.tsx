@@ -21,6 +21,8 @@ import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseS
 
 export const StockCounts: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const queryWarehouseId = searchParams.get('warehouseId') || '';
+  const fromSupplies = searchParams.get('from') === 'supplies';
   const {
     scoped,
     warehouseId: scopedWarehouseId,
@@ -39,7 +41,7 @@ export const StockCounts: React.FC = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
   const [warehouseId, setWarehouseId] = useState(
-    () => searchParams.get('warehouseId') || scopedWarehouseId || '',
+    () => queryWarehouseId || scopedWarehouseId || '',
   );
   const [creating, setCreating] = useState(false);
   const [msg, setMsg] = useState<string>('');
@@ -60,16 +62,22 @@ export const StockCounts: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!scoped) return;
     setWarehouseId((prev) =>
-      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+      resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]),
     );
-  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
+  }, [scoped, warehouseIds.join('|'), scopedWarehouseId, queryWarehouseId, resolveScopedWarehouseId]);
 
   const warehouseNameById = useMemo(
     () => new Map(warehouses.map((w) => [w.id, w.name])),
     [warehouses],
   );
+
+  const selectedWarehouseName = warehouseNameById.get(warehouseId) || warehouseId;
+
+  const visibleSessions = useMemo(() => {
+    if (!warehouseId) return sessions;
+    return sessions.filter((session) => session.warehouseId === warehouseId);
+  }, [sessions, warehouseId]);
 
   const startCountSession = async () => {
     if (!warehouseId) return;
@@ -96,7 +104,7 @@ export const StockCounts: React.FC = () => {
         })),
       });
       await loadData();
-      setMsg('تم فتح جلسة الجرد بنجاح.');
+      setMsg('تم فتح جلسة الجرد. أدخل الكميات الفعلية ثم طابق واعتمد الفروقات.');
     } finally {
       setCreating(false);
     }
@@ -117,8 +125,10 @@ export const StockCounts: React.FC = () => {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="page-title">جرد المخزون</h2>
-        <p className="page-subtitle">إنشاء جلسات جرد واعتماد فروق الكميات كتسويات تلقائية.</p>
+        <h2 className="page-title">جرد ومطابقة المخزون</h2>
+        <p className="page-subtitle">
+          فتح جرد → إدخال الكميات الفعلية → مطابقة واعتماد الفروقات كتسويات مخزنية.
+        </p>
       </div>
 
       <MaterialsWarehouseScopeBanner
@@ -127,7 +137,19 @@ export const StockCounts: React.FC = () => {
         settingsPath={settingsPath}
       />
 
-      <Card title="فتح جلسة جرد جديدة">
+      {(fromSupplies || scoped) && warehouseId && (
+        <p className="text-sm font-medium text-indigo-800 bg-indigo-50 border border-indigo-100 rounded-lg px-4 py-3">
+          جرد مخزن المستلزمات: <span className="font-bold">{selectedWarehouseName}</span>.
+          المطابقة تعتمد فروق العد (الفعلي مقابل النظام) كتسويات مخزنية.
+        </p>
+      )}
+
+      <Card title="مسار الجرد والمطابقة">
+        <ol className="mb-4 space-y-1 text-sm text-slate-600 list-decimal list-inside">
+          <li>افتح جلسة جرد للمخزن المحدد.</li>
+          <li>أدخل الكميات الفعلية لكل صنف.</li>
+          <li>طابق الفروقات واعتمدها لترحيل التسويات.</li>
+        </ol>
         <div className="flex flex-col sm:flex-row gap-3">
           <Select
             value={warehouseId || 'none'}
@@ -150,12 +172,12 @@ export const StockCounts: React.FC = () => {
         {msg && <p className="mt-3 text-sm font-bold text-slate-600">{msg}</p>}
       </Card>
 
-      <Card title="جلسات الجرد">
-        {sessions.length === 0 ? (
+      <Card title="جلسات الجرد والمطابقة">
+        {visibleSessions.length === 0 ? (
           <p className="text-sm text-slate-400">لا توجد جلسات جرد حتى الآن.</p>
         ) : (
           <div className="space-y-3">
-            {sessions.map((session) => (
+            {visibleSessions.map((session) => (
               <div key={session.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
                 <div className="erp-page-head">
                   <div>
@@ -164,11 +186,15 @@ export const StockCounts: React.FC = () => {
                   </div>
                   <div className="flex items-center gap-2">
                     <Badge variant={session.status === 'approved' ? 'success' : session.status === 'counted' ? 'warning' : 'info'}>
-                      {session.status === 'approved' ? 'معتمد' : session.status === 'counted' ? 'معد للجرد' : 'مفتوح'}
+                      {session.status === 'approved'
+                        ? 'مطابق ومعتمد'
+                        : session.status === 'counted'
+                          ? 'جاهز للمطابقة'
+                          : 'مفتوح للعد'}
                     </Badge>
                     <Button variant="outline" onClick={() => viewCountSession(session)}>
                       <span className="material-icons-round text-sm">visibility</span>
-                      فتح
+                      {session.status === 'approved' ? 'عرض' : 'عدّ ومطابقة'}
                     </Button>
                   </div>
                 </div>

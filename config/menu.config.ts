@@ -204,7 +204,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'inv-movements', label: 'إدخال حركة', icon: 'add_circle', path: '/inventory/movements', permission: 'inventory.transactions.create' },
       { key: 'inv-quick-transfer', label: 'تحويل سريع', icon: 'bolt', path: '/quick-inventory-transfer', permission: 'inventory.transactions.create' },
       { key: 'inv-transfer-approvals', label: 'اعتماد التحويلات', icon: 'verified_user', path: '/inventory/transfer-approvals', permission: 'inventory.view' },
-      { key: 'inv-counts', label: 'الجرد', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
+      { key: 'inv-counts', label: 'الجرد والمطابقة', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
       // مخزون الإنتاج
       { key: 'inv-production-issues', label: 'صرف إنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view' },
       { key: 'inv-production-approvals', label: 'اعتمادات الإنتاج المخزنية', icon: 'approval', path: '/inventory/production-approvals', permission: 'inventory.view' },

@@ -73,6 +73,9 @@ export const StockTransactions: React.FC = () => {
   const [warehouseFilter, setWarehouseFilter] = useState(
     () => searchParams.get('warehouseId') || scopedWarehouseId || '',
   );
+  const [itemTypeFilter, setItemTypeFilter] = useState(
+    () => searchParams.get('itemType') || '',
+  );
   const [movementFilter, setMovementFilter] = useState('');
   const [sourceModuleFilter, setSourceModuleFilter] = useState('');
   const [dateFrom, setDateFrom] = useState('');
@@ -137,10 +140,14 @@ export const StockTransactions: React.FC = () => {
   }, [sourceModuleFilter, dateFrom, dateTo]);
 
   useEffect(() => {
-    if (!scoped) return;
+    const queryWarehouseId = searchParams.get('warehouseId') || '';
     setWarehouseFilter((prev) =>
-      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+      resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]),
     );
+    const queryItemType = searchParams.get('itemType') || '';
+    if (queryItemType === 'raw_material' || queryItemType === 'finished_good' || queryItemType === 'material') {
+      setItemTypeFilter(queryItemType);
+    }
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const warehouseMap = useMemo(() => new Map(warehouses.map((w) => [w.id, w.name])), [warehouses]);
@@ -162,14 +169,17 @@ export const StockTransactions: React.FC = () => {
           ? tx.warehouseId === warehouseFilter
           : warehouseIds.includes(tx.warehouseId))
       : !warehouseFilter || tx.warehouseId === warehouseFilter;
+    const matchesItemType = !itemTypeFilter
+      || tx.itemType === itemTypeFilter
+      || (itemTypeFilter === 'raw_material' && tx.itemType === 'material');
     const matchesMovement = !movementFilter || tx.movementType === movementFilter;
     const matchesSource = !sourceModuleFilter
       || (sourceModuleFilter === 'legacy' ? !tx.sourceModule : tx.sourceModule === sourceModuleFilter);
     const createdMs = new Date(tx.createdAt).getTime();
     const matchesFrom = !dateFrom || createdMs >= new Date(dateFrom).getTime();
     const matchesTo = !dateTo || createdMs <= new Date(`${dateTo}T23:59:59`).getTime();
-    return matchesSearch && matchesWarehouse && matchesMovement && matchesSource && matchesFrom && matchesTo;
-  }), [transactions, search, warehouseFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo, scoped, warehouseIds]);
+    return matchesSearch && matchesWarehouse && matchesItemType && matchesMovement && matchesSource && matchesFrom && matchesTo;
+  }), [transactions, search, warehouseFilter, itemTypeFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo, scoped, warehouseIds]);
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
   const selectedRows = useMemo(
     () => filtered.filter((row) => row.id && selectedSet.has(row.id)),
@@ -243,7 +253,7 @@ export const StockTransactions: React.FC = () => {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [search, warehouseFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo]);
+  }, [search, warehouseFilter, itemTypeFilter, movementFilter, sourceModuleFilter, dateFrom, dateTo]);
 
   const visibleSelectableIds = useMemo(() => {
     const ids: string[] = [];

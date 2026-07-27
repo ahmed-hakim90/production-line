@@ -31,6 +31,7 @@ import {
   buildTransferRequestLines,
   buildTransferPrintDataPayload,
   type TransferFormLine,
+  type TransferItemOption,
 } from '../utils/transferFormShared';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
@@ -43,6 +44,14 @@ import {
 } from '@/components/ui/select';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import { materialService } from '../../manufacturing/services/materialService';
+import type { Material } from '../../manufacturing/types';
+import {
+  buildComponentCatalogOptions,
+  getComponentAvailableQty,
+  resolveComponentStockIdentity,
+  type ComponentCatalogOption,
+} from '../lib/componentCatalogOptions';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
@@ -81,6 +90,7 @@ export const StockMovementForm: React.FC = () => {
   const [warehouseLocations, setWarehouseLocations] = useState<WarehouseLocation[]>([]);
   const [warehouseRacks, setWarehouseRacks] = useState<WarehouseRack[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
 
   const initialSearch = useMemo(() => new URLSearchParams(location.search), [location.search]);
@@ -121,9 +131,10 @@ export const StockMovementForm: React.FC = () => {
   });
 
   const loadData = useCallback(async () => {
-    const [whs, rms, peekRef, bals, locs, racks] = await Promise.all([
+    const [whs, rms, mats, peekRef, bals, locs, racks] = await Promise.all([
       warehouseService.getActiveWarehouses(),
       rawMaterialService.getAll(),
+      materialService.getAll().catch(() => [] as Material[]),
       stockService.getNextInvReferenceNo(),
       stockService.getBalances(),
       warehouseLocationService.getAll(),
@@ -131,6 +142,7 @@ export const StockMovementForm: React.FC = () => {
     ]);
     setWarehouses(whs);
     setRawMaterials(rms.filter((m) => m.isActive !== false));
+    setMaterials(mats.filter((m) => m.isActive !== false));
     setBalances(bals);
     setWarehouseLocations(locs);
     setWarehouseRacks(racks);
@@ -143,11 +155,25 @@ export const StockMovementForm: React.FC = () => {
   }, [loadData]);
 
   useEffect(() => {
-    if (!scoped) return;
+    const queryWarehouseId = initialSearch.get('warehouseId') || '';
     setWarehouseId((prev) =>
-      resolveScopedWarehouseId(prev, [initialSearch.get('warehouseId') || '', scopedWarehouseId]),
+      resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]),
     );
-    setItemType('raw_material');
+    const nextItemType = initialSearch.get('itemType');
+    if (scoped || nextItemType === 'raw_material') {
+      setItemType('raw_material');
+    } else if (nextItemType === 'finished_good') {
+      setItemType('finished_good');
+    }
+    const nextMovement = initialSearch.get('movementType');
+    if (
+      nextMovement === 'IN' ||
+      nextMovement === 'OUT' ||
+      nextMovement === 'TRANSFER' ||
+      nextMovement === 'ADJUSTMENT'
+    ) {
+      setMovementType(nextMovement);
+    }
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, initialSearch, resolveScopedWarehouseId]);
 
   const sourceWarehouses = useMemo(
@@ -181,7 +207,7 @@ export const StockMovementForm: React.FC = () => {
     [_rawProducts],
   );
 
-  const finishedGoodOptions = useMemo(() => products.map((p) => {
+  const finishedGoodOptions = useMemo((): TransferItemOption[] => products.map((p) => {
     const raw = rawProductMetaById.get(p.id);
     return {
       id: p.id,
@@ -189,20 +215,33 @@ export const StockMovementForm: React.FC = () => {
       code: p.code,
       minStock: 0,
       unitsPerCarton: Number(raw?.unitsPerCarton || 0),
+      stockItemType: 'finished_good',
     };
   }), [products, rawProductMetaById]);
 
+  const componentOptions = useMemo(
+    () => buildComponentCatalogOptions(materials, rawMaterials),
+    [materials, rawMaterials],
+  );
+
   const rawMaterialOptions = useMemo(
-    () =>
-      rawMaterials.map((m) => ({
-        id: m.id || '',
+    (): TransferItemOption[] =>
+      componentOptions.map((m) => ({
+        id: m.id,
         name: m.name,
         code: m.code,
-        minStock: Number(m.minStock || 0),
+        minStock: m.minStock,
         unitsPerCarton: 0,
+        stockItemType: m.stockItemType,
       })),
-    [rawMaterials],
+    [componentOptions],
   );
+
+  const componentById = useMemo(() => {
+    const map = new Map<string, ComponentCatalogOption>();
+    componentOptions.forEach((opt) => map.set(opt.id, opt));
+    return map;
+  }, [componentOptions]);
 
   const itemOptions = itemType === 'finished_good' ? finishedGoodOptions : rawMaterialOptions;
   const selectedItem = itemOptions.find((item) => item.id === itemId);
@@ -249,19 +288,27 @@ export const StockMovementForm: React.FC = () => {
   const itemSelectOptions = useMemo(
     () =>
       itemOptions.map((opt) => {
-        const row = balances.find(
-          (b) =>
-            b.warehouseId === effectiveWarehouseId &&
-            b.itemType === itemType &&
-            b.itemId === opt.id,
-        );
-        const available = Number(row?.quantity || 0);
+        let available = 0;
+        if (itemType === 'finished_good') {
+          const row = balances.find(
+            (b) =>
+              b.warehouseId === effectiveWarehouseId &&
+              b.itemType === 'finished_good' &&
+              b.itemId === opt.id,
+          );
+          available = Number(row?.quantity || 0);
+        } else {
+          const component = componentById.get(opt.id);
+          available = component
+            ? getComponentAvailableQty(balances, effectiveWarehouseId, component)
+            : 0;
+        }
         return {
           value: opt.id,
           label: `${opt.name} (${opt.code}) — المتاح: ${available}`,
         };
       }),
-    [itemOptions, balances, effectiveWarehouseId, itemType],
+    [itemOptions, balances, effectiveWarehouseId, itemType, componentById],
   );
   const warehouseSelectOptions = useMemo(
     () =>
@@ -294,13 +341,36 @@ export const StockMovementForm: React.FC = () => {
 
   const getAvailableForItem = (lineItemId: string) => {
     if (!lineItemId || !effectiveWarehouseId) return 0;
-    const row = balances.find(
-      (b) =>
-        b.warehouseId === effectiveWarehouseId &&
-        b.itemType === itemType &&
-        b.itemId === lineItemId,
-    );
-    return Number(row?.quantity || 0);
+    if (itemType === 'finished_good') {
+      const row = balances.find(
+        (b) =>
+          b.warehouseId === effectiveWarehouseId &&
+          b.itemType === 'finished_good' &&
+          b.itemId === lineItemId,
+      );
+      return Number(row?.quantity || 0);
+    }
+    const component = componentById.get(lineItemId);
+    if (!component) return 0;
+    return getComponentAvailableQty(balances, effectiveWarehouseId, component);
+  };
+
+  const resolveLineStockIdentity = (
+    lineItemId: string,
+    movement: 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT',
+  ) => {
+    if (itemType === 'finished_good') {
+      return {
+        itemType: 'finished_good' as const,
+        itemId: lineItemId,
+        available: getAvailableForItem(lineItemId),
+      };
+    }
+    const component = componentById.get(lineItemId);
+    if (!component) {
+      return { itemType: 'raw_material' as const, itemId: lineItemId, available: 0 };
+    }
+    return resolveComponentStockIdentity(component, balances, effectiveWarehouseId, movement);
   };
 
   const lineQuantityInPieces = (line: TransferLine) =>
@@ -399,6 +469,14 @@ export const StockMovementForm: React.FC = () => {
             const item = getItemById(line.itemId);
             if (!item) continue;
             const qty = lineQuantityInPieces(line);
+            const stockIdentity = resolveLineStockIdentity(line.itemId, 'TRANSFER');
+            if (qty > stockIdentity.available) {
+              setMessage({
+                type: 'error',
+                text: `الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`,
+              });
+              return;
+            }
             txId = await stockService.createMovement({
               warehouseId: effectiveWarehouseId,
               toWarehouseId: effectiveWarehouseId,
@@ -406,8 +484,8 @@ export const StockMovementForm: React.FC = () => {
               locationCode: selectedLocation?.code,
               toLocationId,
               toLocationCode: selectedToLocation?.code,
-              itemType,
-              itemId: item.id,
+              itemType: stockIdentity.itemType,
+              itemId: stockIdentity.itemId,
               itemName: item.name,
               itemCode: item.code,
               movementType: 'TRANSFER',
@@ -424,10 +502,17 @@ export const StockMovementForm: React.FC = () => {
             });
           }
         } else {
+          // Prefer posting identity with available stock for each component line.
           const requestLines = buildTransferRequestLines(
             transferItems,
             itemType,
-            getItemById,
+            (id) => {
+              const item = getItemById(id);
+              if (!item) return undefined;
+              if (itemType === 'finished_good') return item;
+              const identity = resolveLineStockIdentity(id, 'TRANSFER');
+              return { ...item, id: identity.itemId, stockItemType: identity.itemType };
+            },
             lineQuantityInPieces,
           );
           if (!requestLines.length) {
@@ -466,7 +551,8 @@ export const StockMovementForm: React.FC = () => {
           setMessage({ type: 'error', text: 'حدد اللوكيشن قبل تسجيل حركة مكون.' });
           return;
         }
-        const available = getAvailableForItem(selectedItem.id);
+        const stockIdentity = resolveLineStockIdentity(selectedItem.id, movementType);
+        const available = stockIdentity.available;
         if (movementType === 'OUT' && quantity > available) {
           setMessage({ type: 'error', text: `الكمية تتجاوز الرصيد المتاح (${available}).` });
           return;
@@ -485,8 +571,8 @@ export const StockMovementForm: React.FC = () => {
           locationId: locationId || undefined,
           locationCode: selectedLocation?.code,
           toWarehouseId: undefined,
-          itemType,
-          itemId: selectedItem.id,
+          itemType: stockIdentity.itemType,
+          itemId: stockIdentity.itemId,
           itemName: selectedItem.name,
           itemCode: selectedItem.code,
           movementType,
@@ -694,11 +780,13 @@ export const StockMovementForm: React.FC = () => {
               }}
             >
               <SelectTrigger className={fieldClass}>
-                <SelectValue />
+                <SelectValue placeholder="اختر نوع الصنف">
+                  {itemType === 'finished_good' ? 'منتج نهائي' : 'مكونات المنتجات'}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="finished_good">منتج نهائي</SelectItem>
-                <SelectItem value="raw_material">مادة خام</SelectItem>
+                <SelectItem value="raw_material">مكونات المنتجات</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -804,8 +892,16 @@ export const StockMovementForm: React.FC = () => {
               {itemId && effectiveWarehouseId && (
                 <StockAvailabilityHint
                   warehouseId={effectiveWarehouseId}
-                  itemType={itemType}
-                  itemId={itemId}
+                  itemType={
+                    itemType === 'finished_good'
+                      ? 'finished_good'
+                      : (resolveLineStockIdentity(itemId, movementType).itemType)
+                  }
+                  itemId={
+                    itemType === 'finished_good'
+                      ? itemId
+                      : resolveLineStockIdentity(itemId, movementType).itemId
+                  }
                   className="mt-1.5"
                 />
               )}

@@ -43,6 +43,14 @@ import { FormField } from '@/components/ui/form-field';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import { materialService } from '../../manufacturing/services/materialService';
+import type { Material } from '../../manufacturing/types';
+import {
+  buildComponentCatalogOptions,
+  getComponentAvailableQty,
+  resolveComponentStockIdentity,
+  type ComponentCatalogOption,
+} from '../lib/componentCatalogOptions';
 
 type ItemType = 'finished_good' | 'raw_material';
 const APP_VERSION = __APP_VERSION__;
@@ -74,6 +82,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
 
   const [itemType, setItemType] = useState<ItemType>(
@@ -111,14 +120,16 @@ export const QuickWarehouseTransfer: React.FC = () => {
   });
 
   const loadData = useCallback(async () => {
-    const [whs, rms, peekRef, bals] = await Promise.all([
+    const [whs, rms, mats, peekRef, bals] = await Promise.all([
       warehouseService.getActiveWarehouses(),
       rawMaterialService.getAll(),
+      materialService.getAll().catch(() => [] as Material[]),
       stockService.getNextInvReferenceNo(),
       stockService.getBalances(),
     ]);
     setWarehouses(whs);
     setRawMaterials(rms.filter((m) => m.isActive !== false));
+    setMaterials(mats.filter((m) => m.isActive !== false));
     setBalances(bals);
     const match = peekRef.trim().match(INV_REF_REGEX);
     setNextReferenceSeq(match ? Number(match[1] || 0) : 1);
@@ -129,11 +140,16 @@ export const QuickWarehouseTransfer: React.FC = () => {
   }, [loadData]);
 
   useEffect(() => {
-    if (!scoped) return;
+    const queryWarehouseId = searchParams.get('warehouseId') || '';
     setWarehouseId((prev) =>
-      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+      resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]),
     );
-    setItemType('raw_material');
+    const nextItemType = searchParams.get('itemType');
+    if (scoped || nextItemType === 'raw_material') {
+      setItemType('raw_material');
+    } else if (nextItemType === 'finished_good') {
+      setItemType('finished_good');
+    }
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const fromWarehouseOptions = useMemo(
@@ -149,7 +165,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
   );
 
   const finishedGoodOptions = useMemo(
-    () =>
+    (): TransferItemOption[] =>
       products.map((p) => {
         const raw = rawProductMetaById.get(p.id);
         return {
@@ -158,20 +174,33 @@ export const QuickWarehouseTransfer: React.FC = () => {
           code: p.code,
           minStock: 0,
           unitsPerCarton: Number(raw?.unitsPerCarton || 0),
+          stockItemType: 'finished_good',
         };
       }),
     [products, rawProductMetaById],
   );
 
+  const componentOptions = useMemo(
+    () => buildComponentCatalogOptions(materials, rawMaterials),
+    [materials, rawMaterials],
+  );
+
+  const componentById = useMemo(() => {
+    const map = new Map<string, ComponentCatalogOption>();
+    componentOptions.forEach((opt) => map.set(opt.id, opt));
+    return map;
+  }, [componentOptions]);
+
   const rawMaterialOptions = useMemo(
-    () =>
-      rawMaterials.map((m) => ({
-        id: m.id || '',
+    (): TransferItemOption[] =>
+      componentOptions.map((m) => ({
+        id: m.id,
         name: m.name,
         code: m.code,
-        minStock: Number(m.minStock || 0),
+        minStock: m.minStock,
+        stockItemType: m.stockItemType,
       })),
-    [rawMaterials],
+    [componentOptions],
   );
 
   const itemOptions: TransferItemOption[] =
@@ -193,19 +222,25 @@ export const QuickWarehouseTransfer: React.FC = () => {
   const itemSelectOptions = useMemo(
     () =>
       itemOptions.map((opt) => {
-        const row = balances.find(
-          (b) =>
-            b.warehouseId === warehouseId &&
-            b.itemType === itemType &&
-            b.itemId === opt.id,
-        );
-        const available = Number(row?.quantity || 0);
+        let available = 0;
+        if (itemType === 'finished_good') {
+          const row = balances.find(
+            (b) =>
+              b.warehouseId === warehouseId &&
+              b.itemType === 'finished_good' &&
+              b.itemId === opt.id,
+          );
+          available = Number(row?.quantity || 0);
+        } else {
+          const component = componentById.get(opt.id);
+          available = component ? getComponentAvailableQty(balances, warehouseId, component) : 0;
+        }
         return {
           value: opt.id,
           label: `${opt.name} (${opt.code}) — المتاح: ${available}`,
         };
       }),
-    [itemOptions, balances, warehouseId, itemType],
+    [itemOptions, balances, warehouseId, itemType, componentById],
   );
 
   const warehouseSelectOptions = useMemo(
@@ -230,13 +265,33 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
   const getAvailableForItem = (lineItemId: string) => {
     if (!lineItemId || !warehouseId) return 0;
-    const row = balances.find(
-      (b) =>
-        b.warehouseId === warehouseId &&
-        b.itemType === itemType &&
-        b.itemId === lineItemId,
-    );
-    return Number(row?.quantity || 0);
+    if (itemType === 'finished_good') {
+      const row = balances.find(
+        (b) =>
+          b.warehouseId === warehouseId &&
+          b.itemType === 'finished_good' &&
+          b.itemId === lineItemId,
+      );
+      return Number(row?.quantity || 0);
+    }
+    const component = componentById.get(lineItemId);
+    if (!component) return 0;
+    return getComponentAvailableQty(balances, warehouseId, component);
+  };
+
+  const resolveLineStockIdentity = (lineItemId: string) => {
+    if (itemType === 'finished_good') {
+      return {
+        itemType: 'finished_good' as const,
+        itemId: lineItemId,
+        available: getAvailableForItem(lineItemId),
+      };
+    }
+    const component = componentById.get(lineItemId);
+    if (!component) {
+      return { itemType: 'raw_material' as const, itemId: lineItemId, available: 0 };
+    }
+    return resolveComponentStockIdentity(component, balances, warehouseId, 'TRANSFER');
   };
 
   const buildPrintPayload = (resolvedReferenceNo: string, txId: string | null) =>
@@ -293,7 +348,18 @@ export const QuickWarehouseTransfer: React.FC = () => {
       return;
     }
 
-    const requestLines = buildTransferRequestLines(transferItems, itemType, getItemById, qtyInPieces);
+    const requestLines = buildTransferRequestLines(
+      transferItems,
+      itemType,
+      (id) => {
+        const item = getItemById(id);
+        if (!item) return undefined;
+        if (itemType === 'finished_good') return item;
+        const identity = resolveLineStockIdentity(id);
+        return { ...item, id: identity.itemId, stockItemType: identity.itemType };
+      },
+      qtyInPieces,
+    );
     if (!requestLines.length) {
       setSaveError('تعذر تجهيز أصناف طلب التحويل.');
       return;
@@ -446,16 +512,19 @@ export const QuickWarehouseTransfer: React.FC = () => {
                     })),
                   );
                 }}
+                disabled={scoped}
               >
                 <SelectTrigger
                   id="transfer-item-type"
                   className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm"
                 >
-                  <SelectValue />
+                  <SelectValue placeholder="اختر نوع الصنف">
+                    {itemType === 'finished_good' ? 'منتج نهائي' : 'مكونات المنتجات'}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="finished_good">منتج نهائي</SelectItem>
-                  <SelectItem value="raw_material">مادة خام</SelectItem>
+                  <SelectItem value="raw_material">مكونات المنتجات</SelectItem>
                 </SelectContent>
               </Select>
             </FormField>

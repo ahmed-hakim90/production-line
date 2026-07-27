@@ -106,7 +106,6 @@ export const TransferApprovals: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!scoped) return;
     setWarehouseFilter((prev) =>
       resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
     );

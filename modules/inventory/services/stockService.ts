@@ -942,12 +942,27 @@ export const stockService = {
 
     await runTransaction(db, async (t) => {
       const tenantId = getCurrentTenantId();
+      const now = toIsoNow();
+      const signedQty = Number(tx.quantity || 0);
       const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(tx.warehouseId, tx.itemType, tx.itemId));
+      const locRef = tx.locationId
+        ? doc(
+          db,
+          LOCATION_BALANCES_COLLECTION,
+          locationBalanceDocId(tx.warehouseId, tx.locationId, tx.itemType, tx.itemId),
+        )
+        : null;
       const balSnap = await t.get(balRef);
+      const locSnap = locRef ? await t.get(locRef) : null;
       const currentQty = balSnap.exists() ? Number(balSnap.data().quantity || 0) : 0;
-      const nextQty = currentQty - Number(tx.quantity || 0);
+      const nextQty = currentQty - signedQty;
       if (nextQty < 0) {
         throw new Error('تعذر حذف الحركة لأن رصيد الصنف الحالي لا يسمح بعكسها.');
+      }
+      const currentLocQty = locSnap?.exists() ? Number(locSnap.data().quantity || 0) : 0;
+      const nextLocQty = currentLocQty - signedQty;
+      if (locRef && nextLocQty < 0) {
+        throw new Error('تعذر حذف الحركة لأن رصيد اللوكيشن الحالي لا يسمح بعكسها.');
       }
 
       const txRef = doc(db, TRANSACTIONS_COLLECTION, tx.id!);
@@ -961,11 +976,36 @@ export const stockService = {
           itemCode: tx.itemCode,
           minStock: 0,
           quantity: nextQty,
-          updatedAt: toIsoNow(),
+          updatedAt: now,
           tenantId,
         },
         { merge: true },
       );
+      if (locRef && tx.locationId) {
+        t.set(
+          locRef,
+          locationBalanceWrite({
+            warehouseId: tx.warehouseId,
+            locationId: tx.locationId,
+            locationCode: tx.locationCode,
+            rackId: tx.rackId,
+            rackName: tx.rackName,
+            rackCode: tx.rackCode,
+            shelfName: tx.shelfName,
+            shelfCode: tx.shelfCode,
+            itemType: tx.itemType,
+            itemId: tx.itemId,
+            itemName: tx.itemName,
+            itemCode: tx.itemCode,
+            unit: tx.unit,
+            quantity: nextLocQty,
+            updatedAt: now,
+            lastMovementAt: now,
+            tenantId,
+          }),
+          { merge: true },
+        );
+      }
       t.delete(txRef);
     });
   },

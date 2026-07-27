@@ -129,6 +129,25 @@ textarea::placeholder {
   opacity: 1;
 }
 
+/* Numeric fields: Western digits (0–9), LTR caret/layout even inside RTL pages */
+input[type="number"],
+input[type="tel"],
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"],
+input[type="month"],
+input[type="week"],
+input[inputmode="numeric"],
+input[inputmode="decimal"],
+input[data-english-digits="true"],
+textarea[inputmode="numeric"],
+textarea[inputmode="decimal"],
+textarea[data-english-digits="true"] {
+  direction: ltr !important;
+  unicode-bidi: isolate;
+  font-variant-numeric: tabular-nums;
+}
+
 input[type="checkbox"] {
   accent-color: rgb(var(--color-primary));
   border-radius: 3px !important;

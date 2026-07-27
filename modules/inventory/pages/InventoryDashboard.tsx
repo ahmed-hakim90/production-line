@@ -145,7 +145,7 @@ export const InventoryDashboard: React.FC = () => {
               <GhostButton>حركة مخزون</GhostButton>
             </Link>
             <Link to={withTenantPath(tenantSlug, '/inventory/counts')}>
-              <GhostButton>الجرد</GhostButton>
+              <GhostButton>الجرد والمطابقة</GhostButton>
             </Link>
             <Link to={withTenantPath(tenantSlug, '/inventory/transfer-approvals')}>
               <GhostButton>اعتماد التحويلات</GhostButton>

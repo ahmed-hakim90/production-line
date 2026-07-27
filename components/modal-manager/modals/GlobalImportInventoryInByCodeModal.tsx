@@ -6,7 +6,13 @@ import { warehouseService } from '../../../modules/inventory/services/warehouseS
 import { warehouseLocationService } from '../../../modules/inventory/services/warehouseLocationService';
 import { stockService } from '../../../modules/inventory/services/stockService';
 import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
+import { materialService } from '../../../modules/manufacturing/services/materialService';
 import type { Warehouse, WarehouseLocation, RawMaterial } from '../../../modules/inventory/types';
+import {
+  buildComponentCatalogOptions,
+  type ComponentCatalogOption,
+} from '../../../modules/inventory/lib/componentCatalogOptions';
+import type { Material } from '../../../modules/manufacturing/types';
 import {
   parseInventoryInByCodeExcel,
   type InventoryInImportResult,
@@ -43,6 +49,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [warehouseId, setWarehouseId] = useState('');
   const [itemType, setItemType] = useState<'finished_good' | 'raw_material'>('finished_good');
   const [importParsing, setImportParsing] = useState(false);
@@ -63,13 +70,15 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     setImportResult(null);
     setMessage(null);
     void (async () => {
-      const [warehouseRows, rawRows, locationRows] = await Promise.all([
+      const [warehouseRows, rawRows, materialRows, locationRows] = await Promise.all([
         warehouseService.getActiveWarehouses(),
         rawMaterialService.getAll(),
+        materialService.getAll().catch(() => [] as Material[]),
         warehouseLocationService.getAll(),
       ]);
       setWarehouses(warehouseRows);
       setRawMaterials(rawRows.filter((m) => m.isActive !== false));
+      setMaterials(materialRows.filter((m) => m.isActive !== false));
       setLocations(locationRows);
     })();
   }, [isOpen, parsedPayload.warehouseId, parsedPayload.itemType]);
@@ -99,12 +108,21 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
         })),
     [locations],
   );
+  const componentOptions = useMemo(
+    () => buildComponentCatalogOptions(materials, rawMaterials),
+    [materials, rawMaterials],
+  );
+  const componentById = useMemo(() => {
+    const map = new Map<string, ComponentCatalogOption>();
+    componentOptions.forEach((opt) => map.set(opt.id, opt));
+    return map;
+  }, [componentOptions]);
   const importItems = useMemo(
     () =>
       itemType === 'raw_material'
-        ? rawMaterials.map((m) => ({ id: m.id, code: m.code, name: m.name }))
+        ? componentOptions.map((m) => ({ id: m.id, code: m.code, name: m.name }))
         : products.map((p) => ({ id: p.id, code: p.code, name: p.name })),
-    [itemType, products, rawMaterials],
+    [itemType, products, componentOptions],
   );
   const itemTypeLabel = itemType === 'raw_material'
     ? t('modalManager.importInventoryInByCode.itemType.rawMaterial')
@@ -216,12 +234,13 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
 
       for (let i = 0; i < mergedRows.length; i++) {
         const row = mergedRows[i];
+        const component = itemType === 'raw_material' ? componentById.get(row.productId) : undefined;
         await stockService.createMovement({
           warehouseId,
           locationId: row.locationId,
           locationCode: row.locationCode,
-          itemType,
-          itemId: row.productId,
+          itemType: component?.stockItemType || itemType,
+          itemId: component?.id || row.productId,
           itemName: row.productName,
           itemCode: row.productCode,
           movementType: 'IN',

@@ -52,12 +52,13 @@ export function downloadProductComponentsTemplate() {
       'الكمية المستخدمة',
       'تكلفة الوحدة',
       'كود اللوكيشن',
+      'كود اللوكيشن السابق',
       'رصيد المكون',
     ],
-    ['SK-999N', 'MAT-001', 'موتور نحاس', 1, 18, '20-01-0', 100],
-    ['SK-999N', 'MAT-002', 'هيكل بلاستيك', 1, 7.5, '20-01-0', 50],
-    ['PRD-002', 'MAT-003', 'جلدة مانعة للتسرب', 2, 1.2, '', ''],
-    ['PRD-003', 'MAT-004', 'قماش خارجي', 1.5, 22, '20-02-1', 200],
+    ['SK-999N', 'MAT-001', 'موتور نحاس', 1, 18, '20-01-0', '20-01-0', 100],
+    ['SK-999N', 'MAT-002', 'هيكل بلاستيك', 1, 7.5, '20-01-0', '20-01-0', 50],
+    ['PRD-002', 'MAT-003', 'جلدة مانعة للتسرب', 2, 1.2, '', '', ''],
+    ['PRD-003', 'MAT-004', 'قماش خارجي', 1.5, 22, '20-02-1', '20-02-1', 200],
   ];
   const ws = XLSX.utils.aoa_to_sheet(rows);
   // Note under headers as second info row would break parser — keep sample with balances
@@ -68,6 +69,7 @@ export function downloadProductComponentsTemplate() {
     { wch: 16 },
     { wch: 14 },
     { wch: 16 },
+    { wch: 20 },
     { wch: 14 },
   ];
   if (!ws['!views']) ws['!views'] = [];
@@ -80,8 +82,17 @@ export function downloadProductComponentsTemplate() {
     ['كود المادة / اسم المادة', 'نعم', 'كود جديد + اسم = إنشاء مادة تلقائياً'],
     ['الكمية المستخدمة', 'نعم', 'كمية BOM لكل وحدة منتج'],
     ['تكلفة الوحدة', 'لا', ''],
-    ['كود اللوكيشن', 'لا', 'مثال: 20-01-0 — مطلوب عند جرد رصيد على لوكيشن'],
-    ['رصيد المكون', 'لا', 'اختياري: الكمية الفعلية بعد الجرد (تسوية). فاضي = تحديث BOM فقط بدون لمس المخزون'],
+    ['كود اللوكيشن', 'لا', 'اللوكيشن الهدف للجرد/النقل'],
+    [
+      'كود اللوكيشن السابق',
+      'لا',
+      'للنقل: اتركه كما صُدّر وغيّر كود اللوكيشن — يُصفَّر رصيد السابق',
+    ],
+    [
+      'رصيد المكون',
+      'لا',
+      'اختياري: الكمية الفعلية على اللوكيشن الهدف. فاضي = BOM فقط (أو تصفير السابق إن تغيّر اللوكيشن)',
+    ],
   ];
   const guideWs = XLSX.utils.aoa_to_sheet(guideAoa);
   guideWs['!cols'] = [{ wch: 28 }, { wch: 10 }, { wch: 40 }];
@@ -354,9 +365,76 @@ export function downloadInventoryRawInByCodeTemplate() {
   XLSX.writeFile(wb, 'template_inventory_raw_in_by_code.xlsx');
 }
 
-/** @deprecated Legacy raw materials import removed — use manufacturing materials. */
+/** Template for manufacturing materials master (round-trip with export). */
+export function downloadMaterialsTemplate() {
+  const wb = XLSX.utils.book_new();
+  const rows: (string | number)[][] = [
+    [
+      'الكود الحالي',
+      'الكود الجديد',
+      'اسم المادة',
+      'الفئة',
+      'النوع',
+      'الوحدة الأساسية',
+      'وحدة الشراء',
+      'معامل التحويل',
+      'تكلفة الشراء',
+      'هالك %',
+      'الحد الأدنى للمخزون',
+      'يُصنع داخلياً',
+      'كود المنتج المرتبط',
+      'الحالة',
+    ],
+    ['MAT-001', '', 'موتور نحاس', 'كهرباء', 'مادة خام', 'قطعة', 'قطعة', 1, 18, 2, 10, 'لا', '', 'نشط'],
+    ['MAT-002', 'MAT-002B', 'هيكل بلاستيك', 'بلاستيك', 'مادة خام', 'قطعة', 'قطعة', 1, 7.5, 0, 20, 'لا', '', 'نشط'],
+    ['SF-010', '', 'محور نصف مصنع', 'تجميع', 'نصف مصنع', 'قطعة', 'قطعة', 1, 0, 1, 5, 'نعم', 'SK-999N', 'نشط'],
+  ];
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 24 },
+    { wch: 16 },
+    { wch: 14 },
+    { wch: 14 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 12 },
+    { wch: 10 },
+    { wch: 16 },
+    { wch: 12 },
+    { wch: 16 },
+    { wch: 10 },
+  ];
+  if (!ws['!views']) ws['!views'] = [];
+  (ws['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, ws, 'المواد التصنيعية');
+
+  const guideAoa: (string | number)[][] = [
+    ['العمود', 'إلزامي؟', 'ملاحظات'],
+    ['الكود الحالي', 'للتحديث', 'اتركه كما صُدّر — مفتاح المطابقة (لا تغيّره)'],
+    ['الكود الجديد', 'لا', 'غيّره لتحديث كود المادة؛ لو سيبه زي الحالي = بدون تغيير للكود'],
+    ['اسم المادة', 'للإنشاء', 'عند التحديث: عمود فاضي = لا تغيّر الاسم'],
+    ['الفئة', 'لا', 'اسم الفئة أو المسار الكامل (أ > ب)'],
+    ['النوع', 'لا', 'مادة خام / نصف مصنع / مستهلكات / تعبئة وتغليف'],
+    ['الوحدة الأساسية', 'لا', 'قطعة / كجم / جرام / متر / لتر'],
+    ['يُصنع داخلياً', 'لا', 'نعم أو لا (داخلي / شراء)'],
+    ['كود المنتج المرتبط', 'لا', 'اختياري لربط تكلفة التصنيع بمنتج'],
+    ['الحالة', 'لا', 'نشط أو موقوف'],
+    ['—', '—', 'الأعمدة غير المعبأة لا تُعاد كتابة قيمها الأصلية عند التحديث'],
+  ];
+  const guideWs = XLSX.utils.aoa_to_sheet(guideAoa);
+  guideWs['!cols'] = [{ wch: 22 }, { wch: 10 }, { wch: 48 }];
+  if (!guideWs['!views']) guideWs['!views'] = [];
+  (guideWs['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, guideWs, 'تعليمات');
+
+  XLSX.writeFile(wb, 'template_manufacturing_materials.xlsx');
+}
+
+/** @deprecated Use downloadMaterialsTemplate — manufacturing materials master. */
 export function downloadRawMaterialsMasterTemplate() {
-  console.warn('downloadRawMaterialsMasterTemplate is deprecated; use /manufacturing/materials');
+  downloadMaterialsTemplate();
 }
 
 export function downloadUsersTemplate() {

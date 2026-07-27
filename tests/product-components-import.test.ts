@@ -253,24 +253,101 @@ describe('parseProductComponentsFromBuffer', () => {
     expect(filtered.stockMovements[0].deltaQuantity).toBe(-40);
   });
 
-  it('ignores stock when balance column is empty', () => {
+  it('zeros previous location and sets new location when moving', () => {
     const data = makeBuffer([
-      ['كود المنتج', 'كود المادة', 'الكمية المستخدمة'],
-      ['SK-999N', 'MAT-001', 2],
+      [
+        'كود المنتج',
+        'كود المادة',
+        'الكمية المستخدمة',
+        'كود اللوكيشن',
+        'كود اللوكيشن السابق',
+        'رصيد المكون',
+      ],
+      ['SK-999N', 'MAT-001', 1, '20-02-0', '20-01-0', 100],
     ]);
 
+    const locations2 = [
+      ...locations,
+      { id: 'loc2', code: '20-02-0', warehouseId: 'wh1', warehouseName: 'خام', isActive: true },
+    ];
+
     const parsed = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations: locations2,
+    });
+
+    expect(parsed.validCount).toBe(1);
+    expect(parsed.rows[0].previousLocationId).toBe('loc1');
+    expect(parsed.rows[0].locationId).toBe('loc2');
+
+    const filtered = applySkipExistingProductComponents(parsed, {
+      bomKeys: new Set(),
+      stockQtyByKey: new Map([
+        [stockExistKeyForLocation('m1', 'loc1'), 100],
+        [stockExistKeyForLocation('m1', 'loc2'), 0],
+      ]),
+    });
+
+    expect(filtered.stockMovementCount).toBe(2);
+    const zeroOld = filtered.stockMovements.find((m) => m.locationId === 'loc1');
+    const setNew = filtered.stockMovements.find((m) => m.locationId === 'loc2');
+    expect(zeroOld?.quantity).toBe(0);
+    expect(zeroOld?.deltaQuantity).toBe(-100);
+    expect(setNew?.quantity).toBe(100);
+    expect(setNew?.deltaQuantity).toBe(100);
+    expect(filtered.rows[0].skipNotes?.some((n) => n.includes('تصفير'))).toBe(true);
+  });
+
+  it('zeros previous location only when balance is empty', () => {
+    const data = makeBuffer([
+      [
+        'كود المنتج',
+        'كود المادة',
+        'الكمية المستخدمة',
+        'كود اللوكيشن',
+        'كود اللوكيشن السابق',
+      ],
+      ['SK-999N', 'MAT-001', 1, '20-02-0', '20-01-0'],
+    ]);
+
+    const locations2 = [
+      ...locations,
+      { id: 'loc2', code: '20-02-0', warehouseId: 'wh1', warehouseName: 'خام', isActive: true },
+    ];
+
+    const parsed = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations: locations2,
+    });
+
+    const filtered = applySkipExistingProductComponents(parsed, {
+      bomKeys: new Set(),
+      stockQtyByKey: new Map([[stockExistKeyForLocation('m1', 'loc1'), 40]]),
+    });
+
+    expect(filtered.stockMovementCount).toBe(1);
+    expect(filtered.stockMovements[0].locationId).toBe('loc1');
+    expect(filtered.stockMovements[0].deltaQuantity).toBe(-40);
+  });
+
+  it('errors when moving with balance but no new location', () => {
+    const data = makeBuffer([
+      [
+        'كود المنتج',
+        'كود المادة',
+        'الكمية المستخدمة',
+        'كود اللوكيشن السابق',
+        'رصيد المكون',
+      ],
+      ['SK-999N', 'MAT-001', 1, '20-01-0', 50],
+    ]);
+
+    const result = parseProductComponentsFromBuffer(data, products, {
       manufacturingMaterials: materials,
       locations,
     });
 
-    const filtered = applySkipExistingProductComponents(parsed, {
-      bomKeys: new Set([bomExistKey('p1', 'm1')]),
-      stockQtyByKey: new Map([[stockExistKeyForLocation('m1', 'loc1'), 100]]),
-    });
-
-    expect(filtered.rows[0].balanceProvided).toBe(false);
-    expect(filtered.stockMovementCount).toBe(0);
-    expect(filtered.bomGroups[0].items[0].quantityUsed).toBe(2);
+    expect(result.errorCount).toBe(1);
+    expect(result.rows[0].errors.some((e) => e.includes('اللوكيشن الجديد'))).toBe(true);
   });
 });

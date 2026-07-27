@@ -1,5 +1,5 @@
 import type { StockTransferPrintData } from '../components/StockTransferPrint';
-import type { TransferRequestLine } from '../types';
+import type { InventoryItemType, TransferRequestLine } from '../types';
 import { getTransferDisplay, type TransferDisplayUnitMode } from './transferUnits';
 
 export type TransferUnit = 'piece' | 'carton';
@@ -17,6 +17,8 @@ export type TransferItemOption = {
   code: string;
   minStock: number;
   unitsPerCarton?: number;
+  /** Actual stock ledger type (e.g. manufacturing `material` vs legacy `raw_material`). */
+  stockItemType?: InventoryItemType;
 };
 
 export const INV_REF_REGEX = /^INV-(\d+)$/i;
@@ -84,8 +86,9 @@ export function buildTransferRequestLines(
     .map((line): TransferRequestLine | null => {
       const item = getItemById(line.itemId);
       if (!item) return null;
+      const stockItemType = item.stockItemType || itemType;
       return {
-        itemType,
+        itemType: stockItemType,
         itemId: item.id,
         itemName: item.name,
         itemCode: item.code,

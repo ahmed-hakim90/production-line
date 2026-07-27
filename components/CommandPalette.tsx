@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { usePermission } from '@/utils/permissions';
+import { binaryFilterItems, buildBinarySearchIndex } from '@/utils/binarySearch';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { getPortalContainer } from '@/lib/portalRoot';
 
@@ -34,12 +35,72 @@ interface PaletteItem {
   groupIcon: string;
   icon: string;
   path: string;
+  keywords?: string[];
 }
 
 interface CommandPaletteProps {
   open: boolean;
   onClose: () => void;
 }
+
+/** Extra ops shortcuts for مخزن المستلزمات (beyond sidebar menu entries). */
+const SUPPLIES_WAREHOUSE_SHORTCUTS: Array<{
+  key: string;
+  label: string;
+  icon: string;
+  path: string;
+  permission: Parameters<ReturnType<typeof usePermission>['can']>[0];
+  keywords: string[];
+}> = [
+  {
+    key: 'supplies-balances',
+    label: 'أرصدة المستلزمات',
+    icon: 'inventory_2',
+    path: '/inventory/balances?itemType=raw_material',
+    permission: 'inventory.view',
+    keywords: ['مستلزم', 'أرصدة', 'مكونات', 'رصيد'],
+  },
+  {
+    key: 'supplies-receive',
+    label: 'استلام مكونات المستلزمات',
+    icon: 'inventory',
+    path: '/inventory/raw-materials/receive',
+    permission: 'inventory.transactions.create',
+    keywords: ['مستلزم', 'استلام', 'مكونات', 'وارد'],
+  },
+  {
+    key: 'supplies-issue',
+    label: 'صرف إنتاج المستلزمات',
+    icon: 'fact_check',
+    path: '/inventory/production-issues',
+    permission: 'inventory.view',
+    keywords: ['مستلزم', 'صرف', 'إنتاج', 'مكونات'],
+  },
+  {
+    key: 'supplies-out',
+    label: 'صرف يدوي للمستلزمات',
+    icon: 'remove_circle',
+    path: '/inventory/movements?itemType=raw_material&movementType=OUT',
+    permission: 'inventory.transactions.create',
+    keywords: ['مستلزم', 'صرف', 'يدوي', 'خروج'],
+  },
+  {
+    key: 'supplies-transfer',
+    label: 'تحويل مكونات المستلزمات',
+    icon: 'sync_alt',
+    path: '/inventory/movements?itemType=raw_material&movementType=TRANSFER',
+    permission: 'inventory.transactions.create',
+    keywords: ['مستلزم', 'تحويل', 'مكونات'],
+  },
+  {
+    key: 'supplies-count-match',
+    label: 'جرد ومطابقة المستلزمات',
+    icon: 'checklist',
+    path: '/inventory/counts?from=supplies',
+    permission: 'inventory.counts.manage',
+    keywords: ['مستلزم', 'جرد', 'مطابقة', 'فروقات'],
+  },
+];
 
 const PALETTE_ICON_MAP: Record<string, LucideIcon> = {
   analytics: BarChart3,
@@ -85,20 +146,54 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
             groupIcon: group.icon,
             icon: item.icon,
             path: item.path,
+            keywords: item.label.includes('مستلزم')
+              ? ['مستلزم', 'مكونات', 'مخزن المستلزمات']
+              : undefined,
           });
         }
+      });
+    });
+    const existingKeys = new Set(items.map((i) => i.key));
+    SUPPLIES_WAREHOUSE_SHORTCUTS.forEach((shortcut) => {
+      if (!can(shortcut.permission)) return;
+      if (existingKeys.has(shortcut.key)) return;
+      items.push({
+        key: shortcut.key,
+        label: shortcut.label,
+        group: 'مخزن المستلزمات',
+        groupIcon: 'warehouse',
+        icon: shortcut.icon,
+        path: shortcut.path,
+        keywords: shortcut.keywords,
       });
     });
     return items;
   }, [can]);
 
-  const filtered = useMemo(() => {
-    if (!query.trim()) return allItems.slice(0, 8);
-    const q = query.toLowerCase().trim();
-    return allItems.filter(
-      (i) => i.label.includes(q) || i.group.includes(q) || i.path.includes(q),
-    ).slice(0, 10);
-  }, [query, allItems]);
+  const searchIndex = useMemo(
+    () =>
+      buildBinarySearchIndex(allItems, (i) => [
+        i.label,
+        i.group,
+        i.path,
+        ...(i.keywords || []),
+      ]),
+    [allItems],
+  );
+
+  const filtered = useMemo(
+    () =>
+      binaryFilterItems(
+        allItems,
+        query,
+        (i) => [i.label, i.group, i.path, ...(i.keywords || [])],
+        {
+          index: searchIndex,
+          limit: query.trim() ? 10 : 8,
+        },
+      ),
+    [query, allItems, searchIndex],
+  );
 
   useEffect(() => {
     if (open) {

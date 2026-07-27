@@ -1,0 +1,610 @@
+/**
+ * Excel import for manufacturing materials — create/update by business code.
+ * Round-trip: export → edit → re-upload merges only provided columns (preserves identity).
+ */
+import * as XLSX from 'xlsx';
+import { toEnglishDigits } from '../lib/englishDigits';
+import { normalizeCategoryName } from '../modules/catalog/lib/categoryTree';
+import {
+  LEGACY_UNIT_TO_BASE,
+  MATERIAL_TYPE_LABELS,
+  MATERIAL_UNIT_LABELS,
+  type Material,
+  type MaterialType,
+  type MaterialUnit,
+} from '../modules/manufacturing/types';
+
+export type MaterialImportAction = 'create' | 'update';
+
+export interface MaterialImportCategory {
+  id: string;
+  name: string;
+  breadcrumb?: string;
+}
+
+export interface MaterialImportProductRef {
+  id: string;
+  code: string;
+}
+
+export interface ParsedMaterialRow {
+  rowIndex: number;
+  action: MaterialImportAction;
+  matchedId?: string;
+  currentCode?: string;
+  newCode?: string;
+  providedFields: {
+    name: boolean;
+    code: boolean;
+    category: boolean;
+    type: boolean;
+    baseUnit: boolean;
+    purchaseUnit: boolean;
+    conversionRate: boolean;
+    purchaseCost: boolean;
+    wastePercent: boolean;
+    minStock: boolean;
+    isManufacturedInternally: boolean;
+    manufacturedProductCode: boolean;
+    isActive: boolean;
+  };
+  name: string;
+  code: string;
+  categoryId: string | null;
+  categoryName: string;
+  type: MaterialType;
+  baseUnit: MaterialUnit;
+  purchaseUnit: string;
+  conversionRate: number;
+  purchaseCost: number;
+  wastePercent: number;
+  minStock: number;
+  isManufacturedInternally: boolean;
+  manufacturedProductId: string | null;
+  manufacturedProductCode: string;
+  isActive: boolean;
+  errors: string[];
+  changes?: string[];
+}
+
+export interface MaterialImportResult {
+  rows: ParsedMaterialRow[];
+  totalRows: number;
+  validCount: number;
+  errorCount: number;
+  newCount: number;
+  updateCount: number;
+  fileErrors?: string[];
+}
+
+export interface MaterialImportParseOptions {
+  categories?: MaterialImportCategory[];
+  products?: MaterialImportProductRef[];
+}
+
+const HEADER_MAP: Record<string, string> = {
+  'اسم المادة': 'name',
+  'المادة': 'name',
+  'الاسم': 'name',
+  'اسم': 'name',
+  'الكود': 'code',
+  'كود': 'code',
+  'كود المادة': 'code',
+  'الكود الحالي': 'currentCode',
+  'كود حالي': 'currentCode',
+  'الكود الجديد': 'newCode',
+  'كود جديد': 'newCode',
+  'الفئة': 'category',
+  'فئة': 'category',
+  'فئة المادة': 'category',
+  'النوع': 'type',
+  'نوع المادة': 'type',
+  'الوحدة': 'baseUnit',
+  'الوحدة الأساسية': 'baseUnit',
+  'وحدة': 'baseUnit',
+  'وحدة الشراء': 'purchaseUnit',
+  'معامل التحويل': 'conversionRate',
+  'معدل التحويل': 'conversionRate',
+  'تكلفة الشراء': 'purchaseCost',
+  'تكلفة': 'purchaseCost',
+  'هالك %': 'wastePercent',
+  'نسبة الهالك': 'wastePercent',
+  'الهالك': 'wastePercent',
+  'الحد الأدنى للمخزون': 'minStock',
+  'حد أدنى': 'minStock',
+  'يُصنع داخلياً': 'isManufacturedInternally',
+  'يصنع داخليا': 'isManufacturedInternally',
+  'التصنيع': 'isManufacturedInternally',
+  'كود المنتج المرتبط': 'manufacturedProductCode',
+  'منتج مرتبط': 'manufacturedProductCode',
+  'الحالة': 'isActive',
+  'نشط': 'isActive',
+};
+
+const TYPE_BY_LABEL: Record<string, MaterialType> = Object.fromEntries(
+  (Object.entries(MATERIAL_TYPE_LABELS) as [MaterialType, string][]).map(([k, v]) => [
+    normalizeCategoryName(v),
+    k,
+  ]),
+) as Record<string, MaterialType>;
+
+const UNIT_BY_LABEL: Record<string, MaterialUnit> = Object.fromEntries(
+  (Object.entries(MATERIAL_UNIT_LABELS) as [MaterialUnit, string][]).map(([k, v]) => [
+    normalizeCategoryName(v),
+    k,
+  ]),
+) as Record<string, MaterialUnit>;
+
+function normalizeHeader(h: string): string {
+  return h.trim().replace(/\s+/g, ' ');
+}
+
+function cellStr(v: unknown): string {
+  return toEnglishDigits(String(v ?? '').trim());
+}
+
+function parseNumber(v: unknown): number | null {
+  const raw = cellStr(v).replace(/,/g, '');
+  if (!raw) return null;
+  const n = Number(raw);
+  return Number.isFinite(n) ? n : null;
+}
+
+function parseBool(v: unknown): boolean | null {
+  const s = normalizeCategoryName(cellStr(v));
+  if (!s) return null;
+  if (['1', 'true', 'yes', 'y', 'نعم', 'ايوه', 'أيوه', 'داخلي', 'داخليًا', 'يصنع داخليا', 'يصنع داخليًا'].includes(s)) {
+    return true;
+  }
+  if (['0', 'false', 'no', 'n', 'لا', 'شراء', 'خارجي', 'موقوف'].includes(s)) {
+    return false;
+  }
+  return null;
+}
+
+function parseActive(v: unknown): boolean | null {
+  const s = normalizeCategoryName(cellStr(v));
+  if (!s) return null;
+  if (['active', 'نشط', 'مفعل', 'مفعّل', '1', 'true', 'yes', 'نعم'].includes(s)) return true;
+  if (['inactive', 'موقوف', 'غير نشط', 'معطل', 'معطّل', '0', 'false', 'no', 'لا'].includes(s)) return false;
+  const b = parseBool(v);
+  return b;
+}
+
+function parseType(v: unknown): MaterialType | null {
+  const raw = cellStr(v);
+  if (!raw) return null;
+  const key = raw.toLowerCase().replace(/-/g, '_');
+  if (key in MATERIAL_TYPE_LABELS) return key as MaterialType;
+  return TYPE_BY_LABEL[normalizeCategoryName(raw)] ?? null;
+}
+
+function parseUnit(v: unknown): MaterialUnit | null {
+  const raw = cellStr(v);
+  if (!raw) return null;
+  const key = raw.toLowerCase();
+  if (key in MATERIAL_UNIT_LABELS) return key as MaterialUnit;
+  if (LEGACY_UNIT_TO_BASE[key]) return LEGACY_UNIT_TO_BASE[key];
+  return UNIT_BY_LABEL[normalizeCategoryName(raw)] ?? null;
+}
+
+function normalizeCode(v: unknown): string {
+  return cellStr(v).toUpperCase();
+}
+
+function buildMaterialLookup(materials: Material[]) {
+  const byCode = new Map<string, Material>();
+  for (const m of materials) {
+    const code = normalizeCode(m.code);
+    if (code) byCode.set(code, m);
+  }
+  return { byCode };
+}
+
+function resolveCategory(
+  label: string,
+  categories: MaterialImportCategory[],
+): { id: string | null; name: string; error?: string } {
+  const want = normalizeCategoryName(label);
+  if (!want) return { id: null, name: '' };
+  const byBreadcrumb = categories.find((c) => normalizeCategoryName(c.breadcrumb || '') === want);
+  if (byBreadcrumb) return { id: byBreadcrumb.id, name: byBreadcrumb.breadcrumb || byBreadcrumb.name };
+  const byName = categories.filter((c) => normalizeCategoryName(c.name) === want);
+  if (byName.length === 1) return { id: byName[0].id, name: byName[0].breadcrumb || byName[0].name };
+  if (byName.length > 1) {
+    return { id: null, name: label, error: `الفئة "${label}" غير فريدة — استخدم المسار الكامل` };
+  }
+  return { id: null, name: label, error: `الفئة "${label}" غير موجودة` };
+}
+
+function describeChanges(existing: Material, next: ParsedMaterialRow): string[] {
+  const changes: string[] = [];
+  if (normalizeCode(existing.code) !== normalizeCode(next.code)) {
+    changes.push(`الكود: ${existing.code} ← ${next.code}`);
+  }
+  if (next.providedFields.name && (existing.name || '') !== next.name) changes.push('الاسم');
+  if (next.providedFields.category && (existing.categoryId || null) !== next.categoryId) changes.push('الفئة');
+  if (next.providedFields.type && existing.type !== next.type) changes.push('النوع');
+  if (next.providedFields.baseUnit && existing.baseUnit !== next.baseUnit) changes.push('الوحدة');
+  if (next.providedFields.purchaseUnit && (existing.purchaseUnit || '') !== next.purchaseUnit) {
+    changes.push('وحدة الشراء');
+  }
+  if (
+    next.providedFields.conversionRate &&
+    Number(existing.conversionRate ?? 1) !== next.conversionRate
+  ) {
+    changes.push('معامل التحويل');
+  }
+  if (next.providedFields.purchaseCost && Number(existing.purchaseCost ?? 0) !== next.purchaseCost) {
+    changes.push('تكلفة الشراء');
+  }
+  if (next.providedFields.wastePercent && Number(existing.wastePercent ?? 0) !== next.wastePercent) {
+    changes.push('الهالك');
+  }
+  if (next.providedFields.minStock && Number(existing.minStock ?? 0) !== next.minStock) {
+    changes.push('حد أدنى');
+  }
+  if (
+    next.providedFields.isManufacturedInternally &&
+    Boolean(existing.isManufacturedInternally) !== next.isManufacturedInternally
+  ) {
+    changes.push('التصنيع');
+  }
+  if (
+    next.providedFields.manufacturedProductCode &&
+    (existing.manufacturedProductId || null) !== next.manufacturedProductId
+  ) {
+    changes.push('المنتج المرتبط');
+  }
+  if (next.providedFields.isActive && (existing.isActive !== false) !== next.isActive) {
+    changes.push('الحالة');
+  }
+  return changes;
+}
+
+function resolveSheetName(sheetNames: string[]): string {
+  const preferred = sheetNames.find((n) => /مواد|material/i.test(n));
+  return preferred ?? sheetNames[0];
+}
+
+export function parseMaterialsFromBuffer(
+  buffer: ArrayBuffer | Uint8Array,
+  existingMaterials: Material[],
+  options: MaterialImportParseOptions = {},
+): MaterialImportResult {
+  const wb = XLSX.read(buffer, { type: 'array' });
+  const sheetName = resolveSheetName(wb.SheetNames);
+  if (!sheetName) {
+    return {
+      rows: [],
+      totalRows: 0,
+      validCount: 0,
+      errorCount: 0,
+      newCount: 0,
+      updateCount: 0,
+      fileErrors: ['الملف لا يحتوي على أوراق'],
+    };
+  }
+
+  const ws = wb.Sheets[sheetName];
+  const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(ws, { defval: '' });
+  const fileErrors: string[] = [];
+  if (!json.length) {
+    return {
+      rows: [],
+      totalRows: 0,
+      validCount: 0,
+      errorCount: 0,
+      newCount: 0,
+      updateCount: 0,
+      fileErrors: ['لا توجد صفوف بيانات'],
+    };
+  }
+
+  const rawHeaders = Object.keys(json[0] || {});
+  const headerMapping: Record<string, string> = {};
+  for (const rawH of rawHeaders) {
+    const mapped = HEADER_MAP[normalizeHeader(rawH)];
+    if (mapped) headerMapping[rawH] = mapped;
+  }
+
+  const hasField = (field: string) => rawHeaders.some((h) => headerMapping[h] === field);
+  if (!hasField('code') && !hasField('currentCode') && !hasField('newCode')) {
+    fileErrors.push('عمود الكود مفقود (الكود / الكود الحالي / الكود الجديد)');
+  }
+
+  const get = (row: Record<string, unknown>, field: string): unknown => {
+    const key = rawHeaders.find((h) => headerMapping[h] === field);
+    return key != null ? row[key] : undefined;
+  };
+
+  const lookup = buildMaterialLookup(existingMaterials);
+  const categories = options.categories ?? [];
+  const productsByCode = new Map(
+    (options.products ?? []).map((p) => [normalizeCode(p.code), p] as const),
+  );
+  const targetCodesInFile = new Set<string>();
+  const rows: ParsedMaterialRow[] = [];
+
+  json.forEach((raw, idx) => {
+    const empty = Object.values(raw).every((v) => cellStr(v) === '');
+    if (empty) return;
+
+    const errors: string[] = [];
+    const providedFields = {
+      name: hasField('name') && cellStr(get(raw, 'name')) !== '',
+      code: false,
+      category: hasField('category'),
+      type: hasField('type') && cellStr(get(raw, 'type')) !== '',
+      baseUnit: hasField('baseUnit') && cellStr(get(raw, 'baseUnit')) !== '',
+      purchaseUnit: hasField('purchaseUnit') && cellStr(get(raw, 'purchaseUnit')) !== '',
+      conversionRate: hasField('conversionRate') && cellStr(get(raw, 'conversionRate')) !== '',
+      purchaseCost: hasField('purchaseCost') && cellStr(get(raw, 'purchaseCost')) !== '',
+      wastePercent: hasField('wastePercent') && cellStr(get(raw, 'wastePercent')) !== '',
+      minStock: hasField('minStock') && cellStr(get(raw, 'minStock')) !== '',
+      isManufacturedInternally:
+        hasField('isManufacturedInternally') && cellStr(get(raw, 'isManufacturedInternally')) !== '',
+      manufacturedProductCode: hasField('manufacturedProductCode'),
+      isActive: hasField('isActive') && cellStr(get(raw, 'isActive')) !== '',
+    };
+
+    const currentCode = normalizeCode(get(raw, 'currentCode') ?? (hasField('currentCode') ? '' : get(raw, 'code')));
+    const newCode = normalizeCode(get(raw, 'newCode'));
+    const plainCode = normalizeCode(get(raw, 'code'));
+
+    let matched: Material | undefined;
+    if (currentCode) matched = lookup.byCode.get(currentCode);
+    else if (plainCode && !hasField('currentCode') && !hasField('newCode')) {
+      matched = lookup.byCode.get(plainCode);
+    }
+
+    const targetCode = newCode || currentCode || plainCode;
+    providedFields.code = Boolean(targetCode);
+
+    if (!targetCode) errors.push('الكود مفقود');
+    if (targetCode) {
+      if (targetCodesInFile.has(targetCode)) {
+        errors.push(`الكود النهائي "${targetCode}" مكرر في الملف`);
+      } else {
+        targetCodesInFile.add(targetCode);
+      }
+    }
+
+    if (hasField('currentCode') && currentCode && !matched) {
+      errors.push(`الكود الحالي "${currentCode}" غير موجود`);
+    }
+
+    if (targetCode) {
+      const owner = lookup.byCode.get(targetCode);
+      if (matched?.id) {
+        if (owner && owner.id !== matched.id) {
+          errors.push(`الكود الجديد "${targetCode}" مستخدم بواسطة مادة أخرى`);
+        }
+      } else if (owner) {
+        // Plain code match without currentCode column → update existing
+        matched = owner;
+      }
+    }
+
+    const name = cellStr(get(raw, 'name'));
+    if (!matched && !name) errors.push('اسم المادة مطلوب للإنشاء');
+
+    let categoryId: string | null = null;
+    let categoryName = '';
+    if (providedFields.category) {
+      const catLabel = cellStr(get(raw, 'category'));
+      const resolved = resolveCategory(catLabel, categories);
+      if (resolved.error) errors.push(resolved.error);
+      categoryId = resolved.id;
+      categoryName = resolved.name;
+    }
+
+    let type: MaterialType = 'raw_material';
+    if (providedFields.type) {
+      const parsed = parseType(get(raw, 'type'));
+      if (!parsed) errors.push('نوع المادة غير معروف');
+      else type = parsed;
+    }
+
+    let baseUnit: MaterialUnit = 'piece';
+    if (providedFields.baseUnit) {
+      const parsed = parseUnit(get(raw, 'baseUnit'));
+      if (!parsed) errors.push('الوحدة الأساسية غير معروفة');
+      else baseUnit = parsed;
+    }
+
+    const purchaseUnit = providedFields.purchaseUnit
+      ? cellStr(get(raw, 'purchaseUnit'))
+      : baseUnit;
+
+    let conversionRate = 1;
+    if (providedFields.conversionRate) {
+      const n = parseNumber(get(raw, 'conversionRate'));
+      if (n == null || n <= 0) errors.push('معامل التحويل يجب أن يكون أكبر من 0');
+      else conversionRate = n;
+    }
+
+    let purchaseCost = 0;
+    if (providedFields.purchaseCost) {
+      const n = parseNumber(get(raw, 'purchaseCost'));
+      if (n == null || n < 0) errors.push('تكلفة الشراء غير صالحة');
+      else purchaseCost = n;
+    }
+
+    let wastePercent = 0;
+    if (providedFields.wastePercent) {
+      const n = parseNumber(get(raw, 'wastePercent'));
+      if (n == null || n < 0) errors.push('نسبة الهالك غير صالحة');
+      else wastePercent = n;
+    }
+
+    let minStock = 0;
+    if (providedFields.minStock) {
+      const n = parseNumber(get(raw, 'minStock'));
+      if (n == null || n < 0) errors.push('الحد الأدنى للمخزون غير صالح');
+      else minStock = n;
+    }
+
+    let isManufacturedInternally = false;
+    if (providedFields.isManufacturedInternally) {
+      const b = parseBool(get(raw, 'isManufacturedInternally'));
+      if (b == null) errors.push('قيمة التصنيع الداخلي غير صالحة (نعم/لا أو داخلي/شراء)');
+      else isManufacturedInternally = b;
+    }
+
+    let manufacturedProductId: string | null = null;
+    let manufacturedProductCode = '';
+    if (providedFields.manufacturedProductCode) {
+      manufacturedProductCode = normalizeCode(get(raw, 'manufacturedProductCode'));
+      if (manufacturedProductCode) {
+        const product = productsByCode.get(manufacturedProductCode);
+        if (!product) errors.push(`كود المنتج المرتبط "${manufacturedProductCode}" غير موجود`);
+        else manufacturedProductId = product.id;
+      }
+    }
+
+    let isActive = true;
+    if (providedFields.isActive) {
+      const a = parseActive(get(raw, 'isActive'));
+      if (a == null) errors.push('الحالة غير صالحة (نشط/موقوف)');
+      else isActive = a;
+    }
+
+    const action: MaterialImportAction = matched?.id ? 'update' : 'create';
+    const row: ParsedMaterialRow = {
+      rowIndex: idx + 2,
+      action,
+      matchedId: matched?.id,
+      currentCode: currentCode || undefined,
+      newCode: newCode || undefined,
+      providedFields,
+      name: name || matched?.name || '',
+      code: targetCode,
+      categoryId,
+      categoryName,
+      type: providedFields.type ? type : matched?.type || type,
+      baseUnit: providedFields.baseUnit ? baseUnit : matched?.baseUnit || baseUnit,
+      purchaseUnit: providedFields.purchaseUnit
+        ? purchaseUnit
+        : matched?.purchaseUnit || purchaseUnit,
+      conversionRate: providedFields.conversionRate
+        ? conversionRate
+        : Number(matched?.conversionRate ?? 1) || 1,
+      purchaseCost: providedFields.purchaseCost
+        ? purchaseCost
+        : Number(matched?.purchaseCost ?? 0),
+      wastePercent: providedFields.wastePercent
+        ? wastePercent
+        : Number(matched?.wastePercent ?? 0),
+      minStock: providedFields.minStock ? minStock : Number(matched?.minStock ?? 0),
+      isManufacturedInternally: providedFields.isManufacturedInternally
+        ? isManufacturedInternally
+        : Boolean(matched?.isManufacturedInternally),
+      manufacturedProductId: providedFields.manufacturedProductCode
+        ? manufacturedProductId
+        : matched?.manufacturedProductId ?? null,
+      manufacturedProductCode,
+      isActive: providedFields.isActive ? isActive : matched?.isActive !== false,
+      errors,
+      changes: matched ? undefined : undefined,
+    };
+
+    if (matched && errors.length === 0) {
+      row.changes = describeChanges(matched, row);
+    }
+
+    rows.push(row);
+  });
+
+  const validRows = rows.filter((r) => r.errors.length === 0);
+  return {
+    rows,
+    totalRows: rows.length,
+    validCount: validRows.length,
+    errorCount: rows.length - validRows.length,
+    newCount: validRows.filter((r) => r.action === 'create').length,
+    updateCount: validRows.filter((r) => r.action === 'update').length,
+    fileErrors: fileErrors.length ? fileErrors : undefined,
+  };
+}
+
+export function parseMaterialsExcel(
+  file: File,
+  existingMaterials: Material[],
+  options: MaterialImportParseOptions = {},
+): Promise<MaterialImportResult> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        resolve(parseMaterialsFromBuffer(reader.result as ArrayBuffer, existingMaterials, options));
+      } catch (err) {
+        reject(err);
+      }
+    };
+    reader.onerror = () => reject(new Error('فشل في قراءة الملف'));
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/** Payload for create — all required Material fields. */
+export function toMaterialCreateData(
+  row: ParsedMaterialRow,
+): Omit<Material, 'id' | 'createdAt' | 'tenantId'> {
+  return {
+    code: row.code,
+    name: row.name,
+    type: row.type,
+    categoryId: row.categoryId,
+    categoryName: row.categoryName,
+    baseUnit: row.baseUnit,
+    purchaseUnit: row.purchaseUnit || row.baseUnit,
+    conversionRate: row.conversionRate || 1,
+    purchaseCost: row.purchaseCost,
+    wastePercent: row.wastePercent,
+    minStock: row.minStock,
+    isManufacturedInternally: row.isManufacturedInternally,
+    manufacturedProductId: row.manufacturedProductId || undefined,
+    linkedCostCenterIds: [],
+    isActive: row.isActive,
+  };
+}
+
+/**
+ * Merge import row onto existing material — only overwrite provided columns.
+ * Never wipes id / tenantId / createdAt / legacyRawMaterialId / linkedCostCenterIds
+ * unless those columns are intentionally supported later.
+ */
+export function toMaterialUpdateData(
+  row: ParsedMaterialRow,
+  existing: Material,
+): Partial<Material> {
+  const patch: Partial<Material> = {};
+  if (row.providedFields.code) patch.code = row.code;
+  if (row.providedFields.name) patch.name = row.name;
+  if (row.providedFields.category) {
+    patch.categoryId = row.categoryId;
+    patch.categoryName = row.categoryName;
+  }
+  if (row.providedFields.type) patch.type = row.type;
+  if (row.providedFields.baseUnit) patch.baseUnit = row.baseUnit;
+  if (row.providedFields.purchaseUnit) patch.purchaseUnit = row.purchaseUnit;
+  if (row.providedFields.conversionRate) patch.conversionRate = row.conversionRate;
+  if (row.providedFields.purchaseCost) patch.purchaseCost = row.purchaseCost;
+  if (row.providedFields.wastePercent) patch.wastePercent = row.wastePercent;
+  if (row.providedFields.minStock) patch.minStock = row.minStock;
+  if (row.providedFields.isManufacturedInternally) {
+    patch.isManufacturedInternally = row.isManufacturedInternally;
+  }
+  if (row.providedFields.manufacturedProductCode) {
+    patch.manufacturedProductId = row.manufacturedProductId || undefined;
+  }
+  if (row.providedFields.isActive) patch.isActive = row.isActive;
+
+  // Ensure code always present when renaming via newCode
+  if (!patch.code && row.code && normalizeCode(existing.code) !== normalizeCode(row.code)) {
+    patch.code = row.code;
+  }
+
+  return patch;
+}

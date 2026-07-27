@@ -83,11 +83,18 @@ export const StockBalances: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    if (!scoped) return;
+    const queryWarehouseId = searchParams.get('warehouseId') || '';
     setWarehouseFilter((prev) =>
-      resolveScopedWarehouseId(prev, [searchParams.get('warehouseId') || '', scopedWarehouseId]),
+      resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]),
     );
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
+
+  useEffect(() => {
+    const queryItemType = searchParams.get('itemType') || '';
+    if (queryItemType === 'raw_material' || queryItemType === 'finished_good' || queryItemType === 'material') {
+      setItemTypeFilter(queryItemType);
+    }
+  }, [searchParams]);
 
   const warehouseNameById = useMemo(
     () => new Map(warehouses.map((w) => [w.id, w.name])),

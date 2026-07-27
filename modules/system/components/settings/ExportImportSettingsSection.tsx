@@ -4,6 +4,7 @@ import {
   Check,
   Circle,
   FileText,
+  GitBranch,
   IdCard,
   ImageUp,
   Info,
@@ -38,6 +39,7 @@ const SETTINGS_ICON_MAP: Record<string, LucideIcon> = {
   description: FileText,
   assignment: ScrollText,
   inventory_2: Boxes,
+  account_tree: GitBranch,
   receipt_long: ScrollText,
   groups: IdCard,
   person: IdCard,
@@ -166,7 +168,9 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
           {[
             { section: 'تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'description', color: 'text-blue-500', features: ['تصدير التقارير بالتاريخ والخط والمنتج والتصفية', 'تكلفة الوحدة (حسب الصلاحية)', 'بيانات أمر الشغل (الكمية والعمالة المخططة)', 'صف إجمالي بالمجاميع'] },
             { section: 'أوامر الشغل', page: 'صفحة التقارير / أوامر الشغل', path: '/work-orders', icon: 'assignment', color: 'text-amber-500', features: ['رقم الأمر، المنتج، الخط، المشرف', 'الكمية المخططة / المنتجة / المتبقية', 'عدد العمالة، التكلفة المقدرة والفعلية', 'الحالة والتفاصيل'] },
-            { section: 'المنتجات (تخصيص)', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['الكود والاسم والفئة', 'بيانات المخزون (افتتاحي / إنتاج / هالك / حالي)', 'تكاليف المنتج (صينية، مواد خام، تغليف)', 'تكاليف صناعية (م. وغ.م)', 'سعر البيع وهامش الربح', 'مودال تخصيص الأعمدة قبل التصدير'] },
+            { section: 'المنتجات (تخصيص)', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['تصدير المنتجات مع تخصيص الأعمدة والمخزن', 'تصدير منتجات بإنتاج الشهر المختار', 'تكاليف المنتج وسعر البيع (حسب الصلاحية)', 'مودال تخصيص الأعمدة قبل التصدير'] },
+            { section: 'مكونات المنتجات (BOM)', page: 'صفحة المنتجات', path: '/products', icon: 'account_tree', color: 'text-cyan-500', features: ['تصدير شيت مسطّح: منتج × مكوّن × كمية/وحدة', 'أرصدة اللوكيشنات الحالية مع كود اللوكيشن السابق للنقل', 'متوافق مع رفع/تحديث المكونات (round-trip)'] },
+            { section: 'المواد التصنيعية', page: 'صفحة المواد التصنيعية', path: '/manufacturing/materials', icon: 'precision_manufacturing', color: 'text-lime-600', features: ['تصدير كل تفاصيل المادة (كود، نوع، وحدة، تكلفة، هالك، تصنيع داخلي)', 'أعمدة الكود الحالي/الجديد للتحديث بدون تغيير الأصل', 'متوافق مع الرفع مرة أخرى (round-trip)'] },
             { section: 'منتج واحد (تفصيلي)', page: 'صفحة تفاصيل المنتج', path: '/products', icon: 'receipt_long', color: 'text-teal-500', features: ['شيت بيانات المنتج الأساسية', 'شيت تفصيل التكاليف مع سعر البيع وهامش الربح', 'شيت المواد الخام المستخدمة', 'شيت التكلفة حسب خط الإنتاج'] },
             { section: 'الموظفون', page: 'صفحة الموظفين', path: '/hr/employees', icon: 'groups', color: 'text-purple-500', features: ['الكود والاسم والقسم المعروف', 'نوع التوظيف والمستوى والراتب', 'الوردية والبريد والحالة والصلاحيات'] },
             { section: 'تقارير مشرف', page: 'صفحة تفاصيل المشرف', path: '/supervisors', icon: 'person', color: 'text-orange-500', features: ['تقارير الإنتاج الخاصة بالمشرف', 'تكلفة الوحدة (حسب الصلاحية)', 'صف إجمالي بالمجاميع'] },
@@ -202,7 +206,9 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
         <div className="space-y-3">
           {[
             { section: 'استيراد تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'upload_file', color: 'text-blue-500', features: ['رفع ملف Excel يحتوي على تقارير الإنتاج', 'مطابقة تلقائية للخط والمنتج والتصفية (بالاسم أو الكود)', 'كشف التكرار مع التقارير الموجودة', 'معاينة البيانات قبل الحفظ مع عرض الأخطاء', 'تحميل نموذج Excel فارغ مع قوائم الاختيار'] },
-            { section: 'استيراد المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['رفع ملف Excel بأسماء وأكواد المنتجات', 'تكاليف التعبئة والتغليف', 'سعر البيع', 'كشف التكرار بالاسم والكود', 'معاينة وتحقق قبل الحفظ'] },
+            { section: 'استيراد المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'inventory_2', color: 'text-emerald-500', features: ['رفع ملف Excel بأسماء وأكواد المنتجات', 'تكاليف التعبئة والتغليف وسعر البيع', 'كشف التكرار بالاسم والكود', 'معاينة وتحقق قبل الحفظ'] },
+            { section: 'استيراد/تحديث مكونات المنتجات', page: 'صفحة المنتجات', path: '/products', icon: 'account_tree', color: 'text-cyan-500', features: ['تحديث كمية/تكلفة BOM للموجود وإضافة مكوّنات جديدة', 'رصيد المكون اختياري = الكمية الفعلية بعد الجرد (تسوية ADJUSTMENT)', 'نقل لوكيشن عبر كود اللوكيشن السابق مع تصفير الرصيد القديم', 'إنشاء مواد جديدة تلقائياً عند كود + اسم جديد'] },
+            { section: 'استيراد/تحديث المواد التصنيعية', page: 'صفحة المواد التصنيعية', path: '/manufacturing/materials', icon: 'precision_manufacturing', color: 'text-lime-600', features: ['مطابقة بالكود الحالي بدون إنشاء نسخة جديدة', 'الأعمدة الفارغة لا تمس القيم الأصلية', 'معاينة (جديد/تحديث/أخطاء) قبل الحفظ'] },
             { section: 'استيراد الموظفين', page: 'وحدة HR', path: '/hr/employees/import', icon: 'person_add', color: 'text-purple-500', features: ['رفع بيانات الموظفين من Excel', 'إنشاء الأقسام المعروفة والورديات', 'بيانات الراتب ونوع التوظيف'] },
           ].map((item) => (
             <div key={item.section} className="p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] hover:bg-[var(--color-bg)]/60 transition-all">
@@ -236,6 +242,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
           {[
             { label: 'قالب تقارير الإنتاج', desc: 'يتضمن أسماء الخطوط والمنتجات المعروفة', icon: 'description', page: 'صفحة التقارير → تحميل قالب' },
             { label: 'قالب المنتجات', desc: 'يتضمن أعمدة التكلفة وسعر البيع', icon: 'inventory_2', page: 'صفحة المنتجات → تحميل نموذج' },
+            { label: 'قالب المواد التصنيعية', desc: 'تصدير/تحديث بالكود الحالي بدون تغيير الأصل', icon: 'precision_manufacturing', page: 'المواد التصنيعية → تحميل قالب' },
             { label: 'قالب الموظفين', desc: 'يتضمن الأقسام المعروفة والورديات', icon: 'person_add', page: 'HR → استيراد الموظفين' },
           ].map((t) => (
             <div key={t.label} className="p-4 rounded-[var(--border-radius-lg)] border border-dashed border-[var(--color-border)] bg-[var(--color-bg)]/50">

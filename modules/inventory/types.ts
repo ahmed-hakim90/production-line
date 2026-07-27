@@ -391,6 +391,8 @@ export interface ProductionIssueOrder {
   submittedAt?: string;
   issuedAt?: string;
   issuedBy?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
   note?: string;
   tenantId?: string;
 }
