@@ -287,7 +287,7 @@ export interface ProductionReport {
   productionPlanLinkMode?: 'manual' | 'auto';
   assemblyModeSnapshot?: ProductAssemblyMode;
   workerTargetsApplied?: boolean;
-  workerTargetSource?: 'line_product' | 'none';
+  workerTargetSource?: 'line_product' | 'plan_daily' | 'none';
   laborAssignmentSource?: 'line_worker_assignments' | 'manual' | 'none';
   /** When set for packaging reports, quantities come from lines; productId/quantityProduced are derived for legacy fields. */
   packagingLines?: PackagingReportLine[];
@@ -456,6 +456,8 @@ export interface WorkerMonthlyAchievement {
   workerId: string;
   month: string;
   workingDays: number;
+  /** Days in the period where the worker had a daily target (targetQty > 0). */
+  targetDays: number;
   presentDays: number;
   absentDays: number;
   leaveDays: number;

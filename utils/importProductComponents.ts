@@ -1,6 +1,6 @@
 /**
- * Excel import for product components (BOM) with optional location code + opening balance.
- * One row = one BOM line; optional stock IN is deduped by material + location.
+ * Excel import for product components (BOM) with optional location + absolute balance (جرد).
+ * One row = one BOM line; optional رصيد المكون = target quantity via ADJUSTMENT (not cumulative IN).
  */
 import * as XLSX from 'xlsx';
 import type { FirestoreProduct } from '../types';
@@ -30,6 +30,8 @@ export interface ParsedProductComponentRow {
   locationId?: string;
   locationWarehouseId?: string;
   locationWarehouseName?: string;
+  /** True when «رصيد المكون» cell was filled (including 0). */
+  balanceProvided: boolean;
   balanceQty: number;
   matchedMaterialId?: string;
   matchedMaterialName?: string;
@@ -37,9 +39,9 @@ export interface ParsedProductComponentRow {
   matchedMaterialCode?: string;
   /** True when material code+name are new and will be created on save. */
   willCreateMaterial?: boolean;
-  /** Skip BOM upsert because product already has this material. */
+  /** Informational: BOM line already exists and will be updated. */
   skipBom?: boolean;
-  /** Skip opening-balance IN because stock already exists for material/location. */
+  /** Skip stock movement (e.g. target equals current). */
   skipStock?: boolean;
   skipNotes?: string[];
   errors: string[];
@@ -57,7 +59,12 @@ export interface ProductComponentStockMovementPlan {
   materialName: string;
   materialCode: string;
   materialUnit?: string;
+  /** Absolute target quantity (رصيد المكون / الكمية الفعلية). */
   quantity: number;
+  /** Current on-hand at plan time (0 if unknown / new). */
+  currentQuantity: number;
+  /** target − current; posted as ADJUSTMENT.quantity */
+  deltaQuantity: number;
   locationId?: string;
   locationCode?: string;
   warehouseId?: string;
@@ -99,10 +106,13 @@ export interface ProductComponentsImportResult {
 }
 
 export interface ProductComponentsExistingLookup {
-  /** Keys: `${productId}__${materialId}` */
+  /** Keys: `${productId}__${materialId}` — existing BOM lines (for update notes). */
   bomKeys: Set<string>;
-  /** Keys: `${materialId}__loc__${locationId}` or `${materialId}__wh__${warehouseId}` or `${materialId}__any` */
-  stockKeys: Set<string>;
+  /**
+   * Current quantities keyed by stockExistKeyForLocation / stockExistKeyForWarehouse.
+   * Used to compute ADJUSTMENT delta toward absolute target.
+   */
+  stockQtyByKey: Map<string, number>;
 }
 
 export function bomExistKey(productId: string, materialId: string): string {
@@ -121,9 +131,25 @@ export function stockExistKeyAny(materialId: string): string {
   return `${materialId}__any`;
 }
 
+function resolveCurrentStockQty(
+  existing: ProductComponentsExistingLookup,
+  materialId: string,
+  locationId?: string,
+  warehouseId?: string,
+): number {
+  if (locationId) {
+    return existing.stockQtyByKey.get(stockExistKeyForLocation(materialId, locationId)) ?? 0;
+  }
+  if (warehouseId) {
+    return existing.stockQtyByKey.get(stockExistKeyForWarehouse(materialId, warehouseId)) ?? 0;
+  }
+  return 0;
+}
+
 /**
- * Marks BOM/stock rows that already exist so save can skip them (no double IN / no BOM overwrite).
- * Rebuilds bomGroups + stockMovements from remaining actionable rows.
+ * Annotates existing BOM lines (update, not skip) and builds absolute stock adjustment plans.
+ * Empty رصيد المكون → no stock plan. Filled (incl. 0) → target qty; delta 0 → skipStock.
+ * Rebuilds bomGroups + stockMovements from actionable rows.
  */
 export function applySkipExistingProductComponents(
   result: ProductComponentsImportResult,
@@ -143,37 +169,37 @@ export function applySkipExistingProductComponents(
 
     if (materialRef && !materialRef.startsWith('pending:') && row.productId) {
       if (existing.bomKeys.has(bomExistKey(row.productId, materialRef))) {
-        skipBom = true;
-        skipNotes.push('مكون BOM موجود بالفعل على المنتج — سيتم تخطيه');
+        // Keep in bomGroups for upsert — note only (skipBom stays false).
+        skipNotes.push('مكون BOM موجود — سيتم تحديث الكمية/التكلفة');
       }
     }
 
-    if (row.balanceQty > 0 && materialRef && !materialRef.startsWith('pending:')) {
-      const locKey = row.locationId
-        ? stockExistKeyForLocation(materialRef, row.locationId)
-        : '';
-      const whKey = row.locationWarehouseId
-        ? stockExistKeyForWarehouse(materialRef, row.locationWarehouseId)
-        : '';
-      const anyKey = stockExistKeyAny(materialRef);
-      if (
-        (locKey && existing.stockKeys.has(locKey)) ||
-        (whKey && existing.stockKeys.has(whKey)) ||
-        existing.stockKeys.has(anyKey)
-      ) {
+    if (row.balanceProvided && materialRef && !materialRef.startsWith('pending:')) {
+      const currentQty = resolveCurrentStockQty(
+        existing,
+        materialRef,
+        row.locationId,
+        row.locationWarehouseId,
+      );
+      const delta = Number(row.balanceQty) - currentQty;
+      if (delta === 0) {
         skipStock = true;
-        skipNotes.push('رصيد المادة موجود بالفعل — سيتم تخطي حركة الرصيد');
+        skipNotes.push('الرصيد مطابق للحالي — لا تسوية');
+      } else {
+        skipNotes.push(
+          `تسوية رصيد إلى ${row.balanceQty} (الحالي ${currentQty}، فرق ${delta > 0 ? '+' : ''}${delta})`,
+        );
       }
     }
 
-    if (!skipBom && !skipStock) return row;
+    if (skipNotes.length === 0 && !skipBom && !skipStock) return row;
     return { ...row, skipBom, skipStock, skipNotes };
   });
 
   const actionable = rows.filter((r) => r.errors.length === 0);
   const bomMap = new Map<string, ProductComponentBomGroup>();
   for (const row of actionable) {
-    if (row.skipBom || !row.productId) continue;
+    if (!row.productId) continue;
     const materialRef =
       row.matchedMaterialId ||
       (row.willCreateMaterial && row.matchedMaterialCode
@@ -209,13 +235,25 @@ export function applySkipExistingProductComponents(
 
   const stockByKey = new Map<string, ProductComponentStockMovementPlan>();
   for (const row of actionable) {
-    if (row.skipStock || row.balanceQty <= 0) continue;
+    if (!row.balanceProvided || row.skipStock) continue;
     const materialRef =
       row.matchedMaterialId ||
       (row.willCreateMaterial && row.matchedMaterialCode
         ? pendingMaterialRef(row.matchedMaterialCode)
         : '');
     if (!materialRef) continue;
+    const currentQuantity = materialRef.startsWith('pending:')
+      ? 0
+      : resolveCurrentStockQty(
+          existing,
+          materialRef,
+          row.locationId,
+          row.locationWarehouseId,
+        );
+    const targetQuantity = Number(row.balanceQty);
+    const deltaQuantity = targetQuantity - currentQuantity;
+    if (deltaQuantity === 0) continue;
+
     const key = stockKey(materialRef, row.locationId, row.locationCode);
     const existingPlan = stockByKey.get(key);
     if (!existingPlan) {
@@ -225,7 +263,9 @@ export function applySkipExistingProductComponents(
         materialName: row.matchedMaterialName || row.materialName,
         materialCode: row.matchedMaterialCode || row.materialCode,
         materialUnit: row.matchedMaterialUnit,
-        quantity: row.balanceQty,
+        quantity: targetQuantity,
+        currentQuantity,
+        deltaQuantity,
         locationId: row.locationId,
         locationCode: row.locationCode || undefined,
         warehouseId: row.locationWarehouseId,
@@ -260,7 +300,7 @@ export function applySkipExistingProductComponents(
     bomGroupCount: bomGroups.length,
     stockMovementCount: stockMovements.length,
     newMaterialCount: materialsToCreate.length,
-    skippedBomCount: actionable.filter((r) => r.skipBom).length,
+    skippedBomCount: 0,
     skippedStockCount: actionable.filter((r) => r.skipStock).length,
     needsFallbackWarehouse: stockMovements.some((m) => !m.locationId),
     bomGroups,
@@ -530,6 +570,7 @@ export function parseProductComponentsFromBuffer(
     const balanceRaw = get('balanceQty');
     const balanceEmpty = balanceRaw === undefined || String(balanceRaw).trim() === '';
     const balanceQty = balanceEmpty ? 0 : parseNumericCell(balanceRaw);
+    const balanceProvided = !balanceEmpty;
 
     const errors: string[] = [];
     if (!productCode) errors.push('كود المنتج مطلوب.');
@@ -572,8 +613,8 @@ export function parseProductComponentsFromBuffer(
     if (!Number.isFinite(unitCost) || unitCost < 0) {
       errors.push('تكلفة الوحدة لا تقل عن صفر.');
     }
-    if (!balanceEmpty && (!Number.isFinite(balanceQty) || balanceQty <= 0)) {
-      errors.push('رصيد المكون إن وُجد يجب أن يكون أكبر من صفر.');
+    if (balanceProvided && (!Number.isFinite(balanceQty) || balanceQty < 0)) {
+      errors.push('رصيد المكون إن وُجد يجب أن يكون صفر أو أكبر.');
     }
 
     let locationId: string | undefined;
@@ -608,6 +649,7 @@ export function parseProductComponentsFromBuffer(
       locationId,
       locationWarehouseId,
       locationWarehouseName,
+      balanceProvided,
       balanceQty: Number.isFinite(balanceQty) ? balanceQty : 0,
       matchedMaterialId: matchedMaterial?.id,
       matchedMaterialName: matchedMaterial?.name || materialName,
@@ -649,15 +691,15 @@ export function parseProductComponentsFromBuffer(
     }
   }
 
-  // Detect conflicting opening balances for same material/location
+  // Detect conflicting absolute balances for same material/location
   const stockByKey = new Map<string, ProductComponentStockMovementPlan>();
   const stockConflictKeys = new Set<string>();
   for (const row of rows) {
-    if (row.errors.length > 0) continue;
+    if (row.errors.length > 0 || !row.balanceProvided) continue;
     const materialRef = row.matchedMaterialId || (row.willCreateMaterial && row.matchedMaterialCode
       ? pendingMaterialRef(row.matchedMaterialCode)
       : '');
-    if (!materialRef || row.balanceQty <= 0) continue;
+    if (!materialRef) continue;
 
     const key = stockKey(materialRef, row.locationId, row.locationCode);
     const existing = stockByKey.get(key);
@@ -669,6 +711,8 @@ export function parseProductComponentsFromBuffer(
         materialCode: row.matchedMaterialCode || row.materialCode,
         materialUnit: row.matchedMaterialUnit,
         quantity: row.balanceQty,
+        currentQuantity: 0,
+        deltaQuantity: row.balanceQty,
         locationId: row.locationId,
         locationCode: row.locationCode || undefined,
         warehouseId: row.locationWarehouseId,

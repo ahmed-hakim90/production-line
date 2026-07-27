@@ -2,6 +2,7 @@ import type {
   FirestoreProduct,
   LineProductConfig,
   ProductAssemblyMode,
+  ProductionReportWorkerOutput,
   ProductionWorkerTarget,
 } from '@/types';
 
@@ -149,4 +150,132 @@ export function resolveReportWorkerTarget(params: {
 export function computeAchievementPercent(outputQty: number, targetQty: number): number {
   if (targetQty <= 0) return outputQty > 0 ? 100 : 0;
   return Math.round((outputQty / targetQty) * 1000) / 10;
+}
+
+export type TeamPlanShareWorker = {
+  workerId: string;
+  workerName: string;
+  isPresent?: boolean;
+};
+
+export type TeamPlanShareRow = {
+  workerId: string;
+  workerName: string;
+  isPresent: boolean;
+  dailyTargetQty: number;
+  outputQty: number;
+  achievementPercent: number;
+};
+
+const roundShareQty = (value: number): number => Math.round(value * 1000) / 1000;
+
+/**
+ * Fair shared performance for team (plan-based) products:
+ * split Q and T equally across present workers only; absentees get zeros.
+ * Team achievement Q/T is unchanged by who is absent.
+ */
+export function splitTeamPlanPerformance(params: {
+  quantityProduced: number;
+  planDailyTarget: number;
+  workers: TeamPlanShareWorker[];
+}): TeamPlanShareRow[] {
+  const quantityProduced = Math.max(0, Number(params.quantityProduced) || 0);
+  const planDailyTarget = Math.max(0, Number(params.planDailyTarget) || 0);
+  const workers = params.workers
+    .map((worker) => ({
+      workerId: String(worker.workerId || '').trim(),
+      workerName: String(worker.workerName || worker.workerId || '').trim(),
+      isPresent: worker.isPresent !== false,
+    }))
+    .filter((worker) => worker.workerId);
+
+  const presentWorkers = workers.filter((worker) => worker.isPresent);
+  const presentCount = presentWorkers.length;
+  const teamAchievement = computeAchievementPercent(quantityProduced, planDailyTarget);
+
+  let remainingOutput = quantityProduced;
+  let remainingTarget = planDailyTarget;
+  const presentById = new Map<string, TeamPlanShareRow>();
+
+  presentWorkers.forEach((worker, index) => {
+    const isLast = index === presentCount - 1;
+    const outputQty = presentCount <= 0
+      ? 0
+      : isLast
+        ? roundShareQty(remainingOutput)
+        : roundShareQty(quantityProduced / presentCount);
+    const dailyTargetQty = presentCount <= 0
+      ? 0
+      : isLast
+        ? roundShareQty(remainingTarget)
+        : roundShareQty(planDailyTarget / presentCount);
+    remainingOutput = roundShareQty(remainingOutput - outputQty);
+    remainingTarget = roundShareQty(remainingTarget - dailyTargetQty);
+    presentById.set(worker.workerId, {
+      workerId: worker.workerId,
+      workerName: worker.workerName,
+      isPresent: true,
+      dailyTargetQty,
+      outputQty,
+      achievementPercent: teamAchievement,
+    });
+  });
+
+  return workers.map((worker) => {
+    if (!worker.isPresent) {
+      return {
+        workerId: worker.workerId,
+        workerName: worker.workerName,
+        isPresent: false,
+        dailyTargetQty: 0,
+        outputQty: 0,
+        achievementPercent: 0,
+      };
+    }
+    return presentById.get(worker.workerId) ?? {
+      workerId: worker.workerId,
+      workerName: worker.workerName,
+      isPresent: true,
+      dailyTargetQty: 0,
+      outputQty: 0,
+      achievementPercent: teamAchievement,
+    };
+  });
+}
+
+export function buildTeamPlanWorkerOutputs(params: {
+  quantityProduced: number;
+  planDailyTarget: number;
+  workers: Array<
+    TeamPlanShareWorker & Pick<
+      ProductionReportWorkerOutput,
+      'productId' | 'productName' | 'lineId' | 'lineName'
+    > & { notes?: string }
+  >;
+}): ProductionReportWorkerOutput[] {
+  const shares = splitTeamPlanPerformance({
+    quantityProduced: params.quantityProduced,
+    planDailyTarget: params.planDailyTarget,
+    workers: params.workers,
+  });
+  const metaById = new Map(
+    params.workers.map((worker) => [String(worker.workerId || '').trim(), worker]),
+  );
+
+  return shares.map((share) => {
+    const meta = metaById.get(share.workerId);
+    return {
+      workerId: share.workerId,
+      workerName: share.workerName,
+      productId: String(meta?.productId || ''),
+      productName: String(meta?.productName || ''),
+      lineId: String(meta?.lineId || ''),
+      lineName: String(meta?.lineName || ''),
+      dailyTargetQty: share.dailyTargetQty,
+      outputQty: share.outputQty,
+      achievementPercent: share.achievementPercent,
+      isPresent: share.isPresent,
+      notes: meta?.notes,
+    };
+  });
 }

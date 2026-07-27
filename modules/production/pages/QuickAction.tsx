@@ -46,6 +46,7 @@ import {
 import { ProductionReportShareCard } from '../components/ProductionReportShareCard';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import {
+  buildTeamPlanWorkerOutputs,
   computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
@@ -228,6 +229,7 @@ export const QuickAction: React.FC = () => {
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const productionPlans = useAppStore((s) => s.productionPlans);
   const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
   const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
   const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
@@ -283,9 +285,23 @@ export const QuickAction: React.FC = () => {
     () => _rawProducts.find((p) => p.id === productId) ?? null,
     [_rawProducts, productId],
   );
-  const workerOutputTargetsEligible = reportType === 'finished_product'
-    && getProductAssemblyMode(selectedProduct) === 'individual'
+  const selectedAssemblyMode = getProductAssemblyMode(selectedProduct);
+  const linkedPlan = useMemo(
+    () => productionPlans.find(
+      (p) => p.lineId === lineId
+        && p.productId === productId
+        && (p.status === 'in_progress' || p.status === 'planned'),
+    ) ?? null,
+    [productionPlans, lineId, productId],
+  );
+  const planDailyTarget = Math.max(0, Number(linkedPlan?.avgDailyTarget || 0));
+  const teamSharedEligible = reportType === 'finished_product'
+    && selectedAssemblyMode === 'team'
+    && planDailyTarget > 0;
+  const individualWorkerOutputTargetsEligible = reportType === 'finished_product'
+    && selectedAssemblyMode === 'individual'
     && hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId);
+  const workerOutputTargetsEligible = individualWorkerOutputTargetsEligible || teamSharedEligible;
   const workerOutputEntryEnabled = workerOutputTargetsEligible
     && productionWorkerSettings.performance.productionWorkerOutputEnabled;
   const workerOutputTotal = useMemo(
@@ -296,7 +312,9 @@ export const QuickAction: React.FC = () => {
       ), 0),
     [workerOutputs, productId, lineId],
   );
-  const quantityDerivedFromWorkerOutputs = reportType === 'finished_product' && workerOutputEntryEnabled;
+  const quantityDerivedFromWorkerOutputs = reportType === 'finished_product'
+    && selectedAssemblyMode === 'individual'
+    && workerOutputEntryEnabled;
   const effectiveQuantityProduced = quantityDerivedFromWorkerOutputs
     ? workerOutputTotal
     : Number(quantity || 0);
@@ -1136,7 +1154,7 @@ export const QuickAction: React.FC = () => {
     if (
       productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
       && reportType === 'finished_product'
-      && workerOutputTargetsEligible
+      && individualWorkerOutputTargetsEligible
       && !quantityDerivedFromWorkerOutputs
       && Number(quantity || 0) > 0
       && workerOutputs.length > 0
@@ -1147,9 +1165,24 @@ export const QuickAction: React.FC = () => {
     }
     setSaving(true);
 
-    const reportWorkerOutputs = workerOutputs
-      .filter((row) => row.productId === productId && row.lineId === lineId)
-      .map((row) => {
+    const reportWorkerOutputsBase = workerOutputs
+      .filter((row) => row.productId === productId && row.lineId === lineId);
+    const reportWorkerOutputs = teamSharedEligible
+      ? buildTeamPlanWorkerOutputs({
+        quantityProduced: effectiveQuantityProduced,
+        planDailyTarget,
+        workers: reportWorkerOutputsBase.map((row) => ({
+          workerId: row.workerId,
+          workerName: row.workerName,
+          isPresent: row.isPresent,
+          productId: row.productId,
+          productName: row.productName,
+          lineId: row.lineId,
+          lineName: row.lineName,
+          notes: row.notes,
+        })),
+      })
+      : reportWorkerOutputsBase.map((row) => {
         const isPresent = row.isPresent ?? true;
         const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
         return {
@@ -1997,6 +2030,7 @@ export const QuickAction: React.FC = () => {
                   productName={getProductName(productId)}
                   products={_rawProducts}
                   reportQty={effectiveQuantityProduced}
+                  planDailyTarget={teamSharedEligible ? planDailyTarget : 0}
                   settings={productionWorkerSettings}
                   value={workerOutputs}
                   onChange={setWorkerOutputs}

@@ -6,6 +6,7 @@ import { productionWorkerPerformanceService } from '../services/productionWorker
 import { productionWorkerService } from '../services/productionWorkerService';
 import { productionWorkerTargetService } from '../services/productionWorkerTargetService';
 import {
+  buildTeamPlanWorkerOutputs,
   computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
@@ -24,6 +25,8 @@ type Props = {
   productName: string;
   products: FirestoreProduct[];
   reportQty: number;
+  /** Plan avgDailyTarget — enables team shared performance mode when product is team. */
+  planDailyTarget?: number;
   settings?: ProductionWorkerSettings;
   value: ProductionReportWorkerOutput[];
   onChange: (rows: ProductionReportWorkerOutput[]) => void;
@@ -39,6 +42,7 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
   productName,
   products,
   reportQty,
+  planDailyTarget = 0,
   settings = DEFAULT_PRODUCTION_WORKER_SETTINGS,
   value,
   onChange,
@@ -53,26 +57,52 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     [products, productId],
   );
   const assemblyMode = getProductAssemblyMode(selectedProduct);
-  const canShowWorkerTargets = assemblyMode === 'individual'
-    && hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId);
+  const teamPlanTarget = Math.max(0, Number(planDailyTarget) || 0);
+  const isTeamSharedMode = assemblyMode === 'team' && teamPlanTarget > 0;
+  const canShowWorkerTargets = (
+    assemblyMode === 'individual'
+    && hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId)
+  ) || isTeamSharedMode;
 
+  const displayRows = useMemo(
+    () => (isTeamSharedMode ? value : getVisibleWorkerOutputRows(value)),
+    [isTeamSharedMode, value],
+  );
   const totalWorkerOutput = useMemo(
     () => value.reduce((sum, row) => (
       row.isPresent === false ? sum : sum + Number(row.outputQty || 0)
     ), 0),
     [value],
   );
-  const visibleRows = useMemo(
-    () => getVisibleWorkerOutputRows(value),
-    [value],
-  );
-  const hasVisibleWorkerRows = visibleRows.length > 0;
+  const hasVisibleWorkerRows = displayRows.length > 0;
   const hasReportQtyWithoutWorkerRows = reportQty > 0 && !hasVisibleWorkerRows;
+  const teamAchievement = useMemo(() => {
+    if (!isTeamSharedMode) return 0;
+    return computeAchievementPercent(reportQty, teamPlanTarget);
+  }, [isTeamSharedMode, reportQty, teamPlanTarget]);
 
-  const mismatch = settings.performance.productionWorkerOutputMustMatchReportQty
+  const mismatch = !isTeamSharedMode
+    && settings.performance.productionWorkerOutputMustMatchReportQty
     && reportQty > 0
     && hasVisibleWorkerRows
     && totalWorkerOutput !== reportQty;
+
+  const applyTeamShares = useCallback((rows: ProductionReportWorkerOutput[], qty: number) => (
+    buildTeamPlanWorkerOutputs({
+      quantityProduced: qty,
+      planDailyTarget: teamPlanTarget,
+      workers: rows.map((row) => ({
+        workerId: row.workerId,
+        workerName: row.workerName,
+        isPresent: row.isPresent,
+        productId: row.productId || productId,
+        productName: row.productName || productName,
+        lineId: row.lineId || lineId,
+        lineName: row.lineName || lineName,
+        notes: row.notes,
+      })),
+    })
+  ), [teamPlanTarget, productId, productName, lineId, lineName]);
 
   const loadWorkers = useCallback(async () => {
     if (!lineId || !productId || !date || !canShowWorkerTargets) return;
@@ -88,42 +118,70 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
         resolvedWorkers.length > 0 ? resolvedWorkers[0].source : null,
       );
       const productionAssignments = filterProductionLaborWorkers(resolvedWorkers);
-      const rows = await productionWorkerPerformanceService.getWorkerOutputRowsForReport({
-        lineId,
-        productId,
-        date,
-        products,
-        workers: workers.filter((w) => w.isActive !== false),
-        targets,
-        assignments: productionAssignments.map((row) => ({
-          workerId: row.workerId,
-          isPresent: row.isPresent,
-        })),
-        lineName,
-        productName,
-        lineProductConfigs,
-      });
-      const contextKey = `${lineId}|${productId}|${date}|${workerAssignmentDate}|${assemblyMode}`;
+      const activeWorkers = workers.filter((w) => w.isActive !== false);
+      const workerMap = new Map(activeWorkers.map((w) => [String(w.id), w]));
+
+      let rows: ProductionReportWorkerOutput[] = [];
+      if (isTeamSharedMode) {
+        rows = productionAssignments.map((assignment) => {
+          const worker = workerMap.get(assignment.workerId);
+          return {
+            workerId: assignment.workerId,
+            workerName: worker?.name ?? assignment.workerId,
+            productId,
+            productName,
+            lineId,
+            lineName,
+            dailyTargetQty: 0,
+            outputQty: 0,
+            achievementPercent: 0,
+            isPresent: assignment.isPresent ?? true,
+          };
+        });
+        rows = applyTeamShares(rows, reportQty);
+      } else {
+        rows = await productionWorkerPerformanceService.getWorkerOutputRowsForReport({
+          lineId,
+          productId,
+          date,
+          products,
+          workers: activeWorkers,
+          targets,
+          assignments: productionAssignments.map((row) => ({
+            workerId: row.workerId,
+            isPresent: row.isPresent,
+          })),
+          lineName,
+          productName,
+          lineProductConfigs,
+        });
+      }
+
+      const contextKey = `${lineId}|${productId}|${date}|${workerAssignmentDate}|${assemblyMode}|${teamPlanTarget}`;
       const savedContextRows = value.filter((row) => row.productId === productId && row.lineId === lineId);
       if (rows.length === 0 && savedContextRows.length > 0) {
-        onChange(savedContextRows.map((row) => {
-          const isPresent = row.isPresent ?? true;
-          const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
-          return {
-            ...row,
-            lineName: row.lineName || lineName,
-            productName: row.productName || productName,
-            isPresent,
-            outputQty,
-            achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
-          };
-        }));
+        onChange(
+          isTeamSharedMode
+            ? applyTeamShares(savedContextRows, reportQty)
+            : savedContextRows.map((row) => {
+              const isPresent = row.isPresent ?? true;
+              const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+              return {
+                ...row,
+                lineName: row.lineName || lineName,
+                productName: row.productName || productName,
+                isPresent,
+                outputQty,
+                achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+              };
+            }),
+        );
         lastLoadedContextRef.current = contextKey;
         return;
       }
       // On the very first load (e.g. when editing an existing report) the parent
       // already supplies the saved per-worker outputs, so keep them instead of
-      // resetting every quantity to zero.
+      // resetting every quantity to zero — except team shares which recompute from Q/T.
       const isFirstLoad = lastLoadedContextRef.current === '';
       const shouldPreserveValues = lastLoadedContextRef.current === contextKey || isFirstLoad;
       const existingByWorker = new Map(
@@ -133,9 +191,16 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
             .map((row) => [row.workerId, row])
           : [],
       );
-      onChange(rows.map((row) => {
+      const merged = rows.map((row) => {
         const prev = existingByWorker.get(row.workerId);
         const isPresent = row.isPresent ?? prev?.isPresent ?? true;
+        if (isTeamSharedMode) {
+          return {
+            ...row,
+            isPresent,
+            notes: prev?.notes ?? row.notes,
+          };
+        }
         const outputQty = isPresent ? (prev?.outputQty ?? 0) : 0;
         return {
           ...row,
@@ -144,12 +209,30 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
           achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
           notes: prev?.notes ?? row.notes,
         };
-      }));
+      });
+      onChange(isTeamSharedMode ? applyTeamShares(merged, reportQty) : merged);
       lastLoadedContextRef.current = contextKey;
     } finally {
       setLoading(false);
     }
-  }, [lineId, productId, date, assignmentDate, products, lineProductConfigs, lineName, productName, onChange, value, canShowWorkerTargets, assemblyMode]);
+  }, [
+    lineId,
+    productId,
+    date,
+    assignmentDate,
+    products,
+    lineProductConfigs,
+    lineName,
+    productName,
+    onChange,
+    value,
+    canShowWorkerTargets,
+    assemblyMode,
+    isTeamSharedMode,
+    teamPlanTarget,
+    reportQty,
+    applyTeamShares,
+  ]);
 
   useEffect(() => {
     if (!lineId || !productId || !date || !canShowWorkerTargets) {
@@ -157,9 +240,26 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
       return;
     }
     void loadWorkers();
-  }, [lineId, productId, date, lineName, productName, canShowWorkerTargets]);
+  }, [lineId, productId, date, lineName, productName, canShowWorkerTargets, isTeamSharedMode, teamPlanTarget]);
+
+  // Keep team shares in sync when report quantity changes after workers are loaded.
+  useEffect(() => {
+    if (!isTeamSharedMode || value.length === 0) return;
+    const next = applyTeamShares(value, reportQty);
+    const changed = next.some((row, index) => {
+      const prev = value[index];
+      return !prev
+        || prev.workerId !== row.workerId
+        || prev.outputQty !== row.outputQty
+        || prev.dailyTargetQty !== row.dailyTargetQty
+        || prev.achievementPercent !== row.achievementPercent
+        || (prev.isPresent ?? true) !== (row.isPresent ?? true);
+    }) || next.length !== value.length;
+    if (changed) onChange(next);
+  }, [isTeamSharedMode, reportQty, teamPlanTarget, applyTeamShares]);
 
   const updateRow = (workerId: string, patch: Partial<ProductionReportWorkerOutput>) => {
+    if (isTeamSharedMode) return;
     onChange(value.map((row) => {
       if (row.workerId !== workerId) return row;
       const isPresent = patch.isPresent ?? row.isPresent ?? true;
@@ -181,10 +281,24 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
     <div className="space-y-3 border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4">
       <div className="flex items-center justify-between gap-3">
         <div>
-          <p className="text-sm font-bold text-[var(--color-text)]">إنتاج العمال</p>
+          <p className="text-sm font-bold text-[var(--color-text)]">
+            {isTeamSharedMode ? 'أداء العمال المشترك (من الخطة)' : 'إنتاج العمال'}
+          </p>
           <p className="text-xs text-[var(--color-text-muted)]">
-            أدخل <strong>إنتاج كل عامل على حدة</strong> (قطعة). «هدف العامل» = كمية عامل واحد وليس إجمالي الخط.
-            يُعرض هنا <strong>عمال الإنتاج فقط</strong> — الجودة والتغليف والصيانة والخارجية لا يدخلون في جدول الأهداف.
+            {isTeamSharedMode ? (
+              <>
+                الأداء مشترك من إنجاز الخطة — يُوزَّع بالتساوي على الحاضرين فقط.
+                {' '}
+                هدف اليوم من الخطة: <strong>{formatNumber(teamPlanTarget)}</strong>
+                {' · '}
+                إنجاز الفريق: <strong>{formatNumber(teamAchievement)}%</strong>
+              </>
+            ) : (
+              <>
+                أدخل <strong>إنتاج كل عامل على حدة</strong> (قطعة). «هدف العامل» = كمية عامل واحد وليس إجمالي الخط.
+                يُعرض هنا <strong>عمال الإنتاج فقط</strong> — الجودة والتغليف والصيانة والخارجية لا يدخلون في جدول الأهداف.
+              </>
+            )}
             {' '}
             {workerSource === 'daily'
               ? 'العمالة من بيانات يومية قديمة للتوافق.'
@@ -228,28 +342,50 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
               <tr className="text-[var(--color-text-muted)]">
                 <th className="text-center py-2 w-10">#</th>
                 <th className="text-right py-2">العامل</th>
-                <th className="text-center py-2">هدف العامل</th>
-                <th className="text-center py-2">إنتاج العامل</th>
+                {isTeamSharedMode ? <th className="text-center py-2">الحضور</th> : null}
+                <th className="text-center py-2">{isTeamSharedMode ? 'حصة الهدف' : 'هدف العامل'}</th>
+                <th className="text-center py-2">{isTeamSharedMode ? 'حصة الإنتاج' : 'إنتاج العامل'}</th>
+                {isTeamSharedMode ? <th className="text-center py-2">الإنجاز</th> : null}
               </tr>
             </thead>
             <tbody>
-              {visibleRows.map((row, index) => (
-                <tr key={row.workerId} className="border-t border-[var(--color-border)]">
-                  <td className="py-2 text-center text-[var(--color-text-muted)] tabular-nums font-bold">{index + 1}</td>
-                  <td className="py-2 font-medium">{row.workerName}</td>
-                  <td className="py-2 text-center tabular-nums">{formatNumber(row.dailyTargetQty)}</td>
-                  <td className="py-2 text-center">
-                    <input
-                      type="number"
-                      min={0}
-                      className="w-24 border border-[var(--color-border)] rounded-md text-center py-1 disabled:bg-[#f0f2f5]/70 disabled:text-[var(--color-text-muted)]"
-                      value={row.outputQty || ''}
-                      disabled={disabled}
-                      onChange={(e) => updateRow(row.workerId, { outputQty: Number(e.target.value) || 0 })}
-                    />
-                  </td>
-                </tr>
-              ))}
+              {displayRows.map((row, index) => {
+                const isPresent = row.isPresent !== false;
+                return (
+                  <tr
+                    key={row.workerId}
+                    className={`border-t border-[var(--color-border)] ${isPresent ? '' : 'opacity-60'}`}
+                  >
+                    <td className="py-2 text-center text-[var(--color-text-muted)] tabular-nums font-bold">{index + 1}</td>
+                    <td className="py-2 font-medium">{row.workerName}</td>
+                    {isTeamSharedMode ? (
+                      <td className="py-2 text-center text-xs font-bold">
+                        {isPresent ? 'حاضر' : 'غائب'}
+                      </td>
+                    ) : null}
+                    <td className="py-2 text-center tabular-nums">{formatNumber(row.dailyTargetQty)}</td>
+                    <td className="py-2 text-center">
+                      {isTeamSharedMode ? (
+                        <span className="tabular-nums font-bold">{formatNumber(row.outputQty)}</span>
+                      ) : (
+                        <input
+                          type="number"
+                          min={0}
+                          className="w-24 border border-[var(--color-border)] rounded-md text-center py-1 disabled:bg-[#f0f2f5]/70 disabled:text-[var(--color-text-muted)]"
+                          value={row.outputQty || ''}
+                          disabled={disabled}
+                          onChange={(e) => updateRow(row.workerId, { outputQty: Number(e.target.value) || 0 })}
+                        />
+                      )}
+                    </td>
+                    {isTeamSharedMode ? (
+                      <td className="py-2 text-center tabular-nums font-bold">
+                        {isPresent ? `${formatNumber(row.achievementPercent)}%` : '—'}
+                      </td>
+                    ) : null}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

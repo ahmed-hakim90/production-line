@@ -10,8 +10,6 @@ import { Badge, Button, Card, KPIBox, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '../components/SelectableTable';
 import type {
   ProductionWorker,
-  ProductionWorkerTarget,
-  WorkerDailyAchievementStatus,
   WorkerMonthlyAchievement,
 } from '@/types';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
@@ -44,35 +42,12 @@ type WorkspaceTab = 'summary' | 'reports' | 'evaluation';
 type WorkerRow = ProductionWorker & {
   assignedLineIds: string[];
   activeTargetsCount: number;
-  todayOutput: number;
-  todayAchievement: number;
-  todayStatus?: WorkerDailyAchievementStatus;
   presentDays: number;
   absentDays: number;
   monthStats: WorkerMonthlyAchievement | null;
 };
 
 const defaultPeriod = getDefaultProductionWorkersPeriod();
-
-const TODAY_STATUS_LABELS: Record<WorkerDailyAchievementStatus, string> = {
-  achieved: 'حقق الهدف',
-  below_target: 'أقل من الهدف',
-  over_target: 'تجاوز الهدف',
-  absent: 'غائب',
-  no_output: 'لا يوجد إنتاج',
-  no_target: 'غير مكلف بهدف',
-  leave: 'إجازة',
-};
-
-const TODAY_STATUS_BADGE: Record<WorkerDailyAchievementStatus, 'success' | 'warning' | 'danger' | 'info' | 'neutral'> = {
-  achieved: 'success',
-  below_target: 'warning',
-  over_target: 'success',
-  absent: 'danger',
-  no_output: 'warning',
-  no_target: 'neutral',
-  leave: 'info',
-};
 
 export const ProductionWorkers: React.FC = () => {
   const navigate = useTenantNavigate();
@@ -164,7 +139,6 @@ export const ProductionWorkers: React.FC = () => {
     assignments,
     targets,
     monthStatsMap,
-    todayStatsMap,
     assignmentInfoByWorkerId,
     loading,
     statsLoading,
@@ -200,7 +174,6 @@ export const ProductionWorkers: React.FC = () => {
         (t) => t.workerId === worker.id && t.isActive,
       ).length;
       const monthStats = worker.id ? monthStatsMap.get(worker.id) ?? null : null;
-      const todayStats = worker.id ? todayStatsMap.get(worker.id) : undefined;
       const assignmentInfo = worker.id ? assignmentInfoByWorkerId.get(worker.id) : undefined;
       const presentDays = assignmentInfo?.presentDays ?? monthStats?.presentDays ?? 0;
       const absentDays = assignmentInfo?.absentDays ?? monthStats?.absentDays ?? 0;
@@ -208,15 +181,12 @@ export const ProductionWorkers: React.FC = () => {
         ...worker,
         assignedLineIds: lineIds,
         activeTargetsCount,
-        todayOutput: todayStats?.output ?? 0,
-        todayAchievement: todayStats?.achievement ?? 0,
-        todayStatus: todayStats?.status,
         presentDays,
         absentDays,
         monthStats,
       };
     });
-  }, [workers, assignments, targets, monthStatsMap, todayStatsMap, assignmentInfoByWorkerId, today]);
+  }, [workers, assignments, targets, monthStatsMap, assignmentInfoByWorkerId, today]);
 
   const scopedRows = useMemo(
     () => rows.filter((row) => shouldShowProductionWorkerForSupervisor(
@@ -468,14 +438,11 @@ export const ProductionWorkers: React.FC = () => {
       العامل: row.name,
       الكود: row.code,
       الخطوط: row.assignedLineIds.map(getLineName).join('، '),
-      'أهداف نشطة': row.activeTargetsCount,
-      'إنتاج اليوم': row.todayOutput,
-      'إنجاز اليوم %': row.todayAchievement,
-      'حالة اليوم': row.todayStatus ? TODAY_STATUS_LABELS[row.todayStatus] : '—',
+      'عدد أيام الأهداف': row.monthStats?.targetDays ?? 0,
       'إنتاج الشهر': row.monthStats?.monthlyOutput ?? 0,
       'هدف الشهر': row.monthStats?.monthlyTarget ?? 0,
       'إنجاز الشهر %': row.monthStats?.monthlyAchievement ?? 0,
-      'نسبة الحضور': row.presentDays + row.absentDays > 0
+      'الحضور %': row.presentDays + row.absentDays > 0
         ? Math.round((row.presentDays / (row.presentDays + row.absentDays)) * 1000) / 10
         : 0,
       'أيام حضور': row.presentDays,
@@ -540,24 +507,9 @@ export const ProductionWorkers: React.FC = () => {
       header: 'الخطوط',
       render: (row) => row.assignedLineIds.map(getLineName).join('، ') || '—',
     },
-    { header: 'أهداف نشطة', render: (row) => row.activeTargetsCount, className: 'text-center' },
     {
-      header: 'إنتاج اليوم',
-      render: (row) => (statsLoading && !todayStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.todayOutput)),
-      className: 'text-center',
-    },
-    {
-      header: 'إنجاز اليوم %',
-      render: (row) => (statsLoading && !todayStatsMap.has(row.id ?? '') ? statPlaceholder : `${row.todayAchievement}%`),
-      className: 'text-center',
-    },
-    {
-      header: 'حالة اليوم',
-      render: (row) => {
-        if (statsLoading && !todayStatsMap.has(row.id ?? '')) return statPlaceholder;
-        if (!row.todayStatus) return '—';
-        return <Badge variant={TODAY_STATUS_BADGE[row.todayStatus]}>{TODAY_STATUS_LABELS[row.todayStatus]}</Badge>;
-      },
+      header: 'عدد أيام الأهداف',
+      render: (row) => (statsLoading && !monthStatsMap.has(row.id ?? '') ? statPlaceholder : formatNumber(row.monthStats?.targetDays ?? 0)),
       className: 'text-center',
     },
     {

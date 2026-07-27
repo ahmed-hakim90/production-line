@@ -200,14 +200,18 @@ export const TransferApprovals: React.FC = () => {
   const filtered = useMemo(() => {
     return requests.filter((row) => {
       const statusOk = statusFilter === 'all' || row.status === statusFilter;
-      const warehouseOk =
-        !warehouseFilter ||
-        row.fromWarehouseId === warehouseFilter ||
-        row.toWarehouseId === warehouseFilter;
+      const warehouseOk = scoped
+        ? warehouseIds.length > 0 &&
+          (warehouseFilter
+            ? row.fromWarehouseId === warehouseFilter || row.toWarehouseId === warehouseFilter
+            : warehouseIds.includes(row.fromWarehouseId) || warehouseIds.includes(row.toWarehouseId))
+        : !warehouseFilter ||
+          row.fromWarehouseId === warehouseFilter ||
+          row.toWarehouseId === warehouseFilter;
       const slaOk = !slaOnly || (row.status === 'pending' && transferAgeDays(row) >= transferSlaDays);
       return statusOk && warehouseOk && matchesTypeTab(row) && slaOk;
     });
-  }, [requests, statusFilter, warehouseFilter, typeTab, slaOnly, transferSlaDays]);
+  }, [requests, statusFilter, warehouseFilter, typeTab, slaOnly, transferSlaDays, scoped, warehouseIds]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const page = Math.min(currentPage, totalPages);

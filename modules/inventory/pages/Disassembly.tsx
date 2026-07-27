@@ -9,6 +9,7 @@ import type { DisassemblyLine, DisassemblyOrder, Warehouse, WarehouseLocation, W
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 
 export const Disassembly: React.FC = () => {
   const { can } = usePermission();
@@ -16,8 +17,11 @@ export const Disassembly: React.FC = () => {
     scoped,
     warehouseId: scopedWarehouseId,
     warehouseIds,
+    warehouseSelectLocked,
     filterWarehouses,
     resolveScopedWarehouseId,
+    routingConfigured,
+    settingsPath,
   } = useMaterialsWarehouseScope();
   const allowedWarehouseIds = useMemo(() => new Set(warehouseIds), [warehouseIds]);
   const products = useAppStore((s) => s.products);
@@ -161,6 +165,12 @@ export const Disassembly: React.FC = () => {
     <div className="erp-ds-clean space-y-5">
       <PageHeader title="تفكيك عكسي" subtitle="طلب تفكيك مع اعتماد قبل خصم المنتج وإرجاع مكوناته حسب BOM." icon="inventory_2" />
 
+      <MaterialsWarehouseScopeBanner
+        scoped={scoped}
+        routingConfigured={routingConfigured}
+        settingsPath={settingsPath}
+      />
+
       <Card title="بيانات التفكيك">
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3 p-4">
           <select className="rounded-lg border px-3 py-2 text-sm md:col-span-2" value={productId} onChange={(e) => setProductId(e.target.value)}>
@@ -168,14 +178,14 @@ export const Disassembly: React.FC = () => {
             {products.map((p) => <option key={p.id} value={p.id}>{p.name} ({p.code})</option>)}
           </select>
           <input className="rounded-lg border px-3 py-2 text-sm" type="number" placeholder="الكمية" value={quantity || ''} onChange={(e) => setQuantity(Number(e.target.value || 0))} />
-          <select className="rounded-lg border px-3 py-2 text-sm" value={sourceWarehouseId} onChange={(e) => { setSourceWarehouseId(e.target.value); setSourceLocationId(''); }}>
+          <select className="rounded-lg border px-3 py-2 text-sm" value={sourceWarehouseId} disabled={warehouseSelectLocked} onChange={(e) => { setSourceWarehouseId(e.target.value); setSourceLocationId(''); }}>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
           <select className="rounded-lg border px-3 py-2 text-sm" value={sourceLocationId} onChange={(e) => setSourceLocationId(e.target.value)}>
             <option value="">لوكيشن المنتج المصدر</option>
             {sourceLocations.map((loc) => <option key={loc.id} value={loc.id}>{loc.code}</option>)}
           </select>
-          <select className="rounded-lg border px-3 py-2 text-sm" value={targetWarehouseId} onChange={(e) => setTargetWarehouseId(e.target.value)}>
+          <select className="rounded-lg border px-3 py-2 text-sm" value={targetWarehouseId} disabled={warehouseSelectLocked && warehouses.length <= 1} onChange={(e) => setTargetWarehouseId(e.target.value)}>
             {warehouses.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </select>
           <Button onClick={() => void preview()}>تجهيز المكونات</Button>

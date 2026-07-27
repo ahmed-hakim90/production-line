@@ -42,6 +42,7 @@ import {
 import { FormField } from '@/components/ui/form-field';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 
 type ItemType = 'finished_good' | 'raw_material';
 const APP_VERSION = __APP_VERSION__;
@@ -55,6 +56,8 @@ export const QuickWarehouseTransfer: React.FC = () => {
     warehouseSelectLocked,
     filterWarehouses,
     resolveScopedWarehouseId,
+    routingConfigured,
+    settingsPath,
   } = useMaterialsWarehouseScope();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { can } = usePermission();
@@ -404,6 +407,12 @@ export const QuickWarehouseTransfer: React.FC = () => {
         title="تحويل مخزن سريع"
         subtitle="تسجيل مرجعي تحويل بين المخازن بسرعة — حفظ، مشاركة وتصدير."
         icon="swap_horiz"
+      />
+
+      <MaterialsWarehouseScopeBanner
+        scoped={scoped}
+        routingConfigured={routingConfigured}
+        settingsPath={settingsPath}
       />
 
       {!saved ? (

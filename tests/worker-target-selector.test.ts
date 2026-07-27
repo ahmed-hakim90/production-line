@@ -1,10 +1,12 @@
 import assert from 'node:assert/strict';
 import {
+  buildTeamPlanWorkerOutputs,
   getAvailableIndividualLineWorkerTargetProducts,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
   resolveReportWorkerTarget,
   resolveWorkerTarget,
+  splitTeamPlanPerformance,
 } from '../modules/production/selectors/workerTargetSelector.ts';
 import type { FirestoreProduct, LineProductConfig, ProductionWorkerTarget } from '../types';
 
@@ -149,5 +151,95 @@ assert.deepEqual(
     .map((product) => product.id),
   ['p3', 'p4'],
 );
+
+// Team plan shared performance — equal split among present workers only
+const threePresent = splitTeamPlanPerformance({
+  quantityProduced: 90,
+  planDailyTarget: 90,
+  workers: [
+    { workerId: 'a', workerName: 'A', isPresent: true },
+    { workerId: 'b', workerName: 'B', isPresent: true },
+    { workerId: 'c', workerName: 'C', isPresent: true },
+  ],
+});
+assert.equal(threePresent.length, 3);
+threePresent.forEach((row) => {
+  assert.equal(row.isPresent, true);
+  assert.equal(row.outputQty, 30);
+  assert.equal(row.dailyTargetQty, 30);
+  assert.equal(row.achievementPercent, 100);
+});
+assert.equal(threePresent.reduce((sum, row) => sum + row.outputQty, 0), 90);
+assert.equal(threePresent.reduce((sum, row) => sum + row.dailyTargetQty, 0), 90);
+
+const withAbsent = splitTeamPlanPerformance({
+  quantityProduced: 90,
+  planDailyTarget: 90,
+  workers: [
+    { workerId: 'a', workerName: 'A', isPresent: true },
+    { workerId: 'b', workerName: 'B', isPresent: true },
+    { workerId: 'c', workerName: 'C', isPresent: true },
+    { workerId: 'd', workerName: 'D', isPresent: false },
+  ],
+});
+assert.equal(withAbsent.length, 4);
+const presentRows = withAbsent.filter((row) => row.isPresent);
+const absentRow = withAbsent.find((row) => row.workerId === 'd');
+assert.equal(presentRows.length, 3);
+presentRows.forEach((row) => {
+  assert.equal(row.outputQty, 30);
+  assert.equal(row.dailyTargetQty, 30);
+  assert.equal(row.achievementPercent, 100);
+});
+assert.deepEqual(absentRow, {
+  workerId: 'd',
+  workerName: 'D',
+  isPresent: false,
+  dailyTargetQty: 0,
+  outputQty: 0,
+  achievementPercent: 0,
+});
+// Team achievement Q/T stays 100% regardless of absences
+assert.equal(
+  presentRows[0].achievementPercent,
+  threePresent[0].achievementPercent,
+);
+
+const halfAchievement = splitTeamPlanPerformance({
+  quantityProduced: 45,
+  planDailyTarget: 90,
+  workers: [
+    { workerId: 'a', workerName: 'A' },
+    { workerId: 'b', workerName: 'B', isPresent: false },
+  ],
+});
+assert.equal(halfAchievement[0].outputQty, 45);
+assert.equal(halfAchievement[0].dailyTargetQty, 90);
+assert.equal(halfAchievement[0].achievementPercent, 50);
+assert.equal(halfAchievement[1].outputQty, 0);
+assert.equal(halfAchievement[1].dailyTargetQty, 0);
+assert.equal(halfAchievement[1].achievementPercent, 0);
+
+const built = buildTeamPlanWorkerOutputs({
+  quantityProduced: 10,
+  planDailyTarget: 20,
+  workers: [
+    {
+      workerId: 'w1',
+      workerName: 'Worker 1',
+      isPresent: true,
+      productId: 'p2',
+      productName: 'Team Product',
+      lineId: 'l1',
+      lineName: 'Line 1',
+    },
+  ],
+});
+assert.equal(built.length, 1);
+assert.equal(built[0].productId, 'p2');
+assert.equal(built[0].lineId, 'l1');
+assert.equal(built[0].outputQty, 10);
+assert.equal(built[0].dailyTargetQty, 20);
+assert.equal(built[0].achievementPercent, 50);
 
 console.log('worker-target-selector.test.ts: ok');

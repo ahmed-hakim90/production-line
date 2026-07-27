@@ -18,6 +18,7 @@ import type {
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
+import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 
@@ -48,16 +49,6 @@ const getCell = (row: Record<string, unknown>, keys: string[]) => {
   return '';
 };
 
-function pickDefaultWarehouseId(whs: Warehouse[], preferredId: string): string {
-  const preferred = preferredId.trim();
-  if (preferred && whs.some((w) => w.id === preferred)) return preferred;
-  const byRole = whs.find((w) => w.warehouseRole === 'raw_material')?.id;
-  if (byRole) return byRole;
-  const byName = whs.find((w) => /مستلزم|مواد\s*خام|^خام/i.test(w.name || ''))?.id;
-  if (byName) return byName;
-  return whs[0]?.id || '';
-}
-
 export const WarehouseLocations: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { can } = usePermission();
@@ -72,10 +63,11 @@ export const WarehouseLocations: React.FC = () => {
     routingConfigured,
     settingsPath,
   } = useMaterialsWarehouseScope();
-  const suppliesWarehouseId = useMemo(() => {
-    const routing = resolveInventoryRoutingV1(systemSettings);
-    return (routing.decomposedWarehouseId || routing.rawMaterialWarehouseId || '').trim();
-  }, [systemSettings]);
+  const inventoryRouting = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
+  const suppliesWarehouseId = useMemo(
+    () => (inventoryRouting.decomposedWarehouseId || inventoryRouting.rawMaterialWarehouseId || '').trim(),
+    [inventoryRouting],
+  );
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [racks, setRacks] = useState<WarehouseRack[]>([]);
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
@@ -108,9 +100,10 @@ export const WarehouseLocations: React.FC = () => {
       const [whs] = await Promise.all([warehouseService.getActiveWarehouses()]);
       const visibleWarehouses = filterWarehouses(whs);
       const fromQuery = searchParams.get('warehouseId') || '';
+      const resolvedSuppliesId = resolveSuppliesWarehouseId(inventoryRouting, visibleWarehouses);
       const resolvedWarehouseId = resolveScopedWarehouseId(
         nextWarehouseId || warehouseId,
-        [fromQuery, scopedWarehouseId, suppliesWarehouseId, pickDefaultWarehouseId(visibleWarehouses, suppliesWarehouseId)],
+        [fromQuery, scopedWarehouseId, suppliesWarehouseId, resolvedSuppliesId, visibleWarehouses[0]?.id || ''],
       );
       await warehouseLocationService.migrateLegacyLocationsToRacks();
     const [rackRows, locRows, bals, defs] = await Promise.all([

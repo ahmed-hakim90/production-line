@@ -881,6 +881,56 @@ export function exportLoanRequestsMultiSheet(
   saveAs(blob, `${fileName}.xlsx`);
 }
 
+/** صف تصدير مكونات المنتجات (متوافق مع رفع المكونات) */
+export interface ProductBomExportRow {
+  productCode: string;
+  productName?: string;
+  materialCode: string;
+  materialName: string;
+  qtyPerUnit: number;
+  unitCost?: number;
+  locationCode?: string;
+  /** فارغ = بدون رصيد في الشيت؛ رقم بما فيه 0 = الرصيد الحالي/الفعلي */
+  balanceQty?: number | '';
+}
+
+/** تصدير BOM مسطّح: منتج × مكوّن × كمية (+ لوكيشن/رصيد اختياري للجرد) */
+export function exportProductBomExcel(rows: ProductBomExportRow[]) {
+  const date = new Date().toISOString().slice(0, 10);
+  const data = rows.map((r) => ({
+    'كود المنتج': r.productCode,
+    'اسم المنتج': r.productName || '',
+    'كود المادة': r.materialCode,
+    'اسم المادة': r.materialName,
+    'الكمية المستخدمة': Number(r.qtyPerUnit) || 0,
+    'تكلفة الوحدة':
+      r.unitCost === undefined || r.unitCost === null || Number.isNaN(Number(r.unitCost))
+        ? ''
+        : Number(r.unitCost),
+    'كود اللوكيشن': r.locationCode || '',
+    'رصيد المكون':
+      r.balanceQty === undefined || r.balanceQty === '' ? '' : Number(r.balanceQty),
+  }));
+  downloadExcel(
+    data.length > 0
+      ? data
+      : [
+          {
+            'كود المنتج': '',
+            'اسم المنتج': '',
+            'كود المادة': '',
+            'اسم المادة': '',
+            'الكمية المستخدمة': '',
+            'تكلفة الوحدة': '',
+            'كود اللوكيشن': '',
+            'رصيد المكون': '',
+          },
+        ],
+    'مكونات المنتجات',
+    `مكونات-المنتجات-${date}`,
+  );
+}
+
 /** تصدير قائمة دورات التوريد */
 export function exportSupplyCyclesListExcel(
   rows: Record<string, string | number>[],

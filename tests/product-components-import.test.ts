@@ -42,7 +42,28 @@ describe('parseProductComponentsFromBuffer', () => {
     expect(result.stockMovementCount).toBe(1);
     expect(result.stockMovements[0].quantity).toBe(100);
     expect(result.stockMovements[0].locationId).toBe('loc1');
+    expect(result.rows[0].balanceProvided).toBe(true);
+    expect(result.rows[1].balanceProvided).toBe(false);
     expect(result.needsFallbackWarehouse).toBe(false);
+  });
+
+  it('allows balance of zero as absolute target', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'الكمية المستخدمة', 'كود اللوكيشن', 'رصيد المكون'],
+      ['SK-999N', 'MAT-001', 1, '20-01-0', 0],
+    ]);
+
+    const result = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    expect(result.validCount).toBe(1);
+    expect(result.rows[0].balanceProvided).toBe(true);
+    expect(result.rows[0].balanceQty).toBe(0);
+    expect(result.stockMovementCount).toBe(1);
+    expect(result.stockMovements[0].quantity).toBe(0);
+    expect(result.stockMovements[0].deltaQuantity).toBe(0);
   });
 
   it('flags unknown location and requires fallback warehouse when balance has no location', () => {
@@ -151,10 +172,10 @@ describe('parseProductComponentsFromBuffer', () => {
     expect(result.stockMovementCount).toBe(1);
   });
 
-  it('skips existing BOM and stock when applySkipExisting is used', () => {
+  it('upserts existing BOM and plans absolute stock adjustment', () => {
     const data = makeBuffer([
       ['كود المنتج', 'كود المادة', 'اسم المادة', 'الكمية المستخدمة', 'كود اللوكيشن', 'رصيد المكون'],
-      ['SK-999N', 'MAT-001', 'موتور نحاس', 1, '20-01-0', 100],
+      ['SK-999N', 'MAT-001', 'موتور نحاس', 3, '20-01-0', 80],
       ['SK-999N', 'MAT-002', 'هيكل', 2, '20-01-0', 50],
     ]);
 
@@ -165,19 +186,91 @@ describe('parseProductComponentsFromBuffer', () => {
 
     const filtered = applySkipExistingProductComponents(parsed, {
       bomKeys: new Set([bomExistKey('p1', 'm1')]),
-      stockKeys: new Set([stockExistKeyForLocation('m1', 'loc1')]),
+      stockQtyByKey: new Map([[stockExistKeyForLocation('m1', 'loc1'), 100]]),
     });
 
-    expect(filtered.rows[0].skipBom).toBe(true);
+    // Existing BOM is updated, not skipped
+    expect(filtered.rows[0].skipBom).toBeFalsy();
+    expect(filtered.rows[0].skipNotes?.some((n) => n.includes('تحديث'))).toBe(true);
+    expect(filtered.bomGroupCount).toBe(1);
+    expect(filtered.bomGroups[0].items).toHaveLength(2);
+    expect(filtered.bomGroups[0].items.find((i) => i.materialId === 'm1')?.quantityUsed).toBe(3);
+
+    // Absolute target 80 from current 100 → delta -20
+    expect(filtered.rows[0].skipStock).toBeFalsy();
+    const adj = filtered.stockMovements.find((m) => m.materialId === 'm1');
+    expect(adj).toBeTruthy();
+    expect(adj!.quantity).toBe(80);
+    expect(adj!.currentQuantity).toBe(100);
+    expect(adj!.deltaQuantity).toBe(-20);
+
+    // New stock for m2 (current 0 → 50)
+    const m2 = filtered.stockMovements.find((m) => m.materialId === 'm2');
+    expect(m2?.deltaQuantity).toBe(50);
+    expect(filtered.stockMovementCount).toBe(2);
+  });
+
+  it('skips stock adjustment when target equals current', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'الكمية المستخدمة', 'كود اللوكيشن', 'رصيد المكون'],
+      ['SK-999N', 'MAT-001', 1, '20-01-0', 100],
+    ]);
+
+    const parsed = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    const filtered = applySkipExistingProductComponents(parsed, {
+      bomKeys: new Set(),
+      stockQtyByKey: new Map([[stockExistKeyForLocation('m1', 'loc1'), 100]]),
+    });
+
     expect(filtered.rows[0].skipStock).toBe(true);
-    expect(filtered.rows[1].skipBom).toBeFalsy();
-    expect(filtered.rows[1].skipStock).toBeFalsy();
-    expect(filtered.skippedBomCount).toBe(1);
+    expect(filtered.stockMovementCount).toBe(0);
     expect(filtered.skippedStockCount).toBe(1);
     expect(filtered.bomGroupCount).toBe(1);
-    expect(filtered.bomGroups[0].items).toHaveLength(1);
-    expect(filtered.bomGroups[0].items[0].materialId).toBe('m2');
+  });
+
+  it('plans negative adjustment when target is zero', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'الكمية المستخدمة', 'كود اللوكيشن', 'رصيد المكون'],
+      ['SK-999N', 'MAT-001', 1, '20-01-0', 0],
+    ]);
+
+    const parsed = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    const filtered = applySkipExistingProductComponents(parsed, {
+      bomKeys: new Set(),
+      stockQtyByKey: new Map([[stockExistKeyForLocation('m1', 'loc1'), 40]]),
+    });
+
     expect(filtered.stockMovementCount).toBe(1);
-    expect(filtered.stockMovements[0].materialId).toBe('m2');
+    expect(filtered.stockMovements[0].quantity).toBe(0);
+    expect(filtered.stockMovements[0].deltaQuantity).toBe(-40);
+  });
+
+  it('ignores stock when balance column is empty', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'الكمية المستخدمة'],
+      ['SK-999N', 'MAT-001', 2],
+    ]);
+
+    const parsed = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    const filtered = applySkipExistingProductComponents(parsed, {
+      bomKeys: new Set([bomExistKey('p1', 'm1')]),
+      stockQtyByKey: new Map([[stockExistKeyForLocation('m1', 'loc1'), 100]]),
+    });
+
+    expect(filtered.rows[0].balanceProvided).toBe(false);
+    expect(filtered.stockMovementCount).toBe(0);
+    expect(filtered.bomGroups[0].items[0].quantityUsed).toBe(2);
   });
 });

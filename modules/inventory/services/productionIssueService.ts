@@ -10,13 +10,12 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
-import type { FirestoreProduct, ProductionPlan, ProductionReport, WorkOrder } from '../../../types';
+import type { FirestoreProduct, ProductionPlan, WorkOrder } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { productService } from '../../production/services/productService';
 import { productionPlanService } from '../../production/services/productionPlanService';
 import { workOrderService } from '../../production/services/workOrderService';
-import { reportService } from '../../production/services/reportService';
 import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { rawMaterialService } from './rawMaterialService';
@@ -60,10 +59,7 @@ export function isProductionIssueApprovalError(error: unknown): error is Product
   return error instanceof ProductionIssueApprovalError;
 }
 
-function sourceQty(source: WorkOrder | ProductionPlan | ProductionReport): number {
-  if ('reportCode' in source || 'reportType' in source) {
-    return Number((source as ProductionReport).quantityProduced || 0);
-  }
+function sourceQty(source: WorkOrder | ProductionPlan): number {
   if ('workOrderNumber' in source) {
     return Number((source as WorkOrder).quantity || 0);
   }
@@ -72,11 +68,6 @@ function sourceQty(source: WorkOrder | ProductionPlan | ProductionReport): numbe
     plan.remainingQuantity ??
     (Number(plan.plannedQuantity || 0) - Number(plan.producedQuantity || 0));
   return Number(remaining || plan.plannedQuantity || 0);
-}
-
-function isFinishedLikeReport(report: ProductionReport): boolean {
-  const type = String(report.reportType || 'finished_product');
-  return type === 'finished_product' || type === 'component_injection';
 }
 
 async function resolveMaterialStockLine(materialId: string, fallbackName = ''): Promise<{
@@ -178,22 +169,10 @@ async function buildLines(productId: string, quantity: number, warehouseId: stri
 async function loadSource(params: {
   workOrderId?: string;
   productionPlanId?: string;
-  productionReportId?: string;
 }): Promise<{
-  sourceType: 'work_order' | 'production_plan' | 'production_report';
-  source: WorkOrder | ProductionPlan | ProductionReport;
+  sourceType: 'work_order' | 'production_plan';
+  source: WorkOrder | ProductionPlan;
 }> {
-  if (params.productionReportId) {
-    const source = await reportService.getById(params.productionReportId);
-    if (!source) throw new Error('تقرير الإنتاج غير موجود.');
-    if (!isFinishedLikeReport(source)) {
-      throw new Error('صرف الإنتاج يدعم تقارير المنتج التام أو حقن المكونات فقط.');
-    }
-    if (Number(source.quantityProduced || 0) <= 0) {
-      throw new Error('تقرير الإنتاج لا يحتوي على كمية منتجة.');
-    }
-    return { sourceType: 'production_report', source };
-  }
   if (params.workOrderId) {
     const source = await workOrderService.getById(params.workOrderId);
     if (!source) throw new Error('أمر الشغل غير موجود.');
@@ -204,7 +183,7 @@ async function loadSource(params: {
     if (!source) throw new Error('خطة الإنتاج غير موجودة.');
     return { sourceType: 'production_plan', source };
   }
-  throw new Error('حدد أمر شغل أو خطة إنتاج أو تقرير إنتاج.');
+  throw new Error('حدد أمر شغل أو خطة إنتاج.');
 }
 
 export const productionIssueService = {
@@ -263,31 +242,23 @@ export const productionIssueService = {
   }): Promise<string | null> {
     if (!isConfigured) return null;
 
+    // صرف الإنتاج من تقرير إنتاج لم يعد مدعومًا — المصدر المسموح: أمر شغل أو خطة فقط.
     if (input.productionReportId) {
+      throw new Error('لا يمكن إنشاء صرف إنتاج من تقرير إنتاج. اختر أمر شغل أو خطة إنتاج.');
+    }
+
+    const activeField = input.workOrderId ? 'workOrderId' : 'productionPlanId';
+    const activeValue = input.workOrderId || input.productionPlanId;
+    if (activeValue) {
       const activeSnap = await getDocs(query(
         tenantQuery(db, COLLECTION),
-        where('productionReportId', '==', input.productionReportId),
+        where(activeField, '==', activeValue),
       ));
       const active = activeSnap.docs
         .map((d) => ({ id: d.id, ...d.data() } as ProductionIssueOrder))
-        .find((row) => row.status !== 'cancelled');
+        .find((row) => row.status !== 'cancelled' && row.sourceType !== 'production_report');
       if (active?.id) {
-        throw new Error('يوجد إذن صرف نشط بالفعل لنفس تقرير الإنتاج. استخدم طلب تعويض مستقل بدلاً من إذن صرف جديد.');
-      }
-    } else {
-      const activeField = input.workOrderId ? 'workOrderId' : 'productionPlanId';
-      const activeValue = input.workOrderId || input.productionPlanId;
-      if (activeValue) {
-        const activeSnap = await getDocs(query(
-          tenantQuery(db, COLLECTION),
-          where(activeField, '==', activeValue),
-        ));
-        const active = activeSnap.docs
-          .map((d) => ({ id: d.id, ...d.data() } as ProductionIssueOrder))
-          .find((row) => row.status !== 'cancelled' && row.sourceType !== 'production_report');
-        if (active?.id) {
-          throw new Error('يوجد إذن صرف نشط بالفعل لنفس أمر الشغل/الخطة. استخدم طلب تعويض مستقل بدلاً من إذن صرف جديد.');
-        }
+        throw new Error('يوجد إذن صرف نشط بالفعل لنفس أمر الشغل/الخطة. استخدم طلب تعويض مستقل بدلاً من إذن صرف جديد.');
       }
     }
 
@@ -301,21 +272,11 @@ export const productionIssueService = {
     if (!warehouse?.id) throw new Error('حدد مخزن صرف المكونات.');
     const lines = await buildLines(product.id, quantity, warehouse.id);
     const now = toIsoNow();
-    const report = sourceType === 'production_report' ? (source as ProductionReport) : null;
     const payload: ProductionIssueOrder = {
       referenceNo: issueRef(),
       sourceType,
-      workOrderId:
-        sourceType === 'work_order'
-          ? source.id
-          : report?.workOrderId || undefined,
-      productionPlanId:
-        sourceType === 'production_plan'
-          ? source.id
-          : report?.productionPlanId || undefined,
-      productionReportId: report?.id,
-      productionReportCode: report?.reportCode,
-      productionReportDate: report?.date,
+      workOrderId: sourceType === 'work_order' ? source.id : undefined,
+      productionPlanId: sourceType === 'production_plan' ? source.id : undefined,
       productId: product.id,
       productName: product.name,
       productCode: product.code,

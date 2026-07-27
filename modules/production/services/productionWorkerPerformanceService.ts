@@ -360,6 +360,7 @@ export const productionWorkerPerformanceService = {
     }
 
     let workingDays = 0;
+    let targetDays = 0;
     let presentDays = 0;
     let absentDays = 0;
     let leaveDays = 0;
@@ -416,6 +417,8 @@ export const productionWorkerPerformanceService = {
           : 0;
       }
 
+      if (targetQty > 0) targetDays += 1;
+
       const absent = dayAttendance?.status === 'absent' || dayPresence.operationalAbsent;
       if (dayPresence.totalDays > 0) {
         if (dayPresence.operationalAbsent) absentDays += 1;
@@ -466,6 +469,7 @@ export const productionWorkerPerformanceService = {
       workerId,
       month,
       workingDays,
+      targetDays,
       presentDays,
       absentDays,
       leaveDays,

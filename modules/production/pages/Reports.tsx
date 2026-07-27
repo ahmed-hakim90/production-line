@@ -67,6 +67,7 @@ import {
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../../../types';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import {
+  buildTeamPlanWorkerOutputs,
   computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
@@ -627,9 +628,22 @@ export const Reports: React.FC = () => {
     [_rawProducts, form.productId],
   );
   const formAssemblyMode = getProductAssemblyMode(selectedFormProduct);
-  const formWorkerOutputsEnabled = form.reportType === 'finished_product'
+  const formLinkedPlan = useMemo(
+    () => productionPlans.find(
+      (p) => p.lineId === form.lineId
+        && p.productId === form.productId
+        && (p.status === 'in_progress' || p.status === 'planned'),
+    ) ?? null,
+    [productionPlans, form.lineId, form.productId],
+  );
+  const formPlanDailyTarget = Math.max(0, Number(formLinkedPlan?.avgDailyTarget || 0));
+  const formTeamSharedEnabled = form.reportType === 'finished_product'
+    && formAssemblyMode === 'team'
+    && formPlanDailyTarget > 0;
+  const formIndividualWorkerOutputsEnabled = form.reportType === 'finished_product'
     && formAssemblyMode === 'individual'
     && hasLineSpecificWorkerTarget(lineProductConfigs, form.lineId, form.productId);
+  const formWorkerOutputsEnabled = formIndividualWorkerOutputsEnabled || formTeamSharedEnabled;
   const formWorkerOutputEntryEnabled = formWorkerOutputsEnabled
     && productionWorkerSettings.performance.productionWorkerOutputEnabled;
   const formWorkerOutputTotal = useMemo(
@@ -642,6 +656,7 @@ export const Reports: React.FC = () => {
   );
   const hasPositiveFormWorkerOutput = formWorkerOutputTotal > 0;
   const formQuantityDerivedFromWorkerOutputs = form.reportType === 'finished_product'
+    && formAssemblyMode === 'individual'
     && formWorkerOutputEntryEnabled
     && (!editId || hasPositiveFormWorkerOutput);
   const effectiveFormQuantityProduced = formQuantityDerivedFromWorkerOutputs
@@ -2155,9 +2170,18 @@ export const Reports: React.FC = () => {
     // saved per-worker production when the edit modal first opens.
     const editProduct = _rawProducts.find((p) => p.id === report.productId) ?? null;
     const editAssemblyMode = getProductAssemblyMode(editProduct);
-    const editWorkerOutputsEnabled = rt === 'finished_product'
-      && editAssemblyMode === 'individual'
-      && hasLineSpecificWorkerTarget(lineProductConfigs, report.lineId, report.productId);
+    const editPlanDailyTarget = Math.max(0, Number(
+      productionPlans.find(
+        (p) => p.lineId === report.lineId
+          && p.productId === report.productId
+          && (p.status === 'in_progress' || p.status === 'planned'),
+      )?.avgDailyTarget || 0,
+    ));
+    const editWorkerOutputsEnabled = rt === 'finished_product' && (
+      (editAssemblyMode === 'individual'
+        && hasLineSpecificWorkerTarget(lineProductConfigs, report.lineId, report.productId))
+      || (editAssemblyMode === 'team' && editPlanDailyTarget > 0)
+    );
     lastFormWorkerOutputsContextRef.current = `${rt}|${report.productId}|${report.lineId}|${report.date}|${editAssemblyMode}|${editWorkerOutputsEnabled}`;
     setShowModal(true);
   };
@@ -2336,9 +2360,26 @@ export const Reports: React.FC = () => {
       form.lineId,
       form.productId,
     );
-    const appliedWorkerOutputs = formWorkerOutputsEnabled
-      ? reportWorkerOutputs
-      : [];
+    const appliedWorkerOutputs = !formWorkerOutputsEnabled
+      ? []
+      : formTeamSharedEnabled
+        ? buildTeamPlanWorkerOutputs({
+          quantityProduced: formQuantityDerivedFromWorkerOutputs
+            ? effectiveFormQuantityProduced
+            : Number(form.quantityProduced || 0),
+          planDailyTarget: formPlanDailyTarget,
+          workers: reportWorkerOutputs.map((row) => ({
+            workerId: row.workerId,
+            workerName: row.workerName,
+            isPresent: row.isPresent,
+            productId: row.productId,
+            productName: row.productName,
+            lineId: row.lineId,
+            lineName: row.lineName,
+            notes: row.notes,
+          })),
+        })
+        : reportWorkerOutputs;
     const workerOutputPresence = summarizeWorkerPresenceDays(appliedWorkerOutputs.map((row) => ({
       workerId: row.workerId,
       date: form.date,
@@ -2374,7 +2415,11 @@ export const Reports: React.FC = () => {
         : form.absentAssignments || 0,
       assemblyModeSnapshot: formAssemblyMode,
       workerTargetsApplied: formWorkerOutputsEnabled,
-      workerTargetSource: formWorkerOutputsEnabled ? 'line_product' : 'none',
+      workerTargetSource: formTeamSharedEnabled
+        ? 'plan_daily'
+        : formIndividualWorkerOutputsEnabled
+          ? 'line_product'
+          : 'none',
       laborAssignmentSource: effectiveFormWorkersCount > 0 || hasAppliedWorkerOutputRows
         ? 'line_worker_assignments'
         : 'none',
@@ -2409,7 +2454,7 @@ export const Reports: React.FC = () => {
     if (
       productionWorkerSettings.performance.productionWorkerOutputMustMatchReportQty
       && form.reportType === 'finished_product'
-      && formWorkerOutputsEnabled
+      && formIndividualWorkerOutputsEnabled
       && !formQuantityDerivedFromWorkerOutputs
       && form.quantityProduced > 0
       && (form.workerOutputs || []).length > 0
@@ -5032,6 +5077,7 @@ export const Reports: React.FC = () => {
                   productName={_rawProducts.find((p) => p.id === form.productId)?.name ?? form.productId}
                   products={_rawProducts}
                   reportQty={effectiveFormQuantityProduced}
+                  planDailyTarget={formTeamSharedEnabled ? formPlanDailyTarget : 0}
                   settings={productionWorkerSettings}
                   value={form.workerOutputs || []}
                   onChange={(workerOutputs) => setForm((prev) => ({ ...prev, workerOutputs }))}

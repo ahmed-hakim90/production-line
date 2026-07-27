@@ -21,11 +21,10 @@ import type {
   WarehouseLocation,
   WarehouseRack,
 } from '../types';
-import type { PaperSize, ProductionReport } from '../../../types';
+import type { PaperSize } from '../../../types';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '../../../utils/printManager';
-import { reportService } from '../../production/services/reportService';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
@@ -261,9 +260,8 @@ export const ProductionIssues: React.FC = () => {
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
   const [racks, setRacks] = useState<WarehouseRack[]>([]);
-  const [sourceKind, setSourceKind] = useState<'work_order' | 'production_plan' | 'production_report'>('production_report');
+  const [sourceKind, setSourceKind] = useState<'work_order' | 'production_plan'>('work_order');
   const [sourceId, setSourceId] = useState('');
-  const [recentReports, setRecentReports] = useState<ProductionReport[]>([]);
   const [warehouseId, setWarehouseId] = useState(() => queryWarehouseId);
   const [issueQuantity, setIssueQuantity] = useState('');
   const [selectedOrderId, setSelectedOrderId] = useState('');
@@ -294,16 +292,11 @@ export const ProductionIssues: React.FC = () => {
   const actor = userDisplayName || userEmail || 'Current User';
 
   const load = async () => {
-    const end = new Date();
-    const start = new Date();
-    start.setDate(end.getDate() - 14);
-    const toIsoDate = (d: Date) => d.toISOString().slice(0, 10);
-    const [issueRows, whs, locs, rackRows, reportRows] = await Promise.all([
+    const [issueRows, whs, locs, rackRows] = await Promise.all([
       productionIssueService.getAll(),
       warehouseService.getActiveWarehouses(),
       warehouseLocationService.getAll(),
       warehouseRackService.getAll(),
-      reportService.getByDateRange(toIsoDate(start), toIsoDate(end)).catch(() => [] as ProductionReport[]),
       fetchWorkOrders(),
       fetchProductionPlans(),
       fetchProducts(),
@@ -314,15 +307,6 @@ export const ProductionIssues: React.FC = () => {
     setWarehouses(visibleWarehouses);
     setLocations(locs);
     setRacks(rackRows);
-    setRecentReports(
-      reportRows
-        .filter((r) => {
-          // صرف المكونات من BOM يخص المنتج التام فقط (تقارير الحقن ليس لها اسم منتج في الكتالوج).
-          const type = String(r.reportType || 'finished_product');
-          return type === 'finished_product' && Number(r.quantityProduced || 0) > 0 && Boolean(r.productId);
-        })
-        .sort((a, b) => String(b.date || '').localeCompare(String(a.date || ''))),
-    );
     const suppliesId = resolveSuppliesWarehouseId(inventoryRouting, whs);
     setWarehouseId((prev) =>
       resolveScopedWarehouseId(prev, [queryWarehouseId, suppliesId, scopedWarehouseId, visibleWarehouses[0]?.id || '']),
@@ -338,15 +322,6 @@ export const ProductionIssues: React.FC = () => {
     setWarehouseId((prev) => resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]));
   }, [scoped, warehouseIds.join('|'), queryWarehouseId, scopedWarehouseId, resolveScopedWarehouseId]);
 
-  const issuedReportIds = useMemo(
-    () => new Set(
-      orders
-        .filter((o) => o.status !== 'cancelled' && o.productionReportId)
-        .map((o) => o.productionReportId as string),
-    ),
-    [orders],
-  );
-
   const sourceOptions = useMemo(() => {
     if (sourceKind === 'work_order') {
       return workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress').map((wo) => {
@@ -358,37 +333,19 @@ export const ProductionIssues: React.FC = () => {
         };
       });
     }
-    if (sourceKind === 'production_plan') {
-      return plans.filter((plan) => plan.status === 'planned' || plan.status === 'in_progress').map((plan) => {
-        const productLabel = productLabelById.get(plan.productId) || productNameById.get(plan.productId) || plan.productId;
-        const lineName = lineNameById.get(plan.lineId);
-        const date = plan.plannedStartDate || plan.startDate;
-        return {
-          id: plan.id || '',
-          label: [productLabel, lineName, `كمية ${plan.plannedQuantity}`, date].filter(Boolean).join(' — '),
-        };
-      });
-    }
-    return recentReports
-      .filter((r) => r.id && !issuedReportIds.has(r.id))
-      .map((r) => {
-        const productLabel = productLabelById.get(r.productId);
-        const date = String(r.date || '').slice(0, 10);
-        // اسم المنتج أولاً — لو مش موجود نوضّح بدل ما نظهر ID خام أو اسم الخط
-        const productPart = productLabel || 'منتج غير معروف في الكتالوج';
-        return {
-          id: r.id || '',
-          label: [productPart, r.reportCode || r.id, date, `كمية ${r.quantityProduced}`]
-            .filter(Boolean)
-            .join(' — '),
-        };
-      });
+    return plans.filter((plan) => plan.status === 'planned' || plan.status === 'in_progress').map((plan) => {
+      const productLabel = productLabelById.get(plan.productId) || productNameById.get(plan.productId) || plan.productId;
+      const lineName = lineNameById.get(plan.lineId);
+      const date = plan.plannedStartDate || plan.startDate;
+      return {
+        id: plan.id || '',
+        label: [productLabel, lineName, `كمية ${plan.plannedQuantity}`, date].filter(Boolean).join(' — '),
+      };
+    });
   }, [
     sourceKind,
     workOrders,
     plans,
-    recentReports,
-    issuedReportIds,
     productLabelById,
     productNameById,
     lineNameById,
@@ -400,16 +357,12 @@ export const ProductionIssues: React.FC = () => {
       const wo = workOrders.find((row) => row.id === sourceId);
       return Number(wo?.quantity || 0);
     }
-    if (sourceKind === 'production_plan') {
-      const plan = plans.find((row) => row.id === sourceId);
-      const remaining = Number(plan?.remainingQuantity ?? 0);
-      return remaining > 0
-        ? remaining
-        : Math.max(0, Number(plan?.plannedQuantity || 0) - Number(plan?.producedQuantity || 0));
-    }
-    const report = recentReports.find((row) => row.id === sourceId);
-    return Number(report?.quantityProduced || 0);
-  }, [sourceId, sourceKind, workOrders, plans, recentReports]);
+    const plan = plans.find((row) => row.id === sourceId);
+    const remaining = Number(plan?.remainingQuantity ?? 0);
+    return remaining > 0
+      ? remaining
+      : Math.max(0, Number(plan?.plannedQuantity || 0) - Number(plan?.producedQuantity || 0));
+  }, [sourceId, sourceKind, workOrders, plans]);
 
   useEffect(() => {
     setIssueQuantity('');
@@ -477,7 +430,6 @@ export const ProductionIssues: React.FC = () => {
       const id = await productionIssueService.createDraft({
         workOrderId: sourceKind === 'work_order' ? sourceId : undefined,
         productionPlanId: sourceKind === 'production_plan' ? sourceId : undefined,
-        productionReportId: sourceKind === 'production_report' ? sourceId : undefined,
         sourceWarehouseId: warehouseId,
         quantityOverride: requestedQty,
         createdBy: actor,
@@ -658,7 +610,7 @@ export const ProductionIssues: React.FC = () => {
 
   return (
     <div className="erp-ds-clean space-y-5">
-      <PageHeader title="صرف إنتاج" subtitle="إنشاء أمر صرف من تقرير إنتاج / أمر شغل / خطة، ثم طباعة واعتماد خصم المكونات من اللوكيشن (مخزن المستلزمات)." icon="inventory_2" />
+      <PageHeader title="صرف إنتاج" subtitle="إنشاء أمر صرف من أمر شغل أو خطة إنتاج، ثم طباعة واعتماد خصم المكونات من اللوكيشن (مخزن المستلزمات)." icon="inventory_2" />
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
@@ -670,15 +622,12 @@ export const ProductionIssues: React.FC = () => {
           <label className="space-y-1">
             <span className="text-xs font-bold text-slate-500">نوع المصدر</span>
             <select className="w-full rounded-lg border px-3 py-2 text-sm" value={sourceKind} onChange={(e) => { setSourceKind(e.target.value as typeof sourceKind); setSourceId(''); }}>
-              <option value="production_report">تقرير إنتاج</option>
               <option value="work_order">أمر شغل</option>
               <option value="production_plan">خطة إنتاج</option>
             </select>
           </label>
           <label className="space-y-1">
-            <span className="text-xs font-bold text-slate-500">
-              {sourceKind === 'production_report' ? 'تقرير الإنتاج' : 'أمر الشغل / الخطة'}
-            </span>
+            <span className="text-xs font-bold text-slate-500">أمر الشغل / الخطة</span>
             <select className="w-full rounded-lg border px-3 py-2 text-sm" value={sourceId} onChange={(e) => setSourceId(e.target.value)}>
               <option value="">اختر المصدر</option>
               {sourceOptions.map((opt) => <option key={opt.id} value={opt.id}>{opt.label}</option>)}
@@ -715,12 +664,8 @@ export const ProductionIssues: React.FC = () => {
           <Button variant="primary" disabled={busy || !can('productionIssue.create')} onClick={() => void createOrder()}>إنشاء</Button>
           <div className="lg:col-start-4 text-xs font-semibold text-slate-500">
             {selectedSourceQuantity > 0
-              ? sourceKind === 'production_report'
-                ? `كمية التقرير: ${formatQty(selectedSourceQuantity, 3)} — اتركها فارغة لصرف نفس الكمية`
-                : `اتركها فارغة لصرف كامل الكمية: ${formatQty(selectedSourceQuantity, 3)}`
-              : sourceKind === 'production_report'
-                ? 'اختر تقرير إنتاج من آخر 14 يومًا (بما فيها التقارير السابقة).'
-                : 'اختر المصدر لعرض الكمية الافتراضية.'}
+              ? `اتركها فارغة لصرف كامل الكمية: ${formatQty(selectedSourceQuantity, 3)}`
+              : 'اختر المصدر لعرض الكمية الافتراضية.'}
           </div>
         </div>
         {message && (

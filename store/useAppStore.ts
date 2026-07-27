@@ -154,6 +154,7 @@ import {
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift';
 import {
+  buildTeamPlanWorkerOutputs,
   computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
@@ -3380,23 +3381,50 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       const reportProduct = _rawProducts.find((p) => p.id === savePayload.productId) ?? null;
       const assemblyModeSnapshot = getProductAssemblyMode(reportProduct);
-      const workerTargetsApplied = reportType === 'finished_product'
+      const planDailyTarget = Math.max(0, Number(activePlan?.avgDailyTarget || 0));
+      const teamPlanSharedEnabled = reportType === 'finished_product'
+        && assemblyModeSnapshot === 'team'
+        && Boolean(activePlan?.id)
+        && planDailyTarget > 0;
+      const individualWorkerTargetsEnabled = reportType === 'finished_product'
         && assemblyModeSnapshot === 'individual'
         && hasLineSpecificWorkerTarget(lineProductConfigs, savePayload.lineId, savePayload.productId);
-      const workerOutputs = workerTargetsApplied
-        ? (savePayload.workerOutputs || []).filter((row) => (
-          row.productId === savePayload.productId && row.lineId === savePayload.lineId
-        )).map((row) => {
-          const isPresent = row.isPresent ?? true;
-          const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
-          return {
-            ...row,
-            isPresent,
-            outputQty,
-            achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
-          };
+      const workerTargetsApplied = individualWorkerTargetsEnabled || teamPlanSharedEnabled;
+      const scopedWorkerOutputs = (savePayload.workerOutputs || []).filter((row) => (
+        row.productId === savePayload.productId && row.lineId === savePayload.lineId
+      ));
+      const workerOutputs = teamPlanSharedEnabled
+        ? buildTeamPlanWorkerOutputs({
+          quantityProduced: Number(savePayload.quantityProduced || 0),
+          planDailyTarget,
+          workers: scopedWorkerOutputs.map((row) => ({
+            workerId: row.workerId,
+            workerName: row.workerName,
+            isPresent: row.isPresent,
+            productId: row.productId,
+            productName: row.productName,
+            lineId: row.lineId,
+            lineName: row.lineName,
+            notes: row.notes,
+          })),
         })
-        : [];
+        : individualWorkerTargetsEnabled
+          ? scopedWorkerOutputs.map((row) => {
+            const isPresent = row.isPresent ?? true;
+            const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+            return {
+              ...row,
+              isPresent,
+              outputQty,
+              achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+            };
+          })
+          : [];
+      const workerTargetSource = teamPlanSharedEnabled
+        ? 'plan_daily'
+        : individualWorkerTargetsEnabled
+          ? 'line_product'
+          : 'none';
 
       let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
         ...savePayload,
@@ -3407,7 +3435,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         productionPlanLinkMode: activePlan?.id ? (explicitPlanId || workOrderPlanId ? 'manual' : 'auto') : undefined,
         assemblyModeSnapshot,
         workerTargetsApplied,
-        workerTargetSource: workerTargetsApplied ? 'line_product' : 'none',
+        workerTargetSource,
         laborAssignmentSource: Number(savePayload.workersCount || 0) > 0 || detailedWorkersTotal > 0
           ? 'line_worker_assignments'
           : 'none',

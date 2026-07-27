@@ -55,13 +55,12 @@ import {
   applySkipExistingProductComponents,
   bomExistKey,
   parseProductComponentsExcel,
-  stockExistKeyAny,
   stockExistKeyForLocation,
   stockExistKeyForWarehouse,
   type ProductComponentsImportResult,
 } from '../../../utils/importProductComponents';
-import { exportAllProducts } from '../../../utils/exportExcel';
-import type { ProductExportOptions } from '../../../utils/exportExcel';
+import { exportAllProducts, exportProductBomExcel } from '../../../utils/exportExcel';
+import type { ProductExportOptions, ProductBomExportRow } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import type { ProductMaterial } from '../../../types';
 import { productMaterialService } from '../services/productMaterialService';
@@ -341,6 +340,7 @@ export const Products: React.FC = () => {
   const [exportMonthSavedActiveProductIds, setExportMonthSavedActiveProductIds] = useState<string[]>([]);
   const [exportMonthLoading, setExportMonthLoading] = useState(false);
   const [exportingProducts, setExportingProducts] = useState(false);
+  const [exportingBom, setExportingBom] = useState(false);
 
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const {
@@ -1113,9 +1113,9 @@ export const Products: React.FC = () => {
         ];
       }
 
-      // Skip BOM/stock that already exists so re-import does not double balances.
+      // Annotate existing BOM (upsert) and plan absolute stock adjustments (جرد).
       const bomKeys = new Set<string>();
-      const stockKeys = new Set<string>();
+      const stockQtyByKey = new Map<string, number>();
       try {
         const productIds = [
           ...new Set(
@@ -1146,31 +1146,28 @@ export const Products: React.FC = () => {
           stockService.getBalances(),
         ]);
         for (const bal of locationBalances) {
-          if (!bal.itemId || Number(bal.quantity || 0) <= 0) continue;
-          if (bal.locationId) {
-            stockKeys.add(stockExistKeyForLocation(bal.itemId, bal.locationId));
-          }
-          if (bal.warehouseId) {
-            stockKeys.add(stockExistKeyForWarehouse(bal.itemId, bal.warehouseId));
-          }
-          stockKeys.add(stockExistKeyAny(bal.itemId));
+          if (!bal.itemId || !bal.locationId) continue;
+          stockQtyByKey.set(
+            stockExistKeyForLocation(bal.itemId, bal.locationId),
+            Number(bal.quantity || 0),
+          );
         }
         for (const bal of warehouseBalances) {
-          if (!bal.itemId || Number(bal.quantity || 0) <= 0) continue;
-          stockKeys.add(stockExistKeyAny(bal.itemId));
-          if (bal.warehouseId) {
-            stockKeys.add(stockExistKeyForWarehouse(bal.itemId, bal.warehouseId));
-          }
+          if (!bal.itemId || !bal.warehouseId) continue;
+          stockQtyByKey.set(
+            stockExistKeyForWarehouse(bal.itemId, bal.warehouseId),
+            Number(bal.quantity || 0),
+          );
         }
       } catch {
         result.fileErrors = [
           ...result.fileErrors,
-          'تعذر التحقق من الأرصدة الحالية؛ قد تُضاف أرصدة مكررة.',
+          'تعذر تحميل الأرصدة الحالية؛ تسويات الرصيد قد تُحسب من صفر.',
         ];
       }
 
       setComponentsImportResult(
-        applySkipExistingProductComponents(result, { bomKeys, stockKeys }),
+        applySkipExistingProductComponents(result, { bomKeys, stockQtyByKey }),
       );
     } catch {
       setComponentsImportResult({
@@ -1246,7 +1243,10 @@ export const Products: React.FC = () => {
       componentsImportResult.stockMovementCount === 0 &&
       componentsImportResult.newMaterialCount === 0
     ) {
-      setSaveMsg({ type: 'error', text: 'لا يوجد جديد للحفظ — كل المكونات/الأرصدة موجودة مسبقًا.' });
+      setSaveMsg({
+        type: 'error',
+        text: 'لا يوجد ما يُحفظ — لا تحديثات BOM ولا تسويات رصيد (رصيد فاضي أو مطابق للحالي).',
+      });
       return;
     }
 
@@ -1412,7 +1412,39 @@ export const Products: React.FC = () => {
           fallbackWarehouse?.name ||
           warehouses.find((w) => w.id === warehouseId)?.name;
 
-        // Pre-assign reference to skip INV counter allocation (avoids hangs under load).
+        // Live current qty so fallback-warehouse rows adjust correctly.
+        let currentQty = Number(movement.currentQuantity || 0);
+        try {
+          if (movement.locationId) {
+            const locBals = await withTimeout(
+              stockService.getLocationBalances({
+                warehouseId,
+                locationId: movement.locationId,
+                itemType: stockItemTypeForMaterials,
+                itemId: materialId,
+              }),
+              `bal-loc ${movement.materialCode}`,
+            );
+            currentQty = Number(locBals[0]?.quantity || 0);
+          } else {
+            currentQty = await withTimeout(
+              stockService.getBalance(warehouseId, stockItemTypeForMaterials, materialId),
+              `bal-wh ${movement.materialCode}`,
+            );
+          }
+        } catch {
+          // Keep planned currentQuantity
+        }
+
+        const targetQty = Number(movement.quantity);
+        const delta = targetQty - currentQty;
+        if (delta === 0) {
+          stockSaved++;
+          done++;
+          setComponentsImportProgress({ done, total: totalSteps });
+          continue;
+        }
+
         const movementId = await withTimeout(
           stockService.createMovement({
             warehouseId,
@@ -1422,11 +1454,12 @@ export const Products: React.FC = () => {
             itemId: materialId,
             itemName: movement.materialName,
             itemCode: movement.materialCode,
-            movementType: 'IN',
-            quantity: movement.quantity,
+            movementType: 'ADJUSTMENT',
+            quantity: delta,
             unit: movement.materialUnit || 'piece',
             referenceNo: `${importBatchId}-${movementIndex + 1}`,
-            note: 'استيراد مكونات المنتجات',
+            note: `جرد مكونات المنتجات → ${targetQty}`,
+            adjustmentReason: 'count_correction',
             sourceModule: 'manual_movement',
             createdBy: userDisplayName || 'Current User',
           }),
@@ -1512,11 +1545,136 @@ export const Products: React.FC = () => {
           ? `فشل حفظ الرصيد بالكامل (${stockFailed}). المكونات/BOM قد تكون اتحفظت — أعد رفع الشيت للرصيد.${stockErrorHint}`
           : failed > 0
             ? `تم الحفظ مع ${failed} فشل (رصيد نجح: ${stockSaved}/${stockMovements.length}).${stockErrorHint}`
-            : `تم حفظ ${bomGroupCount} منتج` +
+            : `تم حفظ/تحديث ${bomGroupCount} منتج` +
               (newMaterialCount > 0 ? ` و${newMaterialCount} مادة جديدة` : '') +
-              (stockMovementCount > 0 ? ` و${stockMovementCount} رصيد` : '') +
+              (stockMovementCount > 0 ? ` و${stockMovementCount} تسوية رصيد` : '') +
               '.',
     });
+  };
+
+  const handleExportProductBom = async () => {
+    if (!canExportFromPage || _rawProducts.length === 0) return;
+    setExportingBom(true);
+    setSaveMsg(null);
+    try {
+      const [materials, locationRows, locationBalances, warehouseBalances] = await Promise.all([
+        materialService.getAll(),
+        warehouseLocationService.getAll(),
+        stockService.getLocationBalances(),
+        stockService.getBalances(),
+      ]);
+      const materialById = new Map(materials.map((m) => [m.id || '', m]));
+      const locationById = new Map(
+        locationRows.filter((l) => l.id).map((l) => [l.id!, l]),
+      );
+
+      const locBalancesByItem = new Map<
+        string,
+        Array<{ locationId: string; locationCode: string; quantity: number }>
+      >();
+      for (const bal of locationBalances) {
+        if (!bal.itemId) continue;
+        const qty = Number(bal.quantity || 0);
+        if (!bal.locationId) continue;
+        const code =
+          bal.locationCode ||
+          locationById.get(bal.locationId)?.code ||
+          '';
+        if (!code) continue;
+        const list = locBalancesByItem.get(bal.itemId) ?? [];
+        list.push({ locationId: bal.locationId, locationCode: code, quantity: qty });
+        locBalancesByItem.set(bal.itemId, list);
+      }
+
+      const warehouseQtyByItem = new Map<string, number>();
+      for (const bal of warehouseBalances) {
+        if (!bal.itemId) continue;
+        const qty = Number(bal.quantity || 0);
+        warehouseQtyByItem.set(
+          bal.itemId,
+          (warehouseQtyByItem.get(bal.itemId) || 0) + qty,
+        );
+      }
+
+      const productsSorted = [..._rawProducts].sort((a, b) =>
+        String(a.code || '').localeCompare(String(b.code || ''), 'ar'),
+      );
+
+      const exportRows: ProductBomExportRow[] = [];
+      await Promise.all(
+        productsSorted.map(async (product) => {
+          if (!product.id) return;
+          const { items } = await bomService.getActiveBomWithLegacyFallback('product', product.id);
+          if (items.length === 0) return;
+          const sortedItems = [...items].sort(
+            (a, b) => Number(a.sortOrder ?? 0) - Number(b.sortOrder ?? 0),
+          );
+          for (const item of sortedItems) {
+            if (item.itemType !== 'material' || !item.itemId) continue;
+            const mat = materialById.get(item.itemId);
+            const materialCode = mat?.code || '';
+            const materialName = mat?.name || item.itemName || '';
+            if (!materialCode && !materialName) continue;
+            const base = {
+              productCode: product.code || '',
+              productName: product.name || '',
+              materialCode: materialCode || materialName,
+              materialName: materialName || materialCode,
+              qtyPerUnit: Number(item.qtyPerUnit || 0),
+              unitCost:
+                item.directCostPerUnit != null && Number(item.directCostPerUnit) > 0
+                  ? Number(item.directCostPerUnit)
+                  : mat?.purchaseCost != null
+                    ? Number(mat.purchaseCost)
+                    : undefined,
+            };
+            const locBals = locBalancesByItem.get(item.itemId) ?? [];
+            if (locBals.length > 0) {
+              for (const lb of locBals) {
+                exportRows.push({
+                  ...base,
+                  locationCode: lb.locationCode,
+                  balanceQty: lb.quantity,
+                });
+              }
+            } else if (warehouseQtyByItem.has(item.itemId)) {
+              exportRows.push({
+                ...base,
+                locationCode: '',
+                balanceQty: warehouseQtyByItem.get(item.itemId) ?? 0,
+              });
+            } else {
+              exportRows.push({
+                ...base,
+                locationCode: '',
+                balanceQty: '',
+              });
+            }
+          }
+        }),
+      );
+
+      exportRows.sort((a, b) => {
+        const c = a.productCode.localeCompare(b.productCode, 'ar');
+        if (c !== 0) return c;
+        return a.materialCode.localeCompare(b.materialCode, 'ar');
+      });
+
+      if (exportRows.length === 0) {
+        setSaveMsg({ type: 'error', text: 'لا توجد مكونات BOM للتصدير.' });
+        return;
+      }
+      exportProductBomExcel(exportRows);
+      setSaveMsg({
+        type: 'success',
+        text: `تم تصدير ${exportRows.length} صف مكونات. عدّل الشيت ثم ارفعه من «رفع مكونات المنتجات».`,
+      });
+    } catch (error) {
+      console.error('[products] BOM export failed', error);
+      setSaveMsg({ type: 'error', text: 'فشل تصدير مكونات المنتجات.' });
+    } finally {
+      setExportingBom(false);
+    }
   };
 
   const doExportProducts = async (warehouseId?: string) => {
@@ -1821,6 +1979,15 @@ export const Products: React.FC = () => {
               setExportMonth(getCurrentMonth());
               setExportColumnPrefs({ ...visibleColumns });
               setShowWarehouseExportModal(true);
+            },
+          },
+          {
+            label: 'تصدير مكونات المنتجات',
+            icon: 'table_chart',
+            group: 'تصدير',
+            hidden: !canExportFromPage || _rawProducts.length === 0,
+            onClick: () => {
+              void handleExportProductBom();
             },
           },
           {
@@ -2738,8 +2905,7 @@ export const Products: React.FC = () => {
                   <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                    الأعمدة: كود المنتج، كود/اسم المادة، الكمية المستخدمة، وكود اللوكيشن ورصيد المكون اختياريان.
-                    كود مادة جديد + اسم المادة ينشئ المادة تلقائياً.
+                    الأعمدة: كود المنتج، كود/اسم المادة، الكمية المستخدمة. رصيد المكون اختياري = الكمية الفعلية (جرد)؛ اتركه فاضي لتحديث BOM فقط.
                   </p>
                   <button
                     onClick={downloadProductComponentsTemplate}
@@ -2769,15 +2935,11 @@ export const Products: React.FC = () => {
                       </div>
                     )}
                     <div className="bg-violet-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-violet-600">
-                      حركات رصيد: {componentsImportResult.stockMovementCount}
+                      تسويات رصيد: {componentsImportResult.stockMovementCount}
                     </div>
-                    {(componentsImportResult.skippedBomCount > 0 ||
-                      componentsImportResult.skippedStockCount > 0) && (
+                    {componentsImportResult.skippedStockCount > 0 && (
                       <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-700">
-                        متخطى: {componentsImportResult.skippedBomCount} BOM
-                        {componentsImportResult.skippedStockCount > 0
-                          ? ` + ${componentsImportResult.skippedStockCount} رصيد`
-                          : ''}
+                        رصيد مطابق (بدون حركة): {componentsImportResult.skippedStockCount}
                       </div>
                     )}
                     {componentsImportResult.errorCount > 0 && (
@@ -2787,10 +2949,9 @@ export const Products: React.FC = () => {
                     )}
                   </div>
 
-                  {(componentsImportResult.skippedBomCount > 0 ||
-                    componentsImportResult.skippedStockCount > 0) && (
+                  {componentsImportResult.skippedStockCount > 0 && (
                     <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-800">
-                      سيتم تخطي المكونات/الأرصدة الموجودة مسبقًا حتى لا يتكرر الإدخال.
+                      رصيد المكون اختياري: القيمة المكتوبة = الكمية الفعلية بعد الجرد (تسوية). الصفوف ذات الرصيد المطابق لن تُنشئ حركة.
                     </div>
                   )}
 
@@ -2846,9 +3007,11 @@ export const Products: React.FC = () => {
                             className={
                               row.errors.length > 0
                                 ? 'bg-rose-50/50 dark:bg-rose-900/10'
-                                : row.skipBom || row.skipStock
+                                : row.skipStock
                                   ? 'bg-amber-50/40 dark:bg-amber-900/10'
-                                  : ''
+                                  : row.skipNotes && row.skipNotes.length > 0
+                                    ? 'bg-blue-50/30 dark:bg-blue-900/10'
+                                    : ''
                             }
                           >
                             <td className="px-3 py-2.5 text-[var(--color-text-muted)] font-mono">{row.rowIndex}</td>
@@ -2857,13 +3020,13 @@ export const Products: React.FC = () => {
                                 <span className="inline-flex items-center gap-1 text-rose-500 text-xs font-bold">
                                   <ProductIcon name="error" className="text-sm" /> خطأ
                                 </span>
-                              ) : row.skipBom && row.skipStock ? (
+                              ) : row.skipStock ? (
                                 <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold">
-                                  <ProductIcon name="remove_done" className="text-sm" /> متخطى
+                                  <ProductIcon name="remove_done" className="text-sm" /> رصيد مطابق
                                 </span>
-                              ) : row.skipBom || row.skipStock ? (
-                                <span className="inline-flex items-center gap-1 text-amber-700 text-xs font-bold">
-                                  <ProductIcon name="warning" className="text-sm" /> جزئي
+                              ) : row.skipNotes && row.skipNotes.length > 0 ? (
+                                <span className="inline-flex items-center gap-1 text-blue-600 text-xs font-bold">
+                                  <ProductIcon name="sync" className="text-sm" /> تحديث
                                 </span>
                               ) : row.willCreateMaterial ? (
                                 <span className="inline-flex items-center gap-1 text-indigo-600 text-xs font-bold">
@@ -2947,12 +3110,7 @@ export const Products: React.FC = () => {
                       <ProductIcon name="save" className="text-sm" />
                       حفظ {componentsImportResult.bomGroupCount} BOM
                       {componentsImportResult.stockMovementCount > 0
-                        ? ` + ${componentsImportResult.stockMovementCount} رصيد`
-                        : ''}
-                      {componentsImportResult.skippedBomCount +
-                        componentsImportResult.skippedStockCount >
-                      0
-                        ? ' (مع تخطي الموجود)'
+                        ? ` + ${componentsImportResult.stockMovementCount} تسوية`
                         : ''}
                     </>
                   )}
@@ -2963,7 +3121,9 @@ export const Products: React.FC = () => {
                 componentsImportResult.bomGroupCount === 0 &&
                 componentsImportResult.stockMovementCount === 0 &&
                 componentsImportResult.newMaterialCount === 0 && (
-                <p className="text-sm font-bold text-amber-700">كل الصفوف موجودة مسبقًا — لا يوجد ما يُحفظ.</p>
+                <p className="text-sm font-bold text-amber-700">
+                  لا تحديثات BOM ولا تسويات رصيد للحفظ (رصيد فاضي أو مطابق).
+                </p>
               )}
             </div>
           </div>

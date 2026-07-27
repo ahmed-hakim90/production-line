@@ -108,7 +108,65 @@ assert.deepEqual(
     workersQualityCount: 1,
     workersMaintenanceCount: 0,
     workersExternalCount: 0,
+    presentAssignments: 1,
+    absentAssignments: 1,
   },
 );
+
+const teamClose = buildShiftClosePayload(
+  {
+    shiftStartedAt: '2026-06-24T06:00:00.000Z',
+    shiftWorkers: mapLineAssignmentsToShiftWorkers(assignments),
+  },
+  {
+    quantityProduced: 90,
+    notes: 'إغلاق جماعي',
+    closedByUid: 'user-1',
+    closedAtIso: '2026-06-24T14:30:00.000Z',
+    reportDate: '2026-06-24',
+    assemblyModeSnapshot: 'team',
+    workerTargetsApplied: true,
+    workerTargetSource: 'plan_daily',
+    planDailyTarget: 90,
+    workerOutputs: [
+      {
+        workerId: 'emp-1',
+        workerName: 'Worker One',
+        productId: 'prod-1',
+        productName: 'Team Product',
+        lineId: 'line-1',
+        lineName: 'Line 1',
+        dailyTargetQty: 0,
+        outputQty: 0,
+        achievementPercent: 0,
+        isPresent: true,
+      },
+      {
+        workerId: 'emp-2',
+        workerName: 'Worker Two',
+        productId: 'prod-1',
+        productName: 'Team Product',
+        lineId: 'line-1',
+        lineName: 'Line 1',
+        dailyTargetQty: 0,
+        outputQty: 0,
+        achievementPercent: 0,
+        isPresent: false,
+      },
+    ],
+  },
+);
+
+assert.equal(teamClose.workerTargetsApplied, true);
+assert.equal(teamClose.workerTargetSource, 'plan_daily');
+assert.equal(teamClose.assemblyModeSnapshot, 'team');
+assert.equal(teamClose.workerOutputs?.length, 2);
+assert.equal(teamClose.workerOutputs?.[0].outputQty, 90);
+assert.equal(teamClose.workerOutputs?.[0].dailyTargetQty, 90);
+assert.equal(teamClose.workerOutputs?.[0].achievementPercent, 100);
+assert.equal(teamClose.workerOutputs?.[1].outputQty, 0);
+assert.equal(teamClose.workerOutputs?.[1].isPresent, false);
+assert.equal(teamClose.presentAssignments, 1);
+assert.equal(teamClose.absentAssignments, 1);
 
 console.log('production-shift-service.test.ts: ok');

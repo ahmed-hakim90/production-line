@@ -42,6 +42,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
@@ -59,6 +60,8 @@ export const StockMovementForm: React.FC = () => {
     warehouseSelectLocked,
     filterWarehouses,
     resolveScopedWarehouseId,
+    routingConfigured,
+    settingsPath,
   } = useMaterialsWarehouseScope();
   const products = useAppStore((s) => s.products);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -617,6 +620,12 @@ export const StockMovementForm: React.FC = () => {
           <p className="page-subtitle">وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة</p>
         </div>
       </div>
+
+      <MaterialsWarehouseScopeBanner
+        scoped={scoped}
+        routingConfigured={routingConfigured}
+        settingsPath={settingsPath}
+      />
 
       {/* ── Main Form Card ── */}
       <div

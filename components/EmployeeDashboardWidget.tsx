@@ -80,7 +80,6 @@ import {
 } from '@/modules/production/utils/lineWorkerLaborRoles';
 import { ReportWorkerOutputsSection } from '@/modules/production/components/ReportWorkerOutputsSection';
 import {
-  computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
 } from '@/modules/production/selectors/workerTargetSelector';
@@ -225,6 +224,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   const isGeneralContext = context.type === 'general';
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
+  const productionPlans = useAppStore((s) => s.productionPlans);
   const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
   const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
   const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
@@ -315,9 +315,27 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     [closeProductId, products],
   );
   const closeAssemblyMode = getProductAssemblyMode(closeSelectedProduct);
-  const closeWorkerOutputsEnabled = Boolean(closeLineId && closeProductId)
+  const closeLinkedPlan = useMemo(() => {
+    if (fixedPlan?.id) return fixedPlan;
+    const planId = String(closeFlowReport?.productionPlanId || '').trim();
+    if (planId) {
+      return productionPlans.find((plan) => plan.id === planId) ?? null;
+    }
+    if (!closeLineId || !closeProductId) return null;
+    return productionPlans.find(
+      (plan) => plan.lineId === closeLineId
+        && plan.productId === closeProductId
+        && (plan.status === 'in_progress' || plan.status === 'planned'),
+    ) ?? null;
+  }, [fixedPlan, closeFlowReport?.productionPlanId, productionPlans, closeLineId, closeProductId]);
+  const closePlanDailyTarget = Math.max(0, Number(closeLinkedPlan?.avgDailyTarget || 0));
+  const closeTeamSharedEnabled = Boolean(closeLineId && closeProductId)
+    && closeAssemblyMode === 'team'
+    && closePlanDailyTarget > 0;
+  const closeIndividualWorkerOutputsEnabled = Boolean(closeLineId && closeProductId)
     && closeAssemblyMode === 'individual'
     && hasLineSpecificWorkerTarget(lineProductConfigs, closeLineId, closeProductId);
+  const closeWorkerOutputsEnabled = closeIndividualWorkerOutputsEnabled || closeTeamSharedEnabled;
   const closeWorkerOutputEntryEnabled = closeWorkerOutputsEnabled
     && workerSettings.performance.productionWorkerOutputEnabled;
   const closeWorkerOutputTotal = useMemo(
@@ -463,6 +481,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     const hasWorkerOutputRows = closeWorkerOutputEntryEnabled && scopedWorkerOutputs.length > 0;
     if (
       hasWorkerOutputRows
+      && closeIndividualWorkerOutputsEnabled
       && workerSettings.performance.productionWorkerOutputMustMatchReportQty
       && closeWorkerOutputTotal !== produced
     ) {
@@ -480,6 +499,12 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
         reportDate: activeCloseShift.date || today,
         assemblyModeSnapshot: closeAssemblyMode,
         workerTargetsApplied: hasWorkerOutputRows,
+        workerTargetSource: closeTeamSharedEnabled
+          ? 'plan_daily'
+          : closeIndividualWorkerOutputsEnabled
+            ? 'line_product'
+            : 'none',
+        planDailyTarget: closeTeamSharedEnabled ? closePlanDailyTarget : undefined,
         workerOutputs: hasWorkerOutputRows ? scopedWorkerOutputs : undefined,
       });
       await updateReport(activeCloseShift.id, closePayload);
@@ -889,6 +914,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                   productName={closeProductName}
                   products={products}
                   reportQty={Number(closeQuantity || 0)}
+                  planDailyTarget={closeTeamSharedEnabled ? closePlanDailyTarget : 0}
                   settings={workerSettings}
                   value={workerOutputs}
                   onChange={setWorkerOutputs}
