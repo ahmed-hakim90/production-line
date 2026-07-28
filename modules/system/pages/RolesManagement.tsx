@@ -12,6 +12,12 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { userService } from '../../../services/userService';
 import { withTenantPath } from '../../../lib/tenantPaths';
 import type { FirestoreRole, FirestoreRoleKey } from '../../../types';
+import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+
+const ROLES_USER_COUNTS_CACHE_KEY = 'system:roles-user-counts';
 
 const DEFAULT_ROLE_KEY_BY_NAME: Record<string, FirestoreRoleKey> = {
   [normalizeRoleName('مدير النظام')]: 'admin',
@@ -86,8 +92,9 @@ export const RolesManagement: React.FC = () => {
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
-  const [userCountByRoleId, setUserCountByRoleId] = useState<Record<string, number>>({});
-  const [userCountsLoading, setUserCountsLoading] = useState(true);
+  const initialCounts = peekPageDataCache<Record<string, number>>(ROLES_USER_COUNTS_CACHE_KEY);
+  const [userCountByRoleId, setUserCountByRoleId] = useState<Record<string, number>>(initialCounts ?? {});
+  const [userCountsLoading, setUserCountsLoading] = useState(() => initialCounts == null);
 
   const visibleRoleGroups = useMemo(() => getVisibleRoleGroups(roles), [roles]);
 
@@ -124,17 +131,29 @@ export const RolesManagement: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     (async () => {
-      setUserCountsLoading(true);
+      const cached = peekPageDataCache<Record<string, number>>(ROLES_USER_COUNTS_CACHE_KEY);
+      if (cached) {
+        setUserCountByRoleId(cached);
+        setUserCountsLoading(false);
+      } else {
+        setUserCountsLoading(true);
+      }
       try {
-        const users = await userService.getAll();
-        if (cancelled) return;
-        const counts: Record<string, number> = {};
-        users.forEach((u) => {
-          const rid = String(u.roleId || '').trim();
-          if (!rid) return;
-          counts[rid] = (counts[rid] || 0) + 1;
-        });
-        setUserCountByRoleId(counts);
+        const { data: counts } = await fetchCachedPageData(
+          ROLES_USER_COUNTS_CACHE_KEY,
+          async () => {
+            const users = await userService.getAll();
+            const next: Record<string, number> = {};
+            users.forEach((u) => {
+              const rid = String(u.roleId || '').trim();
+              if (!rid) return;
+              next[rid] = (next[rid] || 0) + 1;
+            });
+            return next;
+          },
+          { maxAgeMs: 60_000 },
+        );
+        if (!cancelled) setUserCountByRoleId(counts);
       } catch {
         if (!cancelled) setUserCountByRoleId({});
       } finally {

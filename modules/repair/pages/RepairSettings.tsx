@@ -25,6 +25,11 @@ import { Separator } from '@/components/ui/separator';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 import { resolveRepairSettings, type ResolvedRepairStatus } from '../config/repairSettings';
 import { repairBranchService } from '../services/repairBranchService';
 import { employeeService } from '../../hr/employeeService';
@@ -60,30 +65,54 @@ export const RepairSettings: React.FC = () => {
   const [autoCloseEnabled, setAutoCloseEnabled] = useState(Boolean(resolved.treasury.autoClose.enabled));
   const [blockIfPrevDayOpen, setBlockIfPrevDayOpen] = useState(Boolean(resolved.treasury.autoClose.blockOperationsIfPrevDayOpen));
 
-  const [repairBranches, setRepairBranches] = useState<RepairBranch[]>([]);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [branchManagersLoading, setBranchManagersLoading] = useState(true);
-  const [managerByBranchId, setManagerByBranchId] = useState<Record<string, string>>({});
+  type RepairSettingsManagersData = {
+    repairBranches: RepairBranch[];
+    employees: FirestoreEmployee[];
+    managerByBranchId: Record<string, string>;
+  };
+  const SETTINGS_MANAGERS_CACHE_KEY = 'repair:settings:branchManagers';
+  const initialManagersCache = peekPageDataCache<RepairSettingsManagersData>(SETTINGS_MANAGERS_CACHE_KEY);
+  const [repairBranches, setRepairBranches] = useState<RepairBranch[]>(() => initialManagersCache?.repairBranches ?? []);
+  const [employees, setEmployees] = useState<FirestoreEmployee[]>(() => initialManagersCache?.employees ?? []);
+  const [branchManagersLoading, setBranchManagersLoading] = useState(() => initialManagersCache == null);
+  const [managerByBranchId, setManagerByBranchId] = useState<Record<string, string>>(() => initialManagersCache?.managerByBranchId ?? {});
   const [managerSearch, setManagerSearch] = useState('');
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
+    const cached = peekPageDataCache<RepairSettingsManagersData>(SETTINGS_MANAGERS_CACHE_KEY);
+    if (cached) {
+      setRepairBranches(cached.repairBranches);
+      setEmployees(cached.employees);
+      setManagerByBranchId(cached.managerByBranchId);
+      setBranchManagersLoading(false);
+    } else {
       setBranchManagersLoading(true);
+    }
+    (async () => {
       try {
-        const [brList, empList] = await Promise.all([
-          repairBranchService.list(),
-          employeeService.getAll(),
-        ]);
-        if (cancelled) return;
-        setRepairBranches(brList);
-        const active = empList.filter((e) => e.isActive !== false);
-        setEmployees(active);
-        setManagerByBranchId(
-          Object.fromEntries(
-            brList.map((b) => [String(b.id || ''), String(b.managerEmployeeId || '')]),
-          ),
+        const { data } = await fetchCachedPageData(
+          SETTINGS_MANAGERS_CACHE_KEY,
+          async () => {
+            const [brList, empList] = await Promise.all([
+              repairBranchService.list(),
+              employeeService.getAll(),
+            ]);
+            const active = empList.filter((e) => e.isActive !== false);
+            return {
+              repairBranches: brList,
+              employees: active,
+              managerByBranchId: Object.fromEntries(
+                brList.map((b) => [String(b.id || ''), String(b.managerEmployeeId || '')]),
+              ),
+            };
+          },
+          { maxAgeMs: 60_000 },
         );
+        if (cancelled) return;
+        setRepairBranches(data.repairBranches);
+        setEmployees(data.employees);
+        setManagerByBranchId(data.managerByBranchId);
       } finally {
         if (!cancelled) setBranchManagersLoading(false);
       }
@@ -162,6 +191,7 @@ export const RepairSettings: React.FC = () => {
         branchManagersUpdated = true;
       }
       if (branchManagersUpdated) {
+        invalidatePageDataCache(SETTINGS_MANAGERS_CACHE_KEY);
         const refreshed = await repairBranchService.list();
         setRepairBranches(refreshed);
         setManagerByBranchId(

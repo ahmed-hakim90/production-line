@@ -17,6 +17,12 @@ import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
 import type { ProductionReport, ProductionWorker, WorkerDailyPerformanceLog } from '@/types';
 import { getPresenceLabel } from '../utils/workerPresence';
 import {
+  invalidatePageDataCache,
+  isPageDataCacheFresh,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
+import {
   buildAssignmentInfoByWorker,
   listDatesInRange,
   monthRange,
@@ -182,10 +188,26 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
     productionLinesRef.current.find((line) => line.id === lineId)?.name ?? lineId ?? '—'
   ), []);
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { force?: boolean }) => {
     if (!canView) return;
     const loadGeneration = ++loadGenerationRef.current;
-    setLoading(true);
+    const reportsCacheKey = `production:workerReports:${kind}:${kind === 'daily' ? `${startDate}:${endDate}` : `${date}:${month}`}`;
+    if (opts?.force) invalidatePageDataCache(reportsCacheKey);
+    type WorkerReportsPageData = {
+      rows: Record<string, unknown>[];
+      periodPresenceSummary: { present: number; absent: number; noTarget: number };
+    };
+    const cached = peekPageDataCache<WorkerReportsPageData>(reportsCacheKey);
+    if (cached) {
+      setRows(cached.rows);
+      setPeriodPresenceSummary(cached.periodPresenceSummary);
+      setLoading(false);
+      if (!opts?.force && isPageDataCacheFresh(reportsCacheKey, 45_000)) {
+        return;
+      }
+    } else {
+      setLoading(true);
+    }
     setLoadError(null);
     const currentProducts = productsRef.current;
     const currentProductionLines = productionLinesRef.current;
@@ -329,11 +351,13 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           ...assignedOnlyRows,
         ];
         setRows(nextRows);
-        setPeriodPresenceSummary({
+        const nextDailySummary = {
           present: nextRows.reduce((sum, row) => sum + Number(row['أيام حضور'] || 0), 0),
           absent: nextRows.reduce((sum, row) => sum + Number(row['أيام غياب'] || 0), 0),
           noTarget: nextRows.reduce((sum, row) => sum + Number(row['أيام بدون هدف'] || 0), 0),
-        });
+        };
+        setPeriodPresenceSummary(nextDailySummary);
+        setPageDataCache(reportsCacheKey, { rows: nextRows, periodPresenceSummary: nextDailySummary });
       } else {
         const { start, end } = monthRange(month);
         const today = getTodayDateString();
@@ -402,12 +426,14 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
           result = result.filter((row) => Number(row['إنجاز الشهر %'] || 0) < threshold);
         }
         if (loadGeneration !== loadGenerationRef.current) return;
-        setRows(result);
-        setPeriodPresenceSummary({
+        const nextSummary = {
           present: result.reduce((sum, row) => sum + Number(row['أيام حضور'] || 0), 0),
           absent: result.reduce((sum, row) => sum + Number(row['أيام غياب'] || 0), 0),
           noTarget: result.reduce((sum, row) => sum + Number(row['أيام بدون هدف'] || 0), 0),
-        });
+        };
+        setRows(result);
+        setPeriodPresenceSummary(nextSummary);
+        setPageDataCache(reportsCacheKey, { rows: result, periodPresenceSummary: nextSummary });
       }
     } catch (error) {
       if (loadGeneration !== loadGenerationRef.current) return;
@@ -554,7 +580,7 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
             <option value="absent">غائب</option>
             <option value="no_target">غير مكلف بهدف</option>
           </select>
-          <Button onClick={() => void load()}>تحديث</Button>
+          <Button onClick={() => void load({ force: true })}>تحديث</Button>
         </div>
         <div className="grid grid-cols-1 gap-3 border-b border-[var(--color-border)] p-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl bg-slate-50 p-3 text-center">

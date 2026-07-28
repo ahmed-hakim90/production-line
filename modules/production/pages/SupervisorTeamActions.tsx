@@ -80,8 +80,22 @@ import {
   isApprovalRequestCreatedBySupervisor,
   mergeSupervisorVisibleApprovalRequests,
 } from '../utils/supervisorApprovalVisibility';
+import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type PageTab = 'create' | 'approvals' | 'history';
+type SupervisorTeamPageData = {
+  resolvedSupervisor: FirestoreEmployee | null;
+  allEmployees: FirestoreEmployee[];
+  departments: FirestoreDepartment[];
+  teamWorkers: SupervisorTeamWorker[];
+  teamScope: TeamWorkerScope;
+  managedDepartmentCount: number;
+  leaveTypes: LeaveTypeDefinition[];
+  leaveReasons: LeaveReasonDefinition[];
+};
 type ActionTab = 'leave' | 'loan' | 'penalty';
 type HistoryStatusFilter = 'all' | 'approved' | 'rejected' | 'cancelled';
 type ExportRequestTypeFilter = 'all' | ApprovalRequestType;
@@ -320,14 +334,21 @@ export const SupervisorTeamActions: React.FC = () => {
   const permissions = useAppStore((s) => s.userPermissions);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
 
-  const [resolvedSupervisor, setResolvedSupervisor] = useState<FirestoreEmployee | null>(currentEmployee);
-  const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>([]);
-  const [teamWorkers, setTeamWorkers] = useState<SupervisorTeamWorker[]>([]);
-  const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
-  const [selectedEmployeeId, setSelectedEmployeeId] = useState('');
-  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
-  const [leaveReasons, setLeaveReasons] = useState<LeaveReasonDefinition[]>([]);
-  const [loading, setLoading] = useState(true);
+  const TEAM_CACHE_KEY = `production:supervisor-team-actions:${uid || 'anon'}`;
+  const initialTeamCache = peekPageDataCache<SupervisorTeamPageData>(TEAM_CACHE_KEY);
+
+  const [resolvedSupervisor, setResolvedSupervisor] = useState<FirestoreEmployee | null>(
+    initialTeamCache?.resolvedSupervisor ?? currentEmployee,
+  );
+  const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>(initialTeamCache?.allEmployees ?? []);
+  const [teamWorkers, setTeamWorkers] = useState<SupervisorTeamWorker[]>(initialTeamCache?.teamWorkers ?? []);
+  const [departments, setDepartments] = useState<FirestoreDepartment[]>(initialTeamCache?.departments ?? []);
+  const [selectedEmployeeId, setSelectedEmployeeId] = useState(
+    () => initialTeamCache?.teamWorkers[0]?.employeeId || '',
+  );
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>(initialTeamCache?.leaveTypes ?? []);
+  const [leaveReasons, setLeaveReasons] = useState<LeaveReasonDefinition[]>(initialTeamCache?.leaveReasons ?? []);
+  const [loading, setLoading] = useState(() => initialTeamCache == null);
   const [submitting, setSubmitting] = useState<ActionTab | null>(null);
   const [activePageTab, setActivePageTab] = useState<PageTab>('create');
   const [activeTab, setActiveTab] = useState<ActionTab>('leave');
@@ -337,8 +358,8 @@ export const SupervisorTeamActions: React.FC = () => {
   const [leaveBalance, setLeaveBalance] = useState<FirestoreLeaveBalance | null>(null);
   const [recentLeaves, setRecentLeaves] = useState<FirestoreLeaveRequest[]>([]);
   const [recentLoans, setRecentLoans] = useState<FirestoreEmployeeLoan[]>([]);
-  const [teamScope, setTeamScope] = useState<TeamWorkerScope>('assigned_lines');
-  const [managedDepartmentCount, setManagedDepartmentCount] = useState(0);
+  const [teamScope, setTeamScope] = useState<TeamWorkerScope>(initialTeamCache?.teamScope ?? 'assigned_lines');
+  const [managedDepartmentCount, setManagedDepartmentCount] = useState(initialTeamCache?.managedDepartmentCount ?? 0);
   const [approvalRequests, setApprovalRequests] = useState<FirestoreApprovalRequest[]>([]);
   const [historyRequests, setHistoryRequests] = useState<FirestoreApprovalRequest[]>([]);
   const [approvalsLoading, setApprovalsLoading] = useState(false);
@@ -626,91 +647,124 @@ export const SupervisorTeamActions: React.FC = () => {
     }
   }, [isConfiguredProductionRequestObserver, permissions, supervisorId, uid]);
 
+  const applyTeamPageData = useCallback((data: SupervisorTeamPageData) => {
+    setResolvedSupervisor(data.resolvedSupervisor);
+    setAllEmployees(data.allEmployees);
+    setDepartments(data.departments);
+    setTeamWorkers(data.teamWorkers);
+    setTeamScope(data.teamScope);
+    setManagedDepartmentCount(data.managedDepartmentCount);
+    setLeaveTypes(data.leaveTypes);
+    setLeaveReasons(data.leaveReasons);
+    setLeaveType((prev) => data.leaveTypes.some((row) => row.key === prev) ? prev : (data.leaveTypes[0]?.key || 'annual'));
+    setLeaveReasonCode((prev) => data.leaveReasons.some((row) => row.code === prev) ? prev : (data.leaveReasons[0]?.code || ''));
+    setSelectedEmployeeId((prev) =>
+      data.teamWorkers.some((row) => row.employeeId === prev) ? prev : (data.teamWorkers[0]?.employeeId || ''),
+    );
+  }, []);
+
   const fetchTeam = useCallback(async () => {
-    setLoading(true);
+    const cached = peekPageDataCache<SupervisorTeamPageData>(TEAM_CACHE_KEY);
+    if (cached) {
+      applyTeamPageData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const supervisor = currentEmployee || (uid ? await employeeService.getByUserId(uid) : null);
-      setResolvedSupervisor(supervisor);
-      if (!supervisor?.id) {
-        setTeamWorkers([]);
-        setAllEmployees([]);
-        setDepartments([]);
-        setManagedDepartmentCount(0);
-        return;
-      }
+      const { data } = await fetchCachedPageData(
+        TEAM_CACHE_KEY,
+        async (): Promise<SupervisorTeamPageData> => {
+          const supervisor = currentEmployee || (uid ? await employeeService.getByUserId(uid) : null);
+          if (!supervisor?.id) {
+            return {
+              resolvedSupervisor: supervisor,
+              allEmployees: [],
+              departments: [],
+              teamWorkers: [],
+              teamScope: 'assigned_lines',
+              managedDepartmentCount: 0,
+              leaveTypes: await getLeaveTypesFromConfig(),
+              leaveReasons: await getLeaveReasonsFromConfig(),
+            };
+          }
 
-      const today = getToday();
-      const [
-        employees,
-        workers,
-        lineAssignments,
-        supervisorAssignments,
-        lines,
-        departmentSnap,
-        jobPositionSnap,
-        configuredLeaveTypes,
-        configuredLeaveReasons,
-      ] = await Promise.all([
-        employeeService.getAll(),
-        productionWorkerService.getAll(),
-        productionLineWorkerAssignmentService.getAll(),
-        supervisorLineAssignmentService.getActiveByDate(today),
-        lineService.getAll(),
-        getDocs(departmentsRef()),
-        getDocs(jobPositionsRef()),
-        getLeaveTypesFromConfig(),
-        getLeaveReasonsFromConfig(),
-      ]);
+          const today = getToday();
+          const [
+            employees,
+            workers,
+            lineAssignments,
+            supervisorAssignments,
+            lines,
+            departmentSnap,
+            jobPositionSnap,
+            configuredLeaveTypes,
+            configuredLeaveReasons,
+          ] = await Promise.all([
+            employeeService.getAll(),
+            productionWorkerService.getAll(),
+            productionLineWorkerAssignmentService.getAll(),
+            supervisorLineAssignmentService.getActiveByDate(today),
+            lineService.getAll(),
+            getDocs(departmentsRef()),
+            getDocs(jobPositionsRef()),
+            getLeaveTypesFromConfig(),
+            getLeaveReasonsFromConfig(),
+          ]);
 
-      const departmentsList = departmentSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreDepartment));
-      const jobPositionsList = jobPositionSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreJobPosition));
-      const managedDepartments = departmentsList.filter((department) => (
-        department.isActive !== false
-        && resolveEmployeeHierarchyId(employees, department.managerId) === supervisor.id
-      ));
-      const managesDepartment = managedDepartments.length > 0;
-      const currentDepartment = departmentsList.find((department) => department.id === supervisor.departmentId) || null;
-      const currentJobPosition = jobPositionsList.find((position) => position.id === supervisor.jobPositionId) || null;
-      const hasAssignedLines = supervisorAssignments.some((assignment) =>
-        resolveEmployeeHierarchyId(employees, assignment.supervisorId) === supervisor.id,
+          const departmentsList = departmentSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreDepartment));
+          const jobPositionsList = jobPositionSnap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as FirestoreJobPosition));
+          const managedDepartments = departmentsList.filter((department) => (
+            department.isActive !== false
+            && resolveEmployeeHierarchyId(employees, department.managerId) === supervisor.id
+          ));
+          const managesDepartment = managedDepartments.length > 0;
+          const currentDepartment = departmentsList.find((department) => department.id === supervisor.departmentId) || null;
+          const currentJobPosition = jobPositionsList.find((position) => position.id === supervisor.jobPositionId) || null;
+          const hasAssignedLines = supervisorAssignments.some((assignment) =>
+            resolveEmployeeHierarchyId(employees, assignment.supervisorId) === supervisor.id,
+          );
+          const scope = resolveTeamRequestScope({
+            can,
+            managesDepartment,
+            currentEmployee: supervisor,
+            department: currentDepartment,
+            jobPosition: currentJobPosition,
+            hasAssignedLines,
+          });
+          const rows = buildSupervisorTeamWorkers({
+            supervisorId: supervisor.id,
+            employees,
+            workers,
+            lineAssignments,
+            supervisorAssignments,
+            lines,
+            departments: departmentsList,
+            date: today,
+            scope,
+          });
+
+          return {
+            resolvedSupervisor: supervisor,
+            allEmployees: employees,
+            departments: departmentsList,
+            teamWorkers: rows,
+            teamScope: scope,
+            managedDepartmentCount: managedDepartments.length,
+            leaveTypes: configuredLeaveTypes,
+            leaveReasons: configuredLeaveReasons,
+          };
+        },
+        { maxAgeMs: 45_000 },
       );
-      const scope = resolveTeamRequestScope({
-        can,
-        managesDepartment,
-        currentEmployee: supervisor,
-        department: currentDepartment,
-        jobPosition: currentJobPosition,
-        hasAssignedLines,
-      });
-      const rows = buildSupervisorTeamWorkers({
-        supervisorId: supervisor.id,
-        employees,
-        workers,
-        lineAssignments,
-        supervisorAssignments,
-        lines,
-        departments: departmentsList,
-        date: today,
-        scope,
-      });
-
-      setAllEmployees(employees);
-      setDepartments(departmentsList);
-      setTeamWorkers(rows);
-      setTeamScope(scope);
-      setManagedDepartmentCount(managedDepartments.length);
-      setLeaveTypes(configuredLeaveTypes);
-      setLeaveReasons(configuredLeaveReasons);
-      setLeaveType((prev) => configuredLeaveTypes.some((row) => row.key === prev) ? prev : (configuredLeaveTypes[0]?.key || 'annual'));
-      setLeaveReasonCode((prev) => configuredLeaveReasons.some((row) => row.code === prev) ? prev : (configuredLeaveReasons[0]?.code || ''));
-      setSelectedEmployeeId((prev) => rows.some((row) => row.employeeId === prev) ? prev : (rows[0]?.employeeId || ''));
+      applyTeamPageData(data);
     } catch (err) {
       console.error('Failed to load supervisor team actions data:', err);
       setToast({ type: 'error', message: 'تعذر تحميل عمال الإنتاج' });
     } finally {
       setLoading(false);
     }
-  }, [can, currentEmployee, uid]);
+  }, [TEAM_CACHE_KEY, applyTeamPageData, can, currentEmployee, uid]);
 
   useEffect(() => { void fetchTeam(); }, [fetchTeam]);
 
@@ -1183,7 +1237,7 @@ export const SupervisorTeamActions: React.FC = () => {
     if (success) setCreateModalOpen(false);
   }, [activeTab, handleLeaveSubmit, handleLoanSubmit, handlePenaltySubmit]);
 
-  if (loading) {
+  if (loading && teamWorkers.length === 0 && !resolvedSupervisor?.id) {
     return <PageContentSkeleton variant="dashboard" />;
   }
 

@@ -28,6 +28,11 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const WORKER_POSITION_KEYWORDS = ['عامل انتاج', 'عامل إنتاج', 'عامل الانتاج', 'عامل الإنتاج'];
 
@@ -218,48 +223,64 @@ export const LineWorkerAssignment: React.FC = () => {
       .filter((row): row is DisplayLineWorkerAssignment => Boolean(row));
   }, [selectedDate]);
 
-  const loadAssignments = useCallback(async () => {
-    setLoading(true);
+  const assignmentCacheKey = `production:lineWorkerAssign:${selectedDate}:${selectedLineId || 'all'}`;
+
+  const loadAssignments = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<{ allDay: DisplayLineWorkerAssignment[]; assignments: DisplayLineWorkerAssignment[] }>(assignmentCacheKey);
+    if (cached) {
+      setAllDayAssignments(cached.allDay);
+      setAssignments(cached.assignments);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const [dailyRows, productionWorkers, permanentByLine] = await Promise.all([
-        lineAssignmentService.getByDate(selectedDate),
-        productionWorkerService.getAll(),
-        Promise.all(
-          visibleLineIdList.map(async (lineId) => ({
-            lineId,
-            rows: await productionLineWorkerAssignmentService.getActiveByLineAndDate(lineId, selectedDate),
-          })),
-        ),
-      ]);
+      const { data } = await fetchCachedPageData(
+        assignmentCacheKey,
+        async () => {
+          const [dailyRows, productionWorkers, permanentByLine] = await Promise.all([
+            lineAssignmentService.getByDate(selectedDate),
+            productionWorkerService.getAll(),
+            Promise.all(
+              visibleLineIdList.map(async (lineId) => ({
+                lineId,
+                rows: await productionLineWorkerAssignmentService.getActiveByLineAndDate(lineId, selectedDate),
+              })),
+            ),
+          ]);
 
-      const workersById = new Map(productionWorkers.map((worker) => [String(worker.id || ''), worker]));
-      const permanentRows = permanentByLine.flatMap(({ rows }) => rows);
-      const linesWithPermanent = new Set(permanentByLine.filter(({ rows }) => rows.length > 0).map(({ lineId }) => lineId));
-      const permanentDisplayRows = buildPermanentDisplayRows(permanentRows, workersById, dailyRows);
-      const legacyRows = (
-        await Promise.all(
-          visibleLineIdList
-            .filter((lineId) => !linesWithPermanent.has(lineId))
-            .map((lineId) => lineAssignmentService.getByLineAndDate(lineId, selectedDate)),
-        )
-      ).flat().map((row) => ({ ...row, source: 'legacy' as const }));
+          const workersById = new Map(productionWorkers.map((worker) => [String(worker.id || ''), worker]));
+          const permanentRows = permanentByLine.flatMap(({ rows }) => rows);
+          const linesWithPermanent = new Set(permanentByLine.filter(({ rows }) => rows.length > 0).map(({ lineId }) => lineId));
+          const permanentDisplayRows = buildPermanentDisplayRows(permanentRows, workersById, dailyRows);
+          const legacyRows = (
+            await Promise.all(
+              visibleLineIdList
+                .filter((lineId) => !linesWithPermanent.has(lineId))
+                .map((lineId) => lineAssignmentService.getByLineAndDate(lineId, selectedDate)),
+            )
+          ).flat().map((row) => ({ ...row, source: 'legacy' as const }));
 
-      const all = [...permanentDisplayRows, ...legacyRows];
-      const scopedAssignments = isSupervisorReporter
-        ? all.filter((a) => visibleLineIds.has(String(a.lineId || '').trim()))
-        : all;
-      setAllDayAssignments(scopedAssignments);
-      if (selectedLineId) {
-        setAssignments(scopedAssignments.filter((a) => a.lineId === selectedLineId));
-      } else {
-        setAssignments([]);
-      }
+          const all = [...permanentDisplayRows, ...legacyRows];
+          const scopedAssignments = isSupervisorReporter
+            ? all.filter((a) => visibleLineIds.has(String(a.lineId || '').trim()))
+            : all;
+          const lineAssignments = selectedLineId
+            ? scopedAssignments.filter((a) => a.lineId === selectedLineId)
+            : [];
+          return { allDay: scopedAssignments, assignments: lineAssignments };
+        },
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      setAllDayAssignments(data.allDay);
+      setAssignments(data.assignments);
     } catch (e) {
       console.error('Load assignments error:', e);
     } finally {
       setLoading(false);
     }
   }, [
+    assignmentCacheKey,
     selectedDate,
     selectedLineId,
     isSupervisorReporter,
@@ -268,8 +289,13 @@ export const LineWorkerAssignment: React.FC = () => {
     buildPermanentDisplayRows,
   ]);
 
+  const reloadAssignments = useCallback(async () => {
+    invalidatePageDataCache(assignmentCacheKey);
+    await loadAssignments({ force: true });
+  }, [assignmentCacheKey, loadAssignments]);
+
   useEffect(() => {
-    loadAssignments();
+    void loadAssignments();
   }, [loadAssignments]);
 
   useEffect(() => {
@@ -298,7 +324,7 @@ export const LineWorkerAssignment: React.FC = () => {
       if (assignment.id) {
         await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
       }
-      await loadAssignments();
+      await reloadAssignments();
       showFeedback('success', 'تم تحديث نوع العامل');
     } catch {
       showFeedback('error', 'حدث خطأ أثناء تحديث نوع العامل');
@@ -441,7 +467,7 @@ export const LineWorkerAssignment: React.FC = () => {
 
       setScanInput('');
       setShowSuggestions(false);
-      await loadAssignments();
+      await reloadAssignments();
       showFeedback('success', `تم ربط ${employee.name} بالخط ربطاً دائماً`);
     } catch {
       showFeedback('error', 'حدث خطأ أثناء حفظ الربط الدائم');
@@ -479,7 +505,7 @@ export const LineWorkerAssignment: React.FC = () => {
       });
       await deleteCancellationDateDailyRows([assignment]);
       await syncWorkerLineSnapshot(assignment.permanentWorkerId);
-      await loadAssignments();
+      await reloadAssignments();
       showFeedback('success', 'تم إلغاء الربط من اليوم مع الحفاظ على السجلات القديمة');
     } catch {
       showFeedback('error', 'حدث خطأ أثناء إلغاء الربط الدائم');
@@ -531,7 +557,7 @@ export const LineWorkerAssignment: React.FC = () => {
           .filter((workerId): workerId is string => Boolean(workerId)),
       ));
       await Promise.all(workerIds.map((workerId) => syncWorkerLineSnapshot(workerId)));
-      await loadAssignments();
+      await reloadAssignments();
       showFeedback('success', selectedLineId ? 'تم إلغاء ربط عمال الخط من اليوم' : 'تم إلغاء ربط عمال كل الخطوط المعروضة من اليوم');
     } catch {
       showFeedback('error', 'حدث خطأ أثناء إلغاء ربط العمال');

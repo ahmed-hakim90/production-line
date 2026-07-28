@@ -22,8 +22,18 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { Skeleton } from '@/components/ui/skeleton';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 const PAGE_SIZE = 25;
+const BALANCES_CACHE_KEY = 'inventory:stock-balances';
+
+type StockBalancesPageData = {
+  balances: StockItemBalance[];
+  warehouses: Warehouse[];
+  lastMovementByKey: Record<string, string>;
+};
 
 export const StockBalances: React.FC = () => {
   const navigate = useTenantNavigate();
@@ -43,9 +53,10 @@ export const StockBalances: React.FC = () => {
   const rawProducts = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
-  const [balances, setBalances] = useState<StockItemBalance[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [lastMovementByKey, setLastMovementByKey] = useState<Record<string, string>>({});
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
+  const stagingWarehouseId = String(routing.finishedStagingWarehouseId || '').trim();
+  const finalWarehouseId = String(routing.finalProductWarehouseId || '').trim();
   const [warehouseFilter, setWarehouseFilter] = useState(
     () => searchParams.get('warehouseId') || scopedWarehouseId || '',
   );
@@ -54,33 +65,45 @@ export const StockBalances: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [negativeOnly, setNegativeOnly] = useState(false);
   const [search, setSearch] = useState('');
-  const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
 
-  const reload = async () => {
-    setLoading(true);
-    const [bals, whs, txs] = await Promise.all([
-      stockService.getBalances(),
-      warehouseService.getWarehousesForReportingFilters(),
-      stockService.getTransactions(),
-    ]);
-    const movementMap: Record<string, string> = {};
-    txs.forEach((tx) => {
-      const key = balanceKey(tx.warehouseId, tx.itemType, tx.itemId);
-      const prev = movementMap[key];
-      if (!prev || new Date(tx.createdAt).getTime() > new Date(prev).getTime()) {
-        movementMap[key] = tx.createdAt;
-      }
-    });
-    setBalances(bals);
-    setWarehouses(filterWarehouses(whs));
-    setLastMovementByKey(movementMap);
-    setLoading(false);
-  };
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<StockBalancesPageData>(
+    BALANCES_CACHE_KEY,
+    async () => {
+      const [bals, whs, txs] = await Promise.all([
+        stockService.getBalances(),
+        warehouseService.getWarehousesForReportingFilters(),
+        stockService.getTransactions(),
+      ]);
+      const movementMap: Record<string, string> = {};
+      txs.forEach((tx) => {
+        const key = balanceKey(tx.warehouseId, tx.itemType, tx.itemId);
+        const prev = movementMap[key];
+        if (!prev || new Date(tx.createdAt).getTime() > new Date(prev).getTime()) {
+          movementMap[key] = tx.createdAt;
+        }
+      });
+      return {
+        balances: bals,
+        warehouses: filterWarehouses(whs),
+        lastMovementByKey: movementMap,
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
 
-  useEffect(() => {
-    void reload();
-  }, []);
+  const balances = data?.balances ?? [];
+  const warehouses = data?.warehouses ?? [];
+  const lastMovementByKey = data?.lastMovementByKey ?? {};
+
+  const reload = async () => {
+    invalidatePageDataCache(BALANCES_CACHE_KEY);
+    await reloadCached(true);
+  };
 
   useEffect(() => {
     const queryWarehouseId = searchParams.get('warehouseId') || '';
@@ -249,6 +272,46 @@ export const StockBalances: React.FC = () => {
         routingConfigured={routingConfigured}
         settingsPath={settingsPath}
       />
+
+      {!scoped && (stagingWarehouseId || finalWarehouseId) && (
+        <div className="flex flex-wrap gap-2">
+          {stagingWarehouseId && (
+            <Button
+              variant={warehouseFilter === stagingWarehouseId ? 'primary' : 'outline'}
+              onClick={() => {
+                setWarehouseFilter(stagingWarehouseId);
+                setRoleFilter('finished_staging');
+                setItemTypeFilter('finished_good');
+              }}
+            >
+              تم الإنتاج (بانتظار التغليف)
+            </Button>
+          )}
+          {finalWarehouseId && (
+            <Button
+              variant={warehouseFilter === finalWarehouseId ? 'primary' : 'outline'}
+              onClick={() => {
+                setWarehouseFilter(finalWarehouseId);
+                setRoleFilter('final_product');
+                setItemTypeFilter('finished_good');
+              }}
+            >
+              منتج تام
+            </Button>
+          )}
+          {(warehouseFilter === stagingWarehouseId || warehouseFilter === finalWarehouseId) && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                setWarehouseFilter('');
+                setRoleFilter('');
+              }}
+            >
+              إلغاء الفلتر السريع
+            </Button>
+          )}
+        </div>
+      )}
 
       <Card className="!p-0 overflow-hidden">
         <SmartFilterBar

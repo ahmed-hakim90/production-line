@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo } from 'react';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { PrimaryButton } from '@/src/components/erp/ActionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -10,14 +10,26 @@ import { useAppStore } from '../../../store/useAppStore';
 import { stockUnitCostKey } from '../lib/stockValuation';
 import { classifyAbcInventory, estimateTurnover } from '../engines/inventoryAnalyticsEngine';
 import { exportGenericRows } from '../../../utils/exportExcel';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+const ANALYTICS_CACHE_KEY = 'inventory:analytics';
+
+type InventoryAnalyticsPageData = {
+  abcRows: ReturnType<typeof classifyAbcInventory>;
+  turnoverRows: ReturnType<typeof estimateTurnover>;
+};
 
 export const InventoryAnalytics: React.FC = () => {
   const rawProducts = useAppStore((s) => s._rawProducts);
-  const [loading, setLoading] = useState(true);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<InventoryAnalyticsPageData>(
+    `${ANALYTICS_CACHE_KEY}:p${rawProducts.length}`,
+    async () => {
       const [balances, transactions, materials] = await Promise.all([
         stockService.getBalances(),
         stockService.getTransactions(),
@@ -39,19 +51,21 @@ export const InventoryAnalytics: React.FC = () => {
           unitCostByItem.set(stockUnitCostKey('raw_material', m.legacyRawMaterialId), cost);
         }
       });
-      setAbcRows(classifyAbcInventory(balances, unitCostByItem));
-      setTurnoverRows(estimateTurnover(balances, transactions));
-    } finally {
-      setLoading(false);
-    }
-  }, [rawProducts]);
+      return {
+        abcRows: classifyAbcInventory(balances, unitCostByItem),
+        turnoverRows: estimateTurnover(balances, transactions),
+      };
+    },
+    { maxAgeMs: 60_000 },
+  );
 
-  const [abcRows, setAbcRows] = useState<ReturnType<typeof classifyAbcInventory>>([]);
-  const [turnoverRows, setTurnoverRows] = useState<ReturnType<typeof estimateTurnover>>([]);
+  const abcRows = data?.abcRows ?? [];
+  const turnoverRows = data?.turnoverRows ?? [];
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const load = useCallback(async () => {
+    invalidatePageDataCache(ANALYTICS_CACHE_KEY);
+    await reloadCached(true);
+  }, [reloadCached]);
 
   const abcSummary = useMemo(() => {
     const counts = { A: 0, B: 0, C: 0 };

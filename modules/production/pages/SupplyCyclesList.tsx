@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
 import { Badge, SearchableSelect } from '../components/UI';
@@ -44,6 +44,18 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+const SUPPLY_CYCLES_CACHE_KEY = 'production:supply-cycles';
+
+type SupplyCyclesPageData = {
+  cycles: SupplyCycle[];
+  rawMaterials: RawMaterial[];
+  reportWasteById: Record<string, number>;
+  productionConsumedById: Record<string, number>;
+  manualWasteById: Record<string, number>;
+};
 
 const KIND_LABEL: Record<SupplyCycleKind, string> = {
   raw_material: 'خام',
@@ -74,12 +86,6 @@ export const SupplyCyclesList: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
 
-  const [cycles, setCycles] = useState<SupplyCycle[]>([]);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [reportWasteById, setReportWasteById] = useState<Record<string, number>>({});
-  const [productionConsumedById, setProductionConsumedById] = useState<Record<string, number>>({});
-  const [manualWasteById, setManualWasteById] = useState<Record<string, number>>({});
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SupplyCycleStatus>('all');
   const [kindFilter, setKindFilter] = useState<'all' | SupplyCycleKind>('all');
@@ -99,12 +105,14 @@ export const SupplyCyclesList: React.FC = () => {
     status: 'draft' as SupplyCycleStatus,
   });
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<SupplyCyclesPageData>(
+    SUPPLY_CYCLES_CACHE_KEY,
+    async () => {
       const [list, rms] = await Promise.all([supplyCycleService.list(), rawMaterialService.getAll()]);
-      setCycles(list);
-      setRawMaterials(rms);
       const reportNext: Record<string, number> = {};
       const productionNext: Record<string, number> = {};
       const manualNext: Record<string, number> = {};
@@ -127,17 +135,27 @@ export const SupplyCyclesList: React.FC = () => {
           }
         }),
       );
-      setReportWasteById(reportNext);
-      setProductionConsumedById(productionNext);
-      setManualWasteById(manualNext);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return {
+        cycles: list,
+        rawMaterials: rms,
+        reportWasteById: reportNext,
+        productionConsumedById: productionNext,
+        manualWasteById: manualNext,
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const cycles = data?.cycles ?? [];
+  const rawMaterials = data?.rawMaterials ?? [];
+  const reportWasteById = data?.reportWasteById ?? {};
+  const productionConsumedById = data?.productionConsumedById ?? {};
+  const manualWasteById = data?.manualWasteById ?? {};
+
+  const load = useCallback(async () => {
+    invalidatePageDataCache(SUPPLY_CYCLES_CACHE_KEY);
+    await reloadCached(true);
+  }, [reloadCached]);
 
   const resolveItemName = useCallback(
     (c: SupplyCycle) => {
@@ -374,7 +392,7 @@ export const SupplyCyclesList: React.FC = () => {
           </p>
         </div>
         <CardContent className="p-0">
-          {loading ? (
+          {loading && cycles.length === 0 ? (
             <SectionSkeleton rows={10} height={14} />
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center gap-3 py-16 px-4 text-center">

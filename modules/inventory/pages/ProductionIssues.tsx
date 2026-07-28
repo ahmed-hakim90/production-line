@@ -29,11 +29,29 @@ import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const ISSUE_ORDERS_PAGE_SIZE = 15;
+const PRODUCTION_ISSUES_CACHE_KEY = 'inventory:production-issues';
+
+type ProductionIssuesLocalData = {
+  orders: ProductionIssueOrder[];
+  warehouses: Warehouse[];
+  locations: WarehouseLocation[];
+  racks: WarehouseRack[];
+};
 
 function statusLabel(status: ProductionIssueOrder['status']) {
-  return status === 'draft' ? 'مسودة' : status === 'submitted' ? 'مرسلة' : status === 'issued' ? 'مصروفة' : 'ملغاة';
+  if (status === 'requested') return 'طلب إنتاج';
+  if (status === 'draft') return 'مسودة';
+  if (status === 'submitted') return 'مرسلة';
+  if (status === 'issued') return 'مصروفة';
+  if (status === 'rejected') return 'مرفوض';
+  return 'ملغاة';
 }
 
 const formatQty = (value: number | undefined, digits = 2) => {
@@ -256,10 +274,25 @@ export const ProductionIssues: React.FC = () => {
     return map;
   }, [lines]);
 
-  const [orders, setOrders] = useState<ProductionIssueOrder[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
-  const [racks, setRacks] = useState<WarehouseRack[]>([]);
+  const [orders, setOrders] = useState<ProductionIssueOrder[]>(
+    () => peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY)?.orders ?? [],
+  );
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(
+    () => {
+      const cached = peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY);
+      return cached ? filterWarehouses(cached.warehouses) : [];
+    },
+  );
+  const [locations, setLocations] = useState<WarehouseLocation[]>(
+    () => peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY)?.locations ?? [],
+  );
+  const [racks, setRacks] = useState<WarehouseRack[]>(
+    () => peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY)?.racks ?? [],
+  );
+  const [listTab, setListTab] = useState<'requests' | 'all'>(() =>
+    searchParams.get('tab') === 'all' ? 'all' : 'requests',
+  );
+  const [approveQty, setApproveQty] = useState('');
   const [sourceKind, setSourceKind] = useState<'work_order' | 'production_plan'>('work_order');
   const [sourceId, setSourceId] = useState('');
   const [warehouseId, setWarehouseId] = useState(() => queryWarehouseId);
@@ -278,7 +311,9 @@ export const ProductionIssues: React.FC = () => {
   const [scrapNeedsCompensation, setScrapNeedsCompensation] = useState(false);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const [preparingLines, setPreparingLines] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
+  const autoPreparedRequestIdsRef = useRef<Set<string>>(new Set());
   const printRef = useRef<HTMLDivElement>(null);
   const issuePrintSettings = useMemo(
     () => ({
@@ -291,26 +326,54 @@ export const ProductionIssues: React.FC = () => {
   const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: issuePrintSettings, documentTitle: 'إذن صرف إنتاج' });
   const actor = userDisplayName || userEmail || 'Current User';
 
-  const load = async () => {
-    const [issueRows, whs, locs, rackRows] = await Promise.all([
-      productionIssueService.getAll(),
-      warehouseService.getActiveWarehouses(),
-      warehouseLocationService.getAll(),
-      warehouseRackService.getAll(),
+  const load = async (force = false) => {
+    const cached = peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY);
+    if (cached) {
+      setOrders(cached.orders);
+      setWarehouses(filterWarehouses(cached.warehouses));
+      setLocations(cached.locations);
+      setRacks(cached.racks);
+    }
+
+    const [{ data },] = await Promise.all([
+      fetchCachedPageData(
+        PRODUCTION_ISSUES_CACHE_KEY,
+        async () => {
+          const [issueRows, whs, locs, rackRows] = await Promise.all([
+            productionIssueService.getAll(),
+            warehouseService.getActiveWarehouses(),
+            warehouseLocationService.getAll(),
+            warehouseRackService.getAll(),
+          ]);
+          return {
+            orders: issueRows,
+            warehouses: whs,
+            locations: locs,
+            racks: rackRows,
+          } satisfies ProductionIssuesLocalData;
+        },
+        { force, maxAgeMs: 45_000 },
+      ),
       fetchWorkOrders(),
       fetchProductionPlans(),
       fetchProducts(),
       fetchLines(),
     ]);
-    const visibleWarehouses = filterWarehouses(whs);
-    setOrders(issueRows);
+
+    const visibleWarehouses = filterWarehouses(data.warehouses);
+    setOrders(data.orders);
     setWarehouses(visibleWarehouses);
-    setLocations(locs);
-    setRacks(rackRows);
-    const suppliesId = resolveSuppliesWarehouseId(inventoryRouting, whs);
+    setLocations(data.locations);
+    setRacks(data.racks);
+    const suppliesId = resolveSuppliesWarehouseId(inventoryRouting, data.warehouses);
     setWarehouseId((prev) =>
       resolveScopedWarehouseId(prev, [queryWarehouseId, suppliesId, scopedWarehouseId, visibleWarehouses[0]?.id || '']),
     );
+  };
+
+  const reload = async () => {
+    invalidatePageDataCache(PRODUCTION_ISSUES_CACHE_KEY);
+    await load(true);
   };
 
   useEffect(() => {
@@ -318,12 +381,63 @@ export const ProductionIssues: React.FC = () => {
   }, []);
 
   useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab === 'all' || tab === 'requests') setListTab(tab);
+  }, [searchParams]);
+
+  useEffect(() => {
     setWarehouseId((prev) => resolveScopedWarehouseId(prev, [queryWarehouseId, scopedWarehouseId]));
   }, [scoped, warehouseIds.join('|'), queryWarehouseId, scopedWarehouseId, resolveScopedWarehouseId]);
 
+  /** Deep-link from plan-issue alerts: ?planId= / ?workOrderId= / ?productId= / ?quantity= */
+  useEffect(() => {
+    const planId = String(searchParams.get('planId') || '').trim();
+    const workOrderId = String(searchParams.get('workOrderId') || '').trim();
+    const productId = String(searchParams.get('productId') || '').trim();
+
+    if (planId && plans.some((p) => p.id === planId)) {
+      setSourceKind('production_plan');
+      setSourceId(planId);
+      return;
+    }
+    if (workOrderId && workOrders.some((wo) => wo.id === workOrderId)) {
+      setSourceKind('work_order');
+      setSourceId(workOrderId);
+      return;
+    }
+    if (productId) {
+      const openPlan = plans.find(
+        (plan) =>
+          plan.productId === productId &&
+          (plan.status === 'planned' || plan.status === 'in_progress' || plan.status === 'paused') &&
+          (Number(plan.remainingQuantity ?? 0) > 0 ||
+            Math.max(0, Number(plan.plannedQuantity || 0) - Number(plan.producedQuantity || 0)) > 0),
+      );
+      if (openPlan?.id) {
+        setSourceKind('production_plan');
+        setSourceId(openPlan.id);
+        return;
+      }
+      const openWo = workOrders.find(
+        (wo) =>
+          wo.productId === productId &&
+          (wo.status === 'pending' || wo.status === 'in_progress'),
+      );
+      if (openWo?.id) {
+        setSourceKind('work_order');
+        setSourceId(openWo.id);
+      }
+    }
+  }, [searchParams, plans, workOrders]);
+
   const sourceOptions = useMemo(() => {
     if (sourceKind === 'work_order') {
-      return workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress').map((wo) => {
+      const open = workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress');
+      const selected = sourceId ? workOrders.find((wo) => wo.id === sourceId) : null;
+      const rows = selected && !open.some((wo) => wo.id === selected.id)
+        ? [selected, ...open]
+        : open;
+      return rows.map((wo) => {
         const productLabel = productLabelById.get(wo.productId) || productNameById.get(wo.productId) || wo.productId;
         const lineName = lineNameById.get(wo.lineId);
         return {
@@ -332,17 +446,28 @@ export const ProductionIssues: React.FC = () => {
         };
       });
     }
-    return plans.filter((plan) => plan.status === 'planned' || plan.status === 'in_progress').map((plan) => {
+    const open = plans.filter(
+      (plan) => plan.status === 'planned' || plan.status === 'in_progress' || plan.status === 'paused',
+    );
+    const selected = sourceId ? plans.find((plan) => plan.id === sourceId) : null;
+    const rows = selected && !open.some((plan) => plan.id === selected.id)
+      ? [selected, ...open]
+      : open;
+    return rows.map((plan) => {
       const productLabel = productLabelById.get(plan.productId) || productNameById.get(plan.productId) || plan.productId;
       const lineName = lineNameById.get(plan.lineId);
       const date = plan.plannedStartDate || plan.startDate;
+      const remaining = Number(plan.remainingQuantity ?? 0) > 0
+        ? Number(plan.remainingQuantity)
+        : Math.max(0, Number(plan.plannedQuantity || 0) - Number(plan.producedQuantity || 0));
       return {
         id: plan.id || '',
-        label: [productLabel, lineName, `كمية ${plan.plannedQuantity}`, date].filter(Boolean).join(' — '),
+        label: [productLabel, lineName, `متبقي ${remaining}`, date].filter(Boolean).join(' — '),
       };
     });
   }, [
     sourceKind,
+    sourceId,
     workOrders,
     plans,
     productLabelById,
@@ -364,15 +489,41 @@ export const ProductionIssues: React.FC = () => {
   }, [sourceId, sourceKind, workOrders, plans]);
 
   useEffect(() => {
+    if (!sourceId) {
+      setIssueQuantity('');
+      return;
+    }
+    const fromQuery = Number(String(searchParams.get('quantity') || '').trim());
+    if (Number.isFinite(fromQuery) && fromQuery > 0) {
+      const capped = selectedSourceQuantity > 0
+        ? Math.min(fromQuery, selectedSourceQuantity)
+        : fromQuery;
+      setIssueQuantity(String(capped));
+      return;
+    }
+    if (selectedSourceQuantity > 0) {
+      setIssueQuantity(String(selectedSourceQuantity));
+      return;
+    }
     setIssueQuantity('');
-  }, [sourceId, sourceKind]);
+  }, [sourceId, sourceKind, selectedSourceQuantity, searchParams]);
 
-  const selectedOrder = orders.find((row) => row.id === selectedOrderId) || orders[0] || null;
-  const ordersTotalPages = Math.max(1, Math.ceil(orders.length / ISSUE_ORDERS_PAGE_SIZE));
+  const listOrders = useMemo(() => {
+    if (listTab === 'requests') {
+      return orders.filter((row) => row.status === 'requested');
+    }
+    return orders.filter((row) => row.status !== 'requested');
+  }, [orders, listTab]);
+  const selectedOrder =
+    listOrders.find((row) => row.id === selectedOrderId)
+    || orders.find((row) => row.id === selectedOrderId)
+    || listOrders[0]
+    || null;
+  const ordersTotalPages = Math.max(1, Math.ceil(listOrders.length / ISSUE_ORDERS_PAGE_SIZE));
   const safeOrdersPage = Math.min(ordersPage, ordersTotalPages);
   const pagedOrders = useMemo(
-    () => orders.slice((safeOrdersPage - 1) * ISSUE_ORDERS_PAGE_SIZE, safeOrdersPage * ISSUE_ORDERS_PAGE_SIZE),
-    [orders, safeOrdersPage],
+    () => listOrders.slice((safeOrdersPage - 1) * ISSUE_ORDERS_PAGE_SIZE, safeOrdersPage * ISSUE_ORDERS_PAGE_SIZE),
+    [listOrders, safeOrdersPage],
   );
   const sourceLabelByOrder = useMemo(() => {
     const labels = new Map<string, string>();
@@ -437,7 +588,7 @@ export const ProductionIssues: React.FC = () => {
       setSelectedOrderId(id || '');
       setIssueQuantity('');
       setMessage('تم إنشاء أمر الصرف كمسودة.');
-      await load();
+      await reload();
     } catch (error: any) {
       setMessage(error?.message || 'تعذر إنشاء أمر الصرف.');
     } finally {
@@ -445,8 +596,101 @@ export const ProductionIssues: React.FC = () => {
     }
   };
 
+  const resolveQtyOverride = () => (approveQty.trim() ? Number(approveQty) : undefined);
+
+  const refreshComponentLines = async (order: ProductionIssueOrder) => {
+    if (!order.id) return;
+    if (order.status !== 'requested' && order.status !== 'draft') return;
+    setPreparingLines(true);
+    setMessage('');
+    try {
+      const updated = await productionIssueService.prepareRequestLines(order.id, {
+        quantityOverride: resolveQtyOverride(),
+        sourceWarehouseId: warehouseId || order.sourceWarehouseId,
+      });
+      setApproveQty(String(updated.quantity || ''));
+      setMessage('تم تحديث بنود المكونات حسب الكمية الحالية.');
+      await reload();
+    } catch (error: any) {
+      setMessage(error?.message || 'تعذر تجهيز بنود المكونات.');
+    } finally {
+      setPreparingLines(false);
+    }
+  };
+
+  const saveProductionRequestDraft = async (order: ProductionIssueOrder) => {
+    if (!order.id || order.status !== 'requested') return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const updated = await productionIssueService.saveRequestAsDraft(order.id, {
+        quantityOverride: resolveQtyOverride(),
+        sourceWarehouseId: warehouseId || order.sourceWarehouseId,
+      });
+      setSelectedOrderId(updated.id || order.id);
+      setApproveQty(String(updated.quantity || ''));
+      setListTab('all');
+      setMessage('تم حفظ المسودة مع بنود المكونات — يمكنك الطباعة ثم الاعتماد.');
+      await reload();
+    } catch (error: any) {
+      setMessage(error?.message || 'تعذر حفظ المسودة.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!selectedOrder?.id) return;
+    if (selectedOrder.status !== 'requested') return;
+    if (selectedOrder.lines.length > 0) return;
+    if (preparingLines || busy) return;
+    if (autoPreparedRequestIdsRef.current.has(selectedOrder.id)) return;
+    if (!can('productionIssue.approve') && !can('productionIssue.create')) return;
+    autoPreparedRequestIdsRef.current.add(selectedOrder.id);
+    void refreshComponentLines(selectedOrder);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prepare once per bare request id
+  }, [selectedOrder?.id, selectedOrder?.status, selectedOrder?.lines.length, preparingLines, busy]);
+
+  const isProductionRequestFlow =
+    selectedOrder?.status === 'requested'
+    || (selectedOrder?.status === 'draft' && selectedOrder.origin === 'production_request');
+  const canPrintSelected = Boolean(
+    selectedOrder
+    && can('productionIssue.print')
+    && selectedOrder.lines.length > 0
+    && selectedOrder.status !== 'rejected'
+    && selectedOrder.status !== 'cancelled',
+  );
+
   const submitAndIssue = async (order: ProductionIssueOrder) => {
     if (!order.id) return;
+    if (order.status === 'requested' || (order.status === 'draft' && order.origin === 'production_request')) {
+      setBusy(true);
+      setMessage('');
+      setShortageModalOpen(false);
+      try {
+        const qtyOverride = resolveQtyOverride();
+        await productionIssueService.approveRequest(order.id, actor, {
+          quantityOverride: qtyOverride,
+          sourceWarehouseId: warehouseId || order.sourceWarehouseId,
+        });
+        setShortageRows([]);
+        setApproveQty('');
+        setMessage('تم اعتماد طلب الإنتاج وترحيل الصرف.');
+        await reload();
+      } catch (error: any) {
+        if (isProductionIssueApprovalError(error)) {
+          setShortageRows(error.shortages);
+          setShortageModalOpen(true);
+          setMessage(`لا يمكن اعتماد الصرف: ${error.shortages.length} صنف بدون رصيد كافٍ.`);
+        } else {
+          setMessage(error?.message || 'تعذر اعتماد الطلب.');
+        }
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
     setBusy(true);
     setMessage('');
     setShortageModalOpen(false);
@@ -455,7 +699,7 @@ export const ProductionIssues: React.FC = () => {
       await productionIssueService.issue(order.id, actor);
       setShortageRows([]);
       setMessage('تم اعتماد وصرف المكونات.');
-      await load();
+      await reload();
     } catch (error: any) {
       if (isProductionIssueApprovalError(error)) {
         setShortageRows(error.shortages);
@@ -464,6 +708,22 @@ export const ProductionIssues: React.FC = () => {
       } else {
         setMessage(error?.message || 'تعذر اعتماد الصرف.');
       }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const rejectProductionRequest = async (order: ProductionIssueOrder) => {
+    if (!order.id || order.status !== 'requested') return;
+    const reason = window.prompt('سبب الرفض (اختياري):') || undefined;
+    setBusy(true);
+    setMessage('');
+    try {
+      await productionIssueService.rejectRequest(order.id, actor, reason);
+      setMessage('تم رفض طلب الإنتاج.');
+      await reload();
+    } catch (error: any) {
+      setMessage(error?.message || 'تعذر رفض الطلب.');
     } finally {
       setBusy(false);
     }
@@ -482,7 +742,7 @@ export const ProductionIssues: React.FC = () => {
       setMessage(order.status === 'issued'
         ? 'تم إلغاء أمر الصرف وإرجاع الكميات للمخزن.'
         : 'تم إلغاء أمر الصرف.');
-      await load();
+      await reload();
     } catch (error: any) {
       setMessage(error?.message || 'تعذر إلغاء أمر الصرف.');
     } finally {
@@ -535,7 +795,7 @@ export const ProductionIssues: React.FC = () => {
       createdByUserId: uid || undefined,
     });
     closeLineAction();
-    await load();
+    await reload();
   };
 
   const changeLineLocation = async (order: ProductionIssueOrder, line: ProductionIssueOrderLine, nextLocationId: string) => {
@@ -548,7 +808,7 @@ export const ProductionIssues: React.FC = () => {
         itemId: line.itemId,
         locationId: nextLocationId,
       });
-      await load();
+      await reload();
       setSelectedOrderId(order.id);
     } catch (error: any) {
       setMessage(error?.message || 'تعذر تعديل لوكيشن المكون.');
@@ -576,7 +836,7 @@ export const ProductionIssues: React.FC = () => {
     });
     setMessage('تم إنشاء طلب التعويض، ويحتاج اعتماد قبل الخصم.');
     closeLineAction();
-    await load();
+    await reload();
   };
 
   const submitScrap = async (order: ProductionIssueOrder, line: ProductionIssueOrderLine) => {
@@ -611,7 +871,7 @@ export const ProductionIssues: React.FC = () => {
     }
     setMessage('تم تسجيل الهالك الفعلي للتحليل بدون خصم مخزون إضافي.');
     closeLineAction();
-    await load();
+    await reload();
   };
 
   const submitLineAction = async () => {
@@ -630,14 +890,19 @@ export const ProductionIssues: React.FC = () => {
 
   return (
     <div className="erp-ds-clean space-y-5">
-      <PageHeader title="صرف إنتاج" subtitle="إنشاء أمر صرف من أمر شغل أو خطة إنتاج، ثم طباعة واعتماد خصم المكونات من اللوكيشن (مخزن المستلزمات)." icon="inventory_2" />
+      <PageHeader
+        title="صرف إنتاج"
+        subtitle="طلبات موديول الإنتاج تظهر هنا لاعتماد أو رفض المستلزم. يمكن للمستودع أيضاً إنشاء إذن صرف مباشر عند الحاجة."
+        icon="inventory_2"
+      />
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
         settingsPath={settingsPath}
       />
 
-      <Card title="إنشاء أمر صرف">
+      {can('productionIssue.create') && (
+      <Card title="إنشاء أمر صرف (من المستودع)">
         <div className="grid grid-cols-1 lg:grid-cols-[150px_minmax(240px,1fr)_180px_180px_110px] gap-3 p-4 items-end">
           <label className="space-y-1">
             <span className="text-xs font-bold text-slate-500">نوع المصدر</span>
@@ -679,52 +944,85 @@ export const ProductionIssues: React.FC = () => {
               value={issueQuantity}
               placeholder={selectedSourceQuantity > 0 ? formatQty(selectedSourceQuantity, 3) : '0'}
               onChange={(e) => setIssueQuantity(e.target.value)}
+              autoFocus={Boolean(String(searchParams.get('quantity') || '').trim())}
             />
           </label>
-          <Button variant="primary" disabled={busy || !can('productionIssue.create')} onClick={() => void createOrder()}>إنشاء</Button>
+          <Button variant="primary" disabled={busy || !can('productionIssue.create')} onClick={() => void createOrder()}>إنشاء إذن</Button>
           <div className="lg:col-start-4 text-xs font-semibold text-slate-500">
-            {selectedSourceQuantity > 0
-              ? `اتركها فارغة لصرف كامل الكمية: ${formatQty(selectedSourceQuantity, 3)}`
-              : 'اختر المصدر لعرض الكمية الافتراضية.'}
+            {issueQuantity.trim()
+              ? `عدّل الكمية إن لزم ثم أنشئ الإذن (حد المصدر: ${formatQty(selectedSourceQuantity || Number(issueQuantity) || 0, 3)}).`
+              : selectedSourceQuantity > 0
+                ? `اتركها فارغة لصرف كامل الكمية: ${formatQty(selectedSourceQuantity, 3)}`
+                : 'اختر المصدر لعرض الكمية الافتراضية.'}
           </div>
         </div>
-        {message && (
-          <div className="px-4 pb-4 flex flex-wrap items-center gap-3">
-            <p className="text-sm font-bold text-primary">{message}</p>
-            {shortageRows.length > 0 && (
-              <button
-                type="button"
-                className="text-sm font-bold text-rose-700 underline"
-                onClick={() => setShortageModalOpen(true)}
-              >
-                عرض تفاصيل النقص
-              </button>
-            )}
-          </div>
-        )}
       </Card>
+      )}
+
+      {message && (
+        <div className="flex flex-wrap items-center gap-3 px-1">
+          <p className="text-sm font-bold text-primary">{message}</p>
+          {shortageRows.length > 0 && (
+            <button
+              type="button"
+              className="text-sm font-bold text-rose-700 underline"
+              onClick={() => setShortageModalOpen(true)}
+            >
+              عرض تفاصيل النقص
+            </button>
+          )}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4">
         <Card className="!p-0 overflow-hidden" title="أوامر الصرف">
-          {orders.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-slate-400">لا توجد أوامر صرف بعد.</p>
+          <div className="flex gap-2 px-3 pt-3">
+            {([
+              ['requests', `طلبات من الإنتاج (${orders.filter((o) => o.status === 'requested').length})`],
+              ['all', 'أوامر المستودع'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setListTab(key);
+                  setOrdersPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                  listTab === key ? 'bg-primary text-white border-primary' : 'bg-white border-slate-200 text-slate-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {listOrders.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-400">
+              {listTab === 'requests' ? 'لا توجد طلبات إنتاج معلّقة.' : 'لا توجد أوامر صرف بعد.'}
+            </p>
           ) : (
             <>
               {pagedOrders.map((order) => (
                 <button
                   key={order.id}
                   className={`block w-full text-start border-b px-4 py-3 ${selectedOrder?.id === order.id ? 'bg-primary/10' : ''}`}
-                  onClick={() => setSelectedOrderId(order.id || '')}
+                  onClick={() => {
+                    setSelectedOrderId(order.id || '');
+                    setApproveQty(String(order.quantity || ''));
+                  }}
                 >
                   <p className="font-bold">{order.referenceNo}</p>
                   <p className="text-xs text-slate-500">{order.productName} - {statusLabel(order.status)}</p>
-                  <p className="text-xs text-slate-500 mt-1">كمية الصرف: {formatQty(order.quantity, 3)}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {order.status === 'requested' ? 'كمية الطلب' : 'كمية الصرف'}: {formatQty(order.quantity, 3)}
+                    {order.requestedBy ? ` · من ${order.requestedBy}` : ''}
+                  </p>
                 </button>
               ))}
               <DataPaginationFooter
                 page={safeOrdersPage}
                 totalPages={ordersTotalPages}
-                totalItems={orders.length}
+                totalItems={listOrders.length}
                 onPageChange={setOrdersPage}
                 itemLabel="أمر"
               />
@@ -736,15 +1034,89 @@ export const ProductionIssues: React.FC = () => {
           {selectedOrder && (
             <>
               <div className="flex flex-wrap gap-2 p-4 border-b">
-                <Button disabled={busy || selectedOrder.status === 'issued' || selectedOrder.status === 'cancelled' || !can('productionIssue.approve')} onClick={() => void submitAndIssue(selectedOrder)}>اعتماد وصرف</Button>
+                {isProductionRequestFlow ? (
+                  <>
+                    <label className="flex items-center gap-2 text-xs font-bold text-slate-600">
+                      كمية الاعتماد
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.001"
+                        className="w-28 rounded border px-2 py-1.5 text-sm tabular-nums"
+                        value={approveQty}
+                        onChange={(e) => setApproveQty(e.target.value)}
+                      />
+                    </label>
+                    <Button
+                      variant="secondary"
+                      disabled={busy || preparingLines || !can('productionIssue.approve')}
+                      onClick={() => void refreshComponentLines(selectedOrder)}
+                    >
+                      {preparingLines ? 'جاري التحديث…' : 'تحديث المكونات'}
+                    </Button>
+                    {selectedOrder.status === 'requested' && (
+                      <Button
+                        variant="secondary"
+                        disabled={busy || preparingLines || !can('productionIssue.approve')}
+                        onClick={() => void saveProductionRequestDraft(selectedOrder)}
+                      >
+                        حفظ مسودة
+                      </Button>
+                    )}
+                    <Button
+                      disabled={
+                        busy
+                        || preparingLines
+                        || selectedOrder.lines.length === 0
+                        || !can('productionIssue.approve')
+                      }
+                      onClick={() => void submitAndIssue(selectedOrder)}
+                    >
+                      اعتماد وترحيل صرف
+                    </Button>
+                    {selectedOrder.status === 'requested' && (
+                      <Button
+                        variant="secondary"
+                        disabled={busy || preparingLines || !can('productionIssue.approve')}
+                        onClick={() => void rejectProductionRequest(selectedOrder)}
+                      >
+                        رفض الطلب
+                      </Button>
+                    )}
+                  </>
+                ) : (
+                  <Button
+                    disabled={
+                      busy
+                      || selectedOrder.status === 'issued'
+                      || selectedOrder.status === 'cancelled'
+                      || selectedOrder.status === 'rejected'
+                      || !can('productionIssue.approve')
+                    }
+                    onClick={() => void submitAndIssue(selectedOrder)}
+                  >
+                    اعتماد وصرف
+                  </Button>
+                )}
                 <Button
                   variant="secondary"
-                  disabled={busy || selectedOrder.status === 'cancelled' || !can('productionIssue.approve')}
+                  disabled={
+                    busy
+                    || selectedOrder.status === 'cancelled'
+                    || selectedOrder.status === 'rejected'
+                    || !can('productionIssue.approve')
+                  }
                   onClick={() => void cancelOrder(selectedOrder)}
                 >
                   إلغاء الأمر
                 </Button>
-                <Button variant="secondary" disabled={!can('productionIssue.print')} onClick={() => void print(selectedOrder)}>طباعة PDF</Button>
+                <Button
+                  variant="secondary"
+                  disabled={!canPrintSelected || busy || preparingLines}
+                  onClick={() => void print(selectedOrder)}
+                >
+                  طباعة PDF
+                </Button>
                 <div className="inline-flex overflow-hidden rounded-lg border border-slate-200 bg-white text-xs font-bold">
                   {(['a4', 'a5'] as PaperSize[]).map((size) => (
                     <button
@@ -776,6 +1148,24 @@ export const ProductionIssues: React.FC = () => {
                   <p className="mt-1 text-sm font-black">{statusLabel(selectedOrder.status)}</p>
                 </div>
               </div>
+              {isProductionRequestFlow && selectedOrder.lines.length === 0 && (
+                <p className="px-4 py-3 text-sm font-semibold text-amber-800 bg-amber-50 border-b border-amber-100">
+                  {preparingLines
+                    ? 'جاري حساب بنود المكونات…'
+                    : 'اضغط «تحديث المكونات» لعرض البنود قبل الاعتماد والطباعة.'}
+                  {selectedOrder.assemblableAtRequest != null
+                    ? ` متاح للتجميع وقت الطلب: ${formatQty(selectedOrder.assemblableAtRequest, 3)}.`
+                    : ''}
+                </p>
+              )}
+              {isProductionRequestFlow && selectedOrder.lines.length > 0 && (
+                <p className="px-4 py-3 text-sm font-semibold text-emerald-800 bg-emerald-50 border-b border-emerald-100">
+                  بنود المكونات جاهزة للمراجعة والطباعة.
+                  {selectedOrder.status === 'requested'
+                    ? ' احفظ مسودة إن أردت، ثم اعتمد ورحّل الصرف.'
+                    : ' راجع الكمية واللوكيشنات ثم اعتمد ورحّل الصرف.'}
+                </p>
+              )}
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
@@ -791,7 +1181,20 @@ export const ProductionIssues: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody>
-                    {selectedOrder.lines.map((line) => (
+                    {preparingLines && selectedOrder.lines.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-6 text-center text-sm text-slate-400">
+                          جاري حساب بنود المكونات…
+                        </td>
+                      </tr>
+                    ) : selectedOrder.lines.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="p-6 text-center text-sm text-slate-400">
+                          لا توجد بنود مكونات بعد.
+                        </td>
+                      </tr>
+                    ) : (
+                      selectedOrder.lines.map((line) => (
                       <tr key={`${line.itemType}-${line.itemId}`} className="border-b">
                         <td className="p-3">{line.itemName}<br /><span className="text-xs font-mono">{line.itemCode}</span></td>
                         <td className="p-3 text-center tabular-nums">{formatQty(line.baseRequiredQty)}</td>
@@ -822,7 +1225,8 @@ export const ProductionIssues: React.FC = () => {
                           <button className="text-xs font-bold text-rose-700 mx-1" disabled={!can('productionIssue.compensate')} onClick={() => openLineAction('scrap', selectedOrder, line)}>هالك</button>
                         </td>
                       </tr>
-                    ))}
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>

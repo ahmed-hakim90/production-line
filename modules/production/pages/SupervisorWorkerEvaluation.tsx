@@ -15,6 +15,10 @@ import { lineAssignmentWorkerBridge } from '@/modules/production/services/lineAs
 import { calculateSupervisorTeamBonusEstimate } from '@/modules/production/services/productionBonusEngine';
 import { lineAssignmentService } from '@/services/lineAssignmentService';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
+import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
 import {
   LINE_WORKER_LABOR_ROLE_LABELS,
@@ -191,16 +195,28 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
   const systemSettings = useAppStore((s) => s.systemSettings);
 
   const isSelfSupervisorPage = !id;
-  const [employee, setEmployee] = useState<FirestoreEmployee | null>(null);
-  const [reports, setReports] = useState<ProductionReport[]>([]);
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
-  const [productionWorkers, setProductionWorkers] = useState<ProductionWorker[]>([]);
+  type SupervisorEvalPageData = {
+    employee: FirestoreEmployee | null;
+    reports: ProductionReport[];
+    workOrders: WorkOrder[];
+    productionWorkers: ProductionWorker[];
+  };
+  const evalLookupId = id ? decodeURIComponent(String(id)).trim() : String(uid || '').trim();
+  const evalCacheKey = evalLookupId ? `production:supervisorEval:${evalLookupId}` : null;
+  const initialEvalCache = evalCacheKey ? peekPageDataCache<SupervisorEvalPageData>(evalCacheKey) : null;
+
+  const [employee, setEmployee] = useState<FirestoreEmployee | null>(() => initialEvalCache?.employee ?? null);
+  const [reports, setReports] = useState<ProductionReport[]>(() => initialEvalCache?.reports ?? []);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => initialEvalCache?.workOrders ?? []);
+  const [productionWorkers, setProductionWorkers] = useState<ProductionWorker[]>(
+    () => initialEvalCache?.productionWorkers ?? [],
+  );
   const [workerRatings, setWorkerRatings] = useState<ProductionWorkerRatingRecord[]>([]);
   const [ratingDrafts, setRatingDrafts] = useState<Record<string, ProductionWorkerStarRating>>({});
   const [ratingLineAssignments, setRatingLineAssignments] = useState<LineWorkerAssignment[]>([]);
   const [ratingDate, setRatingDate] = useState(getTodayDateString());
   const [period, setPeriod] = useState<Period>('daily');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => initialEvalCache == null);
   const [ratingsLoading, setRatingsLoading] = useState(false);
   const [savingRatingWorkerId, setSavingRatingWorkerId] = useState<string | null>(null);
   const [ratingActionErrors, setRatingActionErrors] = useState<Record<string, string>>({});
@@ -222,71 +238,88 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
 
   useEffect(() => {
     const lookupId = id ? decodeURIComponent(String(id)).trim() : String(uid || '').trim();
-    if (!lookupId) {
+    if (!lookupId || !evalCacheKey) {
       setLoading(false);
       return;
     }
 
     let cancelled = false;
-    setLoading(true);
+    const cached = peekPageDataCache<SupervisorEvalPageData>(evalCacheKey);
+    if (cached) {
+      setEmployee(cached.employee);
+      setReports(cached.reports);
+      setWorkOrders(cached.workOrders);
+      setProductionWorkers(cached.productionWorkers);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     (async () => {
       try {
-        const [empById, empByUserId, workerRows] = await Promise.all([
-          employeeService.getById(lookupId),
-          employeeService.getByUserId(lookupId),
-          productionWorkerService.getAll().catch(() => [] as ProductionWorker[]),
-        ]);
-        if (cancelled) return;
+        const { data } = await fetchCachedPageData(
+          evalCacheKey,
+          async (): Promise<SupervisorEvalPageData> => {
+            const [empById, empByUserId, workerRows] = await Promise.all([
+              employeeService.getById(lookupId),
+              employeeService.getByUserId(lookupId),
+              productionWorkerService.getAll().catch(() => [] as ProductionWorker[]),
+            ]);
 
-        const employeeFromStore = _rawEmployees.find((emp) => emp.id === lookupId || emp.userId === lookupId || emp.code === lookupId) ?? null;
-        const resolvedEmployee = empById ?? empByUserId ?? employeeFromStore;
-        if (isSelfSupervisorPage && resolvedEmployee?.level !== 2) {
-          setEmployee(null);
-          setLoading(false);
-          return;
-        }
+            const employeeFromStore = _rawEmployees.find((emp) => emp.id === lookupId || emp.userId === lookupId || emp.code === lookupId) ?? null;
+            const resolvedEmployee = empById ?? empByUserId ?? employeeFromStore;
+            if (isSelfSupervisorPage && resolvedEmployee?.level !== 2) {
+              return { employee: null, reports: [], workOrders: [], productionWorkers: [] };
+            }
 
-        const resolvedEmployeeId = resolvedEmployee?.id ?? lookupId;
-        const supervisorIdsToTry = Array.from(new Set([lookupId, resolvedEmployeeId].filter(Boolean)));
-        const [directReports, supervisorOrderBuckets] = await Promise.all([
-          reportService.getByEmployee(resolvedEmployeeId).catch(() => [] as ProductionReport[]),
-          Promise.all(supervisorIdsToTry.map((sid) => workOrderService.getBySupervisor(sid).catch(() => [] as WorkOrder[]))),
-        ]);
-        if (cancelled) return;
+            const resolvedEmployeeId = resolvedEmployee?.id ?? lookupId;
+            const supervisorIdsToTry = Array.from(new Set([lookupId, resolvedEmployeeId].filter(Boolean)));
+            const [directReports, supervisorOrderBuckets] = await Promise.all([
+              reportService.getByEmployee(resolvedEmployeeId).catch(() => [] as ProductionReport[]),
+              Promise.all(supervisorIdsToTry.map((sid) => workOrderService.getBySupervisor(sid).catch(() => [] as WorkOrder[]))),
+            ]);
 
-        const supervisorOrders = Array.from(
-          new Map(
-            supervisorOrderBuckets
-              .flat()
-              .map((wo) => [wo.id || `${wo.workOrderNumber}__${wo.lineId}__${wo.productId}`, wo]),
-          ).values(),
+            const supervisorOrders = Array.from(
+              new Map(
+                supervisorOrderBuckets
+                  .flat()
+                  .map((wo) => [wo.id || `${wo.workOrderNumber}__${wo.lineId}__${wo.productId}`, wo]),
+              ).values(),
+            );
+
+            let reportsByWorkOrder: ProductionReport[][] = [];
+            try {
+              reportsByWorkOrder = await Promise.all(
+                supervisorOrders
+                  .map((wo) => wo.id)
+                  .filter((woId): woId is string => !!woId)
+                  .map((woId) => reportService.getByWorkOrderId(woId)),
+              );
+            } catch (reportsByWorkOrderError) {
+              console.warn('SupervisorWorkerEvaluation workOrder reports fallback:', reportsByWorkOrderError);
+            }
+
+            const reportMap = new Map<string, ProductionReport>();
+            const upsertReport = (report: ProductionReport) => {
+              const key = report.id || `${report.date}__${report.lineId}__${report.productId}__${report.employeeId}__${report.workOrderId || ''}`;
+              reportMap.set(key, report);
+            };
+            directReports.forEach(upsertReport);
+            reportsByWorkOrder.flat().forEach(upsertReport);
+
+            return {
+              employee: resolvedEmployee,
+              productionWorkers: workerRows,
+              workOrders: supervisorOrders,
+              reports: Array.from(reportMap.values()).sort((a, b) => (b.date || '').localeCompare(a.date || '')),
+            };
+          },
+          { maxAgeMs: 60_000 },
         );
-
-        let reportsByWorkOrder: ProductionReport[][] = [];
-        try {
-          reportsByWorkOrder = await Promise.all(
-            supervisorOrders
-              .map((wo) => wo.id)
-              .filter((woId): woId is string => !!woId)
-              .map((woId) => reportService.getByWorkOrderId(woId)),
-          );
-        } catch (reportsByWorkOrderError) {
-          console.warn('SupervisorWorkerEvaluation workOrder reports fallback:', reportsByWorkOrderError);
-        }
         if (cancelled) return;
-
-        const reportMap = new Map<string, ProductionReport>();
-        const upsertReport = (report: ProductionReport) => {
-          const key = report.id || `${report.date}__${report.lineId}__${report.productId}__${report.employeeId}__${report.workOrderId || ''}`;
-          reportMap.set(key, report);
-        };
-        directReports.forEach(upsertReport);
-        reportsByWorkOrder.flat().forEach(upsertReport);
-
-        setEmployee(resolvedEmployee);
-        setProductionWorkers(workerRows);
-        setWorkOrders(supervisorOrders);
-        setReports(Array.from(reportMap.values()).sort((a, b) => (b.date || '').localeCompare(a.date || '')));
+        setEmployee(data.employee);
+        setProductionWorkers(data.productionWorkers);
+        setWorkOrders(data.workOrders);
+        setReports(data.reports);
       } catch (error) {
         console.error('SupervisorWorkerEvaluation load error:', error);
       } finally {
@@ -295,7 +328,7 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
     })();
 
     return () => { cancelled = true; };
-  }, [id, isSelfSupervisorPage, uid, _rawEmployees]);
+  }, [id, isSelfSupervisorPage, uid, _rawEmployees, evalCacheKey]);
 
   const periodRange = useMemo(() => getPeriodRange(period, ratingDate), [period, ratingDate]);
   const periodReports = useMemo(() => (

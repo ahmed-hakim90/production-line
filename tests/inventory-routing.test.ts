@@ -83,6 +83,7 @@ function testRequireIssuedProductionIssueDefaultOn() {
     },
   } as SystemSettings);
   assert.equal(defaults.requireIssuedProductionIssueOnReport, true);
+  assert.equal(defaults.autoConsumeBomOnProductionReport, false);
 
   const off = resolveInventoryRoutingV1({
     planSettings: {

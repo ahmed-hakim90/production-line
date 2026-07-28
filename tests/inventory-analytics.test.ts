@@ -45,6 +45,7 @@ function testTurnover() {
       itemType: 'material',
       itemId: 'm1',
       itemName: 'A',
+      itemCode: 'A1',
       quantity: 5,
       minStock: 0,
       updatedAt: '',
@@ -57,11 +58,12 @@ function testTurnover() {
       itemType: 'material',
       itemId: 'm1',
       itemName: 'A',
+      itemCode: 'A1',
       movementType: 'OUT',
       quantity: 10,
       createdAt: '2026-01-01',
       createdBy: 'x',
-      sourceModule: 'adjustment',
+      sourceModule: 'manual_movement',
     },
   ];
   const rows = estimateTurnover(balances, txs);

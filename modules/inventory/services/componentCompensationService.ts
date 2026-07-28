@@ -13,17 +13,23 @@ import { tenantQuery } from '../../../lib/tenantFirestore';
 import type {
   ComponentCompensationReason,
   ComponentCompensationRequest,
+  InventoryItemType,
   ProductionIssueOrder,
   ProductionIssueOrderLine,
+  ProductionIssueOrigin,
 } from '../types';
 import { stockService } from './stockService';
 import { productionIssueService } from './productionIssueService';
 import { warehouseLocationService } from './warehouseLocationService';
+import { assertCanRequestCompensation } from '../lib/componentCompensationRequest';
 
 const COLLECTION = 'component_compensation_requests';
 const ISSUE_COLLECTION = 'production_issue_orders';
 const toIsoNow = () => new Date().toISOString();
 const compRef = () => `CMP-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-6)}`;
+
+const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
+  Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
 
 export const componentCompensationService = {
   async getAll(): Promise<ComponentCompensationRequest[]> {
@@ -38,8 +44,15 @@ export const componentCompensationService = {
     return snap.exists() ? ({ id: snap.id, ...snap.data() } as ComponentCompensationRequest) : null;
   },
 
+  async getByIssueOrderId(issueOrderId: string): Promise<ComponentCompensationRequest[]> {
+    if (!isConfigured || !issueOrderId) return [];
+    const all = await this.getAll();
+    return all.filter((row) => row.issueOrderId === issueOrderId);
+  },
+
   async create(input: {
     issueOrderId: string;
+    issueReferenceNo?: string;
     reason: ComponentCompensationReason;
     line: ProductionIssueOrderLine;
     quantity: number;
@@ -47,6 +60,7 @@ export const componentCompensationService = {
     warehouseName?: string;
     locationId: string;
     locationCode: string;
+    origin?: ProductionIssueOrigin;
     createdBy: string;
     createdByUserId?: string;
     note?: string;
@@ -54,9 +68,10 @@ export const componentCompensationService = {
     if (!isConfigured) return null;
     if (input.quantity <= 0) throw new Error('كمية التعويض يجب أن تكون أكبر من صفر.');
     if (!input.locationId) throw new Error('حدد لوكيشن صرف التعويض.');
-    const ref = await addDoc(collection(db, COLLECTION), {
+    const ref = await addDoc(collection(db, COLLECTION), stripUndefined({
       tenantId: getCurrentTenantId(),
       issueOrderId: input.issueOrderId,
+      issueReferenceNo: input.issueReferenceNo,
       referenceNo: compRef(),
       reason: input.reason,
       warehouseId: input.warehouseId,
@@ -65,13 +80,53 @@ export const componentCompensationService = {
       quantity: input.quantity,
       locationId: input.locationId,
       locationCode: input.locationCode,
+      origin: input.origin || 'warehouse',
       status: 'pending',
       createdBy: input.createdBy,
       createdByUserId: input.createdByUserId,
       createdAt: toIsoNow(),
       note: input.note,
-    });
+    }));
     return ref.id;
+  },
+
+  /**
+   * Production requests compensatory OUT against an already-issued production issue.
+   * Location defaults from the original issue allocation; materials still approve before stock moves.
+   */
+  async createFromProductionRequest(input: {
+    issueOrderId: string;
+    itemType: InventoryItemType;
+    itemId: string;
+    quantity: number;
+    reason: ComponentCompensationReason;
+    createdBy: string;
+    createdByUserId?: string;
+    note?: string;
+  }): Promise<string | null> {
+    if (!isConfigured) return null;
+    const order = await productionIssueService.getById(input.issueOrderId);
+    const { line, location } = assertCanRequestCompensation({
+      order,
+      itemType: input.itemType,
+      itemId: input.itemId,
+      quantity: input.quantity,
+    });
+    return this.create({
+      issueOrderId: order!.id!,
+      issueReferenceNo: order!.referenceNo,
+      reason: input.reason,
+      line,
+      quantity: Number(input.quantity),
+      warehouseId: order!.sourceWarehouseId,
+      warehouseName: order!.sourceWarehouseName,
+      locationId: location.locationId,
+      locationCode: location.locationCode,
+      origin: 'production_request',
+      createdBy: input.createdBy,
+      createdByUserId: input.createdByUserId,
+      note: input.note,
+    });
   },
 
   async approve(id: string, actor: string): Promise<void> {

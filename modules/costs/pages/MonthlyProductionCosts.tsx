@@ -34,6 +34,12 @@ import { Card as UiCard, CardContent } from '@/components/ui/card';
 import { DetailPageShell, DetailPageStickyHeader, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
 import { toast } from '../../../components/Toast';
 import {
+  invalidatePageDataCache,
+  isPageDataCacheFresh,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -288,9 +294,29 @@ export const MonthlyProductionCosts: React.FC = () => {
     return () => { mountedRef.current = false; };
   }, []);
 
-  const fetchRecords = useCallback(async () => {
+  const fetchRecords = useCallback(async (opts?: { force?: boolean }) => {
     const requestId = ++fetchRequestRef.current;
-    setLoading(true);
+    const costsCacheKey = `costs:monthlyProduction:${month}`;
+    type MonthlyCostsPageData = {
+      records: typeof records;
+      prevMonthInfoMap: typeof prevMonthInfoMap;
+      breakdownMap: typeof breakdownMap;
+      centerBreakdownMap: typeof centerBreakdownMap;
+    };
+    if (opts?.force) invalidatePageDataCache(costsCacheKey);
+    const cached = peekPageDataCache<MonthlyCostsPageData>(costsCacheKey);
+    if (cached) {
+      setRecords(cached.records);
+      setPrevMonthInfoMap(cached.prevMonthInfoMap);
+      setBreakdownMap(cached.breakdownMap);
+      setCenterBreakdownMap(cached.centerBreakdownMap);
+      setLoading(false);
+      if (!opts?.force && isPageDataCacheFresh(costsCacheKey, 60_000)) {
+        return;
+      }
+    } else {
+      setLoading(true);
+    }
     try {
       const previousMonth = getPreviousMonth(month);
       const hourlyRate = laborSettings?.hourlyRate ?? 0;
@@ -342,8 +368,21 @@ export const MonthlyProductionCosts: React.FC = () => {
             persistedBreakdown[row.productId] = { directCost: row.directCost, indirectCost: row.indirectCost };
           }
         });
-        setBreakdownMap(Object.keys(persistedBreakdown).length > 0 ? persistedBreakdown : nextBreakdown);
+        const nextBreakdownMap = Object.keys(persistedBreakdown).length > 0 ? persistedBreakdown : nextBreakdown;
+        setBreakdownMap(nextBreakdownMap);
         setCenterBreakdownMap(nextCenterBreakdown);
+        setPageDataCache(costsCacheKey, {
+          records: data,
+          prevMonthInfoMap: previousMonthData.reduce<Record<string, PrevMonthProductInfo>>((acc, row) => {
+            acc[row.productId] = {
+              avg: Number(row.averageUnitCost || 0),
+              closed: !!row.isClosed,
+            };
+            return acc;
+          }, {}),
+          breakdownMap: nextBreakdownMap,
+          centerBreakdownMap: nextCenterBreakdown,
+        });
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر تحميل بيانات التكلفة الشهرية.';
@@ -554,7 +593,7 @@ export const MonthlyProductionCosts: React.FC = () => {
           setCalculateProgress(progress);
         },
       );
-      await fetchRecords();
+      await fetchRecords({ force: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر إكمال حساب التكاليف الشهرية.';
       console.error('MonthlyProductionCosts.handleCalculateAll', error);
@@ -572,7 +611,7 @@ export const MonthlyProductionCosts: React.FC = () => {
     try {
       const productIds = records.map((r) => r.productId);
       await monthlyProductionCostService.closeMonthForAll(productIds, month);
-      await fetchRecords();
+      await fetchRecords({ force: true });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'تعذر إغلاق الشهر.';
       console.error('MonthlyProductionCosts.handleCloseMonth', error);

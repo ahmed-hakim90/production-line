@@ -17,6 +17,11 @@ import { printPayslip, printCombinedPayslips } from '../utils/payslipGenerator';
 import { addDoc, getDocs, query, where } from 'firebase/firestore';
 import { departmentsRef, payrollDistributionsRef } from '../collections';
 import { getCurrentTenantId } from '@/lib/currentTenant';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 import type { FirestoreEmployee } from '@/types';
 import type {
   FirestoreDepartment,
@@ -33,6 +38,13 @@ import { PageHeader } from '../../../components/PageHeader';
 // ─── Constants ──────────────────────────────────────────────────────────────
 
 const ROWS_PER_PAGE = 15;
+const PAYROLL_EMPLOYEES_CACHE_KEY = 'hr:payroll:employees';
+
+type PayrollMonthPageData = {
+  payrollMonth: FirestorePayrollMonth | null;
+  records: FirestorePayrollRecord[];
+  auditLogs: FirestorePayrollAuditLog[];
+};
 
 const STATUS_MAP: Record<string, { label: string; variant: 'info' | 'warning' | 'success' | 'danger' | 'neutral' }> = {
   draft: { label: 'مسودة', variant: 'warning' },
@@ -306,9 +318,13 @@ export const Payroll: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   // State
   const [month, setMonth] = useState(getCurrentMonth());
-  const [payrollMonth, setPayrollMonth] = useState<FirestorePayrollMonth | null>(null);
-  const [records, setRecords] = useState<FirestorePayrollRecord[]>([]);
-  const [auditLogs, setAuditLogs] = useState<FirestorePayrollAuditLog[]>([]);
+  const PAYROLL_CACHE_KEY = `hr:payroll:${month}`;
+  const initialPayrollCache = peekPageDataCache<PayrollMonthPageData>(PAYROLL_CACHE_KEY);
+  const initialEmployeesCache = peekPageDataCache<PayrollEmployeeData[]>(PAYROLL_EMPLOYEES_CACHE_KEY);
+
+  const [payrollMonth, setPayrollMonth] = useState<FirestorePayrollMonth | null>(initialPayrollCache?.payrollMonth ?? null);
+  const [records, setRecords] = useState<FirestorePayrollRecord[]>(initialPayrollCache?.records ?? []);
+  const [auditLogs, setAuditLogs] = useState<FirestorePayrollAuditLog[]>(initialPayrollCache?.auditLogs ?? []);
   const [loading, setLoading] = useState(false);
   const [actionLoading, setActionLoading] = useState('');
   const [error, setError] = useState('');
@@ -318,9 +334,9 @@ export const Payroll: React.FC = () => {
   const [departmentFilter, setDepartmentFilter] = useState('');
   const [employmentFilter, setEmploymentFilter] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [dataLoaded, setDataLoaded] = useState(false);
-  const [payrollEmployees, setPayrollEmployees] = useState<PayrollEmployeeData[]>([]);
-  const [employeesLoaded, setEmployeesLoaded] = useState(false);
+  const [dataLoaded, setDataLoaded] = useState(() => initialPayrollCache != null);
+  const [payrollEmployees, setPayrollEmployees] = useState<PayrollEmployeeData[]>(initialEmployeesCache ?? []);
+  const [employeesLoaded, setEmployeesLoaded] = useState(() => initialEmployeesCache != null);
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'payroll'),
     [exportImportSettings]
@@ -332,40 +348,81 @@ export const Payroll: React.FC = () => {
   const canExportFromPage = can('export') && pageControl.exportEnabled;
 
   useEffect(() => {
-    loadPayrollEmployees()
-      .then((emps) => {
-        setPayrollEmployees(emps);
-        setEmployeesLoaded(true);
-      })
-      .catch(() => setEmployeesLoaded(true));
+    let cancelled = false;
+    void (async () => {
+      try {
+        const { data } = await fetchCachedPageData(
+          PAYROLL_EMPLOYEES_CACHE_KEY,
+          () => loadPayrollEmployees(),
+          { maxAgeMs: 120_000 },
+        );
+        if (!cancelled) {
+          setPayrollEmployees(data);
+          setEmployeesLoaded(true);
+        }
+      } catch {
+        if (!cancelled) setEmployeesLoaded(true);
+      }
+    })();
+    return () => { cancelled = true; };
   }, []);
 
-  // Load payroll data for selected month
-  const loadPayrollData = useCallback(async () => {
-    setLoading(true);
+  const applyPayrollData = useCallback((data: PayrollMonthPageData) => {
+    setPayrollMonth(data.payrollMonth);
+    setRecords(data.records);
+    setAuditLogs(data.auditLogs);
+    setDataLoaded(true);
+  }, []);
+
+  // Soft-load month data: paint cache immediately, refresh in background
+  const loadPayrollData = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+    const cacheKey = `hr:payroll:${month}`;
+    const cached = peekPageDataCache<PayrollMonthPageData>(cacheKey);
+    if (cached) {
+      applyPayrollData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError('');
     setSuccess('');
     try {
-      const pm = await getPayrollMonth(month);
-      setPayrollMonth(pm);
-      if (pm?.id) {
-        const [recs, logs] = await Promise.all([
-          getPayrollRecords(pm.id),
-          payrollAuditService.getByMonth(pm.id),
-        ]);
-        setRecords(recs);
-        setAuditLogs(logs);
-      } else {
-        setRecords([]);
-        setAuditLogs([]);
-      }
-      setDataLoaded(true);
+      const { data } = await fetchCachedPageData(
+        cacheKey,
+        async (): Promise<PayrollMonthPageData> => {
+          const pm = await getPayrollMonth(month);
+          if (pm?.id) {
+            const [recs, logs] = await Promise.all([
+              getPayrollRecords(pm.id),
+              payrollAuditService.getByMonth(pm.id),
+            ]);
+            return { payrollMonth: pm, records: recs, auditLogs: logs };
+          }
+          return { payrollMonth: pm, records: [], auditLogs: [] };
+        },
+        { force, maxAgeMs: 60_000 },
+      );
+      applyPayrollData(data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'حدث خطأ أثناء تحميل البيانات');
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, applyPayrollData]);
+
+  // On revisit / month change: soft-paint from cache when available
+  useEffect(() => {
+    const cached = peekPageDataCache<PayrollMonthPageData>(`hr:payroll:${month}`);
+    if (cached) {
+      void loadPayrollData();
+    } else {
+      setDataLoaded(false);
+      setPayrollMonth(null);
+      setRecords([]);
+      setAuditLogs([]);
+    }
+  }, [month, loadPayrollData]);
 
   // Generate payroll
   const handleGenerate = useCallback(async () => {
@@ -393,7 +450,8 @@ export const Payroll: React.FC = () => {
       setSuccess(
         `تم ${payrollMonth ? 'إعادة احتساب' : 'إنشاء'} كشف الرواتب بنجاح — ${result.totalProcessed} موظف`,
       );
-      await loadPayrollData();
+      invalidatePageDataCache(`hr:payroll:${month}`);
+      await loadPayrollData({ force: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'حدث خطأ أثناء إنشاء كشف الرواتب');
     } finally {
@@ -414,7 +472,8 @@ export const Payroll: React.FC = () => {
     try {
       await finalizePayroll({ month, finalizedBy: 'current-user' });
       setSuccess('تم اعتماد كشف الرواتب بنجاح.');
-      await loadPayrollData();
+      invalidatePageDataCache(`hr:payroll:${month}`);
+      await loadPayrollData({ force: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'حدث خطأ أثناء اعتماد الكشف');
     } finally {
@@ -435,7 +494,8 @@ export const Payroll: React.FC = () => {
     try {
       await lockPayroll({ month, lockedBy: 'current-user' });
       setSuccess('تم قفل كشف الرواتب نهائياً.');
-      await loadPayrollData();
+      invalidatePageDataCache(`hr:payroll:${month}`);
+      await loadPayrollData({ force: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'حدث خطأ أثناء قفل الكشف');
     } finally {
@@ -587,14 +647,17 @@ export const Payroll: React.FC = () => {
         primaryAction={{
           label: 'تحميل',
           icon: loading ? 'refresh' : 'search',
-          onClick: loadPayrollData,
+          onClick: () => {
+            invalidatePageDataCache(`hr:payroll:${month}`);
+            void loadPayrollData({ force: true });
+          },
           disabled: loading,
         }}
         extra={
           <input
             type="month"
             value={month}
-            onChange={(e) => { setMonth(e.target.value); setDataLoaded(false); setVisibleCount(ROWS_PER_PAGE); }}
+            onChange={(e) => { setMonth(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
             className="erp-filter-select"
           />
         }

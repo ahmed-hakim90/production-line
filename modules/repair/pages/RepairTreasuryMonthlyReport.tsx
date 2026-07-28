@@ -21,6 +21,11 @@ import {
   type RepairTreasurySessionStatusFilter,
 } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(Number(n || 0));
 const THIS_MONTH = new Date().toISOString().slice(0, 7);
@@ -62,7 +67,9 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
     [allowedBranches],
   );
 
-  const loadReport = async (opts?: { silent?: boolean }) => {
+  const treasuryReportCacheKey = `repair:treasuryMonthly:${month}:${branchFilter || 'all'}:${statusFilter}`;
+
+  const loadReport = async (opts?: { silent?: boolean; force?: boolean }) => {
     const allowedBranchIds = allowedBranches.map((branch) => String(branch.id || '')).filter(Boolean);
     if (!allowedBranchIds.length) {
       setReport(null);
@@ -70,16 +77,26 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
     }
     const selectedIsAll = branchFilter === ALL_BRANCHES_VALUE;
     const selectedBranchId = selectedIsAll ? '' : branchFilter;
-    try {
+    const cached = peekPageDataCache<RepairTreasuryMonthlyReportData>(treasuryReportCacheKey);
+    if (cached) {
+      setReport(cached);
+      setLoading(false);
+    } else if (!opts?.silent) {
       setLoading(true);
-      const data = await repairTreasuryService.getMonthlyReport({
-        month,
-        allowedBranchIds,
-        branchId: selectedBranchId,
-        includeAllBranches: selectedIsAll,
-        sessionStatus: statusFilter,
-        branchNameMap,
-      });
+    }
+    try {
+      const { data } = await fetchCachedPageData(
+        treasuryReportCacheKey,
+        () => repairTreasuryService.getMonthlyReport({
+          month,
+          allowedBranchIds,
+          branchId: selectedBranchId,
+          includeAllBranches: selectedIsAll,
+          sessionStatus: statusFilter,
+          branchNameMap,
+        }),
+        { force: opts?.force === true, maxAgeMs: 60_000 },
+      );
       setReport(data);
       if (!opts?.silent) {
         setExpandedSessionId('');
@@ -90,6 +107,11 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const reloadReport = async () => {
+    invalidatePageDataCache(treasuryReportCacheKey);
+    await loadReport({ force: true });
   };
 
   const openSessionDetails = async (sessionId: string, branchId: string) => {
@@ -233,7 +255,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
             </Select>
           </div>
           <div className="flex items-end">
-            <Button className="w-full" onClick={() => { void loadReport(); }} disabled={loading}>
+            <Button className="w-full" onClick={() => { void reloadReport(); }} disabled={loading}>
               {loading ? 'جارٍ التحميل...' : 'تحديث التقرير'}
             </Button>
           </div>

@@ -42,9 +42,9 @@ export function resolveInventoryRoutingV1(systemSettings: SystemSettings): Resol
       nested.requireApprovalForAutoTransfers !== undefined
         ? Boolean(nested.requireApprovalForAutoTransfers)
         : true,
-    // Off by default — prefer صرف إنتاج; enable only when explicitly configured.
+    // Off by default — تقرير الإنتاج لا يخصم BOM؛ الصرف من صفحة «صرف إنتاج» فقط.
     autoConsumeBomOnProductionReport: Boolean(nested.autoConsumeBomOnProductionReport),
-    // On by default — report inventory waits for issued/approved production issue.
+    // On by default — لا يُنشأ/يُرحَّل تقرير منتج تام إلا بعد صرف إنتاج معتمد.
     requireIssuedProductionIssueOnReport: nested.requireIssuedProductionIssueOnReport !== false,
     allowNegativeDecomposedStock: Boolean(plan?.allowNegativeDecomposedStock),
     allowNegativeFinishedTransferStock: Boolean(plan?.allowNegativeFinishedTransferStock),

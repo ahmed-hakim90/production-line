@@ -58,6 +58,10 @@ import {
   ResponsiveContainer,
   Legend,
 } from 'recharts';
+import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 // â”€â”€â”€ Performance Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -227,14 +231,32 @@ export const SupervisorDetails: React.FC = () => {
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const systemSettings = useAppStore((s) => s.systemSettings);
 
-  const [employee, setEmployee] = useState<FirestoreEmployee | null>(null);
-  const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
-  const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>([]);
-  const [shifts, setShifts] = useState<FirestoreShift[]>([]);
-  const [reports, setReports] = useState<ProductionReport[]>([]);
-  const [workOrders, setWorkOrders] = useState<WorkOrder[]>([]);
-  const [productionWorkers, setProductionWorkers] = useState<ProductionWorker[]>([]);
-  const [loading, setLoading] = useState(true);
+  type SupervisorDetailsPageData = {
+    employee: FirestoreEmployee | null;
+    departments: FirestoreDepartment[];
+    jobPositions: FirestoreJobPosition[];
+    shifts: FirestoreShift[];
+    reports: ProductionReport[];
+    workOrders: WorkOrder[];
+    productionWorkers: ProductionWorker[];
+  };
+
+  const supervisorLookupId = id ? decodeURIComponent(String(id)).trim() : String(uid || '').trim();
+  const supervisorCacheKey = supervisorLookupId
+    ? `production:supervisorDetails:${supervisorLookupId}`
+    : null;
+  const initialSupervisorCache = supervisorCacheKey
+    ? peekPageDataCache<SupervisorDetailsPageData>(supervisorCacheKey)
+    : null;
+
+  const [employee, setEmployee] = useState<FirestoreEmployee | null>(() => initialSupervisorCache?.employee ?? null);
+  const [departments, setDepartments] = useState<FirestoreDepartment[]>(() => initialSupervisorCache?.departments ?? []);
+  const [jobPositions, setJobPositions] = useState<FirestoreJobPosition[]>(() => initialSupervisorCache?.jobPositions ?? []);
+  const [shifts, setShifts] = useState<FirestoreShift[]>(() => initialSupervisorCache?.shifts ?? []);
+  const [reports, setReports] = useState<ProductionReport[]>(() => initialSupervisorCache?.reports ?? []);
+  const [workOrders, setWorkOrders] = useState<WorkOrder[]>(() => initialSupervisorCache?.workOrders ?? []);
+  const [productionWorkers, setProductionWorkers] = useState<ProductionWorker[]>(() => initialSupervisorCache?.productionWorkers ?? []);
+  const [loading, setLoading] = useState(() => initialSupervisorCache == null);
   const [activeTab, setActiveTab] = useState<DetailTab>('production');
   const [chartTab, setChartTab] = useState<ChartTab>('production');
   const [period, setPeriod] = useState<Period>('all');
@@ -244,79 +266,112 @@ export const SupervisorDetails: React.FC = () => {
 
   useEffect(() => {
     const lookupId = id ? decodeURIComponent(String(id)).trim() : String(uid || '').trim();
-    if (!lookupId) { setLoading(false); return; }
+    if (!lookupId || !supervisorCacheKey) { setLoading(false); return; }
     const normalizedId = lookupId;
-    if (!normalizedId) { setLoading(false); return; }
     let cancelled = false;
-    setLoading(true);
+    const cached = peekPageDataCache<SupervisorDetailsPageData>(supervisorCacheKey);
+    if (cached) {
+      setEmployee(cached.employee);
+      setDepartments(cached.departments);
+      setJobPositions(cached.jobPositions);
+      setShifts(cached.shifts);
+      setReports(cached.reports);
+      setWorkOrders(cached.workOrders);
+      setProductionWorkers(cached.productionWorkers);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     (async () => {
       try {
-        const [empById, empByUserId, deptSnap, posSnap, shiftSnap, workerRows] = await Promise.all([
-          employeeService.getById(normalizedId),
-          employeeService.getByUserId(normalizedId),
-          getDocs(departmentsRef()),
-          getDocs(jobPositionsRef()),
-          getDocs(shiftsRef()),
-          productionWorkerService.getAll().catch(() => [] as ProductionWorker[]),
-        ]);
-        if (cancelled) return;
-        const employeeFromStore = _rawEmployees.find((e) => e.id === normalizedId || e.userId === normalizedId || e.code === normalizedId) ?? null;
-        const resolvedEmployee = empById ?? empByUserId ?? employeeFromStore;
-        if (isSelfSupervisorPage && resolvedEmployee?.level !== 2) {
-          setEmployee(null);
-          setLoading(false);
-          return;
-        }
-        const resolvedEmployeeId = resolvedEmployee?.id ?? normalizedId;
-        const supervisorIdsToTry = Array.from(new Set([normalizedId, resolvedEmployeeId].filter(Boolean)));
+        const { data } = await fetchCachedPageData(
+          supervisorCacheKey,
+          async (): Promise<SupervisorDetailsPageData> => {
+            const [empById, empByUserId, deptSnap, posSnap, shiftSnap, workerRows] = await Promise.all([
+              employeeService.getById(normalizedId),
+              employeeService.getByUserId(normalizedId),
+              getDocs(departmentsRef()),
+              getDocs(jobPositionsRef()),
+              getDocs(shiftsRef()),
+              productionWorkerService.getAll().catch(() => [] as ProductionWorker[]),
+            ]);
+            const employeeFromStore = _rawEmployees.find((e) => e.id === normalizedId || e.userId === normalizedId || e.code === normalizedId) ?? null;
+            const resolvedEmployee = empById ?? empByUserId ?? employeeFromStore;
+            if (isSelfSupervisorPage && resolvedEmployee?.level !== 2) {
+              return {
+                employee: null,
+                departments: [],
+                jobPositions: [],
+                shifts: [],
+                reports: [],
+                workOrders: [],
+                productionWorkers: [],
+              };
+            }
+            const resolvedEmployeeId = resolvedEmployee?.id ?? normalizedId;
+            const supervisorIdsToTry = Array.from(new Set([normalizedId, resolvedEmployeeId].filter(Boolean)));
 
-        const [directReports, supervisorOrderBuckets] = await Promise.all([
-          reportService.getByEmployee(resolvedEmployeeId).catch(() => [] as ProductionReport[]),
-          Promise.all(
-            supervisorIdsToTry.map((sid) =>
-              workOrderService.getBySupervisor(sid).catch(() => []),
-            ),
-          ),
-        ]);
-        const supervisorOrders = Array.from(
-          new Map(
-            supervisorOrderBuckets
-              .flat()
-              .map((wo) => [wo.id || `${wo.workOrderNumber}__${wo.lineId}__${wo.productId}`, wo]),
-          ).values(),
+            const [directReports, supervisorOrderBuckets] = await Promise.all([
+              reportService.getByEmployee(resolvedEmployeeId).catch(() => [] as ProductionReport[]),
+              Promise.all(
+                supervisorIdsToTry.map((sid) =>
+                  workOrderService.getBySupervisor(sid).catch(() => []),
+                ),
+              ),
+            ]);
+            const supervisorOrders = Array.from(
+              new Map(
+                supervisorOrderBuckets
+                  .flat()
+                  .map((wo) => [wo.id || `${wo.workOrderNumber}__${wo.lineId}__${wo.productId}`, wo]),
+              ).values(),
+            );
+
+            const departmentsData = deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment));
+            const jobPositionsData = posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition));
+            const shiftsData = shiftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift));
+
+            let reportsByWorkOrder: ProductionReport[][] = [];
+            try {
+              reportsByWorkOrder = await Promise.all(
+                supervisorOrders
+                  .map((wo) => wo.id)
+                  .filter((woId): woId is string => !!woId)
+                  .map((woId) => reportService.getByWorkOrderId(woId)),
+              );
+            } catch (reportsByWorkOrderError) {
+              console.warn('SupervisorDetails workOrder reports fallback:', reportsByWorkOrderError);
+            }
+
+            const reportMap = new Map<string, ProductionReport>();
+            const upsertReport = (report: ProductionReport) => {
+              const key = report.id || `${report.date}__${report.lineId}__${report.productId}__${report.employeeId}__${report.workOrderId || ''}`;
+              reportMap.set(key, report);
+            };
+            directReports.forEach(upsertReport);
+            reportsByWorkOrder.flat().forEach(upsertReport);
+            const mergedReports = Array.from(reportMap.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+
+            return {
+              employee: resolvedEmployee,
+              departments: departmentsData,
+              jobPositions: jobPositionsData,
+              shifts: shiftsData,
+              reports: mergedReports,
+              workOrders: supervisorOrders,
+              productionWorkers: workerRows,
+            };
+          },
+          { maxAgeMs: 60_000 },
         );
-
-        setEmployee(resolvedEmployee);
-        setDepartments(deptSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)));
-        setJobPositions(posSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)));
-        setShifts(shiftSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift)));
-        setProductionWorkers(workerRows);
-        setWorkOrders(supervisorOrders);
-
-        let reportsByWorkOrder: ProductionReport[][] = [];
-        try {
-          reportsByWorkOrder = await Promise.all(
-            supervisorOrders
-              .map((wo) => wo.id)
-              .filter((woId): woId is string => !!woId)
-              .map((woId) => reportService.getByWorkOrderId(woId)),
-          );
-        } catch (reportsByWorkOrderError) {
-          // Keep the details page usable even if work-order report lookups fail
-          // (e.g., missing composite index in some environments).
-          console.warn('SupervisorDetails workOrder reports fallback:', reportsByWorkOrderError);
-        }
         if (cancelled) return;
-
-        const reportMap = new Map<string, ProductionReport>();
-        const upsertReport = (report: ProductionReport) => {
-          const key = report.id || `${report.date}__${report.lineId}__${report.productId}__${report.employeeId}__${report.workOrderId || ''}`;
-          reportMap.set(key, report);
-        };
-        directReports.forEach(upsertReport);
-        reportsByWorkOrder.flat().forEach(upsertReport);
-        const mergedReports = Array.from(reportMap.values()).sort((a, b) => (b.date || '').localeCompare(a.date || ''));
-        setReports(mergedReports);
+        setEmployee(data.employee);
+        setDepartments(data.departments);
+        setJobPositions(data.jobPositions);
+        setShifts(data.shifts);
+        setProductionWorkers(data.productionWorkers);
+        setWorkOrders(data.workOrders);
+        setReports(data.reports);
       } catch (e) {
         console.error('SupervisorDetails load error:', e);
         if (!cancelled) {
@@ -328,7 +383,7 @@ export const SupervisorDetails: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [id, isSelfSupervisorPage, uid, _rawEmployees]);
+  }, [id, isSelfSupervisorPage, uid, _rawEmployees, supervisorCacheKey]);
 
   const getDepartmentName = (dId: string) => departments.find((d) => d.id === dId)?.name ?? '—';
   const getJobPositionTitle = (pId: string) => jobPositions.find((j) => j.id === pId)?.title ?? '—';

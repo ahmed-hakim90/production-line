@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '@/modules/production/components/UI';
@@ -12,6 +12,15 @@ import {
   flattenCategoryTree,
   formatCategoryBreadcrumb,
 } from '../../catalog/lib/categoryTree';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+const CATEGORIES_CACHE_KEY = 'manufacturing:material-categories';
+
+type MaterialCategoriesPageData = {
+  items: MaterialCategory[];
+  usageById: Record<string, { materialCount: number; childrenCount: number }>;
+};
 
 type FormState = {
   name: string;
@@ -30,44 +39,43 @@ export const MaterialCategories: React.FC = () => {
   const canView = can('materials.view');
   const canManage = can('materials.manage');
 
-  const [items, setItems] = useState<MaterialCategory[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [migrating, setMigrating] = useState(false);
-  const [usageById, setUsageById] = useState<
-    Record<string, { materialCount: number; childrenCount: number }>
-  >({});
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<MaterialCategoriesPageData>(
+    canView ? CATEGORIES_CACHE_KEY : null,
+    async () => {
       const list = await materialCategoryService.getAll();
-      setItems(list);
+      let usageById: Record<string, { materialCount: number; childrenCount: number }> = {};
       try {
-        setUsageById(await materialCategoryService.getBulkCategoryUsageCounts(list));
+        usageById = await materialCategoryService.getBulkCategoryUsageCounts(list);
       } catch (usageError) {
         console.error('[material-categories] usage counts failed', usageError);
-        setUsageById({});
         setMessage({
           type: 'error',
           text: 'تم تحميل الفئات لكن تعذر حساب عدد المواد المرتبطة.',
         });
       }
-    } catch (error) {
-      console.error('[material-categories] load failed', error);
-      setMessage({ type: 'error', text: 'تعذر تحميل الفئات.' });
-    } finally {
-      setLoading(false);
-    }
-  };
+      return { items: list, usageById };
+    },
+    { maxAgeMs: 60_000 },
+  );
 
-  useEffect(() => {
-    if (canView) void loadData();
-  }, [canView]);
+  const items = data?.items ?? [];
+  const usageById = data?.usageById ?? {};
+
+  const loadData = async () => {
+    invalidatePageDataCache(CATEGORIES_CACHE_KEY);
+    await reloadCached(true);
+  };
 
   const treeRows = useMemo(() => flattenCategoryTree(buildCategoryTree(items)), [items]);
 
@@ -207,7 +215,7 @@ export const MaterialCategories: React.FC = () => {
             </tr>
           </thead>
           <tbody>
-            {loading ? (
+            {loading && items.length === 0 ? (
               <tr>
                 <td colSpan={5} className="py-8 text-center text-muted-foreground">
                   جاري التحميل...

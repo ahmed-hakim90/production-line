@@ -17,6 +17,11 @@ import { StatusBadge } from '../../../src/components/erp/StatusBadge';
 import { usePermission } from '../../../utils/permissions';
 import { useShallowStore } from '../../../store/useAppStore';
 import type { Asset, AssetDepreciationMethod } from '../../../types';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type AssetCreateForm = {
   name: string;
@@ -67,7 +72,9 @@ export const AssetsList: React.FC = () => {
   const [status, setStatus] = useState('');
   const [period, setPeriod] = useState(currentMonthValue());
   const [runningJob, setRunningJob] = useState(false);
-  const [assetsLoading, setAssetsLoading] = useState(true);
+  const ASSETS_CACHE_KEY = 'costs:assetsList';
+  const initialAssetsCache = peekPageDataCache<{ ready: true }>(ASSETS_CACHE_KEY);
+  const [assetsLoading, setAssetsLoading] = useState(() => initialAssetsCache == null && assets.length === 0);
   const [showCreate, setShowCreate] = useState(false);
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState<AssetCreateForm>({
@@ -87,9 +94,19 @@ export const AssetsList: React.FC = () => {
 
   useEffect(() => {
     let active = true;
+    const cached = peekPageDataCache<{ ready: true }>(ASSETS_CACHE_KEY);
+    if (cached || assets.length > 0) setAssetsLoading(false);
+    else setAssetsLoading(true);
     (async () => {
       try {
-        await fetchAssets();
+        await fetchCachedPageData(
+          ASSETS_CACHE_KEY,
+          async () => {
+            await fetchAssets();
+            return { ready: true as const };
+          },
+          { maxAgeMs: 60_000 },
+        );
       } finally {
         if (active) setAssetsLoading(false);
       }
@@ -97,7 +114,7 @@ export const AssetsList: React.FC = () => {
     return () => {
       active = false;
     };
-  }, [fetchAssets]);
+  }, [fetchAssets, assets.length]);
 
   const categories = useMemo(
     () => Array.from(new Set(assets.map((a) => String(a.category || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b, 'ar')),
@@ -159,7 +176,7 @@ export const AssetsList: React.FC = () => {
     setRunningJob(true);
     try {
       await runDepreciationJob(period);
-      await fetchAssets();
+      invalidatePageDataCache(ASSETS_CACHE_KEY); await fetchAssets();
     } finally {
       setRunningJob(false);
     }
@@ -169,7 +186,7 @@ export const AssetsList: React.FC = () => {
     const confirmed = window.confirm('هل تريد حذف الأصل نهائيًا؟');
     if (!confirmed) return;
     await deleteAsset(assetId);
-    await fetchAssets();
+    invalidatePageDataCache(ASSETS_CACHE_KEY); await fetchAssets();
   };
 
   const assetStatusLabel = (assetStatus: Asset['status']) => (

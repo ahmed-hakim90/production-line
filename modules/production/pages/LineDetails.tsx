@@ -47,6 +47,10 @@ import { getAlertSettings } from '../../../utils/dashboardConfig';
 import type { ProductionReport } from '../../../types';
 import { ProductionLineStatus } from '../../../types';
 import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+import {
   AreaChart,
   Area,
   BarChart,
@@ -122,9 +126,16 @@ export const LineDetails: React.FC = () => {
   const assetDepreciations = useAppStore((s) => s.assetDepreciations);
   const systemSettings = useAppStore((s) => s.systemSettings);
 
-  const [reports, setReports] = useState<ProductionReport[]>([]);
-  const [lineWorkOrders, setLineWorkOrders] = useState<WorkOrder[]>([]);
-  const [loading, setLoading] = useState(true);
+  const lineDetailsCacheKey = id ? `production:lineDetails:${id}` : null;
+  type LineDetailsPageData = { reports: ProductionReport[]; lineWorkOrders: WorkOrder[] };
+  const initialLineCache = lineDetailsCacheKey
+    ? peekPageDataCache<LineDetailsPageData>(lineDetailsCacheKey)
+    : null;
+  const [reports, setReports] = useState<ProductionReport[]>(() => initialLineCache?.reports ?? []);
+  const [lineWorkOrders, setLineWorkOrders] = useState<WorkOrder[]>(
+    () => initialLineCache?.lineWorkOrders ?? [],
+  );
+  const [loading, setLoading] = useState(() => initialLineCache == null);
   const [chartTab, setChartTab] = useState<ChartTab>('production');
   const [period, setPeriod] = useState<Period>('daily');
   const [viewWorkersData, setViewWorkersData] = useState<{ date: string; workers: LineWorkerAssignment[] } | null>(null);
@@ -214,17 +225,31 @@ export const LineDetails: React.FC = () => {
   }, [loading, periodReports.length, reports, todayStr, shiftDate]);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id || !lineDetailsCacheKey) return;
     let cancelled = false;
-    setLoading(true);
-    Promise.all([
-      reportService.getByLine(id),
-      workOrderService.getActiveByLine(id),
-    ])
-      .then(([data, wos]) => {
+    const cached = peekPageDataCache<LineDetailsPageData>(lineDetailsCacheKey);
+    if (cached) {
+      setReports(cached.reports);
+      setLineWorkOrders(cached.lineWorkOrders);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    void fetchCachedPageData(
+      lineDetailsCacheKey,
+      async () => {
+        const [data, wos] = await Promise.all([
+          reportService.getByLine(id),
+          workOrderService.getActiveByLine(id),
+        ]);
+        return { reports: data, lineWorkOrders: wos };
+      },
+      { maxAgeMs: 60_000 },
+    )
+      .then(({ data }) => {
         if (!cancelled) {
-          setReports(data);
-          setLineWorkOrders(wos);
+          setReports(data.reports);
+          setLineWorkOrders(data.lineWorkOrders);
         }
       })
       .catch(console.error)
@@ -232,7 +257,7 @@ export const LineDetails: React.FC = () => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, lineDetailsCacheKey]);
 
   // â”€â”€ Active plan for this line â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 

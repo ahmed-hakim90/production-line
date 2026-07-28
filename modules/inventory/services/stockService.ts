@@ -26,10 +26,11 @@ import type {
   StockTransaction,
 } from '../types';
 import {
-  allocateInvReferenceInTransaction,
   ensureInvCounter,
   formatInvReference,
   peekNextInvReferenceNo,
+  readNextInvSeqInTransaction,
+  writeInvSeqInTransaction,
 } from './inventoryInvSequence';
 
 const BALANCES_COLLECTION = 'stock_items';
@@ -406,8 +407,8 @@ export const stockService = {
 
         const linkedRef = doc(collection(db, TRANSACTIONS_COLLECTION));
         await runTransaction(db, async (t) => {
-          const resolvedReferenceNo =
-            input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
+          const providedReferenceNo = input.referenceNo?.trim() || '';
+          const nextInvSeq = providedReferenceNo ? null : await readNextInvSeqInTransaction(t);
           const sourceLocationRef = doc(
             db,
             LOCATION_BALANCES_COLLECTION,
@@ -433,6 +434,8 @@ export const stockService = {
             : 0;
           const nextTargetLocation = targetLocationQty + input.quantity;
           const now = toIsoNow();
+          const resolvedReferenceNo =
+            providedReferenceNo || formatInvReference(nextInvSeq!);
 
           const lineage = {
             unit: input.unit,
@@ -499,6 +502,7 @@ export const stockService = {
             transferDirection: 'IN',
           };
 
+          if (nextInvSeq != null) writeInvSeqInTransaction(t, nextInvSeq);
           t.set(txRef, stripUndefined({ ...outPayload, tenantId }));
           t.set(linkedRef, stripUndefined({ ...inPayload, tenantId }));
 
@@ -565,8 +569,8 @@ export const stockService = {
 
       const linkedRef = doc(collection(db, TRANSACTIONS_COLLECTION));
       await runTransaction(db, async (t) => {
-        const resolvedReferenceNo =
-          input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
+        const providedReferenceNo = input.referenceNo?.trim() || '';
+        const nextInvSeq = providedReferenceNo ? null : await readNextInvSeqInTransaction(t);
         const sourceBalanceRef = doc(
           db,
           BALANCES_COLLECTION,
@@ -612,6 +616,8 @@ export const stockService = {
         const targetLocationQty = targetLocationSnap?.exists() ? Number(targetLocationSnap.data().quantity || 0) : 0;
         const nextTargetLocation = targetLocationQty + input.quantity;
         const now = toIsoNow();
+        const resolvedReferenceNo =
+          providedReferenceNo || formatInvReference(nextInvSeq!);
 
         const lineage = {
           unit: input.unit,
@@ -678,6 +684,7 @@ export const stockService = {
           transferDirection: 'IN',
         };
 
+        if (nextInvSeq != null) writeInvSeqInTransaction(t, nextInvSeq);
         t.set(txRef, stripUndefined({ ...outPayload, tenantId }));
         t.set(linkedRef, stripUndefined({ ...inPayload, tenantId }));
 
@@ -765,8 +772,8 @@ export const stockService = {
     }
 
     await runTransaction(db, async (t) => {
-      const resolvedReferenceNo =
-        input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
+      const providedReferenceNo = input.referenceNo?.trim() || '';
+      const nextInvSeq = providedReferenceNo ? null : await readNextInvSeqInTransaction(t);
       const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(input.warehouseId, input.itemType, input.itemId));
       const locRef = input.locationId
         ? doc(
@@ -793,6 +800,8 @@ export const stockService = {
       }
 
       const now = toIsoNow();
+      const resolvedReferenceNo =
+        providedReferenceNo || formatInvReference(nextInvSeq!);
       const payload: StockTransaction = {
         warehouseId: input.warehouseId,
         locationId: input.locationId,
@@ -822,6 +831,7 @@ export const stockService = {
         createdAt: now,
       };
 
+      if (nextInvSeq != null) writeInvSeqInTransaction(t, nextInvSeq);
       t.set(txRef, stripUndefined({ ...payload, tenantId }));
       t.set(
         balRef,

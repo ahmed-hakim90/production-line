@@ -20,7 +20,7 @@ async function resolveProductionWarehouseIdByName(): Promise<string> {
     const warehouses = await warehouseService.getAllWarehouses();
     const finishedWarehouse = warehouses.find((w) => {
       const name = (w.name || '').trim().toLowerCase();
-      return name === 'تم الصنع' || name.includes('تم الصنع');
+      return name === 'تم الصنع' || name.includes('تم الصنع') || name === 'تم الإنتاج' || name.includes('تم الإنتاج');
     });
     if (finishedWarehouse?.id) {
       cachedProductionWarehouseId = finishedWarehouse.id;

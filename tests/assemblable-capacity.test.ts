@@ -2,8 +2,10 @@ import assert from 'node:assert/strict';
 import {
   buildAvailableByItemCode,
   buildAvailableByItemId,
+  componentShortageQtyForTarget,
   computeAssemblableCapacity,
   lineTouchesStock,
+  missingComponentsForTarget,
   requiredQtyPerUnit,
 } from '../modules/inventory/lib/assemblableCapacity';
 
@@ -85,5 +87,46 @@ const withWaste = computeAssemblableCapacity(
   buildAvailableByItemId([{ itemId: 'm1', availableQty: 22 }]),
 );
 assert.equal(withWaste[0].maxAssemblable, 10);
+
+assert.equal(
+  componentShortageQtyForTarget({ requiredPerUnit: 2, availableQty: 5 }, 10),
+  15,
+);
+assert.equal(
+  componentShortageQtyForTarget({ requiredPerUnit: 2, availableQty: 30 }, 10),
+  0,
+);
+
+const missing = missingComponentsForTarget(
+  {
+    components: [
+      {
+        materialId: 'm1',
+        materialName: 'A',
+        materialCode: 'A',
+        qtyPerUnit: 1,
+        wastePercent: 0,
+        requiredPerUnit: 1,
+        availableQty: 0,
+        maxAssemblable: 0,
+      },
+      {
+        materialId: 'm2',
+        materialName: 'B',
+        materialCode: 'B',
+        qtyPerUnit: 2,
+        wastePercent: 0,
+        requiredPerUnit: 2,
+        availableQty: 10,
+        maxAssemblable: 5,
+      },
+    ],
+  },
+  10,
+);
+assert.equal(missing.length, 2);
+assert.equal(missing[0].materialId, 'm1');
+assert.equal(missing[0].shortageQty, 10);
+assert.equal(missing[1].shortageQty, 10);
 
 console.log('assemblable-capacity.test.ts: OK');

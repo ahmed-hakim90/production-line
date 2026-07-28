@@ -5,7 +5,7 @@ export const WAREHOUSE_ROLE_LABELS: Record<WarehouseRole, string> = {
   raw_material: 'مواد خام',
   decomposed: 'مفكك / مستلزم إنتاج',
   production_wip: 'WIP',
-  finished_staging: 'تم الصنع',
+  finished_staging: 'تم الإنتاج',
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
@@ -49,8 +49,8 @@ export function transferRequestTypeLabel(value?: TransferRequestType | string): 
     transfer: 'تحويل يدوي',
     manual_transfer: 'تحويل يدوي',
     production_entry: 'إدخال إنتاج',
-    production_auto_transfer: 'تحويل إنتاج تلقائي',
-    finished_to_final: 'تام → منتج تام',
+    production_auto_transfer: 'ترحيل إلى تم الإنتاج',
+    finished_to_final: 'تم الإنتاج → منتج تام',
     packaging_transfer: 'تحويل تغليف',
   };
   return map[t] ?? t;

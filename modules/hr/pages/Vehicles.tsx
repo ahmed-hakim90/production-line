@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
@@ -13,14 +13,20 @@ import type { FirestoreEmployee } from '@/types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+const VEHICLES_CACHE_KEY = 'hr:vehicles';
+
+type VehiclesPageData = {
+  vehicles: FirestoreVehicle[];
+  employees: FirestoreEmployee[];
+};
 
 export const Vehicles: React.FC = () => {
   const { can } = usePermission();
-  const [vehicles, setVehicles] = useState<FirestoreVehicle[]>([]);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const { openModal } = useGlobalModalManager();
-  const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const pageControl = useMemo(
@@ -29,20 +35,26 @@ export const Vehicles: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<VehiclesPageData>(
+    VEHICLES_CACHE_KEY,
+    async () => {
       const [v, e] = await Promise.all([vehicleService.getAll(), employeeService.getAll()]);
-      setVehicles(v);
-      setEmployees(e);
-    } catch (err) {
-      console.error('Failed to load vehicles:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+      return { vehicles: v, employees: e };
+    },
+    { maxAgeMs: 60_000 },
+  );
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const vehicles = data?.vehicles ?? [];
+  const employees = data?.employees ?? [];
+
+  const fetchData = useCallback(async () => {
+    invalidatePageDataCache(VEHICLES_CACHE_KEY);
+    await reloadCached(true);
+  }, [reloadCached]);
 
   const empNameMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -160,7 +172,7 @@ export const Vehicles: React.FC = () => {
     exportHRData(rows, 'المركبات', 'مركبات-تصدير');
   };
 
-  if (loading) {
+  if (loading && vehicles.length === 0) {
     return <PageContentSkeleton variant="list" showFilters tableRows={6} />;
   }
 

@@ -18,6 +18,16 @@ import {
 
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+const STOCK_COUNTS_CACHE_KEY = 'inventory:stock-counts';
+
+type StockCountsPageData = {
+  sessions: StockCountSession[];
+  warehouses: Warehouse[];
+  balances: StockItemBalance[];
+};
 
 export const StockCounts: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -37,9 +47,30 @@ export const StockCounts: React.FC = () => {
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
 
-  const [sessions, setSessions] = useState<StockCountSession[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [balances, setBalances] = useState<StockItemBalance[]>([]);
+  const {
+    data,
+    reload: reloadCached,
+  } = useCachedPageLoad<StockCountsPageData>(
+    STOCK_COUNTS_CACHE_KEY,
+    async () => {
+      const [ses, whs, bals] = await Promise.all([
+        stockService.getCountSessions(),
+        warehouseService.getWarehousesForReportingFilters(),
+        stockService.getBalances(),
+      ]);
+      return {
+        sessions: ses,
+        warehouses: filterWarehouses(whs),
+        balances: bals,
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
+
+  const sessions = data?.sessions ?? [];
+  const warehouses = data?.warehouses ?? [];
+  const balances = data?.balances ?? [];
+
   const [warehouseId, setWarehouseId] = useState(
     () => queryWarehouseId || scopedWarehouseId || '',
   );
@@ -47,19 +78,9 @@ export const StockCounts: React.FC = () => {
   const [msg, setMsg] = useState<string>('');
 
   const loadData = async () => {
-    const [ses, whs, bals] = await Promise.all([
-      stockService.getCountSessions(),
-      warehouseService.getWarehousesForReportingFilters(),
-      stockService.getBalances(),
-    ]);
-    setSessions(ses);
-    setWarehouses(filterWarehouses(whs));
-    setBalances(bals);
+    invalidatePageDataCache(STOCK_COUNTS_CACHE_KEY);
+    await reloadCached(true);
   };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
 
   useEffect(() => {
     setWarehouseId((prev) =>

@@ -28,6 +28,10 @@ import {
   type WorkerDailyAchievementStatus,
 } from '@/types';
 import { ProductionWorkerLineAssignmentsSection } from '../components/ProductionWorkerLineAssignmentsSection';
+import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const currentMonth = (): string => {
   const d = new Date();
@@ -126,17 +130,45 @@ export const ProductionWorkerDetails: React.FC = () => {
     },
   }), [rawWorkerSettings]);
 
-  const [loading, setLoading] = useState(true);
-  const [worker, setWorker] = useState<ProductionWorker | null>(null);
-  const [assignments, setAssignments] = useState<Awaited<ReturnType<typeof productionLineWorkerAssignmentService.getByWorker>>>([]);
-  const [targets, setTargets] = useState<ProductionWorkerTarget[]>([]);
-  const [dailyHistory, setDailyHistory] = useState<WorkerDailyAchievement[]>([]);
-  const [monthStats, setMonthStats] = useState<Awaited<ReturnType<typeof productionWorkerPerformanceService.getMonthlyAchievement>> | null>(null);
-  const [todayStats, setTodayStats] = useState<Awaited<ReturnType<typeof productionWorkerPerformanceService.getDailyAchievement>> | null>(null);
+  type WorkerDetailsPageData = {
+    worker: ProductionWorker | null;
+    assignments: Awaited<ReturnType<typeof productionLineWorkerAssignmentService.getByWorker>>;
+    targets: ProductionWorkerTarget[];
+    dailyHistory: WorkerDailyAchievement[];
+    monthStats: Awaited<ReturnType<typeof productionWorkerPerformanceService.getMonthlyAchievement>> | null;
+    todayStats: Awaited<ReturnType<typeof productionWorkerPerformanceService.getDailyAchievement>> | null;
+    periodReports: ProductionReport[];
+    lineAssignmentsByDate: Array<[string, LineWorkerAssignment[]]>;
+  };
+
   const initialMonth = searchParams.get('month') || searchParams.get('date')?.slice(0, 7) || currentMonth();
   const [selectedMonth, setSelectedMonth] = useState(initialMonth);
-  const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
-  const [lineAssignmentsByDate, setLineAssignmentsByDate] = useState<Map<string, LineWorkerAssignment[]>>(new Map());
+  const workerDetailsCacheKey = id ? `production:workerDetails:${id}:${selectedMonth}` : null;
+  const initialWorkerCache = workerDetailsCacheKey
+    ? peekPageDataCache<WorkerDetailsPageData>(workerDetailsCacheKey)
+    : null;
+
+  const [loading, setLoading] = useState(() => initialWorkerCache == null);
+  const [worker, setWorker] = useState<ProductionWorker | null>(() => initialWorkerCache?.worker ?? null);
+  const [assignments, setAssignments] = useState<Awaited<ReturnType<typeof productionLineWorkerAssignmentService.getByWorker>>>(
+    () => initialWorkerCache?.assignments ?? [],
+  );
+  const [targets, setTargets] = useState<ProductionWorkerTarget[]>(() => initialWorkerCache?.targets ?? []);
+  const [dailyHistory, setDailyHistory] = useState<WorkerDailyAchievement[]>(
+    () => initialWorkerCache?.dailyHistory ?? [],
+  );
+  const [monthStats, setMonthStats] = useState<Awaited<ReturnType<typeof productionWorkerPerformanceService.getMonthlyAchievement>> | null>(
+    () => initialWorkerCache?.monthStats ?? null,
+  );
+  const [todayStats, setTodayStats] = useState<Awaited<ReturnType<typeof productionWorkerPerformanceService.getDailyAchievement>> | null>(
+    () => initialWorkerCache?.todayStats ?? null,
+  );
+  const [periodReports, setPeriodReports] = useState<ProductionReport[]>(
+    () => initialWorkerCache?.periodReports ?? [],
+  );
+  const [lineAssignmentsByDate, setLineAssignmentsByDate] = useState<Map<string, LineWorkerAssignment[]>>(
+    () => new Map(initialWorkerCache?.lineAssignmentsByDate ?? []),
+  );
   const [targetForm, setTargetForm] = useState({
     productId: '',
     lineId: '',
@@ -154,64 +186,92 @@ export const ProductionWorkerDetails: React.FC = () => {
   );
 
   useEffect(() => {
-    if (!id) { setLoading(false); return; }
+    if (!id || !workerDetailsCacheKey) { setLoading(false); return; }
     let cancelled = false;
-    (async () => {
+    const cached = peekPageDataCache<WorkerDetailsPageData>(workerDetailsCacheKey);
+    if (cached) {
+      setWorker(cached.worker);
+      setAssignments(cached.assignments);
+      setTargets(cached.targets);
+      setMonthStats(cached.monthStats);
+      setTodayStats(cached.todayStats);
+      setPeriodReports(cached.periodReports);
+      setLineAssignmentsByDate(new Map(cached.lineAssignmentsByDate));
+      setDailyHistory(cached.dailyHistory);
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+    (async () => {
       try {
-        const [w, a, t, monthly, daily, reports] = await Promise.all([
-          productionWorkerService.getById(id),
-          productionLineWorkerAssignmentService.getByWorker(id),
-          productionWorkerTargetService.getByWorker(id),
-          productionWorkerPerformanceService.getMonthlyAchievement(id, selectedMonth, {
-            settings: workerSettings,
-            products: products as never[],
-            lineProductConfigs,
-          }),
-          productionWorkerPerformanceService.getDailyAchievement(id, today, {
-            products: products as never[],
-            settings: workerSettings,
-            lineProductConfigs,
-          }),
-          reportService.getByDateRange(selectedRange.start, selectedRange.end),
-        ]);
+        const { data } = await fetchCachedPageData(
+          workerDetailsCacheKey,
+          async (): Promise<WorkerDetailsPageData> => {
+            const [w, a, t, monthly, daily, reports] = await Promise.all([
+              productionWorkerService.getById(id),
+              productionLineWorkerAssignmentService.getByWorker(id),
+              productionWorkerTargetService.getByWorker(id),
+              productionWorkerPerformanceService.getMonthlyAchievement(id, selectedMonth, {
+                settings: workerSettings,
+                products: products as never[],
+                lineProductConfigs,
+              }),
+              productionWorkerPerformanceService.getDailyAchievement(id, today, {
+                products: products as never[],
+                settings: workerSettings,
+                lineProductConfigs,
+              }),
+              reportService.getByDateRange(selectedRange.start, selectedRange.end),
+            ]);
+            const lineAssignmentGroups = await Promise.all(periodDates.map(async (date) => {
+              const rows = productionLines.length > 0
+                ? (await Promise.all(
+                  productionLines
+                    .filter((line) => line.id)
+                    .map((line) => lineAssignmentService.getByLineAndDate(line.id!, date)),
+                )).flat()
+                : await lineAssignmentService.getByDate(date);
+              return [date, rows] as const;
+            }));
+            const history: WorkerDailyAchievement[] = [];
+            for (const date of periodDates) {
+              history.push(await productionWorkerPerformanceService.getDailyAchievement(id, date, {
+                worker: w ?? undefined,
+                targets: t,
+                reports: reports.filter((report) => report.date === date),
+                settings: workerSettings,
+                products: products as never[],
+                lineProductConfigs,
+              }));
+            }
+            return {
+              worker: w,
+              assignments: a,
+              targets: t,
+              monthStats: monthly,
+              todayStats: daily,
+              periodReports: reports,
+              lineAssignmentsByDate: lineAssignmentGroups.map(([date, rows]) => [date, rows]),
+              dailyHistory: history,
+            };
+          },
+          { maxAgeMs: 60_000 },
+        );
         if (cancelled) return;
-        const lineAssignmentGroups = await Promise.all(periodDates.map(async (date) => {
-          const rows = productionLines.length > 0
-            ? (await Promise.all(
-              productionLines
-                .filter((line) => line.id)
-                .map((line) => lineAssignmentService.getByLineAndDate(line.id!, date)),
-            )).flat()
-            : await lineAssignmentService.getByDate(date);
-          return [date, rows] as const;
-        }));
-        if (cancelled) return;
-        setWorker(w);
-        setAssignments(a);
-        setTargets(t);
-        setMonthStats(monthly);
-        setTodayStats(daily);
-        setPeriodReports(reports);
-        setLineAssignmentsByDate(new Map(lineAssignmentGroups));
-        const history: WorkerDailyAchievement[] = [];
-        for (const date of periodDates) {
-          history.push(await productionWorkerPerformanceService.getDailyAchievement(id, date, {
-            worker: w ?? undefined,
-            targets: t,
-            reports: reports.filter((report) => report.date === date),
-            settings: workerSettings,
-            products: products as never[],
-            lineProductConfigs,
-          }));
-        }
-        setDailyHistory(history);
+        setWorker(data.worker);
+        setAssignments(data.assignments);
+        setTargets(data.targets);
+        setMonthStats(data.monthStats);
+        setTodayStats(data.todayStats);
+        setPeriodReports(data.periodReports);
+        setLineAssignmentsByDate(new Map(data.lineAssignmentsByDate));
+        setDailyHistory(data.dailyHistory);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [id, selectedMonth, today, products, productionLines, lineProductConfigs, workerSettings, periodDates, selectedRange.end, selectedRange.start]);
+  }, [id, selectedMonth, today, products, productionLines, lineProductConfigs, workerSettings, periodDates, selectedRange.end, selectedRange.start, workerDetailsCacheKey]);
 
   const linkedEmployee = useMemo(
     () => _rawEmployees.find((e) => e.id === worker?.employeeId) ?? null,

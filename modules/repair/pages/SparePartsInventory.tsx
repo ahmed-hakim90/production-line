@@ -36,6 +36,11 @@ import type { ProductMaterial } from '../../../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { sparePartMarginPreview, effectiveSparePartUnitCost } from '../utils/sparePartPricing';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 export const SparePartsInventory: React.FC = () => {
   const { dir } = useAppDirection();
@@ -122,22 +127,40 @@ export const SparePartsInventory: React.FC = () => {
   const activeWarehouseId = String(activeBranch?.warehouseId || '').trim();
   const activeWarehouseCode = String(activeBranch?.warehouseCode || '').trim();
 
-  const load = async () => {
-    if (!branchId || !activeWarehouseId) {
+  const sparePartsCacheKey = branchId && activeWarehouseId
+    ? `repair:spareParts:${branchId}:${activeWarehouseId}`
+    : null;
+
+  const load = async (opts?: { force?: boolean }) => {
+    if (!branchId || !activeWarehouseId || !sparePartsCacheKey) {
       setParts([]);
       setStock([]);
       return;
     }
-    const [p, s] = await Promise.all([
-      sparePartsService.listParts(branchId),
-      sparePartsService.listStock(branchId, activeWarehouseId),
-    ]);
-    setParts(p);
-    setStock(s);
+    if (opts?.force) invalidatePageDataCache(sparePartsCacheKey);
+    const cached = peekPageDataCache<{ parts: RepairSparePart[]; stock: RepairSparePartStock[] }>(sparePartsCacheKey);
+    if (cached) {
+      setParts(cached.parts);
+      setStock(cached.stock);
+    }
+    const { data } = await fetchCachedPageData(
+      sparePartsCacheKey,
+      async () => {
+        const [p, s] = await Promise.all([
+          sparePartsService.listParts(branchId),
+          sparePartsService.listStock(branchId, activeWarehouseId),
+        ]);
+        return { parts: p, stock: s };
+      },
+      { force: opts?.force === true, maxAgeMs: 45_000 },
+    );
+    setParts(data.parts);
+    setStock(data.stock);
   };
 
   useEffect(() => {
     void load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, activeWarehouseId]);
   useEffect(() => {
     void productMaterialService.getAll().then(setMaterials).catch(() => setMaterials([]));
@@ -237,7 +260,7 @@ export const SparePartsInventory: React.FC = () => {
         warehouseDiscountPercent: '',
       }));
       setIsCreatePartModalOpen(false);
-      await load();
+      await load({ force: true });
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إضافة القطعة.');
     }
@@ -267,7 +290,7 @@ export const SparePartsInventory: React.FC = () => {
         createdBy: user?.displayName || user?.email || 'system',
         notes: 'إضافة يدوية',
       });
-      await load();
+      await load({ force: true });
       toast.success('تمت إضافة الكمية بنجاح.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إضافة الكمية.');
@@ -292,7 +315,7 @@ export const SparePartsInventory: React.FC = () => {
         createdBy: user?.displayName || user?.email || 'system',
         notes: 'سحب يدوي',
       });
-      await load();
+      await load({ force: true });
       toast.success('تم سحب الكمية بنجاح.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر سحب الكمية.');
@@ -308,7 +331,7 @@ export const SparePartsInventory: React.FC = () => {
       });
       toast.success('تم حفظ التسعير.');
       setPartPricingEdit(null);
-      await load();
+      await load({ force: true });
     } catch (e: any) {
       toast.error(e?.message || 'تعذر حفظ التسعير.');
     }
@@ -319,7 +342,7 @@ export const SparePartsInventory: React.FC = () => {
     try {
       await sparePartsService.removePart(partPendingDelete.id, branchId);
       toast.success('تم حذف قطعة الغيار.');
-      await load();
+      await load({ force: true });
       setPartPendingDelete(null);
     } catch (e: any) {
       toast.error(e?.message || 'تعذر حذف قطعة الغيار.');

@@ -24,8 +24,21 @@ import type {
   LeaveType,
 } from '../types';
 import { LEAVE_TYPE_LABELS } from '../types';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 type ActiveTab = 'allowances' | 'deductions' | 'loans' | 'leaves' | 'penalties';
+
+type FinancialsPageData = {
+  employees: FirestoreEmployee[];
+  allowanceTypes: FirestoreAllowanceType[];
+  leaveTypes: LeaveTypeDefinition[];
+  allowances: FirestoreEmployeeAllowance[];
+  deductions: FirestoreEmployeeDeduction[];
+  loans: FirestoreEmployeeLoan[];
+  leaves: FirestoreLeaveRequest[];
+  defaultLeaveType: LeaveType;
+};
 
 const TAB_CONFIG: { key: ActiveTab; label: string; icon: string }[] = [
   { key: 'allowances', label: 'البدلات', icon: 'card_giftcard' },
@@ -134,16 +147,50 @@ export const EmployeeFinancials: React.FC = () => {
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const { can } = usePermission();
   const [activeTab, setActiveTab] = useState<ActiveTab>('allowances');
-  const [loading, setLoading] = useState(true);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [allowances, setAllowances] = useState<FirestoreEmployeeAllowance[]>([]);
-  const [deductions, setDeductions] = useState<FirestoreEmployeeDeduction[]>([]);
-  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
-  const [leaves, setLeaves] = useState<FirestoreLeaveRequest[]>([]);
-  const [allowanceTypes, setAllowanceTypes] = useState<FirestoreAllowanceType[]>([]);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
   const [filterEmpId, setFilterEmpId] = useState('');
   const [filterMonth, setFilterMonth] = useState(getMonthKey());
+  const FINANCIALS_CACHE_KEY = `hr:employee-financials:${filterMonth || getMonthKey()}`;
+
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<FinancialsPageData>(
+    FINANCIALS_CACHE_KEY,
+    async () => {
+      const [emps, allTypes] = await Promise.all([
+        employeeService.getAll(),
+        getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
+      ]);
+      const configuredLeaveTypes = await getLeaveTypesFromConfig();
+      const month = filterMonth || getMonthKey();
+      const [allAllowances, allDeductions, allLoans, allLeaves] = await Promise.all([
+        employeeAllowanceService.getActiveForMonth(month),
+        employeeDeductionService.getActiveForMonth(month),
+        loanService.getAll(),
+        leaveRequestService.getAll(),
+      ]);
+      return {
+        employees: emps,
+        allowanceTypes: allTypes.filter((a) => a.isActive),
+        leaveTypes: configuredLeaveTypes,
+        allowances: allAllowances,
+        deductions: allDeductions,
+        loans: allLoans,
+        leaves: allLeaves,
+        defaultLeaveType: (configuredLeaveTypes[0]?.key || 'annual') as LeaveType,
+      };
+    },
+    { maxAgeMs: 60_000 },
+  );
+
+  const employees = data?.employees ?? [];
+  const allowances = data?.allowances ?? [];
+  const deductions = data?.deductions ?? [];
+  const loans = data?.loans ?? [];
+  const leaves = data?.leaves ?? [];
+  const allowanceTypes = data?.allowanceTypes ?? [];
+  const leaveTypes = data?.leaveTypes ?? [];
 
   // ─── Bulk Form States ───────────────────────────────────────────────
   const [showBulkForm, setShowBulkForm] = useState(false);
@@ -186,42 +233,19 @@ export const EmployeeFinancials: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
 
+  useEffect(() => {
+    if (!data?.leaveTypes?.length) return;
+    setBLeaveType((prev) =>
+      data.leaveTypes.find((row) => row.key === prev)
+        ? prev
+        : data.defaultLeaveType,
+    );
+  }, [data?.leaveTypes, data?.defaultLeaveType]);
+
   const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [emps, allTypes] = await Promise.all([
-        employeeService.getAll(),
-        getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
-      ]);
-      const configuredLeaveTypes = await getLeaveTypesFromConfig();
-      setEmployees(emps);
-      setAllowanceTypes(allTypes.filter((a) => a.isActive));
-      setLeaveTypes(configuredLeaveTypes);
-      setBLeaveType((prev) =>
-        configuredLeaveTypes.find((row) => row.key === prev)
-          ? prev
-          : (configuredLeaveTypes[0]?.key || 'annual'),
-      );
-
-      const month = filterMonth || getMonthKey();
-      const [allAllowances, allDeductions, allLoans, allLeaves] = await Promise.all([
-        employeeAllowanceService.getActiveForMonth(month),
-        employeeDeductionService.getActiveForMonth(month),
-        loanService.getAll(),
-        leaveRequestService.getAll(),
-      ]);
-      setAllowances(allAllowances);
-      setDeductions(allDeductions);
-      setLoans(allLoans);
-      setLeaves(allLeaves);
-    } catch (err) {
-      console.error('Failed to load financials:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [filterMonth]);
-
-  useEffect(() => { fetchData(); }, [fetchData]);
+    invalidatePageDataCache(FINANCIALS_CACHE_KEY);
+    await reloadCached(true);
+  }, [FINANCIALS_CACHE_KEY, reloadCached]);
 
   const empOptions = useMemo(() =>
     employees.filter((e) => e.isActive).map((e) => ({

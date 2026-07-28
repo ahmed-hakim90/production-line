@@ -1,12 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Badge, Button, Card } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { qualityWorkersService } from '../services/qualityWorkersService';
 import type { QualityWorkerAssignment } from '@/types';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 type QualityRole = QualityWorkerAssignment['qualityRole'];
+
+const QUALITY_WORKERS_CACHE_KEY = 'quality:workers';
 
 const ROLE_OPTIONS: { value: QualityRole; label: string }[] = [
   { value: 'inspector', label: 'مفتش' },
@@ -26,10 +30,8 @@ export const QualityWorkers: React.FC = () => {
   const canManage = can('quality.workers.manage');
   const rawEmployees = useAppStore((s) => s._rawEmployees);
 
-  const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
   const [search, setSearch] = useState('');
-  const [assignments, setAssignments] = useState<QualityWorkerAssignment[]>([]);
   const [form, setForm] = useState({
     id: '',
     employeeId: '',
@@ -39,19 +41,22 @@ export const QualityWorkers: React.FC = () => {
     isActive: true,
   });
 
-  const loadAssignments = useCallback(async () => {
-    setLoading(true);
-    try {
-      const rows = await qualityWorkersService.getAll();
-      setAssignments(rows);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const {
+    data: assignments = [],
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<QualityWorkerAssignment[]>(
+    QUALITY_WORKERS_CACHE_KEY,
+    () => qualityWorkersService.getAll(),
+    { maxAgeMs: 60_000 },
+  );
 
-  useEffect(() => {
-    loadAssignments();
-  }, [loadAssignments]);
+  const loadAssignments = async () => {
+    invalidatePageDataCache(QUALITY_WORKERS_CACHE_KEY);
+    await reloadCached(true);
+  };
+
+  const list = assignments ?? [];
 
   const employeeMap = useMemo(
     () => new Map(rawEmployees.map((employee) => [employee.id ?? '', employee])),
@@ -60,8 +65,8 @@ export const QualityWorkers: React.FC = () => {
 
   const filteredAssignments = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return assignments;
-    return assignments.filter((row) => {
+    if (!q) return list;
+    return list.filter((row) => {
       const emp = employeeMap.get(row.employeeId);
       const name = emp?.name ?? '';
       const code = emp?.code ?? '';
@@ -71,7 +76,7 @@ export const QualityWorkers: React.FC = () => {
         row.qualityRole.toLowerCase().includes(q)
       );
     });
-  }, [assignments, search, employeeMap]);
+  }, [list, search, employeeMap]);
 
   const resetForm = () => {
     setForm({
@@ -104,7 +109,7 @@ export const QualityWorkers: React.FC = () => {
       if (form.id) {
         await qualityWorkersService.update(form.id, payload);
       } else {
-        const existing = assignments.find((row) => row.employeeId === form.employeeId);
+        const existing = list.find((row) => row.employeeId === form.employeeId);
         if (existing?.id) {
           await qualityWorkersService.update(existing.id, payload);
         } else {
@@ -142,7 +147,7 @@ export const QualityWorkers: React.FC = () => {
     }
   };
 
-  if (loading) return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
+  if (loading && list.length === 0) return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
 
   return (
     <div className="space-y-6">
@@ -153,7 +158,7 @@ export const QualityWorkers: React.FC = () => {
             ربط أدوار الجودة بموظفي HR الحاليين دون إنشاء بيانات عاملين منفصلة.
           </p>
         </div>
-        <Badge variant="info">إجمالي التعيينات: {assignments.length}</Badge>
+        <Badge variant="info">إجمالي التعيينات: {list.length}</Badge>
       </div>
 
       {message && (

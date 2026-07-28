@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '@/store/useAppStore';
 import { attendanceProcessingService } from '../services/attendanceProcessingService';
 import type { AttendanceMonthlySummary } from '../types';
 import type { FirestoreEmployee } from '@/types';
+import { useCachedPageLoad } from '../../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../../shared/lib/pageDataCache';
 
 function getCurrentMonth(): string {
   const now = new Date();
@@ -12,13 +14,33 @@ function getCurrentMonth(): string {
   return `${y}-${m}`;
 }
 
+type MonthlyReportPageData = {
+  rows: AttendanceMonthlySummary[];
+};
+
 export const AttendanceMonthlyReport: React.FC = () => {
   const [month, setMonth] = useState(getCurrentMonth);
-  const [loading, setLoading] = useState(false);
-  const [rows, setRows] = useState<AttendanceMonthlySummary[]>([]);
   const [search, setSearch] = useState('');
+  const [recalculating, setRecalculating] = useState(false);
   const fetchEmployees = useAppStore((s) => s.fetchEmployees);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
+  const REPORT_CACHE_KEY = `hr:attendance-monthly:${month}`;
+
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<MonthlyReportPageData>(
+    REPORT_CACHE_KEY,
+    async () => {
+      if (rawEmployees.length === 0) await fetchEmployees();
+      const summaries = await attendanceProcessingService.getMonthlySummaries(month);
+      return { rows: summaries };
+    },
+    { maxAgeMs: 60_000 },
+  );
+
+  const rows = data?.rows ?? [];
 
   const employeeNames = useMemo(() => (
     rawEmployees.reduce<Record<string, string>>((acc, employee: FirestoreEmployee) => {
@@ -28,20 +50,21 @@ export const AttendanceMonthlyReport: React.FC = () => {
   ), [rawEmployees]);
 
   const load = useCallback(async (recalculate?: boolean) => {
-    setLoading(true);
-    try {
-      if (rawEmployees.length === 0) await fetchEmployees();
-      if (recalculate) await attendanceProcessingService.recalculateMonthlySummary(month);
-      const summaries = await attendanceProcessingService.getMonthlySummaries(month);
-      setRows(summaries);
-    } finally {
-      setLoading(false);
+    if (recalculate) {
+      setRecalculating(true);
+      try {
+        if (rawEmployees.length === 0) await fetchEmployees();
+        await attendanceProcessingService.recalculateMonthlySummary(month);
+        invalidatePageDataCache(REPORT_CACHE_KEY);
+        await reloadCached(true);
+      } finally {
+        setRecalculating(false);
+      }
+      return;
     }
-  }, [month, rawEmployees.length, fetchEmployees]);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+    invalidatePageDataCache(REPORT_CACHE_KEY);
+    await reloadCached(true);
+  }, [month, rawEmployees.length, fetchEmployees, REPORT_CACHE_KEY, reloadCached]);
 
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -88,11 +111,11 @@ export const AttendanceMonthlyReport: React.FC = () => {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <button className="erp-filter-apply" onClick={() => void load(false)} disabled={loading}>
+        <button className="erp-filter-apply" onClick={() => void load(false)} disabled={loading || recalculating}>
           {loading ? 'جار التحميل...' : 'تحديث'}
         </button>
-        <button className="erp-filter-apply" onClick={() => void load(true)} disabled={loading}>
-          إعادة احتساب
+        <button className="erp-filter-apply" onClick={() => void load(true)} disabled={loading || recalculating}>
+          {recalculating ? 'جار إعادة الاحتساب...' : 'إعادة احتساب'}
         </button>
       </div>
 

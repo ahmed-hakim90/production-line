@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
@@ -18,6 +18,20 @@ import type {
 } from '../types';
 import { LEAVE_TYPE_LABELS } from '../types';
 import { PageHeader } from '../../../components/PageHeader';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+
+type LeaveRequestsPageData = {
+  requests: FirestoreLeaveRequest[];
+  allEmployees: FirestoreEmployee[];
+  balance: FirestoreLeaveBalance | null;
+  leaveTypes: LeaveTypeDefinition[];
+  formEmployeeId: string;
+  formLeaveType: LeaveType;
+};
 
 // ─── Status helpers ─────────────────────────────────────────────────────────
 
@@ -79,25 +93,6 @@ export const LeaveRequests: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const permissions = useAppStore((s) => s.userPermissions);
 
-  const [requests, setRequests] = useState<FirestoreLeaveRequest[]>([]);
-  const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>([]);
-  const [balance, setBalance] = useState<FirestoreLeaveBalance | null>(null);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [showForm, setShowForm] = useState(false);
-  const [filterEmployee, setFilterEmployee] = useState('');
-  const [filterStatus, setFilterStatus] = useState<ApprovalStatus | ''>('');
-
-  // Form state
-  const [formEmployeeId, setFormEmployeeId] = useState('');
-  const [formLeaveType, setFormLeaveType] = useState<LeaveType>('annual');
-  const [formStartDate, setFormStartDate] = useState('');
-  const [formEndDate, setFormEndDate] = useState('');
-  const [formReason, setFormReason] = useState('');
-  const [submitting, setSubmitting] = useState(false);
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
-  const [deleting, setDeleting] = useState(false);
-
   const isHR = can('leave.manage');
   const canCreateLeave = can('leave.create') || isHR;
   const canDelete = can('leave.manage') || can('hrSettings.edit');
@@ -108,6 +103,27 @@ export const LeaveRequests: React.FC = () => {
   const canExportFromPage = can('export') && pageControl.exportEnabled;
   const employeeId = currentEmployee?.id || uid || '';
   const viewerEmployeeId = currentEmployee?.id || '';
+  const LEAVE_CACHE_KEY = `hr:leave-requests:${isHR ? 'hr' : 'self'}:${employeeId || 'anon'}`;
+  const initialLeaveCache = peekPageDataCache<LeaveRequestsPageData>(LEAVE_CACHE_KEY);
+
+  const [requests, setRequests] = useState<FirestoreLeaveRequest[]>(initialLeaveCache?.requests ?? []);
+  const [allEmployees, setAllEmployees] = useState<FirestoreEmployee[]>(initialLeaveCache?.allEmployees ?? []);
+  const [balance, setBalance] = useState<FirestoreLeaveBalance | null>(initialLeaveCache?.balance ?? null);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>(initialLeaveCache?.leaveTypes ?? []);
+  const [loading, setLoading] = useState(() => initialLeaveCache == null);
+  const [showForm, setShowForm] = useState(false);
+  const [filterEmployee, setFilterEmployee] = useState('');
+  const [filterStatus, setFilterStatus] = useState<ApprovalStatus | ''>('');
+
+  // Form state
+  const [formEmployeeId, setFormEmployeeId] = useState(initialLeaveCache?.formEmployeeId ?? '');
+  const [formLeaveType, setFormLeaveType] = useState<LeaveType>(initialLeaveCache?.formLeaveType ?? 'annual');
+  const [formStartDate, setFormStartDate] = useState('');
+  const [formEndDate, setFormEndDate] = useState('');
+  const [formReason, setFormReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const empNameMap = useMemo(() => {
     const m = new Map<string, string>();
@@ -187,97 +203,141 @@ export const LeaveRequests: React.FC = () => {
       .map((employee) => ({ value: employee.id!, label: employee.id === employeeId ? `${employee.name} (أنا)` : employee.name }));
   }, [allEmployees, canCreateLeave, currentEmployee, employeeId, isHR, managedEmployeeIds]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const applyLeaveData = useCallback((data: LeaveRequestsPageData) => {
+    setRequests(data.requests);
+    setBalance(data.balance);
+    setAllEmployees(data.allEmployees);
+    setFormEmployeeId((prev) => prev || data.formEmployeeId);
+    setLeaveTypes(data.leaveTypes);
+    setFormLeaveType((prev) =>
+      data.leaveTypes.find((row) => row.key === prev)
+        ? prev
+        : data.formLeaveType,
+    );
+  }, []);
+
+  const formEmployeeIdRef = useRef(formEmployeeId);
+  formEmployeeIdRef.current = formEmployeeId;
+
+  const fetchData = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<LeaveRequestsPageData>(LEAVE_CACHE_KEY);
+    if (cached) {
+      applyLeaveData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const [emps, configuredLeaveTypes] = await Promise.all([
-        (isHR || canCreateLeave) ? employeeService.getAll() : Promise.resolve(currentEmployee?.id ? [currentEmployee] : []),
-        getLeaveTypesFromConfig(),
-      ]);
-      const targetIds = new Set<string>();
-      if (employeeId) targetIds.add(employeeId);
-      if (isHR) {
-        emps.forEach((employee) => {
-          if (employee.id) targetIds.add(employee.id);
-        });
-      } else if (canCreateLeave && viewerEmployeeId) {
-        getManagedEmployeeIds(viewerEmployeeId, emps).forEach((id) => targetIds.add(id));
-      }
-      const allRequests = isHR
-        ? await leaveRequestService.getAll()
-        : (await Promise.all(Array.from(targetIds).map((id) => leaveRequestService.getByEmployee(id)))).flat();
-      const selectedEmployeeId = formEmployeeId && targetIds.has(formEmployeeId)
-        ? formEmployeeId
-        : employeeId;
-      const bal = selectedEmployeeId
-        ? await leaveBalanceService.getOrCreate(selectedEmployeeId)
-        : null;
-
-      // One-time silent backfill for old pending leave requests that were created
-      // before approval-center linking was enforced.
-      const pendingWithoutChain = allRequests.filter((req) => req.id && req.finalStatus === 'pending');
-      if (pendingWithoutChain.length > 0) {
-        const [existingApprovalRequests, employeesForApprovalRaw] = await Promise.all([
-          getRequestsByType('leave').catch(() => []),
-          employeeService.getAll(),
-        ]);
-        const linkedSourceIds = new Set(
-          existingApprovalRequests
-            .map((req) => String(req.sourceRequestId || '').trim())
-            .filter(Boolean),
-        );
-        const missing = pendingWithoutChain.filter((req) => !linkedSourceIds.has(String(req.id)));
-        if (missing.length > 0) {
-          const approvalEmployees = employeesForApprovalRaw
-            .filter((e): e is FirestoreEmployee => Boolean(e.id))
-            .map((e) => toApprovalEmployeeInfo(e));
-          const callerEmployeeId = currentEmployee?.id || employeeId;
-          const callerName = currentEmployee?.name || userDisplayName || employeeId || '—';
-          for (const req of missing) {
-            await createRequest(
-              {
-                requestType: 'leave',
-                employeeId: req.employeeId,
-                requestData: {
-                  leaveType: req.leaveType,
-                  leaveTypeLabel: req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType,
-                  startDate: req.startDate,
-                  endDate: req.endDate,
-                  totalDays: req.totalDays,
-                  reason: req.reason || '—',
-                },
-                sourceRequestId: req.id,
-                createdBy: req.createdBy || uid || '',
-              },
-              {
-                employeeId: callerEmployeeId,
-                employeeName: callerName,
-                permissions,
-              },
-              approvalEmployees,
-            );
+      const { data } = await fetchCachedPageData(
+        LEAVE_CACHE_KEY,
+        async (): Promise<LeaveRequestsPageData> => {
+          const currentFormEmployeeId = formEmployeeIdRef.current;
+          const [emps, configuredLeaveTypes] = await Promise.all([
+            (isHR || canCreateLeave) ? employeeService.getAll() : Promise.resolve(currentEmployee?.id ? [currentEmployee] : []),
+            getLeaveTypesFromConfig(),
+          ]);
+          const targetIds = new Set<string>();
+          if (employeeId) targetIds.add(employeeId);
+          if (isHR) {
+            emps.forEach((employee) => {
+              if (employee.id) targetIds.add(employee.id);
+            });
+          } else if (canCreateLeave && viewerEmployeeId) {
+            getManagedEmployeeIds(viewerEmployeeId, emps).forEach((id) => targetIds.add(id));
           }
-        }
-      }
+          const allRequests = isHR
+            ? await leaveRequestService.getAll()
+            : (await Promise.all(Array.from(targetIds).map((id) => leaveRequestService.getByEmployee(id)))).flat();
+          const selectedEmployeeId = currentFormEmployeeId && targetIds.has(currentFormEmployeeId)
+            ? currentFormEmployeeId
+            : employeeId;
+          const bal = selectedEmployeeId
+            ? await leaveBalanceService.getOrCreate(selectedEmployeeId)
+            : null;
 
-      setRequests(allRequests);
-      setBalance(bal);
-      setAllEmployees(emps);
-      setFormEmployeeId(selectedEmployeeId);
-      setLeaveTypes(configuredLeaveTypes);
-      setFormLeaveType((prev) =>
-        configuredLeaveTypes.find((row) => row.key === prev)
-          ? prev
-          : (configuredLeaveTypes[0]?.key || 'annual'),
+          // One-time silent backfill for old pending leave requests that were created
+          // before approval-center linking was enforced.
+          const pendingWithoutChain = allRequests.filter((req) => req.id && req.finalStatus === 'pending');
+          if (pendingWithoutChain.length > 0) {
+            const [existingApprovalRequests, employeesForApprovalRaw] = await Promise.all([
+              getRequestsByType('leave').catch(() => []),
+              employeeService.getAll(),
+            ]);
+            const linkedSourceIds = new Set(
+              existingApprovalRequests
+                .map((req) => String(req.sourceRequestId || '').trim())
+                .filter(Boolean),
+            );
+            const missing = pendingWithoutChain.filter((req) => !linkedSourceIds.has(String(req.id)));
+            if (missing.length > 0) {
+              const approvalEmployees = employeesForApprovalRaw
+                .filter((e): e is FirestoreEmployee => Boolean(e.id))
+                .map((e) => toApprovalEmployeeInfo(e));
+              const callerEmployeeId = currentEmployee?.id || employeeId;
+              const callerName = currentEmployee?.name || userDisplayName || employeeId || '—';
+              for (const req of missing) {
+                await createRequest(
+                  {
+                    requestType: 'leave',
+                    employeeId: req.employeeId,
+                    requestData: {
+                      leaveType: req.leaveType,
+                      leaveTypeLabel: req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType,
+                      startDate: req.startDate,
+                      endDate: req.endDate,
+                      totalDays: req.totalDays,
+                      reason: req.reason || '—',
+                    },
+                    sourceRequestId: req.id,
+                    createdBy: req.createdBy || uid || '',
+                  },
+                  {
+                    employeeId: callerEmployeeId,
+                    employeeName: callerName,
+                    permissions,
+                  },
+                  approvalEmployees,
+                );
+              }
+            }
+          }
+
+          return {
+            requests: allRequests,
+            balance: bal,
+            allEmployees: emps,
+            formEmployeeId: selectedEmployeeId,
+            leaveTypes: configuredLeaveTypes,
+            formLeaveType: configuredLeaveTypes[0]?.key || 'annual',
+          };
+        },
+        { force: opts?.force === true, maxAgeMs: 45_000 },
       );
+      applyLeaveData(data);
     } catch (err) {
       console.error('Error loading leave data:', err);
     } finally {
       setLoading(false);
     }
-  }, [employeeId, isHR, canCreateLeave, currentEmployee, userDisplayName, permissions, uid, viewerEmployeeId, formEmployeeId]);
+  }, [
+    LEAVE_CACHE_KEY,
+    applyLeaveData,
+    employeeId,
+    isHR,
+    canCreateLeave,
+    currentEmployee,
+    userDisplayName,
+    permissions,
+    uid,
+    viewerEmployeeId,
+  ]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const reload = useCallback(async () => {
+    invalidatePageDataCache(LEAVE_CACHE_KEY);
+    await fetchData({ force: true });
+  }, [LEAVE_CACHE_KEY, fetchData]);
+
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const formDays = useMemo(() => {
     if (!formStartDate || !formEndDate) return 0;
@@ -351,27 +411,27 @@ export const LeaveRequests: React.FC = () => {
       setFormStartDate('');
       setFormEndDate('');
       setFormReason('');
-      await fetchData();
+      await reload();
     } catch (err) {
       console.error('Error creating leave request:', err);
       alert((err as Error).message || 'تعذر إرسال طلب الإجازة للموافقات');
     } finally {
       setSubmitting(false);
     }
-  }, [allEmployees, employeeId, uid, formEmployeeId, formLeaveType, formStartDate, formEndDate, formDays, formReason, fetchData, selectedLeaveType, currentEmployee, userDisplayName, permissions, getEmpName]);
+  }, [allEmployees, employeeId, uid, formEmployeeId, formLeaveType, formStartDate, formEndDate, formDays, formReason, reload, selectedLeaveType, currentEmployee, userDisplayName, permissions, getEmpName]);
 
   const handleDelete = useCallback(async (id: string) => {
     setDeleting(true);
     try {
       await leaveRequestService.delete(id);
       setDeleteConfirm(null);
-      await fetchData();
+      await reload();
     } catch (err) {
       console.error('Error deleting leave request:', err);
     } finally {
       setDeleting(false);
     }
-  }, [fetchData]);
+  }, [reload]);
 
   const filtered = useMemo(() => {
     let result = requests;
@@ -390,7 +450,7 @@ export const LeaveRequests: React.FC = () => {
   }, [requests, getEmpName]);
   const showEmployeeColumn = isHR || requestableEmployees.length > 1;
 
-  if (loading) {
+  if (loading && requests.length === 0) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
 

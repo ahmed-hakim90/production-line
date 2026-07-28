@@ -9,7 +9,6 @@ import { GlobalCreateWarehouseModal } from './modals/GlobalCreateWarehouseModal'
 import { GlobalEditWarehouseModal } from './modals/GlobalEditWarehouseModal';
 import { GlobalApproveTransferModal } from './modals/GlobalApproveTransferModal';
 import { GlobalStockAdjustmentModal } from './modals/GlobalStockAdjustmentModal';
-import { GlobalProductionRoutingSettingsModal } from './modals/GlobalProductionRoutingSettingsModal';
 import { GlobalMaterialRequirementDetailsModal } from './modals/GlobalMaterialRequirementDetailsModal';
 import { GlobalStockCountSessionModal } from './modals/GlobalStockCountSessionModal';
 import { GlobalImportInventoryInByCodeModal } from './modals/GlobalImportInventoryInByCodeModal';
@@ -48,7 +47,6 @@ export const ModalHost: React.FC = () => {
       <GlobalEditWarehouseModal />
       <GlobalApproveTransferModal />
       <GlobalStockAdjustmentModal />
-      <GlobalProductionRoutingSettingsModal />
       <GlobalMaterialRequirementDetailsModal />
       <GlobalStockCountSessionModal />
       <GlobalProductionPlanFollowUpModal />

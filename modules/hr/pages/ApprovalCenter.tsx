@@ -29,6 +29,16 @@ import { LEAVE_TYPE_LABELS, type ApprovalChainItem, type ApprovalStatus } from '
 import { ApprovalEmployeeContext } from '../components/ApprovalEmployeeContext';
 import { HRNotificationBell } from '../components/HRNotificationBell';
 import { isApprovalRequestCreatedBySupervisor } from '@/modules/production/utils/supervisorApprovalVisibility';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+
+type ApprovalCenterPageData = {
+  requests: FirestoreApprovalRequest[];
+  overdueMap: Record<string, boolean>;
+};
 
 const TYPE_CONFIG: Record<ApprovalRequestType, { label: string; icon: string; color: string; bg: string }> = {
   overtime: { label: 'عمل إضافي', icon: 'schedule', color: 'text-purple-500', bg: 'bg-purple-100 dark:bg-purple-900/30' },
@@ -130,13 +140,10 @@ export const ApprovalCenter: React.FC = () => {
     name: currentEmployee?.name || userDisplayName || '',
   });
 
-  const [requests, setRequests] = useState<FirestoreApprovalRequest[]>([]);
-  const [loading, setLoading] = useState(true);
   const [filterType, setFilterType] = useState<ApprovalRequestType | ''>('');
   const [filterStatus, setFilterStatus] = useState<'actionable' | 'all' | ApprovalRequestStatus>('actionable');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [actionNotes, setActionNotes] = useState<Record<string, string>>({});
-  const [overdueMap, setOverdueMap] = useState<Record<string, boolean>>({});
   const [expandedContext, setExpandedContext] = useState<Set<string>>(new Set());
 
   useEffect(() => {
@@ -182,59 +189,83 @@ export const ApprovalCenter: React.FC = () => {
     permissions,
   }), [approverEmployeeId, approverName, permissions]);
 
-  const fetchData = useCallback(async (opts?: { silent?: boolean }) => {
+  const APPROVALS_CACHE_KEY = `hr:approvals:${viewAll ? 'all' : 'mine'}:${approverEmployeeId || 'anon'}`;
+  const initialApprovalsCache = peekPageDataCache<ApprovalCenterPageData>(APPROVALS_CACHE_KEY);
+
+  const [requests, setRequests] = useState<FirestoreApprovalRequest[]>(initialApprovalsCache?.requests ?? []);
+  const [loading, setLoading] = useState(() => initialApprovalsCache == null);
+  const [overdueMap, setOverdueMap] = useState<Record<string, boolean>>(initialApprovalsCache?.overdueMap ?? {});
+
+  const applyApprovalsData = useCallback((data: ApprovalCenterPageData) => {
+    setRequests(data.requests);
+    setOverdueMap(data.overdueMap);
+  }, []);
+
+  const fetchData = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
     const silent = Boolean(opts?.silent);
-    if (!silent) setLoading(true);
+    const force = Boolean(opts?.force);
+    const cached = peekPageDataCache<ApprovalCenterPageData>(APPROVALS_CACHE_KEY);
+    if (cached) {
+      applyApprovalsData(cached);
+      if (!silent) setLoading(false);
+    } else if (!silent) {
+      setLoading(true);
+    }
     try {
-      let data: FirestoreApprovalRequest[];
-      if (viewAll) {
-        const [all, actionable] = await Promise.all([
-          getAllRequests(),
-          approverEmployeeId ? getPendingApprovals({ approverEmployeeId, approverUserId: uid || undefined }) : Promise.resolve([]),
-        ]);
-        const merged = new Map<string, FirestoreApprovalRequest>();
-        all.forEach((r) => { if (r.id) merged.set(r.id, r); });
-        actionable.forEach((r) => { if (r.id) merged.set(r.id, r); });
-        data = Array.from(merged.values());
-      } else if (approverEmployeeId) {
-        const [pending, own] = await Promise.all([
-          getPendingApprovals({ approverEmployeeId, approverUserId: uid || undefined }),
-          getAllRequests(),
-        ]);
-        const ownRequests = own.filter((r) =>
-          r.employeeId === approverEmployeeId ||
-          isApprovalRequestCreatedBySupervisor(r, approverEmployeeId, uid || undefined),
-        );
-        const merged = new Map<string, FirestoreApprovalRequest>();
-        [...pending, ...ownRequests].forEach((r) => { if (r.id) merged.set(r.id, r); });
-        data = Array.from(merged.values());
-      } else {
-        data = [];
-      }
+      const { data } = await fetchCachedPageData(
+        APPROVALS_CACHE_KEY,
+        async (): Promise<ApprovalCenterPageData> => {
+          let list: FirestoreApprovalRequest[];
+          if (viewAll) {
+            const [all, actionable] = await Promise.all([
+              getAllRequests(),
+              approverEmployeeId ? getPendingApprovals({ approverEmployeeId, approverUserId: uid || undefined }) : Promise.resolve([]),
+            ]);
+            const merged = new Map<string, FirestoreApprovalRequest>();
+            all.forEach((r) => { if (r.id) merged.set(r.id, r); });
+            actionable.forEach((r) => { if (r.id) merged.set(r.id, r); });
+            list = Array.from(merged.values());
+          } else if (approverEmployeeId) {
+            const [pending, own] = await Promise.all([
+              getPendingApprovals({ approverEmployeeId, approverUserId: uid || undefined }),
+              getAllRequests(),
+            ]);
+            const ownRequests = own.filter((r) =>
+              r.employeeId === approverEmployeeId ||
+              isApprovalRequestCreatedBySupervisor(r, approverEmployeeId, uid || undefined),
+            );
+            const merged = new Map<string, FirestoreApprovalRequest>();
+            [...pending, ...ownRequests].forEach((r) => { if (r.id) merged.set(r.id, r); });
+            list = Array.from(merged.values());
+          } else {
+            list = [];
+          }
 
-      data.sort((a, b) => {
-        const aTime = a.createdAt?.seconds || 0;
-        const bTime = b.createdAt?.seconds || 0;
-        return bTime - aTime;
-      });
+          list.sort((a, b) => {
+            const aTime = a.createdAt?.seconds || 0;
+            const bTime = b.createdAt?.seconds || 0;
+            return bTime - aTime;
+          });
 
-      setRequests(data);
-
-      const overdue: Record<string, boolean> = {};
-      for (const r of data) {
-        if (r.status === 'pending' || r.status === 'in_progress') {
-          overdue[r.id!] = await isRequestOverdue(r);
-        }
-      }
-      setOverdueMap(overdue);
+          const overdue: Record<string, boolean> = {};
+          for (const r of list) {
+            if (r.status === 'pending' || r.status === 'in_progress') {
+              overdue[r.id!] = await isRequestOverdue(r);
+            }
+          }
+          return { requests: list, overdueMap: overdue };
+        },
+        { force: force || silent, maxAgeMs: 30_000 },
+      );
+      applyApprovalsData(data);
     } catch (err) {
       console.error('Error loading approvals:', err);
     } finally {
       if (!silent) setLoading(false);
     }
-  }, [viewAll, approverEmployeeId, uid]);
+  }, [viewAll, approverEmployeeId, uid, APPROVALS_CACHE_KEY, applyApprovalsData]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const handleApprove = useCallback(async (req: FirestoreApprovalRequest) => {
     if (!req.id) return;

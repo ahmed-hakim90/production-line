@@ -7,9 +7,9 @@ import { useAppStore } from '../../../../store/useAppStore';
 
 const WAREHOUSE_ROLE_LABELS: Record<string, string> = {
   raw_material: 'مواد خام',
-  decomposed: 'مفكك / مكونات',
-  production_wip: 'إنتاج تحت التشغيل',
-  finished_staging: 'تم الصنع',
+  decomposed: 'مفكك / مستلزم إنتاج',
+  production_wip: 'إنتاج تحت التشغيل (WIP)',
+  finished_staging: 'تم الإنتاج',
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
@@ -32,10 +32,10 @@ const emptyRouting = (): InventoryRoutingSettings => ({
   packagingSourceWarehouseId: '',
   packagingTargetWarehouseId: '',
   wasteWarehouseId: '',
-  autoTransferProductionToFinished: false,
+  autoTransferProductionToFinished: true,
   autoTransferFinishedToFinal: false,
   requireApprovalForProductionEntry: true,
-  requireApprovalForAutoTransfers: true,
+  requireApprovalForAutoTransfers: false,
   autoConsumeBomOnProductionReport: false,
   requireIssuedProductionIssueOnReport: true,
 });
@@ -63,6 +63,10 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
       }),
     );
   };
+
+  const conflictBomAndIssue =
+    Boolean(routing.autoConsumeBomOnProductionReport) &&
+    routing.requireIssuedProductionIssueOnReport !== false;
 
   const runMigration = async () => {
     setMigrating(true);
@@ -142,7 +146,7 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
         <div>
           <h3 className="text-base font-bold text-[var(--color-text)]">توجيه المخازن والإنتاج</h3>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            الإعدادات الجديدة تحكم مسار الإنتاج: WIP → تم الصنع → منتج تام. الحقول القديمة في «سلوك النظام» تبقى للتوافق حتى الحفظ.
+            المسار التشغيلي: صرف إنتاج → تقرير → اعتماد إدخال → تم الإنتاج (بانتظار التغليف) → تغليف → منتج تام.
           </p>
         </div>
         <button
@@ -156,42 +160,70 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
       </div>
       {migrateMsg && <p className="text-sm font-medium text-slate-600">{migrateMsg}</p>}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {select('مخزن المواد الخام', 'مخزن الخامات الوارد/الشراء. يُستخدم كاحتياطي فقط إذا لم يُحدد مخزن المفكك.', routing.rawMaterialWarehouseId, (v) => patchRouting({ rawMaterialWarehouseId: v }), WAREHOUSE_ROLE_LABELS.raw_material)}
-        {select('مخزن المفكك (مستلزم إنتاج)', 'رصيد مكونات BOM للصرف والإنتاج — مصدر خصم صرف الإنتاج وخصم BOM التلقائي.', routing.decomposedWarehouseId, (v) => patchRouting({ decomposedWarehouseId: v }), WAREHOUSE_ROLE_LABELS.decomposed)}
-        {select('مخزن إنتاج تحت التشغيل (WIP)', 'أول استقبال للكمية المنتجة من التقرير.', routing.productionWipWarehouseId, (v) => patchRouting({ productionWipWarehouseId: v }), WAREHOUSE_ROLE_LABELS.production_wip)}
-        {select('مخزن تم الصنع', 'مرحلة ما بعد الإنتاج قبل التام.', routing.finishedStagingWarehouseId, (v) => patchRouting({ finishedStagingWarehouseId: v }), WAREHOUSE_ROLE_LABELS.finished_staging)}
-        {select('مخزن المنتج التام', 'مخزن البيع / التسليم.', routing.finalProductWarehouseId, (v) => patchRouting({ finalProductWarehouseId: v }), WAREHOUSE_ROLE_LABELS.final_product)}
-        {select('مخزن الهالك', 'استقبال هالك التقارير والمكونات.', routing.wasteWarehouseId, (v) => patchRouting({ wasteWarehouseId: v }), WAREHOUSE_ROLE_LABELS.waste)}
-        {select('مخزن التغليف (من)', 'مصدر تحويل التغليف.', routing.packagingSourceWarehouseId, (v) => patchRouting({ packagingSourceWarehouseId: v }), WAREHOUSE_ROLE_LABELS.packaging)}
-        {select('مخزن التغليف (إلى)', 'وجهة تحويل التغليف.', routing.packagingTargetWarehouseId, (v) => patchRouting({ packagingTargetWarehouseId: v }), WAREHOUSE_ROLE_LABELS.packaging)}
+      <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
+        <p className="font-bold">التوصية المعتمدة للمصنع</p>
+        <ul className="mt-1 text-xs leading-relaxed list-disc pr-5 space-y-0.5">
+          <li>إلزام صرف إنتاج قبل التقرير + إيقاف خصم BOM من التقرير</li>
+          <li>اعتماد إدخال الإنتاج مرة واحدة؛ الترحيل إلى «تم الإنتاج» يتم تلقائياً بعده</li>
+          <li>مخزن التغليف (من) = تم الإنتاج، (إلى) = منتج تام</li>
+        </ul>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {toggle('تحويل تلقائي WIP → تم الصنع', 'بعد التقرير، نقل الكمية من WIP إلى تم الصنع.', Boolean(routing.autoTransferProductionToFinished), () => patchRouting({ autoTransferProductionToFinished: !routing.autoTransferProductionToFinished }))}
-        {toggle('تحويل تلقائي تم الصنع → منتج تام', 'نقل اختياري إلى مخزن المنتج التام.', Boolean(routing.autoTransferFinishedToFinal), () => patchRouting({ autoTransferFinishedToFinal: !routing.autoTransferFinishedToFinal }))}
-        {toggle('اعتماد إدخال الإنتاج', 'إدخال WIP يتطلب اعتماداً قبل الترحيل.', routing.requireApprovalForProductionEntry !== false, () => patchRouting({ requireApprovalForProductionEntry: !routing.requireApprovalForProductionEntry }))}
-        {toggle('اعتماد التحويلات التلقائية', 'التحويلات التلقائية تمر باعتماد التحويلات.', routing.requireApprovalForAutoTransfers !== false, () => patchRouting({ requireApprovalForAutoTransfers: !routing.requireApprovalForAutoTransfers }))}
+        {select('مخزن المواد الخام', 'مخزن الخامات الوارد/الشراء. يُستخدم كاحتياطي فقط إذا لم يُحدد مخزن المفكك.', routing.rawMaterialWarehouseId, (v) => patchRouting({ rawMaterialWarehouseId: v }), WAREHOUSE_ROLE_LABELS.raw_material)}
+        {select('مخزن المفكك (مستلزم إنتاج)', 'مصدر خصم صرف الإنتاج لمكونات BOM.', routing.decomposedWarehouseId, (v) => patchRouting({ decomposedWarehouseId: v }), WAREHOUSE_ROLE_LABELS.decomposed)}
+        {select('مخزن إنتاج تحت التشغيل (WIP)', 'استقبال تقني أول بعد التقرير (داخلي). الاعتماد يرحّل منه تلقائياً إلى تم الإنتاج.', routing.productionWipWarehouseId, (v) => patchRouting({ productionWipWarehouseId: v }), WAREHOUSE_ROLE_LABELS.production_wip)}
+        {select('مخزن تم الإنتاج', 'بانتظار التغليف — يظهر الرصيد هنا بعد اعتماد إدخال الإنتاج.', routing.finishedStagingWarehouseId, (v) => patchRouting({ finishedStagingWarehouseId: v }), WAREHOUSE_ROLE_LABELS.finished_staging)}
+        {select('مخزن المنتج التام', 'بعد التغليف — البيع / التسليم.', routing.finalProductWarehouseId, (v) => patchRouting({ finalProductWarehouseId: v }), WAREHOUSE_ROLE_LABELS.final_product)}
+        {select('مخزن الهالك', 'استقبال هالك التقارير والمكونات.', routing.wasteWarehouseId, (v) => patchRouting({ wasteWarehouseId: v }), WAREHOUSE_ROLE_LABELS.waste)}
+        {select('مخزن التغليف (من)', 'يُفضّل نفس مخزن تم الإنتاج.', routing.packagingSourceWarehouseId, (v) => patchRouting({ packagingSourceWarehouseId: v }), WAREHOUSE_ROLE_LABELS.finished_staging)}
+        {select('مخزن التغليف (إلى)', 'يُفضّل نفس مخزن المنتج التام.', routing.packagingTargetWarehouseId, (v) => patchRouting({ packagingTargetWarehouseId: v }), WAREHOUSE_ROLE_LABELS.final_product)}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {toggle('تحويل تلقائي إلى تم الإنتاج', 'بعد اعتماد إدخال الإنتاج يُرحَّل الرصيد إلى تم الإنتاج (بانتظار التغليف).', Boolean(routing.autoTransferProductionToFinished), () => patchRouting({ autoTransferProductionToFinished: !routing.autoTransferProductionToFinished }))}
+        {toggle('تحويل تلقائي تم الإنتاج → منتج تام', 'غير موصى به إذا كان التغليف يمر عبر تقرير تغليف.', Boolean(routing.autoTransferFinishedToFinal), () => patchRouting({ autoTransferFinishedToFinal: !routing.autoTransferFinishedToFinal }))}
+        {toggle('اعتماد إدخال الإنتاج', 'طلب اعتماد واحد قبل أن يسمع الرصيد في تم الإنتاج.', routing.requireApprovalForProductionEntry !== false, () => patchRouting({ requireApprovalForProductionEntry: !routing.requireApprovalForProductionEntry }))}
+        {toggle('اعتماد التحويلات التلقائية الأخرى', 'لا يشمل ترحيل WIP→تم الإنتاج بعد اعتماد الإدخال (يُنفَّذ تلقائياً). يؤثر على مسارات أخرى مثل تم الإنتاج→التام.', routing.requireApprovalForAutoTransfers === true, () => patchRouting({ requireApprovalForAutoTransfers: !(routing.requireApprovalForAutoTransfers === true) }))}
         {toggle(
-          'إلزام صرف إنتاج معتمد قبل ترحيل مخزون التقرير',
-          'تقرير المنتج التام لا يرحّل للمخزن إلا بعد اعتماد وإصدار إذن صرف إنتاج. بعد الاعتماد يمكن إعادة ترحيل المخزون.',
+          'إلزام صرف إنتاج معتمد قبل تقرير الإنتاج',
+          'مفعّل افتراضياً: لا يُحفظ تقرير منتج تام إلا بعد اعتماد وإصدار إذن صرف. التقرير لا يخصم المكونات بنفسه.',
           routing.requireIssuedProductionIssueOnReport !== false,
           () => patchRouting({ requireIssuedProductionIssueOnReport: !(routing.requireIssuedProductionIssueOnReport !== false) }),
         )}
         {toggle(
           'خصم BOM تلقائي عند حفظ التقرير',
-          'يعمل فقط إذا كان إلزام صرف الإنتاج مطفأ. عند التفعيل يخصم المكونات مباشرة بدون أمر صرف.',
+          'مطفأ افتراضياً. لا تستخدمه مع مسار صرف الإنتاج.',
           Boolean(routing.autoConsumeBomOnProductionReport),
           () => patchRouting({ autoConsumeBomOnProductionReport: !routing.autoConsumeBomOnProductionReport }),
         )}
       </div>
 
-      {routing.requireIssuedProductionIssueOnReport !== false && (
-        <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
-          <p className="font-bold">مسار صرف الإنتاج مفعّل</p>
+      {conflictBomAndIssue && (
+        <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
+          <p className="font-bold">تعارض إعدادات</p>
           <p className="mt-1 text-xs leading-relaxed">
-            أنشئ إذن صرف من صفحة «صرف إنتاج»، ثم اعتمده (تم الصرف). بعدها يُسمح بترحيل مخزون تقرير الإنتاج.
-            خصم BOM التلقائي يُتجاهل طالما هذا الخيار مفعّل.
+            لا تجمع بين «إلزام صرف إنتاج» و«خصم BOM من التقرير» — سيحدث خصم مزدوج أو مسار غير واضح.
+            أوقف خصم BOM من التقرير واعتمد صفحة صرف الإنتاج فقط.
+          </p>
+          <button
+            type="button"
+            className="mt-2 text-xs font-bold underline"
+            onClick={() => patchRouting({ autoConsumeBomOnProductionReport: false })}
+          >
+            إيقاف خصم BOM من التقرير الآن
+          </button>
+        </div>
+      )}
+
+      {routing.requireIssuedProductionIssueOnReport !== false && !conflictBomAndIssue && (
+        <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+          <p className="font-bold">مسار: صرف إنتاج أولاً ثم التقرير</p>
+          <p className="mt-1 text-xs leading-relaxed">
+            1) صرف إنتاج من المستلزم واعتماده.
+            2) حفظ تقرير الإنتاج.
+            3) اعتماد إدخال الإنتاج → الرصيد يظهر في تم الإنتاج بانتظار التغليف.
+            4) تقرير تغليف يحوّل إلى منتج تام.
           </p>
         </div>
       )}
@@ -201,7 +233,6 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
           <p className="font-bold">تنبيه: خصم مباشر من التقرير</p>
           <p className="mt-1 text-xs leading-relaxed">
             حفظ تقرير الإنتاج سيخصم مكونات الـ BOM من مخزن المستلزم/المفكك فوراً إذا لم يوجد أمر صرف صادر.
-            قد يحدث خصم مزدوج إن استخدمت أيضاً «صرف إنتاج».
           </p>
         </div>
       )}

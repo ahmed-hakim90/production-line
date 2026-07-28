@@ -25,8 +25,19 @@ import {
 } from '@/components/ui/select';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const PAGE_SIZE = 20;
+const TRANSFER_APPROVALS_CACHE_KEY = 'inventory:transfer-approvals';
+
+type TransferApprovalsPageData = {
+  requests: InventoryTransferRequest[];
+  warehouses: Warehouse[];
+};
 
 const STATUS_LABEL: Record<string, string> = {
   pending: 'قيد الاعتماد',
@@ -72,8 +83,12 @@ export const TransferApprovals: React.FC = () => {
   const allowNegativeDecomposedStock = useAppStore(
     (s) => Boolean(s.systemSettings.planSettings?.allowNegativeDecomposedStock),
   );
-  const [requests, setRequests] = useState<InventoryTransferRequest[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
+  const [requests, setRequests] = useState<InventoryTransferRequest[]>(
+    () => peekPageDataCache<TransferApprovalsPageData>(TRANSFER_APPROVALS_CACHE_KEY)?.requests ?? [],
+  );
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(
+    () => peekPageDataCache<TransferApprovalsPageData>(TRANSFER_APPROVALS_CACHE_KEY)?.warehouses ?? [],
+  );
   const [statusFilter, setStatusFilter] = useState<'all' | 'pending' | 'approved' | 'rejected' | 'cancelled'>('pending');
   const [warehouseFilter, setWarehouseFilter] = useState(
     () => searchParams.get('warehouseId') || '',
@@ -92,8 +107,10 @@ export const TransferApprovals: React.FC = () => {
   const transferSlaDays = useAppStore((s) => Number(s.systemSettings.planSettings?.transferSlaWarningDays || 2));
   const [typeTab, setTypeTab] = useState<
     'all' | 'manual' | 'production_entry' | 'production_auto' | 'finished_final' | 'packaging'
-  >('all');
-  const [loading, setLoading] = useState(false);
+  >('production_entry');
+  const [loading, setLoading] = useState(
+    () => peekPageDataCache<TransferApprovalsPageData>(TRANSFER_APPROVALS_CACHE_KEY) == null,
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [bulkApproving, setBulkApproving] = useState(false);
   const [processingId, setProcessingId] = useState<string>('');
@@ -146,22 +163,40 @@ export const TransferApprovals: React.FC = () => {
     return finishedPath || decomposedPath;
   };
 
-  const loadData = async (opts?: { silent?: boolean; warehouses?: boolean }) => {
+  const loadData = async (opts?: { silent?: boolean; warehouses?: boolean; force?: boolean }) => {
     const silent = Boolean(opts?.silent);
+    const force = Boolean(opts?.force) || silent;
     const fetchWarehouses = opts?.warehouses ?? !silent;
-    if (!silent) setLoading(true);
+    const cached = peekPageDataCache<TransferApprovalsPageData>(TRANSFER_APPROVALS_CACHE_KEY);
+    if (cached) {
+      setRequests(cached.requests);
+      if (cached.warehouses.length) setWarehouses(filterWarehouses(cached.warehouses));
+    }
+    if (!silent) {
+      if (cached) setLoading(false);
+      else setLoading(true);
+    }
     try {
-      if (fetchWarehouses) {
-        const [rows, whs] = await Promise.all([
-          transferApprovalService.getAll(),
-          warehouseService.getWarehousesForReportingFilters(),
-        ]);
-        setRequests(rows);
-        setWarehouses(filterWarehouses(whs));
-      } else {
-        const rows = await transferApprovalService.getAll();
-        setRequests(rows);
-      }
+      const { data } = await fetchCachedPageData(
+        TRANSFER_APPROVALS_CACHE_KEY,
+        async () => {
+          if (fetchWarehouses) {
+            const [rows, whs] = await Promise.all([
+              transferApprovalService.getAll(),
+              warehouseService.getWarehousesForReportingFilters(),
+            ]);
+            return { requests: rows, warehouses: filterWarehouses(whs) };
+          }
+          const rows = await transferApprovalService.getAll();
+          const prev =
+            peekPageDataCache<TransferApprovalsPageData>(TRANSFER_APPROVALS_CACHE_KEY)?.warehouses
+            ?? warehouses;
+          return { requests: rows, warehouses: prev };
+        },
+        { force, maxAgeMs: 45_000 },
+      );
+      setRequests(data.requests);
+      setWarehouses(data.warehouses);
     } finally {
       if (!silent) setLoading(false);
     }
@@ -257,7 +292,7 @@ export const TransferApprovals: React.FC = () => {
     if (!requestId || !canApprove) return;
     const request = requests.find((row) => row.id === requestId);
     if (isSelfProductionEntryRequest(request)) {
-      toast.warning('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب اعتمادها من مستخدم آخر مخوّل.');
+      toast.warning('لا يمكن لمنشئ التقرير اعتماد إدخال الإنتاج الخاص به. يجب اعتمادها من مستخدم آخر مخوّل.');
       return;
     }
     setProcessingId(requestId);
@@ -399,7 +434,9 @@ export const TransferApprovals: React.FC = () => {
       <div className="erp-page-head">
         <div>
           <h2 className="page-title">اعتماد تحويلات المخازن</h2>
-          <p className="page-subtitle">التحويلات ودخول تم الصنع لا تؤثر على المخزون قبل الاعتماد.</p>
+          <p className="page-subtitle">
+            اعتماد إدخال الإنتاج يرحّل الرصيد إلى «تم الإنتاج» بانتظار التغليف. التحويلات لا تؤثر على المخزون قبل الاعتماد.
+          </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-2 text-xs font-bold px-2">
@@ -443,7 +480,14 @@ export const TransferApprovals: React.FC = () => {
               اعتماد الكل ({bulkApproveEligible.length})
             </Button>
           )}
-          <Button variant="outline" onClick={() => void loadData()} disabled={loading || bulkApproving}>
+          <Button
+            variant="outline"
+            onClick={() => {
+              invalidatePageDataCache(TRANSFER_APPROVALS_CACHE_KEY);
+              void loadData({ force: true });
+            }}
+            disabled={loading || bulkApproving}
+          >
             <span className="material-icons-round text-sm">refresh</span>
             تحديث
           </Button>
@@ -458,11 +502,11 @@ export const TransferApprovals: React.FC = () => {
 
       <div className="flex flex-wrap gap-2">
         {([
+          ['production_entry', 'إدخال إنتاج'],
           ['all', 'الكل'],
           ['manual', 'يدوي'],
-          ['production_entry', 'إدخال إنتاج'],
-          ['production_auto', 'تحويل إنتاج'],
-          ['finished_final', 'تام'],
+          ['production_auto', 'ترحيل تم الإنتاج'],
+          ['finished_final', 'إلى منتج تام'],
           ['packaging', 'تغليف'],
         ] as const).map(([key, label]) => (
           <button

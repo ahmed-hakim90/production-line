@@ -8,44 +8,68 @@ import { productionIssueService } from '../services/productionIssueService';
 import type { ComponentReturnRecord, ComponentScrapRecord } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const PAGE_SIZE = 20;
+const COMPONENT_RECORDS_CACHE_KEY = 'inventory:production-component-records';
+
+type ComponentRecordsPageData = {
+  returns: ComponentReturnRecord[];
+  scraps: ComponentScrapRecord[];
+  issueWarehouseById: Record<string, string>;
+};
 
 export const ProductionComponentRecords: React.FC = () => {
   const { can } = usePermission();
   const { scoped, warehouseIds } = useMaterialsWarehouseScope();
   const allowedWarehouseIds = useMemo(() => new Set(warehouseIds), [warehouseIds]);
-  const [returns, setReturns] = useState<ComponentReturnRecord[]>([]);
-  const [scraps, setScraps] = useState<ComponentScrapRecord[]>([]);
   const [returnsPage, setReturnsPage] = useState(1);
   const [scrapsPage, setScrapsPage] = useState(1);
 
-  useEffect(() => {
-    void Promise.all([
-      componentReturnService.getAll(),
-      componentScrapService.getAll(),
-      productionIssueService.getAll(),
-    ]).then(([returnRows, scrapRows, issueRows]) => {
-      if (!scoped) {
-        setReturns(returnRows);
-        setScraps(scrapRows);
-        return;
-      }
-      if (allowedWarehouseIds.size === 0) {
-        setReturns([]);
-        setScraps([]);
-        return;
-      }
-      const allowedIssueIds = new Set(
-        issueRows
-          .filter((order) => allowedWarehouseIds.has(order.sourceWarehouseId))
-          .map((order) => order.id)
-          .filter(Boolean) as string[],
-      );
-      setReturns(returnRows.filter((row) => allowedWarehouseIds.has(row.warehouseId)));
-      setScraps(scrapRows.filter((row) => allowedIssueIds.has(row.issueOrderId)));
-    });
-  }, [scoped, allowedWarehouseIds]);
+  const {
+    data,
+    loading,
+  } = useCachedPageLoad<ComponentRecordsPageData>(
+    COMPONENT_RECORDS_CACHE_KEY,
+    async () => {
+      const [returnRows, scrapRows, issueRows] = await Promise.all([
+        componentReturnService.getAll(),
+        componentScrapService.getAll(),
+        productionIssueService.getAll(),
+      ]);
+      const issueWarehouseById: Record<string, string> = {};
+      issueRows.forEach((order) => {
+        if (order.id) issueWarehouseById[order.id] = order.sourceWarehouseId;
+      });
+      return {
+        returns: returnRows,
+        scraps: scrapRows,
+        issueWarehouseById,
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
+
+  const returns = useMemo(() => {
+    const rows = data?.returns ?? [];
+    if (!scoped) return rows;
+    if (allowedWarehouseIds.size === 0) return [];
+    return rows.filter((row) => allowedWarehouseIds.has(row.warehouseId));
+  }, [data, scoped, allowedWarehouseIds]);
+
+  const scraps = useMemo(() => {
+    const rows = data?.scraps ?? [];
+    if (!scoped) return rows;
+    if (allowedWarehouseIds.size === 0) return [];
+    const issueWarehouseById = data?.issueWarehouseById ?? {};
+    const allowedIssueIds = new Set(
+      Object.entries(issueWarehouseById)
+        .filter(([, warehouseId]) => allowedWarehouseIds.has(warehouseId))
+        .map(([issueId]) => issueId),
+    );
+    return rows.filter((row) => allowedIssueIds.has(row.issueOrderId));
+  }, [data, scoped, allowedWarehouseIds]);
 
   useEffect(() => { setReturnsPage(1); }, [returns.length]);
   useEffect(() => { setScrapsPage(1); }, [scraps.length]);
@@ -64,6 +88,16 @@ export const ProductionComponentRecords: React.FC = () => {
   );
 
   if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+
+  if (loading && !data) {
+    return (
+      <div className="erp-ds-clean space-y-5">
+        <PageHeader title="سجلات مكونات الإنتاج" subtitle="عرض سجلات المرتجعات والهالك الفعلي المرتبطة بأوامر الصرف." icon="receipt_long" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="erp-ds-clean space-y-5">

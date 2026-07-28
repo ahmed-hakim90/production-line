@@ -35,6 +35,7 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
           { key: 'requireFinishedStockApprovalForReports' as keyof PlanSettings, label: 'اعتماد دخول تم الصنع من التقارير', icon: 'approval', desc: 'عند التفعيل، لا تتم إضافة المنتج التام تلقائياً للمخزن بعد التقرير، بل يتطلب طلب اعتماد للمستخدم المخول.' },
           { key: 'allowNegativeDecomposedStock' as keyof PlanSettings, label: 'السماح بالسالب في مخزن المفكك', icon: 'remove_circle_outline', desc: 'عند التفعيل، يمكن خصم مواد خام من مخزن المفكك حتى لو الرصيد غير كافٍ في التقارير، واعتماد تحويلات صادرة من مخزن المفكك المحدد في الإعدادات بنفس الشرط (مع صلاحية الموافقة على التحويل بالسالب).' },
           { key: 'allowNegativeFinishedTransferStock' as keyof PlanSettings, label: 'السماح بتحويل تم الصنع بالسالب', icon: 'swap_horiz', desc: 'عند التفعيل، يمكن اعتماد تحويلات صادرة من مخزن "تم الصنع" حتى لو الرصيد أقل من الكمية (مع صلاحية الموافقة على التحويل بالسالب).' },
+          { key: 'useOperationalPeriodDailyTarget' as keyof PlanSettings, label: 'هدف يومي من فترة التشغيل (٢٦→٢٦)', icon: 'calendar_month', desc: 'عند التفعيل وبدون تارجت يدوي: الهدف اليومي = كمية الخطة ÷ أيام الشغل في فترة التشغيل (الجمعة إجازة). مناسب للخطط الجماعية والتقييم بالخطة.' },
         ]).map((setting) => (
           <div key={setting.key} className="flex items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
@@ -102,6 +103,31 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <option value="weekly">أسبوعي</option>
               <option value="monthly">شهري</option>
             </select>
+          </div>
+
+          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-3">
+            <div className="flex items-center gap-2 mb-3">
+              <span className="material-icons-round text-primary text-lg">event_repeat</span>
+              <p className="text-sm font-bold text-[var(--color-text)]">يوم بداية شهر التشغيل</p>
+            </div>
+            <p className="text-xs text-[var(--color-text-muted)] mb-3">
+              الفترة من هذا اليوم إلى نفس اليوم في الشهر التالي (نهاية حصرية). مثال: ٢٦ → الفترة ٢٦ يونيو حتى ٢٥ يوليو، والشهر التالي يبدأ ٢٦ يوليو.
+            </p>
+            <div className="erp-page-actions max-w-xs">
+              <input
+                type="number"
+                min={1}
+                max={28}
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold text-center py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
+                value={localPlanSettings.operationalMonthStartDay ?? 26}
+                onChange={(e) => {
+                  const raw = Number(e.target.value);
+                  const day = Number.isFinite(raw) ? Math.min(28, Math.max(1, Math.round(raw))) : 26;
+                  setLocalPlanSettings((p) => ({ ...p, operationalMonthStartDay: day }));
+                }}
+              />
+              <span className="text-sm font-bold text-[var(--color-text-muted)]">من كل شهر</span>
+            </div>
           </div>
         </div>
 

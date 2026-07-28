@@ -10,6 +10,20 @@ import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+
+const DISASSEMBLY_CACHE_KEY = 'inventory:disassembly';
+
+type DisassemblyPageData = {
+  warehouses: Warehouse[];
+  locations: WarehouseLocation[];
+  racks: WarehouseRack[];
+  orders: DisassemblyOrder[];
+};
 
 export const Disassembly: React.FC = () => {
   const { can } = usePermission();
@@ -28,10 +42,22 @@ export const Disassembly: React.FC = () => {
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
   const uid = useAppStore((s) => s.uid);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
-  const [racks, setRacks] = useState<WarehouseRack[]>([]);
-  const [orders, setOrders] = useState<DisassemblyOrder[]>([]);
+  const initialCache = peekPageDataCache<DisassemblyPageData>(DISASSEMBLY_CACHE_KEY);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() =>
+    initialCache ? filterWarehouses(initialCache.warehouses) : [],
+  );
+  const [locations, setLocations] = useState<WarehouseLocation[]>(() => initialCache?.locations ?? []);
+  const [racks, setRacks] = useState<WarehouseRack[]>(() => initialCache?.racks ?? []);
+  const [orders, setOrders] = useState<DisassemblyOrder[]>(() => {
+    if (!initialCache) return [];
+    if (!scoped) return initialCache.orders;
+    if (allowedWarehouseIds.size === 0) return [];
+    return initialCache.orders.filter(
+      (row) =>
+        allowedWarehouseIds.has(row.sourceWarehouseId)
+        || allowedWarehouseIds.has(row.targetWarehouseId),
+    );
+  });
   const [productId, setProductId] = useState('');
   const [quantity, setQuantity] = useState(0);
   const [sourceWarehouseId, setSourceWarehouseId] = useState('');
@@ -41,22 +67,16 @@ export const Disassembly: React.FC = () => {
   const [message, setMessage] = useState('');
   const actor = userDisplayName || userEmail || 'Current User';
 
-  const load = async () => {
-    const [whs, locs, rackRows, disRows] = await Promise.all([
-      warehouseService.getActiveWarehouses(),
-      warehouseLocationService.getAll(),
-      warehouseRackService.getAll(),
-      disassemblyService.getAll(),
-    ]);
-    const scopedWhs = filterWarehouses(whs);
+  const applyPageData = (data: DisassemblyPageData) => {
+    const scopedWhs = filterWarehouses(data.warehouses);
     setWarehouses(scopedWhs);
-    setLocations(locs);
-    setRacks(rackRows);
+    setLocations(data.locations);
+    setRacks(data.racks);
     const scopedOrders = !scoped
-      ? disRows
+      ? data.orders
       : allowedWarehouseIds.size === 0
         ? []
-        : disRows.filter(
+        : data.orders.filter(
           (row) =>
             allowedWarehouseIds.has(row.sourceWarehouseId)
             || allowedWarehouseIds.has(row.targetWarehouseId),
@@ -71,6 +91,35 @@ export const Disassembly: React.FC = () => {
       if (prev && scopedWhs.some((w) => w.id === prev)) return prev;
       return defaultTarget;
     });
+  };
+
+  const load = async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<DisassemblyPageData>(DISASSEMBLY_CACHE_KEY);
+    if (cached) applyPageData(cached);
+    const { data } = await fetchCachedPageData(
+      DISASSEMBLY_CACHE_KEY,
+      async () => {
+        const [whs, locs, rackRows, disRows] = await Promise.all([
+          warehouseService.getActiveWarehouses(),
+          warehouseLocationService.getAll(),
+          warehouseRackService.getAll(),
+          disassemblyService.getAll(),
+        ]);
+        return {
+          warehouses: whs,
+          locations: locs,
+          racks: rackRows,
+          orders: disRows,
+        };
+      },
+      { force: opts?.force === true, maxAgeMs: 45_000 },
+    );
+    applyPageData(data);
+  };
+
+  const reload = async () => {
+    invalidatePageDataCache(DISASSEMBLY_CACHE_KEY);
+    await load({ force: true });
   };
 
   useEffect(() => {
@@ -133,7 +182,7 @@ export const Disassembly: React.FC = () => {
       });
       setMessage(`تم إنشاء طلب التفكيك ${id ? 'كمسودة' : ''}.`);
       setLines([]);
-      await load();
+      await reload();
     } catch (error: any) {
       setMessage(error?.message || 'تعذر إنشاء طلب التفكيك.');
     }
@@ -151,7 +200,7 @@ export const Disassembly: React.FC = () => {
         await disassemblyService.reject(order.id, actor, reason, uid || undefined);
       }
       setMessage('تم تحديث طلب التفكيك.');
-      await load();
+      await reload();
     } catch (error: any) {
       setMessage(error?.message || 'تعذر تحديث طلب التفكيك.');
     }

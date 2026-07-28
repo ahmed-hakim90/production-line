@@ -13,7 +13,7 @@ const WAREHOUSE_ROLES: { value: WarehouseRole; label: string }[] = [
   { value: 'raw_material', label: 'مواد خام' },
   { value: 'decomposed', label: 'مفكك' },
   { value: 'production_wip', label: 'إنتاج WIP' },
-  { value: 'finished_staging', label: 'تم الصنع' },
+  { value: 'finished_staging', label: 'تم الإنتاج' },
   { value: 'final_product', label: 'منتج تام' },
   { value: 'packaging', label: 'تغليف' },
   { value: 'waste', label: 'هالك' },

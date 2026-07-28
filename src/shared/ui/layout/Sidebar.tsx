@@ -99,6 +99,12 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const { collapsed, toggleCollapse } = useSidebar();
   const badgeCounts   = useSidebarBadges();
   const { isActiveItem, isActiveGroup, activeGroupKey } = useSidebarActiveRoute();
+  const roles = useAppStore((s) => s.roles);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const roleKey = useMemo(
+    () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
+    [roles, userRoleId],
+  );
 
   /**
    * وضع الاختصار (أيقونات فقط) مخصص لسطح المكتب (lg+). على الموبايل، درج القائمة المفتوح
@@ -112,11 +118,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         .map((g) => ({
           ...g,
           children: g.children.filter((i) => (
-            canAccessMenuItem(can, i) && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
+            canAccessMenuItem(can, i, roleKey) && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
           )),
         }))
         .filter((g) => g.children.length > 0),
-    [can, currentEmployee?.level],
+    [can, currentEmployee?.level, roleKey],
   );
 
   /** مجموعات الأكورديون فقط (غير flat). لو 1 أو 2 يبقوا مفتوحين دائماً في الشريط الموسّع */

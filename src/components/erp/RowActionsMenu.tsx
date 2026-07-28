@@ -55,7 +55,7 @@ export function RowActionsMenu({
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-44 rounded-lg border border-slate-200 bg-white p-1">
         {safeItems.map((item, index) => {
-          if ("separator" in item && item.separator) {
+          if (item.separator === true) {
             return <DropdownMenuSeparator key={`sep-${index}`} />
           }
 

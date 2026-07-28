@@ -39,22 +39,29 @@ function counterRef(dbInst: Firestore, tenantId: string) {
 }
 
 /**
- * Allocate the next INV- reference inside an existing Firestore transaction.
- * Persists `lastInvSeq` on `inventory_counters/{tenantId}`.
+ * Read the next INV sequence inside a transaction (no write).
+ * Call this with all other reads — before any writes.
  *
  * Note: Firestore transactions cannot run collection queries. If the counter
  * doc is missing we start at 1 (or a pre-seeded value from `ensureInvCounter`).
  */
-export async function allocateInvReferenceInTransaction(t: Transaction): Promise<string> {
+export async function readNextInvSeqInTransaction(t: Transaction): Promise<number> {
   const tenantId = getCurrentTenantId();
   const cref = counterRef(db, tenantId);
   const cSnap = await t.get(cref);
-  let nextSeq: number;
   if (cSnap.exists()) {
-    nextSeq = Math.max(1, Math.floor(Number(cSnap.data().lastInvSeq || 0))) + 1;
-  } else {
-    nextSeq = 1;
+    return Math.max(1, Math.floor(Number(cSnap.data().lastInvSeq || 0))) + 1;
   }
+  return 1;
+}
+
+/**
+ * Persist `lastInvSeq` on `inventory_counters/{tenantId}`.
+ * Call only after every transaction read is done.
+ */
+export function writeInvSeqInTransaction(t: Transaction, nextSeq: number): string {
+  const tenantId = getCurrentTenantId();
+  const cref = counterRef(db, tenantId);
   t.set(
     cref,
     {
@@ -65,6 +72,16 @@ export async function allocateInvReferenceInTransaction(t: Transaction): Promise
     { merge: true },
   );
   return formatInvReference(nextSeq);
+}
+
+/**
+ * Allocate the next INV- reference when the transaction has no further reads.
+ * Prefer `readNextInvSeqInTransaction` + `writeInvSeqInTransaction` when the
+ * same transaction still needs to read balances or other docs afterward.
+ */
+export async function allocateInvReferenceInTransaction(t: Transaction): Promise<string> {
+  const nextSeq = await readNextInvSeqInTransaction(t);
+  return writeInvSeqInTransaction(t, nextSeq);
 }
 
 /** Seed counter from recent docs when missing (outside a transaction). */

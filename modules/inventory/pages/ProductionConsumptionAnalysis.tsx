@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { productionIssueService } from '../services/productionIssueService';
@@ -6,27 +6,30 @@ import type { ProductionIssueOrder } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { exportGenericRows } from '../../../utils/exportExcel';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { Skeleton } from '@/components/ui/skeleton';
 
 export const ProductionConsumptionAnalysis: React.FC = () => {
   const { can } = usePermission();
   const { scoped, warehouseIds } = useMaterialsWarehouseScope();
   const allowedWarehouseIds = useMemo(() => new Set(warehouseIds), [warehouseIds]);
-  const [orders, setOrders] = useState<ProductionIssueOrder[]>([]);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    void productionIssueService.getAll().then((rows) => {
-      if (!scoped) {
-        setOrders(rows);
-        return;
-      }
-      if (allowedWarehouseIds.size === 0) {
-        setOrders([]);
-        return;
-      }
-      setOrders(rows.filter((order) => allowedWarehouseIds.has(order.sourceWarehouseId)));
-    });
-  }, [scoped, allowedWarehouseIds]);
+  const {
+    data: ordersData,
+    loading,
+  } = useCachedPageLoad<ProductionIssueOrder[]>(
+    'inventory:production-consumption-analysis',
+    () => productionIssueService.getAll(),
+    { maxAgeMs: 60_000 },
+  );
+
+  const orders = useMemo(() => {
+    const rows = ordersData ?? [];
+    if (!scoped) return rows;
+    if (allowedWarehouseIds.size === 0) return [];
+    return rows.filter((order) => allowedWarehouseIds.has(order.sourceWarehouseId));
+  }, [ordersData, scoped, allowedWarehouseIds]);
 
   const filteredOrders = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -66,6 +69,16 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
   };
 
   if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+
+  if (loading && !ordersData) {
+    return (
+      <div className="erp-ds-clean space-y-5">
+        <PageHeader title="تحليل استهلاك أوامر الشغل" subtitle="مقارنة BOM بالمصروف والتعويض والمرتجع والهالك الفعلي." icon="analytics" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        <Skeleton className="h-64 w-full rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="erp-ds-clean space-y-5">

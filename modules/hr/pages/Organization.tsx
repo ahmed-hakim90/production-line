@@ -20,8 +20,21 @@ import { JOB_LEVEL_LABELS } from '../types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { buildDepartmentPositionHierarchy, getDirectReportCounts, wouldCreateManagerCycle } from '../utils/organizationHierarchy';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 type OrgTab = 'departments' | 'positions' | 'employees' | 'shifts' | 'penalties' | 'lateRules' | 'allowances';
+
+const ORG_CACHE_KEY = 'hr:organization';
+
+type OrganizationPageData = {
+  departments: FirestoreDepartment[];
+  positions: FirestoreJobPosition[];
+  shifts: FirestoreShift[];
+  penalties: FirestorePenaltyRule[];
+  lateRulesList: FirestoreLateRule[];
+  allowances: FirestoreAllowanceType[];
+};
 
 type EmployeeHierarchyForm = {
   departmentId: string;
@@ -59,14 +72,42 @@ export const Organization: React.FC = () => {
   const canEdit = can('hrSettings.edit');
 
   const [tab, setTab] = useState<OrgTab>('departments');
-  const [loading, setLoading] = useState(true);
 
-  const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
-  const [positions, setPositions] = useState<FirestoreJobPosition[]>([]);
-  const [shifts, setShifts] = useState<FirestoreShift[]>([]);
-  const [penalties, setPenalties] = useState<FirestorePenaltyRule[]>([]);
-  const [lateRulesList, setLateRulesList] = useState<FirestoreLateRule[]>([]);
-  const [allowances, setAllowances] = useState<FirestoreAllowanceType[]>([]);
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<OrganizationPageData>(
+    ORG_CACHE_KEY,
+    async () => {
+      const [dSnap, pSnap, sSnap, penSnap, lrSnap, alSnap] = await Promise.all([
+        getDocs(departmentsRef()),
+        getDocs(jobPositionsRef()),
+        getDocs(shiftsRef()),
+        getDocs(penaltyRulesRef()),
+        getDocs(lateRulesRef()),
+        getDocs(allowanceTypesRef()),
+      ]);
+      return {
+        departments: dSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)),
+        positions: pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)),
+        shifts: sSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift)),
+        penalties: penSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestorePenaltyRule)),
+        lateRulesList: lrSnap.docs
+          .map((d) => ({ id: d.id, ...d.data() } as FirestoreLateRule))
+          .sort((a, b) => a.minutesFrom - b.minutesFrom),
+        allowances: alSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreAllowanceType)),
+      };
+    },
+    { maxAgeMs: 60_000 },
+  );
+
+  const departments = data?.departments ?? [];
+  const positions = data?.positions ?? [];
+  const shifts = data?.shifts ?? [];
+  const penalties = data?.penalties ?? [];
+  const lateRulesList = data?.lateRulesList ?? [];
+  const allowances = data?.allowances ?? [];
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [employeeSearch, setEmployeeSearch] = useState('');
@@ -76,30 +117,9 @@ export const Organization: React.FC = () => {
   const [employeeSaveMsg, setEmployeeSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [dSnap, pSnap, sSnap, penSnap, lrSnap, alSnap] = await Promise.all([
-        getDocs(departmentsRef()),
-        getDocs(jobPositionsRef()),
-        getDocs(shiftsRef()),
-        getDocs(penaltyRulesRef()),
-        getDocs(lateRulesRef()),
-        getDocs(allowanceTypesRef()),
-      ]);
-      setDepartments(dSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreDepartment)));
-      setPositions(pSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreJobPosition)));
-      setShifts(sSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreShift)));
-      setPenalties(penSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestorePenaltyRule)));
-      setLateRulesList(lrSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreLateRule)).sort((a, b) => a.minutesFrom - b.minutesFrom));
-      setAllowances(alSnap.docs.map((d) => ({ id: d.id, ...d.data() } as FirestoreAllowanceType)));
-    } catch (e) {
-      console.error('Organization loadData error:', e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { loadData(); }, [loadData]);
+    invalidatePageDataCache(ORG_CACHE_KEY);
+    await reloadCached(true);
+  }, [reloadCached]);
 
   const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name ?? '—';
   const getManagerName = (id: string) => _rawEmployees.find((e) => e.id === id)?.name ?? '—';

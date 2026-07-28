@@ -25,8 +25,14 @@ import type {
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '../../../utils/printManager';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const PAGE_SIZE = 20;
+const SUPPLIES_RECEIPT_CACHE_KEY = 'inventory:supplies-receipt';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'مسودة',
@@ -43,6 +49,14 @@ type ComponentOption = {
   name: string;
   code: string;
   unit: string;
+};
+
+type SuppliesReceiptListData = {
+  warehouses: Warehouse[];
+  locations: WarehouseLocation[];
+  racks: WarehouseRack[];
+  componentOptions: ComponentOption[];
+  orders: SuppliesReceiptOrder[];
 };
 
 type DraftGroup = SuppliesReceiptProductGroup & { key: string };
@@ -78,12 +92,23 @@ export const SuppliesReceipt: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const actor = userDisplayName || userEmail || 'Current User';
+  const queryWarehouseId = searchParams.get('warehouseId') || '';
 
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [locations, setLocations] = useState<WarehouseLocation[]>([]);
-  const [racks, setRacks] = useState<WarehouseRack[]>([]);
-  const [componentOptions, setComponentOptions] = useState<ComponentOption[]>([]);
-  const [orders, setOrders] = useState<SuppliesReceiptOrder[]>([]);
+  const initialListCache = peekPageDataCache<SuppliesReceiptListData>(SUPPLIES_RECEIPT_CACHE_KEY);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(() =>
+    initialListCache ? filterWarehouses(initialListCache.warehouses) : [],
+  );
+  const [locations, setLocations] = useState<WarehouseLocation[]>(() => initialListCache?.locations ?? []);
+  const [racks, setRacks] = useState<WarehouseRack[]>(() => initialListCache?.racks ?? []);
+  const [componentOptions, setComponentOptions] = useState<ComponentOption[]>(
+    () => initialListCache?.componentOptions ?? [],
+  );
+  const [orders, setOrders] = useState<SuppliesReceiptOrder[]>(() => {
+    if (!initialListCache) return [];
+    if (!scoped) return initialListCache.orders;
+    if (allowedWarehouseIds.size === 0) return [];
+    return initialListCache.orders.filter((row) => allowedWarehouseIds.has(row.warehouseId));
+  });
   const [warehouseId, setWarehouseId] = useState('');
   const [containerRef, setContainerRef] = useState('');
   const [note, setNote] = useState('');
@@ -101,55 +126,18 @@ export const SuppliesReceipt: React.FC = () => {
     documentTitle: 'مستند استلام مستلزمات',
   });
 
-  const queryWarehouseId = searchParams.get('warehouseId') || '';
-
-  const load = useCallback(async () => {
-    const [whs, locs, rackRows, materials, raws, receiptRows] = await Promise.all([
-      warehouseService.getActiveWarehouses(),
-      warehouseLocationService.getAll(),
-      warehouseRackService.getAll(),
-      materialService.getAll().catch(() => []),
-      rawMaterialService.getAll().catch(() => []),
-      suppliesReceiptService.getAll(),
-    ]);
-    const scopedWhs = filterWarehouses(whs);
+  const applyListData = useCallback((data: SuppliesReceiptListData) => {
+    const scopedWhs = filterWarehouses(data.warehouses);
     setWarehouses(scopedWhs);
-    setLocations(locs);
-    setRacks(rackRows);
-
-    const materialOpts: ComponentOption[] = materials
-      .filter((m) => m.id && m.isActive !== false)
-      .map((m) => ({
-        id: m.id!,
-        itemType: 'material' as const,
-        name: m.name,
-        code: m.code,
-        unit: m.baseUnit || 'unit',
-      }));
-    const rawOpts: ComponentOption[] = raws
-      .filter((m) => m.id && m.isActive !== false)
-      .map((m) => ({
-        id: m.id!,
-        itemType: 'raw_material' as const,
-        name: m.name,
-        code: m.code,
-        unit: m.unit || 'unit',
-      }));
-    // Prefer manufacturing materials; append raws not already covered by code.
-    const codes = new Set(materialOpts.map((o) => o.code.trim().toLowerCase()).filter(Boolean));
-    const merged = [
-      ...materialOpts,
-      ...rawOpts.filter((o) => !codes.has(o.code.trim().toLowerCase())),
-    ];
-    setComponentOptions(merged);
-
+    setLocations(data.locations);
+    setRacks(data.racks);
+    setComponentOptions(data.componentOptions);
     const scopedOrders = !scoped
-      ? receiptRows
+      ? data.orders
       : allowedWarehouseIds.size === 0
         ? []
-        : receiptRows.filter((row) => allowedWarehouseIds.has(row.warehouseId));
+        : data.orders.filter((row) => allowedWarehouseIds.has(row.warehouseId));
     setOrders(scopedOrders);
-
     setWarehouseId((prev) => {
       if (queryWarehouseId && scopedWhs.some((w) => w.id === queryWarehouseId)) return queryWarehouseId;
       if (suppliesWarehouseId && scopedWhs.some((w) => w.id === suppliesWarehouseId)) return suppliesWarehouseId;
@@ -163,6 +151,64 @@ export const SuppliesReceipt: React.FC = () => {
     scoped,
     suppliesWarehouseId,
   ]);
+
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<SuppliesReceiptListData>(SUPPLIES_RECEIPT_CACHE_KEY);
+    if (cached) applyListData(cached);
+    const { data } = await fetchCachedPageData(
+      SUPPLIES_RECEIPT_CACHE_KEY,
+      async () => {
+        const [whs, locs, rackRows, materials, raws, receiptRows] = await Promise.all([
+          warehouseService.getActiveWarehouses(),
+          warehouseLocationService.getAll(),
+          warehouseRackService.getAll(),
+          materialService.getAll().catch(() => []),
+          rawMaterialService.getAll().catch(() => []),
+          suppliesReceiptService.getAll(),
+        ]);
+
+        const materialOpts: ComponentOption[] = materials
+          .filter((m) => m.id && m.isActive !== false)
+          .map((m) => ({
+            id: m.id!,
+            itemType: 'material' as const,
+            name: m.name,
+            code: m.code,
+            unit: m.baseUnit || 'unit',
+          }));
+        const rawOpts: ComponentOption[] = raws
+          .filter((m) => m.id && m.isActive !== false)
+          .map((m) => ({
+            id: m.id!,
+            itemType: 'raw_material' as const,
+            name: m.name,
+            code: m.code,
+            unit: m.unit || 'unit',
+          }));
+        // Prefer manufacturing materials; append raws not already covered by code.
+        const codes = new Set(materialOpts.map((o) => o.code.trim().toLowerCase()).filter(Boolean));
+        const merged = [
+          ...materialOpts,
+          ...rawOpts.filter((o) => !codes.has(o.code.trim().toLowerCase())),
+        ];
+
+        return {
+          warehouses: whs,
+          locations: locs,
+          racks: rackRows,
+          componentOptions: merged,
+          orders: receiptRows,
+        };
+      },
+      { force: opts?.force === true, maxAgeMs: 45_000 },
+    );
+    applyListData(data);
+  }, [applyListData]);
+
+  const reloadList = useCallback(async () => {
+    invalidatePageDataCache(SUPPLIES_RECEIPT_CACHE_KEY);
+    await load({ force: true });
+  }, [load]);
 
   useEffect(() => {
     void load();
@@ -370,7 +416,7 @@ export const SuppliesReceipt: React.FC = () => {
       });
       setMessage(id ? 'تم حفظ مستند الاستلام كمسودة.' : 'تعذر الحفظ.');
       resetForm();
-      await load();
+      await reloadList();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : 'تعذر إنشاء مستند الاستلام.');
     } finally {
@@ -404,7 +450,7 @@ export const SuppliesReceipt: React.FC = () => {
       } else {
         setMessage('تم تحديث مستند الاستلام.');
       }
-      await load();
+      await reloadList();
     } catch (error: unknown) {
       setMessage(error instanceof Error ? error.message : 'تعذر تحديث مستند الاستلام.');
     } finally {

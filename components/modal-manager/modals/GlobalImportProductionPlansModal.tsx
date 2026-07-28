@@ -4,7 +4,9 @@ import { Button } from '../../../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { addDaysToDate, calculateEstimatedDays } from '../../../utils/calculations';
+import { calculateOperationalPeriodDailyTarget } from '../../../modules/production/lib/operationalPeriod';
 import { parseProductionPlansExcel, type ProductionPlanImportResult } from '../../../utils/importProductionPlans';
+import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useTranslation } from 'react-i18next';
@@ -17,6 +19,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   const createProductionPlan = useAppStore((s) => s.createProductionPlan);
   const products = useAppStore((s) => s._rawProducts);
   const lines = useAppStore((s) => s._rawLines);
+  const planSettings = useAppStore((s) => s.systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
@@ -73,9 +76,26 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
     for (const row of validRows) {
       try {
         const product = products.find((p) => p.id === row.productId);
-        const dailyRate = Number(product?.avgDailyProduction || 0);
-        const estimatedDays = calculateEstimatedDays(row.plannedQuantity, dailyRate);
-        const plannedEndDate = estimatedDays > 0 ? addDaysToDate(row.startDate, estimatedDays) : '';
+        const productDailyRate = Number(product?.avgDailyProduction || 0);
+        const useOperationalPeriod = planSettings.useOperationalPeriodDailyTarget !== false;
+        const operationalCalc = useOperationalPeriod
+          ? calculateOperationalPeriodDailyTarget({
+              plannedQuantity: row.plannedQuantity,
+              anchorDate: row.startDate,
+              startDay: planSettings.operationalMonthStartDay,
+            })
+          : { dailyTarget: 0, workingDays: 0, period: null as null };
+        const dailyRate = operationalCalc.dailyTarget > 0
+          ? operationalCalc.dailyTarget
+          : productDailyRate;
+        const estimatedDays = operationalCalc.dailyTarget > 0
+          ? operationalCalc.workingDays
+          : calculateEstimatedDays(row.plannedQuantity, dailyRate);
+        const plannedEndDate = operationalCalc.period
+          ? operationalCalc.period.endDateInclusive
+          : estimatedDays > 0
+            ? addDaysToDate(row.startDate, estimatedDays)
+            : '';
         const avgDailyTarget = dailyRate > 0 ? Math.ceil(dailyRate) : 0;
 
         await createProductionPlan({

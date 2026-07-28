@@ -28,6 +28,8 @@ function testLegacySeedWhenNestedAbsent() {
   });
   assert.equal(synced.inventoryRouting?.decomposedWarehouseId, 'legacy-dec');
   assert.equal(synced.inventoryRouting?.productionWipWarehouseId, 'legacy-wip');
+  assert.equal(synced.inventoryRouting?.requireIssuedProductionIssueOnReport, true);
+  assert.equal(synced.inventoryRouting?.autoConsumeBomOnProductionReport, false);
 }
 
 function testFlagsPreserved() {

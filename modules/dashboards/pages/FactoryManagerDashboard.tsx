@@ -14,6 +14,10 @@ import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWid
 import { useWorkerDashboardSnapshot } from '@/modules/production/hooks/useWorkerDashboardSnapshot';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+import {
   calculateProgressRatio,
   calculateSmartStatus,
   calculateTimeRatio,
@@ -233,8 +237,15 @@ export const FactoryManagerDashboard: React.FC = () => {
       setMonthlyCostSummary(null);
       return () => { cancelled = true; };
     }
-    monthlyProductionCostService.getDashboardMonthlySummary(fullMonthKey)
-      .then((summary) => {
+    const cacheKey = `dashboard:factory:monthly-cost:${fullMonthKey}`;
+    const cached = peekPageDataCache<MonthlyDashboardCostSummary>(cacheKey);
+    if (cached) setMonthlyCostSummary(cached);
+    fetchCachedPageData(
+      cacheKey,
+      () => monthlyProductionCostService.getDashboardMonthlySummary(fullMonthKey),
+      { maxAgeMs: 60_000 },
+    )
+      .then(({ data: summary }) => {
         if (!cancelled) setMonthlyCostSummary(summary);
       })
       .catch(() => {
@@ -273,15 +284,26 @@ export const FactoryManagerDashboard: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false;
-    const loadCompliance = async () => {
-      setYesterdayComplianceLoading(true);
+    const loadCompliance = async (force = false) => {
+      const cacheKey = `dashboard:factory:compliance:${selectedComplianceDate}`;
+      const cached = peekPageDataCache<ReportComplianceSnapshot>(cacheKey);
+      if (cached) {
+        setYesterdayCompliance(cached);
+        setYesterdayComplianceLoading(false);
+      } else {
+        setYesterdayComplianceLoading(true);
+      }
       setYesterdayComplianceError(null);
       try {
-        const yesterdaySnapshot = await reportComplianceService.getSnapshotForDate(
-          selectedComplianceDate,
-          _rawEmployees,
-          _rawLines,
-          { scope: 'assigned_only' },
+        const { data: yesterdaySnapshot } = await fetchCachedPageData(
+          cacheKey,
+          () => reportComplianceService.getSnapshotForDate(
+            selectedComplianceDate,
+            _rawEmployees,
+            _rawLines,
+            { scope: 'assigned_only' },
+          ),
+          { force, maxAgeMs: 45_000 },
         );
         if (!cancelled) {
           setYesterdayCompliance(yesterdaySnapshot);
@@ -298,8 +320,8 @@ export const FactoryManagerDashboard: React.FC = () => {
         }
       }
     };
-    loadCompliance();
-    const refreshTimer = window.setInterval(loadCompliance, 5 * 60 * 1000);
+    void loadCompliance(false);
+    const refreshTimer = window.setInterval(() => void loadCompliance(true), 5 * 60 * 1000);
     return () => {
       cancelled = true;
       window.clearInterval(refreshTimer);

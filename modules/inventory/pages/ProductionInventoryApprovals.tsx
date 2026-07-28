@@ -11,8 +11,21 @@ import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { useManagedPrint } from '../../../utils/printManager';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+import { Skeleton } from '@/components/ui/skeleton';
 
 const PAGE_SIZE = 20;
+const APPROVALS_CACHE_KEY = 'inventory:production-inventory-approvals';
+
+type ApprovalsPageData = {
+  compensations: ComponentCompensationRequest[];
+  disassemblies: DisassemblyOrder[];
+  receipts: SuppliesReceiptOrder[];
+};
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'مسودة',
@@ -33,9 +46,51 @@ export const ProductionInventoryApprovals: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const actor = userDisplayName || userEmail || 'Current User';
-  const [compensations, setCompensations] = useState<ComponentCompensationRequest[]>([]);
-  const [disassemblies, setDisassemblies] = useState<DisassemblyOrder[]>([]);
-  const [receipts, setReceipts] = useState<SuppliesReceiptOrder[]>([]);
+  const applyScoped = (data: ApprovalsPageData) => {
+    if (!scoped) {
+      setCompensations(data.compensations);
+      setDisassemblies(data.disassemblies);
+      setReceipts(data.receipts);
+      return;
+    }
+    if (allowedWarehouseIds.size === 0) {
+      setCompensations([]);
+      setDisassemblies([]);
+      setReceipts([]);
+      return;
+    }
+    setCompensations(data.compensations.filter((row) => allowedWarehouseIds.has(row.warehouseId)));
+    setDisassemblies(data.disassemblies.filter(
+      (row) =>
+        allowedWarehouseIds.has(row.sourceWarehouseId)
+        || allowedWarehouseIds.has(row.targetWarehouseId),
+    ));
+    setReceipts(data.receipts.filter((row) => allowedWarehouseIds.has(row.warehouseId)));
+  };
+  const initialCache = peekPageDataCache<ApprovalsPageData>(APPROVALS_CACHE_KEY);
+  const [compensations, setCompensations] = useState<ComponentCompensationRequest[]>(() => {
+    if (!initialCache) return [];
+    if (!scoped) return initialCache.compensations;
+    if (allowedWarehouseIds.size === 0) return [];
+    return initialCache.compensations.filter((row) => allowedWarehouseIds.has(row.warehouseId));
+  });
+  const [disassemblies, setDisassemblies] = useState<DisassemblyOrder[]>(() => {
+    if (!initialCache) return [];
+    if (!scoped) return initialCache.disassemblies;
+    if (allowedWarehouseIds.size === 0) return [];
+    return initialCache.disassemblies.filter(
+      (row) =>
+        allowedWarehouseIds.has(row.sourceWarehouseId)
+        || allowedWarehouseIds.has(row.targetWarehouseId),
+    );
+  });
+  const [receipts, setReceipts] = useState<SuppliesReceiptOrder[]>(() => {
+    if (!initialCache) return [];
+    if (!scoped) return initialCache.receipts;
+    if (allowedWarehouseIds.size === 0) return [];
+    return initialCache.receipts.filter((row) => allowedWarehouseIds.has(row.warehouseId));
+  });
+  const [loading, setLoading] = useState(() => initialCache == null);
   const [message, setMessage] = useState('');
   const [compPage, setCompPage] = useState(1);
   const [disPage, setDisPage] = useState(1);
@@ -48,31 +103,40 @@ export const ProductionInventoryApprovals: React.FC = () => {
     documentTitle: 'مستند استلام مستلزمات',
   });
 
-  const load = async () => {
-    const [compRows, disRows, receiptRows] = await Promise.all([
-      componentCompensationService.getAll(),
-      disassemblyService.getAll(),
-      suppliesReceiptService.getAll(),
-    ]);
-    if (!scoped) {
-      setCompensations(compRows);
-      setDisassemblies(disRows);
-      setReceipts(receiptRows);
-      return;
+  const load = async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<ApprovalsPageData>(APPROVALS_CACHE_KEY);
+    if (cached) {
+      applyScoped(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
     }
-    if (allowedWarehouseIds.size === 0) {
-      setCompensations([]);
-      setDisassemblies([]);
-      setReceipts([]);
-      return;
+    try {
+      const { data } = await fetchCachedPageData(
+        APPROVALS_CACHE_KEY,
+        async () => {
+          const [compRows, disRows, receiptRows] = await Promise.all([
+            componentCompensationService.getAll(),
+            disassemblyService.getAll(),
+            suppliesReceiptService.getAll(),
+          ]);
+          return {
+            compensations: compRows,
+            disassemblies: disRows,
+            receipts: receiptRows,
+          };
+        },
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      applyScoped(data);
+    } finally {
+      setLoading(false);
     }
-    setCompensations(compRows.filter((row) => allowedWarehouseIds.has(row.warehouseId)));
-    setDisassemblies(disRows.filter(
-      (row) =>
-        allowedWarehouseIds.has(row.sourceWarehouseId)
-        || allowedWarehouseIds.has(row.targetWarehouseId),
-    ));
-    setReceipts(receiptRows.filter((row) => allowedWarehouseIds.has(row.warehouseId)));
+  };
+
+  const reload = async () => {
+    invalidatePageDataCache(APPROVALS_CACHE_KEY);
+    await load({ force: true });
   };
 
   useEffect(() => {
@@ -108,7 +172,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
     try {
       await componentCompensationService.approve(row.id, actor);
       setMessage('تم اعتماد التعويض وخصم المخزون.');
-      await load();
+      await reload();
     } catch (error: any) {
       setMessage(error?.message || 'تعذر اعتماد التعويض.');
     }
@@ -118,7 +182,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
     if (!row.id) return;
     await componentCompensationService.reject(row.id, actor);
     setMessage('تم رفض التعويض.');
-    await load();
+    await reload();
   };
 
   const actionDisassembly = async (row: DisassemblyOrder, action: 'approve' | 'reject' | 'execute') => {
@@ -129,7 +193,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       if (action === 'reject') await disassemblyService.reject(row.id, actor, window.prompt('سبب الرفض:', '') || '', uid || undefined);
       if (action === 'execute') await disassemblyService.execute(row.id, actor, uid || undefined);
       setMessage('تم تحديث طلب التفكيك.');
-      await load();
+      await reload();
     } catch (error: any) {
       setMessage(error?.message || 'تعذر تحديث طلب التفكيك.');
     }
@@ -150,7 +214,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       } else {
         setMessage('تم تحديث مستند استلام المستلزمات.');
       }
-      await load();
+      await reload();
     } catch (error: any) {
       setMessage(error?.message || 'تعذر تحديث مستند الاستلام.');
     }
@@ -163,6 +227,16 @@ export const ProductionInventoryApprovals: React.FC = () => {
   };
 
   if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
+
+  if (loading && compensations.length === 0 && disassemblies.length === 0 && receipts.length === 0) {
+    return (
+      <div className="erp-ds-clean space-y-5">
+        <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle="اعتماد تعويضات المكونات وطلبات التفكيك واستلام المستلزمات قبل تأثيرها على المخزون." icon="fact_check" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+        <Skeleton className="h-48 w-full rounded-xl" />
+      </div>
+    );
+  }
 
   return (
     <div className="erp-ds-clean space-y-5">
@@ -194,6 +268,12 @@ export const ProductionInventoryApprovals: React.FC = () => {
                     <td className="px-4 py-3">
                       <p className="font-semibold">{row.line.itemName}</p>
                       <p className="text-xs text-slate-500">{row.locationCode}</p>
+                      {row.origin === 'production_request' && (
+                        <p className="text-[11px] font-bold text-amber-700">طلب من الإنتاج</p>
+                      )}
+                      {row.issueReferenceNo && (
+                        <p className="text-[11px] text-slate-400 font-mono">{row.issueReferenceNo}</p>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-center tabular-nums">{row.quantity}</td>
                     <td className="px-4 py-3 text-center">{row.reason}</td>

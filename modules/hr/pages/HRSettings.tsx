@@ -22,6 +22,13 @@ import type { DayOfWeek } from '../types';
 import type { AttendanceIntegrationSettings } from '@/types';
 import { updateApprovalSettings } from '../approval';
 import { DEFAULT_ATTENDANCE_INTEGRATION } from '@/utils/dashboardConfig';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+
+const HR_SETTINGS_CACHE_KEY = 'hr:settings:configs';
 
 // ─── Validation ─────────────────────────────────────────────────────────────
 
@@ -1104,20 +1111,32 @@ const TAB_FORMS: Record<HRConfigModuleName, React.FC<TabFormProps<any>>> = {
 // ─── Audit Log Viewer ───────────────────────────────────────────────────────
 
 const AuditLogPanel: React.FC<{ module: HRConfigModuleName }> = ({ module }) => {
-  const [logs, setLogs] = useState<FirestoreHRConfigAuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const AUDIT_CACHE_KEY = `hr:settings:audit:${module}`;
+  const initialAudit = peekPageDataCache<FirestoreHRConfigAuditLog[]>(AUDIT_CACHE_KEY);
+  const [logs, setLogs] = useState<FirestoreHRConfigAuditLog[]>(initialAudit ?? []);
+  const [loading, setLoading] = useState(() => initialAudit == null);
 
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    hrConfigAuditService.getByModule(module, 20).then((result) => {
+    const cached = peekPageDataCache<FirestoreHRConfigAuditLog[]>(AUDIT_CACHE_KEY);
+    if (cached) {
+      setLogs(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    void fetchCachedPageData(
+      AUDIT_CACHE_KEY,
+      () => hrConfigAuditService.getByModule(module, 20),
+      { maxAgeMs: 60_000 },
+    ).then(({ data }) => {
       if (!cancelled) {
-        setLogs(result);
+        setLogs(data);
         setLoading(false);
       }
     });
     return () => { cancelled = true; };
-  }, [module]);
+  }, [module, AUDIT_CACHE_KEY]);
 
   if (loading) return <TableSkeleton rows={3} showHeader={false} />;
   if (logs.length === 0) return <p className="text-sm text-[var(--color-text-muted)] text-center py-4">لا توجد سجلات تغييرات</p>;
@@ -1160,11 +1179,18 @@ export const HRSettings: React.FC = () => {
   const canEdit = can('hrSettings.edit');
   const readOnly = !canEdit;
 
-  const [loading, setLoading] = useState(true);
+  const performedBy = userDisplayName || userEmail || 'unknown';
+  const initialConfigsCache = peekPageDataCache<HRConfigMap>(HR_SETTINGS_CACHE_KEY);
+
+  const [loading, setLoading] = useState(() => initialConfigsCache == null);
   const [saving, setSaving] = useState(false);
   const [activeTab, setActiveTab] = useState<HRConfigModuleName>('general');
-  const [configs, setConfigs] = useState<HRConfigMap | null>(null);
-  const [draft, setDraft] = useState<HRConfigMap | null>(null);
+  const [configs, setConfigs] = useState<HRConfigMap | null>(
+    initialConfigsCache ? JSON.parse(JSON.stringify(initialConfigsCache)) : null,
+  );
+  const [draft, setDraft] = useState<HRConfigMap | null>(
+    initialConfigsCache ? JSON.parse(JSON.stringify(initialConfigsCache)) : null,
+  );
   const [errors, setErrors] = useState<ValidationError[]>([]);
   const [showConfirmSave, setShowConfirmSave] = useState(false);
   const [showConfirmReset, setShowConfirmReset] = useState(false);
@@ -1177,13 +1203,25 @@ export const HRSettings: React.FC = () => {
     }));
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
-  const performedBy = userDisplayName || userEmail || 'unknown';
-
-  const loadConfigs = useCallback(async () => {
-    setLoading(true);
+  const loadConfigs = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+    const cached = peekPageDataCache<HRConfigMap>(HR_SETTINGS_CACHE_KEY);
+    if (cached) {
+      setConfigs(JSON.parse(JSON.stringify(cached)));
+      setDraft(JSON.parse(JSON.stringify(cached)));
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      await initializeConfigModules(performedBy);
-      const allConfigs = await getAllConfigModules();
+      const { data: allConfigs } = await fetchCachedPageData(
+        HR_SETTINGS_CACHE_KEY,
+        async () => {
+          await initializeConfigModules(performedBy);
+          return getAllConfigModules();
+        },
+        { force, maxAgeMs: 60_000 },
+      );
       setConfigs(allConfigs);
       setDraft(JSON.parse(JSON.stringify(allConfigs)));
     } catch (err) {
@@ -1194,7 +1232,7 @@ export const HRSettings: React.FC = () => {
     }
   }, [performedBy]);
 
-  useEffect(() => { loadConfigs(); }, [loadConfigs]);
+  useEffect(() => { void loadConfigs(); }, [loadConfigs]);
 
   useEffect(() => {
     if (toast) {
@@ -1252,7 +1290,9 @@ export const HRSettings: React.FC = () => {
         });
       }
       setToast({ message: `تم حفظ الإعدادات بنجاح — الإصدار ${newVersion}`, type: 'success' });
-      await loadConfigs();
+      invalidatePageDataCache(HR_SETTINGS_CACHE_KEY);
+      invalidatePageDataCache(`hr:settings:audit:${activeTab}`);
+      await loadConfigs({ force: true });
     } catch (err) {
       console.error('Failed to save config:', err);
       const message = err instanceof Error ? err.message : 'سبب غير معروف';
@@ -1272,7 +1312,9 @@ export const HRSettings: React.FC = () => {
     try {
       const { newVersion } = await resetConfigModule(activeTab, performedBy);
       setToast({ message: `تم إعادة التعيين — الإصدار ${newVersion}`, type: 'success' });
-      await loadConfigs();
+      invalidatePageDataCache(HR_SETTINGS_CACHE_KEY);
+      invalidatePageDataCache(`hr:settings:audit:${activeTab}`);
+      await loadConfigs({ force: true });
     } catch (err) {
       console.error('Failed to reset config:', err);
       setToast({ message: 'فشل في إعادة التعيين', type: 'error' });
@@ -1322,7 +1364,16 @@ export const HRSettings: React.FC = () => {
       <div className="text-center py-16">
         <span className="material-icons-round text-4xl text-[var(--color-text-muted)] mb-4">error_outline</span>
         <p className="text-[var(--color-text-muted)]">فشل في تحميل الإعدادات</p>
-        <Button variant="outline" onClick={loadConfigs} className="mt-4">إعادة المحاولة</Button>
+        <Button
+          variant="outline"
+          onClick={() => {
+            invalidatePageDataCache(HR_SETTINGS_CACHE_KEY);
+            void loadConfigs({ force: true });
+          }}
+          className="mt-4"
+        >
+          إعادة المحاولة
+        </Button>
       </div>
     );
   }

@@ -29,6 +29,11 @@ import type {
 import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../types';
 import { HRNotificationBell } from '../components/HRNotificationBell';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 function getToday(): string {
   const d = new Date();
@@ -66,6 +71,29 @@ interface LateEmployee {
   lateDays: number;
 }
 
+type HRDashboardPageData = {
+  employees: FirestoreEmployee[];
+  departments: FirestoreDepartment[];
+  attendance: AttendanceRecord[];
+  leaves: FirestoreLeaveRequest[];
+  loans: FirestoreEmployeeLoan[];
+  allowanceTypes: FirestoreAllowanceType[];
+  payrollStatus: string | null;
+  pendingApprovals: number;
+  incompleteAttendance: number;
+  top5Late: LateEmployee[];
+  loanPortfolio: {
+    totalOutstanding: number;
+    totalMonthlyDeduction: number;
+    activeCount: number;
+  };
+  evaluationAlerts: {
+    lowPerformanceCount: number;
+    pendingBonusApprovals: number;
+    topRiskEmployees: FirestoreEmployeePerformance[];
+  };
+};
+
 function toApprovalEmployeeInfo(e: FirestoreEmployee): ApprovalEmployeeInfo {
   const level = e.level as number;
   return {
@@ -87,23 +115,26 @@ export const HRDashboard: React.FC = () => {
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const permissions = useAppStore((s) => s.userPermissions);
-  const [loading, setLoading] = useState(true);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [departments, setDepartments] = useState<FirestoreDepartment[]>([]);
-  const [attendance, setAttendance] = useState<AttendanceRecord[]>([]);
-  const [leaves, setLeaves] = useState<FirestoreLeaveRequest[]>([]);
-  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
-  const [allowanceTypes, setAllowanceTypes] = useState<FirestoreAllowanceType[]>([]);
-  const [payrollStatus, setPayrollStatus] = useState<string | null>(null);
-  const [pendingApprovals, setPendingApprovals] = useState(0);
-  const [incompleteAttendance, setIncompleteAttendance] = useState(0);
-  const [top5Late, setTop5Late] = useState<LateEmployee[]>([]);
-  const [loanPortfolio, setLoanPortfolio] = useState({
+  const DASHBOARD_CACHE_KEY = `hr:dashboard:${getMonthKey()}:${currentEmployee?.id || uid || 'anon'}`;
+  const initialDashboardCache = peekPageDataCache<HRDashboardPageData>(DASHBOARD_CACHE_KEY);
+
+  const [loading, setLoading] = useState(() => initialDashboardCache == null);
+  const [employees, setEmployees] = useState<FirestoreEmployee[]>(initialDashboardCache?.employees ?? []);
+  const [departments, setDepartments] = useState<FirestoreDepartment[]>(initialDashboardCache?.departments ?? []);
+  const [attendance, setAttendance] = useState<AttendanceRecord[]>(initialDashboardCache?.attendance ?? []);
+  const [leaves, setLeaves] = useState<FirestoreLeaveRequest[]>(initialDashboardCache?.leaves ?? []);
+  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>(initialDashboardCache?.loans ?? []);
+  const [allowanceTypes, setAllowanceTypes] = useState<FirestoreAllowanceType[]>(initialDashboardCache?.allowanceTypes ?? []);
+  const [payrollStatus, setPayrollStatus] = useState<string | null>(initialDashboardCache?.payrollStatus ?? null);
+  const [pendingApprovals, setPendingApprovals] = useState(initialDashboardCache?.pendingApprovals ?? 0);
+  const [incompleteAttendance, setIncompleteAttendance] = useState(initialDashboardCache?.incompleteAttendance ?? 0);
+  const [top5Late, setTop5Late] = useState<LateEmployee[]>(initialDashboardCache?.top5Late ?? []);
+  const [loanPortfolio, setLoanPortfolio] = useState(initialDashboardCache?.loanPortfolio ?? {
     totalOutstanding: 0,
     totalMonthlyDeduction: 0,
     activeCount: 0,
   });
-  const [evaluationAlerts, setEvaluationAlerts] = useState({
+  const [evaluationAlerts, setEvaluationAlerts] = useState(initialDashboardCache?.evaluationAlerts ?? {
     lowPerformanceCount: 0,
     pendingBonusApprovals: 0,
     topRiskEmployees: [] as FirestoreEmployeePerformance[],
@@ -160,8 +191,30 @@ export const HRDashboard: React.FC = () => {
   const [qaStaged, setQaStaged] = useState<QaStagedItem[]>([]);
   const [qaSaveProgress, setQaSaveProgress] = useState({ done: 0, total: 0 });
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const applyDashboardData = useCallback((data: HRDashboardPageData) => {
+    setEmployees(data.employees);
+    setDepartments(data.departments);
+    setAttendance(data.attendance);
+    setLeaves(data.leaves);
+    setLoans(data.loans);
+    setAllowanceTypes(data.allowanceTypes);
+    setPayrollStatus(data.payrollStatus);
+    setPendingApprovals(data.pendingApprovals);
+    setIncompleteAttendance(data.incompleteAttendance);
+    setTop5Late(data.top5Late);
+    setLoanPortfolio(data.loanPortfolio);
+    setEvaluationAlerts(data.evaluationAlerts);
+  }, []);
+
+  const fetchData = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+    const cached = peekPageDataCache<HRDashboardPageData>(DASHBOARD_CACHE_KEY);
+    if (cached) {
+      applyDashboardData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     const today = getToday();
     const monthStart = getMonthStart();
     const safeFetch = async <T,>(
@@ -177,93 +230,100 @@ export const HRDashboard: React.FC = () => {
       }
     };
     try {
-      const [emps, depts, att, lvs, lns, allTypes, pm, pending, performanceScores] = await Promise.all([
-        safeFetch('employees', employeeService.getAll(), [] as FirestoreEmployee[]),
-        safeFetch(
-          'departments',
-          getDocs(departmentsRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreDepartment)),
-          [] as FirestoreDepartment[],
-        ),
-        safeFetch(
-          'attendance records',
-          attendanceProcessingService.getRecordsByDateRange(monthStart, today),
-          [] as AttendanceRecord[],
-        ),
-        safeFetch('leave requests', leaveRequestService.getAll(), [] as FirestoreLeaveRequest[]),
-        safeFetch('employee loans', loanService.getAll(), [] as FirestoreEmployeeLoan[]),
-        safeFetch(
-          'allowance types',
-          getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
-          [] as FirestoreAllowanceType[],
-        ),
-        safeFetch('payroll month', getPayrollMonth(getMonthKey()), null),
-        currentEmployee?.id
-          ? safeFetch(
-              'pending approvals',
-              getPendingApprovals({ approverEmployeeId: currentEmployee.id, approverUserId: uid || undefined }),
-              [] as Awaited<ReturnType<typeof getPendingApprovals>>,
-            )
-          : Promise.resolve([] as Awaited<ReturnType<typeof getPendingApprovals>>),
-        safeFetch('performance scores', performanceService.getByMonth(getMonthKey()), [] as FirestoreEmployeePerformance[]),
-      ]);
-      setEmployees(emps);
-      setDepartments(depts);
-      setAttendance(att);
-      setLeaves(lvs);
-      setLoans(lns);
-      setAllowanceTypes(allTypes.filter((a) => a.isActive));
-      setPayrollStatus(pm?.status ?? null);
-      setPendingApprovals(pending.length);
-      setIncompleteAttendance(att.filter((log) => !log.checkIn || !log.checkOut).length);
+      const { data } = await fetchCachedPageData(
+        DASHBOARD_CACHE_KEY,
+        async (): Promise<HRDashboardPageData> => {
+          const [emps, depts, att, lvs, lns, allTypes, pm, pending, performanceScores] = await Promise.all([
+            safeFetch('employees', employeeService.getAll(), [] as FirestoreEmployee[]),
+            safeFetch(
+              'departments',
+              getDocs(departmentsRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreDepartment)),
+              [] as FirestoreDepartment[],
+            ),
+            safeFetch(
+              'attendance records',
+              attendanceProcessingService.getRecordsByDateRange(monthStart, today),
+              [] as AttendanceRecord[],
+            ),
+            safeFetch('leave requests', leaveRequestService.getAll(), [] as FirestoreLeaveRequest[]),
+            safeFetch('employee loans', loanService.getAll(), [] as FirestoreEmployeeLoan[]),
+            safeFetch(
+              'allowance types',
+              getDocs(allowanceTypesRef()).then((s) => s.docs.map((d) => ({ id: d.id, ...d.data() }) as FirestoreAllowanceType)),
+              [] as FirestoreAllowanceType[],
+            ),
+            safeFetch('payroll month', getPayrollMonth(getMonthKey()), null),
+            currentEmployee?.id
+              ? safeFetch(
+                  'pending approvals',
+                  getPendingApprovals({ approverEmployeeId: currentEmployee.id, approverUserId: uid || undefined }),
+                  [] as Awaited<ReturnType<typeof getPendingApprovals>>,
+                )
+              : Promise.resolve([] as Awaited<ReturnType<typeof getPendingApprovals>>),
+            safeFetch('performance scores', performanceService.getByMonth(getMonthKey()), [] as FirestoreEmployeePerformance[]),
+          ]);
 
-      const lateMap = new Map<string, LateEmployee>();
-      att.forEach((log) => {
-        if ((log.lateMinutes || 0) <= 0) return;
-        const entry = lateMap.get(log.employeeId) ?? {
-          employeeId: log.employeeId,
-          employeeName: emps.find((e) => e.id === log.employeeId)?.name || log.employeeId,
-          totalLateMinutes: 0,
-          lateDays: 0,
-        };
-        entry.totalLateMinutes += log.lateMinutes || 0;
-        entry.lateDays += 1;
-        lateMap.set(log.employeeId, entry);
-      });
-      setTop5Late(
-        Array.from(lateMap.values())
-          .sort((a, b) => b.totalLateMinutes - a.totalLateMinutes)
-          .slice(0, 5),
+          const lateMap = new Map<string, LateEmployee>();
+          att.forEach((log) => {
+            if ((log.lateMinutes || 0) <= 0) return;
+            const entry = lateMap.get(log.employeeId) ?? {
+              employeeId: log.employeeId,
+              employeeName: emps.find((e) => e.id === log.employeeId)?.name || log.employeeId,
+              totalLateMinutes: 0,
+              lateDays: 0,
+            };
+            entry.totalLateMinutes += log.lateMinutes || 0;
+            entry.lateDays += 1;
+            lateMap.set(log.employeeId, entry);
+          });
+
+          const activeLoans = lns.filter((loan) => loan.status === 'active');
+          const lowPerformance = performanceScores.filter((score) => score.overallScore < 60);
+          const pendingBonus = performanceScores.filter(
+            (score) => score.bonusEligible && !score.bonusApproved,
+          );
+
+          return {
+            employees: emps,
+            departments: depts,
+            attendance: att,
+            leaves: lvs,
+            loans: lns,
+            allowanceTypes: allTypes.filter((a) => a.isActive),
+            payrollStatus: pm?.status ?? null,
+            pendingApprovals: pending.length,
+            incompleteAttendance: att.filter((log) => !log.checkIn || !log.checkOut).length,
+            top5Late: Array.from(lateMap.values())
+              .sort((a, b) => b.totalLateMinutes - a.totalLateMinutes)
+              .slice(0, 5),
+            loanPortfolio: {
+              totalOutstanding: activeLoans.reduce(
+                (sum, loan) => sum + (loan.installmentAmount || 0) * (loan.remainingInstallments || 0),
+                0,
+              ),
+              totalMonthlyDeduction: activeLoans.reduce((sum, loan) => sum + (loan.installmentAmount || 0), 0),
+              activeCount: activeLoans.length,
+            },
+            evaluationAlerts: {
+              lowPerformanceCount: lowPerformance.length,
+              pendingBonusApprovals: pendingBonus.length,
+              topRiskEmployees: [...lowPerformance]
+                .sort((a, b) => a.overallScore - b.overallScore)
+                .slice(0, 3),
+            },
+          };
+        },
+        { force, maxAgeMs: 60_000 },
       );
-
-      const activeLoans = lns.filter((loan) => loan.status === 'active');
-      setLoanPortfolio({
-        totalOutstanding: activeLoans.reduce(
-          (sum, loan) => sum + (loan.installmentAmount || 0) * (loan.remainingInstallments || 0),
-          0,
-        ),
-        totalMonthlyDeduction: activeLoans.reduce((sum, loan) => sum + (loan.installmentAmount || 0), 0),
-        activeCount: activeLoans.length,
-      });
-
-      const lowPerformance = performanceScores.filter((score) => score.overallScore < 60);
-      const pendingBonus = performanceScores.filter(
-        (score) => score.bonusEligible && !score.bonusApproved,
-      );
-      setEvaluationAlerts({
-        lowPerformanceCount: lowPerformance.length,
-        pendingBonusApprovals: pendingBonus.length,
-        topRiskEmployees: [...lowPerformance]
-          .sort((a, b) => a.overallScore - b.overallScore)
-          .slice(0, 3),
-      });
+      applyDashboardData(data);
     } catch (err) {
       console.error('HR Dashboard fetch error:', err);
     } finally {
       setLoading(false);
     }
-  }, [currentEmployee?.id, uid]);
+  }, [currentEmployee?.id, uid, DASHBOARD_CACHE_KEY, applyDashboardData]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const empOptions = useMemo(() =>
     employees.filter((e) => e.isActive).map((e) => ({
@@ -731,7 +791,8 @@ export const HRDashboard: React.FC = () => {
       setQaSaveProgress({ done, total: qaStaged.length });
     }
 
-    await fetchData();
+    invalidatePageDataCache(DASHBOARD_CACHE_KEY);
+    await fetchData({ force: true });
     setQaSaving(false);
     setQaStaged([]);
     setQaOpen('');

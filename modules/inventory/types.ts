@@ -334,8 +334,9 @@ export interface InventoryTransferRequest {
   cancellationReason?: string;
 }
 
-export type ProductionIssueOrderStatus = 'draft' | 'submitted' | 'issued' | 'cancelled';
+export type ProductionIssueOrderStatus = 'requested' | 'draft' | 'submitted' | 'issued' | 'rejected' | 'cancelled';
 export type ProductionIssueSourceType = 'work_order' | 'production_plan' | 'production_report';
+export type ProductionIssueOrigin = 'production_request' | 'warehouse';
 
 export interface ProductionIssueAllocation {
   locationId: string;
@@ -381,19 +382,32 @@ export interface ProductionIssueOrder {
   productCode?: string;
   lineId?: string;
   quantity: number;
+  /** FG qty originally requested by production (before materials adjust/approve). */
+  requestedQuantity?: number;
   sourceWarehouseId: string;
   sourceWarehouseName?: string;
   status: ProductionIssueOrderStatus;
+  origin?: ProductionIssueOrigin;
   lines: ProductionIssueOrderLine[];
   createdBy: string;
   createdByUserId?: string;
   createdAt: string;
+  requestedBy?: string;
+  requestedByUserId?: string;
+  requestedAt?: string;
   submittedAt?: string;
+  approvedBy?: string;
+  approvedAt?: string;
   issuedAt?: string;
   issuedBy?: string;
+  rejectedBy?: string;
+  rejectedAt?: string;
+  rejectionReason?: string;
   cancelledAt?: string;
   cancelledBy?: string;
   note?: string;
+  /** Snapshot of assemblable capacity when the production request was created. */
+  assemblableAtRequest?: number;
   tenantId?: string;
 }
 
@@ -419,6 +433,8 @@ export type ComponentReturnReason = 'unused' | 'over_issue' | 'production_cancel
 export interface ComponentCompensationRequest {
   id?: string;
   issueOrderId: string;
+  /** Issued production issue reference for display (snapshot). */
+  issueReferenceNo?: string;
   referenceNo: string;
   reason: ComponentCompensationReason;
   warehouseId: string;
@@ -428,6 +444,8 @@ export interface ComponentCompensationRequest {
   locationId: string;
   locationCode: string;
   status: ComponentCompensationStatus;
+  /** Who initiated: production request screen vs warehouse materials UI. */
+  origin?: ProductionIssueOrigin;
   createdBy: string;
   createdByUserId?: string;
   createdAt: string;
@@ -628,9 +646,9 @@ export interface ResolvedInventoryRouting {
   autoTransferFinishedToFinal: boolean;
   requireApprovalForProductionEntry: boolean;
   requireApprovalForAutoTransfers: boolean;
-  /** Direct BOM deduction on report save (optional; prefer production issues). */
+  /** Direct BOM deduction on report save (off by default; use صرف إنتاج separately). */
   autoConsumeBomOnProductionReport: boolean;
-  /** Finished report stock posts only after an issued production issue. */
+  /** Finished report requires issued صرف إنتاج before create/post. On by default; does not auto-consume. */
   requireIssuedProductionIssueOnReport: boolean;
   allowNegativeDecomposedStock: boolean;
   allowNegativeFinishedTransferStock: boolean;

@@ -4,6 +4,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button, KPIBox, SearchableSelect } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
+import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import {
   formatNumber,
   formatCurrency,
@@ -20,6 +21,7 @@ import {
   getTodayDateString,
 } from '../../../utils/calculations';
 import { effectivePlanningAssemblyMinutes } from '../../../utils/routingStandardAssembly';
+import { calculateOperationalPeriodDailyTarget } from '../lib/operationalPeriod';
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { productionPlanService } from '../services/productionPlanService';
@@ -141,7 +143,7 @@ export const ProductionPlans: React.FC = () => {
   const canExport = can('export');
   const canImport = can('import');
   const canCreateReport = can('reports.create') || can('reports.componentInjection.manage');
-  const planSettings = systemSettings.planSettings ?? { allowMultipleActivePlans: true, allowReportWithoutPlan: true, allowOverProduction: true };
+  const planSettings = systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS;
 
   // â”€â”€ View / Filter state â”€â”€
   const [viewMode, setViewMode] = useState<ViewMode>('table');
@@ -266,14 +268,31 @@ export const ProductionPlans: React.FC = () => {
     const productAvgDailyProduction = Number(selectedProduct?.avgDailyProduction || 0);
     const usesProductAverage = productAvgDailyProduction > 0;
     const manualDailyTarget = Number(formDailyTarget || 0);
+    const useOperationalPeriod =
+      planSettings.useOperationalPeriodDailyTarget !== false;
+    const operationalCalc = useOperationalPeriod
+      ? calculateOperationalPeriodDailyTarget({
+          plannedQuantity: formQuantity,
+          anchorDate: formStartDate,
+          startDay: planSettings.operationalMonthStartDay,
+        })
+      : { dailyTarget: 0, workingDays: 0, period: null };
+    const usesOperationalPeriodTarget =
+      manualDailyTarget <= 0 && operationalCalc.dailyTarget > 0;
     const effectiveDailyRate = manualDailyTarget > 0
       ? manualDailyTarget
-      : usesProductAverage
-        ? productAvgDailyProduction
-        : dailyCapacity;
+      : usesOperationalPeriodTarget
+        ? operationalCalc.dailyTarget
+        : usesProductAverage
+          ? productAvgDailyProduction
+          : dailyCapacity;
     const estimatedDays = calculateEstimatedDays(formQuantity, effectiveDailyRate);
     const avgDailyTarget = effectiveDailyRate > 0 ? Math.ceil(effectiveDailyRate) : 0;
-    const plannedEndDate = estimatedDays > 0 ? addDaysToDate(formStartDate, estimatedDays) : '';
+    const plannedEndDate = usesOperationalPeriodTarget && operationalCalc.period
+      ? operationalCalc.period.endDateInclusive
+      : estimatedDays > 0
+        ? addDaysToDate(formStartDate, estimatedDays)
+        : '';
 
     const hourlyRate = laborSettings?.hourlyRate ?? 0;
     const laborCostPerUnit = effectiveTime > 0 ? (hourlyRate * effectiveTime) / 60 : 0;
@@ -284,14 +303,19 @@ export const ProductionPlans: React.FC = () => {
       dailyCapacity,
       productAvgDailyProduction,
       usesProductAverage,
+      usesOperationalPeriodTarget,
+      operationalPeriod: operationalCalc.period,
+      operationalWorkingDays: operationalCalc.workingDays,
       effectiveDailyRate,
-      estimatedDays,
+      estimatedDays: usesOperationalPeriodTarget
+        ? operationalCalc.workingDays
+        : estimatedDays,
       estimatedCost,
       plannedEndDate,
       avgDailyTarget,
       usesManualDailyTarget: manualDailyTarget > 0,
     };
-  }, [formProductId, formLineId, formQuantity, formDailyTarget, formStartDate, productReports, _rawLines, lineProductConfigs, routingVarianceBasisSecondsByProduct, routingTotalTimeSecondsByProduct, laborSettings, products]);
+  }, [formProductId, formLineId, formQuantity, formDailyTarget, formStartDate, productReports, _rawLines, lineProductConfigs, routingVarianceBasisSecondsByProduct, routingTotalTimeSecondsByProduct, laborSettings, products, planSettings.useOperationalPeriodDailyTarget, planSettings.operationalMonthStartDay]);
 
   // â”€â”€ Enriched plans with computed metrics â”€â”€
   const enrichedPlans = useMemo<EnrichedPlan[]>(() => {
@@ -765,6 +789,13 @@ export const ProductionPlans: React.FC = () => {
         }
         moreActions={[
           {
+            label: 'طلب صرف إنتاج',
+            icon: 'fact_check',
+            group: 'مخزون',
+            hidden: !can('productionIssue.request'),
+            onClick: () => navigate('/production/issue-requests'),
+          },
+          {
             label: 'تصدير الخطط',
             icon: 'download',
             group: 'تصدير',
@@ -841,9 +872,13 @@ export const ProductionPlans: React.FC = () => {
                 className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
                 value={formDailyTarget || ''}
                 onChange={(e) => setFormDailyTarget(Number(e.target.value))}
-                placeholder="مثال: 500"
+                placeholder="اتركه فارغًا للحساب التلقائي"
               />
-              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">إذا تركته فارغاً سيتم استخدام متوسط المنتج أو طاقة الخط.</p>
+              <p className="text-[11px] text-[var(--color-text-muted)] font-medium">
+                {planSettings.useOperationalPeriodDailyTarget !== false
+                  ? 'إذا تركته فارغًا: كمية الخطة ÷ أيام الشغل في فترة التشغيل (٢٦→٢٦، الجمعة إجازة). يمكن تجاوزه يدويًا.'
+                  : 'إذا تركته فارغًا سيتم استخدام متوسط المنتج أو طاقة الخط.'}
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -929,7 +964,13 @@ export const ProductionPlans: React.FC = () => {
                     {calculations.effectiveDailyRate > 0 ? `${formatNumber(calculations.effectiveDailyRate)} وحدة` : '—'}
                   </p>
                   <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
-                    {calculations.usesManualDailyTarget ? 'من التارجت اليدوي' : calculations.usesProductAverage ? 'من سجل المنتج' : 'احتساب من طاقة الخط'}
+                    {calculations.usesManualDailyTarget
+                      ? 'من التارجت اليدوي'
+                      : calculations.usesOperationalPeriodTarget
+                        ? `من فترة التشغيل (${calculations.operationalWorkingDays} يوم شغل)`
+                        : calculations.usesProductAverage
+                          ? 'من سجل المنتج'
+                          : 'احتساب من طاقة الخط'}
                   </p>
                 </div>
                 <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
@@ -937,6 +978,11 @@ export const ProductionPlans: React.FC = () => {
                   <p className="text-lg font-bold text-emerald-600">
                     {calculations.estimatedDays > 0 ? `${calculations.estimatedDays} يوم` : '—'}
                   </p>
+                  {calculations.usesOperationalPeriodTarget && calculations.operationalPeriod && (
+                    <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                      {calculations.operationalPeriod.startDate} → {calculations.operationalPeriod.endDateInclusive}
+                    </p>
+                  )}
                 </div>
                 {canViewCosts && (
                   <div className="text-center p-3 bg-[var(--color-card)] rounded-[var(--border-radius-base)] border border-[var(--color-border)]">

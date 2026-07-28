@@ -42,6 +42,14 @@ export const INVENTORY_ROUTES: AppRouteDef[] = [
     skeleton: 'dashboard',
   },
   {
+    path: '/inventory/packaging/control',
+    redirectTo: '/production/packaging/control',
+  },
+  {
+    path: '/inventory/production-issue-requests',
+    redirectTo: '/production/issue-requests',
+  },
+  {
     path: '/inventory/raw-materials/receive',
     permission: 'inventory.transactions.create',
     component: SuppliesReceipt,

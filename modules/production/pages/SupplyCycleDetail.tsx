@@ -21,6 +21,11 @@ import { exportSupplyCycleDetailExcel } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { toast } from '../../../components/Toast';
 import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+import {
   DetailPageShell,
   DetailPageStickyHeader,
   DetailCollapsibleSection,
@@ -83,21 +88,57 @@ export const SupplyCycleDetail: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
 
-  const [cycle, setCycle] = useState<SupplyCycle | null>(null);
-  const [wasteLines, setWasteLines] = useState<SupplyCycleWasteLine[]>([]);
-  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
-  const [reportWaste, setReportWaste] = useState(0);
-  const [productionConsumed, setProductionConsumed] = useState(0);
-  const [loading, setLoading] = useState(true);
+  type SupplyCycleDetailPageData = {
+    cycle: SupplyCycle | null;
+    wasteLines: SupplyCycleWasteLine[];
+    rawMaterials: RawMaterial[];
+    reportWaste: number;
+    productionConsumed: number;
+    linkedReportCount: number | null;
+    linkedReports: ProductionReport[];
+    editForm: {
+      kind: SupplyCycleKind;
+      itemId: string;
+      externalLabel: string;
+      periodStart: string;
+      periodEnd: string;
+      openingQty: number;
+      receivedQty: number;
+      consumedQty: number;
+      status: SupplyCycleStatus;
+    };
+  };
+
+  const supplyCycleCacheKey = cycleId ? `production:supplyCycleDetail:${cycleId}` : null;
+  const initialCycleCache = supplyCycleCacheKey
+    ? peekPageDataCache<SupplyCycleDetailPageData>(supplyCycleCacheKey)
+    : null;
+
+  const [cycle, setCycle] = useState<SupplyCycle | null>(() => initialCycleCache?.cycle ?? null);
+  const [wasteLines, setWasteLines] = useState<SupplyCycleWasteLine[]>(
+    () => initialCycleCache?.wasteLines ?? [],
+  );
+  const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>(
+    () => initialCycleCache?.rawMaterials ?? [],
+  );
+  const [reportWaste, setReportWaste] = useState(() => initialCycleCache?.reportWaste ?? 0);
+  const [productionConsumed, setProductionConsumed] = useState(
+    () => initialCycleCache?.productionConsumed ?? 0,
+  );
+  const [loading, setLoading] = useState(() => initialCycleCache == null);
   const [saving, setSaving] = useState(false);
-  const [linkedReportCount, setLinkedReportCount] = useState<number | null>(null);
-  const [linkedReports, setLinkedReports] = useState<ProductionReport[]>([]);
+  const [linkedReportCount, setLinkedReportCount] = useState<number | null>(
+    () => initialCycleCache?.linkedReportCount ?? null,
+  );
+  const [linkedReports, setLinkedReports] = useState<ProductionReport[]>(
+    () => initialCycleCache?.linkedReports ?? [],
+  );
 
   const [wasteQty, setWasteQty] = useState(0);
   const [wasteNote, setWasteNote] = useState('');
 
   const [showEdit, setShowEdit] = useState(false);
-  const [editForm, setEditForm] = useState({
+  const [editForm, setEditForm] = useState(() => initialCycleCache?.editForm ?? {
     kind: 'finished_good' as SupplyCycleKind,
     itemId: '',
     externalLabel: '',
@@ -109,53 +150,104 @@ export const SupplyCycleDetail: React.FC = () => {
     status: 'draft' as SupplyCycleStatus,
   });
 
-  const load = useCallback(async () => {
-    if (!cycleId) return;
-    setLoading(true);
-    try {
+  const applyCycleData = useCallback((data: SupplyCycleDetailPageData) => {
+    setRawMaterials(data.rawMaterials);
+    setCycle(data.cycle);
+    setWasteLines(data.wasteLines);
+    setReportWaste(data.reportWaste);
+    setProductionConsumed(data.productionConsumed);
+    setLinkedReportCount(data.linkedReportCount);
+    setLinkedReports(data.linkedReports);
+    setEditForm(data.editForm);
+  }, []);
+
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    if (!cycleId || !supplyCycleCacheKey) return;
+    const cached = peekPageDataCache<SupplyCycleDetailPageData>(supplyCycleCacheKey);
+    if (cached) {
+      applyCycleData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
       setLinkedReportCount(null);
       setLinkedReports([]);
-      const [c, rms, lines] = await Promise.all([
-        supplyCycleService.getById(cycleId),
-        rawMaterialService.getAll(),
-        supplyCycleService.listWasteLines(cycleId),
-      ]);
-      setRawMaterials(rms);
-      setCycle(c);
-      setWasteLines(lines);
-      if (c) {
-        try {
-          const m = await aggregateCycleReportMetrics(c);
-          setReportWaste(m.reportWaste);
-          setProductionConsumed(m.productionConsumed);
-          setLinkedReportCount(m.linkedCount);
-        } catch {
-          setReportWaste(0);
-          setProductionConsumed(0);
-          setLinkedReportCount(null);
-        }
-        try {
-          const rows = await reportService.listAllBySupplyCycleId(c.id!);
-          setLinkedReports(rows);
-        } catch {
-          setLinkedReports([]);
-        }
-        setEditForm({
-          kind: c.kind,
-          itemId: c.itemId,
-          externalLabel: c.externalLabel || '',
-          periodStart: c.periodStart,
-          periodEnd: c.periodEnd,
-          openingQty: c.openingQty,
-          receivedQty: c.receivedQty,
-          consumedQty: c.consumedQty,
-          status: c.status,
-        });
-      }
+    }
+    try {
+      const { data } = await fetchCachedPageData(
+        supplyCycleCacheKey,
+        async () => {
+          const [c, rms, lines] = await Promise.all([
+            supplyCycleService.getById(cycleId),
+            rawMaterialService.getAll(),
+            supplyCycleService.listWasteLines(cycleId),
+          ]);
+          let nextReportWaste = 0;
+          let nextProductionConsumed = 0;
+          let nextLinkedCount: number | null = null;
+          let nextLinkedReports: ProductionReport[] = [];
+          let nextEditForm: SupplyCycleDetailPageData['editForm'] = {
+            kind: 'finished_good',
+            itemId: '',
+            externalLabel: '',
+            periodStart: '',
+            periodEnd: '',
+            openingQty: 0,
+            receivedQty: 0,
+            consumedQty: 0,
+            status: 'draft',
+          };
+          if (c) {
+            try {
+              const m = await aggregateCycleReportMetrics(c);
+              nextReportWaste = m.reportWaste;
+              nextProductionConsumed = m.productionConsumed;
+              nextLinkedCount = m.linkedCount;
+            } catch {
+              nextReportWaste = 0;
+              nextProductionConsumed = 0;
+              nextLinkedCount = null;
+            }
+            try {
+              nextLinkedReports = await reportService.listAllBySupplyCycleId(c.id!);
+            } catch {
+              nextLinkedReports = [];
+            }
+            nextEditForm = {
+              kind: c.kind,
+              itemId: c.itemId,
+              externalLabel: c.externalLabel || '',
+              periodStart: c.periodStart,
+              periodEnd: c.periodEnd,
+              openingQty: c.openingQty,
+              receivedQty: c.receivedQty,
+              consumedQty: c.consumedQty,
+              status: c.status,
+            };
+          }
+          return {
+            cycle: c,
+            wasteLines: lines,
+            rawMaterials: rms,
+            reportWaste: nextReportWaste,
+            productionConsumed: nextProductionConsumed,
+            linkedReportCount: nextLinkedCount,
+            linkedReports: nextLinkedReports,
+            editForm: nextEditForm,
+          };
+        },
+        { force: opts?.force === true, maxAgeMs: 60_000 },
+      );
+      applyCycleData(data);
     } finally {
       setLoading(false);
     }
-  }, [cycleId]);
+  }, [applyCycleData, cycleId, supplyCycleCacheKey]);
+
+  const reload = useCallback(async () => {
+    if (!supplyCycleCacheKey) return;
+    invalidatePageDataCache(supplyCycleCacheKey);
+    await load({ force: true });
+  }, [load, supplyCycleCacheKey]);
 
   useEffect(() => {
     void load();
@@ -277,7 +369,7 @@ export const SupplyCycleDetail: React.FC = () => {
         status: editForm.status,
       });
       setShowEdit(false);
-      await load();
+      await reload();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'فشل التعديل');
     } finally {
@@ -293,7 +385,7 @@ export const SupplyCycleDetail: React.FC = () => {
       await supplyCycleService.addManualWasteLine(cycle.id, wasteQty, wasteNote);
       setWasteQty(0);
       setWasteNote('');
-      await load();
+      await reload();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'فشل الإضافة');
     } finally {
@@ -307,7 +399,7 @@ export const SupplyCycleDetail: React.FC = () => {
     setSaving(true);
     try {
       await supplyCycleService.deleteWasteLine(line.id);
-      await load();
+      await reload();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'فشل الحذف');
     } finally {
@@ -321,7 +413,7 @@ export const SupplyCycleDetail: React.FC = () => {
     setSaving(true);
     try {
       await supplyCycleService.close(cycle.id);
-      await load();
+      await reload();
     } catch (e) {
       window.alert(e instanceof Error ? e.message : 'فشل الإقفال');
     } finally {

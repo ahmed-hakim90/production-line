@@ -172,3 +172,36 @@ export function computeAssemblableCapacity(
     return a.productCode.localeCompare(b.productCode, 'ar');
   });
 }
+
+/**
+ * How much extra stock is needed for a component to cover `targetUnits` finished goods.
+ */
+export function componentShortageQtyForTarget(
+  component: Pick<AssemblableComponentDetail, 'requiredPerUnit' | 'availableQty'>,
+  targetUnits: number,
+): number {
+  const target = Math.max(0, Number(targetUnits || 0));
+  const requiredPerUnit = Number(component.requiredPerUnit || 0);
+  if (!(target > 0) || !(requiredPerUnit > 0)) return 0;
+  const need = requiredPerUnit * target;
+  const available = Math.max(0, Number(component.availableQty || 0));
+  return Math.max(0, need - available);
+}
+
+/** Components that cannot cover `targetUnits` (shortage > 0), worst first. */
+export function missingComponentsForTarget(
+  row: Pick<AssemblableCapacityRow, 'components'> | null | undefined,
+  targetUnits: number,
+): Array<AssemblableComponentDetail & { shortageQty: number; requiredForTarget: number }> {
+  const target = Math.max(0, Number(targetUnits || 0));
+  if (!row?.components?.length || !(target > 0)) return [];
+  return row.components
+    .map((component) => {
+      const requiredForTarget = Number(component.requiredPerUnit || 0) * target;
+      const shortageQty = componentShortageQtyForTarget(component, target);
+      return { ...component, requiredForTarget, shortageQty };
+    })
+    .filter((row) => row.shortageQty > 0.000001)
+    .sort((a, b) => b.shortageQty - a.shortageQty);
+}
+

@@ -39,11 +39,23 @@ import { StockTransactionsDialogs } from './stockTransactions/StockTransactionsD
 import { movementLabel } from './stockTransactions/types';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 const PAGE_SIZE = 25;
 const APP_VERSION = __APP_VERSION__;
+const TX_CACHE_PREFIX = 'inventory:stock-transactions';
+
+type StockTransactionsPageData = {
+  transactions: StockTransaction[];
+  pendingTransfers: InventoryTransferRequest[];
+  warehouses: Warehouse[];
+};
+
 export const StockTransactions: React.FC = () => {
   const [searchParams] = useSearchParams();
+  const navigate = useTenantNavigate();
   const {
     scoped,
     warehouseId: scopedWarehouseId,
@@ -66,9 +78,6 @@ export const StockTransactions: React.FC = () => {
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
   const rawProducts = useAppStore((s) => s._rawProducts);
-  const [transactions, setTransactions] = useState<StockTransaction[]>([]);
-  const [pendingTransfers, setPendingTransfers] = useState<InventoryTransferRequest[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const { openModal } = useGlobalModalManager();
   const [warehouseFilter, setWarehouseFilter] = useState(
     () => searchParams.get('warehouseId') || scopedWarehouseId || '',
@@ -85,7 +94,6 @@ export const StockTransactions: React.FC = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkAction, setBulkAction] = useState<'export' | 'delete' | ''>('');
   const [processing, setProcessing] = useState(false);
-  const [loading, setLoading] = useState(true);
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const [shareTransferData, setShareTransferData] = useState<StockTransferPrintData | null>(null);
   const [selectedPending, setSelectedPending] = useState<InventoryTransferRequest | null>(null);
@@ -109,9 +117,18 @@ export const StockTransactions: React.FC = () => {
     documentTitle: 'stock-transfer-from-transactions',
   });
 
-  const loadData = async () => {
-    setLoading(true);
-    try {
+  const txCacheKey = useMemo(
+    () => `${TX_CACHE_PREFIX}:${sourceModuleFilter || 'all'}:${dateFrom || ''}:${dateTo || ''}`,
+    [sourceModuleFilter, dateFrom, dateTo],
+  );
+
+  const {
+    data: pageData,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<StockTransactionsPageData>(
+    txCacheKey,
+    async () => {
       const useServerQuery = Boolean(sourceModuleFilter || dateFrom || dateTo);
       const txsPromise = useServerQuery
         ? stockService.getTransactionsPaged({
@@ -126,17 +143,27 @@ export const StockTransactions: React.FC = () => {
         warehouseService.getWarehousesForReportingFilters(),
       ]);
       const pending = (await transferApprovalService.getAll()).filter((row) => row.status === 'pending');
-      setTransactions(txs);
-      setPendingTransfers(pending);
-      setWarehouses(filterWarehouses(whs));
-      setSelectedIds([]);
-    } finally {
-      setLoading(false);
-    }
+      return {
+        transactions: txs,
+        pendingTransfers: pending,
+        warehouses: filterWarehouses(whs),
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
+
+  const transactions = pageData?.transactions ?? [];
+  const pendingTransfers = pageData?.pendingTransfers ?? [];
+  const warehouses = pageData?.warehouses ?? [];
+
+  const loadData = async () => {
+    invalidatePageDataCache(TX_CACHE_PREFIX);
+    await reloadCached(true);
+    setSelectedIds([]);
   };
 
   useEffect(() => {
-    void loadData();
+    setSelectedIds([]);
   }, [sourceModuleFilter, dateFrom, dateTo]);
 
   useEffect(() => {
@@ -637,6 +664,15 @@ export const StockTransactions: React.FC = () => {
         title="سجل حركات المخزون"
         subtitle="تتبع كامل لكل حركة على المنتجات والخامات"
         icon="swap_horiz"
+        primaryAction={
+          can('inventory.transactions.create')
+            ? {
+                label: 'إدخال حركة',
+                icon: 'add',
+                onClick: () => navigate('/inventory/movements'),
+              }
+            : undefined
+        }
         moreActions={[
           {
             label: 'تصدير Excel',

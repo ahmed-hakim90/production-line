@@ -54,7 +54,7 @@ function renderKpiIcon(icon: string, className?: string) {
 interface CardProps {
   children: React.ReactNode;
   className?: string;
-  title?: string;
+  title?: React.ReactNode;
   onClick?: () => void;
 }
 

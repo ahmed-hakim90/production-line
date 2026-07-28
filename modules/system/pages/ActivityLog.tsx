@@ -14,6 +14,11 @@ import { employeeService } from '../../hr/employeeService';
 import { roleService } from '../services/roleService';
 import { presenceService } from '../../../services/presenceService';
 import { notificationComposerService } from '../../../services/notificationComposerService';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const PAGE_SIZE = 15;
 const HIDDEN_ACTIVITY_ACTIONS = new Set<ActivityAction>([
@@ -70,14 +75,22 @@ interface ActivityLogDayGroup {
   users: ActivityLogUserGroup[];
 }
 
+const ACTIVITY_LOG_CACHE_KEY = 'system:activityLog:page1';
+
+type ActivityLogPage1Data = {
+  logs: ActivityLogType[];
+  hasMore: boolean;
+};
+
 export const ActivityLogPage: React.FC = () => {
   const { can } = usePermission();
   const canBroadcast = can('roles.manage');
-  const [logs, setLogs] = useState<ActivityLogType[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialLogsCache = peekPageDataCache<ActivityLogPage1Data>(ACTIVITY_LOG_CACHE_KEY);
+  const [logs, setLogs] = useState<ActivityLogType[]>(() => initialLogsCache?.logs ?? []);
+  const [loading, setLoading] = useState(() => initialLogsCache == null);
   const [loadingMore, setLoadingMore] = useState(false);
   const [cursor, setCursor] = useState<QueryDocumentSnapshot<DocumentData> | null>(null);
-  const [hasMore, setHasMore] = useState(false);
+  const [hasMore, setHasMore] = useState(() => initialLogsCache?.hasMore ?? false);
   const [presences, setPresences] = useState<UserPresence[]>([]);
   const [employeesById, setEmployeesById] = useState<Record<string, FirestoreEmployee>>({});
   const [roles, setRoles] = useState<FirestoreRole[]>([]);
@@ -90,27 +103,70 @@ export const ActivityLogPage: React.FC = () => {
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
 
-  const fetchLogs = useCallback(async () => {
-    setLoading(true);
-    const result = await activityLogService.getPaginated(PAGE_SIZE);
-    setLogs(result.logs);
-    setCursor(result.lastDoc);
-    setHasMore(result.hasMore);
-    setLoading(false);
+  const fetchLogs = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<ActivityLogPage1Data>(ACTIVITY_LOG_CACHE_KEY);
+    if (cached) {
+      setLogs(cached.logs);
+      setHasMore(cached.hasMore);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    try {
+      const { data, fromCache } = await fetchCachedPageData(
+        ACTIVITY_LOG_CACHE_KEY,
+        async () => {
+          const result = await activityLogService.getPaginated(PAGE_SIZE);
+          setCursor(result.lastDoc);
+          return { logs: result.logs, hasMore: result.hasMore };
+        },
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      setLogs(data.logs);
+      setHasMore(data.hasMore);
+      // Firestore cursors are not cached; refresh cursor in background when serving stale page-1.
+      if (fromCache) {
+        void activityLogService.getPaginated(PAGE_SIZE).then((result) => {
+          setCursor(result.lastDoc);
+          setLogs(result.logs);
+          setHasMore(result.hasMore);
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
+  const reloadLogs = useCallback(async () => {
+    invalidatePageDataCache(ACTIVITY_LOG_CACHE_KEY);
+    setCursor(null);
+    await fetchLogs({ force: true });
+  }, [fetchLogs]);
+
   const loadMore = async () => {
-    if (!cursor || !hasMore) return;
+    if (!hasMore) return;
     setLoadingMore(true);
-    const result = await activityLogService.getPaginated(PAGE_SIZE, cursor);
-    setLogs((prev) => [...prev, ...result.logs]);
-    setCursor(result.lastDoc);
-    setHasMore(result.hasMore);
-    setLoadingMore(false);
+    try {
+      let activeCursor = cursor;
+      if (!activeCursor) {
+        const first = await activityLogService.getPaginated(PAGE_SIZE);
+        setLogs(first.logs);
+        setCursor(first.lastDoc);
+        setHasMore(first.hasMore);
+        activeCursor = first.lastDoc;
+        if (!first.hasMore || !activeCursor) return;
+      }
+      const result = await activityLogService.getPaginated(PAGE_SIZE, activeCursor);
+      setLogs((prev) => [...prev, ...result.logs]);
+      setCursor(result.lastDoc);
+      setHasMore(result.hasMore);
+    } finally {
+      setLoadingMore(false);
+    }
   };
 
   useEffect(() => {
-    fetchLogs();
+    void fetchLogs();
   }, [fetchLogs]);
 
   useEffect(() => {
@@ -328,7 +384,7 @@ export const ActivityLogPage: React.FC = () => {
         <div className="erp-page-actions">
           <button
             className="btn btn-secondary"
-            onClick={fetchLogs}
+            onClick={() => void reloadLogs()}
             title="تحديث"
           >
             <span className="material-icons-round" style={{ fontSize: 16 }}>refresh</span>

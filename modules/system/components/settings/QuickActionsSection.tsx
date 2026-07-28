@@ -67,7 +67,8 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
         </Button>
       </div>
 
-      <Card title="قائمة الأزرار السريعة" subtitle="الترتيب هنا هو نفس ترتيب الأزرار في لوحة مدير المصنع">
+      <Card title="قائمة الأزرار السريعة">
+        <p className="page-subtitle mb-3">الترتيب هنا هو نفس ترتيب الأزرار في لوحة مدير المصنع</p>
         <div className="space-y-3">
           {localQuickActions.length === 0 && (
             <div className="text-center py-10 bg-[#f8f9fa]/50 border border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)]">

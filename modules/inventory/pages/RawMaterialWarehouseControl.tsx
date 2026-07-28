@@ -29,8 +29,20 @@ import type { ProductBomCountCard } from '../../production/components/ProductBom
 import { buildProductBomCountCards } from '../../production/lib/buildProductBomCountCards';
 import { productService } from '../../production/services/productService';
 import type { Product } from '../../../types';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 const ASSEMBLE_PAGE_SIZE = 20;
+const RM_CONTROL_CACHE_PREFIX = 'inventory:raw-material-control';
+
+type RawMaterialControlPageData = {
+  balances: StockItemBalance[];
+  transactions: StockTransaction[];
+  pendingTransfers: number;
+  pendingIssues: number;
+  assemblableRows: AssemblableCapacityRow[];
+  assemblableError: string | null;
+};
 
 type OpLink = {
   label: string;
@@ -77,16 +89,9 @@ export const RawMaterialWarehouseControl: React.FC = () => {
     canSwitchWarehouse,
   } = useRawMaterialWarehouse();
 
-  const [loading, setLoading] = useState(true);
-  const [balances, setBalances] = useState<StockItemBalance[]>([]);
-  const [transactions, setTransactions] = useState<StockTransaction[]>([]);
-  const [pendingTransfers, setPendingTransfers] = useState(0);
-  const [pendingIssues, setPendingIssues] = useState(0);
-  const [assemblableRows, setAssemblableRows] = useState<AssemblableCapacityRow[]>([]);
   const [assemblableSearch, setAssemblableSearch] = useState('');
   const [assemblablePage, setAssemblablePage] = useState(1);
   const [expandedProductId, setExpandedProductId] = useState<string | null>(null);
-  const [assemblableError, setAssemblableError] = useState<string | null>(null);
   const [assemblableOpen, setAssemblableOpen] = useState(false);
   const [toolsOpen, setToolsOpen] = useState(false);
   const [countCardPreviewOpen, setCountCardPreviewOpen] = useState(false);
@@ -95,19 +100,25 @@ export const RawMaterialWarehouseControl: React.FC = () => {
   const [countCardPreviewWarning, setCountCardPreviewWarning] = useState<string | null>(null);
   const [countCardMessage, setCountCardMessage] = useState<string | null>(null);
 
-  const loadData = useCallback(async () => {
-    if (!warehouseId) {
-      setBalances([]);
-      setTransactions([]);
-      setPendingTransfers(0);
-      setPendingIssues(0);
-      setAssemblableRows([]);
-      setAssemblableError(null);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
+  const controlCacheKey = warehouseId ? `${RM_CONTROL_CACHE_PREFIX}:${warehouseId}` : null;
+
+  const {
+    data: controlData,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<RawMaterialControlPageData>(
+    controlCacheKey,
+    async () => {
+      if (!warehouseId) {
+        return {
+          balances: [],
+          transactions: [],
+          pendingTransfers: 0,
+          pendingIssues: 0,
+          assemblableRows: [],
+          assemblableError: null,
+        };
+      }
       const [bals, txs, pending, issues, assemblableResult] = await Promise.all([
         stockService.getBalances(warehouseId),
         stockService.getTransactions(warehouseId),
@@ -122,28 +133,38 @@ export const RawMaterialWarehouseControl: React.FC = () => {
           }),
         ),
       ]);
-      setBalances(bals);
-      setTransactions(txs.slice(0, 8));
-      setPendingTransfers(
-        pending.filter((row) => row.fromWarehouseId === warehouseId || row.toWarehouseId === warehouseId).length,
-      );
-      setPendingIssues(
-        issues.filter(
+      return {
+        balances: bals,
+        transactions: txs.slice(0, 8),
+        pendingTransfers: pending.filter(
+          (row) => row.fromWarehouseId === warehouseId || row.toWarehouseId === warehouseId,
+        ).length,
+        pendingIssues: issues.filter(
           (row) =>
             row.sourceWarehouseId === warehouseId &&
-            (row.status === 'draft' || row.status === 'submitted'),
+            (row.status === 'draft' || row.status === 'submitted' || row.status === 'requested'),
         ).length,
-      );
-      setAssemblableRows(assemblableResult.rows);
-      setAssemblableError(assemblableResult.ok ? null : ('error' in assemblableResult ? assemblableResult.error : 'تعذر حساب التجميع'));
-    } finally {
-      setLoading(false);
-    }
-  }, [warehouseId]);
+        assemblableRows: assemblableResult.rows,
+        assemblableError: assemblableResult.ok
+          ? null
+          : ('error' in assemblableResult ? assemblableResult.error : 'تعذر حساب التجميع'),
+      };
+    },
+    { maxAgeMs: 45_000 },
+  );
 
-  useEffect(() => {
-    void loadData();
-  }, [loadData]);
+  const balances = controlData?.balances ?? [];
+  const transactions = controlData?.transactions ?? [];
+  const pendingTransfers = controlData?.pendingTransfers ?? 0;
+  const pendingIssues = controlData?.pendingIssues ?? 0;
+  const assemblableRows = controlData?.assemblableRows ?? [];
+  const assemblableError = controlData?.assemblableError ?? null;
+
+  const loadData = useCallback(async () => {
+    if (!controlCacheKey) return;
+    invalidatePageDataCache(controlCacheKey);
+    await reloadCached(true);
+  }, [controlCacheKey, reloadCached]);
 
   const openCountCardPreview = useCallback(
     async (productIds: string[]) => {
@@ -337,16 +358,21 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         key: 'issue',
         step: 3,
         label: 'صرف',
-        description: 'صرف إنتاج للمكونات أو صرف يدوي من المخزن',
+        description: 'اعتماد طلبات الإنتاج أو إنشاء صرف من المخزن',
         icon: 'fact_check',
         permission: 'inventory.view',
         links: [
           {
-            label: 'صرف إنتاج',
-            path: `/inventory/production-issues?warehouseId=${wh}`,
-            permission: 'inventory.view',
+            label: 'اعتماد طلبات الإنتاج',
+            path: `/inventory/production-issues?tab=requests&warehouseId=${wh}`,
+            permission: 'productionIssue.approve',
             primary: true,
             badge: pendingIssues,
+          },
+          {
+            label: 'صرف إنتاج (مستودع)',
+            path: `/inventory/production-issues?tab=all&warehouseId=${wh}`,
+            permission: 'inventory.view',
           },
           {
             label: 'صرف يدوي',

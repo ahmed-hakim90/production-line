@@ -58,6 +58,7 @@ type CreateTransferRequestInput = {
 };
 
 import { isTransferLikeType, normalizeTransferRequestType } from '../lib/transferRequestTypes';
+import { resolveInventoryRoutingV1Async } from './inventoryRoutingService';
 
 const normalizeRequestType = normalizeTransferRequestType;
 
@@ -72,6 +73,112 @@ type ApproveRequestOptions = {
 };
 
 const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
+
+async function executeTransferLikeRequest(
+  request: InventoryTransferRequest,
+  approvedBy: string,
+  options?: ApproveRequestOptions,
+): Promise<void> {
+  for (const line of request.lines) {
+    await stockService.createMovement({
+      warehouseId: request.fromWarehouseId,
+      toWarehouseId: request.toWarehouseId,
+      itemType: line.itemType,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      itemCode: line.itemCode,
+      movementType: 'TRANSFER',
+      quantity: Number(line.quantity || 0),
+      unit: line.unit,
+      requestQuantity: Number(line.requestQuantity ?? line.quantity ?? 0),
+      requestUnit: line.requestUnit || (line.itemType === 'finished_good' ? 'piece' : 'unit'),
+      unitsPerCarton: Number(line.unitsPerCarton || 0) || undefined,
+      minStock: line.minStock,
+      note: request.note,
+      referenceNo: request.referenceNo,
+      sourceModule: request.sourceModule ?? 'transfer_request',
+      sourceId: request.sourceId ?? request.sourceReportId ?? request.id,
+      createdBy: approvedBy,
+      allowNegative: Boolean(options?.allowNegativeFromSource),
+    });
+  }
+}
+
+/**
+ * After production_entry lands in WIP, move qty to تم الإنتاج (finished staging)
+ * by approving/executing the deferred production_auto_transfer — no second human click.
+ */
+async function chainProductionEntryToFinishedStaging(
+  productionEntry: InventoryTransferRequest,
+  approvedBy: string,
+  options?: ApproveRequestOptions,
+): Promise<void> {
+  const reportId = String(productionEntry.sourceReportId || productionEntry.sourceId || '').trim();
+  const settings = await systemSettingsService.get();
+  if (!settings) return;
+  const routing = await resolveInventoryRoutingV1Async(settings);
+  if (!routing.autoTransferProductionToFinished) return;
+
+  const wipId = String(routing.productionWipWarehouseId || productionEntry.toWarehouseId || '').trim();
+  const stagingId = String(routing.finishedStagingWarehouseId || '').trim();
+  if (!wipId || !stagingId || wipId === stagingId) return;
+
+  let pendingAutos: InventoryTransferRequest[] = [];
+  if (reportId) {
+    const linked = await transferApprovalService.getBySourceReportId(reportId);
+    pendingAutos = linked.filter(
+      (row) =>
+        row.id &&
+        row.id !== productionEntry.id &&
+        row.status === 'pending' &&
+        normalizeRequestType(row.requestType) === 'production_auto_transfer',
+    );
+  }
+
+  if (pendingAutos.length === 0) {
+    // Create and execute immediately for audit trail when report didn't pre-create the auto request.
+    const createdId = await transferApprovalService.createRequest({
+      requestType: 'production_auto_transfer',
+      fromWarehouseId: wipId,
+      fromWarehouseName: 'مخزن إنتاج تحت التشغيل',
+      toWarehouseId: stagingId,
+      toWarehouseName: 'تم الإنتاج',
+      note: `ترحيل تلقائي إلى تم الإنتاج بعد اعتماد إدخال ${productionEntry.referenceNo || productionEntry.id}`,
+      sourceModule: productionEntry.sourceModule ?? 'production_report',
+      sourceId: reportId || productionEntry.id,
+      sourceReportId: reportId || undefined,
+      lines: productionEntry.lines,
+      createdBy: approvedBy,
+      createdByUserId: options?.approverUserId,
+    });
+    if (createdId) {
+      const created = await transferApprovalService.getById(createdId);
+      if (created) pendingAutos = [created];
+    }
+  }
+
+  const chainApprover = `${approvedBy} (ترحيل تلقائي → تم الإنتاج)`;
+  for (const auto of pendingAutos) {
+    if (!auto.id || auto.status !== 'pending') continue;
+    await executeTransferLikeRequest(auto, chainApprover, {
+      ...options,
+      allowNegativeFromSource: Boolean(
+        options?.allowNegativeFromSource || routing.allowNegativeFinishedTransferStock,
+      ),
+    });
+    const resolvedAt = toIsoNow();
+    const approvePatch: Record<string, unknown> = {
+      status: 'approved',
+      approvedBy: chainApprover,
+      approvedAt: resolvedAt,
+      resolvedAt,
+      note: [auto.note, 'نُفّذ تلقائياً بعد اعتماد إدخال الإنتاج'].filter(Boolean).join(' — '),
+    };
+    if (!auto.firstReviewedAt) approvePatch.firstReviewedAt = resolvedAt;
+    if (options?.approverUserId?.trim()) approvePatch.approvedByUserId = options.approverUserId.trim();
+    await updateDoc(doc(db, COLLECTION, auto.id), approvePatch);
+  }
+}
 
 export const transferApprovalService = {
   /** Display-only; allocation for new requests is atomic in `createRequest`. */
@@ -259,7 +366,7 @@ export const transferApprovalService = {
         normalizeActor(approvedBy) === normalizeActor(request.createdBy)
       );
       if (sameUserById || sameUserByName) {
-        throw new Error('لا يمكن لمنشئ التقرير اعتماد دخول تم الصنع الخاص به. يجب أن يعتمدها مستخدم آخر مخوّل.');
+        throw new Error('لا يمكن لمنشئ التقرير اعتماد إدخال الإنتاج الخاص به. يجب أن يعتمدها مستخدم آخر مخوّل.');
       }
     }
     for (const line of request.lines) {
@@ -317,6 +424,14 @@ export const transferApprovalService = {
     const approvedByUserId = options?.approverUserId?.trim();
     if (approvedByUserId) approvePatch.approvedByUserId = approvedByUserId;
     await updateDoc(doc(db, COLLECTION, id), approvePatch);
+
+    if (requestType === 'production_entry') {
+      await chainProductionEntryToFinishedStaging(
+        { ...request, status: 'approved' },
+        approvedBy,
+        options,
+      );
+    }
   },
 
   async rejectRequest(id: string, rejectedBy: string, rejectionReason?: string, rejectedByUserId?: string): Promise<void> {
@@ -361,6 +476,31 @@ export const transferApprovalService = {
       );
       for (const tx of approvedRows) {
         await stockService.deleteMovement(tx);
+      }
+
+      // Reverse chained WIP → تم الإنتاج moves for the same report.
+      const reportId = String(request.sourceReportId || request.sourceId || '').trim();
+      if (reportId) {
+        const linked = await this.getBySourceReportId(reportId);
+        for (const auto of linked) {
+          if (
+            !auto.id ||
+            auto.id === id ||
+            normalizeRequestType(auto.requestType) !== 'production_auto_transfer' ||
+            auto.status !== 'approved' ||
+            !String(auto.referenceNo || '').trim()
+          ) {
+            continue;
+          }
+          await stockService.deleteTransferByReference(auto.referenceNo!.trim());
+          await updateDoc(doc(db, COLLECTION, auto.id), {
+            status: 'cancelled',
+            cancelledBy,
+            cancelledAt: toIsoNow(),
+            cancellationReason: cancellationReason?.trim() || 'إلغاء مرتبط بإلغاء إدخال الإنتاج',
+            ...(cancelledByUserId?.trim() ? { cancelledByUserId: cancelledByUserId.trim() } : {}),
+          });
+        }
       }
     } else {
       await stockService.deleteTransferByReference(request.referenceNo.trim());

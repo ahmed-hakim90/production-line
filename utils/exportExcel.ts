@@ -844,7 +844,7 @@ export function exportLoanRequestsMultiSheet(
     };
   });
 
-  const monthlyRows = buildRows(monthlyAdvance);
+  const monthlyRows = buildRows(monthlyAdvance) as Array<Record<string, string | number>>;
   monthlyRows.push({
     'كود الموظف': '',
     'اسم الموظف': 'الإجمالي',
@@ -858,7 +858,7 @@ export function exportLoanRequestsMultiSheet(
     'السبب': '',
   });
 
-  const installmentRows = buildRows(installment);
+  const installmentRows = buildRows(installment) as Array<Record<string, string | number>>;
   installmentRows.push({
     'كود الموظف': '',
     'اسم الموظف': 'الإجمالي',

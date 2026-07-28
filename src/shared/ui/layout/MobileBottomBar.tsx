@@ -5,6 +5,7 @@ import { MENU_CONFIG, canAccessMenuItem, type MenuItem } from '@/config/menu.con
 import { cn } from '@/lib/utils';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
+import { useAppStore } from '@/store/useAppStore';
 import { resolveMenuIcon } from './menuIconMap';
 import { useSidebarActiveRoute } from './useSidebar';
 
@@ -41,15 +42,21 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ onMoreClick })
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const { isActiveItem } = useSidebarActiveRoute();
+  const roles = useAppStore((s) => s.roles);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const roleKey = useMemo(
+    () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
+    [roles, userRoleId],
+  );
 
   const visibleItems = useMemo(
     () =>
       BOTTOM_BAR_ITEMS.map((item) => {
         const menuItem = MENU_ITEMS_BY_KEY[item.menuItemKey];
-        if (!menuItem || !canAccessMenuItem(can, menuItem)) return null;
+        if (!menuItem || !canAccessMenuItem(can, menuItem, roleKey)) return null;
         return { ...item, menuItem };
       }).filter(Boolean),
-    [can],
+    [can, roleKey],
   );
 
   return (

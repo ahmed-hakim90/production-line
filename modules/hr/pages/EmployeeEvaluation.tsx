@@ -15,6 +15,8 @@ import { attendanceProcessingService } from '@/modules/hr/attendance/services/at
 import type { AttendanceRecord } from '@/modules/hr/attendance/types';
 import type { FirestoreEmployee } from '@/types';
 import type { FirestoreEmployeePerformance } from '../types';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 type ManualScore = {
   productivity: number;
@@ -24,56 +26,72 @@ type ManualScore = {
   bonusAmount: number;
 };
 
+type EvaluationPageData = {
+  employees: FirestoreEmployee[];
+  attendanceRecords: AttendanceRecord[];
+  scores: FirestoreEmployeePerformance[];
+};
+
 export const EmployeeEvaluation: React.FC = () => {
   const { can } = usePermission();
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
 
   const [month, setMonth] = useState(new Date().toISOString().slice(0, 7));
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
-  const [savedScores, setSavedScores] = useState<Map<string, FirestoreEmployeePerformance>>(new Map());
   const [manualScores, setManualScores] = useState<Map<string, ManualScore>>(new Map());
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
   const [approvingAll, setApprovingAll] = useState(false);
 
   const canApprove = can('hr.evaluation.approve');
+  const EVAL_CACHE_KEY = `hr:employee-evaluation:${month}`;
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<EvaluationPageData>(
+    EVAL_CACHE_KEY,
+    async () => {
       const [emps, records, scores] = await Promise.all([
         employeeService.getAll().then((list) => list.filter((emp) => emp.isActive !== false)),
         attendanceProcessingService.getRecordsForMonth(month),
         performanceService.getByMonth(month),
       ]);
+      return { employees: emps, attendanceRecords: records, scores };
+    },
+    { maxAgeMs: 60_000 },
+  );
 
-      setEmployees(emps);
-      setAttendanceRecords(records);
+  const employees = data?.employees ?? [];
+  const attendanceRecords = data?.attendanceRecords ?? [];
+  const savedScores = useMemo(() => {
+    const scoresMap = new Map<string, FirestoreEmployeePerformance>();
+    (data?.scores ?? []).forEach((score) => {
+      scoresMap.set(score.employeeId, score);
+    });
+    return scoresMap;
+  }, [data?.scores]);
 
-      const scoresMap = new Map<string, FirestoreEmployeePerformance>();
-      const manualMap = new Map<string, ManualScore>();
-      scores.forEach((score) => {
-        scoresMap.set(score.employeeId, score);
-        manualMap.set(score.employeeId, {
-          productivity: score.productivityScore,
-          behavior: score.behaviorScore,
-          notes: score.notes,
-          bonusEligible: score.bonusEligible,
-          bonusAmount: score.bonusAmount,
-        });
-      });
-      setSavedScores(scoresMap);
-      setManualScores(manualMap);
-    } finally {
-      setLoading(false);
-    }
-  }, [month]);
-
+  // Sync manual score defaults when month data arrives
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    if (!data?.scores) return;
+    const manualMap = new Map<string, ManualScore>();
+    data.scores.forEach((score) => {
+      manualMap.set(score.employeeId, {
+        productivity: score.productivityScore,
+        behavior: score.behaviorScore,
+        notes: score.notes,
+        bonusEligible: score.bonusEligible,
+        bonusAmount: score.bonusAmount,
+      });
+    });
+    setManualScores(manualMap);
+  }, [data?.scores]);
+
+  const loadData = useCallback(async () => {
+    invalidatePageDataCache(EVAL_CACHE_KEY);
+    await reloadCached(true);
+  }, [EVAL_CACHE_KEY, reloadCached]);
 
   const attendanceStats = useMemo(() => {
     const map = new Map<string, { presentDays: number; absentDays: number; lateDays: number; totalLateMinutes: number; workingDays: number }>();
@@ -220,7 +238,7 @@ export const EmployeeEvaluation: React.FC = () => {
         ))}
       </div>
 
-      {loading ? (
+      {loading && employees.length === 0 ? (
         <div className="space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-20 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] animate-pulse" />

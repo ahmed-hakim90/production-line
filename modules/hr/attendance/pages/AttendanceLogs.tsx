@@ -4,6 +4,11 @@ import { SelectableTable, type TableColumn } from '@/components/SelectableTable'
 import { useAppStore } from '@/store/useAppStore';
 import type { FirestoreEmployee } from '@/types';
 import type { AttendanceLog } from '../types';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../../shared/lib/pageDataCache';
 
 function toDateString(date: Date): string {
   const y = date.getFullYear();
@@ -45,13 +50,29 @@ export const AttendanceLogs: React.FC = () => {
     }, {})
   ), [rawEmployees]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+    const cacheKey = `hr:attendance-logs:${startDate}:${endDate}`;
+    const cached = peekPageDataCache<AttendanceLog[]>(cacheKey);
+    if (cached != null) {
+      useAppStore.setState({ attendanceLogs: cached });
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      await Promise.all([
-        fetchAttendanceLogs(startDate, endDate),
-        rawEmployees.length === 0 ? fetchEmployees() : Promise.resolve(),
-      ]);
+      const { data } = await fetchCachedPageData(
+        cacheKey,
+        async () => {
+          await Promise.all([
+            fetchAttendanceLogs(startDate, endDate),
+            rawEmployees.length === 0 ? fetchEmployees() : Promise.resolve(),
+          ]);
+          return useAppStore.getState().attendanceLogs as AttendanceLog[];
+        },
+        { force, maxAgeMs: 60_000 },
+      );
+      useAppStore.setState({ attendanceLogs: data });
     } finally {
       setLoading(false);
     }
@@ -195,7 +216,14 @@ export const AttendanceLogs: React.FC = () => {
           />
         </label>
 
-        <button className="erp-filter-apply" onClick={() => void load()} disabled={loading}>
+        <button
+          className="erp-filter-apply"
+          onClick={() => {
+            invalidatePageDataCache(`hr:attendance-logs:${startDate}:${endDate}`);
+            void load({ force: true });
+          }}
+          disabled={loading}
+        >
           <span className="material-icons-round text-sm">sync</span>
           {loading ? 'جار التحميل...' : 'تحديث'}
         </button>

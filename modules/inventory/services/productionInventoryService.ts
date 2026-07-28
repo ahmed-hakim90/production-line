@@ -279,7 +279,10 @@ async function postAutoTransfer(params: {
   const needsApproval =
     requestType === 'packaging_transfer'
       ? false
-      : routing.requireApprovalForAutoTransfers;
+      : // Defer WIP→تم الإنتاج until production_entry is approved (WIP may still be empty).
+        requestType === 'production_auto_transfer' && routing.requireApprovalForProductionEntry
+        ? true
+        : routing.requireApprovalForAutoTransfers;
 
   if (needsApproval) {
     await transferApprovalService.createRequest({
@@ -524,7 +527,7 @@ export const productionInventoryService = {
     if (!isComponentInjection && producedQty > 0) {
       if (routing.requireIssuedProductionIssueOnReport && !hasIssuedProductionComponents) {
         throw new Error(
-          'يجب إنشاء واعتماد إذن صرف إنتاج (حالة: تم الصرف) لهذا التقرير أو أمر الشغل/الخطة قبل ترحيل مخزون تقرير الإنتاج. بعد الاعتماد استخدم إعادة ترحيل المخزون إن لزم.',
+          'لا يمكن ترحيل مخزون تقرير الإنتاج قبل اعتماد وإصدار إذن صرف إنتاج لأمر الشغل/الخطة. التقرير لا ينفّذ صرفاً تلقائياً — استخدم صفحة «صرف إنتاج» ثم أعد الترحيل.',
         );
       }
       if (

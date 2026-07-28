@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
 import { usePermission } from '@/utils/permissions';
+import { useAppStore } from '@/store/useAppStore';
 import { binaryFilterItems, buildBinarySearchIndex } from '@/utils/binarySearch';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { getPortalContainer } from '@/lib/portalRoot';
@@ -133,12 +134,18 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const navigate = useNavigate();
   const { can }  = usePermission();
+  const roles = useAppStore((s) => s.roles);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const roleKey = useMemo(
+    () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
+    [roles, userRoleId],
+  );
 
   const allItems = useMemo<PaletteItem[]>(() => {
     const items: PaletteItem[] = [];
     MENU_CONFIG.forEach((group) => {
       group.children.forEach((item) => {
-        if (canAccessMenuItem(can, item)) {
+        if (canAccessMenuItem(can, item, roleKey)) {
           items.push({
             key: item.key,
             label: item.label,
@@ -168,7 +175,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
       });
     });
     return items;
-  }, [can]);
+  }, [can, roleKey]);
 
   const searchIndex = useMemo(
     () =>

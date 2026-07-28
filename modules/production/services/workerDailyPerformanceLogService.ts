@@ -40,7 +40,7 @@ const resolveLogStatus = (
 
 const mapDoc = (id: string, data: Record<string, unknown>): WorkerDailyPerformanceLog => ({
   id,
-  ...(data as WorkerDailyPerformanceLog),
+  ...(data as unknown as WorkerDailyPerformanceLog),
 });
 
 export const workerDailyPerformanceLogService = {

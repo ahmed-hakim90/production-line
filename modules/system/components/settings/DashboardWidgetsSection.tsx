@@ -90,7 +90,8 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
         </div>
       </Card>
 
-      <Card title={`عناصر ${dashboardLabels[selectedDashboardKey] || 'لوحة التحكم'}`} subtitle="اسحب لإعادة الترتيب، وفعّل/عطّل العرض حسب الحاجة">
+      <Card title={`عناصر ${dashboardLabels[selectedDashboardKey] || 'لوحة التحكم'}`}>
+        <p className="page-subtitle mb-3">اسحب لإعادة الترتيب، وفعّل/عطّل العرض حسب الحاجة</p>
         <div className="space-y-1">
           {(localWidgets[selectedDashboardKey] || selectedWidgetDefs(selectedDashboardKey).map((def) => ({ id: def.id, visible: true }))).map((widget, index) => {
             const defs = selectedWidgetDefs(selectedDashboardKey);
@@ -177,7 +178,8 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
         </div>
       </Card>
 
-      <Card title="إنشاء Widget جديد" subtitle="Builder بسيط لعنصر Dashboard جديد">
+      <Card title="إنشاء Widget جديد">
+        <p className="page-subtitle mb-3">Builder بسيط لعنصر Dashboard جديد</p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="space-y-1">
             <label className="text-xs font-bold text-slate-500">اللوحة المستهدفة</label>

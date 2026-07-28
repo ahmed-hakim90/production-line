@@ -15,6 +15,11 @@ import {
   LINE_WORKER_LABOR_ROLE_LABELS,
   resolveLineWorkerLaborRole,
 } from '../utils/lineWorkerLaborRoles';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 const REVIEW_STATUS_LABELS: Record<ProductionWorkerRatingReviewStatus | 'all', string> = {
   all: 'كل الحالات',
@@ -85,6 +90,8 @@ const emptyReview = (): ProductionWorkerManagementReview => ({
   notes: '',
 });
 
+const RATINGS_CACHE_KEY = 'production:workerRatingsReview';
+
 export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsReviewProps> = ({ embedded = false }) => {
   const { can } = usePermission();
   const canReview = can('production.workerRatings.manage') || can('hr.evaluation.approve');
@@ -93,27 +100,52 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const userEmail = useAppStore((s) => s.userEmail);
 
-  const [rows, setRows] = useState<ProductionWorkerRatingRecord[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialCache = peekPageDataCache<ProductionWorkerRatingRecord[]>(RATINGS_CACHE_KEY);
+  const [rows, setRows] = useState<ProductionWorkerRatingRecord[]>(() => initialCache ?? []);
+  const [loading, setLoading] = useState(() => initialCache == null);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [date, setDate] = useState(getTodayDateString());
   const [status, setStatus] = useState<ProductionWorkerRatingReviewStatus | 'all'>('all');
-  const [drafts, setDrafts] = useState<Record<string, ProductionWorkerManagementReview>>({});
+  const [drafts, setDrafts] = useState<Record<string, ProductionWorkerManagementReview>>(() =>
+    Object.fromEntries((initialCache ?? []).map((row) => [row.id || '', {
+      ...emptyReview(),
+      ...(row.managementReview ?? {}),
+    }])),
+  );
 
-  const load = useCallback(async () => {
+  const applyRows = useCallback((latest: ProductionWorkerRatingRecord[]) => {
+    setRows(latest);
+    setDrafts(Object.fromEntries(latest.map((row) => [row.id || '', {
+      ...emptyReview(),
+      ...(row.managementReview ?? {}),
+    }])));
+  }, []);
+
+  const load = useCallback(async (opts?: { force?: boolean }) => {
     if (!canView) return;
-    setLoading(true);
+    const cached = peekPageDataCache<ProductionWorkerRatingRecord[]>(RATINGS_CACHE_KEY);
+    if (cached) {
+      applyRows(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const latest = await productionWorkerRatingService.getRecent(300);
-      setRows(latest);
-      setDrafts(Object.fromEntries(latest.map((row) => [row.id || '', {
-        ...emptyReview(),
-        ...(row.managementReview ?? {}),
-      }])));
+      const { data } = await fetchCachedPageData(
+        RATINGS_CACHE_KEY,
+        () => productionWorkerRatingService.getRecent(300),
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      applyRows(data);
     } finally {
       setLoading(false);
     }
-  }, [canView]);
+  }, [applyRows, canView]);
+
+  const reload = useCallback(async () => {
+    invalidatePageDataCache(RATINGS_CACHE_KEY);
+    await load({ force: true });
+  }, [load]);
 
   useEffect(() => { void load(); }, [load]);
 
@@ -180,14 +212,14 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                 اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة.
               </p>
             </div>
-            <Button type="button" variant="outline" onClick={() => void load()}>تحديث</Button>
+            <Button type="button" variant="outline" onClick={() => void reload()}>تحديث</Button>
           </div>
         </Card>
       ) : (
         <PageHeader
           title="مراجعة تقييمات العمال"
           subtitle="اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة"
-          secondaryAction={{ label: 'تحديث', onClick: () => void load() }}
+          secondaryAction={{ label: 'تحديث', onClick: () => void reload() }}
         />
       )}
 

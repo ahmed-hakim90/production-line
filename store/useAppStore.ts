@@ -97,6 +97,7 @@ import { scanEventService } from '../modules/production/services/scanEventServic
 import { stockService } from '../modules/inventory/services/stockService';
 import { transferApprovalService } from '../modules/inventory/services/transferApprovalService';
 import { productionInventoryService } from '../modules/inventory/services/productionInventoryService';
+import { productionIssueService } from '../modules/inventory/services/productionIssueService';
 import {
   removeWorkerDailyPerformanceForReport,
   syncWorkerDailyPerformanceFromReport,
@@ -760,10 +761,10 @@ interface AppState {
   updateRole: (id: string, data: Partial<Omit<FirestoreRole, 'id'>>) => Promise<void>;
   deleteRole: (id: string) => Promise<void>;
 
-  // Fetch (one-time)
-  fetchProducts: () => Promise<void>;
-  fetchLines: () => Promise<void>;
-  fetchEmployees: () => Promise<void>;
+  // Fetch (one-time) — optional TTL cache so route remounts do not refetch cold
+  fetchProducts: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
+  fetchLines: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
+  fetchEmployees: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
   fetchAttendanceLogs: (startDate: string, endDate: string) => Promise<void>;
   fetchAttendanceRecords: (startDate: string, endDate: string) => Promise<void>;
   importAttendanceFingerprintCsv: (input: {
@@ -801,7 +802,7 @@ interface AppState {
   fetchLineStatuses: () => Promise<void>;
   fetchLineProductConfigs: () => Promise<void>;
   fetchRoutingPlanTotals: () => Promise<void>;
-  fetchProductionPlans: () => Promise<void>;
+  fetchProductionPlans: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
   fetchProductionPlanFollowUps: (planId?: string) => Promise<void>;
 
   // Mutations — Products
@@ -874,7 +875,7 @@ interface AppState {
   updateProductionPlanFollowUp: (id: string, data: Partial<ProductionPlanFollowUp>) => Promise<void>;
 
   // Mutations — Work Orders
-  fetchWorkOrders: () => Promise<void>;
+  fetchWorkOrders: (options?: { force?: boolean; maxAgeMs?: number; silent?: boolean }) => Promise<void>;
   createWorkOrder: (data: Omit<WorkOrder, 'id' | 'createdAt'>) => Promise<string | null>;
   updateWorkOrder: (id: string, data: Partial<WorkOrder>) => Promise<void>;
   deleteWorkOrder: (id: string) => Promise<void>;
@@ -1002,9 +1003,37 @@ function pruneProductionReportsRangeCache(
 
 const DEFAULT_REPORTS_RANGE_STALE_MS = 5 * 60 * 1000;
 const DEFAULT_REPORTS_UI_REF_STALE_MS = 10 * 60 * 1000;
+const DEFAULT_CATALOG_STALE_MS = 5 * 60 * 1000;
+const DEFAULT_OPS_STALE_MS = 2 * 60 * 1000;
 
 let _productionReportsRangeInFlight = new Map<string, Promise<ProductionReport[]>>();
 let _reportsUiReferenceInFlight: Promise<void> | null = null;
+
+type StoreFetchCacheOptions = { force?: boolean; maxAgeMs?: number; silent?: boolean };
+
+let _productsFetchedAt = 0;
+let _linesFetchedAt = 0;
+let _employeesFetchedAt = 0;
+let _plansFetchedAt = 0;
+let _workOrdersFetchedAt = 0;
+let _productsInFlight: Promise<void> | null = null;
+let _linesInFlight: Promise<void> | null = null;
+let _employeesInFlight: Promise<void> | null = null;
+let _plansInFlight: Promise<void> | null = null;
+let _workOrdersInFlight: Promise<void> | null = null;
+
+function resetStoreFetchCaches() {
+  _productsFetchedAt = 0;
+  _linesFetchedAt = 0;
+  _employeesFetchedAt = 0;
+  _plansFetchedAt = 0;
+  _workOrdersFetchedAt = 0;
+  _productsInFlight = null;
+  _linesInFlight = null;
+  _employeesInFlight = null;
+  _plansInFlight = null;
+  _workOrdersInFlight = null;
+}
 
 function invalidateProductionReportsRangeCacheForDates(
   dates: string[],
@@ -1105,11 +1134,16 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: apply a role to the store ─────────────────────────────────────
 
   _applyRole: (role: FirestoreRole) => {
+    // System admin must always receive every current permission key. Stale Firestore
+    // role docs (seeded before a new permission existed) otherwise leave new keys undefined/false.
+    const isSystemAdmin =
+      role.roleKey === 'admin'
+      || String(role.name || '').trim() === 'مدير النظام';
     set({
       userRoleId: role.id!,
       userRoleName: role.name,
       userRoleColor: role.color,
-      userPermissions: role.permissions,
+      userPermissions: isSystemAdmin ? adminPermissions() : role.permissions,
     });
   },
 
@@ -1212,6 +1246,13 @@ export const useAppStore = create<AppState>((set, get) => ({
     useJobsStore.getState().resetUiState();
     _productionReportsRangeInFlight.clear();
     _reportsUiReferenceInFlight = null;
+    resetStoreFetchCaches();
+    try {
+      const { invalidatePageDataCache } = await import('../modules/shared/lib/pageDataCache');
+      invalidatePageDataCache();
+    } catch {
+      /* ignore */
+    }
     set({
       isAuthenticated: false,
       isPendingApproval: false,
@@ -1599,6 +1640,14 @@ export const useAppStore = create<AppState>((set, get) => ({
     }));
 
     set({ products, productionLines, employees });
+    {
+      const bootTs = Date.now();
+      _productsFetchedAt = bootTs;
+      _linesFetchedAt = bootTs;
+      _employeesFetchedAt = bootTs;
+      _plansFetchedAt = bootTs;
+      _workOrdersFetchedAt = bootTs;
+    }
 
     const scheduleDeferredBootstrap = () => {
       const idle =
@@ -1742,61 +1791,108 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Fetch Actions ─────────────────────────────────────────────────────────
 
-  fetchProducts: async () => {
-    set({ productsLoading: true, error: null });
-    try {
-      const [rawProducts, allCategories] = await Promise.all([
-        productService.getAll(),
-        categoryService.getAll(),
-      ]);
-      const productCategories = allCategories.filter(isProductCategoryRow);
-      const rawMaterialWarehouseId = get().systemSettings.planSettings?.rawMaterialWarehouseId;
-      const filteredRawProducts = await filterProductsByRawMaterialWarehouse(rawProducts, rawMaterialWarehouseId);
-      set({ _rawProducts: filteredRawProducts, _productCategories: productCategories });
-      get()._rebuildProducts();
-      await get().fetchRoutingPlanTotals();
-      set({ productsLoading: false });
-    } catch (error) {
-      set({ error: (error as Error).message, productsLoading: false });
+  fetchProducts: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_CATALOG_STALE_MS;
+    const hasData = get()._rawProducts.length > 0;
+    if (!force && hasData && Date.now() - _productsFetchedAt < maxAgeMs) return;
+    if (_productsInFlight) {
+      await _productsInFlight;
+      return;
     }
+    const silent = options.silent ?? hasData;
+    if (!silent) set({ productsLoading: true, error: null });
+    const run = (async () => {
+      try {
+        const [rawProducts, allCategories] = await Promise.all([
+          productService.getAll(),
+          categoryService.getAll(),
+        ]);
+        const productCategories = allCategories.filter(isProductCategoryRow);
+        const rawMaterialWarehouseId = get().systemSettings.planSettings?.rawMaterialWarehouseId;
+        const filteredRawProducts = await filterProductsByRawMaterialWarehouse(rawProducts, rawMaterialWarehouseId);
+        set({ _rawProducts: filteredRawProducts, _productCategories: productCategories });
+        get()._rebuildProducts();
+        await get().fetchRoutingPlanTotals();
+        _productsFetchedAt = Date.now();
+        set({ productsLoading: false });
+      } catch (error) {
+        set({ error: (error as Error).message, productsLoading: false });
+      } finally {
+        _productsInFlight = null;
+      }
+    })();
+    _productsInFlight = run;
+    await run;
   },
 
-  fetchLines: async () => {
-    set({ linesLoading: true, error: null });
-    try {
-      const rawLines = await lineService.getAll();
-      set({ _rawLines: rawLines });
-      get()._rebuildLines();
-      set({ linesLoading: false });
-    } catch (error) {
-      set({ error: (error as Error).message, linesLoading: false });
+  fetchLines: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_CATALOG_STALE_MS;
+    const hasData = get()._rawLines.length > 0;
+    if (!force && hasData && Date.now() - _linesFetchedAt < maxAgeMs) return;
+    if (_linesInFlight) {
+      await _linesInFlight;
+      return;
     }
+    const silent = options.silent ?? hasData;
+    if (!silent) set({ linesLoading: true, error: null });
+    const run = (async () => {
+      try {
+        const rawLines = await lineService.getAll();
+        set({ _rawLines: rawLines });
+        get()._rebuildLines();
+        _linesFetchedAt = Date.now();
+        set({ linesLoading: false });
+      } catch (error) {
+        set({ error: (error as Error).message, linesLoading: false });
+      } finally {
+        _linesInFlight = null;
+      }
+    })();
+    _linesInFlight = run;
+    await run;
   },
 
-  fetchEmployees: async () => {
-    try {
-      const rawEmployees = await employeeService.getAll();
-      set({ _rawEmployees: rawEmployees });
-      const employees: Employee[] = rawEmployees.map((e) => ({
-        id: e.id!,
-        name: e.name,
-        departmentId: e.departmentId ?? '',
-        jobPositionId: e.jobPositionId ?? '',
-        level: e.level ?? 1,
-        managerId: e.managerId,
-        employmentType: e.employmentType ?? 'full_time',
-        baseSalary: e.baseSalary ?? 0,
-        hourlyRate: e.hourlyRate ?? 0,
-        shiftId: e.shiftId,
-        vehicleId: e.vehicleId,
-        hasSystemAccess: e.hasSystemAccess ?? false,
-        isActive: e.isActive !== false,
-        code: e.code,
-      }));
-      set({ employees });
-    } catch (error) {
-      set({ error: (error as Error).message });
+  fetchEmployees: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_CATALOG_STALE_MS;
+    const hasData = get()._rawEmployees.length > 0;
+    if (!force && hasData && Date.now() - _employeesFetchedAt < maxAgeMs) return;
+    if (_employeesInFlight) {
+      await _employeesInFlight;
+      return;
     }
+    const run = (async () => {
+      try {
+        const rawEmployees = await employeeService.getAll();
+        set({ _rawEmployees: rawEmployees });
+        const employees: Employee[] = rawEmployees.map((e) => ({
+          id: e.id!,
+          name: e.name,
+          departmentId: e.departmentId ?? '',
+          jobPositionId: e.jobPositionId ?? '',
+          level: e.level ?? 1,
+          managerId: e.managerId,
+          employmentType: e.employmentType ?? 'full_time',
+          baseSalary: e.baseSalary ?? 0,
+          hourlyRate: e.hourlyRate ?? 0,
+          shiftId: e.shiftId,
+          vehicleId: e.vehicleId,
+          hasSystemAccess: e.hasSystemAccess ?? false,
+          isActive: e.isActive !== false,
+          code: e.code,
+        }));
+        set({ employees });
+        _employeesFetchedAt = Date.now();
+      } catch (error) {
+        set({ error: (error as Error).message });
+      } finally {
+        _employeesInFlight = null;
+      }
+    })();
+    _employeesInFlight = run;
+    await run;
   },
 
   fetchAttendanceLogs: async (startDate, endDate) => {
@@ -2244,39 +2340,54 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
-  fetchProductionPlans: async () => {
-    try {
-      const productionPlans = await productionPlanService.getAll();
-      const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
-      const activePlans = productionPlans.filter(
-        (p) => p.status === 'in_progress' || p.status === 'planned'
-      );
-      const planReports: Record<string, ProductionReport[]> = {};
-      const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
-      await Promise.all(
-        activePlans.map(async (plan) => {
-          const key = `${plan.lineId}_${plan.productId}`;
-          const reports = await reportService.getByLineAndProduct(
-            plan.lineId, plan.productId, plan.startDate
-          );
-          planReports[key] = filterReportsForProductionPlan(plan, reports);
-          if (!plan.id) return;
-          const patch = deriveProductionPlanAutoPatch(plan, reports);
-          if (!patch) return;
-          planAutoPatches.push({ id: plan.id, patch });
-          Object.assign(plan, patch);
-        })
-      );
-      if (planAutoPatches.length > 0) {
-        await Promise.allSettled(
-          planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
-        );
-      }
-      set({ productionPlans, productionPlanFollowUps, planReports });
-      get()._rebuildLines();
-    } catch (error) {
-      set({ error: (error as Error).message });
+  fetchProductionPlans: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_OPS_STALE_MS;
+    const hasData = get().productionPlans.length > 0;
+    if (!force && hasData && Date.now() - _plansFetchedAt < maxAgeMs) return;
+    if (_plansInFlight) {
+      await _plansInFlight;
+      return;
     }
+    const run = (async () => {
+      try {
+        const productionPlans = await productionPlanService.getAll();
+        const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
+        const activePlans = productionPlans.filter(
+          (p) => p.status === 'in_progress' || p.status === 'planned'
+        );
+        const planReports: Record<string, ProductionReport[]> = {};
+        const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
+        await Promise.all(
+          activePlans.map(async (plan) => {
+            const key = `${plan.lineId}_${plan.productId}`;
+            const reports = await reportService.getByLineAndProduct(
+              plan.lineId, plan.productId, plan.startDate
+            );
+            planReports[key] = filterReportsForProductionPlan(plan, reports);
+            if (!plan.id) return;
+            const patch = deriveProductionPlanAutoPatch(plan, reports);
+            if (!patch) return;
+            planAutoPatches.push({ id: plan.id, patch });
+            Object.assign(plan, patch);
+          })
+        );
+        if (planAutoPatches.length > 0) {
+          await Promise.allSettled(
+            planAutoPatches.map(({ id, patch }) => productionPlanService.update(id, patch)),
+          );
+        }
+        set({ productionPlans, productionPlanFollowUps, planReports });
+        get()._rebuildLines();
+        _plansFetchedAt = Date.now();
+      } catch (error) {
+        set({ error: (error as Error).message });
+      } finally {
+        _plansInFlight = null;
+      }
+    })();
+    _plansInFlight = run;
+    await run;
   },
 
   fetchProductionPlanFollowUps: async (planId) => {
@@ -2311,7 +2422,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         planType,
       });
       if (id) {
-        await get().fetchProductionPlans();
+        await get().fetchProductionPlans({ force: true });
         const saved = await productionPlanService.getById(id);
         if (saved) {
           void get().autoGeneratePlanMaterialRequirements(saved);
@@ -2327,7 +2438,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateProductionPlan: async (id, data) => {
     try {
       await productionPlanService.update(id, data);
-      await get().fetchProductionPlans();
+      await get().fetchProductionPlans({ force: true });
       const saved = await productionPlanService.getById(id);
       if (saved) {
         void get().autoGeneratePlanMaterialRequirements(saved);
@@ -2354,7 +2465,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteProductionPlan: async (id) => {
     try {
       await productionPlanService.delete(id);
-      await get().fetchProductionPlans();
+      await get().fetchProductionPlans({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2382,13 +2493,28 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   // ── Work Orders ──────────────────────────────────────────────────────────
 
-  fetchWorkOrders: async () => {
-    try {
-      const workOrders = await workOrderService.getAll();
-      set({ workOrders });
-    } catch (error) {
-      set({ error: (error as Error).message });
+  fetchWorkOrders: async (options: StoreFetchCacheOptions = {}) => {
+    const force = options.force === true;
+    const maxAgeMs = options.maxAgeMs ?? DEFAULT_OPS_STALE_MS;
+    const hasData = get().workOrders.length > 0;
+    if (!force && hasData && Date.now() - _workOrdersFetchedAt < maxAgeMs) return;
+    if (_workOrdersInFlight) {
+      await _workOrdersInFlight;
+      return;
     }
+    const run = (async () => {
+      try {
+        const workOrders = await workOrderService.getAll();
+        set({ workOrders });
+        _workOrdersFetchedAt = Date.now();
+      } catch (error) {
+        set({ error: (error as Error).message });
+      } finally {
+        _workOrdersInFlight = null;
+      }
+    })();
+    _workOrdersInFlight = run;
+    await run;
   },
 
   createWorkOrder: async (data) => {
@@ -2437,7 +2563,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       trackedOperation.entityId = id ?? trackedOperation.entityId;
       trackedOperation.batchId = id ?? trackedOperation.batchId;
       if (id) {
-        await get().fetchWorkOrders();
+        await get().fetchWorkOrders({ force: true });
         const { _rawProducts } = get();
         const product = _rawProducts.find((p) => p.id === data.productId);
         if (data.supervisorId) {
@@ -2563,7 +2689,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         }
       }
       await workOrderService.update(id, data);
-      await get().fetchWorkOrders();
+      await get().fetchWorkOrders({ force: true });
       const updatedWorkOrder = get().workOrders.find((w) => w.id === id) ?? (existing ? { ...existing, ...data } : null);
 
       if (existing && data.status && data.status !== existing.status) {
@@ -2623,16 +2749,33 @@ export const useAppStore = create<AppState>((set, get) => ({
             throw new Error('تعذر إنشاء تقرير الإغلاق: المشرف غير محدد في أمر الشغل.');
           }
 
+          const woCloseReportType =
+            updatedWorkOrder.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product';
           const woCloseProducedQty = Number(
             updatedWorkOrder.actualProducedFromScans ??
             updatedWorkOrder.producedQuantity ??
             0,
           );
+          if (woCloseReportType === 'finished_product' && woCloseProducedQty > 0) {
+            const closeRouting = await resolveInventoryRoutingV1Async(get().systemSettings);
+            if (closeRouting.requireIssuedProductionIssueOnReport) {
+              const hasIssued = await productionIssueService.hasIssuedForProduction({
+                workOrderId: id,
+                productionPlanId: updatedWorkOrder.planId || undefined,
+              });
+              if (!hasIssued) {
+                throw new Error(
+                  'لا يمكن إغلاق أمر الشغل بتقرير إنتاج قبل اعتماد وإصدار إذن صرف إنتاج. أنشئ الصرف من صفحة «صرف إنتاج» ثم أعد المحاولة.',
+                );
+              }
+            }
+          }
+
           const woCloseReportPayload: Omit<ProductionReport, 'id' | 'createdAt'> = {
             employeeId: updatedWorkOrder.supervisorId,
             productId: updatedWorkOrder.productId,
             lineId: updatedWorkOrder.lineId,
-            reportType: updatedWorkOrder.workOrderType === 'component_injection' ? 'component_injection' : 'finished_product',
+            reportType: woCloseReportType,
             date: toLocalDateString(updatedWorkOrder.completedAt ?? data.completedAt),
             quantityProduced: woCloseProducedQty,
             workersCount: Number(
@@ -2756,7 +2899,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteWorkOrder: async (id) => {
     try {
       await workOrderService.delete(id);
-      await get().fetchWorkOrders();
+      await get().fetchWorkOrders({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;
@@ -2839,7 +2982,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const normalized = await normalizeProductCategoryOnSave(data);
       const id = await productService.create(normalized as Omit<FirestoreProduct, 'id'>);
-      if (id) await get().fetchProducts();
+      if (id) await get().fetchProducts({ force: true });
       return id;
     } catch (error) {
       if (isDuplicateEntityCodeError(error)) throw error;
@@ -2852,7 +2995,7 @@ export const useAppStore = create<AppState>((set, get) => ({
     try {
       const normalized = await normalizeProductCategoryOnSave(data);
       await productService.update(id, normalized);
-      await get().fetchProducts();
+      await get().fetchProducts({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2861,7 +3004,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteProduct: async (id) => {
     try {
       await productService.delete(id);
-      await get().fetchProducts();
+      await get().fetchProducts({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2872,7 +3015,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   createLine: async (data) => {
     try {
       const id = await lineService.create(data);
-      if (id) await get().fetchLines();
+      if (id) await get().fetchLines({ force: true });
       return id;
     } catch (error) {
       set({ error: (error as Error).message });
@@ -2883,7 +3026,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateLine: async (id, data) => {
     try {
       await lineService.update(id, data);
-      await get().fetchLines();
+      await get().fetchLines({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2892,7 +3035,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   deleteLine: async (id) => {
     try {
       await lineService.delete(id);
-      await get().fetchLines();
+      await get().fetchLines({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2903,7 +3046,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   createEmployee: async (data) => {
     try {
       const id = await employeeService.create(data);
-      if (id) await get().fetchEmployees();
+      if (id) await get().fetchEmployees({ force: true });
       return id;
     } catch (error) {
       set({ error: (error as Error).message });
@@ -2914,7 +3057,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   updateEmployee: async (id, data) => {
     try {
       await employeeService.update(id, data);
-      await get().fetchEmployees();
+      await get().fetchEmployees({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -2928,7 +3071,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         try { await userService.delete(emp.userId); } catch { /* best effort */ }
       }
       await employeeService.delete(id);
-      await get().fetchEmployees();
+      await get().fetchEmployees({ force: true });
     } catch (error) {
       set({ error: (error as Error).message });
     }
@@ -3372,6 +3515,22 @@ export const useAppStore = create<AppState>((set, get) => ({
         return null;
       }
 
+      if (reportType === 'finished_product' && Number(savePayload.quantityProduced || 0) > 0) {
+        const inventoryRouting = await resolveInventoryRoutingV1Async(systemSettings);
+        if (inventoryRouting.requireIssuedProductionIssueOnReport) {
+          const hasIssuedProductionComponents = await productionIssueService.hasIssuedForProduction({
+            workOrderId: activeWO?.id || savePayload.workOrderId || undefined,
+            productionPlanId: activePlan?.id || undefined,
+          });
+          if (!hasIssuedProductionComponents) {
+            const msg =
+              'لا يمكن حفظ تقرير الإنتاج قبل اعتماد وإصدار إذن صرف إنتاج لأمر الشغل أو الخطة. أنشئ الصرف من صفحة «صرف إنتاج» ثم أعد المحاولة.';
+            set({ error: msg });
+            return null;
+          }
+        }
+      }
+
       if (shouldPostToPlan && !planSettings.allowOverProduction && activePlan) {
         if ((activePlan.producedQuantity ?? 0) >= activePlan.plannedQuantity) {
           set({ error: 'تم الوصول للكمية المخططة — الإنتاج الزائد غير مسموح' });
@@ -3641,7 +3800,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         } catch (syncErr) {
           console.warn('syncWorkerDailyPerformanceFromReport (create):', syncErr);
         }
-        if (activePlan) await get().fetchProductionPlans();
+        if (activePlan) await get().fetchProductionPlans({ force: true });
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث البيانات المعروضة';
       }
@@ -3842,7 +4001,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch (syncErr) {
         console.warn('syncWorkerDailyPerformanceFromReport (update):', syncErr);
       }
-      await get().fetchProductionPlans();
+      await get().fetchProductionPlans({ force: true });
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -3992,7 +4151,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       get()._rebuildProducts();
       get()._rebuildLines();
-      await get().fetchProductionPlans();
+      await get().fetchProductionPlans({ force: true });
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -4690,7 +4849,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         };
         set({ systemSettings: merged });
         reapplyThemeFromAppStore(get);
-        await get().fetchProducts();
+        await get().fetchProducts({ force: true });
       }
     } catch (error) {
       console.error('fetchSystemSettings error:', error);
@@ -4722,7 +4881,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       // Post-save refresh is best-effort and should not flip a successful settings write into a failure.
       try {
-        await get().fetchProducts();
+        await get().fetchProducts({ force: true });
       } catch (refreshError) {
         console.warn('updateSystemSettings post-save refresh failed:', refreshError);
       }

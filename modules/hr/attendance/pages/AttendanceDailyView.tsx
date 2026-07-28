@@ -7,6 +7,11 @@ import { usePermission } from '@/utils/permissions';
 import type { FirestoreEmployee } from '@/types';
 import type { AttendanceRecord, AttendanceRecordStatus } from '../types';
 import { exportAttendanceLogs } from '@/utils/exportExcel';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../../shared/lib/pageDataCache';
 
 type DateRangePreset = 'today' | 'week' | 'month' | 'custom';
 
@@ -87,13 +92,29 @@ export const AttendanceDailyView: React.FC = () => {
     }, {})
   ), [rawEmployees]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+    const cacheKey = `hr:attendance-daily:${startDate}:${endDate}`;
+    const cached = peekPageDataCache<AttendanceRecord[]>(cacheKey);
+    if (cached != null) {
+      useAppStore.setState({ attendanceRecords: cached });
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      await Promise.all([
-        fetchAttendanceRecords(startDate, endDate),
-        rawEmployees.length === 0 ? fetchEmployees() : Promise.resolve(),
-      ]);
+      const { data } = await fetchCachedPageData(
+        cacheKey,
+        async () => {
+          await Promise.all([
+            fetchAttendanceRecords(startDate, endDate),
+            rawEmployees.length === 0 ? fetchEmployees() : Promise.resolve(),
+          ]);
+          return useAppStore.getState().attendanceRecords;
+        },
+        { force, maxAgeMs: 60_000 },
+      );
+      useAppStore.setState({ attendanceRecords: data });
     } finally {
       setLoading(false);
     }
@@ -161,11 +182,12 @@ export const AttendanceDailyView: React.FC = () => {
         checkOut: editCheckOut.trim() || null,
       });
       clearEdit();
-      await load();
+      invalidatePageDataCache(`hr:attendance-daily:${startDate}:${endDate}`);
+      await load({ force: true });
     } finally {
       setActionBusy(false);
     }
-  }, [updateAttendanceRecordTimes, editCheckIn, editCheckOut, clearEdit, load]);
+  }, [updateAttendanceRecordTimes, editCheckIn, editCheckOut, clearEdit, load, startDate, endDate]);
 
   const handleDeleteRows = useCallback(async (recordIds: string[]) => {
     if (recordIds.length === 0) return;
@@ -181,7 +203,8 @@ export const AttendanceDailyView: React.FC = () => {
       if (editingId && recordIds.includes(editingId)) {
         clearEdit();
       }
-      await load();
+      invalidatePageDataCache(`hr:attendance-daily:${startDate}:${endDate}`);
+      await load({ force: true });
     } finally {
       setActionBusy(false);
       setDeleteProgress((prev) => ({ ...prev, done: prev.total }));
@@ -189,7 +212,7 @@ export const AttendanceDailyView: React.FC = () => {
         setDeleteProgress({ visible: false, done: 0, total: 0 });
       }, 500);
     }
-  }, [deleteAttendanceRecordsByIds, editingId, clearEdit, load]);
+  }, [deleteAttendanceRecordsByIds, editingId, clearEdit, load, startDate, endDate]);
 
   const progressPercent = deleteProgress.total > 0
     ? Math.min(100, Math.round((deleteProgress.done / deleteProgress.total) * 100))
@@ -425,7 +448,14 @@ export const AttendanceDailyView: React.FC = () => {
           />
         </label>
 
-        <button className="erp-filter-apply" onClick={() => void load()} disabled={loading}>
+        <button
+          className="erp-filter-apply"
+          onClick={() => {
+            invalidatePageDataCache(`hr:attendance-daily:${startDate}:${endDate}`);
+            void load({ force: true });
+          }}
+          disabled={loading}
+        >
           <span className="material-icons-round text-sm">sync</span>
           {loading ? 'جار التحميل...' : 'تحديث'}
         </button>

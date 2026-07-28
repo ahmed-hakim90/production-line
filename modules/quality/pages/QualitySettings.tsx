@@ -4,6 +4,11 @@ import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { qualitySettingsService } from '../services/qualitySettingsService';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 import type {
   QualityDefectSeverity,
   QualityInspectionTemplate,
@@ -45,6 +50,17 @@ const splitCsv = (value: string): string[] =>
     .map((item) => item.trim())
     .filter(Boolean);
 
+type QualitySettingsPageData = {
+  policies: QualityPolicySettings;
+  reasons: QualityReasonCatalogItem[];
+  inspectionTemplates: QualityInspectionTemplate[];
+  samplingPlans: QualitySamplingPlan[];
+  reworkPolicies: QualityReworkPolicySettings;
+  printTemplates: QualityPrintTemplateSettings;
+};
+
+const QUALITY_SETTINGS_CACHE_KEY = 'quality:settings';
+
 export const QualitySettings: React.FC = () => {
   const { can } = usePermission();
   const canManageSettings = can('quality.settings.manage');
@@ -52,10 +68,15 @@ export const QualitySettings: React.FC = () => {
   const rawProducts = useAppStore((s) => s._rawProducts);
   const rawLines = useAppStore((s) => s._rawLines);
 
+  const initialSettingsCache = peekPageDataCache<QualitySettingsPageData>(QUALITY_SETTINGS_CACHE_KEY);
   const [activeTab, setActiveTab] = useState<QualitySettingsTab>('policies');
-  const [loading, setLoading] = useState(true);
-  const [policies, setPolicies] = useState<QualityPolicySettings>({ closeRequiresQualityApproval: false });
-  const [reasons, setReasons] = useState<QualityReasonCatalogItem[]>([]);
+  const [loading, setLoading] = useState(() => initialSettingsCache == null);
+  const [policies, setPolicies] = useState<QualityPolicySettings>(
+    () => initialSettingsCache?.policies ?? { closeRequiresQualityApproval: false },
+  );
+  const [reasons, setReasons] = useState<QualityReasonCatalogItem[]>(
+    () => initialSettingsCache?.reasons ?? [],
+  );
   const [savingPolicies, setSavingPolicies] = useState(false);
   const [savingReason, setSavingReason] = useState(false);
   const [message, setMessage] = useState('');
@@ -68,20 +89,28 @@ export const QualitySettings: React.FC = () => {
     severityDefault: 'medium' as QualityDefectSeverity,
     isActive: true,
   });
-  const [inspectionTemplates, setInspectionTemplates] = useState<QualityInspectionTemplate[]>([]);
-  const [samplingPlans, setSamplingPlans] = useState<QualitySamplingPlan[]>([]);
-  const [reworkPolicies, setReworkPolicies] = useState<QualityReworkPolicySettings>({
-    autoCreateReworkOnFail: true,
-    allowDirectScrap: false,
-    requireCapaForCritical: true,
-  });
-  const [printTemplates, setPrintTemplates] = useState<QualityPrintTemplateSettings>({
-    headerText: 'تقرير الجودة',
-    footerText: 'تم الإنشاء تلقائياً من الإنتاج',
-    showSignatureInspector: true,
-    showSignatureSupervisor: true,
-    showSignatureQualityManager: true,
-  });
+  const [inspectionTemplates, setInspectionTemplates] = useState<QualityInspectionTemplate[]>(
+    () => initialSettingsCache?.inspectionTemplates ?? [],
+  );
+  const [samplingPlans, setSamplingPlans] = useState<QualitySamplingPlan[]>(
+    () => initialSettingsCache?.samplingPlans ?? [],
+  );
+  const [reworkPolicies, setReworkPolicies] = useState<QualityReworkPolicySettings>(
+    () => initialSettingsCache?.reworkPolicies ?? {
+      autoCreateReworkOnFail: true,
+      allowDirectScrap: false,
+      requireCapaForCritical: true,
+    },
+  );
+  const [printTemplates, setPrintTemplates] = useState<QualityPrintTemplateSettings>(
+    () => initialSettingsCache?.printTemplates ?? {
+      headerText: 'تقرير الجودة',
+      footerText: 'تم الإنشاء تلقائياً من الإنتاج',
+      showSignatureInspector: true,
+      showSignatureSupervisor: true,
+      showSignatureQualityManager: true,
+    },
+  );
   const [templateForm, setTemplateForm] = useState({
     id: '',
     name: '',
@@ -100,28 +129,57 @@ export const QualitySettings: React.FC = () => {
     isActive: true,
   });
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const applySettingsData = useCallback((data: QualitySettingsPageData) => {
+    setPolicies(data.policies);
+    setReasons(data.reasons);
+    setInspectionTemplates(data.inspectionTemplates);
+    setSamplingPlans(data.samplingPlans);
+    setReworkPolicies(data.reworkPolicies);
+    setPrintTemplates(data.printTemplates);
+  }, []);
+
+  const loadData = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<QualitySettingsPageData>(QUALITY_SETTINGS_CACHE_KEY);
+    if (cached) {
+      applySettingsData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      await qualitySettingsService.seedDefaultReasons();
-      const [policiesData, reasonsData, settingsHub] = await Promise.all([
-        qualitySettingsService.getPolicies(),
-        qualitySettingsService.getReasons(false),
-        qualitySettingsService.getSettingsHub(),
-      ]);
-      setPolicies(policiesData);
-      setReasons(reasonsData);
-      setInspectionTemplates(settingsHub.inspectionTemplates ?? []);
-      setSamplingPlans(settingsHub.samplingPlans ?? []);
-      setReworkPolicies(settingsHub.reworkPolicies);
-      setPrintTemplates(settingsHub.printTemplates);
+      const { data } = await fetchCachedPageData(
+        QUALITY_SETTINGS_CACHE_KEY,
+        async () => {
+          await qualitySettingsService.seedDefaultReasons();
+          const [policiesData, reasonsData, settingsHub] = await Promise.all([
+            qualitySettingsService.getPolicies(),
+            qualitySettingsService.getReasons(false),
+            qualitySettingsService.getSettingsHub(),
+          ]);
+          return {
+            policies: policiesData,
+            reasons: reasonsData,
+            inspectionTemplates: settingsHub.inspectionTemplates ?? [],
+            samplingPlans: settingsHub.samplingPlans ?? [],
+            reworkPolicies: settingsHub.reworkPolicies,
+            printTemplates: settingsHub.printTemplates,
+          };
+        },
+        { force: opts?.force === true, maxAgeMs: 60_000 },
+      );
+      applySettingsData(data);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [applySettingsData]);
+
+  const reload = useCallback(async () => {
+    invalidatePageDataCache(QUALITY_SETTINGS_CACHE_KEY);
+    await loadData({ force: true });
+  }, [loadData]);
 
   useEffect(() => {
-    loadData();
+    void loadData();
   }, [loadData]);
 
   const activeReasonsCount = useMemo(() => reasons.filter((item) => item.isActive).length, [reasons]);
@@ -184,7 +242,7 @@ export const QualitySettings: React.FC = () => {
         await qualitySettingsService.createReason(payload);
       }
 
-      await loadData();
+      await reload();
       resetReasonForm();
       setMessage('تم حفظ سبب العيب');
     } catch {
@@ -211,7 +269,7 @@ export const QualitySettings: React.FC = () => {
     if (!window.confirm('هل تريد حذف هذا السبب؟')) return;
     try {
       await qualitySettingsService.deleteReason(id);
-      await loadData();
+      await reload();
       setMessage('تم حذف سبب العيب');
     } catch {
       setMessage('تعذر حذف سبب العيب');
@@ -240,7 +298,7 @@ export const QualitySettings: React.FC = () => {
       criticalChecksCsv: '',
       isActive: true,
     });
-    await loadData();
+    await reload();
     setMessage('تم حفظ قالب الفحص');
   };
 
@@ -264,25 +322,25 @@ export const QualitySettings: React.FC = () => {
       sampleSize: 5,
       isActive: true,
     });
-    await loadData();
+    await reload();
     setMessage('تم حفظ خطة المعاينة');
   };
 
   const saveReworkPolicies = async () => {
     if (!canManageSettings) return;
     await qualitySettingsService.setSettingsHub({ reworkPolicies });
-    await loadData();
+    await reload();
     setMessage('تم حفظ سياسات إعادة التشغيل');
   };
 
   const savePrintTemplates = async () => {
     if (!canManageSettings) return;
     await qualitySettingsService.setSettingsHub({ printTemplates });
-    await loadData();
+    await reload();
     setMessage('تم حفظ قوالب الطباعة');
   };
 
-  if (loading) return <PageContentSkeleton variant="form" />;
+  if (loading && reasons.length === 0) return <PageContentSkeleton variant="form" />;
 
   return (
     <div className="space-y-6">
@@ -583,7 +641,7 @@ export const QualitySettings: React.FC = () => {
                       disabled={!canManageSettings}
                       onClick={async () => {
                         await qualitySettingsService.removeInspectionTemplate(tpl.id);
-                        await loadData();
+                        await reload();
                       }}
                     >
                       حذف
@@ -673,7 +731,7 @@ export const QualitySettings: React.FC = () => {
                       disabled={!canManageSettings}
                       onClick={async () => {
                         await qualitySettingsService.removeSamplingPlan(plan.id);
-                        await loadData();
+                        await reload();
                       }}
                     >
                       حذف

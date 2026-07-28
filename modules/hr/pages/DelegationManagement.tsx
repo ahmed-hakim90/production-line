@@ -10,6 +10,13 @@ import {
   type ApprovalRequestType,
 } from '../approval';
 import type { FirestoreEmployee } from '@/types';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+type DelegationPageData = {
+  delegations: FirestoreApprovalDelegation[];
+  employees: FirestoreEmployee[];
+};
 
 const REQUEST_TYPE_LABELS: Record<ApprovalRequestType, string> = {
   leave: 'إجازات',
@@ -33,9 +40,6 @@ export const DelegationManagement: React.FC = () => {
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
 
-  const [delegations, setDelegations] = useState<FirestoreApprovalDelegation[]>([]);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
@@ -47,24 +51,34 @@ export const DelegationManagement: React.FC = () => {
 
   const isAdmin = can('approval.delegate');
   const myId = currentEmployee?.id || '';
+  const DELEGATION_CACHE_KEY = `hr:delegations:${isAdmin ? 'admin' : 'self'}:${myId || 'anon'}`;
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
-    try {
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<DelegationPageData>(
+    DELEGATION_CACHE_KEY,
+    async () => {
       const [delegationList, employeeList] = await Promise.all([
         isAdmin ? approvalDelegationService.getAll() : approvalDelegationService.getByFromEmployee(myId),
         employeeService.getAll(),
       ]);
-      setDelegations(delegationList);
-      setEmployees(employeeList.filter((e: FirestoreEmployee) => e.isActive));
-    } catch (err) {
-      console.error('Failed to load delegations:', err);
-    } finally {
-      setLoading(false);
-    }
-  }, [isAdmin, myId]);
+      return {
+        delegations: delegationList,
+        employees: employeeList.filter((e: FirestoreEmployee) => e.isActive),
+      };
+    },
+    { maxAgeMs: 60_000 },
+  );
 
-  useEffect(() => { loadData(); }, [loadData]);
+  const delegations = data?.delegations ?? [];
+  const employees = data?.employees ?? [];
+
+  const loadData = useCallback(async () => {
+    invalidatePageDataCache(DELEGATION_CACHE_KEY);
+    await reloadCached(true);
+  }, [DELEGATION_CACHE_KEY, reloadCached]);
 
   useEffect(() => {
     if (toast) {

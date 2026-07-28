@@ -18,6 +18,14 @@ const Reports = lazyNamed(() => import('../pages/Reports'), 'Reports');
 const ComponentWasteReports = lazyNamed(() => import('../pages/ComponentWasteReports'), 'ComponentWasteReports');
 const QuickAction = lazyNamed(() => import('../pages/QuickAction'), 'QuickAction');
 const SupervisorTeamActions = lazyNamed(() => import('../pages/SupervisorTeamActions'), 'SupervisorTeamActions');
+const ProductionIssueRequests = lazyNamed(
+  () => import('../pages/ProductionIssueRequests'),
+  'ProductionIssueRequests',
+);
+const PackagingControl = lazyNamed(
+  () => import('../pages/PackagingControl'),
+  'PackagingControl',
+);
 
 const RoutingPlansPage = lazyNamed(() => import('../routing/pages/RoutingPlansPage'), 'RoutingPlansPage');
 const PlanBuilderPage = lazyNamed(() => import('../routing/pages/PlanBuilderPage'), 'PlanBuilderPage');
@@ -31,6 +39,20 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   { path: '/lines', permission: 'lines.view', component: Lines },
   { path: '/lines/:id', permission: 'lines.view', component: LineDetails },
   { path: '/production-plans', permission: 'plans.view', component: ProductionPlans },
+  {
+    path: '/production/issue-requests',
+    permission: 'productionIssue.request',
+    permissionsAny: ['productionIssue.request', 'plans.view', 'workOrders.view'],
+    component: ProductionIssueRequests,
+    skeleton: 'dashboard',
+  },
+  {
+    path: '/production/packaging/control',
+    permission: 'reports.view',
+    permissionsAny: ['reports.view', 'reports.packaging.create', 'reports.packaging.only', 'inventory.view'],
+    component: PackagingControl,
+    skeleton: 'dashboard',
+  },
   { path: '/work-orders', permission: 'workOrders.view', component: WorkOrders },
   {
     path: '/work-orders/:id/scanner',

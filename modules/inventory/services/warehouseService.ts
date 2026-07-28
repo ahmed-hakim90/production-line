@@ -68,7 +68,7 @@ async function clearPlanSettingsWarehouseRefs(warehouseId: string): Promise<void
     const routing = { ...next.inventoryRouting };
     for (const k of ROUTING_WAREHOUSE_KEYS) {
       if (routing[k] === warehouseId) {
-        routing[k] = '';
+        (routing as unknown as Record<string, unknown>)[k as string] = '';
         changed = true;
       }
     }

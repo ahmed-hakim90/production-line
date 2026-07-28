@@ -604,6 +604,13 @@ export const WorkOrders: React.FC = () => {
         } : undefined}
         moreActions={[
           {
+            label: 'طلب صرف إنتاج',
+            icon: 'fact_check',
+            group: 'مخزون',
+            hidden: !can('productionIssue.request'),
+            onClick: () => navigate('/production/issue-requests'),
+          },
+          {
             label: 'تصدير أوامر الشغل Excel',
             icon: 'download',
             group: 'تصدير',

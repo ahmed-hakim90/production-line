@@ -9,6 +9,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 import { useAppStore } from '../../../store/useAppStore';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
@@ -80,17 +85,41 @@ export const RepairTreasury: React.FC = () => {
     });
   }, [branches, repairCtx.canViewAllBranches, currentEmployee?.id, user]);
 
-  const load = async (selectedBranchId: string, options?: { suppressToast?: boolean }) => {
+  const load = async (selectedBranchId: string, options?: { suppressToast?: boolean; force?: boolean }) => {
     if (!selectedBranchId) return;
+    const treasuryCacheKey = `repair:treasury:${selectedBranchId}`;
+    type TreasuryPageData = {
+      sessions: typeof sessions;
+      entries: typeof entries;
+      activeOpenSession: typeof activeOpenSession;
+    };
+    if (options?.force) invalidatePageDataCache(treasuryCacheKey);
+    const cached = peekPageDataCache<TreasuryPageData>(treasuryCacheKey);
+    if (cached) {
+      setSessions(cached.sessions);
+      setEntries(cached.entries);
+      setActiveOpenSession(cached.activeOpenSession);
+    }
     try {
-      const [rowsSessions, rowsEntries] = await Promise.all([
-        repairTreasuryService.listSessions(selectedBranchId),
-        repairTreasuryService.listEntries(selectedBranchId),
-      ]);
-      setSessions(rowsSessions);
-      setEntries(rowsEntries);
-      const liveOpenSession = await repairTreasuryService.getOpenSession(selectedBranchId);
-      setActiveOpenSession(liveOpenSession);
+      const { data } = await fetchCachedPageData(
+        treasuryCacheKey,
+        async () => {
+          const [rowsSessions, rowsEntries] = await Promise.all([
+            repairTreasuryService.listSessions(selectedBranchId),
+            repairTreasuryService.listEntries(selectedBranchId),
+          ]);
+          const liveOpenSession = await repairTreasuryService.getOpenSession(selectedBranchId);
+          return {
+            sessions: rowsSessions,
+            entries: rowsEntries,
+            activeOpenSession: liveOpenSession,
+          };
+        },
+        { force: options?.force === true, maxAgeMs: 45_000 },
+      );
+      setSessions(data.sessions);
+      setEntries(data.entries);
+      setActiveOpenSession(data.activeOpenSession);
     } catch (e: any) {
       setSessions([]);
       setEntries([]);

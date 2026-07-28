@@ -27,6 +27,11 @@ import { employeeService } from '../../hr/employeeService';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import type { RepairBranch } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type BranchStats = {
   productsCount: number;
@@ -37,7 +42,9 @@ type BranchStats = {
 export const RepairBranches: React.FC = () => {
   const { dir } = useAppDirection();
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('grid');
-  const [rows, setRows] = useState<RepairBranch[]>([]);
+  const BRANCHES_CACHE_KEY = 'repair:branches';
+  const initialBranchesCache = peekPageDataCache<RepairBranch[]>(BRANCHES_CACHE_KEY);
+  const [rows, setRows] = useState<RepairBranch[]>(() => initialBranchesCache ?? []);
   const [users, setUsers] = useState<FirestoreUser[]>([]);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
   const [branchStats, setBranchStats] = useState<Record<string, BranchStats>>({});
@@ -70,8 +77,16 @@ export const RepairBranches: React.FC = () => {
   const [branchPendingDelete, setBranchPendingDelete] = useState<RepairBranch | null>(null);
   const [deleteConfirmText, setDeleteConfirmText] = useState('');
 
-  const loadBranches = async () => {
-    setRows(await repairBranchService.list());
+  const loadBranches = async (opts?: { force?: boolean }) => {
+    if (opts?.force) invalidatePageDataCache(BRANCHES_CACHE_KEY);
+    const cached = peekPageDataCache<RepairBranch[]>(BRANCHES_CACHE_KEY);
+    if (cached) setRows(cached);
+    const { data } = await fetchCachedPageData(
+      BRANCHES_CACHE_KEY,
+      () => repairBranchService.list(),
+      { force: opts?.force === true, maxAgeMs: 60_000 },
+    );
+    setRows(data);
   };
   const loadUsers = async () => {
     const result = await userService.getAll();
@@ -148,7 +163,7 @@ export const RepairBranches: React.FC = () => {
     });
     setManagerFilter('');
     setBranchModalOpen(false);
-    await loadBranches();
+    await loadBranches({ force: true });
   };
   const save = async (id: string) => {
     const row = rows.find((item) => item.id === id);
@@ -193,7 +208,7 @@ export const RepairBranches: React.FC = () => {
       toast.success(
         `تم حذف الفرع وكل البيانات المرتبطة به (${result.deletedFirestoreDocs} سجل). ${details}. فك ربط الموظفين فقط: الفنيون ${unlinkedTechs}، المسؤول ${unlinkedManagers}.`,
       );
-      await loadBranches();
+      await loadBranches({ force: true });
       setBranchPendingDelete(null);
       setDeleteConfirmText('');
     } catch (e: any) {

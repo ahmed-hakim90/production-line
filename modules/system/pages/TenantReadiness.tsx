@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
@@ -8,24 +8,27 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { tenantReadinessService } from '../services/tenantReadinessService';
 import type { TenantReadinessResult } from '../lib/tenantReadinessLib';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+const CACHE_KEY = 'system:tenantReadiness';
 
 export const TenantReadiness: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
-  const [loading, setLoading] = useState(true);
-  const [result, setResult] = useState<TenantReadinessResult | null>(null);
+  const {
+    data: result,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<TenantReadinessResult>(
+    CACHE_KEY,
+    () => tenantReadinessService.evaluate(),
+    { maxAgeMs: 60_000 },
+  );
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      setResult(await tenantReadinessService.evaluate());
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const load = async () => {
+    invalidatePageDataCache(CACHE_KEY);
+    await reloadCached(true);
+  };
 
   return (
     <div className="space-y-6">
@@ -39,7 +42,7 @@ export const TenantReadiness: React.FC = () => {
         }
       />
 
-      {loading ? (
+      {loading && !result ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
             <Skeleton key={i} className="h-24 rounded-xl" />

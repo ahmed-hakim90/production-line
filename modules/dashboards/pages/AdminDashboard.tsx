@@ -106,6 +106,10 @@ import {
 } from '../../../utils/dashboardConfig';
 import type { ProductionReport, ActivityLog, QuickActionItem, QuickActionColor } from '../../../types';
 import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+import {
   ResponsiveContainer,
   ComposedChart,
   Bar,
@@ -459,10 +463,22 @@ export const AdminDashboard: React.FC = () => {
   // â”€â”€ System metrics state â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [productSearch, setProductSearch] = useState('');
   const [productCategoryFilter, setProductCategoryFilter] = useState('all');
-  const [systemUsers, setSystemUsers] = useState<SystemUsers>({ total: 0, active: 0, disabled: 0 });
-  const [rolesDistribution, setRolesDistribution] = useState<{ roleName: string; color: string; count: number }[]>([]);
-  const [recentActivity, setRecentActivity] = useState<ActivityLog[]>([]);
-  const [systemLoading, setSystemLoading] = useState(true);
+  const systemMetricsCacheKey = `dashboard:admin:system-metrics:${tenantSlug || 'default'}`;
+  const initialSystemMetrics = peekPageDataCache<{
+    users: SystemUsers;
+    roles: { roleName: string; color: string; count: number }[];
+    activity: ActivityLog[];
+  }>(systemMetricsCacheKey);
+  const [systemUsers, setSystemUsers] = useState<SystemUsers>(
+    () => initialSystemMetrics?.users ?? { total: 0, active: 0, disabled: 0 },
+  );
+  const [rolesDistribution, setRolesDistribution] = useState<{ roleName: string; color: string; count: number }[]>(
+    () => initialSystemMetrics?.roles ?? [],
+  );
+  const [recentActivity, setRecentActivity] = useState<ActivityLog[]>(
+    () => initialSystemMetrics?.activity ?? [],
+  );
+  const [systemLoading, setSystemLoading] = useState(() => initialSystemMetrics == null);
   const [yesterdayCompliance, setYesterdayCompliance] = useState<ReportComplianceSnapshot | null>(null);
   const [yesterdayComplianceLoading, setYesterdayComplianceLoading] = useState(true);
   const [yesterdayComplianceError, setYesterdayComplianceError] = useState<string | null>(null);
@@ -579,8 +595,15 @@ export const AdminDashboard: React.FC = () => {
       setMonthlyCostSummary(null);
       return () => { cancelled = true; };
     }
-    monthlyProductionCostService.getDashboardMonthlySummary(calendarMonthKey)
-      .then((summary) => {
+    const cacheKey = `dashboard:admin:monthly-cost:${calendarMonthKey}`;
+    const cached = peekPageDataCache<MonthlyDashboardCostSummary>(cacheKey);
+    if (cached) setMonthlyCostSummary(cached);
+    fetchCachedPageData(
+      cacheKey,
+      () => monthlyProductionCostService.getDashboardMonthlySummary(calendarMonthKey),
+      { maxAgeMs: 60_000 },
+    )
+      .then(({ data: summary }) => {
         if (!cancelled) setMonthlyCostSummary(summary);
       })
       .catch(() => {
@@ -595,8 +618,16 @@ export const AdminDashboard: React.FC = () => {
       setPreviousMonthlyCostSummary(null);
       return () => { cancelled = true; };
     }
-    monthlyProductionCostService.getDashboardMonthlySummary(getPreviousMonth(calendarMonthKey))
-      .then((summary) => {
+    const prevMonth = getPreviousMonth(calendarMonthKey);
+    const cacheKey = `dashboard:admin:monthly-cost:${prevMonth}`;
+    const cached = peekPageDataCache<MonthlyDashboardCostSummary>(cacheKey);
+    if (cached) setPreviousMonthlyCostSummary(cached);
+    fetchCachedPageData(
+      cacheKey,
+      () => monthlyProductionCostService.getDashboardMonthlySummary(prevMonth),
+      { maxAgeMs: 60_000 },
+    )
+      .then(({ data: summary }) => {
         if (!cancelled) setPreviousMonthlyCostSummary(summary);
       })
       .catch(() => {
@@ -629,38 +660,65 @@ export const AdminDashboard: React.FC = () => {
   // Fetch system metrics (tenant-aware)
   useEffect(() => {
     let cancelled = false;
-    setSystemLoading(true);
-    setSystemUsers({ total: 0, active: 0, disabled: 0 });
-    setRolesDistribution([]);
-    setRecentActivity([]);
-    Promise.all([
-      adminService.getSystemUsers(),
-      adminService.getRolesDistribution(),
-      adminService.getRecentActivity(10),
-    ]).then(([users, roles, activity]) => {
+    const cached = peekPageDataCache<{
+      users: SystemUsers;
+      roles: { roleName: string; color: string; count: number }[];
+      activity: ActivityLog[];
+    }>(systemMetricsCacheKey);
+    if (cached) {
+      setSystemUsers(cached.users);
+      setRolesDistribution(cached.roles);
+      setRecentActivity(cached.activity);
+      setSystemLoading(false);
+    } else {
+      setSystemLoading(true);
+    }
+    fetchCachedPageData(
+      systemMetricsCacheKey,
+      async () => {
+        const [users, roles, activity] = await Promise.all([
+          adminService.getSystemUsers(),
+          adminService.getRolesDistribution(),
+          adminService.getRecentActivity(10),
+        ]);
+        return { users, roles, activity };
+      },
+      { maxAgeMs: 60_000 },
+    ).then(({ data }) => {
       if (!cancelled) {
-        setSystemUsers(users);
-        setRolesDistribution(roles);
-        setRecentActivity(activity);
+        setSystemUsers(data.users);
+        setRolesDistribution(data.roles);
+        setRecentActivity(data.activity);
         setSystemLoading(false);
       }
     }).catch(() => {
       if (!cancelled) setSystemLoading(false);
     });
     return () => { cancelled = true; };
-  }, [tenantSlug]);
+  }, [systemMetricsCacheKey]);
 
   useEffect(() => {
     let cancelled = false;
-    const loadCompliance = async () => {
-      setYesterdayComplianceLoading(true);
+    const loadCompliance = async (force = false) => {
+      const cacheKey = `dashboard:admin:compliance:${selectedComplianceDate}`;
+      const cached = peekPageDataCache<ReportComplianceSnapshot>(cacheKey);
+      if (cached) {
+        setYesterdayCompliance(cached);
+        setYesterdayComplianceLoading(false);
+      } else {
+        setYesterdayComplianceLoading(true);
+      }
       setYesterdayComplianceError(null);
       try {
-        const yesterdaySnapshot = await reportComplianceService.getSnapshotForDate(
-          selectedComplianceDate,
-          _rawEmployees,
-          _rawLines,
-          { scope: 'assigned_only' },
+        const { data: yesterdaySnapshot } = await fetchCachedPageData(
+          cacheKey,
+          () => reportComplianceService.getSnapshotForDate(
+            selectedComplianceDate,
+            _rawEmployees,
+            _rawLines,
+            { scope: 'assigned_only' },
+          ),
+          { force, maxAgeMs: 45_000 },
         );
         if (!cancelled) {
           setYesterdayCompliance(yesterdaySnapshot);
@@ -677,8 +735,8 @@ export const AdminDashboard: React.FC = () => {
         }
       }
     };
-    loadCompliance();
-    const refreshTimer = window.setInterval(loadCompliance, 5 * 60 * 1000);
+    void loadCompliance(false);
+    const refreshTimer = window.setInterval(() => void loadCompliance(true), 5 * 60 * 1000);
     return () => {
       cancelled = true;
       window.clearInterval(refreshTimer);

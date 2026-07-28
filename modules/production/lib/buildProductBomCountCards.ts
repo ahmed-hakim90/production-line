@@ -55,8 +55,8 @@ function resolveLocationCode(
 ): string {
   const keySet = new Set(keys.map((k) => String(k || '').trim()).filter(Boolean));
   const code = String(itemCode || '').trim().toUpperCase();
-  const preferredTypes =
-    itemType === 'product' ? (['finished_good'] as const) : (['material', 'raw_material'] as const);
+  const preferredTypes: ReadonlyArray<'finished_good' | 'material' | 'raw_material'> =
+    itemType === 'product' ? ['finished_good'] : ['material', 'raw_material'];
 
   for (const type of preferredTypes) {
     const byDefault = defaults.find(

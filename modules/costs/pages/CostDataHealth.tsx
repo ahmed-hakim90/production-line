@@ -14,6 +14,11 @@ import {
 import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
 import { reportService } from '../../production/services/reportService';
 import type { MonthlyProductionCost, ProductionReport } from '../../../types';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type HealthIssueType = 'calc' | 'query' | 'perf';
 type HealthIssueSeverity = 'critical' | 'high' | 'medium';
@@ -78,34 +83,63 @@ export const CostDataHealth: React.FC = () => {
   }));
 
   const [month, setMonth] = useState(getCurrentMonth());
-  const [loading, setLoading] = useState(false);
+  const healthCacheKey = `costs:dataHealth:${month}`;
+  type CostDataHealthPageData = {
+    monthlyRecords: MonthlyProductionCost[];
+    monthReports: ProductionReport[];
+  };
+  const initialHealthCache = peekPageDataCache<CostDataHealthPageData>(healthCacheKey);
+  const [loading, setLoading] = useState(() => initialHealthCache == null);
   const [search, setSearch] = useState('');
   const [severityFilter, setSeverityFilter] = useState('');
   const [typeFilter, setTypeFilter] = useState('');
-  const [monthlyRecords, setMonthlyRecords] = useState<MonthlyProductionCost[]>([]);
-  const [monthReports, setMonthReports] = useState<ProductionReport[]>([]);
+  const [monthlyRecords, setMonthlyRecords] = useState<MonthlyProductionCost[]>(
+    () => initialHealthCache?.monthlyRecords ?? [],
+  );
+  const [monthReports, setMonthReports] = useState<ProductionReport[]>(
+    () => initialHealthCache?.monthReports ?? [],
+  );
   const supervisorHourlyRates = useMemo(
     () => buildSupervisorHourlyRatesMap(_rawEmployees),
     [_rawEmployees]
   );
 
-  const fetchMonthHealthData = useCallback(async () => {
-    setLoading(true);
+  const fetchMonthHealthData = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<CostDataHealthPageData>(healthCacheKey);
+    if (cached) {
+      setMonthlyRecords(cached.monthlyRecords);
+      setMonthReports(cached.monthReports);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const { startDate, endDate } = buildMonthDateRange(month);
-      const [records, reports] = await Promise.all([
-        monthlyProductionCostService.getByMonth(month),
-        reportService.getByDateRange(startDate, endDate),
-      ]);
-      setMonthlyRecords(records);
-      setMonthReports(reports);
+      const { data } = await fetchCachedPageData(
+        healthCacheKey,
+        async () => {
+          const { startDate, endDate } = buildMonthDateRange(month);
+          const [records, reports] = await Promise.all([
+            monthlyProductionCostService.getByMonth(month),
+            reportService.getByDateRange(startDate, endDate),
+          ]);
+          return { monthlyRecords: records, monthReports: reports };
+        },
+        { force: opts?.force === true, maxAgeMs: 60_000 },
+      );
+      setMonthlyRecords(data.monthlyRecords);
+      setMonthReports(data.monthReports);
     } catch {
       setMonthlyRecords([]);
       setMonthReports([]);
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [healthCacheKey, month]);
+
+  const reloadHealth = useCallback(async () => {
+    invalidatePageDataCache(healthCacheKey);
+    await fetchMonthHealthData({ force: true });
+  }, [fetchMonthHealthData, healthCacheKey]);
 
   useEffect(() => {
     void fetchMonthHealthData();
@@ -525,7 +559,7 @@ export const CostDataHealth: React.FC = () => {
         onAdvancedFilterChange={(key, value) => {
           if (key === 'type') setTypeFilter(value === 'all' ? '' : value);
         }}
-        onApply={() => void fetchMonthHealthData()}
+        onApply={() => void reloadHealth()}
         applyLabel={loading ? 'جار التحميل...' : 'تحديث الفحص'}
         extra={(
           <div className="inline-flex h-[34px] items-center gap-2">

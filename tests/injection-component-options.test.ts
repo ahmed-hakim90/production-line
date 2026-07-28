@@ -35,7 +35,9 @@ const rawRows = [
     name: 'مادة قديمة',
     categoryName: 'حقن',
     unit: 'piece',
+    minStock: 0,
     isActive: true,
+    createdAt: '2026-01-01',
   },
   {
     id: 'raw-only',
@@ -43,7 +45,9 @@ const rawRows = [
     name: 'مادة حقن قديمة',
     categoryName: 'حقن',
     unit: 'piece',
+    minStock: 0,
     isActive: true,
+    createdAt: '2026-01-01',
   },
 ];
 

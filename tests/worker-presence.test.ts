@@ -69,7 +69,7 @@ const reportPresenceRows = buildWorkerPresenceRowsFromReports([
       { employeeId: 'emp-1', employeeName: 'Worker One', laborRole: 'production', isPresent: true },
     ],
   },
-] satisfies ProductionReport[], 'worker-1', 'emp-1');
+] as ProductionReport[], 'worker-1', 'emp-1');
 
 const reportPresence = summarizeWorkerPresenceDays(reportPresenceRows);
 assert.equal(reportPresence.presentDays, 1);

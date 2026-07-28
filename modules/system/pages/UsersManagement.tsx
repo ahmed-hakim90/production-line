@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, LoadingSkeleton } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -14,6 +14,19 @@ import type { FirestoreEmployee, FirestoreRole } from '../../../types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { exportHRData } from '../../../utils/exportExcel';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+
+const USERS_CACHE_KEY = 'system:users-management';
+
+type UsersManagementPageData = {
+  rows: UserManagementRow[];
+  roles: FirestoreRole[];
+  employees: FirestoreEmployee[];
+};
 
 function sortByName<T extends { name?: string }>(items: T[]): T[] {
   return [...items].sort((a, b) =>
@@ -45,10 +58,11 @@ export const UsersManagement: React.FC = () => {
   const { openModal } = useGlobalModalManager();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const [rows, setRows] = useState<UserManagementRow[]>([]);
-  const [roles, setRoles] = useState<FirestoreRole[]>([]);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialUsersCache = peekPageDataCache<UsersManagementPageData>(USERS_CACHE_KEY);
+  const [rows, setRows] = useState<UserManagementRow[]>(initialUsersCache?.rows ?? []);
+  const [roles, setRoles] = useState<FirestoreRole[]>(initialUsersCache?.roles ?? []);
+  const [employees, setEmployees] = useState<FirestoreEmployee[]>(initialUsersCache?.employees ?? []);
+  const [loading, setLoading] = useState(() => initialUsersCache == null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [query, setQuery] = useState('');
@@ -61,32 +75,58 @@ export const UsersManagement: React.FC = () => {
     { key: 'active', label: 'مفعل' },
   ];
 
+  const applyUsersData = useCallback((data: UsersManagementPageData) => {
+    setRows(data.rows);
+    setRoles(data.roles);
+    setEmployees(data.employees);
+  }, []);
+
+  const loadPage = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<UsersManagementPageData>(USERS_CACHE_KEY);
+    if (cached) {
+      applyUsersData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
+    try {
+      const { data } = await fetchCachedPageData(
+        USERS_CACHE_KEY,
+        async () => {
+          const [rolesRows, nextRows, allEmployees] = await Promise.all([
+            roleService.getAll(),
+            userManagementService.getRows(),
+            employeeService.getAll(),
+          ]);
+          return {
+            roles: rolesRows,
+            rows: nextRows,
+            employees: sortByName(allEmployees.filter((employee) => employee.isActive !== false)),
+          };
+        },
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      applyUsersData(data);
+    } finally {
+      setLoading(false);
+    }
+  }, [applyUsersData]);
+
   const loadEmployees = async () => {
+    invalidatePageDataCache(USERS_CACHE_KEY);
     const all = await employeeService.getAll();
     setEmployees(sortByName(all.filter((employee) => employee.isActive !== false)));
   };
 
   const refreshRows = async () => {
+    invalidatePageDataCache(USERS_CACHE_KEY);
     const nextRows = await userManagementService.getRows();
     setRows(nextRows);
   };
 
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true);
-      try {
-        const [rolesRows] = await Promise.all([roleService.getAll(), refreshRows(), loadEmployees()]);
-        if (!mounted) return;
-        setRoles(rolesRows);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => {
-      mounted = false;
-    };
-  }, []);
+    void loadPage();
+  }, [loadPage]);
 
   const roleById = useMemo(() => {
     const map = new Map<string, FirestoreRole>();

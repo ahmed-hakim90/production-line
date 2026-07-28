@@ -8,10 +8,21 @@ import { useAppStore } from '@/store/useAppStore';
 import { db } from '@/services/firebase';
 import { usePermission } from '@/utils/permissions';
 import { getCurrentTenantId } from '@/lib/currentTenant';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 function fmt(value: number): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
+
+type PayrollAccountsPageData = {
+  month: string;
+  rows: (FirestorePayrollRecord & { disbursed?: boolean })[];
+};
 
 export const PayrollAccounts: React.FC = () => {
   const { can } = usePermission();
@@ -23,39 +34,65 @@ export const PayrollAccounts: React.FC = () => {
   const [month, setMonth] = useState('');
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const applyAccountsData = useCallback((data: PayrollAccountsPageData) => {
+    setMonth(data.month);
+    setRows(data.rows);
+  }, []);
+
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+    const cacheKey = `hr:payroll-accounts:${month || 'auto'}`;
+    const cached = peekPageDataCache<PayrollAccountsPageData>(cacheKey);
+    if (cached) {
+      applyAccountsData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError('');
     try {
-      const distSnap = await getDocs(query(
-        payrollDistributionsRef(),
-        where('tenantId', '==', getCurrentTenantId()),
-        where('status', '==', 'distributed'),
-      ));
-      const months = distSnap.docs
-        .map((d) => String((d.data() as any).month || ''))
-        .filter(Boolean)
-        .sort((a, b) => b.localeCompare(a));
-      if (months.length === 0) {
-        setMonth('');
-        setRows([]);
-        return;
+      const { data } = await fetchCachedPageData(
+        cacheKey,
+        async (): Promise<PayrollAccountsPageData> => {
+          const distSnap = await getDocs(query(
+            payrollDistributionsRef(),
+            where('tenantId', '==', getCurrentTenantId()),
+            where('status', '==', 'distributed'),
+          ));
+          const months = distSnap.docs
+            .map((d) => String((d.data() as { month?: string }).month || ''))
+            .filter(Boolean)
+            .sort((a, b) => b.localeCompare(a));
+          if (months.length === 0) {
+            return { month: '', rows: [] };
+          }
+          const targetMonth = month || months[0];
+          const payrollMonth = await getPayrollMonth(targetMonth);
+          if (!payrollMonth?.id) {
+            return { month: targetMonth, rows: [] };
+          }
+          const records = await getPayrollRecords(payrollMonth.id);
+          return {
+            month: targetMonth,
+            rows: records as Array<FirestorePayrollRecord & { disbursed?: boolean }>,
+          };
+        },
+        { force, maxAgeMs: 60_000 },
+      );
+      applyAccountsData(data);
+      // Also seed the resolved-month key when we started from "auto"
+      if (!month && data.month) {
+        const resolvedKey = `hr:payroll-accounts:${data.month}`;
+        if (resolvedKey !== cacheKey) {
+          setPageDataCache(resolvedKey, data);
+        }
       }
-      const targetMonth = month || months[0];
-      if (!month) setMonth(targetMonth);
-      const payrollMonth = await getPayrollMonth(targetMonth);
-      if (!payrollMonth?.id) {
-        setRows([]);
-        return;
-      }
-      const records = await getPayrollRecords(payrollMonth.id);
-      setRows(records as Array<FirestorePayrollRecord & { disbursed?: boolean }>);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'فشل تحميل بيانات صرف الرواتب');
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, applyAccountsData]);
 
   useEffect(() => {
     void load();
@@ -74,7 +111,8 @@ export const PayrollAccounts: React.FC = () => {
       disbursedByName: userDisplayName || '',
     });
     if (reloadAfter) {
-      await load();
+      invalidatePageDataCache('hr:payroll-accounts:');
+      await load({ force: true });
     }
   };
 
@@ -92,7 +130,8 @@ export const PayrollAccounts: React.FC = () => {
     if (failedCount > 0) {
       setError(`تعذر تأكيد صرف ${failedCount} سجل.`);
     }
-    await load();
+    invalidatePageDataCache('hr:payroll-accounts:');
+    await load({ force: true });
   };
 
   const totals = useMemo(() => {

@@ -17,10 +17,15 @@ import { useRawMaterialWarehouse } from '../hooks/useRawMaterialWarehouse';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { productionIssueService } from '../services/productionIssueService';
+import { listPlanIssueAlerts } from '../services/rawMaterialWarehouseAlertsService';
+import { planIssueAlertHref, planReplenishAlertHref } from '../lib/planIssueAlerts';
 import type { StockItemBalance, StockTransaction } from '../types';
 import { Bell } from 'lucide-react';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 const PAGE_SIZE = 25;
+const ALERTS_CACHE_PREFIX = 'inventory:raw-material-alerts';
 
 type AlertKind =
   | 'negative'
@@ -28,7 +33,9 @@ type AlertKind =
   | 'out'
   | 'pending_transfer'
   | 'pending_issue'
-  | 'large_manual';
+  | 'large_manual'
+  | 'plan_issue'
+  | 'plan_shortage';
 
 type AlertRow = {
   id: string;
@@ -38,6 +45,7 @@ type AlertRow = {
   createdAt?: string;
   balance?: StockItemBalance;
   href?: string;
+  actionLabel?: string;
 };
 
 const KIND_META: Record<AlertKind, { label: string; type: 'danger' | 'warning' | 'info' | 'success' }> = {
@@ -47,6 +55,8 @@ const KIND_META: Record<AlertKind, { label: string; type: 'danger' | 'warning' |
   pending_transfer: { label: 'تحويل معلّق', type: 'warning' },
   pending_issue: { label: 'صرف إنتاج معلّق', type: 'info' },
   large_manual: { label: 'حركة يدوية كبيرة', type: 'warning' },
+  plan_issue: { label: 'محتاج صرف إنتاج', type: 'warning' },
+  plan_shortage: { label: 'نقص مستلزمات للخطط', type: 'danger' },
 };
 
 export const RawMaterialWarehouseAlerts: React.FC = () => {
@@ -66,25 +76,28 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
     canSwitchWarehouse,
   } = useRawMaterialWarehouse();
 
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<AlertRow[]>([]);
   const [kindFilter, setKindFilter] = useState('');
   const [search, setSearch] = useState('');
   const [currentPage, setCurrentPage] = useState(1);
 
-  const load = useCallback(async () => {
-    if (!warehouseId) {
-      setRows([]);
-      setLoading(false);
-      return;
-    }
-    setLoading(true);
-    try {
-      const [balances, transactions, pending, issues] = await Promise.all([
+  const alertsCacheKey = warehouseId
+    ? `${ALERTS_CACHE_PREFIX}:${warehouseId}:${threshold}`
+    : null;
+
+  const {
+    data: rowsData,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<AlertRow[]>(
+    alertsCacheKey,
+    async () => {
+      if (!warehouseId) return [];
+      const [balances, transactions, pending, issues, planAlerts] = await Promise.all([
         stockService.getBalances(warehouseId),
         stockService.getTransactions(warehouseId),
         transferApprovalService.getByStatus('pending'),
         productionIssueService.getAll(),
+        listPlanIssueAlerts(warehouseId),
       ]);
 
       const next: AlertRow[] = [];
@@ -122,6 +135,28 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
         }
       });
 
+      planAlerts.forEach((alert) => {
+        if (alert.action === 'issue') {
+          next.push({
+            id: `plan-issue-${alert.productId}`,
+            kind: 'plan_issue',
+            title: alert.productName,
+            detail: `محتاج صرف إنتاج للمنتج ${alert.productCode || alert.productName} — متبقي في الخطط ${formatNumber(alert.remainingQuantity)} · متاح للتجميع الآن ${formatNumber(alert.maxAssemblable)} · اصرف المتاح فقط ${formatNumber(alert.suggestedIssueQuantity)}`,
+            href: planIssueAlertHref(alert, warehouseId) || undefined,
+            actionLabel: 'إنشاء إذن صرف',
+          });
+          return;
+        }
+        next.push({
+          id: `plan-shortage-${alert.productId}`,
+          kind: 'plan_shortage',
+          title: alert.productName,
+          detail: `لا يمكن الصرف: قابل للتجميع 0 — متبقي في الخطط ${formatNumber(alert.remainingQuantity)}. استلم مستلزمات أو راجع المكونات الناقصة أولاً.`,
+          href: planReplenishAlertHref(alert, warehouseId),
+          actionLabel: 'مراجعة المكونات',
+        });
+      });
+
       pending
         .filter((row) => row.fromWarehouseId === warehouseId || row.toWarehouseId === warehouseId)
         .forEach((row) => {
@@ -139,16 +174,23 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
         .filter(
           (row) =>
             row.sourceWarehouseId === warehouseId &&
-            (row.status === 'draft' || row.status === 'submitted'),
+            (row.status === 'draft' || row.status === 'submitted' || row.status === 'requested'),
         )
         .forEach((row) => {
           next.push({
             id: `issue-${row.id}`,
             kind: 'pending_issue',
             title: row.referenceNo || 'صرف إنتاج',
-            detail: `${row.productName} · كمية ${formatNumber(row.quantity)} · ${row.status === 'draft' ? 'مسودة' : 'مُرسل'}`,
+            detail:
+              row.status === 'requested'
+                ? `طلب من الإنتاج: ${row.productName} · كمية ${formatNumber(row.quantity)} · بانتظار الاعتماد`
+                : `${row.productName} · كمية ${formatNumber(row.quantity)} · ${row.status === 'draft' ? 'مسودة' : 'مُرسل'}`,
             createdAt: row.createdAt,
-            href: `/inventory/production-issues?warehouseId=${encodeURIComponent(warehouseId)}`,
+            href:
+              row.status === 'requested'
+                ? `/inventory/production-issues`
+                : `/inventory/production-issues?warehouseId=${encodeURIComponent(warehouseId)}`,
+            actionLabel: row.status === 'requested' ? 'اعتماد الطلب' : 'فتح',
           });
         });
 
@@ -170,19 +212,26 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
         });
 
       next.sort((a, b) => {
+        if (a.kind === 'plan_shortage' && b.kind !== 'plan_shortage') return -1;
+        if (b.kind === 'plan_shortage' && a.kind !== 'plan_shortage') return 1;
+        if (a.kind === 'plan_issue' && b.kind !== 'plan_issue') return -1;
+        if (b.kind === 'plan_issue' && a.kind !== 'plan_issue') return 1;
         const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
         const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
         return tb - ta;
       });
-      setRows(next);
-    } finally {
-      setLoading(false);
-    }
-  }, [warehouseId, threshold]);
+      return next;
+    },
+    { maxAgeMs: 45_000, enabled: Boolean(warehouseId) },
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const rows = rowsData ?? [];
+
+  const load = useCallback(async () => {
+    if (!warehouseId) return;
+    invalidatePageDataCache(ALERTS_CACHE_PREFIX);
+    await reloadCached(true);
+  }, [warehouseId, reloadCached]);
 
   useEffect(() => {
     setCurrentPage(1);
@@ -212,6 +261,8 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
       pending_transfer: 0,
       pending_issue: 0,
       large_manual: 0,
+      plan_issue: 0,
+      plan_shortage: 0,
     };
     rows.forEach((row) => {
       map[row.kind] += 1;
@@ -269,12 +320,14 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
             <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control')}>
               <GhostButton>لوحة التحكم</GhostButton>
             </Link>
-            <PrimaryButton onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
+            <PrimaryButton onClick={() => void load()} disabled={loading}>
+              تحديث
+            </PrimaryButton>
           </div>
         )}
       />
 
-      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+      <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
         {(Object.keys(KIND_META) as AlertKind[]).map((kind) => (
           <button
             key={kind}
@@ -366,7 +419,14 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
                                 )}
                                 {row.href && (
                                   <Link to={withTenantPath(tenantSlug, row.href)}>
-                                    <GhostButton>فتح</GhostButton>
+                                    <GhostButton>
+                                      {row.actionLabel
+                                        || (row.kind === 'plan_issue'
+                                          ? 'إنشاء إذن صرف'
+                                          : row.kind === 'plan_shortage'
+                                            ? 'مراجعة المكونات'
+                                            : 'فتح')}
+                                    </GhostButton>
                                   </Link>
                                 )}
                               </div>

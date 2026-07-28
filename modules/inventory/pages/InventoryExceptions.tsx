@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
@@ -10,6 +10,8 @@ import { useAppStore } from '../../../store/useAppStore';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import type { StockItemBalance, StockTransaction } from '../types';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 type ExceptionRow = {
   id: string;
@@ -19,18 +21,22 @@ type ExceptionRow = {
   balance?: StockItemBalance;
 };
 
+const EXCEPTIONS_CACHE_KEY = 'inventory:exceptions';
+
 export const InventoryExceptions: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { openModal } = useGlobalModalManager();
   const threshold = useAppStore(
     (s) => Number(s.systemSettings.planSettings?.inventoryExceptionManualThreshold || 500),
   );
-  const [loading, setLoading] = useState(true);
-  const [rows, setRows] = useState<ExceptionRow[]>([]);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    try {
+  const {
+    data: rowsData,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<ExceptionRow[]>(
+    `${EXCEPTIONS_CACHE_KEY}:${threshold}`,
+    async () => {
       const [balances, transactions] = await Promise.all([
         stockService.getBalances(),
         stockService.getTransactions(),
@@ -71,15 +77,17 @@ export const InventoryExceptions: React.FC = () => {
           });
         });
 
-      setRows(exceptions);
-    } finally {
-      setLoading(false);
-    }
-  }, [threshold]);
+      return exceptions;
+    },
+    { maxAgeMs: 45_000 },
+  );
 
-  useEffect(() => {
-    void load();
-  }, [load]);
+  const rows = rowsData ?? [];
+
+  const load = useCallback(async () => {
+    invalidatePageDataCache(EXCEPTIONS_CACHE_KEY);
+    await reloadCached(true);
+  }, [reloadCached]);
 
   return (
     <div className="space-y-6">

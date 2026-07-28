@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect, useMemo, useCallback } from 'react';
+﻿import React, { useState, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button, SearchableSelect } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -23,6 +23,18 @@ import type {
 } from '../types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../types';
 import { PageHeader } from '../../../components/PageHeader';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+
+const TX_CACHE_KEY = 'hr:transactions';
+
+type HRTransactionsPageData = {
+  employees: FirestoreEmployee[];
+  leaves: FirestoreLeaveRequest[];
+  loans: FirestoreEmployeeLoan[];
+  allowances: FirestoreEmployeeAllowance[];
+  deductions: FirestoreEmployeeDeduction[];
+};
 
 type TransactionType = 'all' | 'leave' | 'loan' | 'allowance' | 'deduction';
 
@@ -80,12 +92,36 @@ export const HRTransactions: React.FC = () => {
   const permissions = useAppStore((s) => s.userPermissions);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
 
-  const [loading, setLoading] = useState(true);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [leaves, setLeaves] = useState<FirestoreLeaveRequest[]>([]);
-  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
-  const [allowances, setAllowances] = useState<FirestoreEmployeeAllowance[]>([]);
-  const [deductions, setDeductions] = useState<FirestoreEmployeeDeduction[]>([]);
+  const {
+    data,
+    loading,
+    reload: reloadCached,
+  } = useCachedPageLoad<HRTransactionsPageData>(
+    TX_CACHE_KEY,
+    async () => {
+      const [emps, lv, lo, al, de] = await Promise.all([
+        employeeService.getAll(),
+        leaveRequestService.getAll(),
+        loanService.getAll(),
+        employeeAllowanceService.getAll(),
+        employeeDeductionService.getAll(),
+      ]);
+      return {
+        employees: emps,
+        leaves: lv,
+        loans: lo,
+        allowances: al,
+        deductions: de,
+      };
+    },
+    { maxAgeMs: 60_000 },
+  );
+
+  const employees = data?.employees ?? [];
+  const leaves = data?.leaves ?? [];
+  const loans = data?.loans ?? [];
+  const allowances = data?.allowances ?? [];
+  const deductions = data?.deductions ?? [];
 
   const [filterType, setFilterType] = useState<TransactionType>('all');
   const [filterEmployee, setFilterEmployee] = useState('');
@@ -140,35 +176,14 @@ export const HRTransactions: React.FC = () => {
     () =>
       employees
         .filter((e) => e.isActive !== false)
-        .map((e) => ({ value: e.id!, label: `${e.code || ''} أ¢آ€آ” ${e.name}` })),
+        .map((e) => ({ value: e.id!, label: `${e.code || ''} — ${e.name}` })),
     [employees],
   );
 
   const fetchData = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [emps, lv, lo, al, de] = await Promise.all([
-        employeeService.getAll(),
-        leaveRequestService.getAll(),
-        loanService.getAll(),
-        employeeAllowanceService.getAll(),
-        employeeDeductionService.getAll(),
-      ]);
-      setEmployees(emps);
-      setLeaves(lv);
-      setLoans(lo);
-      setAllowances(al);
-      setDeductions(de);
-    } catch (err) {
-      console.error('Failed to load HR transactions', err);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchData();
-  }, [fetchData]);
+    invalidatePageDataCache(TX_CACHE_KEY);
+    await reloadCached(true);
+  }, [reloadCached]);
 
   const transactions = useMemo<HRTransaction[]>(() => {
     const items: HRTransaction[] = [];

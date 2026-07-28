@@ -23,7 +23,7 @@ export type Permission =
   | 'catalog.categories.view' | 'catalog.categories.create' | 'catalog.categories.edit' | 'catalog.categories.delete'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
   | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.locations.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove' | 'inventory.disassembly.manage'
-  | 'productionIssue.create' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
+  | 'productionIssue.create' | 'productionIssue.request' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
@@ -213,6 +213,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'inventory.transfers.approve', label: 'اعتماد تحويلات المخازن' },
       { key: 'inventory.finishedStock.allowNegativeApprove', label: 'الموافقة على تحويل بالسالب (تم الصنع أو مخزن المفكك)' },
       { key: 'productionIssue.create', label: 'إنشاء أوامر صرف إنتاج' },
+      { key: 'productionIssue.request', label: 'طلب صرف إنتاج من الإنتاج' },
       { key: 'productionIssue.approve', label: 'اعتماد صرف الإنتاج' },
       { key: 'productionIssue.print', label: 'طباعة إذن صرف إنتاج' },
       { key: 'productionIssue.return', label: 'تسجيل مرتجع مكونات' },
@@ -447,6 +448,15 @@ export function checkPermission(
   }
   if (permission === 'productionIssue.approve' || permission === 'productionIssue.compensate') {
     return permissions['inventory.transfers.approve'] === true || permissions['inventory.transactions.create'] === true;
+  }
+  // New permission — older role docs (including admin) may omit the key entirely.
+  if (permission === 'productionIssue.request') {
+    return (
+      permissions['productionIssue.create'] === true
+      || permissions['plans.create'] === true
+      || permissions['adminDashboard.view'] === true
+      || permissions['roles.manage'] === true
+    );
   }
   if (permission === 'inventory.disassembly.manage') {
     return permissions['inventory.transactions.create'] === true;

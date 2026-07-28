@@ -20,6 +20,11 @@ import {
   formatCategoryBreadcrumb,
   normalizeCategoryName,
 } from '../lib/categoryTree';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type CategoryForm = {
   name: string;
@@ -42,6 +47,13 @@ function isDuplicateEntityCodeError(e: unknown): boolean {
   );
 }
 
+type CategoriesPageData = {
+  items: ProductCategory[];
+  usageById: Record<string, { productCount: number; childrenCount: number }>;
+};
+
+const CATEGORIES_CACHE_KEY = 'catalog:categories';
+
 export const Categories: React.FC = () => {
   const { t } = useTranslation();
   const { can } = usePermission();
@@ -53,8 +65,9 @@ export const Categories: React.FC = () => {
   const canDelete = can('catalog.categories.delete');
   const rawProducts = useAppStore((s) => s._rawProducts);
 
-  const [items, setItems] = useState<ProductCategory[]>([]);
-  const [loading, setLoading] = useState(true);
+  const initialCategoriesCache = peekPageDataCache<CategoriesPageData>(CATEGORIES_CACHE_KEY);
+  const [items, setItems] = useState<ProductCategory[]>(() => initialCategoriesCache?.items ?? []);
+  const [loading, setLoading] = useState(() => initialCategoriesCache == null);
   const [saving, setSaving] = useState(false);
   const [migrating, setMigrating] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -63,7 +76,7 @@ export const Categories: React.FC = () => {
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [usageById, setUsageById] = useState<
     Record<string, { productCount: number; childrenCount: number }>
-  >({});
+  >(() => initialCategoriesCache?.usageById ?? {});
 
   const productCategories = useMemo(() => items.filter(isProductCategoryRow), [items]);
 
@@ -87,34 +100,54 @@ export const Categories: React.FC = () => {
     peek: peekCategory,
   });
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<CategoriesPageData>(CATEGORIES_CACHE_KEY);
+    if (cached) {
+      setItems(cached.items);
+      setUsageById(cached.usageById);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const list = await categoryService.getAll();
-      const productOnly = list.filter(isProductCategoryRow);
-      setItems(list);
-      try {
-        setUsageById(await categoryService.getBulkCategoryUsageCounts(productOnly));
-      } catch (usageError) {
-        console.error('[categories] usage counts failed', usageError);
-        setUsageById({});
-        setMessage({
-          type: 'error',
-          text: 'تم تحميل الفئات لكن تعذر حساب عدد المنتجات المرتبطة.',
-        });
-      }
+      const { data } = await fetchCachedPageData(
+        CATEGORIES_CACHE_KEY,
+        async () => {
+          const list = await categoryService.getAll();
+          const productOnly = list.filter(isProductCategoryRow);
+          let usage: CategoriesPageData['usageById'] = {};
+          try {
+            usage = await categoryService.getBulkCategoryUsageCounts(productOnly);
+          } catch (usageError) {
+            console.error('[categories] usage counts failed', usageError);
+            setMessage({
+              type: 'error',
+              text: 'تم تحميل الفئات لكن تعذر حساب عدد المنتجات المرتبطة.',
+            });
+          }
+          return { items: list, usageById: usage };
+        },
+        { force: opts?.force === true, maxAgeMs: 60_000 },
+      );
+      setItems(data.items);
+      setUsageById(data.usageById);
     } catch (error) {
       console.error('[categories] load failed', error);
       setMessage({ type: 'error', text: 'تعذر تحميل الفئات حالياً.' });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
+
+  const reload = useCallback(async () => {
+    invalidatePageDataCache(CATEGORIES_CACHE_KEY);
+    await loadData({ force: true });
+  }, [loadData]);
 
   useEffect(() => {
     if (!canView) return;
     void loadData();
-  }, [canView]);
+  }, [canView, loadData]);
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
@@ -194,7 +227,7 @@ export const Categories: React.FC = () => {
         setMessage({ type: 'success', text: 'تمت إضافة الفئة بنجاح.' });
       }
       resetForm();
-      await loadData();
+      await reload();
     } catch (e) {
       if (isDuplicateEntityCodeError(e)) {
         setMessage({ type: 'error', text: t('entityCode.duplicateError') });
@@ -223,7 +256,7 @@ export const Categories: React.FC = () => {
     try {
       await categoryService.deactivateCategory(id);
       setMessage({ type: 'success', text: 'تم إيقاف الفئة.' });
-      await loadData();
+      await reload();
     } catch {
       setMessage({ type: 'error', text: 'تعذر إيقاف الفئة.' });
     }
@@ -234,7 +267,7 @@ export const Categories: React.FC = () => {
     try {
       await categoryService.deleteCategory(id);
       setMessage({ type: 'success', text: 'تم حذف الفئة.' });
-      await loadData();
+      await reload();
     } catch (e) {
       const msg =
         e instanceof Error && e.message === 'CATEGORY_HAS_CHILDREN'
@@ -257,7 +290,7 @@ export const Categories: React.FC = () => {
         type: 'success',
         text: `تم الترحيل: ${result.productsUpdated} منتج، ${result.categoriesHierarchyUpdated} فئة هيكلية.`,
       });
-      await loadData();
+      await reload();
       await useAppStore.getState().fetchProducts();
     } catch {
       setMessage({ type: 'error', text: 'فشل الترحيل.' });

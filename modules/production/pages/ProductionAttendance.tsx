@@ -8,6 +8,12 @@ import type { FirestoreProductionLine, FirestoreProduct, ProductionAttendanceRec
 import { getTodayDateString } from '@/utils/calculations';
 import { productionAttendanceService } from '../services/productionAttendanceService';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type StatusFilter = 'all' | ProductionAttendanceRecord['status'];
 
@@ -40,8 +46,10 @@ export const ProductionAttendance: React.FC = () => {
   const [endDate, setEndDate] = useState(getTodayDateString);
   const [lineId, setLineId] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
-  const [records, setRecords] = useState<ProductionAttendanceRecord[]>([]);
-  const [loading, setLoading] = useState(false);
+  const attendanceCacheKey = `production:attendance:${startDate}:${endDate}:${lineId || 'all'}:${status}`;
+  const initialCache = peekPageDataCache<ProductionAttendanceRecord[]>(attendanceCacheKey);
+  const [records, setRecords] = useState<ProductionAttendanceRecord[]>(() => initialCache ?? []);
+  const [loading, setLoading] = useState(() => initialCache == null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const lineNames = useMemo(
@@ -53,26 +61,36 @@ export const ProductionAttendance: React.FC = () => {
     [products],
   );
 
-  const load = useCallback(async () => {
-    setLoading(true);
+  const load = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<ProductionAttendanceRecord[]>(attendanceCacheKey);
+    if (cached) {
+      setRecords(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const rows = await productionAttendanceService.list({
-        startDate,
-        endDate,
-        lineId,
-        status,
-      });
-      setRecords(rows);
+      const { data } = await fetchCachedPageData(
+        attendanceCacheKey,
+        () => productionAttendanceService.list({ startDate, endDate, lineId, status }),
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      setRecords(data);
     } catch (error) {
       showAppToast('error', (error as Error).message || 'تعذر تحميل سجل حضور الإنتاج.');
     } finally {
       setLoading(false);
     }
-  }, [startDate, endDate, lineId, status]);
+  }, [attendanceCacheKey, startDate, endDate, lineId, status]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const reload = useCallback(async () => {
+    invalidatePageDataCache(attendanceCacheKey);
+    await load({ force: true });
+  }, [attendanceCacheKey, load]);
 
   const updateStatus = useCallback(async (
     record: ProductionAttendanceRecord,
@@ -82,16 +100,20 @@ export const ProductionAttendance: React.FC = () => {
     setBusyId(record.id);
     try {
       await productionAttendanceService.updateRecordStatus(record, nextStatus);
-      setRecords((current) => current.map((row) => (
-        row.id === record.id ? { ...row, status: nextStatus } : row
-      )));
+      setRecords((current) => {
+        const next = current.map((row) => (
+          row.id === record.id ? { ...row, status: nextStatus } : row
+        ));
+        setPageDataCache(attendanceCacheKey, next);
+        return next;
+      });
       showAppToast('success', 'تم تحديث حالة الحضور.');
     } catch (error) {
       showAppToast('error', (error as Error).message || 'تعذر تحديث سجل الحضور.');
     } finally {
       setBusyId(null);
     }
-  }, []);
+  }, [attendanceCacheKey]);
 
   const deleteRows = useCallback(async (rows: ProductionAttendanceRecord[]) => {
     const ids = rows.map((row) => row.id).filter((id): id is string => Boolean(id));
@@ -100,14 +122,18 @@ export const ProductionAttendance: React.FC = () => {
     setBusyId('bulk-delete');
     try {
       await productionAttendanceService.deleteByIds(ids);
-      setRecords((current) => current.filter((row) => !row.id || !ids.includes(row.id)));
+      setRecords((current) => {
+        const next = current.filter((row) => !row.id || !ids.includes(row.id));
+        setPageDataCache(attendanceCacheKey, next);
+        return next;
+      });
       showAppToast('success', 'تم حذف السجلات المحددة.');
     } catch (error) {
       showAppToast('error', (error as Error).message || 'تعذر حذف سجلات الحضور.');
     } finally {
       setBusyId(null);
     }
-  }, []);
+  }, [attendanceCacheKey]);
 
   const stats = useMemo(() => {
     const present = records.filter((row) => row.status === 'present').length;
@@ -177,7 +203,7 @@ export const ProductionAttendance: React.FC = () => {
         subtitle="الحضور والغياب المسجل وقت حفظ تقارير الإنتاج فقط، وليس بتوليد يومي تلقائي."
         icon="fact_check"
         moreActions={[
-          { label: 'تحديث', icon: 'refresh', onClick: load, disabled: loading },
+          { label: 'تحديث', icon: 'refresh', onClick: () => void reload(), disabled: loading },
         ]}
       />
 
@@ -244,7 +270,7 @@ export const ProductionAttendance: React.FC = () => {
           <div className="flex items-end">
             <button
               type="button"
-              onClick={() => void load()}
+              onClick={() => void reload()}
               disabled={loading}
               className="w-full rounded-md bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
             >

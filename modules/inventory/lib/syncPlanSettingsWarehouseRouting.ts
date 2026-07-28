@@ -9,12 +9,12 @@ const emptyRouting = (): InventoryRoutingSettings => ({
   packagingSourceWarehouseId: '',
   packagingTargetWarehouseId: '',
   wasteWarehouseId: '',
-  autoTransferProductionToFinished: false,
+  autoTransferProductionToFinished: true,
   autoTransferFinishedToFinal: false,
   requireApprovalForProductionEntry: true,
-  requireApprovalForAutoTransfers: true,
+  requireApprovalForAutoTransfers: false,
   autoConsumeBomOnProductionReport: false,
-  /** Default on: report stock posts only after issued production issue. */
+  /** Default on: finished report requires issued صرف إنتاج (no auto BOM consume). */
   requireIssuedProductionIssueOnReport: true,
 });
 

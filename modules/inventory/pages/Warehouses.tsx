@@ -9,7 +9,7 @@ const ROLE_LABELS: Record<WarehouseRole, string> = {
   raw_material: 'مواد خام',
   decomposed: 'مفكك',
   production_wip: 'WIP',
-  finished_staging: 'تم الصنع',
+  finished_staging: 'تم الإنتاج',
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
@@ -21,12 +21,16 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { Pencil, Trash2 } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
+import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
+import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
 const DELETE_CONFIRM = (name: string) =>
   `سيتم حذف المخزن «${name}» وجميع البيانات المرتبطة به نهائيًا:\n`
   + 'حركات المخزون، الأرصدة، طلبات التحويل، وجلسات الجرد لهذا المخزن.\n'
   + 'لا يمكن التراجع عن هذه العملية.\n\n'
   + 'هل تريد المتابعة؟';
+
+const WAREHOUSES_CACHE_KEY = 'inventory:warehouses';
 
 export const Warehouses: React.FC = () => {
   const { can } = usePermission();
@@ -44,7 +48,7 @@ export const Warehouses: React.FC = () => {
     add(routing.rawMaterialWarehouseId, 'مواد خام');
     add(routing.decomposedWarehouseId, 'مستلزم / مفكك');
     add(routing.productionWipWarehouseId, 'WIP');
-    add(routing.finishedStagingWarehouseId, 'تم الصنع');
+    add(routing.finishedStagingWarehouseId, 'تم الإنتاج');
     add(routing.finalProductWarehouseId, 'منتج تام');
     add(routing.wasteWarehouseId, 'هالك');
     add(routing.packagingSourceWarehouseId, 'تغليف (من)');
@@ -54,11 +58,25 @@ export const Warehouses: React.FC = () => {
   const canView = can('inventory.view');
   const canManage = can('inventory.warehouses.manage');
 
-  const [rows, setRows] = useState<Warehouse[]>([]);
-  const [loading, setLoading] = useState(true);
+  const {
+    data: rowsData,
+    loading,
+    error: loadError,
+    reload: reloadCached,
+  } = useCachedPageLoad<Warehouse[]>(
+    canView ? WAREHOUSES_CACHE_KEY : null,
+    () => warehouseService.getAllWarehouses(),
+    { maxAgeMs: 60_000 },
+  );
+  const rows = rowsData ?? [];
+
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [roleFilter, setRoleFilter] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (loadError) setMessage({ type: 'error', text: 'تعذر تحميل المخازن.' });
+  }, [loadError]);
 
   const displayRows = useMemo(
     () => rows.filter((w) => !roleFilter || (w.warehouseRole || 'general') === roleFilter),
@@ -66,21 +84,9 @@ export const Warehouses: React.FC = () => {
   );
 
   const load = useCallback(async () => {
-    setLoading(true);
-    try {
-      const list = await warehouseService.getAllWarehouses();
-      setRows(list);
-    } catch {
-      setMessage({ type: 'error', text: 'تعذر تحميل المخازن.' });
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (!canView) return;
-    void load();
-  }, [canView, load]);
+    invalidatePageDataCache(WAREHOUSES_CACHE_KEY);
+    await reloadCached(true);
+  }, [reloadCached]);
 
   const startEdit = (w: Warehouse) => {
     if (!w.id || !canManage) return;

@@ -3,6 +3,7 @@
  * Single source of truth for navigation structure and badge sources.
  */
 import type { Permission } from '../utils/permissions';
+import type { FirestoreRoleKey } from '../types';
 
 export interface MenuItem {
   key: string;
@@ -14,6 +15,8 @@ export interface MenuItem {
   anyOfPermissions?: Permission[];
   /** Visible only when the logged-in employee is a supervisor self-service user. */
   selfSupervisorOnly?: boolean;
+  /** Hide from these built-in role keys (role-focused navigation). */
+  excludeRoleKeys?: FirestoreRoleKey[];
   activePatterns?: string[];
   /**
    * When `activePatterns` or the default `path/` prefix matches, skip if the logical path
@@ -36,7 +39,11 @@ export interface MenuGroup {
 export function canAccessMenuItem(
   can: (permission: Permission) => boolean,
   item: MenuItem,
+  roleKey?: FirestoreRoleKey | string | null,
 ): boolean {
+  if (roleKey && item.excludeRoleKeys?.length && item.excludeRoleKeys.includes(roleKey as FirestoreRoleKey)) {
+    return false;
+  }
   if (item.anyOfPermissions?.length) {
     return item.anyOfPermissions.some((p) => can(p));
   }
@@ -63,6 +70,13 @@ const badgeSources = {
       '../modules/inventory/services/rawMaterialWarehouseAlertsService'
     );
     return countRawMaterialWarehouseAlerts();
+  },
+  pendingProductionIssueRequests: async (): Promise<number> => {
+    const { productionIssueService } = await import(
+      '../modules/inventory/services/productionIssueService'
+    );
+    const rows = await productionIssueService.getAll();
+    return rows.filter((row) => row.status === 'requested').length;
   },
 };
 
@@ -96,9 +110,7 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'category',
     children: [
       { key: 'catalog-products', label: 'المنتجات', icon: 'inventory_2', path: '/products', permission: 'products.view', activePatterns: ['/products/'] },
-      { key: 'catalog-products-add', label: 'إضافة منتج', icon: 'add_circle', path: '/products?action=create', permission: 'products.create', activePatterns: ['/products'] },
       { key: 'catalog-categories', label: 'الفئات', icon: 'category', path: '/catalog/categories', permission: 'catalog.categories.view' },
-      { key: 'catalog-categories-add', label: 'إضافة فئة', icon: 'add_circle', path: '/catalog/categories?action=create', permission: 'catalog.categories.create' },
       { key: 'manufacturing-materials', label: 'المواد التصنيعية', icon: 'precision_manufacturing', path: '/manufacturing/materials', permission: 'materials.view' },
       { key: 'manufacturing-material-categories', label: 'فئات المواد', icon: 'category', path: '/manufacturing/material-categories', permission: 'materials.manage' },
     ],
@@ -120,6 +132,25 @@ export const MENU_CONFIG: MenuGroup[] = [
       },
       { key: 'work-orders', label: 'أوامر الشغل', icon: 'assignment', path: '/work-orders', permission: 'workOrders.view' },
       { key: 'plans', label: 'خطط الإنتاج', icon: 'event_note', path: '/production-plans', permission: 'plans.view' },
+      {
+        key: 'production-issue-requests',
+        label: 'طلبات صرف الإنتاج',
+        icon: 'fact_check',
+        path: '/production/issue-requests',
+        permission: 'productionIssue.request',
+        anyOfPermissions: ['productionIssue.request', 'plans.view', 'workOrders.view'],
+        activePatterns: ['/production/issue-requests'],
+      },
+      {
+        key: 'packaging-control',
+        label: 'تحكم التغليف',
+        icon: 'package_2',
+        path: '/production/packaging/control',
+        permission: 'reports.view',
+        anyOfPermissions: ['reports.view', 'reports.packaging.create', 'reports.packaging.only', 'inventory.view'],
+        excludeRoleKeys: ['materials_warehouse'],
+        activePatterns: ['/production/packaging/', '/inventory/packaging/'],
+      },
       { key: 'lines', label: 'خطوط الإنتاج', icon: 'precision_manufacturing', path: '/lines', permission: 'lines.view', activePatterns: ['/lines/'] },
       { key: 'supervisors', label: 'المشرفين', icon: 'engineering', path: '/supervisors', permission: 'supervisors.view', anyOfPermissions: ['supervisors.view', 'supervisorAssignments.manage'], activePatterns: ['/supervisors/', '/supervisor-line-assignments'] },
       {
@@ -171,7 +202,7 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'warehouse',
     children: [
       // نظرة عامة
-      { key: 'inv-dashboard', label: 'لوحة المخزون', icon: 'inventory', path: '/inventory', permission: 'inventory.view' },
+      { key: 'inv-dashboard', label: 'لوحة تحكم المخزون', icon: 'inventory', path: '/inventory', permission: 'inventory.view' },
       {
         key: 'inv-raw-control',
         label: 'تحكم مخزن المستلزمات',
@@ -193,23 +224,28 @@ export const MENU_CONFIG: MenuGroup[] = [
       // استعلام
       { key: 'inv-balances', label: 'الأرصدة', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
       { key: 'inv-transactions', label: 'الحركات', icon: 'sync_alt', path: '/inventory/transactions', permission: 'inventory.view' },
-      // عمليات يومية
-      {
-        key: 'inv-raw-receive',
-        label: 'استلام مستلزمات',
-        icon: 'add_circle',
-        path: '/inventory/raw-materials/receive',
-        permission: 'inventory.transactions.create',
-      },
-      { key: 'inv-movements', label: 'إدخال حركة', icon: 'add_circle', path: '/inventory/movements', permission: 'inventory.transactions.create' },
-      { key: 'inv-quick-transfer', label: 'تحويل سريع', icon: 'bolt', path: '/quick-inventory-transfer', permission: 'inventory.transactions.create' },
+      // عمليات ومتابعة
       { key: 'inv-transfer-approvals', label: 'اعتماد التحويلات', icon: 'verified_user', path: '/inventory/transfer-approvals', permission: 'inventory.view' },
       { key: 'inv-counts', label: 'الجرد والمطابقة', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
       // مخزون الإنتاج
-      { key: 'inv-production-issues', label: 'صرف إنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view' },
-      { key: 'inv-production-approvals', label: 'اعتمادات الإنتاج المخزنية', icon: 'approval', path: '/inventory/production-approvals', permission: 'inventory.view' },
+      { key: 'inv-production-issues', label: 'صرف إنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view', badgeSource: badgeSources.pendingProductionIssueRequests },
+      {
+        key: 'inv-production-approvals',
+        label: 'اعتمادات الإنتاج المخزنية',
+        icon: 'approval',
+        path: '/inventory/production-approvals',
+        permission: 'inventory.view',
+        excludeRoleKeys: ['materials_warehouse'],
+      },
       { key: 'inv-production-component-records', label: 'سجلات مكونات الإنتاج', icon: 'receipt_long', path: '/inventory/production-component-records', permission: 'inventory.view' },
-      { key: 'inv-production-consumption-analysis', label: 'تحليل استهلاك الإنتاج', icon: 'analytics', path: '/inventory/production-consumption-analysis', permission: 'inventory.view' },
+      {
+        key: 'inv-production-consumption-analysis',
+        label: 'تحليل استهلاك الإنتاج',
+        icon: 'analytics',
+        path: '/inventory/production-consumption-analysis',
+        permission: 'inventory.view',
+        excludeRoleKeys: ['materials_warehouse'],
+      },
       { key: 'inv-disassembly', label: 'تفكيك عكسي', icon: 'sync_alt', path: '/inventory/disassembly', permission: 'inventory.disassembly.manage' },
       // تحليل ومتابعة
       { key: 'inv-analytics', label: 'تحليلات المخزون', icon: 'analytics', path: '/inventory/analytics', permission: 'inventory.analytics.view' },
@@ -223,7 +259,6 @@ export const MENU_CONFIG: MenuGroup[] = [
     children: [
       { key: 'hr-dash', label: 'لوحة HR', icon: 'monitoring', path: '/hr/dashboard', permission: 'hrDashboard.view' },
       { key: 'employees', label: 'الموظفين', icon: 'groups', path: '/hr/employees', permission: 'employees.view', activePatterns: ['/hr/employees/'] },
-      { key: 'emp-import', label: 'استيراد الموظفين', icon: 'upload', path: '/hr/employees/import', permission: 'employees.create' },
       { key: 'org', label: 'الهيكل التنظيمي', icon: 'account_tree', path: '/hr/organization', permission: 'hrSettings.view' },
       { key: 'self-svc', label: 'الخدمة الذاتية', icon: 'person', path: '/hr/self-service', permission: 'selfService.view' },
       { key: 'leaves', label: 'الإجازات', icon: 'beach_access', path: '/hr/leave-requests', permission: 'leave.view' },
@@ -276,7 +311,6 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'repair-dashboard', label: 'لوحة الصيانة', icon: 'dashboard', path: '/repair', permission: 'repair.dashboard.view' },
       { key: 'repair-call-center', label: 'مركز الاتصال', icon: 'call', path: '/repair/call-center', permission: 'repair.view' },
       { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
-      { key: 'repair-new', label: 'جهاز جديد', icon: 'add_circle', path: '/repair/jobs/new', permission: 'repair.jobs.create' },
       { key: 'repair-parts', label: 'قطع الغيار', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
       { key: 'repair-treasury', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/treasury', permission: 'repair.treasury.view' },
       { key: 'repair-sales-invoice', label: 'فاتورة بيع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },

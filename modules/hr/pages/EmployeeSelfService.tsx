@@ -25,8 +25,26 @@ import { LEAVE_TYPE_LABELS } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+  setPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type SelfServiceTab = 'approvals' | 'attendance' | 'leave' | 'loan' | 'payroll' | 'requests';
+
+type SelfServicePageData = {
+  attendanceLogs: AttendanceRecord[];
+  leaveRequests: FirestoreLeaveRequest[];
+  leaveBalance: FirestoreLeaveBalance | null;
+  leaveUsageSummary: Awaited<ReturnType<typeof getEmployeeLeaveUsageSummary>> | null;
+  loans: FirestoreEmployeeLoan[];
+  managerPendingApprovals: FirestoreApprovalRequest[];
+  lockedPayslip: { month: string; record: FirestorePayrollRecord } | null;
+  leaveTypes: LeaveTypeDefinition[];
+  defaultLeaveType: LeaveType;
+};
 
 function formatTime(ts: any): string {
   if (!ts) return '—';
@@ -97,17 +115,23 @@ export const EmployeeSelfService: React.FC = () => {
 
   const canViewApprovals = can('approval.view');
   const [activeTab, setActiveTab] = useState<SelfServiceTab>(canViewApprovals ? 'approvals' : 'attendance');
-  const [loading, setLoading] = useState(true);
-  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>([]);
-  const [leaveRequests, setLeaveRequests] = useState<FirestoreLeaveRequest[]>([]);
-  const [leaveBalance, setLeaveBalance] = useState<FirestoreLeaveBalance | null>(null);
-  const [leaveUsageSummary, setLeaveUsageSummary] = useState<Awaited<ReturnType<typeof getEmployeeLeaveUsageSummary>> | null>(null);
-  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
-  const [managerPendingApprovals, setManagerPendingApprovals] = useState<FirestoreApprovalRequest[]>([]);
-  const [lockedPayslip, setLockedPayslip] = useState<{ month: string; record: FirestorePayrollRecord } | null>(null);
-  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>([]);
+  const employeeId = currentEmployee?.id ?? '';
+  const SELF_CACHE_KEY = employeeId ? `hr:self-service:${employeeId}` : null;
+  const initialSelfCache = SELF_CACHE_KEY
+    ? peekPageDataCache<SelfServicePageData>(SELF_CACHE_KEY)
+    : null;
 
-  const [leaveType, setLeaveType] = useState<LeaveType>('annual');
+  const [loading, setLoading] = useState(() => Boolean(employeeId) && initialSelfCache == null);
+  const [attendanceLogs, setAttendanceLogs] = useState<AttendanceRecord[]>(initialSelfCache?.attendanceLogs ?? []);
+  const [leaveRequests, setLeaveRequests] = useState<FirestoreLeaveRequest[]>(initialSelfCache?.leaveRequests ?? []);
+  const [leaveBalance, setLeaveBalance] = useState<FirestoreLeaveBalance | null>(initialSelfCache?.leaveBalance ?? null);
+  const [leaveUsageSummary, setLeaveUsageSummary] = useState<Awaited<ReturnType<typeof getEmployeeLeaveUsageSummary>> | null>(initialSelfCache?.leaveUsageSummary ?? null);
+  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>(initialSelfCache?.loans ?? []);
+  const [managerPendingApprovals, setManagerPendingApprovals] = useState<FirestoreApprovalRequest[]>(initialSelfCache?.managerPendingApprovals ?? []);
+  const [lockedPayslip, setLockedPayslip] = useState<{ month: string; record: FirestorePayrollRecord } | null>(initialSelfCache?.lockedPayslip ?? null);
+  const [leaveTypes, setLeaveTypes] = useState<LeaveTypeDefinition[]>(initialSelfCache?.leaveTypes ?? []);
+
+  const [leaveType, setLeaveType] = useState<LeaveType>(initialSelfCache?.defaultLeaveType ?? 'annual');
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [reason, setReason] = useState('');
@@ -127,10 +151,24 @@ export const EmployeeSelfService: React.FC = () => {
   const leaveTypeByKey = useMemo(() => leaveTypeMapByKey(leaveTypes), [leaveTypes]);
   const selectedLeaveType = leaveTypeByKey[leaveType];
 
-  const employeeId = currentEmployee?.id ?? '';
+  const applySelfData = useCallback((data: SelfServicePageData) => {
+    setAttendanceLogs(data.attendanceLogs);
+    setLeaveRequests(data.leaveRequests);
+    setLeaveBalance(data.leaveBalance);
+    setLeaveUsageSummary(data.leaveUsageSummary);
+    setLoans(data.loans);
+    setManagerPendingApprovals(data.managerPendingApprovals);
+    setLockedPayslip(data.lockedPayslip);
+    setLeaveTypes(data.leaveTypes);
+    setLeaveType((prev) =>
+      data.leaveTypes.find((row) => row.key === prev)
+        ? prev
+        : data.defaultLeaveType,
+    );
+  }, []);
 
   const refreshLeaveData = useCallback(async () => {
-    if (!employeeId) return;
+    if (!employeeId || !SELF_CACHE_KEY) return;
     const updated = await leaveRequestService.getByEmployee(employeeId);
     setLeaveRequests(updated);
     const balance = await leaveBalanceService.getByEmployee(employeeId) ?? await leaveBalanceService.getOrCreate(employeeId);
@@ -140,47 +178,63 @@ export const EmployeeSelfService: React.FC = () => {
       leaveBalance: balance,
     });
     setLeaveUsageSummary(usage);
-  }, [employeeId]);
+    const cached = peekPageDataCache<SelfServicePageData>(SELF_CACHE_KEY);
+    if (cached) {
+      setPageDataCache(SELF_CACHE_KEY, {
+        ...cached,
+        leaveRequests: updated,
+        leaveBalance: balance,
+        leaveUsageSummary: usage,
+      });
+    }
+  }, [employeeId, SELF_CACHE_KEY]);
 
   useEffect(() => {
-    if (!employeeId) return;
+    if (!employeeId || !SELF_CACHE_KEY) return;
     let cancelled = false;
-    setLoading(true);
+    const cached = peekPageDataCache<SelfServicePageData>(SELF_CACHE_KEY);
+    if (cached) {
+      applySelfData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     (async () => {
       await fetchEmployees?.();
       try {
-        const [logs, leaveReqs, balance, loanList, payslipResult, configuredLeaveTypes, pendingApprovals] = await Promise.all([
-          attendanceProcessingService.getRecordsByEmployee(employeeId),
-          leaveRequestService.getByEmployee(employeeId),
-          leaveBalanceService.getByEmployee(employeeId).then((b) => b ?? leaveBalanceService.getOrCreate(employeeId)),
-          loanService.getByEmployee(employeeId),
-          getEmployeeLockedPayslip(employeeId),
-          getLeaveTypesFromConfig(),
-          canViewApprovals ? getPendingApprovals({ approverEmployeeId: employeeId, approverUserId: uid || undefined }) : Promise.resolve([]),
-        ]);
-        if (!cancelled) {
-          setAttendanceLogs(logs);
-          setLeaveRequests(leaveReqs);
-          setLeaveBalance(balance);
-          const usage = await getEmployeeLeaveUsageSummary(employeeId, {
-            approvedRequests: leaveReqs,
-            leaveBalance: balance,
-          });
-          if (!cancelled) setLeaveUsageSummary(usage);
-          setLoans(loanList);
-          setManagerPendingApprovals(pendingApprovals);
-          setLockedPayslip(
-            payslipResult
-              ? { month: payslipResult.month.month, record: payslipResult.record }
-              : null,
-          );
-          setLeaveTypes(configuredLeaveTypes);
-          setLeaveType((prev) =>
-            configuredLeaveTypes.find((row) => row.key === prev)
-              ? prev
-              : (configuredLeaveTypes[0]?.key || 'annual'),
-          );
-        }
+        const { data } = await fetchCachedPageData(
+          SELF_CACHE_KEY,
+          async (): Promise<SelfServicePageData> => {
+            const [logs, leaveReqs, balance, loanList, payslipResult, configuredLeaveTypes, pendingApprovals] = await Promise.all([
+              attendanceProcessingService.getRecordsByEmployee(employeeId),
+              leaveRequestService.getByEmployee(employeeId),
+              leaveBalanceService.getByEmployee(employeeId).then((b) => b ?? leaveBalanceService.getOrCreate(employeeId)),
+              loanService.getByEmployee(employeeId),
+              getEmployeeLockedPayslip(employeeId),
+              getLeaveTypesFromConfig(),
+              canViewApprovals ? getPendingApprovals({ approverEmployeeId: employeeId, approverUserId: uid || undefined }) : Promise.resolve([]),
+            ]);
+            const usage = await getEmployeeLeaveUsageSummary(employeeId, {
+              approvedRequests: leaveReqs,
+              leaveBalance: balance,
+            });
+            return {
+              attendanceLogs: logs,
+              leaveRequests: leaveReqs,
+              leaveBalance: balance,
+              leaveUsageSummary: usage,
+              loans: loanList,
+              managerPendingApprovals: pendingApprovals,
+              lockedPayslip: payslipResult
+                ? { month: payslipResult.month.month, record: payslipResult.record }
+                : null,
+              leaveTypes: configuredLeaveTypes,
+              defaultLeaveType: (configuredLeaveTypes[0]?.key || 'annual') as LeaveType,
+            };
+          },
+          { maxAgeMs: 60_000 },
+        );
+        if (!cancelled) applySelfData(data);
       } catch (err) {
         console.error('Employee self-service load error:', err);
       } finally {
@@ -188,7 +242,7 @@ export const EmployeeSelfService: React.FC = () => {
       }
     })();
     return () => { cancelled = true; };
-  }, [employeeId, fetchEmployees, canViewApprovals]);
+  }, [employeeId, SELF_CACHE_KEY, fetchEmployees, canViewApprovals, uid, applySelfData]);
 
   useEffect(() => {
     if (!employeeId) return;
@@ -429,6 +483,11 @@ export const EmployeeSelfService: React.FC = () => {
       setLoanReason('');
       const updated = await loanService.getByEmployee(employeeId);
       setLoans(updated);
+      if (SELF_CACHE_KEY) {
+        const cached = peekPageDataCache<SelfServicePageData>(SELF_CACHE_KEY);
+        if (cached) setPageDataCache(SELF_CACHE_KEY, { ...cached, loans: updated });
+        else invalidatePageDataCache(SELF_CACHE_KEY);
+      }
     } catch (err: any) {
       console.error('Loan create error:', err);
       const msg = err?.message || 'حدث خطأ أثناء إرسال طلب السلفة';

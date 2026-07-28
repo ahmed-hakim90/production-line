@@ -1,261 +1,280 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { stockService } from '../services/stockService';
-import { transferApprovalService } from '../services/transferApprovalService';
-import { warehouseService } from '../services/warehouseService';
-import { materialService } from '../../manufacturing/services/materialService';
-import { materialPurchaseCostPerBaseUnit } from '../../manufacturing/types';
-import { useAppStore } from '../../../store/useAppStore';
-import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
-import { estimateStockValue, stockUnitCostKey } from '../lib/stockValuation';
-import { sourceModuleLabel } from '../lib/stockLabels';
-import type { StockItemBalance, StockTransaction, Warehouse } from '../types';
-import { formatNumber } from '../../../utils/calculations';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
-import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { formatNumber } from '../../../utils/calculations';
+import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { useInventoryControlData } from './inventoryDashboard/useInventoryControlData';
+import { InventoryActionQueue } from './inventoryDashboard/InventoryActionQueue';
+import { InventoryReviewTabs } from './inventoryDashboard/InventoryReviewTabs';
+import { WarehouseHealthGrid } from './inventoryDashboard/WarehouseHealthGrid';
+import { InventoryExceptionsPreview } from './inventoryDashboard/InventoryExceptionsPreview';
 
 export const InventoryDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { scoped, controlPath } = useMaterialsWarehouseScope();
-  const [balances, setBalances] = useState<StockItemBalance[]>([]);
-  const [transactions, setTransactions] = useState<StockTransaction[]>([]);
-  const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
-  const [pendingTransfers, setPendingTransfers] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [stockValueSummary, setStockValueSummary] = useState({
-    totalValue: 0,
-    valuedLines: 0,
-    unknownLines: 0,
-  });
-  const [kpiSummary, setKpiSummary] = useState({
-    totalLines: 0,
-    totalQty: 0,
-    lowStockCount: 0,
-    truncated: false,
-  });
-  const systemSettings = useAppStore((s) => s.systemSettings);
-  const rawProducts = useAppStore((s) => s._rawProducts);
+  const { can } = usePermission();
+  const data = useInventoryControlData();
 
-  /** KPIs use a single balances page (newest first) instead of a full tenant scan via `getBalances`. */
-  const loadData = async () => {
-    setLoading(true);
-    try {
-      const [balPage, kpi, txs, whs, pending, materials] = await Promise.all([
-        stockService.getBalancesPaged({ limit: 100, cursor: null }),
-        stockService.getInventoryKpiSummary(),
-        stockService.getTransactions(),
-        warehouseService.getAllWarehouses(),
-        transferApprovalService.getByStatus('pending'),
-        materialService.getAll(),
-      ]);
-      setBalances(balPage.items);
-      setKpiSummary({
-        totalLines: kpi.totalLines,
-        totalQty: kpi.totalQty,
-        lowStockCount: kpi.lowStockCount,
-        truncated: kpi.truncated,
-      });
-      setTransactions(txs.slice(0, 8));
-      setWarehouses(whs);
-      setPendingTransfers(pending.length);
-
-      const unitCostByItem = new Map<string, number>();
-      rawProducts.forEach((p) => {
-        if (!p.id) return;
-        unitCostByItem.set(
-          stockUnitCostKey('finished_good', p.id),
-          Number((p as { unitCost?: number }).unitCost || p.chineseUnitCost || 0),
-        );
-      });
-      materials.forEach((m) => {
-        if (!m.id) return;
-        const cost = materialPurchaseCostPerBaseUnit(m);
-        unitCostByItem.set(stockUnitCostKey('material', m.id), cost);
-        if (m.legacyRawMaterialId) {
-          unitCostByItem.set(stockUnitCostKey('raw_material', m.legacyRawMaterialId), cost);
-        }
-      });
-      setStockValueSummary(estimateStockValue(balPage.items, unitCostByItem));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    void loadData();
-  }, []);
-
-  const totalQty = useMemo(
-    () => balances.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
-    [balances],
-  );
-  const lowItems = useMemo(
-    () => balances.filter((row) => row.minStock > 0 && row.quantity <= row.minStock),
-    [balances],
-  );
-  const negativeItems = useMemo(
-    () => balances.filter((row) => Number(row.quantity || 0) < 0),
-    [balances],
-  );
-  const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
-  const wipQty = useMemo(() => {
-    const wipId = routing.productionWipWarehouseId;
-    if (!wipId) return 0;
-    return balances
-      .filter((b) => b.warehouseId === wipId)
-      .reduce((s, b) => s + Number(b.quantity || 0), 0);
-  }, [balances, routing.productionWipWarehouseId]);
-  const wasteQty = useMemo(() => {
-    const wasteId = routing.wasteWarehouseId;
-    if (!wasteId) return 0;
-    return balances
-      .filter((b) => b.warehouseId === wasteId)
-      .reduce((s, b) => s + Number(b.quantity || 0), 0);
-  }, [balances, routing.wasteWarehouseId]);
-  const routingReady = Boolean(
-    routing.productionWipWarehouseId && routing.finishedStagingWarehouseId,
+  const tenantPath = useCallback(
+    (path: string) => withTenantPath(tenantSlug, path),
+    [tenantSlug],
   );
 
   if (scoped) {
     return <Navigate to={withTenantPath(tenantSlug, controlPath)} replace />;
   }
 
-  if (loading && warehouses.length === 0) {
+  if (data.loading && data.warehousesCount === 0) {
     return <PageContentSkeleton variant="dashboard" kpiCount={8} />;
   }
+
+  const canCreateTx = can('inventory.transactions.create');
+  const canCounts = can('inventory.counts.manage');
+  const canAnalytics = can('inventory.analytics.view');
+  const canExceptions = can('inventory.exceptions.view');
 
   return (
     <div className="erp-ds-clean erp-dashboard-theme space-y-6">
       <PageHeader
-        title="لوحة المخازن"
-        subtitle="متابعة فورية للأرصدة والحركات والجرد. مؤشرات KPI من مسح كامل للأرصدة؛ الجدول يعرض أحدث ١٠٠ سطر."
+        title="لوحة تحكم المخزون"
+        subtitle="مراجعة شاملة لكل المخازن والحركات وصرف الإنتاج والاستلامات والتحويلات."
         actions={(
           <div className="flex flex-wrap gap-2">
-            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control#assemblable')}>
-              <PrimaryButton>مخزن المستلزمات · المتاح للتجميع</PrimaryButton>
-            </Link>
-            <Link to={withTenantPath(tenantSlug, '/inventory/movements')}>
-              <GhostButton>حركة مخزون</GhostButton>
-            </Link>
-            <Link to={withTenantPath(tenantSlug, '/inventory/counts')}>
-              <GhostButton>الجرد والمطابقة</GhostButton>
-            </Link>
-            <Link to={withTenantPath(tenantSlug, '/inventory/transfer-approvals')}>
+            <GhostButton onClick={() => void data.refresh()} disabled={data.loading || data.txLoading}>
+              تحديث
+            </GhostButton>
+            {canCreateTx && (
+              <>
+                <Link to={tenantPath('/inventory/movements')}>
+                  <PrimaryButton>حركة مخزون</PrimaryButton>
+                </Link>
+                <Link to={tenantPath('/inventory/raw-materials/receive')}>
+                  <GhostButton>استلام مستلزمات</GhostButton>
+                </Link>
+                <Link to={tenantPath('/quick-inventory-transfer')}>
+                  <GhostButton>تحويل سريع</GhostButton>
+                </Link>
+              </>
+            )}
+            <Link to={tenantPath('/inventory/transfer-approvals')}>
               <GhostButton>اعتماد التحويلات</GhostButton>
             </Link>
-            <Link to={withTenantPath(tenantSlug, '/settings')}>
+            <Link to={tenantPath('/inventory/production-issues')}>
+              <GhostButton>صرف إنتاج</GhostButton>
+            </Link>
+            {canCounts && (
+              <Link to={tenantPath('/inventory/counts')}>
+                <GhostButton>الجرد</GhostButton>
+              </Link>
+            )}
+            {canExceptions && (
+              <Link to={tenantPath('/inventory/exceptions')}>
+                <GhostButton>الاستثناءات</GhostButton>
+              </Link>
+            )}
+            {canAnalytics && (
+              <Link to={tenantPath('/inventory/analytics')}>
+                <GhostButton>التحليلات</GhostButton>
+              </Link>
+            )}
+            <Link to={tenantPath('/settings/production')}>
               <GhostButton>إعدادات التوجيه</GhostButton>
             </Link>
           </div>
         )}
       />
 
-      {!loading && kpiSummary.truncated && (
+      <div className="flex flex-wrap items-center gap-3">
+        <label className="text-sm font-medium text-slate-700" htmlFor="inv-control-warehouse">
+          المخزن
+        </label>
+        <select
+          id="inv-control-warehouse"
+          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm min-w-[220px]"
+          value={data.warehouseId}
+          onChange={(e) => data.setWarehouseId(e.target.value)}
+        >
+          <option value="">كل المخازن</option>
+          {data.warehouses.map((w) => (
+            <option key={w.id} value={w.id}>
+              {w.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {!data.loading && (data.kpiSummary.truncated || data.balancesTruncated) && (
         <p className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
-          تم حساب المؤشرات على جزء من الأرصدة (حد المسح). راجع صفحة الأرصدة للتفاصيل الكاملة.
+          تم حساب جزء من مؤشرات الأرصدة على حد المسح. راجع صفحة الأرصدة للتفاصيل الكاملة إن لزم.
         </p>
       )}
 
-      {!loading && !routingReady && (
+      {!data.loading && !data.routingReady && (
         <p className="text-sm font-medium text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
           توجيه المخازن غير مكتمل (WIP / تم الصنع). أكمل الإعداد من صفحة الإعدادات ثم شغّل مزامنة V1.
         </p>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-        <KPICard label="عدد المخازن" value={warehouses.length} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="تحويلات معلقة" value={pendingTransfers} iconType="trend" color="amber" loading={loading} />
-        <KPICard label="إجمالي الأصناف" value={kpiSummary.totalLines} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="إجمالي الكميات" value={formatNumber(kpiSummary.totalQty)} iconType="metric" color="green" loading={loading} />
-        <KPICard label="أصناف منخفضة" value={kpiSummary.lowStockCount} iconType="money" color="amber" loading={loading} />
-        <KPICard label="أرصدة سالبة" value={negativeItems.length} iconType="metric" color="red" loading={loading} />
-        <KPICard label="رصيد WIP (تقديري)" value={formatNumber(wipQty)} iconType="metric" color="green" loading={loading} />
-        <KPICard label="رصيد الهالك" value={formatNumber(wasteQty)} iconType="metric" color="gray" loading={loading} />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <KPICard
-          label="قيمة المخزون (تقديري)"
-          value={formatNumber(stockValueSummary.totalValue)}
-          iconType="money"
+          label="عدد المخازن"
+          value={data.warehousesCount}
+          iconType="metric"
           color="indigo"
-          loading={loading}
+          loading={data.loading}
         />
         <KPICard
-          label="أصناف بلا تكلفة"
-          value={stockValueSummary.unknownLines}
+          label="إجمالي الأصناف"
+          value={data.kpiSummary.totalLines}
+          iconType="metric"
+          color="indigo"
+          loading={data.loading}
+        />
+        <KPICard
+          label="إجمالي الكميات"
+          value={formatNumber(data.kpiSummary.totalQty)}
+          iconType="metric"
+          color="green"
+          loading={data.loading}
+        />
+        <KPICard
+          label="أصناف منخفضة"
+          value={data.kpiSummary.lowStockCount}
+          iconType="money"
+          color="amber"
+          loading={data.loading}
+        />
+        <KPICard
+          label="تحويلات معلقة"
+          value={data.pendingTransfersCount}
+          iconType="trend"
+          color="amber"
+          loading={data.loading}
+        />
+        <KPICard
+          label="صرف إنتاج معلق"
+          value={data.pendingIssuesCount}
+          iconType="trend"
+          color="amber"
+          loading={data.loading}
+        />
+        <KPICard
+          label="استلامات بانتظار"
+          value={data.awaitingReceiptsCount}
+          iconType="trend"
+          color="amber"
+          loading={data.loading}
+        />
+        <KPICard
+          label="أرصدة سالبة"
+          value={data.negativeCount}
+          iconType="metric"
+          color="red"
+          loading={data.loading}
+        />
+        <KPICard
+          label="رصيد WIP"
+          value={formatNumber(data.wipQty)}
+          iconType="metric"
+          color="green"
+          loading={data.loading}
+        />
+        <KPICard
+          label="رصيد تم الصنع"
+          value={formatNumber(data.finishedQty)}
+          iconType="metric"
+          color="green"
+          loading={data.loading}
+        />
+        <KPICard
+          label="رصيد الهالك"
+          value={formatNumber(data.wasteQty)}
           iconType="metric"
           color="gray"
-          loading={loading}
+          loading={data.loading}
+        />
+        <KPICard
+          label="قيمة المخزون (تقديري)"
+          value={formatNumber(data.stockValueSummary.totalValue)}
+          iconType="money"
+          color="indigo"
+          loading={data.loading}
+        />
+        {!data.warehouseId && (
+          <KPICard
+            label="تنبيهات مستلزمات"
+            value={data.suppliesAlertCount}
+            iconType="trend"
+            color="amber"
+            loading={data.loading}
+          />
+        )}
+        <KPICard
+          label="أصناف بلا تكلفة"
+          value={data.stockValueSummary.unknownLines}
+          iconType="metric"
+          color="gray"
+          loading={data.loading}
         />
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <Card className="border-slate-200 shadow-none">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-slate-800">آخر الحركات</CardTitle>
-          </CardHeader>
-          <CardContent>
-          {loading ? (
-            <div className="space-y-3">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <Skeleton key={`tx-skeleton-${i}`} className="h-14 w-full rounded-lg" />
-              ))}
-            </div>
-          ) : transactions.length === 0 ? (
-            <p className="text-sm text-slate-400">لا توجد حركات حتى الآن.</p>
-          ) : (
-            <div className="space-y-3">
-              {transactions.map((tx) => (
-                <div key={tx.id} className="flex items-center justify-between rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--color-text)]">{tx.itemName}</p>
-                    <p className="text-xs text-slate-400">{new Date(tx.createdAt).toLocaleString('ar-EG')}</p>
-                  </div>
-                  <div className="text-left">
-                    <StatusBadge
-                      label={tx.quantity >= 0 ? `+${formatNumber(tx.quantity)}` : formatNumber(tx.quantity)}
-                      type={tx.quantity >= 0 ? 'success' : 'danger'}
-                    />
-                    <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                      {tx.movementType} · {sourceModuleLabel(tx.sourceModule)}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          </CardContent>
-        </Card>
+      <div>
+        <h2 className="text-sm font-semibold text-slate-800 mb-3">طابور المراجعة</h2>
+        <InventoryActionQueue
+          tenantPath={tenantPath}
+          loading={data.loading}
+          transfers={data.queueTransfers}
+          transfersTotal={data.pendingTransfersCount}
+          issues={data.queueIssues}
+          issuesTotal={data.pendingIssuesCount}
+          receipts={data.queueReceipts}
+          receiptsTotal={data.awaitingReceiptsCount}
+        />
+      </div>
 
-        <Card className="border-slate-200 shadow-none">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-slate-800">تنبيهات الحد الأدنى</CardTitle>
-          </CardHeader>
-          <CardContent>
-          {lowItems.length === 0 ? (
-            <p className="text-sm font-medium text-emerald-600">لا توجد أصناف تحت الحد الأدنى.</p>
-          ) : (
-            <div className="space-y-3">
-              {lowItems.slice(0, 12).map((row) => (
-                <div key={row.id} className="flex items-center justify-between rounded-[var(--border-radius-lg)] bg-amber-50 dark:bg-amber-900/10 px-3 py-2 border border-amber-100">
-                  <div>
-                    <p className="text-sm font-medium text-[var(--color-text)]">{row.itemName}</p>
-                    <p className="text-xs text-slate-500">{row.itemType === 'finished_good' ? 'منتج نهائي' : 'مادة خام'}</p>
-                  </div>
-                  <div className="text-left text-sm font-medium text-amber-700">
-                    {formatNumber(row.quantity)} / {formatNumber(row.minStock)}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-          </CardContent>
-        </Card>
+      <InventoryReviewTabs
+        tenantPath={tenantPath}
+        loading={data.loading}
+        txLoading={data.txLoading}
+        reviewTab={data.reviewTab}
+        setReviewTab={data.setReviewTab}
+        period={data.period}
+        setPeriod={data.setPeriod}
+        movementFilter={data.movementFilter}
+        setMovementFilter={data.setMovementFilter}
+        sourceFilter={data.sourceFilter}
+        setSourceFilter={data.setSourceFilter}
+        issueStatusFilter={data.issueStatusFilter}
+        setIssueStatusFilter={data.setIssueStatusFilter}
+        receiptStatusFilter={data.receiptStatusFilter}
+        setReceiptStatusFilter={data.setReceiptStatusFilter}
+        transferStatusFilter={data.transferStatusFilter}
+        setTransferStatusFilter={data.setTransferStatusFilter}
+        movements={data.reviewMovements}
+        issues={data.reviewIssues}
+        receipts={data.reviewReceipts}
+        transfers={data.reviewTransfers}
+        warehouseNameById={data.warehouseNameById}
+      />
+
+      <div className={`grid grid-cols-1 gap-5 ${canExceptions ? 'xl:grid-cols-2' : ''}`}>
+        <WarehouseHealthGrid
+          loading={data.loading}
+          rows={data.warehouseHealth}
+          onSelectWarehouse={(id) => data.setWarehouseId(id)}
+        />
+        {canExceptions && (
+          <InventoryExceptionsPreview
+            tenantPath={tenantPath}
+            loading={data.loading}
+            rows={data.exceptionPreview}
+          />
+        )}
       </div>
     </div>
   );

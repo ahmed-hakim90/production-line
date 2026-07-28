@@ -1217,8 +1217,9 @@ export interface InventoryRoutingSettings {
    */
   autoConsumeBomOnProductionReport?: boolean;
   /**
-   * When true (default), finished-product report inventory posting requires an
-   * issued/approved production issue for the report or its work order / plan.
+   * When true (default), finished-product report creation/posting requires an
+   * issued/approved production issue for the work order / plan.
+   * Does not auto-consume BOM — use صرف إنتاج separately.
    */
   requireIssuedProductionIssueOnReport?: boolean;
 }
@@ -1281,6 +1282,15 @@ export interface PlanSettings {
   transferSlaWarningDays?: number;
   /** Manual stock movement qty threshold for exception board */
   inventoryExceptionManualThreshold?: number;
+  /**
+   * يوم بداية شهر التشغيل (1–28). مثال: 26 يعني الفترة من ٢٦ إلى ٢٦ الشهر التالي (نهاية حصرية).
+   * يُستخدم لحساب الهدف اليومي = كمية الخطة ÷ أيام الشغل في الفترة.
+   */
+  operationalMonthStartDay?: number;
+  /**
+   * عند التفعيل وبدون تارجت يومي يدوي: الهدف اليومي = كمية الخطة ÷ أيام الشغل في فترة التشغيل.
+   */
+  useOperationalPeriodDailyTarget?: boolean;
 
   /** بادئة وأطوال الأكواد التلقائية للمنتجات / المواد الخام / التصنيفات */
   productCodePrefix?: string;
@@ -1501,6 +1511,7 @@ export interface SystemSettings {
   forceClientUpdate?: boolean;
   /** ط±ط³ط§ظ„ط© طھط¸ظ‡ط± ط¹ظ„ظ‰ ط´ط§ط´ط© ط§ظ„طھط­ط¯ظٹط« ط§ظ„ط¥ط¬ط¨ط§ط±ظٹ */
   clientUpdateMessageAr?: string;
+  clientUpdateMessageEn?: string;
   /** ط¹ط²ظ„ ط¨ظٹط§ظ†ط§طھ ط§ظ„طµظٹط§ظ†ط©: ظ†ط·ط§ظ‚ ط§ظ„ظ…ط¯ظٹط± ظˆط؛ظٹط±ظ‡ (ط§ط®طھظٹط§ط±ظٹ) */
   repairAccess?: RepairAccessSettings;
   /** ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„طµظٹط§ظ†ط© ط§ظ„ظ…ط¬ظ…ط¹ط© (ظˆطµظˆظ„ + ط³ظٹط± ط¹ظ…ظ„ + ط§ظپطھط±ط§ط¶ظٹط§طھ) */

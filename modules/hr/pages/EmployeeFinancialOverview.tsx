@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Button, Badge } from '../components/UI';
 import { PageHeader } from '@/components/PageHeader';
@@ -7,6 +7,11 @@ import { employeeService } from '../employeeService';
 import { getPayrollMonth, getPayrollRecords } from '../payroll';
 import type { FirestorePayrollMonth, FirestorePayrollRecord } from '../payroll/types';
 import { getEmployeeLeaveUsageSummariesByRange } from '../leaveService';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 function getCurrentMonth(): string {
   const d = new Date();
@@ -26,62 +31,104 @@ function formatMoney(value: number): string {
   return value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+type FinancialOverviewPageData = {
+  payrollMonth: FirestorePayrollMonth | null;
+  records: FirestorePayrollRecord[];
+  deptNameById: Record<string, string>;
+  leaveSummaryByEmployee: Record<string, Awaited<ReturnType<typeof getEmployeeLeaveUsageSummariesByRange>>[string]>;
+};
+
 export const EmployeeFinancialOverview: React.FC = () => {
   const navigate = useTenantNavigate();
   const [month, setMonth] = useState(getCurrentMonth());
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('');
+  const OVERVIEW_CACHE_KEY = `hr:financial-overview:${month}`;
+  const initialOverviewCache = peekPageDataCache<FinancialOverviewPageData>(OVERVIEW_CACHE_KEY);
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [payrollMonth, setPayrollMonth] = useState<FirestorePayrollMonth | null>(null);
-  const [records, setRecords] = useState<FirestorePayrollRecord[]>([]);
-  const [deptNameById, setDeptNameById] = useState<Record<string, string>>({});
+  const [payrollMonth, setPayrollMonth] = useState<FirestorePayrollMonth | null>(initialOverviewCache?.payrollMonth ?? null);
+  const [records, setRecords] = useState<FirestorePayrollRecord[]>(initialOverviewCache?.records ?? []);
+  const [deptNameById, setDeptNameById] = useState<Record<string, string>>(initialOverviewCache?.deptNameById ?? {});
   const [leaveSummaryByEmployee, setLeaveSummaryByEmployee] = useState<
     Record<string, Awaited<ReturnType<typeof getEmployeeLeaveUsageSummariesByRange>>[string]>
-  >({});
+  >(initialOverviewCache?.leaveSummaryByEmployee ?? {});
 
-  const loadData = useCallback(async () => {
-    setLoading(true);
+  const applyOverviewData = useCallback((data: FinancialOverviewPageData) => {
+    setPayrollMonth(data.payrollMonth);
+    setRecords(data.records);
+    setDeptNameById(data.deptNameById);
+    setLeaveSummaryByEmployee(data.leaveSummaryByEmployee);
+  }, []);
+
+  const loadData = useCallback(async (opts?: { force?: boolean }) => {
+    const force = opts?.force === true;
+    const cacheKey = `hr:financial-overview:${month}`;
+    const cached = peekPageDataCache<FinancialOverviewPageData>(cacheKey);
+    if (cached) {
+      applyOverviewData(cached);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     setError('');
     try {
-      const [monthDoc, employees] = await Promise.all([
-        getPayrollMonth(month),
-        employeeService.getAll(),
-      ]);
-      setPayrollMonth(monthDoc);
+      const { data } = await fetchCachedPageData(
+        cacheKey,
+        async (): Promise<FinancialOverviewPageData> => {
+          const [monthDoc, employees] = await Promise.all([
+            getPayrollMonth(month),
+            employeeService.getAll(),
+          ]);
 
-      const deptMap: Record<string, string> = {};
-      employees.forEach((emp) => {
-        if (emp.departmentId && !deptMap[emp.departmentId]) {
-          deptMap[emp.departmentId] = emp.departmentId;
-        }
-      });
-      setDeptNameById(deptMap);
+          const deptMap: Record<string, string> = {};
+          employees.forEach((emp) => {
+            if (emp.departmentId && !deptMap[emp.departmentId]) {
+              deptMap[emp.departmentId] = emp.departmentId;
+            }
+          });
 
-      if (!monthDoc?.id) {
-        setRecords([]);
-        setLeaveSummaryByEmployee({});
-        return;
-      }
+          if (!monthDoc?.id) {
+            return {
+              payrollMonth: monthDoc,
+              records: [],
+              deptNameById: deptMap,
+              leaveSummaryByEmployee: {},
+            };
+          }
 
-      const payrollRecords = await getPayrollRecords(monthDoc.id);
-      setRecords(payrollRecords);
-
-      const employeeIds = payrollRecords.map((r) => r.employeeId);
-      const range = getMonthRange(month);
-      const leaveMap = await getEmployeeLeaveUsageSummariesByRange(
-        employeeIds,
-        range.startDate,
-        range.endDate,
+          const payrollRecords = await getPayrollRecords(monthDoc.id);
+          const employeeIds = payrollRecords.map((r) => r.employeeId);
+          const range = getMonthRange(month);
+          const leaveMap = await getEmployeeLeaveUsageSummariesByRange(
+            employeeIds,
+            range.startDate,
+            range.endDate,
+          );
+          return {
+            payrollMonth: monthDoc,
+            records: payrollRecords,
+            deptNameById: deptMap,
+            leaveSummaryByEmployee: leaveMap,
+          };
+        },
+        { force, maxAgeMs: 60_000 },
       );
-      setLeaveSummaryByEmployee(leaveMap);
+      applyOverviewData(data);
     } catch (err: any) {
       setError(err?.message || 'حدث خطأ أثناء تحميل بيانات التحليل المالي');
     } finally {
       setLoading(false);
     }
-  }, [month]);
+  }, [month, applyOverviewData]);
+
+  // Soft-restore on revisit when this month was previously loaded
+  useEffect(() => {
+    if (peekPageDataCache<FinancialOverviewPageData>(`hr:financial-overview:${month}`)) {
+      void loadData();
+    }
+  }, [month, loadData]);
 
   const filteredRecords = useMemo(() => {
     let list = records;
@@ -109,7 +156,10 @@ export const EmployeeFinancialOverview: React.FC = () => {
         primaryAction={{
           label: loading ? 'جاري التحميل...' : 'تحميل البيانات',
           icon: loading ? 'refresh' : 'search',
-          onClick: loadData,
+          onClick: () => {
+            invalidatePageDataCache(`hr:financial-overview:${month}`);
+            void loadData({ force: true });
+          },
           disabled: loading,
         }}
       />
@@ -131,7 +181,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
         ]}
         quickFilterValues={{ department: departmentFilter || 'all' }}
         onQuickFilterChange={(_, value) => setDepartmentFilter(value === 'all' ? '' : value)}
-        onApply={loadData}
+        onApply={() => void loadData()}
         applyLabel={loading ? 'جار التحميل...' : 'تطبيق'}
         extra={(
           <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">

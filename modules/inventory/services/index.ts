@@ -26,6 +26,7 @@ export { componentCompensationService } from './componentCompensationService';
 export { componentScrapService } from './componentScrapService';
 export { disassemblyService } from './disassemblyService';
 export { suppliesReceiptService } from './suppliesReceiptService';
-export { countRawMaterialWarehouseAlerts } from './rawMaterialWarehouseAlertsService';
+export { countRawMaterialWarehouseAlerts, listPlanIssueAlerts } from './rawMaterialWarehouseAlertsService';
+export type { PlanIssueAlertRow } from './rawMaterialWarehouseAlertsService';
 export { assemblableCapacityService } from './assemblableCapacityService';
 export type { AssemblableCapacityRow } from './assemblableCapacityService';

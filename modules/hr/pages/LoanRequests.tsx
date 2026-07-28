@@ -16,6 +16,16 @@ import type {
 } from '../types';
 import { LOAN_TYPE_LABELS } from '../types';
 import { PageHeader } from '../../../components/PageHeader';
+import {
+  fetchCachedPageData,
+  invalidatePageDataCache,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
+
+type LoanRequestsPageData = {
+  loans: FirestoreEmployeeLoan[];
+  employees: FirestoreEmployee[];
+};
 
 const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   pending: 'بانتظار الموافقة',
@@ -60,9 +70,21 @@ export const LoanRequests: React.FC = () => {
   const permissions = useAppStore((s) => s.userPermissions);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
 
-  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>([]);
-  const [employees, setEmployees] = useState<FirestoreEmployee[]>([]);
-  const [loading, setLoading] = useState(true);
+  const isHR = can('loan.manage');
+  const canDisburse = can('loan.disburse');
+  const canDelete = can('loan.manage') || can('hrSettings.edit');
+  const pageControl = useMemo(
+    () => getExportImportPageControl(exportImportSettings, 'loanRequests'),
+    [exportImportSettings]
+  );
+  const canExportFromPage = can('export') && pageControl.exportEnabled;
+  const employeeId = currentEmployee?.id || uid || '';
+  const LOANS_CACHE_KEY = `hr:loan-requests:${isHR ? 'hr' : 'self'}:${employeeId || 'anon'}`;
+  const initialLoansCache = peekPageDataCache<LoanRequestsPageData>(LOANS_CACHE_KEY);
+
+  const [loans, setLoans] = useState<FirestoreEmployeeLoan[]>(initialLoansCache?.loans ?? []);
+  const [employees, setEmployees] = useState<FirestoreEmployee[]>(initialLoansCache?.employees ?? []);
+  const [loading, setLoading] = useState(() => initialLoansCache == null);
   const [activeTab, setActiveTab] = useState<LoanType>('monthly_advance');
   const [showForm, setShowForm] = useState(false);
   const [filterEmployee, setFilterEmployee] = useState('');
@@ -82,16 +104,6 @@ export const LoanRequests: React.FC = () => {
   const [formReason, setFormReason] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
-  const isHR = can('loan.manage');
-  const canDisburse = can('loan.disburse');
-  const canDelete = can('loan.manage') || can('hrSettings.edit');
-  const pageControl = useMemo(
-    () => getExportImportPageControl(exportImportSettings, 'loanRequests'),
-    [exportImportSettings]
-  );
-  const canExportFromPage = can('export') && pageControl.exportEnabled;
-  const employeeId = currentEmployee?.id || uid || '';
-
   useEffect(() => {
     if (toast) {
       const timer = setTimeout(() => setToast(null), 4000);
@@ -99,23 +111,45 @@ export const LoanRequests: React.FC = () => {
     }
   }, [toast]);
 
-  const fetchData = useCallback(async () => {
-    setLoading(true);
+  const fetchData = useCallback(async (opts?: { force?: boolean }) => {
+    const cached = peekPageDataCache<LoanRequestsPageData>(LOANS_CACHE_KEY);
+    if (cached) {
+      setLoans(cached.loans);
+      setEmployees(cached.employees);
+      setLoading(false);
+    } else {
+      setLoading(true);
+    }
     try {
-      const [loanData, empData] = await Promise.all([
-        isHR ? loanService.getAll() : loanService.getByEmployee(employeeId),
-        employeeService.getAll(),
-      ]);
-      setLoans(loanData);
-      setEmployees(empData.filter((e: FirestoreEmployee) => e.isActive));
+      const { data } = await fetchCachedPageData(
+        LOANS_CACHE_KEY,
+        async () => {
+          const [loanData, empData] = await Promise.all([
+            isHR ? loanService.getAll() : loanService.getByEmployee(employeeId),
+            employeeService.getAll(),
+          ]);
+          return {
+            loans: loanData,
+            employees: empData.filter((e: FirestoreEmployee) => e.isActive),
+          };
+        },
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      setLoans(data.loans);
+      setEmployees(data.employees);
     } catch (err) {
       console.error('Error loading loans:', err);
     } finally {
       setLoading(false);
     }
-  }, [employeeId, isHR]);
+  }, [LOANS_CACHE_KEY, employeeId, isHR]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  const reload = useCallback(async () => {
+    invalidatePageDataCache(LOANS_CACHE_KEY);
+    await fetchData({ force: true });
+  }, [LOANS_CACHE_KEY, fetchData]);
+
+  useEffect(() => { void fetchData(); }, [fetchData]);
 
   const employeeMap = useMemo(() => {
     const map = new Map<string, FirestoreEmployee>();
@@ -209,14 +243,14 @@ export const LoanRequests: React.FC = () => {
       setFormReason('');
       setFormEmployeeId('');
       setToast({ message: 'تم إرسال طلب السلفة بنجاح', type: 'success' });
-      await fetchData();
+      await reload();
     } catch (err) {
       console.error('Error creating loan:', err);
       setToast({ message: 'فشل في إنشاء السلفة', type: 'error' });
     } finally {
       setSubmitting(false);
     }
-  }, [employeeId, uid, formAmount, formInstallments, formStartMonth, formReason, formEmployeeId, installmentAmount, activeTab, isHR, employeeMap, currentEmployee, userDisplayName, permissions, fetchData]);
+  }, [employeeId, uid, formAmount, formInstallments, formStartMonth, formReason, formEmployeeId, installmentAmount, activeTab, isHR, employeeMap, currentEmployee, userDisplayName, permissions, reload]);
 
   const handleDisburse = useCallback(async (loan: FirestoreEmployeeLoan) => {
     if (!loan.id) return;
@@ -233,14 +267,14 @@ export const LoanRequests: React.FC = () => {
         );
         setToast({ message: 'تم الصرف بنجاح', type: 'success' });
       }
-      await fetchData();
+      await reload();
     } catch (err) {
       console.error('Disburse error:', err);
       setToast({ message: 'فشل في تحديث حالة الصرف', type: 'error' });
     } finally {
       setActionLoading(null);
     }
-  }, [employeeId, currentEmployee, userDisplayName, fetchData]);
+  }, [employeeId, currentEmployee, userDisplayName, reload]);
 
   const handleDeleteLoan = useCallback(async (id: string) => {
     setDeleting(true);
@@ -248,14 +282,14 @@ export const LoanRequests: React.FC = () => {
       await loanService.delete(id);
       setDeleteConfirm(null);
       setToast({ message: 'تم حذف السلفة بنجاح', type: 'success' });
-      await fetchData();
+      await reload();
     } catch (err) {
       console.error('Error deleting loan:', err);
       setToast({ message: 'فشل في حذف السلفة', type: 'error' });
     } finally {
       setDeleting(false);
     }
-  }, [fetchData]);
+  }, [reload]);
 
   const filtered = useMemo(() => {
     let result = loans.filter((l) => (l.loanType || 'installment') === activeTab);
@@ -287,7 +321,7 @@ export const LoanRequests: React.FC = () => {
     exportLoanRequestsMultiSheet(monthlyAdvance, installment, employeeMap, `السلف-${filterMonth}`);
   }, [loans, employeeMap, filterMonth]);
 
-  if (loading) {
+  if (loading && loans.length === 0) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
 

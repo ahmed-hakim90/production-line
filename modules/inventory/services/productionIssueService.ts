@@ -31,6 +31,15 @@ import { warehouseService } from './warehouseService';
 import { warehouseLocationService } from './warehouseLocationService';
 import { allocateProductionIssueFromLocations } from '../lib/productionIssueAllocation';
 import { defaultItemLocationService } from './defaultItemLocationService';
+import {
+  findBlockingOpenIssue,
+  summarizeOrdersForSource,
+  type IssueSourceSummary,
+} from '../lib/productionIssueRequest';
+import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
+import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
+import { assemblableCapacityService } from './assemblableCapacityService';
+import { systemSettingsService } from '../../system/services/systemSettingsService';
 
 const COLLECTION = 'production_issue_orders';
 
@@ -186,6 +195,42 @@ async function loadSource(params: {
   throw new Error('حدد أمر شغل أو خطة إنتاج.');
 }
 
+async function listOrdersForSource(params: {
+  workOrderId?: string;
+  productionPlanId?: string;
+}): Promise<ProductionIssueOrder[]> {
+  const field = params.workOrderId ? 'workOrderId' : 'productionPlanId';
+  const value = params.workOrderId || params.productionPlanId;
+  if (!value) return [];
+  const snap = await getDocs(query(
+    tenantQuery(db, COLLECTION),
+    where(field, '==', value),
+  ));
+  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionIssueOrder));
+}
+
+async function assertNoBlockingOpenIssue(params: {
+  workOrderId?: string;
+  productionPlanId?: string;
+}): Promise<void> {
+  const rows = await listOrdersForSource(params);
+  const active = findBlockingOpenIssue(rows);
+  if (active?.id) {
+    throw new Error('يوجد طلب/إذن صرف معلّق لنفس أمر الشغل أو الخطة. أنهِه أو ألغه قبل إنشاء طلب جديد.');
+  }
+}
+
+async function resolveSuppliesWarehouse(): Promise<Warehouse> {
+  const settings = await systemSettingsService.get();
+  if (!settings) throw new Error('تعذر تحميل إعدادات النظام.');
+  const routing = resolveInventoryRoutingV1(settings);
+  const warehouses = await warehouseService.getAllWarehouses();
+  const warehouseId = resolveSuppliesWarehouseId(routing, warehouses);
+  const warehouse = warehouses.find((w) => w.id === warehouseId);
+  if (!warehouse?.id) throw new Error('حدّد مخزن المستلزمات في توجيه المخازن أولاً.');
+  return warehouse;
+}
+
 export const productionIssueService = {
   async getAll(): Promise<ProductionIssueOrder[]> {
     if (!isConfigured) return [];
@@ -197,6 +242,31 @@ export const productionIssueService = {
     if (!isConfigured || !id) return null;
     const snap = await getDoc(doc(db, COLLECTION, id));
     return snap.exists() ? ({ id: snap.id, ...snap.data() } as ProductionIssueOrder) : null;
+  },
+
+  async getByStatus(status: ProductionIssueOrder['status']): Promise<ProductionIssueOrder[]> {
+    if (!isConfigured) return [];
+    const all = await this.getAll();
+    return all.filter((row) => row.status === status);
+  },
+
+  async summarizeIssuedForSource(params: {
+    workOrderId?: string;
+    productionPlanId?: string;
+  }): Promise<IssueSourceSummary & { sourceRemainingQty: number }> {
+    if (!isConfigured) {
+      return { issuedQty: 0, openRequestedQty: 0, rejectedQty: 0, orderCount: 0, sourceRemainingQty: 0 };
+    }
+    const rows = await listOrdersForSource(params);
+    const summary = summarizeOrdersForSource(rows);
+    let sourceRemainingQty = 0;
+    try {
+      const { source } = await loadSource(params);
+      sourceRemainingQty = Math.max(0, sourceQty(source));
+    } catch {
+      sourceRemainingQty = 0;
+    }
+    return { ...summary, sourceRemainingQty };
   },
 
   async hasIssuedForProduction(params: {
@@ -250,16 +320,10 @@ export const productionIssueService = {
     const activeField = input.workOrderId ? 'workOrderId' : 'productionPlanId';
     const activeValue = input.workOrderId || input.productionPlanId;
     if (activeValue) {
-      const activeSnap = await getDocs(query(
-        tenantQuery(db, COLLECTION),
-        where(activeField, '==', activeValue),
-      ));
-      const active = activeSnap.docs
-        .map((d) => ({ id: d.id, ...d.data() } as ProductionIssueOrder))
-        .find((row) => row.status !== 'cancelled' && row.sourceType !== 'production_report');
-      if (active?.id) {
-        throw new Error('يوجد إذن صرف نشط بالفعل لنفس أمر الشغل/الخطة. استخدم طلب تعويض مستقل بدلاً من إذن صرف جديد.');
-      }
+      await assertNoBlockingOpenIssue({
+        workOrderId: input.workOrderId,
+        productionPlanId: input.productionPlanId,
+      });
     }
 
     const { sourceType, source } = await loadSource(input);
@@ -285,6 +349,7 @@ export const productionIssueService = {
       sourceWarehouseId: warehouse.id,
       sourceWarehouseName: warehouse.name,
       status: 'draft',
+      origin: 'warehouse',
       lines,
       createdBy: input.createdBy,
       createdByUserId: input.createdByUserId,
@@ -296,6 +361,204 @@ export const productionIssueService = {
       tenantId: getCurrentTenantId(),
     }));
     return ref.id;
+  },
+
+  /**
+   * Production-side request: no stock deduction until materials approve.
+   * Blocked when assemblable capacity is 0 or an open request/draft already exists.
+   */
+  async createRequest(input: {
+    workOrderId?: string;
+    productionPlanId?: string;
+    quantity: number;
+    note?: string;
+    createdBy: string;
+    createdByUserId?: string;
+  }): Promise<string | null> {
+    if (!isConfigured) return null;
+    if (!input.workOrderId && !input.productionPlanId) {
+      throw new Error('حدد أمر شغل أو خطة إنتاج.');
+    }
+    await assertNoBlockingOpenIssue({
+      workOrderId: input.workOrderId,
+      productionPlanId: input.productionPlanId,
+    });
+
+    const { sourceType, source } = await loadSource(input);
+    const maxSourceQty = Math.max(0, sourceQty(source));
+    const quantity = Number(input.quantity || 0);
+    if (!(quantity > 0)) throw new Error('كمية الطلب يجب أن تكون أكبر من صفر.');
+    if (maxSourceQty > 0 && quantity > maxSourceQty + 0.000001) {
+      throw new Error(`كمية الطلب تتجاوز متبقي المصدر (${maxSourceQty}).`);
+    }
+
+    const product = await productService.getById(source.productId) as FirestoreProduct | null;
+    if (!product?.id) throw new Error('تعذر تحميل المنتج المرتبط.');
+    const warehouse = await resolveSuppliesWarehouse();
+
+    const capacityRows = await assemblableCapacityService.getForWarehouse(warehouse.id);
+    const capacity = capacityRows.find((row) => row.productId === product.id);
+    const maxAssemblable = Math.max(0, Number(capacity?.maxAssemblable || 0));
+    if (!(maxAssemblable > 0)) {
+      throw new Error(
+        'لا يمكن إرسال طلب صرف: لا توجد مكونات كافية للتجميع في مخزن المستلزمات. أبلغ المستلزم لاستلام المكونات أولاً.',
+      );
+    }
+    if (quantity > maxAssemblable + 0.000001) {
+      throw new Error(`الكمية أكبر من المتاح للتجميع (${maxAssemblable}).`);
+    }
+
+    const now = toIsoNow();
+    const payload: ProductionIssueOrder = {
+      referenceNo: issueRef(),
+      sourceType,
+      workOrderId: sourceType === 'work_order' ? source.id : undefined,
+      productionPlanId: sourceType === 'production_plan' ? source.id : undefined,
+      productId: product.id,
+      productName: product.name,
+      productCode: product.code,
+      lineId: source.lineId,
+      quantity,
+      requestedQuantity: quantity,
+      sourceWarehouseId: warehouse.id,
+      sourceWarehouseName: warehouse.name,
+      status: 'requested',
+      origin: 'production_request',
+      lines: [],
+      createdBy: input.createdBy,
+      createdByUserId: input.createdByUserId,
+      createdAt: now,
+      requestedBy: input.createdBy,
+      requestedByUserId: input.createdByUserId,
+      requestedAt: now,
+      assemblableAtRequest: maxAssemblable,
+      note: input.note,
+    };
+    const ref = await addDoc(collection(db, COLLECTION), stripUndefined({
+      ...payload,
+      tenantId: getCurrentTenantId(),
+    }));
+    return ref.id;
+  },
+
+  async rejectRequest(id: string, actor: string, reason?: string): Promise<void> {
+    if (!isConfigured || !id) return;
+    const order = await this.getById(id);
+    if (!order?.id) throw new Error('طلب الصرف غير موجود.');
+    if (order.status !== 'requested') throw new Error('يمكن رفض الطلبات بحالة «مطلوب» فقط.');
+    await updateDoc(doc(db, COLLECTION, order.id), stripUndefined({
+      status: 'rejected',
+      rejectedBy: actor,
+      rejectedAt: toIsoNow(),
+      rejectionReason: String(reason || '').trim() || 'مرفوض من مخزن المستلزمات',
+    }));
+  },
+
+  /**
+   * Build BOM component lines for a production request (or draft) without posting stock.
+   * Keeps current status so materials can review/print before approve.
+   */
+  async prepareRequestLines(
+    id: string,
+    options?: { quantityOverride?: number; sourceWarehouseId?: string },
+  ): Promise<ProductionIssueOrder> {
+    if (!isConfigured || !id) throw new Error('طلب الصرف غير موجود.');
+    const order = await this.getById(id);
+    if (!order?.id) throw new Error('طلب الصرف غير موجود.');
+    if (order.status !== 'requested' && order.status !== 'draft') {
+      throw new Error('يمكن تجهيز بنود المكونات للطلبات أو المسودات فقط.');
+    }
+
+    const quantity = Number(
+      options?.quantityOverride != null ? options.quantityOverride : order.quantity,
+    );
+    if (!(quantity > 0)) throw new Error('كمية الاعتماد يجب أن تكون أكبر من صفر.');
+
+    const warehouseId = String(options?.sourceWarehouseId || order.sourceWarehouseId || '').trim();
+    const warehouses = await warehouseService.getAllWarehouses();
+    const warehouse = warehouses.find((w) => w.id === warehouseId);
+    if (!warehouse?.id) throw new Error('حدد مخزن صرف المكونات.');
+
+    const capacityRows = await assemblableCapacityService.getForWarehouse(warehouse.id);
+    const capacity = capacityRows.find((row) => row.productId === order.productId);
+    const maxAssemblable = Math.max(0, Number(capacity?.maxAssemblable || 0));
+    if (!(maxAssemblable > 0)) {
+      throw new Error('لا يمكن تجهيز البنود: المتاح للتجميع = 0 في مخزن المستلزمات.');
+    }
+    if (quantity > maxAssemblable + 0.000001) {
+      throw new Error(`الكمية أكبر من المتاح للتجميع (${maxAssemblable}).`);
+    }
+
+    const lines = await buildLines(order.productId, quantity, warehouse.id);
+    await updateDoc(doc(db, COLLECTION, order.id), stripUndefined({
+      quantity,
+      lines,
+      sourceWarehouseId: warehouse.id,
+      sourceWarehouseName: warehouse.name,
+    }));
+
+    const refreshed = await this.getById(order.id);
+    if (!refreshed?.id) throw new Error('تعذر تحديث طلب الصرف.');
+    return refreshed;
+  },
+
+  /**
+   * Persist production request as warehouse draft with BOM lines (no stock movement).
+   */
+  async saveRequestAsDraft(
+    id: string,
+    options?: { quantityOverride?: number; sourceWarehouseId?: string },
+  ): Promise<ProductionIssueOrder> {
+    const prepared = await this.prepareRequestLines(id, options);
+    if (prepared.status === 'draft') return prepared;
+    if (prepared.status !== 'requested') {
+      throw new Error('يمكن حفظ المسودة من طلبات الإنتاج فقط.');
+    }
+    await updateDoc(doc(db, COLLECTION, prepared.id!), {
+      status: 'draft',
+    });
+    const refreshed = await this.getById(prepared.id!);
+    if (!refreshed?.id) throw new Error('تعذر حفظ المسودة.');
+    return refreshed;
+  },
+
+  /**
+   * Materials approves a production request: ensure lines exist, then submit + issue stock.
+   */
+  async approveRequest(
+    id: string,
+    actor: string,
+    options?: { quantityOverride?: number; sourceWarehouseId?: string },
+  ): Promise<void> {
+    if (!isConfigured || !id) return;
+    const order = await this.getById(id);
+    if (!order?.id) throw new Error('طلب الصرف غير موجود.');
+    if (order.status !== 'requested' && !(order.status === 'draft' && order.origin === 'production_request')) {
+      throw new Error('يمكن اعتماد طلبات الإنتاج أو مسوداتها فقط.');
+    }
+
+    const quantity = Number(
+      options?.quantityOverride != null ? options.quantityOverride : order.quantity,
+    );
+    const needsRebuild =
+      order.lines.length === 0
+      || Math.abs(Number(order.quantity || 0) - quantity) > 0.000001
+      || (options?.sourceWarehouseId
+        && String(options.sourceWarehouseId) !== String(order.sourceWarehouseId || ''));
+
+    if (needsRebuild || order.status === 'requested') {
+      await this.prepareRequestLines(id, options);
+    }
+
+    const now = toIsoNow();
+    await updateDoc(doc(db, COLLECTION, order.id), stripUndefined({
+      status: 'submitted',
+      submittedAt: now,
+      approvedBy: actor,
+      approvedAt: now,
+    }));
+
+    await this.issue(order.id, actor);
   },
 
   async submit(id: string): Promise<void> {
@@ -351,6 +614,13 @@ export const productionIssueService = {
     const order = await this.getById(id);
     if (!order?.id) throw new Error('أمر الصرف غير موجود.');
     if (order.status === 'issued') return;
+    if (order.status === 'requested') {
+      throw new Error('اعتمد طلب الإنتاج أولاً قبل ترحيل الصرف.');
+    }
+    if (order.status === 'rejected' || order.status === 'cancelled') {
+      throw new Error('لا يمكن صرف طلب مرفوض أو ملغى.');
+    }
+    if (!order.lines.length) throw new Error('أمر الصرف بلا بنود مكونات.');
     const activeLocations = await warehouseLocationService.getActiveByWarehouse(order.sourceWarehouseId);
     const activeLocationIds = new Set(activeLocations.map((loc) => loc.id).filter(Boolean));
     const shortages: ProductionIssueShortageRow[] = [];
@@ -461,6 +731,14 @@ export const productionIssueService = {
     const order = await this.getById(id);
     if (!order?.id) throw new Error('أمر الصرف غير موجود.');
     if (order.status === 'cancelled') return;
+    if (order.status === 'requested' || order.status === 'rejected') {
+      await updateDoc(doc(db, COLLECTION, order.id), {
+        status: 'cancelled',
+        cancelledAt: toIsoNow(),
+        cancelledBy: actor,
+      });
+      return;
+    }
 
     const hasFollowUp = order.lines.some((line) =>
       Number(line.returnedQty || 0) > 0
