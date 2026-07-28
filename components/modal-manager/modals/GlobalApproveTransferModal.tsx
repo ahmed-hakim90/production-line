@@ -69,31 +69,51 @@ export const GlobalApproveTransferModal: React.FC = () => {
             </tbody>
           </table>
         </div>
-        <div className="px-6 py-4 border-t flex flex-wrap justify-end gap-2 sticky bottom-0 bg-[var(--color-card)]">
+        <div className="px-6 py-4 border-t flex flex-wrap justify-end gap-1.5 sticky bottom-0 bg-[var(--color-card)]">
           {data.onPrint && (
-            <Button variant="outline" onClick={() => void data.onPrint?.()}>طباعة</Button>
+            <button
+              type="button"
+              onClick={() => void data.onPrint?.()}
+              title="طباعة"
+              aria-label="طباعة طلب التحويل"
+              className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors"
+            >
+              <span className="material-icons-round text-sm">print</span>
+            </button>
           )}
           {request.status === 'pending' && data.canApprove && (
             <>
-              <Button variant="outline" onClick={() => { void data.onReject?.(); close(); }}>رفض</Button>
-              <Button
-                variant="primary"
-                title={data.approveDisabledReason}
+              <button
+                type="button"
+                onClick={() => { void data.onReject?.(); close(); }}
+                title="رفض"
+                aria-label="رفض طلب التحويل"
+                className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+              >
+                <span className="material-icons-round text-sm">cancel</span>
+              </button>
+              <button
+                type="button"
+                title={data.approveDisabledReason || 'اعتماد'}
+                aria-label="اعتماد طلب التحويل"
                 disabled={Boolean(data.approveDisabledReason)}
                 onClick={() => { void data.onApprove?.(); close(); }}
+                className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                اعتماد
-              </Button>
+                <span className="material-icons-round text-sm">check_circle</span>
+              </button>
             </>
           )}
           {request.status === 'approved' && data.canCancelMovement && (
-            <Button
-              variant="outline"
-              className="!text-rose-600"
+            <button
+              type="button"
+              title="إلغاء الحركة"
+              aria-label="إلغاء حركة التحويل"
               onClick={() => { void data.onCancelMovement?.(); close(); }}
+              className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
             >
-              إلغاء الحركة
-            </Button>
+              <span className="material-icons-round text-sm">undo</span>
+            </button>
           )}
           <Button variant="outline" onClick={() => close()}>إغلاق</Button>
         </div>

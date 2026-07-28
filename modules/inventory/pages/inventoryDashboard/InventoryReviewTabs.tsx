@@ -285,7 +285,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
                   <tr>
                     <th className="erp-th text-right">المرجع</th>
                     <th className="erp-th text-right">المخزن</th>
-                    <th className="erp-th text-right">الحاوية</th>
+                    <th className="erp-th text-right">أمر التوريد</th>
                     <th className="erp-th text-right">الحالة</th>
                     <th className="erp-th text-right">التاريخ</th>
                   </tr>

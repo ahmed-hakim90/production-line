@@ -367,7 +367,7 @@ export const suppliesReceiptService = {
         ),
       );
       const noteParts = [`استلام مستلزمات ${order.referenceNo}`];
-      if (order.containerRef) noteParts.push(`حاوية ${order.containerRef}`);
+      if (order.containerRef) noteParts.push(`أمر توريد ${order.containerRef}`);
       if (group) noteParts.push(`${group.productName} × ${group.quantity}`);
 
       await stockService.createMovement({

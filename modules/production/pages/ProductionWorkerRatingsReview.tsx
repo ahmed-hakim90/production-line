@@ -324,16 +324,37 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                         onChange={(event) => updateDraft(rowId, { notes: event.target.value })}
                       />
                     </label>
-                    <div className="mt-4 grid grid-cols-1 gap-2">
-                      <Button type="button" size="sm" className="h-10 w-full" disabled={disabled} onClick={() => void saveReview(row, 'approved')}>
-                        اعتماد
-                      </Button>
-                      <Button type="button" size="sm" className="h-10 w-full" variant="outline" disabled={disabled} onClick={() => void saveReview(row, 'rejected')}>
-                        رفض
-                      </Button>
-                      <Button type="button" size="sm" className="h-10 w-full" variant="outline" disabled={disabled} onClick={() => void saveReview(row)}>
-                        حفظ فقط
-                      </Button>
+                    <div className="mt-4 flex items-center justify-center gap-1.5">
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => void saveReview(row, 'approved')}
+                        title="اعتماد"
+                        aria-label="اعتماد التقييم"
+                        className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span className="material-icons-round text-sm">check_circle</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => void saveReview(row, 'rejected')}
+                        title="رفض"
+                        aria-label="رفض التقييم"
+                        className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span className="material-icons-round text-sm">cancel</span>
+                      </button>
+                      <button
+                        type="button"
+                        disabled={disabled}
+                        onClick={() => void saveReview(row)}
+                        title="حفظ فقط"
+                        aria-label="حفظ التقييم بدون اعتماد"
+                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <span className="material-icons-round text-sm">save</span>
+                      </button>
                     </div>
                   </div>
                 );
@@ -416,16 +437,37 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                         />
                       </td>
                       <td className="px-4 py-3">
-                        <div className="flex flex-col gap-2">
-                          <Button type="button" size="sm" disabled={disabled} onClick={() => void saveReview(row, 'approved')}>
-                            اعتماد
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => void saveReview(row, 'rejected')}>
-                            رفض
-                          </Button>
-                          <Button type="button" size="sm" variant="outline" disabled={disabled} onClick={() => void saveReview(row)}>
-                            حفظ فقط
-                          </Button>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => void saveReview(row, 'approved')}
+                            title="اعتماد"
+                            aria-label="اعتماد التقييم"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">check_circle</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => void saveReview(row, 'rejected')}
+                            title="رفض"
+                            aria-label="رفض التقييم"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">cancel</span>
+                          </button>
+                          <button
+                            type="button"
+                            disabled={disabled}
+                            onClick={() => void saveReview(row)}
+                            title="حفظ فقط"
+                            aria-label="حفظ التقييم بدون اعتماد"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">save</span>
+                          </button>
                         </div>
                       </td>
                     </tr>

@@ -587,22 +587,31 @@ export const ApprovalCenter: React.FC = () => {
                           value={actionNotes[req.id!] || ''}
                           onChange={(e) => setActionNotes((prev) => ({ ...prev, [req.id!]: e.target.value }))}
                         />
-                        <div className="flex gap-2">
-                          <Button
-                            variant="outline"
+                        <div className="flex gap-1.5">
+                          <button
+                            type="button"
                             onClick={() => handleReject(req)}
                             disabled={isProcessing}
-                            className="!border-rose-200 !text-rose-600 hover:!bg-rose-50 dark:!border-rose-800 dark:!text-rose-400"
+                            title="رفض"
+                            aria-label="رفض الطلب"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
-                            {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                            <span className="material-icons-round text-sm">close</span>
-                            رفض
-                          </Button>
-                          <Button variant="secondary" onClick={() => handleApprove(req)} disabled={isProcessing}>
-                            {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                            <span className="material-icons-round text-sm">check</span>
-                            اعتماد
-                          </Button>
+                            {isProcessing
+                              ? <span className="material-icons-round animate-spin text-sm">refresh</span>
+                              : <span className="material-icons-round text-sm">cancel</span>}
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleApprove(req)}
+                            disabled={isProcessing}
+                            title="اعتماد"
+                            aria-label="اعتماد الطلب"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {isProcessing
+                              ? <span className="material-icons-round animate-spin text-sm">refresh</span>
+                              : <span className="material-icons-round text-sm">check_circle</span>}
+                          </button>
                         </div>
                       </div>
                     </div>

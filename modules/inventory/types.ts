@@ -595,6 +595,7 @@ export interface SuppliesReceiptOrder {
   status: SuppliesReceiptOrderStatus;
   warehouseId: string;
   warehouseName?: string;
+  /** رقم أمر التوريد / الحاوية / الشحنة (اختياري). */
   containerRef?: string;
   groups: SuppliesReceiptProductGroup[];
   standaloneLines: SuppliesReceiptLine[];

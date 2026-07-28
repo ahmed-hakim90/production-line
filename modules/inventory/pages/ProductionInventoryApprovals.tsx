@@ -11,6 +11,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { useManagedPrint } from '../../../utils/printManager';
+import { exportToPDF, waitForExportPaint } from '../../../utils/reportExport';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -46,6 +47,8 @@ export const ProductionInventoryApprovals: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const actor = userDisplayName || userEmail || 'Current User';
+  const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  const canPrint = can('inventory.transactions.print');
   const applyScoped = (data: ApprovalsPageData) => {
     if (!scoped) {
       setCompensations(data.compensations);
@@ -100,7 +103,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
   const handlePrint = useManagedPrint({
     contentRef: printRef,
     printSettings: printTemplate,
-    documentTitle: 'مستند استلام مستلزمات',
+    documentTitle: 'اذن-استلام-مستلزمات',
   });
 
   const load = async (opts?: { force?: boolean }) => {
@@ -222,7 +225,15 @@ export const ProductionInventoryApprovals: React.FC = () => {
 
   const printReceipt = async (order: SuppliesReceiptOrder) => {
     setPrintOrder(order);
-    await new Promise((r) => window.setTimeout(r, 80));
+    await waitForExportPaint(80);
+    if (isMobilePrint && printRef.current) {
+      await exportToPDF(printRef.current, `اذن-استلام-${order.referenceNo}`, {
+        paperSize: printTemplate?.paperSize,
+        orientation: printTemplate?.orientation,
+        copies: 1,
+      });
+      return;
+    }
     handlePrint();
   };
 
@@ -278,9 +289,33 @@ export const ProductionInventoryApprovals: React.FC = () => {
                     <td className="px-4 py-3 text-center tabular-nums">{row.quantity}</td>
                     <td className="px-4 py-3 text-center">{row.reason}</td>
                     <td className="px-4 py-3 text-center">{STATUS_LABELS[row.status] || row.status}</td>
-                    <td className="px-4 py-3 text-center space-x-1 space-x-reverse">
-                      {row.status === 'pending' && <button className="text-xs font-bold text-emerald-700" disabled={!can('productionIssue.approve')} onClick={() => void approveCompensation(row)}>اعتماد</button>}
-                      {row.status === 'pending' && <button className="text-xs font-bold text-rose-700" disabled={!can('productionIssue.approve')} onClick={() => void rejectCompensation(row)}>رفض</button>}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {row.status === 'pending' && (
+                          <button
+                            type="button"
+                            disabled={!can('productionIssue.approve')}
+                            onClick={() => void approveCompensation(row)}
+                            title="اعتماد"
+                            aria-label="اعتماد التعويض"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">check_circle</span>
+                          </button>
+                        )}
+                        {row.status === 'pending' && (
+                          <button
+                            type="button"
+                            disabled={!can('productionIssue.approve')}
+                            onClick={() => void rejectCompensation(row)}
+                            title="رفض"
+                            aria-label="رفض التعويض"
+                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">cancel</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -302,7 +337,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
           <table className="erp-table w-full text-sm text-right border-collapse">
             <thead className="erp-thead">
               <tr>
-                <th className="erp-th">المستند</th>
+                <th className="erp-th">رقم الإذن</th>
                 <th className="erp-th">المخزن</th>
                 <th className="erp-th text-center">مجموعات</th>
                 <th className="erp-th text-center">الحالة</th>
@@ -312,7 +347,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
             <tbody className="divide-y divide-[var(--color-border)]">
               {receipts.length === 0 ? (
                 <tr>
-                  <td colSpan={5} className="px-4 py-10 text-center text-slate-400">لا توجد مستندات استلام.</td>
+                  <td colSpan={5} className="px-4 py-10 text-center text-slate-400">لا توجد إذونات استلام.</td>
                 </tr>
               ) : (
                 pagedReceipts.map((row) => (
@@ -324,16 +359,68 @@ export const ProductionInventoryApprovals: React.FC = () => {
                     </td>
                     <td className="px-4 py-3 text-center tabular-nums">{(row.groups?.length || 0) + (row.standaloneLines?.length || 0)}</td>
                     <td className="px-4 py-3 text-center">{STATUS_LABELS[row.status] || row.status}</td>
-                    <td className="px-4 py-3 text-center space-x-1 space-x-reverse">
-                      {row.status === 'submitted' && <button className="text-xs font-bold text-emerald-700" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'approve')}>اعتماد</button>}
-                      {row.status === 'submitted' && <button className="text-xs font-bold text-rose-700" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'reject')}>رفض</button>}
-                      {row.status === 'approved' && <button className="text-xs font-bold text-primary" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'execute')}>تنفيذ</button>}
-                      {(row.status === 'draft' || row.status === 'rejected' || row.status === 'cancelled') && (
-                        <button className="text-xs font-bold text-rose-700" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'delete')}>حذف</button>
-                      )}
-                      {can('inventory.transactions.print') && (
-                        <button className="text-xs font-bold text-slate-700" onClick={() => void printReceipt(row)}>طباعة</button>
-                      )}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {row.status === 'submitted' && (
+                          <button
+                            type="button"
+                            disabled={!can('inventory.transactions.create')}
+                            onClick={() => void actionReceipt(row, 'approve')}
+                            title="اعتماد"
+                            aria-label={`اعتماد إذن الاستلام ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">check_circle</span>
+                          </button>
+                        )}
+                        {row.status === 'submitted' && (
+                          <button
+                            type="button"
+                            disabled={!can('inventory.transactions.create')}
+                            onClick={() => void actionReceipt(row, 'reject')}
+                            title="رفض"
+                            aria-label={`رفض إذن الاستلام ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">cancel</span>
+                          </button>
+                        )}
+                        {row.status === 'approved' && (
+                          <button
+                            type="button"
+                            disabled={!can('inventory.transactions.create')}
+                            onClick={() => void actionReceipt(row, 'execute')}
+                            title="تنفيذ"
+                            aria-label={`تنفيذ إذن الاستلام ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">play_circle</span>
+                          </button>
+                        )}
+                        {(row.status === 'draft' || row.status === 'rejected' || row.status === 'cancelled') && (
+                          <button
+                            type="button"
+                            disabled={!can('inventory.transactions.create')}
+                            onClick={() => void actionReceipt(row, 'delete')}
+                            title="حذف"
+                            aria-label={`حذف إذن الاستلام ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">delete</span>
+                          </button>
+                        )}
+                        {canPrint && (
+                          <button
+                            type="button"
+                            onClick={() => void printReceipt(row)}
+                            title="طباعة إذن الاستلام"
+                            aria-label={`طباعة إذن الاستلام ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors"
+                          >
+                            <span className="material-icons-round text-sm">print</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -346,7 +433,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
           totalPages={receiptTotalPages}
           totalItems={receipts.length}
           onPageChange={setReceiptPage}
-          itemLabel="مستند"
+          itemLabel="إذن"
         />
       </Card>
 
@@ -374,10 +461,45 @@ export const ProductionInventoryApprovals: React.FC = () => {
                     <td className="px-4 py-3 font-semibold">{row.productName}</td>
                     <td className="px-4 py-3 text-center tabular-nums">{row.quantity}</td>
                     <td className="px-4 py-3 text-center">{STATUS_LABELS[row.status] || row.status}</td>
-                    <td className="px-4 py-3 text-center space-x-1 space-x-reverse">
-                      {row.status === 'submitted' && <button className="text-xs font-bold text-emerald-700" disabled={!can('inventory.disassembly.manage')} onClick={() => void actionDisassembly(row, 'approve')}>اعتماد</button>}
-                      {row.status === 'submitted' && <button className="text-xs font-bold text-rose-700" disabled={!can('inventory.disassembly.manage')} onClick={() => void actionDisassembly(row, 'reject')}>رفض</button>}
-                      {row.status === 'approved' && <button className="text-xs font-bold text-primary" disabled={!can('inventory.disassembly.manage')} onClick={() => void actionDisassembly(row, 'execute')}>تنفيذ</button>}
+                    <td className="px-4 py-3">
+                      <div className="flex items-center justify-center gap-1.5">
+                        {row.status === 'submitted' && (
+                          <button
+                            type="button"
+                            disabled={!can('inventory.disassembly.manage')}
+                            onClick={() => void actionDisassembly(row, 'approve')}
+                            title="اعتماد"
+                            aria-label={`اعتماد طلب التفكيك ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">check_circle</span>
+                          </button>
+                        )}
+                        {row.status === 'submitted' && (
+                          <button
+                            type="button"
+                            disabled={!can('inventory.disassembly.manage')}
+                            onClick={() => void actionDisassembly(row, 'reject')}
+                            title="رفض"
+                            aria-label={`رفض طلب التفكيك ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">cancel</span>
+                          </button>
+                        )}
+                        {row.status === 'approved' && (
+                          <button
+                            type="button"
+                            disabled={!can('inventory.disassembly.manage')}
+                            onClick={() => void actionDisassembly(row, 'execute')}
+                            title="تنفيذ"
+                            aria-label={`تنفيذ طلب التفكيك ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">play_circle</span>
+                          </button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))

@@ -573,15 +573,63 @@ export const TransferApprovals: React.FC = () => {
                       <p><span className="font-bold">المنشئ:</span> {row.createdBy}</p>
                       <p><span className="font-bold">الأصناف:</span> {row.lines.length}</p>
                     </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button variant="outline" onClick={() => openRequest(row)} disabled={rowProcessing}>
+                    <div className="flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={() => openRequest(row)}
+                        disabled={rowProcessing}
+                        title="فتح"
+                        aria-label={`فتح طلب ${row.referenceNo}`}
+                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
                         <span className="material-icons-round text-sm">visibility</span>
-                        فتح
-                      </Button>
-                      <Button variant="outline" onClick={() => void printRequest(row)} disabled={rowProcessing}>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void printRequest(row)}
+                        disabled={rowProcessing}
+                        title="طباعة"
+                        aria-label={`طباعة طلب ${row.referenceNo}`}
+                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
                         <span className="material-icons-round text-sm">print</span>
-                        طباعة
-                      </Button>
+                      </button>
+                      {row.status === 'pending' && (
+                        <>
+                          <button
+                            type="button"
+                            onClick={() => void handleApprove(row.id)}
+                            disabled={!canApprove || rowProcessing || isSelfProductionEntryRequest(row)}
+                            title={isSelfProductionEntryRequest(row) ? 'لا يمكن اعتماد طلب تم إنشاؤه من نفس المستخدم.' : 'اعتماد'}
+                            aria-label={`اعتماد طلب ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">check_circle</span>
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => void handleReject(row.id)}
+                            disabled={!canApprove || rowProcessing}
+                            title="رفض"
+                            aria-label={`رفض طلب ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            <span className="material-icons-round text-sm">cancel</span>
+                          </button>
+                        </>
+                      )}
+                      {row.status === 'approved' && (
+                        <button
+                          type="button"
+                          onClick={() => void handleCancelMovement(row.id)}
+                          disabled={!canApprove || rowProcessing}
+                          title="إلغاء الحركة"
+                          aria-label={`إلغاء حركة طلب ${row.referenceNo}`}
+                          className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        >
+                          <span className="material-icons-round text-sm">undo</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 );
@@ -665,54 +713,62 @@ export const TransferApprovals: React.FC = () => {
                       </td>
                       <td className="px-4 py-3 text-sm">{row.createdBy}</td>
                       <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-2">
-                          <Button
-                            variant="outline"
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
                             onClick={() => openRequest(row)}
                             disabled={rowProcessing}
+                            title="فتح"
+                            aria-label={`فتح طلب ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <span className="material-icons-round text-sm">visibility</span>
-                            فتح
-                          </Button>
-                          <Button
-                            variant="outline"
+                          </button>
+                          <button
+                            type="button"
                             onClick={() => void printRequest(row)}
                             disabled={rowProcessing}
+                            title="طباعة"
+                            aria-label={`طباعة طلب ${row.referenceNo}`}
+                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                           >
                             <span className="material-icons-round text-sm">print</span>
-                            طباعة
-                          </Button>
+                          </button>
                           {row.status === 'pending' && (
                             <>
-                              <Button
-                                variant="primary"
+                              <button
+                                type="button"
                                 onClick={() => void handleApprove(row.id)}
                                 disabled={!canApprove || rowProcessing || rowIsSelfProductionEntry}
-                                title={rowIsSelfProductionEntry ? 'لا يمكن اعتماد طلب تم إنشاؤه من نفس المستخدم.' : undefined}
+                                title={rowIsSelfProductionEntry ? 'لا يمكن اعتماد طلب تم إنشاؤه من نفس المستخدم.' : 'اعتماد'}
+                                aria-label={`اعتماد طلب ${row.referenceNo}`}
+                                className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <span className="material-icons-round text-sm">check_circle</span>
-                                اعتماد
-                              </Button>
-                              <Button
-                                variant="outline"
+                              </button>
+                              <button
+                                type="button"
                                 onClick={() => void handleReject(row.id)}
                                 disabled={!canApprove || rowProcessing}
+                                title="رفض"
+                                aria-label={`رفض طلب ${row.referenceNo}`}
+                                className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                               >
                                 <span className="material-icons-round text-sm">cancel</span>
-                                رفض
-                              </Button>
+                              </button>
                             </>
                           )}
                           {row.status === 'approved' && (
-                            <Button
-                              variant="outline"
-                              className="!text-rose-600 !border-rose-200 hover:!bg-rose-50 dark:!border-rose-900/60 dark:!text-rose-300 dark:hover:!bg-rose-950/30"
+                            <button
+                              type="button"
                               onClick={() => void handleCancelMovement(row.id)}
                               disabled={!canApprove || rowProcessing}
+                              title="إلغاء الحركة"
+                              aria-label={`إلغاء حركة طلب ${row.referenceNo}`}
+                              className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                               <span className="material-icons-round text-sm">undo</span>
-                              إلغاء الحركة
-                            </Button>
+                            </button>
                           )}
                         </div>
                       </td>

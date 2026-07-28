@@ -67,18 +67,25 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
     const createdAt = order.createdAt
       ? new Date(order.createdAt).toLocaleString('ar-EG')
       : '—';
+    const printedAt = new Date().toLocaleString('ar-EG');
+    const supplyOrderNo = order.containerRef?.trim() || '';
+    const statusLabel = STATUS_LABELS[order.status] || order.status;
 
     const thStyle: React.CSSProperties = {
-      border: `1px solid ${palette.border}`,
-      padding: '2.5mm 2mm',
+      border: `1px solid ${ps.primaryColor}`,
+      padding: isThermal ? '1.5mm 1mm' : '3mm 2mm',
       fontSize: isThermal ? '7pt' : '10pt',
-      background: palette.tableHeaderBg,
-      color: palette.tableHeaderText,
+      background: ps.primaryColor,
+      color: '#ffffff',
+      fontWeight: 900,
+      textAlign: 'center',
+      whiteSpace: 'nowrap',
     };
     const tdStyle: React.CSSProperties = {
       border: `1px solid ${palette.border}`,
-      padding: '2.5mm 2mm',
+      padding: isThermal ? '1.5mm 1mm' : '2.5mm 2mm',
       fontSize: isThermal ? '7pt' : '10pt',
+      color: palette.text,
     };
 
     const renderLinesTable = (
@@ -91,12 +98,21 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
         locationCode: string;
       }>,
     ) => (
-      <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed', marginBottom: isThermal ? '3mm' : '6mm' }}>
+      <table
+        className="erp-table"
+        style={{
+          width: '100%',
+          borderCollapse: 'collapse',
+          tableLayout: 'fixed',
+          marginBottom: isThermal ? '3mm' : '6mm',
+          border: `1.5px solid ${ps.primaryColor}`,
+        }}
+      >
         <thead>
           <tr>
             <th style={{ ...thStyle, width: '8%' }}>م</th>
-            <th style={{ ...thStyle, width: '18%' }}>الكود</th>
-            <th style={{ ...thStyle, width: '34%' }}>المكون</th>
+            <th style={{ ...thStyle, width: '16%' }}>كود الصنف</th>
+            <th style={{ ...thStyle, width: '36%' }}>اسم المكون</th>
             <th style={{ ...thStyle, width: '12%' }}>الوحدة</th>
             <th style={{ ...thStyle, width: '14%' }}>الكمية</th>
             <th style={{ ...thStyle, width: '14%' }}>اللوكيشن</th>
@@ -105,9 +121,9 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
         <tbody>
           {lines.map((line, index) => (
             <tr key={`${line.itemCode}-${index}`} style={{ background: index % 2 ? palette.tableRowAltBg : '#fff' }}>
-              <td style={{ ...tdStyle, textAlign: 'center' }}>{index + 1}</td>
-              <td style={{ ...tdStyle, fontFamily: 'monospace' }}>{line.itemCode || '—'}</td>
-              <td style={tdStyle}>
+              <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700 }}>{index + 1}</td>
+              <td style={{ ...tdStyle, fontFamily: 'monospace', textAlign: 'center' }}>{line.itemCode || '—'}</td>
+              <td style={{ ...tdStyle, fontWeight: 700 }}>
                 {line.itemName}
                 {line.suggestedQty != null && Number(line.suggestedQty) !== Number(line.quantity) && (
                   <div style={{ fontSize: '8pt', color: palette.mutedText, fontWeight: 700 }}>
@@ -146,37 +162,160 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
           boxSizing: 'border-box',
         }}
       >
-        <div style={{ textAlign: 'center', marginBottom: isThermal ? '3mm' : '8mm', borderBottom: `3px solid ${ps.primaryColor}`, paddingBottom: isThermal ? '2mm' : '6mm' }}>
-          {ps.logoUrl && (
-            <img src={ps.logoUrl} alt="logo" style={{ maxHeight: isThermal ? '12mm' : '20mm', marginBottom: '2mm', objectFit: 'contain' }} />
-          )}
-          <h1 style={{ margin: 0, fontSize: isThermal ? '12pt' : '20pt', fontWeight: 900, color: ps.primaryColor }}>
-            {ps.headerText}
-          </h1>
-          <p style={{ margin: '2mm 0 0', fontSize: isThermal ? '10pt' : '18pt', fontWeight: 900, color: palette.mutedText }}>
-            مستند استلام مستلزمات
-          </p>
+        {/* Document header */}
+        <div
+          style={{
+            marginBottom: isThermal ? '3mm' : '7mm',
+            border: `2px solid ${ps.primaryColor}`,
+            borderRadius: isThermal ? '2mm' : '3mm',
+            overflow: 'hidden',
+          }}
+        >
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              gap: '4mm',
+              padding: isThermal ? '3mm' : '5mm 6mm',
+              background: '#fff',
+              borderBottom: `3px solid ${ps.primaryColor}`,
+            }}
+          >
+            <div style={{ flex: 1, textAlign: 'right' }}>
+              {ps.logoUrl && (
+                <img
+                  src={ps.logoUrl}
+                  alt="logo"
+                  style={{ maxHeight: isThermal ? '10mm' : '16mm', objectFit: 'contain', display: 'block', marginBottom: '1.5mm' }}
+                />
+              )}
+              <h1 style={{ margin: 0, fontSize: isThermal ? '11pt' : '16pt', fontWeight: 900, color: ps.primaryColor }}>
+                {ps.headerText}
+              </h1>
+            </div>
+            <div style={{ textAlign: 'center', flex: 1.2 }}>
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: isThermal ? '9pt' : '14pt',
+                  fontWeight: 900,
+                  color: '#0f172a',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                إذن استلام مستلزمات
+              </p>
+              <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '9pt', fontWeight: 700, color: palette.mutedText }}>
+                {order.warehouseName || order.warehouseId}
+              </p>
+            </div>
+            <div style={{ flex: 1, textAlign: 'left' }}>
+              <div
+                style={{
+                  display: 'inline-block',
+                  padding: isThermal ? '1.5mm 2mm' : '2.5mm 3.5mm',
+                  borderRadius: '2mm',
+                  background: ps.primaryColor,
+                  color: '#fff',
+                  textAlign: 'center',
+                  minWidth: isThermal ? '22mm' : '32mm',
+                }}
+              >
+                <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', fontWeight: 700, opacity: 0.9 }}>رقم الإذن</p>
+                <p style={{ margin: '0.5mm 0 0', fontSize: isThermal ? '8pt' : '11pt', fontWeight: 900, fontFamily: 'monospace' }}>
+                  {order.referenceNo}
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: supplyOrderNo ? '1.2fr 1fr 1fr 0.9fr' : '1.2fr 1fr 1fr',
+              gap: 0,
+              background: palette.tableRowAltBg,
+            }}
+          >
+            {[
+              { label: 'التاريخ', value: createdAt },
+              ...(supplyOrderNo
+                ? [{ label: 'رقم أمر التوريد', value: supplyOrderNo }]
+                : []),
+              { label: 'الحالة', value: statusLabel },
+              { label: 'عدد الأسطر', value: totalLines.toLocaleString('en-US') },
+            ].map((cell, idx, arr) => (
+              <div
+                key={cell.label}
+                style={{
+                  padding: isThermal ? '2mm' : '3mm 4mm',
+                  borderLeft: idx < arr.length - 1 ? `1px solid ${palette.border}` : undefined,
+                }}
+              >
+                <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', fontWeight: 700, color: palette.mutedText }}>
+                  {cell.label}
+                </p>
+                <p
+                  style={{
+                    margin: '0.5mm 0 0',
+                    fontSize: isThermal ? '8pt' : '11pt',
+                    fontWeight: 900,
+                    color: palette.text,
+                    fontFamily: cell.label.includes('أمر') || cell.label === 'عدد الأسطر' ? 'monospace' : undefined,
+                  }}
+                >
+                  {cell.value}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
 
-        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '4mm' : '8mm' }}>
+        {!order.id && (
+          <div
+            style={{
+              marginBottom: isThermal ? '3mm' : '5mm',
+              padding: '2.5mm 3.5mm',
+              border: `1px dashed ${palette.border}`,
+              borderRadius: '2mm',
+              color: palette.mutedText,
+              fontWeight: 800,
+              fontSize: isThermal ? '7pt' : '9pt',
+              background: '#fffbeb',
+            }}
+          >
+            طباعة قبل الحفظ — لم يُسجَّل الإذن بعد
+          </div>
+        )}
+
+        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '4mm' : '7mm' }}>
           <tbody>
-            {summaryPairRow('رقم المستند', order.referenceNo, 'التاريخ', createdAt)}
-            {summaryPairRow('المخزن', order.warehouseName || order.warehouseId, 'الحالة', STATUS_LABELS[order.status] || order.status, true)}
-            {summaryPairRow('مرجع الحاوية', order.containerRef || '—', 'المنشئ', order.createdBy || '—')}
-            {summaryPairRow('المعتمد', order.approvedBy || '—', 'المنفّذ', order.executedBy || '—', true)}
-            {summaryPairRow('عدد الأسطر', totalLines.toLocaleString('en-US'), 'إجمالي الكميات', totalQty.toLocaleString('en-US'))}
+            {summaryPairRow('المخزن', order.warehouseName || order.warehouseId, 'المنشئ', order.createdBy || '—')}
+            {summaryPairRow('أمر التوريد', supplyOrderNo || '—', 'إجمالي الكميات', totalQty.toLocaleString('en-US'), true)}
+            {summaryPairRow('المعتمد', order.approvedBy || '—', 'المنفّذ', order.executedBy || '—')}
             {order.note ? summaryPairRow('ملاحظة', order.note, '', '', true) : null}
           </tbody>
         </table>
 
         {groups.map((group, gIndex) => (
           <div key={`${group.productId}-${gIndex}`} style={{ marginBottom: isThermal ? '4mm' : '8mm' }}>
-            <h2 style={{ margin: 0, marginBottom: '3mm', fontSize: isThermal ? '9pt' : '12pt', fontWeight: 900, color: '#0f172a' }}>
-              منتج مفكك: {group.productName}
-              {group.productCode ? ` (${group.productCode})` : ''}
-              {' — '}
-              الكمية: {Number(group.quantity || 0).toLocaleString('en-US')}
-            </h2>
+            <div
+              style={{
+                marginBottom: '2.5mm',
+                padding: isThermal ? '1.5mm 2mm' : '2.5mm 3.5mm',
+                background: palette.tableRowAltBg,
+                borderRight: `4px solid ${ps.primaryColor}`,
+                borderRadius: '0 2mm 2mm 0',
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: isThermal ? '9pt' : '11pt', fontWeight: 900, color: '#0f172a' }}>
+                منتج مفكك: {group.productName}
+                {group.productCode ? ` (${group.productCode})` : ''}
+                {' — '}
+                الكمية: {Number(group.quantity || 0).toLocaleString('en-US')}
+              </h2>
+            </div>
             {group.lines?.length ? renderLinesTable(group.lines) : (
               <div style={{ border: `1px solid ${palette.border}`, borderRadius: '6px', padding: '4mm', color: palette.mutedText, fontWeight: 700 }}>
                 لا توجد مكونات لهذه المجموعة.
@@ -187,9 +326,19 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
 
         {standalone.length > 0 && (
           <div style={{ marginBottom: isThermal ? '4mm' : '8mm' }}>
-            <h2 style={{ margin: 0, marginBottom: '3mm', fontSize: isThermal ? '9pt' : '12pt', fontWeight: 900, color: '#0f172a' }}>
-              مكونات مستقلة
-            </h2>
+            <div
+              style={{
+                marginBottom: '2.5mm',
+                padding: isThermal ? '1.5mm 2mm' : '2.5mm 3.5mm',
+                background: palette.tableRowAltBg,
+                borderRight: `4px solid ${ps.primaryColor}`,
+                borderRadius: '0 2mm 2mm 0',
+              }}
+            >
+              <h2 style={{ margin: 0, fontSize: isThermal ? '9pt' : '11pt', fontWeight: 900, color: '#0f172a' }}>
+                مكونات مستقلة
+              </h2>
+            </div>
             {renderLinesTable(standalone)}
           </div>
         )}
@@ -207,6 +356,12 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
               <div style={{ marginTop: '12mm', borderTop: `1px solid ${palette.border}` }} />
             </div>
           ))}
+        </div>
+
+        <div style={{ marginTop: isThermal ? '3mm' : '8mm', borderTop: `1px solid ${palette.border}`, paddingTop: '3mm', textAlign: 'center' }}>
+          <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText }}>
+            {ps.footerText} — طباعة: {printedAt}
+          </p>
         </div>
       </div>
     );

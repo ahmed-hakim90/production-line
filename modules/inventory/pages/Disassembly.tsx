@@ -309,11 +309,53 @@ export const Disassembly: React.FC = () => {
                   <td className="p-3">{order.productName}</td>
                   <td className="p-3 text-center">{order.quantity}</td>
                   <td className="p-3 text-center">{order.status}</td>
-                  <td className="p-3 text-center space-x-1 space-x-reverse">
-                    {order.status === 'draft' && <button className="text-xs font-bold text-primary" onClick={() => void actionOrder(order, 'submit')}>إرسال</button>}
-                    {order.status === 'submitted' && <button className="text-xs font-bold text-emerald-700" onClick={() => void actionOrder(order, 'approve')}>اعتماد</button>}
-                    {order.status === 'submitted' && <button className="text-xs font-bold text-rose-700" onClick={() => void actionOrder(order, 'reject')}>رفض</button>}
-                    {order.status === 'approved' && <button className="text-xs font-bold text-primary" onClick={() => void actionOrder(order, 'execute')}>تنفيذ</button>}
+                  <td className="p-3">
+                    <div className="flex items-center justify-center gap-1.5">
+                      {order.status === 'draft' && (
+                        <button
+                          type="button"
+                          onClick={() => void actionOrder(order, 'submit')}
+                          title="إرسال"
+                          aria-label={`إرسال طلب التفكيك ${order.referenceNo}`}
+                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors"
+                        >
+                          <span className="material-icons-round text-sm">send</span>
+                        </button>
+                      )}
+                      {order.status === 'submitted' && (
+                        <button
+                          type="button"
+                          onClick={() => void actionOrder(order, 'approve')}
+                          title="اعتماد"
+                          aria-label={`اعتماد طلب التفكيك ${order.referenceNo}`}
+                          className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors"
+                        >
+                          <span className="material-icons-round text-sm">check_circle</span>
+                        </button>
+                      )}
+                      {order.status === 'submitted' && (
+                        <button
+                          type="button"
+                          onClick={() => void actionOrder(order, 'reject')}
+                          title="رفض"
+                          aria-label={`رفض طلب التفكيك ${order.referenceNo}`}
+                          className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                        >
+                          <span className="material-icons-round text-sm">cancel</span>
+                        </button>
+                      )}
+                      {order.status === 'approved' && (
+                        <button
+                          type="button"
+                          onClick={() => void actionOrder(order, 'execute')}
+                          title="تنفيذ"
+                          aria-label={`تنفيذ طلب التفكيك ${order.referenceNo}`}
+                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors"
+                        >
+                          <span className="material-icons-round text-sm">play_circle</span>
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
