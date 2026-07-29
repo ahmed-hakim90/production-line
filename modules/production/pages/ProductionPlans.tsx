@@ -1222,6 +1222,32 @@ export const ProductionPlans: React.FC = () => {
                   <p className="font-bold text-[var(--color-text)]">{getCurrentRunningAction(activeDrawerPlan)}</p>
                 </div>
 
+                <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <div>
+                      <p className="text-xs text-[var(--color-text-muted)]">التقارير المربوطة بالخطة</p>
+                      <p className="text-sm font-bold text-[var(--color-text)] tabular-nums">
+                        {formatNumber(activeDrawerPlan.reportCount)} تقرير
+                      </p>
+                    </div>
+                    {can('reports.view') && activeDrawerPlan.id && (
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                          navigate(`/reports?productionPlanId=${encodeURIComponent(activeDrawerPlan.id!)}`);
+                          setActiveDrawerPlanId(null);
+                        }}
+                      >
+                        عرض التقارير
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-[var(--color-text-muted)] leading-relaxed">
+                    العدد يشمل التقارير المرتبطة مباشرة بالخطة أو عبر أمر شغل مربوط عند تفعيل احتساب التقارير.
+                  </p>
+                </div>
+
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 space-y-1">
                   <p className="text-xs text-[var(--color-text-muted)]">احتساب إنتاج التقارير وأوامر الشغل</p>
                   <p className={`text-sm font-bold ${activeDrawerPlan.acceptsProductionFromReports === false ? 'text-amber-600' : 'text-emerald-600'}`}>

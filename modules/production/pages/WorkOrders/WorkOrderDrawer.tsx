@@ -18,6 +18,9 @@ interface WorkOrderDrawerProps {
   onOpenScanner?: (order: WorkOrder) => void;
   canReopenCompleted?: boolean;
   onReopenCompleted?: (order: WorkOrder) => void;
+  onViewReports?: (order: WorkOrder) => void;
+  onReconcileReports?: (order: WorkOrder) => void;
+  reconcilingReports?: boolean;
 }
 
 const STATUS_AR_MAP: Record<WorkOrderStatus, 'قيد التنفيذ' | 'مكتمل' | 'قيد الانتظار' | 'ملغي'> = {
@@ -50,6 +53,9 @@ export function WorkOrderDrawer({
   onOpenScanner,
   canReopenCompleted,
   onReopenCompleted,
+  onViewReports,
+  onReconcileReports,
+  reconcilingReports,
 }: WorkOrderDrawerProps) {
   if (!order) return null;
   const effectiveStatus = rowView?.effectiveStatus ?? order.status;
@@ -111,6 +117,9 @@ export function WorkOrderDrawer({
       showReopenCompleted={showReopenCompleted}
       onReopenCompleted={showReopenCompleted ? () => onReopenCompleted!(order) : undefined}
       storedCompleted={storedStatus === 'completed'}
+      onViewReports={onViewReports && order.id ? () => onViewReports(order) : undefined}
+      onReconcileReports={onReconcileReports && order.id ? () => onReconcileReports(order) : undefined}
+      reconcilingReports={reconcilingReports}
     />
   );
 }

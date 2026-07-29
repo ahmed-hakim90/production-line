@@ -81,6 +81,14 @@ import {
 import {
   filterReportsForProductionPlan,
 } from '../modules/production/utils/productionPlanReports';
+import {
+  deriveWorkOrderStatusFromProduced,
+  filterUnlinkedReportsEligibleForWorkOrder,
+  getWorkOrderEffectiveStartDate,
+  pickBestAutoLinkedWorkOrder,
+  reportDateEligibleForWorkOrder,
+  sumProducedFromWorkOrderReports,
+} from '../modules/production/utils/workOrderReportLinking';
 import { supplyCycleService } from '../modules/production/services/supplyCycleService';
 import { lineStatusService } from '../modules/production/services/lineStatusService';
 import { lineProductConfigService } from '../modules/production/services/lineProductConfigService';
@@ -426,58 +434,6 @@ async function persistProductionReportCostSnapshot(
 
 function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
   return status === 'pending' || status === 'in_progress';
-}
-
-function getSortableDateMs(value: any): number {
-  if (!value) return 0;
-  if (typeof value?.toDate === 'function') return value.toDate().getTime();
-  if (typeof value?.seconds === 'number') return value.seconds * 1000;
-  const ms = new Date(value).getTime();
-  return Number.isNaN(ms) ? 0 : ms;
-}
-
-function pickBestAutoLinkedWorkOrder(
-  workOrders: WorkOrder[],
-  criteria: {
-    lineId: string;
-    productId: string;
-    supervisorId?: string;
-    reportType: NonNullable<ProductionReport['reportType']>;
-    includeCompleted?: boolean;
-  },
-): WorkOrder | null {
-  const allowedStatuses = criteria.includeCompleted
-    ? new Set<WorkOrder['status']>(['pending', 'in_progress', 'completed'])
-    : new Set<WorkOrder['status']>(['pending', 'in_progress']);
-  const filtered = workOrders.filter((wo) => (
-    Boolean(wo?.id)
-    && allowedStatuses.has(wo.status)
-    && wo.productId === criteria.productId
-    && workOrderMatchesReportType(wo, criteria.reportType)
-  ));
-  if (filtered.length === 0) return null;
-
-  const supervisorId = String(criteria.supervisorId || '').trim();
-  const ranked = [...filtered].sort((a, b) => {
-    const score = (wo: WorkOrder) => {
-      let value = 0;
-      if (wo.lineId === criteria.lineId) value += 8;
-      if (supervisorId && wo.supervisorId === supervisorId) value += 4;
-      if (wo.status === 'in_progress') value += 2;
-      if (wo.status === 'pending') value += 1;
-      if (wo.status === 'completed') value += 0.5;
-      return value;
-    };
-    const scoreDiff = score(b) - score(a);
-    if (scoreDiff !== 0) return scoreDiff;
-    const targetDateDiff = String(b.targetDate || '').localeCompare(String(a.targetDate || ''));
-    if (targetDateDiff !== 0) return targetDateDiff;
-    const createdAtDiff = getSortableDateMs(b.createdAt) - getSortableDateMs(a.createdAt);
-    if (createdAtDiff !== 0) return createdAtDiff;
-    return String(b.id || '').localeCompare(String(a.id || ''));
-  });
-
-  return ranked[0] ?? null;
 }
 
 function deriveProductionPlanAutoPatch(
@@ -854,6 +810,12 @@ interface AppState {
       }) => void;
     }
   ) => Promise<{ processed: number; linked: number; skipped: number; failed: number }>;
+  /** Link eligible reports from WO start date onward, then set producedQuantity from linked report sum (idempotent). */
+  reconcileWorkOrderFromReports: (workOrderId: string) => Promise<{
+    linked: number;
+    reportCount: number;
+    producedQuantity: number;
+  }>;
   unlinkReportsWorkOrdersInRange: (
     startDate: string,
     endDate: string,
@@ -2631,6 +2593,12 @@ export const useAppStore = create<AppState>((set, get) => ({
             status: data.status,
           },
         });
+
+        try {
+          await get().reconcileWorkOrderFromReports(id);
+        } catch (reconcileError) {
+          console.warn('reconcileWorkOrderFromReports after create failed:', reconcileError);
+        }
       }
       actionTrackerService.succeedOperation(trackedOperation, {
         metadata: {
@@ -3517,6 +3485,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           selectedWO
           && isActiveWorkOrderStatus(selectedWO.status)
           && workOrderMatchesReportType(selectedWO, reportType)
+          && reportDateEligibleForWorkOrder(savePayload.date, selectedWO)
         ) {
           activeWO = selectedWO;
         }
@@ -3550,6 +3519,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           productId: savePayload.productId,
           supervisorId: savePayload.employeeId,
           reportType,
+          reportDate: savePayload.date,
         });
       }
 
@@ -4555,12 +4525,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const workOrders = await workOrderService.getAll();
-      const workOrderById = new Map(
-        workOrders
-          .filter((wo) => Boolean(wo.id))
-          .map((wo) => [String(wo.id), wo]),
-      );
-      const laborRate = Number(get().laborSettings?.hourlyRate ?? 0);
+      const touchedWorkOrderIds = new Set<string>();
 
       for (const report of candidates) {
         if (!report.id) continue;
@@ -4571,6 +4536,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             productId: report.productId,
             supervisorId: report.employeeId,
             reportType: resolveReportType(report.reportType),
+            reportDate: report.date,
             includeCompleted: true,
           });
           if (!target?.id) {
@@ -4578,47 +4544,14 @@ export const useAppStore = create<AppState>((set, get) => ({
             continue;
           }
 
-          await reportService.update(report.id, { workOrderId: target.id });
-
-          const qty = Number(report.quantityProduced || 0);
-          const workers = Number(report.workersCount || 0);
-          const hours = Number(report.workHours || 0);
-          const laborCost = laborRate * hours * workers;
-          if (qty > 0 && !isPackagingThroughputReport(report, get()._rawLines)) {
-            await workOrderService.incrementProduced(target.id, qty, laborCost);
+          const planId = String(target.planId || '').trim();
+          const patch: Partial<ProductionReport> = { workOrderId: target.id };
+          if (planId && !String(report.productionPlanId || '').trim()) {
+            patch.productionPlanId = planId;
+            patch.productionPlanLinkMode = 'auto';
           }
-
-          const cached = workOrderById.get(String(target.id));
-          const currentProduced = Number(cached?.producedQuantity ?? target.producedQuantity ?? 0);
-          const nextProduced = Math.max(0, currentProduced + qty);
-          const targetQty = Number(cached?.quantity ?? target.quantity ?? 0);
-          const previousStatus = cached?.status ?? target.status;
-          const nextStatus: WorkOrder['status'] =
-            nextProduced <= 0
-              ? 'pending'
-              : nextProduced >= targetQty
-                ? 'completed'
-                : 'in_progress';
-
-          if (nextStatus !== previousStatus || (nextStatus === 'completed' && !(cached?.completedAt ?? target.completedAt))) {
-            await workOrderService.update(target.id, {
-              status: nextStatus,
-              completedAt:
-                nextStatus === 'completed'
-                  ? (cached?.completedAt ?? target.completedAt ?? new Date().toISOString())
-                  : null,
-            });
-          }
-
-          if (cached) {
-            cached.producedQuantity = nextProduced;
-            cached.actualCost = Number(cached.actualCost || 0) + (qty > 0 ? laborCost : 0);
-            cached.status = nextStatus;
-            cached.completedAt =
-              nextStatus === 'completed'
-                ? (cached.completedAt ?? new Date().toISOString())
-                : null;
-          }
+          await reportService.update(report.id, patch);
+          touchedWorkOrderIds.add(String(target.id));
           linked += 1;
         } catch {
           failed += 1;
@@ -4630,6 +4563,14 @@ export const useAppStore = create<AppState>((set, get) => ({
           skipped,
           failed,
         });
+      }
+
+      for (const workOrderId of touchedWorkOrderIds) {
+        try {
+          await get().reconcileWorkOrderFromReports(workOrderId);
+        } catch {
+          // reconcile failures are surfaced via store error; keep linking progress
+        }
       }
 
       const touchedDates = candidates
@@ -4661,6 +4602,88 @@ export const useAppStore = create<AppState>((set, get) => ({
       get()._rebuildLines();
 
       return { processed, linked, skipped, failed };
+    } catch (error) {
+      set({ error: (error as Error).message });
+      throw error;
+    }
+  },
+
+  reconcileWorkOrderFromReports: async (workOrderId) => {
+    set({ error: null });
+    const id = String(workOrderId || '').trim();
+    if (!id) {
+      throw new Error('معرّف أمر الشغل غير صالح.');
+    }
+
+    try {
+      const wo = await workOrderService.getById(id);
+      if (!wo?.id) {
+        throw new Error('أمر الشغل غير موجود.');
+      }
+
+      const startDate = getWorkOrderEffectiveStartDate(wo) || getReportOperationalDateString(get().systemSettings);
+      const endDate = String(wo.targetDate || '').trim() || getReportOperationalDateString(get().systemSettings);
+      const rangeStart = startDate <= endDate ? startDate : endDate;
+      const rangeEnd = startDate <= endDate ? endDate : startDate;
+
+      const rangeReports = await reportService.getByDateRange(rangeStart, rangeEnd);
+      const toLink = filterUnlinkedReportsEligibleForWorkOrder(wo, rangeReports);
+      const planId = String(wo.planId || '').trim();
+      let linked = 0;
+
+      for (const report of toLink) {
+        if (!report.id) continue;
+        const patch: Partial<ProductionReport> = { workOrderId: id };
+        if (planId && !String(report.productionPlanId || '').trim()) {
+          patch.productionPlanId = planId;
+          patch.productionPlanLinkMode = 'auto';
+        }
+        await reportService.update(report.id, patch);
+        linked += 1;
+      }
+
+      const linkedReports = await reportService.getByWorkOrderId(id);
+      if (planId) {
+        for (const report of linkedReports) {
+          if (!report.id) continue;
+          if (String(report.productionPlanId || '').trim()) continue;
+          await reportService.update(report.id, {
+            productionPlanId: planId,
+            productionPlanLinkMode: report.productionPlanLinkMode || 'auto',
+          });
+        }
+      }
+
+      const refreshedLinked = planId ? await reportService.getByWorkOrderId(id) : linkedReports;
+      const producedQuantity = sumProducedFromWorkOrderReports(id, refreshedLinked);
+      const targetQty = Number(wo.quantity || 0);
+      const nextStatus = deriveWorkOrderStatusFromProduced(producedQuantity, targetQty, wo.status);
+      const statusPatch: Partial<WorkOrder> = {
+        producedQuantity,
+        status: nextStatus,
+      };
+      if (nextStatus === 'completed') {
+        statusPatch.completedAt = wo.completedAt || new Date().toISOString();
+      } else if (wo.status === 'completed' && nextStatus !== 'completed') {
+        statusPatch.completedAt = null;
+      }
+      await workOrderService.update(id, statusPatch);
+
+      await Promise.all([
+        get().fetchWorkOrders({ force: true }),
+        get().fetchProductionPlans({ force: true, silent: true }),
+      ]);
+
+      const touchedDates = refreshedLinked
+        .map((r) => String(r.date || '').trim())
+        .filter(Boolean);
+      invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
+
+      return {
+        linked,
+        reportCount: refreshedLinked.length,
+        producedQuantity,
+      };
     } catch (error) {
       set({ error: (error as Error).message });
       throw error;

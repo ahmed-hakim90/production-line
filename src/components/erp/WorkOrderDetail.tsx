@@ -46,6 +46,9 @@ interface WorkOrderDetailProps {
   onReopenCompleted?: () => void
   /** إن وُجد، يُستخدم لشريط الإجراءات بدل الاعتماد على نص الحالة المعروض */
   storedCompleted?: boolean
+  onViewReports?: () => void
+  onReconcileReports?: () => void
+  reconcilingReports?: boolean
 }
 
 const numberFormatter = new Intl.NumberFormat("ar-EG")
@@ -65,6 +68,9 @@ export function WorkOrderDetail({
   showReopenCompleted,
   onReopenCompleted,
   storedCompleted,
+  onViewReports,
+  onReconcileReports,
+  reconcilingReports,
 }: WorkOrderDetailProps) {
   const { t } = useTranslation()
   const { dir } = useAppDirection();
@@ -196,6 +202,34 @@ export function WorkOrderDetail({
                   </p>
                 </div>
               ))}
+            </div>
+
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-[var(--color-border-ui)] bg-[var(--color-page-bg)] px-3 py-2">
+              <div>
+                <p className="text-[11px] text-[var(--color-text-2)]">{t("erpComponents.workOrderDetail.dates.reportsCount")}</p>
+                <p className="text-sm font-medium text-[var(--color-text-1)]">
+                  {t("erpComponents.workOrderDetail.units.reportValue", { count: numberFormatter.format(order.reportsCount) })}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {onViewReports ? (
+                  <Button type="button" variant="outline" size="sm" onClick={onViewReports} className="border-[var(--color-border-ui)]">
+                    عرض التقارير
+                  </Button>
+                ) : null}
+                {onReconcileReports ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={reconcilingReports}
+                    onClick={onReconcileReports}
+                    className="border-[var(--color-border-ui)]"
+                  >
+                    {reconcilingReports ? 'جاري المزامنة...' : 'مزامنة من التقارير'}
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </section>
 

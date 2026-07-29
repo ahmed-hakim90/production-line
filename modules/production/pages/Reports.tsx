@@ -1161,6 +1161,21 @@ export const Reports: React.FC = () => {
     });
     return map;
   }, [_rawProducts]);
+  const linkedReportId = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return params.get('reportId');
+  }, [location.search]);
+
+  const linkedWorkOrderIdFilter = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return String(params.get('workOrderId') || '').trim();
+  }, [location.search]);
+
+  const linkedProductionPlanIdFilter = useMemo(() => {
+    const params = new URLSearchParams(location.search);
+    return String(params.get('productionPlanId') || '').trim();
+  }, [location.search]);
+
   const applyReportFilters = useCallback((source: ProductionReport[]) => {
     let list = myEmployeeId
       ? source.filter((r) => r.employeeId === myEmployeeId)
@@ -1171,8 +1186,14 @@ export const Reports: React.FC = () => {
       list = list.filter((r) => (productCategoryByProductId.get(r.productId) || '') === filterProductCategory);
     }
     if (filterEmployeeId) list = list.filter((r) => r.employeeId === filterEmployeeId);
+    if (linkedWorkOrderIdFilter) {
+      list = list.filter((r) => String(r.workOrderId || '').trim() === linkedWorkOrderIdFilter);
+    }
+    if (linkedProductionPlanIdFilter) {
+      list = list.filter((r) => String(r.productionPlanId || '').trim() === linkedProductionPlanIdFilter);
+    }
     return list;
-  }, [myEmployeeId, filterLineId, filterReportKind, filterProductCategory, filterEmployeeId, productCategoryByProductId, _rawLines]);
+  }, [myEmployeeId, filterLineId, filterReportKind, filterProductCategory, filterEmployeeId, productCategoryByProductId, _rawLines, linkedWorkOrderIdFilter, linkedProductionPlanIdFilter]);
 
   const sortReports = useCallback((source: ProductionReport[]) => {
     const getRegisteredAtMs = (report: ProductionReport): number => {
@@ -1218,11 +1239,6 @@ export const Reports: React.FC = () => {
     return counts;
   }, [allReports, myEmployeeId, filterLineId, filterEmployeeId, filterReportKind, productCategoryByProductId, _rawLines]);
 
-  const linkedReportId = useMemo(() => {
-    const params = new URLSearchParams(location.search);
-    return params.get('reportId');
-  }, [location.search]);
-
   useEffect(() => {
     if (!linkedReportId) return;
     let cancelled = false;
@@ -1264,6 +1280,27 @@ export const Reports: React.FC = () => {
     const timer = setTimeout(() => setHighlightReportId(null), 5000);
     return () => clearTimeout(timer);
   }, [linkedReportId, displayedReports]);
+
+  useEffect(() => {
+    if (!linkedWorkOrderIdFilter) return;
+    let cancelled = false;
+    const loadLinkedWorkOrderReports = async () => {
+      const rows = await reportService.getByWorkOrderId(linkedWorkOrderIdFilter);
+      if (cancelled || rows.length === 0) return;
+      const dates = rows.map((r) => String(r.date || '').trim()).filter(Boolean).sort();
+      if (dates.length === 0) return;
+      const from = dates[0];
+      const to = dates[dates.length - 1];
+      setStartDate(from);
+      setEndDate(to);
+      setViewMode('range');
+      await fetchReports(from, to);
+    };
+    loadLinkedWorkOrderReports().catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, [linkedWorkOrderIdFilter, fetchReports]);
 
   const supervisorHourlyRates = useMemo(
     () => buildSupervisorHourlyRatesMap(_rawEmployees),
@@ -2821,7 +2858,8 @@ export const Reports: React.FC = () => {
   const handleBackfillUnlinkedReports = useCallback(async () => {
     if (backfillingUnlinkedReports) return;
     const confirmed = window.confirm(
-      `سيتم ربط التقارير غير المربوطة بأوامر الشغل خلال الفترة:\n${startDate} إلى ${endDate}\n\nهل تريد المتابعة؟`,
+      `سيتم ربط التقارير غير المربوطة بأوامر الشغل خلال الفترة:\n${startDate} إلى ${endDate}\n` +
+      `ثم إعادة حساب كميات أوامر الشغل من مجموع التقارير (بدون مضاعفة).\n\nهل تريد المتابعة؟`,
     );
     if (!confirmed) return;
 
@@ -3912,6 +3950,16 @@ export const Reports: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {(linkedWorkOrderIdFilter || linkedProductionPlanIdFilter) && (
+        <div className="mb-4 rounded-[var(--border-radius-lg)] border border-primary/20 bg-primary/5 px-4 py-3 text-sm text-[var(--color-text)]">
+          {linkedWorkOrderIdFilter
+            ? `عرض التقارير المربوطة بأمر الشغل المحدد (${displayedReports.length} تقرير في الفترة الحالية).`
+            : `عرض التقارير المربوطة بالخطة المحددة (${displayedReports.length} تقرير في الفترة الحالية).`}
+          {' '}
+          وسّع فترة التاريخ إن لم تظهر كل التقارير.
+        </div>
+      )}
 
       {/* Reports Table */}
       {rangeError && (viewMode === 'range' || viewMode === 'general') && (

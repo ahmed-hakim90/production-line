@@ -86,6 +86,7 @@ export const WorkOrders: React.FC = () => {
   }));
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const deleteWorkOrder = useAppStore((s) => s.deleteWorkOrder);
+  const reconcileWorkOrderFromReports = useAppStore((s) => s.reconcileWorkOrderFromReports);
 
   const loggedInSupervisor = useMemo(() => {
     if (currentEmployee?.id) return currentEmployee;
@@ -115,6 +116,7 @@ export const WorkOrders: React.FC = () => {
   const selectedOrderId = useWorkOrderStore((s) => s.selectedOrderId);
 
   const [syncingStatus, setSyncingStatus] = useState<string | null>(null);
+  const [reconcilingOrderId, setReconcilingOrderId] = useState<string | null>(null);
   const [reportMetaByOrderId, setReportMetaByOrderId] = useState<Record<string, WorkOrderReportMeta>>({});
   const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
@@ -435,6 +437,46 @@ export const WorkOrders: React.FC = () => {
     await handleStatusChange(order.id, 'completed');
   };
 
+  const handleViewLinkedReports = useCallback((order: WorkOrder) => {
+    if (!order.id) return;
+    navigate(`/reports?workOrderId=${encodeURIComponent(order.id)}`);
+  }, [navigate]);
+
+  const handleReconcileLinkedReports = useCallback(async (order: WorkOrder) => {
+    if (!order.id || !isConfigured) return;
+    if (reconcilingOrderId) return;
+    const confirmed = window.confirm(
+      `مزامنة أمر الشغل مع تقارير الإنتاج من تاريخ إنشائه وبعده؟\n` +
+      `سيتم ربط التقارير غير المربوطة وإعادة حساب الكمية المنتجة من مجموع التقارير (بدون مضاعفة).`,
+    );
+    if (!confirmed) return;
+
+    setReconcilingOrderId(order.id);
+    try {
+      const result = await reconcileWorkOrderFromReports(order.id);
+      setReportMetaByOrderId((prev) => ({
+        ...prev,
+        [order.id!]: {
+          count: result.reportCount,
+          firstReportDate: prev[order.id!]?.firstReportDate ?? null,
+          producedQuantity: result.producedQuantity,
+        },
+      }));
+      updateOrder(order.id, {
+        producedQuantity: result.producedQuantity,
+      });
+      toast.success(
+        `تمت المزامنة: ${result.reportCount} تقرير مربوط` +
+        (result.linked > 0 ? ` (ربط جديد: ${result.linked})` : '') +
+        ` — الكمية: ${formatNumber(result.producedQuantity)}`,
+      );
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'تعذر مزامنة التقارير مع أمر الشغل.');
+    } finally {
+      setReconcilingOrderId(null);
+    }
+  }, [reconcilingOrderId, reconcileWorkOrderFromReports, updateOrder]);
+
   const handleReopenCompletedOrder = useCallback(
     async (order: WorkOrder) => {
       const id = order.id;
@@ -685,6 +727,9 @@ export const WorkOrders: React.FC = () => {
         onOpenScanner={handleOpenScanner}
         canReopenCompleted={can('workOrders.edit')}
         onReopenCompleted={handleReopenCompletedOrder}
+        onViewReports={can('reports.view') || can('reports.create') ? handleViewLinkedReports : undefined}
+        onReconcileReports={can('workOrders.edit') || can('reports.edit') ? handleReconcileLinkedReports : undefined}
+        reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
       />
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <WorkOrderPrint ref={woPrintRef} data={printData} printSettings={printTemplate} />
