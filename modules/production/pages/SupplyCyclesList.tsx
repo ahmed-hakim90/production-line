@@ -24,7 +24,7 @@ import { rawMaterialService } from '../../inventory/services/rawMaterialService'
 import type { RawMaterial } from '../../inventory/types';
 import { exportSupplyCyclesListExcel } from '../../../utils/exportExcel';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
-import { CalendarDays, Loader2, Package, Plus, Trash2 } from 'lucide-react';
+import { CalendarDays, Package, Plus, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -404,8 +404,7 @@ export const SupplyCyclesList: React.FC = () => {
                 غيّر البحث أو الحالة أو أنشئ دورة جديدة لبدء تتبع الباتش.
               </p>
               {can('supplyCycles.manage') && (
-                <Button type="button" onClick={openCreate} className="mt-1 gap-1.5">
-                  <Plus className="size-4" />
+                <Button type="button" onClick={openCreate} className="mt-1">
                   دورة جديدة
                 </Button>
               )}
@@ -630,16 +629,9 @@ export const SupplyCyclesList: React.FC = () => {
               type="button"
               onClick={() => void handleCreate()}
               disabled={saving}
-              className="min-w-[88px] w-full gap-2 sm:w-auto"
+              className="min-w-[88px] w-full sm:w-auto"
             >
-              {saving ? (
-                <>
-                  <Loader2 className="size-4 shrink-0 animate-spin" />
-                  جاري الحفظ
-                </>
-              ) : (
-                'حفظ'
-              )}
+              {saving ? 'جاري الحفظ' : 'حفظ'}
             </Button>
           </DialogFooter>
         </DialogContent>

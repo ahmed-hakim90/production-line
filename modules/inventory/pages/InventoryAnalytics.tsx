@@ -97,8 +97,8 @@ export const InventoryAnalytics: React.FC = () => {
         subtitle="تصنيف ABC ودوران مبسّط من الأرصدة والحركات"
         actions={
           <>
-            <PrimaryButton onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
-            <PrimaryButton onClick={exportAbc} disabled={loading || abcRows.length === 0}>تصدير ABC</PrimaryButton>
+            <PrimaryButton iconName="refresh" tone="neutral" onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
+            <PrimaryButton iconName="download" tone="export" onClick={exportAbc} disabled={loading || abcRows.length === 0}>تصدير ABC</PrimaryButton>
           </>
         }
       />

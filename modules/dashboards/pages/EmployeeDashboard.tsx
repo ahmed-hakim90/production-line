@@ -34,8 +34,13 @@ import {
   loadWorkOrderCardMetricsData,
   type WorkOrderCardMetricsData,
 } from '../utils/workOrderCardMetrics';
+import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import { SearchableSelect } from '@/components/UI';
 import { useActiveRoutingPlansQuery } from '../../production/routing/hooks/routingQueries';
+import {
+  EMPLOYEE_PORTAL_PATHS,
+  SUPERVISOR_PORTAL_PATHS,
+} from '../lib/portalHome';
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
@@ -132,6 +137,7 @@ export const EmployeeDashboard: React.FC = () => {
   const [periodLoading, setPeriodLoading] = useState(false);
   const [pendingEntriesLoading, setPendingEntriesLoading] = useState(false);
   const [pendingProductionEntries, setPendingProductionEntries] = useState<InventoryTransferRequest[]>([]);
+  const { snapshot: decisionSnapshot, loading: decisionLoading } = useOperationalDecisionSnapshot();
   const [assignedLineIds, setAssignedLineIds] = useState<Set<string>>(new Set());
   const [workOrderCardMetricsData, setWorkOrderCardMetricsData] = useState<WorkOrderCardMetricsData>(
     () => emptyWorkOrderCardMetricsData(),
@@ -567,8 +573,6 @@ export const EmployeeDashboard: React.FC = () => {
         periods={PERIOD_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
         activePeriod={period}
         onPeriodChange={(value) => setPeriod(value as Period)}
-        onApply={() => undefined}
-        applyLabel="عرض"
       />
 
       {/* â”€â”€ ROW 2: Quick Actions â”€â”€ */}
@@ -576,29 +580,43 @@ export const EmployeeDashboard: React.FC = () => {
         {can('quickAction.view') && (
           <PrimaryButton
             type="button"
-            onClick={() => navigate('/quick-action')}
+            onClick={() => navigate(EMPLOYEE_PORTAL_PATHS.quickAction)}
             className="shrink-0"
+            iconName="bolt"
+            tone="execute"
           >
-            <span className="material-icons-round text-base">bolt</span>
             الإدخال السريع
           </PrimaryButton>
+        )}
+        {can('productionIssue.request') && (
+          <GhostButton
+            type="button"
+            onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.productionIssueRequests)}
+            className="shrink-0"
+            iconName="assignment"
+            tone="view"
+          >
+            طلبات صرف الإنتاج
+          </GhostButton>
         )}
         {employee?.level === 2 && (
           <>
             <GhostButton
               type="button"
               onClick={() => navigate('/my-workers')}
-              className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+              className="shrink-0"
+              iconName="supervisor_account"
+              tone="view"
             >
-              <span className="material-icons-round text-base">supervisor_account</span>
               تفاصيل المشرف
             </GhostButton>
             <GhostButton
               type="button"
-              onClick={() => navigate('/my-workers/evaluation')}
-              className="shrink-0 border-indigo-200 text-indigo-700 hover:bg-indigo-50"
+              onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.workerEvaluation)}
+              className="shrink-0"
+              iconName="assignment_ind"
+              tone="edit"
             >
-              <span className="material-icons-round text-base">assignment_ind</span>
               تقييم العمالة
             </GhostButton>
           </>
@@ -607,9 +625,10 @@ export const EmployeeDashboard: React.FC = () => {
           <GhostButton
             type="button"
             onClick={() => navigate('/inventory/movements')}
-            className="shrink-0 border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+            className="shrink-0"
+            iconName="warehouse"
+            tone="share"
           >
-            <span className="material-icons-round text-base">warehouse</span>
             حركة المخزون
           </GhostButton>
         )}
@@ -617,9 +636,10 @@ export const EmployeeDashboard: React.FC = () => {
           <GhostButton
             type="button"
             onClick={() => navigate('/component-waste-reports')}
-            className="shrink-0 border-rose-200 text-rose-700 hover:bg-rose-50"
+            className="shrink-0"
+            iconName="report_problem"
+            tone="undo"
           >
-            <span className="material-icons-round text-base">report_problem</span>
             هالك المكونات
           </GhostButton>
         )}
@@ -627,9 +647,10 @@ export const EmployeeDashboard: React.FC = () => {
           <GhostButton
             type="button"
             onClick={() => navigate('/line-workers')}
-            className="shrink-0 border-[#C7D2FE] text-[#4F46E5] hover:bg-[#EEF2FF]"
+            className="shrink-0"
+            iconName="group_work"
+            tone="submit"
           >
-            <span className="material-icons-round text-base">group_work</span>
             ربط العمالة بالخط
           </GhostButton>
         )}
@@ -637,10 +658,37 @@ export const EmployeeDashboard: React.FC = () => {
           <GhostButton
             type="button"
             onClick={() => navigate('/inventory/transfer-approvals')}
-            className="shrink-0 border-amber-200 text-amber-700 hover:bg-amber-50"
+            className="shrink-0"
+            iconName="verified_user"
+            tone="approve"
           >
-            <span className="material-icons-round text-base">verified_user</span>
             اعتماد التحويلات
+          </GhostButton>
+        )}
+        {(can('productionIssue.request' as any) || can('productionIssue.create' as any)) && (
+          <GhostButton
+            type="button"
+            onClick={() => navigate('/production/issue-requests')}
+            className="shrink-0"
+            iconName="fact_check"
+            tone="submit"
+          >
+            طلبات صرف الإنتاج
+            {decisionSnapshot.issues.openCount > 0 ? ` (${decisionSnapshot.issues.openCount})` : ''}
+          </GhostButton>
+        )}
+        {(can('reports.packaging.create' as any) || can('reports.view' as any)) && (
+          <GhostButton
+            type="button"
+            onClick={() => navigate('/production/packaging/control')}
+            className="shrink-0"
+            iconName="package_2"
+            tone="share"
+          >
+            تحكم التغليف
+            {decisionSnapshot.packaging.awaitingUnits > 0
+              ? ` (${formatNumber(decisionSnapshot.packaging.awaitingUnits)})`
+              : ''}
           </GhostButton>
         )}
       </div>
@@ -660,8 +708,10 @@ export const EmployeeDashboard: React.FC = () => {
                 تعذر تحميل خطط المسارات.
                 <GhostButton
                   type="button"
-                  className="text-xs border-rose-200 text-rose-800 hover:bg-rose-100 dark:hover:bg-rose-900/40"
+                  className="text-xs"
                   onClick={() => void refetchActiveRoutingPlans()}
+                  iconName="refresh"
+                  tone="neutral"
                 >
                   إعادة المحاولة
                 </GhostButton>
@@ -695,21 +745,23 @@ export const EmployeeDashboard: React.FC = () => {
                         `/production/routing/${selectedRoutingPlan.productId}?planId=${selectedRoutingPlan.id}`,
                       );
                     }}
+                    iconName="visibility"
+                    tone="view"
                   >
-                    <span className="material-icons-round text-base">visibility</span>
                     عرض الخطة
                   </PrimaryButton>
                   {can('routing.execute') && (
                     <GhostButton
                       type="button"
-                      className="shrink-0 border-emerald-200 text-emerald-800 hover:bg-emerald-50 dark:border-emerald-800 dark:text-emerald-200"
+                      className="shrink-0"
                       disabled={!selectedRoutingPlan}
                       onClick={() => {
                         if (!selectedRoutingPlan) return;
                         navigate(`/production/routing/execution/new?productId=${selectedRoutingPlan.productId}`);
                       }}
+                      iconName="play_arrow"
+                      tone="execute"
                     >
-                      <span className="material-icons-round text-base">play_arrow</span>
                       بدء تنفيذ
                     </GhostButton>
                   )}
@@ -770,9 +822,10 @@ export const EmployeeDashboard: React.FC = () => {
             <GhostButton
               type="button"
               onClick={() => navigate('/inventory/transfer-approvals')}
-              className="sm:mr-auto text-xs border-amber-200 text-amber-700 hover:bg-amber-50"
+              className="sm:mr-auto text-xs"
+              iconName="fact_check"
+              tone="approve"
             >
-              <span className="material-icons-round text-sm">inventory</span>
               فتح شاشة الاعتماد
             </GhostButton>
           </div>
@@ -783,6 +836,100 @@ export const EmployeeDashboard: React.FC = () => {
               isLoading={pendingEntriesLoading}
               emptyMessage="لا توجد طلبات اعتماد معلقة"
             />
+          </div>
+        </Card>
+      )}
+
+      {(can('productionIssue.request' as any) || can('inventory.view' as any) || can('productionIssue.approve' as any) || can('inventory.counts.manage' as any)) &&
+        (decisionSnapshot.issues.openCount > 0 ||
+          decisionSnapshot.packaging.awaitingUnits > 0 ||
+          decisionSnapshot.inventory.negativeCount > 0 ||
+          decisionSnapshot.inventory.lowStockCount > 0 ||
+          decisionSnapshot.stockCounts.openSessions > 0 ||
+          decisionSnapshot.stockCounts.awaitingApproval > 0) && (
+        <Card>
+          <div className="flex flex-col gap-3">
+            <div className="flex items-center gap-2">
+              <span className="material-icons-round text-primary">rule</span>
+              <h3 className="text-sm font-medium text-[var(--color-text)]">قرارات تشغيلية اليوم</h3>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {decisionSnapshot.issues.openCount > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate(
+                    can('productionIssue.approve' as any) || can('inventory.view' as any)
+                      ? '/inventory/production-issues'
+                      : '/production/issue-requests',
+                  )}
+                  className="text-right rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50/80 px-3.5 py-3 hover:shadow-sm"
+                >
+                  <p className="text-xs font-bold text-amber-800">صرف إنتاج معلّق</p>
+                  <p className="text-xl font-black tabular-nums text-amber-900 mt-0.5">
+                    {decisionLoading ? '…' : decisionSnapshot.issues.openCount}
+                  </p>
+                  <p className="text-[11px] text-amber-800/80 mt-1">
+                    تنفيذ {decisionSnapshot.issues.fulfilmentPercent}% · {formatNumber(decisionSnapshot.issues.openRequestedQty)} وحدة
+                  </p>
+                </button>
+              )}
+              {decisionSnapshot.packaging.awaitingUnits > 0 && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/production/packaging/control')}
+                  className="text-right rounded-[var(--border-radius-lg)] border border-slate-200 bg-slate-50/80 px-3.5 py-3 hover:shadow-sm"
+                >
+                  <p className="text-xs font-bold text-slate-700">بانتظار التغليف</p>
+                  <p className="text-xl font-black tabular-nums text-slate-900 mt-0.5">
+                    {decisionLoading ? '…' : formatNumber(decisionSnapshot.packaging.awaitingUnits)}
+                  </p>
+                  <p className="text-[11px] text-slate-600 mt-1">
+                    {decisionSnapshot.packaging.skuCount} صنف · تحويلات معلّقة {decisionSnapshot.packaging.pendingTransfers}
+                  </p>
+                </button>
+              )}
+              {can('inventory.view' as any) &&
+                (decisionSnapshot.inventory.negativeCount > 0 || decisionSnapshot.inventory.lowStockCount > 0) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/inventory/exceptions')}
+                  className="text-right rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50/80 px-3.5 py-3 hover:shadow-sm"
+                >
+                  <p className="text-xs font-bold text-rose-800">مخاطر المخزون</p>
+                  <p className="text-xl font-black tabular-nums text-rose-900 mt-0.5">
+                    {decisionLoading
+                      ? '…'
+                      : decisionSnapshot.inventory.negativeCount + decisionSnapshot.inventory.lowStockCount}
+                  </p>
+                  <p className="text-[11px] text-rose-800/80 mt-1">
+                    سالب {decisionSnapshot.inventory.negativeCount} · تحت الحد {decisionSnapshot.inventory.lowStockCount}
+                    {decisionSnapshot.inventory.finishedDaysOfCover != null
+                      ? ` · تغطية ${decisionSnapshot.inventory.finishedDaysOfCover} يوم`
+                      : ''}
+                  </p>
+                </button>
+              )}
+              {can('inventory.counts.manage' as any) &&
+                (decisionSnapshot.stockCounts.openSessions > 0 || decisionSnapshot.stockCounts.awaitingApproval > 0) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/inventory/counts')}
+                  className="text-right rounded-[var(--border-radius-lg)] border border-indigo-200 bg-indigo-50/80 px-3.5 py-3 hover:shadow-sm"
+                >
+                  <p className="text-xs font-bold text-indigo-800">الجرد والمطابقة</p>
+                  <p className="text-xl font-black tabular-nums text-indigo-900 mt-0.5">
+                    {decisionLoading
+                      ? '…'
+                      : decisionSnapshot.stockCounts.accuracyPercent != null
+                        ? `${decisionSnapshot.stockCounts.accuracyPercent}%`
+                        : decisionSnapshot.stockCounts.openSessions + decisionSnapshot.stockCounts.awaitingApproval}
+                  </p>
+                  <p className="text-[11px] text-indigo-800/80 mt-1">
+                    مفتوح {decisionSnapshot.stockCounts.openSessions} · اعتماد {decisionSnapshot.stockCounts.awaitingApproval}
+                  </p>
+                </button>
+              )}
+            </div>
           </div>
         </Card>
       )}
@@ -960,18 +1107,20 @@ export const EmployeeDashboard: React.FC = () => {
                                 {isSupervisor && can('workOrders.edit') && wo.status === 'pending' && (
                                   <GhostButton
                                     onClick={() => updateWorkOrder(wo.id!, { status: 'in_progress' })}
-                                    className="h-8 px-3 text-xs border-emerald-200 text-emerald-700 hover:bg-emerald-50"
+                                    className="h-8 px-3 text-xs"
+                                    iconName="play_arrow"
+                                    tone="execute"
                                   >
-                                    <span className="material-icons-round text-sm">play_arrow</span>
                                     بدء
                                   </GhostButton>
                                 )}
                                 {isSupervisor && can('workOrders.edit') && wo.status === 'in_progress' && (
                                   <GhostButton
                                     onClick={() => updateWorkOrder(wo.id!, { status: 'completed', completedAt: new Date().toISOString() })}
-                                    className="h-8 px-3 text-xs border-[#C7D2FE] text-[#4F46E5] hover:bg-[#EEF2FF]"
+                                    className="h-8 px-3 text-xs"
+                                    iconName="check_circle"
+                                    tone="approve"
                                   >
-                                    <span className="material-icons-round text-sm">check_circle</span>
                                     اكتمل
                                   </GhostButton>
                                 )}

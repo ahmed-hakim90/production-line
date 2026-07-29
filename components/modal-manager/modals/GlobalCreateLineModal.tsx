@@ -172,7 +172,7 @@ export const GlobalCreateLineModal: React.FC = () => {
           </label>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
+          <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.name}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Plus size={14} />

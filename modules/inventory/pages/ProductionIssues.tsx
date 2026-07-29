@@ -4,7 +4,14 @@ import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { productionIssueService, isProductionIssueApprovalError } from '../services/productionIssueService';
+import {
+  approveProductionIssueRequest,
+  issueProductionIssueOrder,
+  rejectProductionIssueRequest,
+} from '../usecases/approveProductionIssue';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { warehouseRackService } from '../services/warehouseRackService';
@@ -670,10 +677,12 @@ export const ProductionIssues: React.FC = () => {
       setShortageModalOpen(false);
       try {
         const qtyOverride = resolveQtyOverride();
-        await productionIssueService.approveRequest(order.id, actor, {
+        unwrapOrThrow(await approveProductionIssueRequest({
+          orderId: order.id,
+          actor,
           quantityOverride: qtyOverride,
           sourceWarehouseId: warehouseId || order.sourceWarehouseId,
-        });
+        }));
         setShortageRows([]);
         setApproveQty('');
         setMessage('تم اعتماد طلب الإنتاج وترحيل الصرف.');
@@ -695,8 +704,11 @@ export const ProductionIssues: React.FC = () => {
     setMessage('');
     setShortageModalOpen(false);
     try {
-      if (order.status === 'draft') await productionIssueService.submit(order.id);
-      await productionIssueService.issue(order.id, actor);
+      unwrapOrThrow(await issueProductionIssueOrder({
+        orderId: order.id,
+        actor,
+        submitIfDraft: order.status === 'draft',
+      }));
       setShortageRows([]);
       setMessage('تم اعتماد وصرف المكونات.');
       await reload();
@@ -719,7 +731,11 @@ export const ProductionIssues: React.FC = () => {
     setBusy(true);
     setMessage('');
     try {
-      await productionIssueService.rejectRequest(order.id, actor, reason);
+      unwrapOrThrow(await rejectProductionIssueRequest({
+        orderId: order.id,
+        actor,
+        reason,
+      }));
       setMessage('تم رفض طلب الإنتاج.');
       await reload();
     } catch (error: any) {
@@ -963,13 +979,14 @@ export const ProductionIssues: React.FC = () => {
         <div className="flex flex-wrap items-center gap-3 px-1">
           <p className="text-sm font-bold text-primary">{message}</p>
           {shortageRows.length > 0 && (
-            <button
+            <Button
               type="button"
-              className="text-sm font-bold text-rose-700 underline"
+              variant="outline"
+              size="sm"
               onClick={() => setShortageModalOpen(true)}
             >
               عرض تفاصيل النقص
-            </button>
+            </Button>
           )}
         </div>
       )}
@@ -1063,7 +1080,8 @@ export const ProductionIssues: React.FC = () => {
                         حفظ مسودة
                       </Button>
                     )}
-                    <Button
+                    <ToneActionButton
+                      action="approve"
                       disabled={
                         busy
                         || preparingLines
@@ -1073,19 +1091,20 @@ export const ProductionIssues: React.FC = () => {
                       onClick={() => void submitAndIssue(selectedOrder)}
                     >
                       اعتماد وترحيل صرف
-                    </Button>
+                    </ToneActionButton>
                     {selectedOrder.status === 'requested' && (
-                      <Button
-                        variant="secondary"
+                      <ToneActionButton
+                        action="reject"
                         disabled={busy || preparingLines || !can('productionIssue.approve')}
                         onClick={() => void rejectProductionRequest(selectedOrder)}
                       >
                         رفض الطلب
-                      </Button>
+                      </ToneActionButton>
                     )}
                   </>
                 ) : (
-                  <Button
+                  <ToneActionButton
+                    action="approve"
                     disabled={
                       busy
                       || selectedOrder.status === 'issued'
@@ -1096,10 +1115,10 @@ export const ProductionIssues: React.FC = () => {
                     onClick={() => void submitAndIssue(selectedOrder)}
                   >
                     اعتماد وصرف
-                  </Button>
+                  </ToneActionButton>
                 )}
                 <Button
-                  variant="secondary"
+                  variant="danger"
                   disabled={
                     busy
                     || selectedOrder.status === 'cancelled'
@@ -1220,9 +1239,11 @@ export const ProductionIssues: React.FC = () => {
                           مصروف {formatQty(line.issuedQty)} / تعويض {formatQty(line.compensatedQty)} / مرتجع {formatQty(line.returnedQty)} / هالك {formatQty(line.actualScrapQty)}
                         </td>
                         <td className="p-3 text-center">
-                          <button className="text-xs font-bold text-primary mx-1" disabled={!can('productionIssue.return')} onClick={() => openLineAction('return', selectedOrder, line)}>مرتجع</button>
-                          <button className="text-xs font-bold text-amber-700 mx-1" disabled={!can('productionIssue.compensate')} onClick={() => openLineAction('compensate', selectedOrder, line)}>تعويض</button>
-                          <button className="text-xs font-bold text-rose-700 mx-1" disabled={!can('productionIssue.compensate')} onClick={() => openLineAction('scrap', selectedOrder, line)}>هالك</button>
+                          <div className="inline-flex flex-wrap items-center justify-center gap-1">
+                            <Button size="sm" variant="ghost" disabled={!can('productionIssue.return')} onClick={() => openLineAction('return', selectedOrder, line)}>مرتجع</Button>
+                            <Button size="sm" variant="ghost" disabled={!can('productionIssue.compensate')} onClick={() => openLineAction('compensate', selectedOrder, line)}>تعويض</Button>
+                            <Button size="sm" variant="ghost" disabled={!can('productionIssue.compensate')} onClick={() => openLineAction('scrap', selectedOrder, line)}>هالك</Button>
+                          </div>
                         </td>
                       </tr>
                       ))

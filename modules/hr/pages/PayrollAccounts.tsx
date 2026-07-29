@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { getDocs, query, where, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
+import { getDocs, query, where } from 'firebase/firestore';
 import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/UI';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { payrollDistributionsRef } from '../collections';
 import { getPayrollMonth, getPayrollRecords } from '../payroll';
 import type { FirestorePayrollRecord } from '../payroll/types';
 import { useAppStore } from '@/store/useAppStore';
-import { db } from '@/services/firebase';
 import { usePermission } from '@/utils/permissions';
 import { getCurrentTenantId } from '@/lib/currentTenant';
+import { confirmPayrollDisbursement } from '../usecases/payrollAccounts';
+import { unwrapOrThrow } from '@/shared/usecases';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -104,12 +107,11 @@ export const PayrollAccounts: React.FC = () => {
       return;
     }
     if (!id) return;
-    await updateDoc(doc(db, 'payroll_records', id), {
-      disbursed: true,
-      disbursedAt: serverTimestamp(),
+    unwrapOrThrow(await confirmPayrollDisbursement({
+      recordId: id,
       disbursedBy: uid || '',
       disbursedByName: userDisplayName || '',
-    });
+    }));
     if (reloadAfter) {
       invalidatePageDataCache('hr:payroll-accounts:');
       await load({ force: true });
@@ -147,26 +149,35 @@ export const PayrollAccounts: React.FC = () => {
         subtitle="تأكيد صرف الرواتب الموزعة"
         icon="payments"
         primaryAction={{ label: loading ? 'جار التحميل...' : 'تحديث', icon: 'refresh', onClick: () => void load(), disabled: loading }}
-        extra={(
-          <input
-            type="month"
-            className="erp-filter-select"
-            value={month}
-            onChange={(e) => setMonth(e.target.value)}
-          />
-        )}
       />
 
       {error && <div className="card p-3 text-sm font-bold text-rose-600">{error}</div>}
 
-      <div className="flex items-center gap-3">
-        <button className="erp-filter-apply" onClick={() => void confirmAll()} disabled={rows.length === 0 || !canConfirmDisbursement}>
-          تأكيد صرف الكل
-        </button>
-        <div className="text-sm font-bold text-[var(--color-text-muted)]">
-          إجمالي المصروف: {fmt(totals.disbursed)} ج.م · المتبقي: {fmt(totals.remaining)} ج.م
-        </div>
-      </div>
+      <SmartFilterBar
+        advancedFilters={[
+          {
+            key: 'month',
+            label: 'الشهر',
+            placeholder: 'اختر الشهر',
+            type: 'month',
+            options: [],
+          },
+        ]}
+        advancedFilterValues={{ month }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'month') setMonth(value);
+        }}
+        extra={
+          <>
+            <Button className="erp-filter-apply" onClick={() => void confirmAll()} disabled={rows.length === 0 || !canConfirmDisbursement}>
+              تأكيد صرف الكل
+            </Button>
+            <div className="text-sm font-bold text-[var(--color-text-muted)]">
+              إجمالي المصروف: {fmt(totals.disbursed)} ج.م · المتبقي: {fmt(totals.remaining)} ج.م
+            </div>
+          </>
+        }
+      />
 
       <div className="card overflow-x-auto">
         <table className="erp-table w-full text-sm">
@@ -187,13 +198,14 @@ export const PayrollAccounts: React.FC = () => {
                 <td className="py-2 px-2 font-mono">{fmt(Number(row.netSalary || 0))}</td>
                 <td className="py-2 px-2">{row.disbursed ? 'تم الصرف' : 'لم يُصرف'}</td>
                 <td className="py-2 px-2">
-                  <button
+                  <Button
                     className="erp-filter-apply"
+                    size="sm"
                     disabled={!!row.disbursed || !canConfirmDisbursement}
                     onClick={() => void confirmOne(row.id)}
                   >
                     {row.disbursed ? 'تم ✓' : 'تأكيد الصرف'}
-                  </button>
+                  </Button>
                 </td>
               </tr>
             ))}

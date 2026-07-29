@@ -147,7 +147,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         icon: 'package_2',
         path: '/production/packaging/control',
         permission: 'reports.view',
-        anyOfPermissions: ['reports.view', 'reports.packaging.create', 'reports.packaging.only', 'inventory.view'],
+        anyOfPermissions: ['reports.view', 'reports.packaging.create', 'inventory.view'],
         excludeRoleKeys: ['materials_warehouse'],
         activePatterns: ['/production/packaging/', '/inventory/packaging/'],
       },

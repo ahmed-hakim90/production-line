@@ -3,6 +3,7 @@ import {
   collection,
   deleteDoc,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   updateDoc,
@@ -95,6 +96,20 @@ export const warehouseService = {
     const q = tenantQuery(db, COLLECTION, orderBy('name', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
+  },
+
+  async getById(id: string): Promise<Warehouse | null> {
+    if (!isConfigured || !id || id.startsWith('__')) return null;
+    const snap = await getDoc(doc(db, COLLECTION, id));
+    if (!snap.exists()) return null;
+    return { id: snap.id, ...snap.data() } as Warehouse;
+  },
+
+  /** Prefer the warehouse's UI name; fallback only when the doc is missing. */
+  async resolveDisplayName(id: string, fallback = ''): Promise<string> {
+    const warehouse = await this.getById(id);
+    const name = String(warehouse?.name || '').trim();
+    return name || fallback;
   },
 
   /** @deprecated Prefer `getAllWarehouses` for clarity. */

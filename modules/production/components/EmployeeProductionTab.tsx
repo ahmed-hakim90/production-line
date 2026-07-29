@@ -134,9 +134,15 @@ export const EmployeeProductionTab: React.FC<Props> = ({ employeeId }) => {
         <KPIBox label="الدرجة" value={String(month?.performanceScore ?? 0)} icon="grade" />
       </div>
       <Card>
-        <button type="button" className="text-primary font-bold text-sm" onClick={() => navigate(`/production-workers/${workerId}`)}>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          className="!h-auto !px-1.5 !py-0.5 text-primary font-bold text-sm"
+          onClick={() => navigate(`/production-workers/${workerId}`)}
+        >
           عرض تفاصيل الإنتاج الكاملة
-        </button>
+        </Button>
       </Card>
     </div>
   );

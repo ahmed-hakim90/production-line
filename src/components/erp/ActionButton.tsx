@@ -3,15 +3,36 @@ import { useTranslation } from "react-i18next"
 
 import { Button, type ButtonProps } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import {
+  tableIconActionToneClass,
+  type TableIconActionTone,
+} from "./TableIconAction"
 
 interface ActionButtonProps extends ButtonProps {
   icon?: ReactNode
+  /** Material Icons Round ligature — preferred for ERP consistency. */
+  iconName?: string
+  /** Distinctive color tone (same system as ToneActionButton). */
+  tone?: TableIconActionTone
+  /** Filled solid background. */
+  solid?: boolean
   loading?: boolean
+}
+
+function renderIcon(icon?: ReactNode, iconName?: string) {
+  if (iconName) {
+    return <span className="material-icons-round text-sm" aria-hidden>{iconName}</span>
+  }
+  if (icon) return <span>{icon}</span>
+  return null
 }
 
 export function PrimaryButton({
   children,
   icon,
+  iconName,
+  tone = "execute",
+  solid = true,
   loading,
   className,
   disabled,
@@ -21,37 +42,67 @@ export function PrimaryButton({
   return (
     <Button
       variant="default"
-      className={cn("rounded-lg bg-[#4F46E5] px-4 py-2 text-sm font-medium text-white hover:bg-[#4338CA]", className)}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-medium border shadow-none",
+        tableIconActionToneClass(tone, solid),
+        className,
+      )}
       disabled={loading || disabled}
       {...props}
     >
-      {icon && <span>{icon}</span>}
+      {loading
+        ? <span className="material-icons-round text-sm animate-spin" aria-hidden>refresh</span>
+        : renderIcon(icon, iconName)}
       {loading ? t("erpComponents.actionButton.loadingSave") : children}
     </Button>
   )
 }
 
-export function GhostButton({ children, icon, className, ...props }: ActionButtonProps) {
+export function GhostButton({
+  children,
+  icon,
+  iconName,
+  tone = "neutral",
+  solid = false,
+  className,
+  ...props
+}: ActionButtonProps) {
   return (
     <Button
       variant="ghost"
-      className={cn("rounded-lg border border-slate-200 px-4 py-2 text-sm font-normal text-slate-600 hover:bg-slate-50", className)}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold border shadow-none",
+        tableIconActionToneClass(tone, solid),
+        className,
+      )}
       {...props}
     >
-      {icon && <span>{icon}</span>}
+      {renderIcon(icon, iconName)}
       {children}
     </Button>
   )
 }
 
-export function DangerButton({ children, icon, className, ...props }: ActionButtonProps) {
+export function DangerButton({
+  children,
+  icon,
+  iconName = "delete",
+  tone = "delete",
+  solid = false,
+  className,
+  ...props
+}: ActionButtonProps) {
   return (
     <Button
       variant="ghost"
-      className={cn("rounded-lg border border-red-200 px-4 py-2 text-sm font-normal text-red-700 hover:bg-red-50", className)}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-lg px-4 py-2 text-sm font-bold border shadow-none",
+        tableIconActionToneClass(tone, solid),
+        className,
+      )}
       {...props}
     >
-      {icon && <span>{icon}</span>}
+      {renderIcon(icon, iconName)}
       {children}
     </Button>
   )

@@ -40,13 +40,13 @@ import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { assemblableCapacityService } from './assemblableCapacityService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
+import { allocateNextProductionIssueReference } from './productionIssueSequence';
 
 const COLLECTION = 'production_issue_orders';
 
 const toIsoNow = () => new Date().toISOString();
 const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
-const issueRef = () => `PI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Date.now().toString().slice(-6)}`;
 
 export class ProductionIssueApprovalError extends Error {
   readonly shortages: ProductionIssueShortageRow[];
@@ -336,8 +336,9 @@ export const productionIssueService = {
     if (!warehouse?.id) throw new Error('حدد مخزن صرف المكونات.');
     const lines = await buildLines(product.id, quantity, warehouse.id);
     const now = toIsoNow();
+    const referenceNo = await allocateNextProductionIssueReference();
     const payload: ProductionIssueOrder = {
-      referenceNo: issueRef(),
+      referenceNo,
       sourceType,
       workOrderId: sourceType === 'work_order' ? source.id : undefined,
       productionPlanId: sourceType === 'production_plan' ? source.id : undefined,
@@ -409,8 +410,9 @@ export const productionIssueService = {
     }
 
     const now = toIsoNow();
+    const referenceNo = await allocateNextProductionIssueReference();
     const payload: ProductionIssueOrder = {
-      referenceNo: issueRef(),
+      referenceNo,
       sourceType,
       workOrderId: sourceType === 'work_order' ? source.id : undefined,
       productionPlanId: sourceType === 'production_plan' ? source.id : undefined,

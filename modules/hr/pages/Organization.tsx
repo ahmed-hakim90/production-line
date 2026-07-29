@@ -3,13 +3,14 @@ import { Card, Button, Badge } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
-import { getDocs, deleteDoc, doc } from 'firebase/firestore';
-import { db } from '@/services/firebase';
+import { getDocs } from 'firebase/firestore';
 import {
   departmentsRef, jobPositionsRef, shiftsRef,
   penaltyRulesRef, lateRulesRef, allowanceTypesRef,
   HR_COLLECTIONS,
 } from '../collections';
+import { deleteOrganizationEntity } from '../usecases/manageOrganization';
+import { unwrapOrThrow } from '@/shared/usecases';
 import type {
   FirestoreDepartment, FirestoreJobPosition, FirestoreShift,
   FirestorePenaltyRule, FirestoreLateRule, FirestoreAllowanceType,
@@ -300,7 +301,10 @@ export const Organization: React.FC = () => {
   const handleDelete = async () => {
     if (!deleteConfirmId) return;
     try {
-      await deleteDoc(doc(db, getCollectionName(), deleteConfirmId));
+      unwrapOrThrow(await deleteOrganizationEntity(getCollectionName(), deleteConfirmId, {
+        userId: useAppStore.getState().uid || undefined,
+        userName: useAppStore.getState().userDisplayName || undefined,
+      }));
       setDeleteConfirmId(null);
       await loadData();
     } catch (e) {

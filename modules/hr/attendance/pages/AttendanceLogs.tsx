@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/UI';
 import { SelectableTable, type TableColumn } from '@/components/SelectableTable';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
 import type { FirestoreEmployee } from '@/types';
 import type { AttendanceLog } from '../types';
@@ -41,7 +43,8 @@ export const AttendanceLogs: React.FC = () => {
   const fetchAttendanceLogs = useAppStore((s) => s.fetchAttendanceLogs);
   const [startDate, setStartDate] = useState(getWeekStart);
   const [endDate, setEndDate] = useState(getToday);
-  const [activeRange, setActiveRange] = useState<'today' | 'week' | 'month' | 'custom'>('week');
+  const [activePeriod, setActivePeriod] = useState<'today' | 'week' | 'month' | 'custom'>('week');
+  const [dateFilters, setDateFilters] = useState({ startDate: getWeekStart(), endDate: getToday() });
   const [loading, setLoading] = useState(false);
   const employeeNames = useMemo(() => (
     rawEmployees.reduce<Record<string, string>>((acc, employee: FirestoreEmployee) => {
@@ -81,6 +84,30 @@ export const AttendanceLogs: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  const handleApplyDates = useCallback(() => {
+    setStartDate(dateFilters.startDate);
+    setEndDate(dateFilters.endDate);
+    setActivePeriod('custom');
+  }, [dateFilters]);
+
+  const handleDateFilterChange = (key: string, value: string) => {
+    setDateFilters((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const applyDatePreset = (value: string) => {
+    if (value === 'today') {
+      const today = getToday();
+      setActivePeriod('today');
+      setDateFilters({ startDate: today, endDate: today });
+    } else if (value === 'week') {
+      setActivePeriod('week');
+      setDateFilters({ startDate: getWeekStart(), endDate: getToday() });
+    } else if (value === 'month') {
+      setActivePeriod('month');
+      setDateFilters({ startDate: getMonthStart(), endDate: getToday() });
+    }
+  };
 
   const stats = useMemo(() => {
     const total = logs.length;
@@ -155,96 +182,54 @@ export const AttendanceLogs: React.FC = () => {
         <div className="erp-kpi-card"><div className="erp-kpi-label">غير معروف</div><div className="erp-kpi-value">{stats.unknown}</div></div>
       </div>
 
-      <div className="erp-filter-bar">
-        <div className="erp-date-seg">
-          <button
-            type="button"
-            className={`erp-date-seg-btn ${activeRange === 'today' ? 'active' : ''}`}
-            onClick={() => {
-              const today = getToday();
-              setActiveRange('today');
-              setStartDate(today);
-              setEndDate(today);
-            }}
-          >
-            اليوم
-          </button>
-          <button
-            type="button"
-            className={`erp-date-seg-btn ${activeRange === 'week' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveRange('week');
-              setStartDate(getWeekStart());
-              setEndDate(getToday());
-            }}
-          >
-            آخر 7 أيام
-          </button>
-          <button
-            type="button"
-            className={`erp-date-seg-btn ${activeRange === 'month' ? 'active' : ''}`}
-            onClick={() => {
-              setActiveRange('month');
-              setStartDate(getMonthStart());
-              setEndDate(getToday());
-            }}
-          >
-            هذا الشهر
-          </button>
-        </div>
-
-        <label className="erp-filter-date">
-          <span className="erp-filter-label">من</span>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => {
-              setActiveRange('custom');
-              setStartDate(e.target.value);
-            }}
-          />
-        </label>
-        <label className="erp-filter-date">
-          <span className="erp-filter-label">إلى</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => {
-              setActiveRange('custom');
-              setEndDate(e.target.value);
-            }}
-          />
-        </label>
-
-        <button
-          className="erp-filter-apply"
-          onClick={() => {
-            invalidatePageDataCache(`hr:attendance-logs:${startDate}:${endDate}`);
-            void load({ force: true });
-          }}
-          disabled={loading}
-        >
-          <span className="material-icons-round text-sm">sync</span>
-          {loading ? 'جار التحميل...' : 'تحديث'}
-        </button>
+      <div className="card p-0">
+        <SmartFilterBar
+          periods={[
+            { label: 'اليوم', value: 'today' },
+            { label: 'آخر 7 أيام', value: 'week' },
+            { label: 'هذا الشهر', value: 'month' },
+          ]}
+          activePeriod={activePeriod}
+          onPeriodChange={applyDatePreset}
+          advancedFilters={[
+            {
+              key: 'startDate',
+              label: 'من',
+              placeholder: 'من',
+              type: 'date',
+              options: [],
+            },
+            {
+              key: 'endDate',
+              label: 'إلى',
+              placeholder: 'إلى',
+              type: 'date',
+              options: [],
+            },
+          ]}
+          advancedFilterValues={dateFilters}
+          onAdvancedFilterChange={handleDateFilterChange}
+          onApply={handleApplyDates}
+          applyLabel="تحديث"
+          className="mb-0 border-0 rounded-none"
+        />
+        <SelectableTable<AttendanceLog>
+          data={logs}
+          columns={tableColumns}
+          getId={(log) => log.id}
+          actionsHeader="إجراءات"
+          emptyIcon="fingerprint"
+          emptyTitle="لا توجد سجلات بصمة ضمن النطاق المحدد"
+          emptySubtitle="غيّر التاريخ أو راجع مصدر الاستيراد"
+          tableId="attendance-raw-logs"
+          pageSize={25}
+          enableSearch={true}
+          searchPlaceholder="بحث بالموظف أو كود الجهاز أو المصدر"
+          enableColumnVisibility={true}
+          checkboxSelection={false}
+          loading={loading}
+        />
       </div>
-
-      <SelectableTable<AttendanceLog>
-        data={logs}
-        columns={tableColumns}
-        getId={(log) => log.id}
-        actionsHeader="إجراءات"
-        emptyIcon="fingerprint"
-        emptyTitle="لا توجد سجلات بصمة ضمن النطاق المحدد"
-        emptySubtitle="غيّر التاريخ أو راجع مصدر الاستيراد"
-        tableId="attendance-raw-logs"
-        pageSize={25}
-        enableSearch={true}
-        searchPlaceholder="بحث بالموظف أو كود الجهاز أو المصدر"
-        enableColumnVisibility={true}
-        checkboxSelection={false}
-        loading={loading}
-      />
     </div>
   );
 };

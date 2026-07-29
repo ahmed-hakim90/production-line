@@ -269,7 +269,6 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                 data-modal-key={MODAL_KEYS.EMPLOYEE_ALLOWANCE_CREATE}
                 disabled={financialSaving}
               >
-                <span className="material-icons-round text-lg">add</span>
                 إضافة بدل
               </Button>
             )}
@@ -365,7 +364,6 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                   data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
                   disabled={financialSaving}
                 >
-                  <span className="material-icons-round text-lg text-amber-500">gavel</span>
                   جزاء تأديبي
                 </Button>
                 <Button
@@ -373,7 +371,6 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
                   data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
                   disabled={financialSaving}
                 >
-                  <span className="material-icons-round text-lg">add</span>
                   إضافة خصم
                 </Button>
               </div>
@@ -866,7 +863,6 @@ export const EmployeeProfile: React.FC = () => {
           <h2 className="text-xl font-bold mt-4">موظف غير موجود</h2>
           <p className="text-[var(--color-text-muted)] mt-2">لم يتم العثور على الموظف المطلوب.</p>
           <Button className="mt-6" onClick={() => navigate('/hr/employees')}>
-            <span className="material-icons-round text-lg">arrow_back</span>
             العودة للقائمة
           </Button>
         </Card>
@@ -910,7 +906,6 @@ export const EmployeeProfile: React.FC = () => {
                   variant="outline"
                   onClick={() => navigate('/hr/employees', { state: { editId: employee.id } })}
                 >
-                  <span className="material-icons-round text-lg">edit</span>
                   تعديل
                 </Button>
                 <Button
@@ -918,7 +913,6 @@ export const EmployeeProfile: React.FC = () => {
                   onClick={handleToggleStatus}
                   disabled={toggling}
                 >
-                  <span className="material-icons-round text-lg">{employee.isActive ? 'toggle_on' : 'toggle_off'}</span>
                   {employee.isActive ? 'إلغاء التفعيل' : 'تفعيل'}
                 </Button>
               </>
@@ -1159,7 +1153,6 @@ export const EmployeeProfile: React.FC = () => {
             يمكنك مراجعة كشف الرواتب التفصيلي من صفحة الرواتب.
           </p>
           <Button variant="outline" onClick={() => navigate('/hr/payroll')}>
-            <span className="material-icons-round text-lg">receipt_long</span>
             صفحة الرواتب
           </Button>
         </Card>

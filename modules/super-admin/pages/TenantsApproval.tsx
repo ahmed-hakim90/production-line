@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Button } from '@/components/UI';
 import { tenantService } from '../../../services/tenantService';
 import { useAppStore } from '../../../store/useAppStore';
 import type { PendingTenant } from '../../../types';
@@ -62,14 +63,13 @@ export const TenantsApproval: React.FC = () => {
                   @{row.slug} — {row.adminEmail}
                 </p>
               </div>
-              <button
+              <Button
                 type="button"
-                className="px-4 py-2 rounded-md bg-emerald-600 text-white text-sm font-semibold disabled:opacity-50"
                 disabled={busyId === row.id}
                 onClick={() => void approve(row.id)}
               >
                 {busyId === row.id ? 'جاري الموافقة...' : 'موافقة وتفعيل'}
-              </button>
+              </Button>
             </li>
           ))}
         </ul>

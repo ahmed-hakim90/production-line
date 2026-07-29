@@ -18,6 +18,7 @@ import { TasksNavButton } from '@/components/background-jobs/JobsPanel';
 import { useAppStore } from '@/store/useAppStore';
 import { userService } from '@/services/userService';
 import { setAppLanguage, type SupportedLanguage } from '@/src/i18n';
+import { Button } from '@/components/ui/button';
 import { useSidebar, useSidebarActiveRoute } from './useSidebar';
 import { MENU_CONFIG } from '@/config/menu.config';
 import { CommandPalette } from '@/components/CommandPalette';
@@ -225,13 +226,16 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
 
           {/* Install PWA */}
           {!isInstalled && canPromptInstall && (
-            <button
+            <Button
+              type="button"
               onClick={handleInstall}
-              className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1.5 rounded-[var(--border-radius-sm)] text-[11.5px] font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 transition-colors"
+              iconName="download"
+              tone="approve"
+              solid={false}
+              className="hidden sm:inline-flex !h-auto items-center gap-1 !px-2.5 !py-1.5 !rounded-[var(--border-radius-sm)] !text-[11.5px] font-semibold"
             >
-              <Download size={14} />
               {t('topbar.install')}
-            </button>
+            </Button>
           )}
           {!isInstalled && !canPromptInstall && (
             <Link

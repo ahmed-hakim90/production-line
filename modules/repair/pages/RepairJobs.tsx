@@ -22,6 +22,7 @@ import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { computeRepairJobCost, summarizeRepairJobs } from '../utils/repairBusinessLogic';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 function RepairKanbanCard({ job, tenantSlug }: { job: RepairJob; tenantSlug?: string }) {
   const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: job.id || '' });
@@ -307,46 +308,68 @@ export const RepairJobs: React.FC = () => {
         </Card>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>بحث وفلاتر</CardTitle>
-          <CardDescription>فلترة الطلبات حسب الحالة أو البحث بالكود والعميل والجهاز.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="بحث سريع: الاسم، الهاتف، الإيصال، نوع الجهاز..." />
-            <select
-              className="h-10 rounded-md border border-input bg-background px-3 text-sm"
-              value={branchFilter}
-              onChange={(e) => setBranchFilter(e.target.value)}
-            >
-              <option value="all">كل الفروع</option>
-              {branches.map((branch) => (
-                <option key={branch.id} value={String(branch.id)}>{branch.name}</option>
-              ))}
-            </select>
-            <Input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} />
-            <Input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} />
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Button variant={statusFilter === 'all' ? 'default' : 'outline'} size="sm" onClick={() => setStatusFilter('all')}>
-              الكل
-              <Badge variant="secondary" className="mr-2">{jobs.length}</Badge>
-            </Button>
-            {((repairSettings.workflow.statuses.map((s) => s.id).length > 0
-              ? repairSettings.workflow.statuses.map((s) => s.id)
-              : REPAIR_JOB_STATUSES) as RepairJobStatus[]).map((status) => (
-              <Button
-                key={status}
-                variant={statusFilter === status ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => setStatusFilter(status)}
-              >
-                {repairSettings.statusMap[status]?.label || REPAIR_JOB_STATUS_LABELS[status] || status}
-                <Badge variant="secondary" className="mr-2">{jobsByStatus[status] || 0}</Badge>
-              </Button>
-            ))}
-          </div>
+      <Card className="mb-0 border-0 rounded-none">
+        <CardContent className="p-0">
+          <SmartFilterBar
+            searchValue={search}
+            onSearchChange={setSearch}
+            searchPlaceholder="بحث: الاسم، الهاتف، الإيصال، نوع الجهاز..."
+            quickFilters={[
+              {
+                key: 'branch',
+                placeholder: 'كل الفروع',
+                options: branches.map((branch) => ({ value: String(branch.id), label: branch.name || '' })),
+              },
+              {
+                key: 'status',
+                placeholder: 'كل الحالات',
+                options: ((repairSettings.workflow.statuses.map((s) => s.id).length > 0
+                  ? repairSettings.workflow.statuses.map((s) => s.id)
+                  : REPAIR_JOB_STATUSES) as RepairJobStatus[]).map((status) => ({
+                  value: status,
+                  label: repairSettings.statusMap[status]?.label || REPAIR_JOB_STATUS_LABELS[status] || status,
+                })),
+              },
+            ]}
+            quickFilterValues={{ branch: branchFilter, status: statusFilter }}
+            onQuickFilterChange={(key, value) => {
+              if (key === 'branch') setBranchFilter(value);
+              if (key === 'status') setStatusFilter(value as RepairJobStatus | 'all');
+            }}
+            advancedFilters={[
+              { key: 'fromDate', label: 'من تاريخ', placeholder: 'من', type: 'date', options: [] },
+              { key: 'toDate', label: 'إلى تاريخ', placeholder: 'إلى', type: 'date', options: [] },
+            ]}
+            advancedFilterValues={{ fromDate, toDate }}
+            onAdvancedFilterChange={(key, value) => {
+              if (key === 'fromDate') setFromDate(value);
+              if (key === 'toDate') setToDate(value);
+            }}
+            extra={(
+              <div className="flex items-center gap-2">
+                <Button variant="outline" type="button" size="sm" onClick={() => void refetch()} disabled={isFetching}>
+                  تحديث
+                </Button>
+                <Button
+                  variant={boardView === 'kanban' ? 'default' : 'outline'}
+                  size="sm"
+                  type="button"
+                  onClick={() => setBoardView('kanban')}
+                >
+                  كنبان
+                </Button>
+                <Button
+                  variant={boardView === 'table' ? 'default' : 'outline'}
+                  size="sm"
+                  type="button"
+                  onClick={() => setBoardView('table')}
+                >
+                  جدول
+                </Button>
+              </div>
+            )}
+            className="mb-0 border-0 rounded-none"
+          />
         </CardContent>
       </Card>
 

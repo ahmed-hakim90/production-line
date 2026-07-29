@@ -1,8 +1,15 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { Badge, Button, Card } from '../components/UI';
+import { Badge, Card } from '../components/UI';
+import { TableIconAction, ToneActionButton } from '@/src/components/erp/TableIconAction';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { transferApprovalService } from '../services/transferApprovalService';
+import {
+  approveTransferRequest,
+  rejectTransferRequest,
+} from '../usecases/approveTransferRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { warehouseService } from '../services/warehouseService';
 import type { InventoryTransferRequest, Warehouse } from '../types';
 import { transferRequestTypeLabel } from '../lib/stockLabels';
@@ -16,13 +23,6 @@ import { getTransferDisplay, type TransferDisplayUnitMode } from '../utils/trans
 import { toast } from '../../../components/Toast';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
 import {
@@ -297,14 +297,12 @@ export const TransferApprovals: React.FC = () => {
     }
     setProcessingId(requestId);
     try {
-      await transferApprovalService.approveRequest(
+      unwrapOrThrow(await approveTransferRequest({
         requestId,
-        userDisplayName || userEmail || 'Current User',
-        {
-          allowNegativeFromSource: allowNegativeFromSourceFor(request),
-          approverUserId: uid || undefined,
-        },
-      );
+        approvedBy: userDisplayName || userEmail || 'Current User',
+        allowNegativeFromSource: allowNegativeFromSourceFor(request),
+        approverUserId: uid || undefined,
+      }));
       await loadData({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'تعذر اعتماد التحويلة.');
@@ -319,12 +317,12 @@ export const TransferApprovals: React.FC = () => {
     if (reason === null) return;
     setProcessingId(requestId);
     try {
-      await transferApprovalService.rejectRequest(
+      unwrapOrThrow(await rejectTransferRequest({
         requestId,
-        userDisplayName || userEmail || 'Current User',
-        reason || '',
-        uid || undefined,
-      );
+        rejectedBy: userDisplayName || userEmail || 'Current User',
+        reason: reason || '',
+        rejectedByUserId: uid || undefined,
+      }));
       await loadData({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'تعذر رفض التحويلة.');
@@ -406,10 +404,12 @@ export const TransferApprovals: React.FC = () => {
       for (const req of targets) {
         const id = req.id!;
         try {
-          await transferApprovalService.approveRequest(id, actor, {
+          unwrapOrThrow(await approveTransferRequest({
+            requestId: id,
+            approvedBy: actor,
             allowNegativeFromSource: allowNegativeFromSourceFor(req),
             approverUserId: uid || undefined,
-          });
+          }));
           ok += 1;
         } catch (e: any) {
           errors.push(`${req.referenceNo || id}: ${e?.message || 'خطأ'}`);
@@ -438,61 +438,65 @@ export const TransferApprovals: React.FC = () => {
             اعتماد إدخال الإنتاج يرحّل الرصيد إلى «تم الإنتاج» بانتظار التغليف. التحويلات لا تؤثر على المخزون قبل الاعتماد.
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="flex items-center gap-2 text-xs font-bold px-2">
-            <input type="checkbox" checked={slaOnly} onChange={(e) => setSlaOnly(e.target.checked)} />
-            تجاوز SLA ({transferSlaDays}+ يوم)
-          </label>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as typeof statusFilter)}>
-            <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm">
-              <SelectValue placeholder="كل الحالات" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل الحالات</SelectItem>
-              <SelectItem value="pending">قيد الاعتماد</SelectItem>
-              <SelectItem value="approved">معتمدة</SelectItem>
-              <SelectItem value="rejected">مرفوضة</SelectItem>
-              <SelectItem value="cancelled">ملغاة</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select
-            value={warehouseFilter || 'all'}
-            disabled={warehouseSelectLocked}
-            onValueChange={(v) => setWarehouseFilter(v === 'all' ? '' : v)}
-          >
-            <SelectTrigger className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[#f8f9fa] text-sm min-w-[180px]">
-              <SelectValue placeholder="كل المخازن" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل المخازن</SelectItem>
-              {warehouses.map((w) => (
-                <SelectItem key={w.id} value={w.id || ''}>{w.name}</SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {canApprove && bulkApproveEligible.length > 0 && (
-            <Button
-              variant="primary"
-              onClick={() => void handleApproveAll()}
-              disabled={loading || bulkApproving}
-            >
-              <span className="material-icons-round text-sm">done_all</span>
-              اعتماد الكل ({bulkApproveEligible.length})
-            </Button>
-          )}
-          <Button
-            variant="outline"
-            onClick={() => {
-              invalidatePageDataCache(TRANSFER_APPROVALS_CACHE_KEY);
-              void loadData({ force: true });
-            }}
-            disabled={loading || bulkApproving}
-          >
-            <span className="material-icons-round text-sm">refresh</span>
-            تحديث
-          </Button>
-        </div>
       </div>
+
+      <SmartFilterBar
+        quickFilters={[
+          {
+            key: 'status',
+            placeholder: 'كل الحالات',
+            options: [
+              { value: 'pending', label: 'قيد الاعتماد' },
+              { value: 'approved', label: 'معتمدة' },
+              { value: 'rejected', label: 'مرفوضة' },
+              { value: 'cancelled', label: 'ملغاة' },
+            ],
+          },
+          {
+            key: 'warehouse',
+            placeholder: 'كل المخازن',
+            options: warehouses.map((w) => ({ value: w.id || '', label: w.name })),
+            width: 'min-w-[180px]',
+          },
+        ]}
+        quickFilterValues={{ status: statusFilter, warehouse: warehouseFilter || 'all' }}
+        onQuickFilterChange={(key, value) => {
+          if (key === 'status') setStatusFilter(value as typeof statusFilter);
+          if (key === 'warehouse') setWarehouseFilter(value === 'all' ? '' : value);
+        }}
+        extra={
+          <>
+            <label className="flex items-center gap-2 text-xs font-bold px-2">
+              <input type="checkbox" checked={slaOnly} onChange={(e) => setSlaOnly(e.target.checked)} />
+              تجاوز SLA ({transferSlaDays}+ يوم)
+            </label>
+            {canApprove && bulkApproveEligible.length > 0 && (
+              <ToneActionButton
+                action="approve"
+                icon="done_all"
+                onClick={() => void handleApproveAll()}
+                disabled={loading || bulkApproving}
+                loading={bulkApproving}
+              >
+                اعتماد الكل ({bulkApproveEligible.length})
+              </ToneActionButton>
+            )}
+            <ToneActionButton
+              action="view"
+              icon="refresh"
+              tone="neutral"
+              onClick={() => {
+                invalidatePageDataCache(TRANSFER_APPROVALS_CACHE_KEY);
+                void loadData({ force: true });
+              }}
+              disabled={loading || bulkApproving}
+              title="تحديث"
+            >
+              تحديث
+            </ToneActionButton>
+          </>
+        }
+      />
 
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
@@ -574,61 +578,44 @@ export const TransferApprovals: React.FC = () => {
                       <p><span className="font-bold">الأصناف:</span> {row.lines.length}</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
-                      <button
-                        type="button"
+                      <TableIconAction
+                        action="view"
                         onClick={() => openRequest(row)}
                         disabled={rowProcessing}
                         title="فتح"
                         aria-label={`فتح طلب ${row.referenceNo}`}
-                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">visibility</span>
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <TableIconAction
+                        action="print"
                         onClick={() => void printRequest(row)}
                         disabled={rowProcessing}
-                        title="طباعة"
                         aria-label={`طباعة طلب ${row.referenceNo}`}
-                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">print</span>
-                      </button>
+                      />
                       {row.status === 'pending' && (
                         <>
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="approve"
                             onClick={() => void handleApprove(row.id)}
                             disabled={!canApprove || rowProcessing || isSelfProductionEntryRequest(row)}
                             title={isSelfProductionEntryRequest(row) ? 'لا يمكن اعتماد طلب تم إنشاؤه من نفس المستخدم.' : 'اعتماد'}
                             aria-label={`اعتماد طلب ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">check_circle</span>
-                          </button>
-                          <button
-                            type="button"
+                          />
+                          <TableIconAction
+                            action="reject"
                             onClick={() => void handleReject(row.id)}
                             disabled={!canApprove || rowProcessing}
-                            title="رفض"
                             aria-label={`رفض طلب ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">cancel</span>
-                          </button>
+                          />
                         </>
                       )}
                       {row.status === 'approved' && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="undo"
                           onClick={() => void handleCancelMovement(row.id)}
                           disabled={!canApprove || rowProcessing}
                           title="إلغاء الحركة"
                           aria-label={`إلغاء حركة طلب ${row.referenceNo}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">undo</span>
-                        </button>
+                        />
                       )}
                     </div>
                   </div>
@@ -714,61 +701,44 @@ export const TransferApprovals: React.FC = () => {
                       <td className="px-4 py-3 text-sm">{row.createdBy}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="view"
                             onClick={() => openRequest(row)}
                             disabled={rowProcessing}
                             title="فتح"
                             aria-label={`فتح طلب ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">visibility</span>
-                          </button>
-                          <button
-                            type="button"
+                          />
+                          <TableIconAction
+                            action="print"
                             onClick={() => void printRequest(row)}
                             disabled={rowProcessing}
-                            title="طباعة"
                             aria-label={`طباعة طلب ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">print</span>
-                          </button>
+                          />
                           {row.status === 'pending' && (
                             <>
-                              <button
-                                type="button"
+                              <TableIconAction
+                                action="approve"
                                 onClick={() => void handleApprove(row.id)}
                                 disabled={!canApprove || rowProcessing || rowIsSelfProductionEntry}
                                 title={rowIsSelfProductionEntry ? 'لا يمكن اعتماد طلب تم إنشاؤه من نفس المستخدم.' : 'اعتماد'}
                                 aria-label={`اعتماد طلب ${row.referenceNo}`}
-                                className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <span className="material-icons-round text-sm">check_circle</span>
-                              </button>
-                              <button
-                                type="button"
+                              />
+                              <TableIconAction
+                                action="reject"
                                 onClick={() => void handleReject(row.id)}
                                 disabled={!canApprove || rowProcessing}
-                                title="رفض"
                                 aria-label={`رفض طلب ${row.referenceNo}`}
-                                className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              >
-                                <span className="material-icons-round text-sm">cancel</span>
-                              </button>
+                              />
                             </>
                           )}
                           {row.status === 'approved' && (
-                            <button
-                              type="button"
+                            <TableIconAction
+                              action="undo"
                               onClick={() => void handleCancelMovement(row.id)}
                               disabled={!canApprove || rowProcessing}
                               title="إلغاء الحركة"
                               aria-label={`إلغاء حركة طلب ${row.referenceNo}`}
-                              className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              <span className="material-icons-round text-sm">undo</span>
-                            </button>
+                            />
                           )}
                         </div>
                       </td>

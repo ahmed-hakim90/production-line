@@ -439,8 +439,6 @@ export const AssetsList: React.FC = () => {
           onAdvancedFilterChange={(key, value) => {
             if (key === 'category') setCategory(value === 'all' ? '' : value);
           }}
-          onApply={() => undefined}
-          applyLabel="عرض"
           className="mb-0 border-0"
         />
         <DataTable

@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { isConfigured, submitRepairApprovalPublicCallable } from '../../../services/firebase';
@@ -76,21 +76,24 @@ export const RepairApprovalPublic: React.FC = () => {
                   />
                 </div>
                 <div className="flex flex-col sm:flex-row gap-2">
-                  <Button
+                  <ToneActionButton
+                    action="approve"
                     className="flex-1 min-h-12"
                     disabled={loading || !jobId || !token}
+                    loading={loading}
                     onClick={() => void submit('approved')}
                   >
                     موافقة على التقدير
-                  </Button>
-                  <Button
-                    variant="destructive"
+                  </ToneActionButton>
+                  <ToneActionButton
+                    action="reject"
                     className="flex-1 min-h-12"
                     disabled={loading || !jobId || !token}
+                    loading={loading}
                     onClick={() => void submit('rejected')}
                   >
                     رفض
-                  </Button>
+                  </ToneActionButton>
                 </div>
               </>
             )}

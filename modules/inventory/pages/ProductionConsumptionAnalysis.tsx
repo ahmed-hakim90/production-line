@@ -8,6 +8,7 @@ import { exportGenericRows } from '../../../utils/exportExcel';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { Skeleton } from '@/components/ui/skeleton';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 export const ProductionConsumptionAnalysis: React.FC = () => {
   const { can } = usePermission();
@@ -83,16 +84,16 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
   return (
     <div className="erp-ds-clean space-y-5">
       <PageHeader title="تحليل استهلاك أوامر الشغل" subtitle="مقارنة BOM بالمصروف والتعويض والمرتجع والهالك الفعلي." icon="analytics" />
-      <Card title="تصفية وتصدير">
-        <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center">
-          <input
-            className="min-w-0 flex-1 rounded-lg border px-3 py-2 text-sm"
-            placeholder="بحث بإذن الصرف، المنتج، أمر الشغل، أو المكون"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <Button variant="secondary" disabled={filteredOrders.length === 0} onClick={exportRows}>تصدير Excel</Button>
-        </div>
+      <Card>
+        <SmartFilterBar
+          searchPlaceholder="بحث بإذن الصرف، المنتج، أمر الشغل، أو المكون"
+          searchValue={search}
+          onSearchChange={setSearch}
+          extra={
+            <Button variant="secondary" disabled={filteredOrders.length === 0} onClick={exportRows} className="h-[34px]">تصدير Excel</Button>
+          }
+          className="mb-0 border-0 rounded-none"
+        />
       </Card>
       {filteredOrders.map((order) => (
         <Card key={order.id} className="!p-0 overflow-hidden" title={`${order.referenceNo} - ${order.productName}`}>

@@ -4,8 +4,7 @@ import { AlertTriangle, Loader2, Save, X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
-import { productMaterialService } from '../../../modules/production/services/productMaterialService';
-import { rawMaterialService } from '../../../modules/inventory/services/rawMaterialService';
+import { loadProductComponents } from '../../../modules/catalog/lib/productComponents';
 import { useAppStore } from '../../../store/useAppStore';
 import { useTranslation } from 'react-i18next';
 import { getPortalContainer } from '@/lib/portalRoot';
@@ -20,16 +19,6 @@ type ComponentOption = {
   id: string;
   name: string;
 };
-
-const normalizeText = (value: string) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, '')
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/\s+/g, ' ');
 
 export const GlobalProductionPlanFollowUpModal: React.FC = () => {
   const { t } = useTranslation();
@@ -71,24 +60,13 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
       setLoading(true);
       setError(null);
       try {
-        const [materials, rawMaterials] = await Promise.all([
-          productMaterialService.getByProduct(productId),
-          rawMaterialService.getAll(),
-        ]);
+        const components = await loadProductComponents(productId);
         if (cancelled) return;
-        const rawById = new Map(rawMaterials.filter((rm) => Boolean(rm.id)).map((rm) => [String(rm.id), rm]));
-        const rawByName = new Map(rawMaterials.map((rm) => [normalizeText(rm.name), rm]));
-        const resolved = new Map<string, ComponentOption>();
-        for (const material of materials) {
-          const raw =
-            (material.materialId ? rawById.get(material.materialId) : undefined)
-            ?? rawByName.get(normalizeText(material.materialName || ''));
-          if (!raw?.id) continue;
-          if (!resolved.has(raw.id)) {
-            resolved.set(raw.id, { id: raw.id, name: raw.name });
-          }
-        }
-        setOptions(Array.from(resolved.values()).sort((a, b) => a.name.localeCompare(b.name, 'ar')));
+        setOptions(
+          components
+            .map((row) => ({ id: row.materialId, name: row.materialName }))
+            .sort((a, b) => a.name.localeCompare(b.name, 'ar')),
+        );
       } catch {
         if (cancelled) return;
         setOptions([]);
@@ -223,7 +201,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
-          <Button variant="outline" onClick={close}>{t('ui.cancel')}</Button>
+          <Button variant="outline" onClick={close} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={!canSave}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />

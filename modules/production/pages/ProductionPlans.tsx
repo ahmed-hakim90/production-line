@@ -1006,9 +1006,7 @@ export const ProductionPlans: React.FC = () => {
           <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
             <Button variant="outline" onClick={() => setFormOpen(false)}>إلغاء</Button>
             <Button variant="primary" onClick={handleCreate} disabled={saving || !formProductId || !formLineId || formQuantity <= 0}>
-              {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              <span className="material-icons-round text-sm">add_task</span>
-              إنشاء خطة
+              {saving ? 'جاري الحفظ...' : 'إنشاء خطة'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1306,8 +1304,9 @@ export const ProductionPlans: React.FC = () => {
                   </Button>
                 )}
                 {canAddFollowUp && activeDrawerPlan.id && (
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
                     data-modal-key={MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE}
                     onClick={() => {
                       openModal(MODAL_KEYS.PRODUCTION_PLAN_FOLLOW_UP_CREATE, {
@@ -1317,15 +1316,14 @@ export const ProductionPlans: React.FC = () => {
                       });
                       setActiveDrawerPlanId(null);
                     }}
-                    className="px-4 py-2.5 text-sm rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-amber-600 hover:bg-amber-50 dark:hover:bg-amber-900/10 font-bold transition-colors"
                   >
                     متابعة نقص
-                  </button>
+                  </Button>
                 )}
                 {canDelete && activeDrawerPlan.id && (
-                  <button onClick={() => { setDeletePlanId(activeDrawerPlan.id!); setActiveDrawerPlanId(null); }} className="px-4 py-2.5 text-sm rounded-[var(--border-radius-base)] bg-rose-500 text-white hover:bg-rose-600 font-bold transition-colors">
+                  <Button variant="danger" onClick={() => { setDeletePlanId(activeDrawerPlan.id!); setActiveDrawerPlanId(null); }}>
                     حذف
-                  </button>
+                  </Button>
                 )}
               </div>
             </div>
@@ -1405,8 +1403,7 @@ export const ProductionPlans: React.FC = () => {
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setEditPlan(null)}>إلغاء</Button>
               <Button variant="primary" onClick={handleEdit} disabled={editSaving || editForm.plannedQuantity <= 0}>
-                {editSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                حفظ التعديلات
+                {editSaving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
               </Button>
             </div>
           </div>
@@ -1436,8 +1433,7 @@ export const ProductionPlans: React.FC = () => {
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setStatusPlan(null)}>إلغاء</Button>
               <Button variant="primary" onClick={handleStatusChange} disabled={statusSaving || newStatus === statusPlan.status}>
-                {statusSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                تحديث الحالة
+                {statusSaving ? 'جاري الحفظ...' : 'تحديث الحالة'}
               </Button>
             </div>
           </div>
@@ -1457,11 +1453,9 @@ export const ProductionPlans: React.FC = () => {
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeletePlanId(null)}>إلغاء</Button>
-              <button onClick={handleDelete} disabled={deleting} className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold transition-all flex items-center justify-center gap-2 text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20">
-                {deleting && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                <span className="material-icons-round text-sm">delete</span>
-                حذف
-              </button>
+              <Button variant="danger" onClick={handleDelete} disabled={deleting}>
+                {deleting ? 'جاري الحذف...' : 'حذف'}
+              </Button>
             </div>
           </div>
         </div>
@@ -1507,9 +1501,7 @@ export const ProductionPlans: React.FC = () => {
                 onClick={handleBulkDateShift}
                 disabled={bulkSaving || selectedPlanIds.length === 0 || !bulkStartDate}
               >
-                {bulkSaving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                <span className="material-icons-round text-sm">event_repeat</span>
-                ترحيل التاريخ للمحدد
+                {bulkSaving ? 'جاري الحفظ...' : 'ترحيل التاريخ للمحدد'}
               </Button>
               {canGenerateMaterialReq && (
                 <Button
@@ -1517,9 +1509,7 @@ export const ProductionPlans: React.FC = () => {
                   onClick={() => void handleGenerateRequirementsForSelected()}
                   disabled={bulkReqLoading || selectedPlanIds.length === 0}
                 >
-                  {bulkReqLoading && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                  <span className="material-icons-round text-sm">inventory</span>
-                  توليد احتياجات المواد
+                  {bulkReqLoading ? 'جاري...' : 'توليد احتياجات المواد'}
                 </Button>
               )}
             </div>
@@ -1586,17 +1576,18 @@ export const ProductionPlans: React.FC = () => {
                           <p><span className="font-bold">الفترة:</span> {plan.plannedStartDate || plan.startDate} - {plan.plannedEndDate || '—'}</p>
                           {canViewCosts && <p><span className="font-bold">التكلفة:</span> {formatCurrency(plan.estimatedCost || 0)}</p>}
                         </div>
-                        <button
+                        <Button
                           type="button"
+                          variant="outline"
+                          size="sm"
+                          className="w-full"
                           onClick={(e) => {
                             e.stopPropagation();
                             openPlanDrawer(plan.id);
                           }}
-                          className="w-full inline-flex items-center justify-center gap-2 text-xs font-bold rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2 text-primary hover:bg-primary/5 transition-colors"
                         >
-                          <span className="material-icons-round text-sm">dock_to_right</span>
                           تفاصيل الخطة
-                        </button>
+                        </Button>
                       </div>
                     );
                   })}

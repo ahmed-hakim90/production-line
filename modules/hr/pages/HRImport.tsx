@@ -2,11 +2,12 @@ import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Button, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
-import { getDocs, addDoc, updateDoc, doc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/services/firebase';
+import { getDocs } from 'firebase/firestore';
 import { getCurrentTenantId } from '@/lib/currentTenant';
 import { departmentsRef, jobPositionsRef, shiftsRef, employeesRef } from '../collections';
-import { HR_COLLECTIONS } from '../collections';
+import { createDepartment, createJobPosition } from '../usecases/manageOrganization';
+import { unwrapOrThrow } from '@/shared/usecases';
+import { employeeService } from '../employeeService';
 import { parseHRExcel, type HRImportResult, type ParsedDepartmentRow, type ParsedPositionRow, type ParsedEmployeeRow, type HRLookups } from '../importHR';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, FirestoreVehicle, JobLevel } from '../types';
 import type { FirestoreEmployee, EmploymentType } from '@/types';
@@ -186,15 +187,11 @@ export const HRImport: React.FC = () => {
 
     for (const dept of departmentsToCreate) {
       try {
-        const ref = await addDoc(departmentsRef(), {
+        const departmentId = unwrapOrThrow(await createDepartment({
           name: dept.name,
           code: dept.code,
-          managerId: '',
-          isActive: true,
-          tenantId,
-          createdAt: serverTimestamp(),
-        });
-        createdDeptMap[dept.name.toLowerCase()] = ref.id;
+        })).departmentId;
+        createdDeptMap[dept.name.toLowerCase()] = departmentId;
         deptCount++;
         setImportProgress((p) => ({ ...p, depts: deptCount }));
       } catch (err) {
@@ -249,16 +246,12 @@ export const HRImport: React.FC = () => {
     for (const pos of positionsToCreate) {
       try {
         const departmentId = resolveDeptId(pos.departmentName);
-        const ref = await addDoc(jobPositionsRef(), {
+        const positionId = unwrapOrThrow(await createJobPosition({
           title: pos.title,
           departmentId,
           level: pos.level,
-          hasSystemAccessDefault: false,
-          isActive: true,
-          tenantId,
-          createdAt: serverTimestamp(),
-        });
-        createdPosMap[pos.title.toLowerCase()] = ref.id;
+        })).positionId;
+        createdPosMap[pos.title.toLowerCase()] = positionId;
         posCount++;
         setImportProgress((p) => ({ ...p, positions: posCount }));
       } catch (err) {
@@ -316,12 +309,12 @@ export const HRImport: React.FC = () => {
           updateData.tenantId = tenantId;
 
           if (Object.keys(updateData).length > 0) {
-            await updateDoc(doc(db, HR_COLLECTIONS.EMPLOYEES, emp.existingId), updateData);
+            await employeeService.update(emp.existingId, updateData);
             updatedCount++;
             setImportProgress((p) => ({ ...p, updated: updatedCount }));
           }
         } else {
-          await addDoc(employeesRef(), {
+          await employeeService.create({
             name: emp.name,
             code: emp.code || '',
             phone: emp.phone || '',
@@ -337,9 +330,7 @@ export const HRImport: React.FC = () => {
             managerId: '',
             hasSystemAccess: emp.hasSystemAccess,
             isActive: emp.isActive,
-            tenantId,
-            createdAt: serverTimestamp(),
-          });
+          } as Omit<FirestoreEmployee, 'id'>);
           empCount++;
           setImportProgress((p) => ({ ...p, employees: empCount }));
         }

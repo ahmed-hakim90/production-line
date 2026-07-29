@@ -31,7 +31,7 @@ export function WorkOrderFilters({
   counts,
   lines,
   onSetFilter,
-  onClear,
+  onClear: _onClear,
 }: WorkOrderFiltersProps) {
   const selectedStatusCount = counts[filters.status];
 
@@ -108,22 +108,11 @@ export function WorkOrderFilters({
           });
         }
       }}
-      onApply={() => undefined}
       extra={(
-        <div className="inline-flex h-[34px] items-center gap-2">
-          <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
-            نتائج الحالة: {selectedStatusCount}
-          </div>
-          <button
-            type="button"
-            className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500 hover:bg-slate-50"
-            onClick={onClear}
-          >
-            مسح
-          </button>
+        <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
+          نتائج الحالة: {selectedStatusCount}
         </div>
       )}
-      applyLabel="عرض"
       className="mb-0"
     />
   );

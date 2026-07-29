@@ -61,9 +61,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
           <p className="page-subtitle">أنشئ أزرار تنقل أو تصدير بسرعة، وخصص الاسم والأيقونة واللون.</p>
         </div>
         <Button onClick={onSave} disabled={saving}>
-          {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-          <span className="material-icons-round text-sm">save</span>
-          حفظ التغييرات
+          {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </Button>
       </div>
 
@@ -202,7 +200,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
 
         <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
           <Button variant="outline" onClick={addQuickAction}>
-            <span className="material-icons-round text-sm">add</span>
             إضافة زر سريع
           </Button>
         </div>

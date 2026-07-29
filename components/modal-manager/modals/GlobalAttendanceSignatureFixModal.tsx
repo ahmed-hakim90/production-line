@@ -1,5 +1,5 @@
 import React from 'react';
-import { Loader2, Save } from 'lucide-react';
+import { Loader2 } from 'lucide-react';
 import { Button, SearchableSelect } from '@/components/UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -208,8 +208,10 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
                           className="w-full"
                           onClick={() => void saveRow(record.id)}
                           disabled={rowSaving}
+                          iconName={rowSaving ? undefined : 'save'}
+                          tone="save"
                         >
-                          {rowSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                          {rowSaving ? <Loader2 size={14} className="animate-spin" /> : null}
                           {rowSaving ? t('modalManager.attendanceSignatureFix.saving') : t('ui.save')}
                         </Button>
                       </td>
@@ -222,9 +224,9 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
         </div>
 
         <div className="erp-modal-foot">
-          <button type="button" className="erp-btn erp-btn-light" onClick={() => close()}>
+          <Button type="button" variant="outline" onClick={() => close()} iconName="close" tone="neutral">
             {t('ui.close')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -45,45 +45,68 @@ export const InventoryDashboard: React.FC = () => {
         subtitle="مراجعة شاملة لكل المخازن والحركات وصرف الإنتاج والاستلامات والتحويلات."
         actions={(
           <div className="flex flex-wrap gap-2">
-            <GhostButton onClick={() => void data.refresh()} disabled={data.loading || data.txLoading}>
+            <GhostButton
+              iconName="refresh"
+              tone="neutral"
+              onClick={() => void data.refresh()}
+              disabled={data.loading || data.txLoading}
+            >
               تحديث
             </GhostButton>
             {canCreateTx && (
               <>
                 <Link to={tenantPath('/inventory/movements')}>
-                  <PrimaryButton>حركة مخزون</PrimaryButton>
+                  <PrimaryButton iconName="swap_horiz" tone="execute">
+                    حركة مخزون
+                  </PrimaryButton>
                 </Link>
                 <Link to={tenantPath('/inventory/raw-materials/receive')}>
-                  <GhostButton>استلام مستلزمات</GhostButton>
+                  <GhostButton iconName="inventory_2" tone="share">
+                    استلام مستلزمات
+                  </GhostButton>
                 </Link>
                 <Link to={tenantPath('/quick-inventory-transfer')}>
-                  <GhostButton>تحويل سريع</GhostButton>
+                  <GhostButton iconName="sync_alt" tone="export">
+                    تحويل سريع
+                  </GhostButton>
                 </Link>
               </>
             )}
             <Link to={tenantPath('/inventory/transfer-approvals')}>
-              <GhostButton>اعتماد التحويلات</GhostButton>
+              <GhostButton iconName="fact_check" tone="approve">
+                اعتماد التحويلات
+              </GhostButton>
             </Link>
             <Link to={tenantPath('/inventory/production-issues')}>
-              <GhostButton>صرف إنتاج</GhostButton>
+              <GhostButton iconName="precision_manufacturing" tone="edit">
+                صرف إنتاج
+              </GhostButton>
             </Link>
             {canCounts && (
               <Link to={tenantPath('/inventory/counts')}>
-                <GhostButton>الجرد</GhostButton>
+                <GhostButton iconName="checklist" tone="save">
+                  الجرد
+                </GhostButton>
               </Link>
             )}
             {canExceptions && (
               <Link to={tenantPath('/inventory/exceptions')}>
-                <GhostButton>الاستثناءات</GhostButton>
+                <GhostButton iconName="warning_amber" tone="undo">
+                  الاستثناءات
+                </GhostButton>
               </Link>
             )}
             {canAnalytics && (
               <Link to={tenantPath('/inventory/analytics')}>
-                <GhostButton>التحليلات</GhostButton>
+                <GhostButton iconName="analytics" tone="view">
+                  التحليلات
+                </GhostButton>
               </Link>
             )}
             <Link to={tenantPath('/settings/production')}>
-              <GhostButton>إعدادات التوجيه</GhostButton>
+              <GhostButton iconName="settings" tone="print">
+                إعدادات التوجيه
+              </GhostButton>
             </Link>
           </div>
         )}

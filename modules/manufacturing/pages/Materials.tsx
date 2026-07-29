@@ -495,8 +495,6 @@ export const Materials: React.FC = () => {
             if (key === 'status') setStatusFilter(value as StatusFilter);
             if (key === 'manufactured') setManufacturedFilter(value as ManufacturedFilter);
           }}
-          onApply={() => undefined}
-          applyLabel="تطبيق"
           className="mb-0 border-0 rounded-none"
         />
 
@@ -562,13 +560,15 @@ export const Materials: React.FC = () => {
                       <td className="px-4 py-3">
                         <p className="text-sm font-bold text-[var(--color-text)]">{row.name}</p>
                         {row.type === 'semi_finished' && row.id && (
-                          <button
+                          <Button
                             type="button"
-                            className="mt-0.5 text-xs font-semibold text-primary hover:underline"
+                            size="sm"
+                            variant="ghost"
+                            className="mt-0.5"
                             onClick={() => navigate(`/manufacturing/materials/${row.id}`)}
                           >
                             عرض قائمة المواد (BOM)
-                          </button>
+                          </Button>
                         )}
                       </td>
                       <td className="px-4 py-3 text-sm text-muted-foreground">

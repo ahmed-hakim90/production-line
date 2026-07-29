@@ -328,7 +328,6 @@ export const Lines: React.FC = () => {
             ]}
             quickFilterValues={{ status: statusFilter }}
             onQuickFilterChange={(_, value) => setStatusFilter(value as 'all' | ProductionLineStatus)}
-            onApply={() => undefined}
             extra={(
               <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
                 إجمالي الخطوط: <span className="mx-1 font-semibold text-slate-700">{formatNumber(filteredLines.length)}</span>
@@ -572,13 +571,9 @@ export const Lines: React.FC = () => {
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا الخط؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
-              <button
-                onClick={() => handleDelete(deleteConfirmId)}
-                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
-              >
-                <span className="material-icons-round text-sm">delete</span>
-                نعمطŒ احذف
-              </button>
+              <Button variant="danger" onClick={() => handleDelete(deleteConfirmId)}>
+                نعم، احذف
+              </Button>
             </div>
           </div>
         </div>

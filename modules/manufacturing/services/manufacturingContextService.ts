@@ -1,5 +1,4 @@
 import type { ProductMaterial } from '../../../types';
-import { productMaterialService } from '../../production/services/productMaterialService';
 import { stockService } from '../../inventory/services/stockService';
 import type { InventoryItemType } from '../../inventory/types';
 import type { BomExplosionContext } from '../engines/bomExplosionEngine';

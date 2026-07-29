@@ -7,6 +7,8 @@ import { employeeService } from '../employeeService';
 import { employeeAllowanceService, employeeDeductionService } from '../employeeFinancialsService';
 import { loanService } from '../loanService';
 import { leaveRequestService, leaveBalanceService } from '../leaveService';
+import { createLeaveRequest } from '../usecases/createLeaveRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { allowanceTypesRef } from '../collections';
 import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import { exportHRData } from '@/utils/exportExcel';
@@ -412,7 +414,7 @@ export const EmployeeFinancials: React.FC = () => {
         const totalDays = Math.max(1, Math.ceil((new Date(bLeaveEnd).getTime() - new Date(bLeaveStart).getTime()) / (1000 * 60 * 60 * 24)) + 1);
         for (const empId of selectedEmps) {
           try {
-            await leaveRequestService.create({
+            unwrapOrThrow(await createLeaveRequest({
               employeeId: empId,
               leaveType: bLeaveType,
               leaveTypeLabel: selectedBulkLeaveType?.label || LEAVE_TYPE_LABELS[bLeaveType] || bLeaveType,
@@ -426,7 +428,7 @@ export const EmployeeFinancials: React.FC = () => {
               finalStatus: 'pending',
               reason: bLeaveReason.trim() || '—',
               createdBy: uid || '',
-            });
+            }, { userId: uid || undefined }));
             savedCount++;
           } catch { /* skip */ }
         }

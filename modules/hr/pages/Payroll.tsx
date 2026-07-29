@@ -1,5 +1,6 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Card, Button, Badge, KPIBox } from '../components/UI';
+import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
@@ -14,8 +15,10 @@ import {
   payrollAuditService,
 } from '../payroll';
 import { printPayslip, printCombinedPayslips } from '../utils/payslipGenerator';
-import { addDoc, getDocs, query, where } from 'firebase/firestore';
+import { getDocs, query, where } from 'firebase/firestore';
 import { departmentsRef, payrollDistributionsRef } from '../collections';
+import { recordPayrollDistribution } from '../usecases/payrollAccounts';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { getCurrentTenantId } from '@/lib/currentTenant';
 import {
   fetchCachedPageData,
@@ -34,6 +37,7 @@ import type {
   EmploymentType,
 } from '../payroll/types';
 import { PageHeader } from '../../../components/PageHeader';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
 
@@ -614,15 +618,12 @@ export const Payroll: React.FC = () => {
         return count;
       }, 0);
 
-      await addDoc(payrollDistributionsRef(), {
-        tenantId: getCurrentTenantId(),
+      unwrapOrThrow(await recordPayrollDistribution({
         month,
-        distributedAt: new Date(),
         distributedBy: uid || '',
         distributedByName: userDisplayName || '',
         employeeCount: records.length,
-        status: 'distributed',
-      });
+      }));
 
       const failed = notificationResults.filter((result) => result.status === 'rejected').length;
       setSuccess(
@@ -756,16 +757,15 @@ export const Payroll: React.FC = () => {
                 </Button>
               )}
               {payrollMonth && records.length > 0 && canFinalizePayroll && (
-                <Button
-                  variant="secondary"
+                <ToneActionButton
+                  action="approve"
+                  icon="verified"
                   onClick={handleFinalize}
                   disabled={!!actionLoading}
+                  loading={actionLoading === 'finalize'}
                 >
-                  {actionLoading === 'finalize'
-                    ? <span className="material-icons-round animate-spin text-sm">refresh</span>
-                    : <span className="material-icons-round text-sm">verified</span>}
                   اعتماد الكشف
-                </Button>
+                </ToneActionButton>
               )}
             </>
           )}
@@ -811,38 +811,32 @@ export const Payroll: React.FC = () => {
 
       {/* Filters */}
       {records.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          <div className="relative flex-1 min-w-0 sm:min-w-[200px]">
-            <span className="material-icons-round text-[var(--color-text-muted)] absolute right-3 top-1/2 -translate-y-1/2 text-lg">search</span>
-            <input
-              type="text"
-              placeholder="بحث باسم الموظف..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
-              className="erp-filter-input-inner"
-            />
-          </div>
-          <select
-            value={departmentFilter}
-            onChange={(e) => { setDepartmentFilter(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
-            className="erp-filter-select"
-          >
-            <option value="">كل الأقسام</option>
-            {departments.map((d) => (
-              <option key={d.value} value={d.value}>{d.label}</option>
-            ))}
-          </select>
-          <select
-            value={employmentFilter}
-            onChange={(e) => { setEmploymentFilter(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
-            className="erp-filter-select"
-          >
-            <option value="">كل أنواع التوظيف</option>
-            <option value="monthly">شهري</option>
-            <option value="daily">يومي</option>
-            <option value="hourly">بالساعة</option>
-          </select>
-        </div>
+        <SmartFilterBar
+          searchPlaceholder="بحث باسم الموظف..."
+          searchValue={searchQuery}
+          onSearchChange={(value) => { setSearchQuery(value); setVisibleCount(ROWS_PER_PAGE); }}
+          quickFilters={[
+            {
+              key: 'department',
+              placeholder: 'كل الأقسام',
+              options: departments,
+            },
+            {
+              key: 'employment',
+              placeholder: 'كل أنواع التوظيف',
+              options: [
+                { value: 'monthly', label: 'شهري' },
+                { value: 'daily', label: 'يومي' },
+                { value: 'hourly', label: 'بالساعة' },
+              ],
+            },
+          ]}
+          quickFilterValues={{ department: departmentFilter, employment: employmentFilter }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'department') { setDepartmentFilter(value); setVisibleCount(ROWS_PER_PAGE); }
+            if (key === 'employment') { setEmploymentFilter(value); setVisibleCount(ROWS_PER_PAGE); }
+          }}
+        />
       )}
 
       {/* Records Table */}
@@ -939,13 +933,13 @@ export const Payroll: React.FC = () => {
                 عرض {paginatedRecords.length} من {filteredRecords.length}
               </p>
               {canLoadMoreRecords && (
-                <button
+                <Button
+                  size="sm"
+                  variant="ghost"
                   onClick={() => setVisibleCount((prev) => prev + ROWS_PER_PAGE)}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold text-[var(--color-text-muted)] border border-[var(--color-border)] hover:bg-[#f0f2f5]/60 transition-all"
                 >
-                  <span className="material-icons-round text-sm">expand_more</span>
-                  تحميل المزيد{remainingRecordsCount > 0 ? ` (متبقي ${remainingRecordsCount})` : ''}
-                </button>
+                  {remainingRecordsCount > 0 ? `تحميل المزيد (متبقي ${remainingRecordsCount})` : 'تحميل المزيد'}
+                </Button>
               )}
             </div>
           )}

@@ -3,6 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
+import type { TableIconActionTone } from '@/src/components/erp/TableIconAction';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -50,6 +51,8 @@ type OpLink = {
   permission?: Parameters<ReturnType<typeof usePermission>['can']>[0];
   badge?: number;
   primary?: boolean;
+  iconName: string;
+  tone: TableIconActionTone;
 };
 
 type OpCard = {
@@ -330,6 +333,8 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             path: `/inventory/balances?warehouseId=${wh}&itemType=raw_material`,
             permission: 'inventory.view',
             primary: true,
+            iconName: 'visibility',
+            tone: 'view',
           },
         ],
       },
@@ -346,11 +351,15 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             path: `/inventory/raw-materials/receive?warehouseId=${wh}`,
             permission: 'inventory.transactions.create',
             primary: true,
+            iconName: 'inventory_2',
+            tone: 'share',
           },
           {
             label: 'إدخال يدوي',
             path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=IN`,
             permission: 'inventory.transactions.create',
+            iconName: 'add',
+            tone: 'submit',
           },
         ],
       },
@@ -368,16 +377,22 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             permission: 'productionIssue.approve',
             primary: true,
             badge: pendingIssues,
+            iconName: 'fact_check',
+            tone: 'approve',
           },
           {
             label: 'صرف إنتاج (مستودع)',
             path: `/inventory/production-issues?tab=all&warehouseId=${wh}`,
             permission: 'inventory.view',
+            iconName: 'precision_manufacturing',
+            tone: 'edit',
           },
           {
             label: 'صرف يدوي',
             path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=OUT`,
             permission: 'inventory.transactions.create',
+            iconName: 'swap_horiz',
+            tone: 'execute',
           },
         ],
       },
@@ -394,17 +409,23 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             path: `/inventory/movements?warehouseId=${wh}&itemType=raw_material&movementType=TRANSFER`,
             permission: 'inventory.transactions.create',
             primary: true,
+            iconName: 'sync_alt',
+            tone: 'export',
           },
           {
             label: 'تحويل سريع',
             path: `/quick-inventory-transfer?warehouseId=${wh}&itemType=raw_material`,
             permission: 'inventory.transactions.create',
+            iconName: 'sync_alt',
+            tone: 'export',
           },
           {
             label: 'اعتماد التحويلات',
             path: `/inventory/transfer-approvals?warehouseId=${wh}`,
             permission: 'inventory.view',
             badge: pendingTransfers,
+            iconName: 'fact_check',
+            tone: 'approve',
           },
         ],
       },
@@ -421,6 +442,8 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             path: `/inventory/counts?warehouseId=${wh}&from=supplies`,
             permission: 'inventory.counts.manage',
             primary: true,
+            iconName: 'checklist',
+            tone: 'save',
           },
         ],
       },
@@ -437,6 +460,8 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             path: `/inventory/transactions?warehouseId=${wh}&itemType=raw_material`,
             permission: 'inventory.view',
             primary: true,
+            iconName: 'swap_horiz',
+            tone: 'execute',
           },
         ],
       },
@@ -495,7 +520,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
               لم يُحدَّد مخزن المستلزمات بعد. عيّن «مخزن المفكك (مستلزم إنتاج)» أو «مخزن المواد الخام» من إعدادات توجيه المخزون، ثم اضغط «حفظ الصفحة».
             </p>
             <Link to={withTenantPath(tenantSlug, '/settings/production')}>
-              <PrimaryButton>فتح إعدادات التوجيه</PrimaryButton>
+              <PrimaryButton iconName="settings" tone="print">فتح إعدادات التوجيه</PrimaryButton>
             </Link>
             <p className="text-xs text-[var(--color-text-muted)]">
               بعد الحفظ ستظهر لوحة التشغيل اليومية لهذا المخزن.
@@ -528,9 +553,9 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                 ))}
               </select>
             )}
-            <GhostButton onClick={() => void loadData()} disabled={loading}>تحديث</GhostButton>
+            <GhostButton iconName="refresh" tone="neutral" onClick={() => void loadData()} disabled={loading}>تحديث</GhostButton>
             <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')}>
-              <PrimaryButton>
+              <PrimaryButton iconName="warning_amber" tone="undo">
                 التنبيهات
                 {kpis.alertCount + pendingTransfers + pendingIssues > 0
                   ? ` (${kpis.alertCount + pendingTransfers + pendingIssues})`
@@ -599,12 +624,20 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                     {links.map((link) => (
                       <Link key={link.path} to={withTenantPath(tenantSlug, link.path)}>
                         {link.primary ? (
-                          <PrimaryButton className="!text-xs !px-3 !py-1.5">
+                          <PrimaryButton
+                            iconName={link.iconName}
+                            tone={link.tone}
+                            className="!text-xs !px-3 !py-1.5"
+                          >
                             {link.label}
                             {link.badge && link.badge > 0 ? ` (${link.badge})` : ''}
                           </PrimaryButton>
                         ) : (
-                          <GhostButton className="!text-xs !px-3 !py-1.5">
+                          <GhostButton
+                            iconName={link.iconName}
+                            tone={link.tone}
+                            className="!text-xs !px-3 !py-1.5"
+                          >
                             {link.label}
                             {link.badge && link.badge > 0 ? ` (${link.badge})` : ''}
                           </GhostButton>
@@ -701,12 +734,16 @@ export const RawMaterialWarehouseControl: React.FC = () => {
               />
               <div className="flex flex-wrap gap-2">
                 <GhostButton
+                  iconName="download"
+                  tone="export"
                   onClick={exportAssemblable}
                   disabled={loading || filteredAssemblable.length === 0}
                 >
                   تصدير Excel
                 </GhostButton>
                 <GhostButton
+                  iconName="checklist"
+                  tone="save"
                   onClick={() =>
                     void openCountCardPreview(pagedAssemblable.map((row) => row.productId))
                   }
@@ -716,7 +753,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                 </GhostButton>
                 {warehouseId && (
                   <Link to={withTenantPath(tenantSlug, `/inventory/production-issues?warehouseId=${encodeURIComponent(warehouseId)}`)}>
-                    <PrimaryButton>صرف إنتاج</PrimaryButton>
+                    <PrimaryButton iconName="precision_manufacturing" tone="edit">صرف إنتاج</PrimaryButton>
                   </Link>
                 )}
               </div>

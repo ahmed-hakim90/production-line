@@ -34,7 +34,7 @@ import {
   NESTED_TILE,
   FIELD_ON_PANEL,
 } from '@/src/components/erp/DetailPageChrome';
-import { Loader2, Lock, Pencil, Plus, Save, Trash2 } from 'lucide-react';
+import { Pencil, Trash2 } from 'lucide-react';
 import {
   Select,
   SelectContent,
@@ -522,11 +522,10 @@ export const SupplyCycleDetail: React.FC = () => {
         <Button
           type="button"
           size="sm"
-          className="gap-1.5 h-8"
+          className="h-8"
           onClick={() => void closeCycle()}
           disabled={saving}
         >
-          <Lock className="size-3.5" />
           إقفال الدورة
         </Button>
       )}
@@ -783,8 +782,7 @@ export const SupplyCycleDetail: React.FC = () => {
                   onChange={(e) => setWasteNote(e.target.value)}
                 />
               </div>
-              <Button type="button" onClick={() => void addWaste()} disabled={saving} className="gap-1.5">
-                <Plus className="size-4" />
+              <Button type="button" onClick={() => void addWaste()} disabled={saving}>
                 إضافة هالك
               </Button>
             </div>
@@ -955,8 +953,7 @@ export const SupplyCycleDetail: React.FC = () => {
               إلغاء
             </Button>
             <Button type="button" onClick={() => void saveEdit()} disabled={saving}>
-              {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-              حفظ
+              {saving ? 'جاري الحفظ...' : 'حفظ'}
             </Button>
           </DialogFooter>
         </DialogContent>

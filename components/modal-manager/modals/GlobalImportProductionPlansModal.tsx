@@ -242,7 +242,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
         </div>
 
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose} disabled={saving}>{t('ui.close')}</Button>
+          <Button variant="outline" onClick={handleClose} disabled={saving} iconName="close" tone="neutral">{t('ui.close')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || validRows.length === 0}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />

@@ -4,7 +4,7 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { BOMS_COLLECTION, BOM_ITEMS_COLLECTION } from '../../manufacturing/collections';
 import type { Bom, BomItem } from '../../manufacturing/types';
 import { materialService } from '../../manufacturing/services/materialService';
-import { productMaterialService } from '../../production/services/productMaterialService';
+import { bomService } from '../../manufacturing/services/bomService';
 import { productService } from '../../production/services/productService';
 import { stockService } from './stockService';
 import {
@@ -57,11 +57,10 @@ export const assemblableCapacityService = {
   async getForWarehouse(warehouseId: string): Promise<AssemblableCapacityRow[]> {
     if (!warehouseId) return [];
 
-    const [balances, products, materials, legacyMats, { boms, itemsByBomId }] = await Promise.all([
+    const [balances, products, materials, { boms, itemsByBomId }] = await Promise.all([
       stockService.getBalances(warehouseId),
       productService.getAll(),
       materialService.getAll(),
-      productMaterialService.getAll(),
       loadActiveProductBoms(),
     ]);
 
@@ -120,59 +119,35 @@ export const assemblableCapacityService = {
       bomsByProduct.set(ownerId, list);
     }
 
-    const legacyByProduct = new Map<string, typeof legacyMats>();
-    for (const row of legacyMats) {
-      const productId = String(row.productId || '').trim();
-      if (!productId) continue;
-      const list = legacyByProduct.get(productId) || [];
-      list.push(row);
-      legacyByProduct.set(productId, list);
-    }
-
     const productInputs: AssemblableProductInput[] = [];
     for (const product of products) {
       if (!product.id) continue;
       const preferred = pickPreferredBom(bomsByProduct.get(product.id) || []);
-      if (preferred?.id) {
-        const items = itemsByBomId.get(preferred.id) || [];
-        if (!items.length) continue;
-        productInputs.push({
-          productId: product.id,
-          productName: product.name,
-          productCode: product.code || '',
-          lines: items.map((item) => {
-            const resolved = resolveStockKeys(item.itemId);
-            return {
-              materialId: item.itemId,
-              materialName: item.itemName || materialById.get(item.itemId)?.name || item.itemId,
-              materialCode: resolved.code || materialById.get(item.itemId)?.code || '',
-              qtyPerUnit: Number(item.qtyPerUnit || 0),
-              wastePercent: Number(item.wastePercent || 0),
-              stockKeys: resolved.stockKeys,
-            };
-          }),
-        });
-        continue;
-      }
+      let items = preferred?.id ? itemsByBomId.get(preferred.id) || [] : [];
 
-      const legacy = legacyByProduct.get(product.id) || [];
-      if (!legacy.length) continue;
+      // Shared master-data fallback (canonical BOM or legacy via bomService)
+      if (!items.length) {
+        const { items: fallbackItems } = await bomService.getActiveBomWithLegacyFallback(
+          'product',
+          product.id,
+        );
+        items = fallbackItems.filter((item) => item.itemType === 'material');
+      }
+      if (!items.length) continue;
+
       productInputs.push({
         productId: product.id,
         productName: product.name,
         productCode: product.code || '',
-        lines: legacy.map((row) => {
-          const materialId = String(row.materialId || '').trim();
-          const resolved = materialId
-            ? resolveStockKeys(materialId)
-            : { code: '', stockKeys: [] as string[] };
+        lines: items.map((item) => {
+          const resolved = resolveStockKeys(item.itemId);
           return {
-            materialId: materialId || row.materialName,
-            materialName: row.materialName,
-            materialCode: resolved.code,
-            qtyPerUnit: Number(row.quantityUsed || 0),
-            wastePercent: 0,
-            stockKeys: materialId ? resolved.stockKeys : [],
+            materialId: item.itemId,
+            materialName: item.itemName || materialById.get(item.itemId)?.name || item.itemId,
+            materialCode: resolved.code || materialById.get(item.itemId)?.code || '',
+            qtyPerUnit: Number(item.qtyPerUnit || 0),
+            wastePercent: Number(item.wastePercent || 0),
+            stockKeys: resolved.stockKeys,
           };
         }),
       });

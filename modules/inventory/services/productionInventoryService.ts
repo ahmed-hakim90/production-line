@@ -15,7 +15,6 @@ import {
 import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { Material } from '../../manufacturing/types';
-import { productMaterialService } from '../../production/services/productMaterialService';
 import { resolveReportType } from '../../production/utils/reportTypes';
 import { rawMaterialService } from './rawMaterialService';
 import { stockService } from './stockService';
@@ -127,24 +126,31 @@ async function consumeMaterialsForProduction(params: {
 
   const leaves: Array<{ materialId: string; requiredQty: number }> = [];
 
-  if (bom?.id && items.length > 0) {
+  if (!isLegacy && bom?.id && items.length > 0) {
     const exploded = explodeBom(ctx, 'product', productId, quantity);
     const aggregated = aggregateExplodedLeaves(exploded);
     for (const [, line] of aggregated) {
       leaves.push({ materialId: line.materialId, requiredQty: line.requiredQty });
     }
-  } else if (isLegacy) {
-    const legacyRows = await productMaterialService.getByProduct(productId);
+  } else if (items.length > 0) {
+    // Flat / legacy BOM lines already resolved by bomService (no second product_materials read)
     const rawMaterials = await rawMaterialService.getAll();
     const rawById = new Map(rawMaterials.filter((r) => r.id).map((r) => [String(r.id), r]));
     const rawByName = new Map(rawMaterials.map((r) => [normalizeText(r.name), r]));
-    for (const row of legacyRows) {
-      const raw =
-        (row.materialId ? rawById.get(row.materialId) : undefined)
-        ?? rawByName.get(normalizeText(row.materialName || ''));
-      if (!raw?.id) continue;
-      const qty = Number(row.quantityUsed || 0) * quantity;
+    for (const item of items) {
+      const materialId = String(item.itemId || '').trim();
+      const qty = Number(item.qtyPerUnit || 0) * quantity;
       if (qty <= 0) continue;
+
+      if (materialId && bundle.materialsById.has(materialId)) {
+        leaves.push({ materialId, requiredQty: qty });
+        continue;
+      }
+
+      const raw =
+        (materialId ? rawById.get(materialId) : undefined)
+        ?? rawByName.get(normalizeText(item.itemName || ''));
+      if (!raw?.id) continue;
       await stockService.createMovement({
         warehouseId: routing.decomposedWarehouseId || routing.rawMaterialWarehouseId,
         itemType: 'raw_material',
@@ -161,7 +167,7 @@ async function consumeMaterialsForProduction(params: {
         allowNegative: routing.allowNegativeDecomposedStock,
       });
     }
-    return;
+    // Continue below for any manufacturing-material leaves collected above
   }
 
   for (const leaf of leaves) {
@@ -221,7 +227,6 @@ async function postProducedToWip(params: {
       fromWarehouseId: '__production_report__',
       fromWarehouseName: 'تقارير الإنتاج',
       toWarehouseId: routing.productionWipWarehouseId,
-      toWarehouseName: 'مخزن إنتاج تحت التشغيل',
       note,
       sourceModule: 'production_report',
       sourceId: reportId,

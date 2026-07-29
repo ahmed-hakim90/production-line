@@ -23,6 +23,7 @@ import type {
 import { stockService } from './stockService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { opsNotificationService } from '../../../services/opsNotificationService';
+import { warehouseService } from './warehouseService';
 import {
   allocateInvReferenceInTransaction,
   formatInvReference,
@@ -137,13 +138,17 @@ async function chainProductionEntryToFinishedStaging(
 
   if (pendingAutos.length === 0) {
     // Create and execute immediately for audit trail when report didn't pre-create the auto request.
+    const [fromName, toName] = await Promise.all([
+      warehouseService.resolveDisplayName(wipId, 'مخزن إنتاج تحت التشغيل'),
+      warehouseService.resolveDisplayName(stagingId, 'تم الإنتاج'),
+    ]);
     const createdId = await transferApprovalService.createRequest({
       requestType: 'production_auto_transfer',
       fromWarehouseId: wipId,
-      fromWarehouseName: 'مخزن إنتاج تحت التشغيل',
+      fromWarehouseName: fromName,
       toWarehouseId: stagingId,
-      toWarehouseName: 'تم الإنتاج',
-      note: `ترحيل تلقائي إلى تم الإنتاج بعد اعتماد إدخال ${productionEntry.referenceNo || productionEntry.id}`,
+      toWarehouseName: toName,
+      note: `ترحيل تلقائي بعد اعتماد إدخال ${productionEntry.referenceNo || productionEntry.id}`,
       sourceModule: productionEntry.sourceModule ?? 'production_report',
       sourceId: reportId || productionEntry.id,
       sourceReportId: reportId || undefined,
@@ -157,7 +162,7 @@ async function chainProductionEntryToFinishedStaging(
     }
   }
 
-  const chainApprover = `${approvedBy} (ترحيل تلقائي → تم الإنتاج)`;
+  const chainApprover = `${approvedBy} (ترحيل تلقائي)`;
   for (const auto of pendingAutos) {
     if (!auto.id || auto.status !== 'pending') continue;
     await executeTransferLikeRequest(auto, chainApprover, {
@@ -291,6 +296,19 @@ export const transferApprovalService = {
       throw new Error('لا توجد أصناف صالحة في طلب التحويل.');
     }
 
+    const [resolvedFromName, resolvedToName] = await Promise.all([
+      input.fromWarehouseId?.startsWith('__')
+        ? Promise.resolve(String(input.fromWarehouseName || '').trim())
+        : warehouseService.resolveDisplayName(
+          input.fromWarehouseId,
+          String(input.fromWarehouseName || '').trim(),
+        ),
+      warehouseService.resolveDisplayName(
+        input.toWarehouseId,
+        String(input.toWarehouseName || '').trim(),
+      ),
+    ]);
+
     const createdId = await runTransaction(db, async (t) => {
       const resolvedReferenceNo =
         input.referenceNo?.trim() || (await allocateInvReferenceInTransaction(t));
@@ -306,10 +324,8 @@ export const transferApprovalService = {
         createdAt: now,
         submittedAt: now,
       };
-      const fromWarehouseName = String(input.fromWarehouseName || '').trim();
-      if (fromWarehouseName) payload.fromWarehouseName = fromWarehouseName;
-      const toWarehouseName = String(input.toWarehouseName || '').trim();
-      if (toWarehouseName) payload.toWarehouseName = toWarehouseName;
+      if (resolvedFromName) payload.fromWarehouseName = resolvedFromName;
+      if (resolvedToName) payload.toWarehouseName = resolvedToName;
       const note = String(input.note || '').trim();
       if (note) payload.note = note;
       const sourceId = String(input.sourceId || input.sourceReportId || '').trim();

@@ -21,7 +21,11 @@ function testLegacyMapping() {
   assert.equal(routing.finishedStagingWarehouseId, 'w2');
   assert.equal(routing.decomposedWarehouseId, 'd1');
   assert.equal(routing.wasteWarehouseId, 'h1');
-  assert.equal(routing.autoTransferProductionToFinished, false);
+  assert.equal(routing.autoTransferProductionToFinished, true);
+  assert.equal(routing.requireApprovalForProductionEntry, true);
+  assert.equal(routing.requireApprovalForAutoTransfers, false);
+  assert.equal(routing.requireIssuedProductionIssueOnReport, true);
+  assert.equal(routing.autoConsumeBomOnProductionReport, false);
 }
 
 function testExistingRoutingPreserved() {

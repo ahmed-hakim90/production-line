@@ -284,7 +284,7 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
               لم يُحدَّد مخزن المستلزمات بعد. عيّن «مخزن المفكك (مستلزم إنتاج)» أو «مخزن المواد الخام» من إعدادات توجيه المخزون، ثم احفظ الصفحة.
             </p>
             <Link to={withTenantPath(tenantSlug, '/settings/production')}>
-              <PrimaryButton>فتح إعدادات التوجيه</PrimaryButton>
+              <PrimaryButton iconName="settings" tone="print">فتح إعدادات التوجيه</PrimaryButton>
             </Link>
           </CardContent>
         </Card>
@@ -315,12 +315,12 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
               </select>
             )}
             <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control#assemblable')}>
-              <GhostButton>المتاح للتجميع</GhostButton>
+              <GhostButton iconName="visibility" tone="view">المتاح للتجميع</GhostButton>
             </Link>
             <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control')}>
-              <GhostButton>لوحة التحكم</GhostButton>
+              <GhostButton iconName="dashboard" tone="view">لوحة التحكم</GhostButton>
             </Link>
-            <PrimaryButton onClick={() => void load()} disabled={loading}>
+            <PrimaryButton iconName="refresh" tone="neutral" onClick={() => void load()} disabled={loading}>
               تحديث
             </PrimaryButton>
           </div>
@@ -406,6 +406,9 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
                               <div className="flex flex-wrap justify-center gap-2">
                                 {row.balance && can('inventory.transactions.create') && (
                                   <PrimaryButton
+                                    iconName="tune"
+                                    tone="edit"
+                                    solid={false}
                                     onClick={() =>
                                       openModal(MODAL_KEYS.INVENTORY_STOCK_ADJUSTMENT, {
                                         warehouseId: row.balance!.warehouseId,
@@ -419,14 +422,41 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
                                 )}
                                 {row.href && (
                                   <Link to={withTenantPath(tenantSlug, row.href)}>
-                                    <GhostButton>
-                                      {row.actionLabel
+                                    {(() => {
+                                      const label =
+                                        row.actionLabel
                                         || (row.kind === 'plan_issue'
                                           ? 'إنشاء إذن صرف'
                                           : row.kind === 'plan_shortage'
                                             ? 'مراجعة المكونات'
-                                            : 'فتح')}
-                                    </GhostButton>
+                                            : 'فتح');
+                                      if (label === 'إنشاء إذن صرف') {
+                                        return (
+                                          <GhostButton iconName="add_circle" tone="submit">
+                                            {label}
+                                          </GhostButton>
+                                        );
+                                      }
+                                      if (label === 'مراجعة المكونات') {
+                                        return (
+                                          <GhostButton iconName="manage_search" tone="view">
+                                            {label}
+                                          </GhostButton>
+                                        );
+                                      }
+                                      if (label === 'اعتماد الطلب') {
+                                        return (
+                                          <GhostButton iconName="check_circle" tone="approve">
+                                            {label}
+                                          </GhostButton>
+                                        );
+                                      }
+                                      return (
+                                        <GhostButton iconName="open_in_new" tone="view">
+                                          {label}
+                                        </GhostButton>
+                                      );
+                                    })()}
                                   </Link>
                                 )}
                               </div>

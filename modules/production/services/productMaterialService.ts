@@ -16,6 +16,11 @@ import { assertManufacturingWriteAllowed } from '../../manufacturing/lib/legacyG
 const COLLECTION = 'product_materials';
 
 export const productMaterialService = {
+  /**
+   * @deprecated Prefer `loadProductMaterialsByProductIds` / `loadAllCatalogMaterials`
+   * from `modules/catalog` — this reads legacy `product_materials` only.
+   * Kept for bomService legacy fallback and migration tooling.
+   */
   async getAll(): Promise<ProductMaterial[]> {
     if (!isConfigured) return [];
     const tenantId = getCurrentTenantIdOrNull();
@@ -30,6 +35,10 @@ export const productMaterialService = {
     }
   },
 
+  /**
+   * @deprecated Prefer `loadProductMaterials` from `modules/catalog`
+   * (canonical BOM + materials with legacy fallback).
+   */
   async getByProduct(productId: string): Promise<ProductMaterial[]> {
     if (!isConfigured) return [];
     const tenantId = getCurrentTenantIdOrNull();

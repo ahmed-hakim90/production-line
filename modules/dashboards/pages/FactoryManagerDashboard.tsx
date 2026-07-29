@@ -53,6 +53,17 @@ import {
   getKPIColor,
 } from '../../../utils/dashboardConfig';
 import type { ProductionReport, PlanPriority, SmartStatus } from '../../../types';
+import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
+import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
+import {
+  averageScheduleAdherence,
+  isPlanBehindSchedule,
+  laborUtilizationPercent,
+  outputVsIdealPercent,
+  qualityRatesFromTotals,
+  volumeWeightedPlanAchievement,
+  yieldEfficiencyPercent,
+} from '../lib/decisionMetrics';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -158,6 +169,9 @@ export const FactoryManagerDashboard: React.FC = () => {
   );
 
   const alertCfg = useMemo(() => getAlertSettings(systemSettings), [systemSettings]);
+  const { snapshot: decisionSnapshot, loading: decisionLoading } = useOperationalDecisionSnapshot({
+    planDelayDays: alertCfg.planDelayDays,
+  });
 
   const [preset, setPreset] = useState<PeriodPreset>('month');
   const [customStart, setCustomStart] = useState('');
@@ -263,6 +277,64 @@ export const FactoryManagerDashboard: React.FC = () => {
     () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress'),
     [workOrders],
   );
+
+  const qualityKpis = useMemo(() => {
+    const active = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed');
+    const totals = active.reduce(
+      (acc, wo) => {
+        const summary = wo.qualitySummary;
+        if (!summary) return acc;
+        acc.inspected += summary.inspectedUnits || 0;
+        acc.failed += summary.failedUnits || 0;
+        acc.rework += summary.reworkUnits || 0;
+        acc.fpyTotal += summary.firstPassYield || 0;
+        acc.fpyCount += 1;
+        return acc;
+      },
+      { inspected: 0, failed: 0, rework: 0, fpyTotal: 0, fpyCount: 0 },
+    );
+    const rates = qualityRatesFromTotals(totals);
+    const pendingQuality = active.filter((wo) => wo.qualityStatus && wo.qualityStatus !== 'approved').length;
+    return {
+      inspected: totals.inspected,
+      failed: totals.failed,
+      rework: totals.rework,
+      failRate: rates.failRate,
+      reworkRate: rates.reworkRate,
+      avgFpy: rates.avgFpy,
+      pendingQuality,
+    };
+  }, [workOrders]);
+
+  const workOrderRisk = useMemo(() => {
+    let costToCompleteTotal = 0;
+    let atRiskCount = 0;
+    activeWorkOrders.forEach((wo) => {
+      const producedNow = resolveWorkOrderProducedNow(wo);
+      const remaining = Math.max(Number(wo.quantity || 0) - producedNow, 0);
+      const unitCost =
+        Number(wo.quantity || 0) > 0
+          ? Number(wo.estimatedCost || 0) / Number(wo.quantity || 0)
+          : 0;
+      costToCompleteTotal += remaining * unitCost;
+
+      const product = _rawProducts.find((p) => p.id === wo.productId);
+      const daily = Math.max(0, Number(product?.avgDailyProduction || 0));
+      if (daily > 0 && remaining > 0 && wo.targetDate) {
+        const daysNeeded = Math.ceil(remaining / daily);
+        const forecast = new Date();
+        forecast.setDate(forecast.getDate() + daysNeeded);
+        const target = new Date(wo.targetDate);
+        if (Number.isFinite(target.getTime()) && forecast.getTime() > target.getTime()) {
+          atRiskCount += 1;
+        }
+      }
+    });
+    return {
+      costToComplete: Number(costToCompleteTotal.toFixed(2)),
+      atRiskCount,
+    };
+  }, [activeWorkOrders, _rawProducts]);
 
   useEffect(() => {
     let cancelled = false;
@@ -399,9 +471,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     const totalProduction = productionReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
     const totalWaste = productionReports.reduce((s, r) => s + getReportWaste(r), 0);
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
-    const efficiency = totalProduction + totalWaste > 0
-      ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
-      : 0;
+    const efficiency = yieldEfficiencyPercent(totalProduction, totalWaste);
 
     const totalLaborCost = monthlyCostMode
       ? Number(monthlyCostSummary?.totals.directCost || 0)
@@ -435,18 +505,24 @@ export const FactoryManagerDashboard: React.FC = () => {
       : 0;
 
     const activePlans = productionPlans.filter(
-      (p) => p.status === 'in_progress' || p.status === 'completed'
+      (p) => p.status === 'in_progress' || p.status === 'completed' || p.status === 'planned',
     );
-    let achievedCount = 0;
-    activePlans.forEach((plan) => {
+    const planActuals = activePlans.map((plan) => {
       const key = `${plan.lineId}_${plan.productId}`;
       const pReports = planReports[key] || [];
-      const actual = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-      if (actual >= plan.plannedQuantity * 0.9) achievedCount++;
+      const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+      return {
+        plannedQuantity: plan.plannedQuantity,
+        actualQuantity: Math.max(Number(plan.producedQuantity || 0), fromReports),
+        startDate: plan.plannedStartDate || plan.startDate,
+        plannedEndDate: plan.plannedEndDate,
+        status: plan.status,
+      };
     });
-    const planAchievementRate = activePlans.length > 0
-      ? Number(((achievedCount / activePlans.length) * 100).toFixed(0))
-      : 0;
+    const planAchievementRate = volumeWeightedPlanAchievement(planActuals);
+    const scheduleAdherence = averageScheduleAdherence(
+      planActuals.filter((p) => p.status === 'in_progress' || p.status === 'planned'),
+    );
 
     return {
       totalProduction,
@@ -455,10 +531,44 @@ export const FactoryManagerDashboard: React.FC = () => {
       wastePercent,
       efficiency,
       planAchievementRate,
+      scheduleAdherence,
       totalLaborCost,
       totalIndirectCost,
     };
-  }, [productionReports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
+  }, [productionReports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary, reports]);
+
+  const utilizationMetrics = useMemo(() => {
+    const actualLaborHours = productionReports.reduce(
+      (sum, report) => sum + Number(report.workersCount || 0) * Number(report.workHours || 0),
+      0,
+    );
+    const byLineDay = new Map<string, { workers: number; lineHours: number }>();
+    let idealUnits = 0;
+    productionReports.forEach((report) => {
+      const line = _rawLines.find((row) => row.id === report.lineId);
+      const lineHours = Number(line?.dailyWorkingHours || 0);
+      const key = `${report.lineId}|${report.date}`;
+      const prev = byLineDay.get(key) || { workers: 0, lineHours };
+      prev.workers = Math.max(prev.workers, Number(report.workersCount || 0));
+      prev.lineHours = lineHours;
+      byLineDay.set(key, prev);
+
+      const product = _rawProducts.find((row) => row.id === report.productId);
+      const avgDaily = Number(product?.avgDailyProduction || 0);
+      const workHours = Number(report.workHours || 0);
+      if (avgDaily > 0 && lineHours > 0 && workHours > 0) {
+        idealUnits += avgDaily * (workHours / lineHours);
+      }
+    });
+    const scheduledLaborHours = Array.from(byLineDay.values()).reduce(
+      (sum, row) => sum + row.workers * row.lineHours,
+      0,
+    );
+    return {
+      laborUtilization: laborUtilizationPercent(actualLaborHours, scheduledLaborHours),
+      performanceProxy: outputVsIdealPercent(kpis.totalProduction, idealUnits),
+    };
+  }, [productionReports, _rawLines, _rawProducts, kpis.totalProduction]);
 
   // â”€â”€ Chart 1: Production vs Cost Per Unit (daily) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -545,20 +655,116 @@ export const FactoryManagerDashboard: React.FC = () => {
       if (p.status !== 'in_progress' && p.status !== 'planned') return false;
       const key = `${p.lineId}_${p.productId}`;
       const pReports = planReports[key] || [];
-      const actual = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-      const progress = p.plannedQuantity > 0 ? (actual / p.plannedQuantity) * 100 : 0;
-
-      const start = new Date(p.startDate);
-      const now = new Date();
-      const elapsed = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-      const expectedProgress = Math.min(100, (elapsed / Math.max(1, elapsed)) * (progress > 0 ? 50 : 30));
-      return progress < expectedProgress * 0.5 && elapsed > alertCfg.planDelayDays;
+      const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+      return isPlanBehindSchedule(
+        {
+          plannedQuantity: p.plannedQuantity,
+          actualQuantity: Math.max(Number(p.producedQuantity || 0), fromReports),
+          startDate: p.plannedStartDate || p.startDate,
+          plannedEndDate: p.plannedEndDate,
+          status: p.status,
+        },
+        { minElapsedDays: alertCfg.planDelayDays, gapPercent: 20 },
+      );
     });
     if (delayedPlans.length > 0) {
       result.push({
         type: 'warning',
         icon: 'schedule',
-        message: `${delayedPlans.length} خطة إنتاج متأخرة عن الجدول الزمني`,
+        message: `${delayedPlans.length} خطة إنتاج متأخرة عن الجدول (التزام ${kpis.scheduleAdherence}%)`,
+      });
+    }
+
+    if (decisionSnapshot.issues.openCount > 0) {
+      result.push({
+        type: decisionSnapshot.issues.agingOver72h > 0 ? 'danger' : 'warning',
+        icon: 'fact_check',
+        message: `${decisionSnapshot.issues.openCount} طلب صرف إنتاج معلّق (تنفيذ ${decisionSnapshot.issues.fulfilmentPercent}%)`,
+      });
+    }
+
+    if (decisionSnapshot.packaging.awaitingUnits > 0 || decisionSnapshot.transfers.pendingPackaging > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'package_2',
+        message: `${formatNumber(decisionSnapshot.packaging.awaitingUnits)} وحدة بانتظار التغليف · ${decisionSnapshot.transfers.pendingPackaging} تحويل معلّق`,
+      });
+    }
+
+    if (decisionSnapshot.transfers.pendingProductionEntry > 0) {
+      result.push({
+        type: 'info',
+        icon: 'inventory_2',
+        message: `${decisionSnapshot.transfers.pendingProductionEntry} اعتماد دخول إنتاج بانتظار المراجعة`,
+      });
+    }
+
+    if (decisionSnapshot.inventory.negativeCount > 0) {
+      result.push({
+        type: 'danger',
+        icon: 'report_problem',
+        message: `${decisionSnapshot.inventory.negativeCount} رصيد سالب يحتاج مراجعة فورية`,
+      });
+    } else if (decisionSnapshot.inventory.lowStockCount > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'inventory_2',
+        message: `${decisionSnapshot.inventory.lowStockCount} صنف تحت الحد الأدنى للمخزون`,
+      });
+    }
+
+    if (
+      decisionSnapshot.inventory.finishedDaysOfCover != null &&
+      decisionSnapshot.inventory.finishedDaysOfCover < 3
+    ) {
+      result.push({
+        type: 'warning',
+        icon: 'timelapse',
+        message: `تغطية تم الصنع ${decisionSnapshot.inventory.finishedDaysOfCover} يوم فقط مقابل الطلب اليومي للخطط`,
+      });
+    }
+
+    if (decisionSnapshot.receipts.awaitingCount > 0) {
+      result.push({
+        type: decisionSnapshot.receipts.agingOver72h > 0 ? 'danger' : 'info',
+        icon: 'local_shipping',
+        message: `${decisionSnapshot.receipts.awaitingCount} إيصال مستلزمات بانتظار الإتمام`,
+      });
+    }
+
+    if (decisionSnapshot.stockCounts.awaitingApproval > 0 || decisionSnapshot.stockCounts.openSessions > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'fact_check',
+        message: `جرد: ${decisionSnapshot.stockCounts.openSessions} مفتوح · ${decisionSnapshot.stockCounts.awaitingApproval} بانتظار الاعتماد${
+          decisionSnapshot.stockCounts.accuracyPercent != null
+            ? ` · دقة ${decisionSnapshot.stockCounts.accuracyPercent}%`
+            : ''
+        }`,
+      });
+    }
+
+    if (decisionSnapshot.materials.plansWithShortage > 0) {
+      result.push({
+        type: decisionSnapshot.materials.readinessPercent < 70 ? 'danger' : 'warning',
+        icon: 'report_problem',
+        message: `جاهزية المواد ${decisionSnapshot.materials.readinessPercent}% · ${decisionSnapshot.materials.plansWithShortage} خطة بنواقص مكونات`,
+      });
+    }
+
+    if (qualityKpis.pendingQuality > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'verified',
+        message: `${qualityKpis.pendingQuality} أمر شغل بانتظار اعتماد الجودة`,
+      });
+    }
+
+    if (workOrderRisk.atRiskCount > 0) {
+      result.push({
+        type: 'danger',
+        icon: 'assignment',
+        message: `${workOrderRisk.atRiskCount} أمر شغل متوقع تأخره عن تاريخ الهدف`,
       });
     }
 
@@ -580,7 +786,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       result.push({
         type: 'warning',
         icon: 'speed',
-        message: `الكفاءة أقل من الحد المحدد: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
+        message: `عائد الإنتاج أقل من الحد: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
       });
     }
 
@@ -593,7 +799,7 @@ export const FactoryManagerDashboard: React.FC = () => {
     }
 
     return result;
-  }, [kpis, productionPlans, planReports, alertCfg]);
+  }, [kpis, productionPlans, planReports, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, workOrderRisk.atRiskCount]);
 
   const supervisorExecutionDiscipline = useMemo(() => {
     const today = getTodayDateString();
@@ -729,7 +935,7 @@ export const FactoryManagerDashboard: React.FC = () => {
       {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <PageHeader
         title="لوحة مدير المصنع"
-        subtitle="تحليلات متقدمة للإنتاج والتكاليف"
+        subtitle="طابور قرارات · تحقيق موزون للخطة · صرف وتغليف · تكاليف الإنتاج"
         actions={
           loading ? (
             <span className="text-xs text-[var(--color-text-muted)] flex items-center gap-1">
@@ -766,8 +972,6 @@ export const FactoryManagerDashboard: React.FC = () => {
             setPreset('custom');
           }
         }}
-        onApply={() => undefined}
-        applyLabel="عرض"
         extra={(
           <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
             {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب فوري (fallback)'}
@@ -780,6 +984,19 @@ export const FactoryManagerDashboard: React.FC = () => {
         systemSettings={systemSettings}
         renderBuiltin={(widgetId) => {
           switch (widgetId) {
+            case 'decision_queue':
+              return (
+                <OperationalDecisionQueue
+                  snapshot={decisionSnapshot}
+                  loading={decisionLoading}
+                  absentWorkersToday={workerDashboard.absentToday.length}
+                  costToComplete={canViewCosts ? workOrderRisk.costToComplete : null}
+                  atRiskWorkOrders={workOrderRisk.atRiskCount}
+                  qualityPending={qualityKpis.pendingQuality}
+                  laborUtilizationPercent={utilizationMetrics.laborUtilization}
+                  performanceProxyPercent={utilizationMetrics.performanceProxy}
+                />
+              );
             case 'kpis':
               return (
       <div className="overflow-x-auto pb-2 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0">
@@ -830,11 +1047,11 @@ export const FactoryManagerDashboard: React.FC = () => {
               const mappedColor = effColor === 'good' ? 'green' : effColor === 'warning' ? 'amber' : 'red';
               return (
                 <KPICard
-                  label="الكفاءة العامة"
+                  label="عائد الإنتاج"
                   value={`${kpis.efficiency}%`}
                   iconType="trend"
                   color={mappedColor}
-                  trend={effColor === 'good' ? 'ممتاز' : effColor === 'warning' ? 'جيد' : 'يحتاج تحسين'}
+                  trend="جيد / (جيد + هدر)"
                   trendUp={effColor !== 'danger'}
                 />
               );
@@ -844,10 +1061,12 @@ export const FactoryManagerDashboard: React.FC = () => {
               const mappedColor = paColor === 'good' ? 'green' : paColor === 'warning' ? 'amber' : 'red';
               return (
                 <KPICard
-                  label="تحقيق الخطة"
+                  label="تحقيق الخطة (موزون)"
                   value={`${kpis.planAchievementRate}%`}
                   iconType="trend"
                   color={mappedColor}
+                  trend={`التزام الجدول ${kpis.scheduleAdherence}%`}
+                  trendUp={paColor !== 'danger'}
                 />
               );
             })()}
@@ -1104,6 +1323,33 @@ export const FactoryManagerDashboard: React.FC = () => {
       />
 
       {/* â”€â”€ Active Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      {(qualityKpis.inspected > 0 || qualityKpis.pendingQuality > 0 || workOrderRisk.atRiskCount > 0) && (
+        <Card>
+          <div className="flex items-center gap-2 mb-3">
+            <span className="material-icons-round text-violet-500">verified</span>
+            <h3 className="text-base font-bold text-[var(--color-text)]">الجودة وتكلفة الإكمال</h3>
+          </div>
+          <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-3">
+            <KPICard label="مفحوص" value={formatNumber(qualityKpis.inspected)} iconType="metric" color="indigo" />
+            <KPICard label="فشل %" value={`${qualityKpis.failRate}%`} iconType="trend" color={qualityKpis.failRate > 5 ? 'red' : 'green'} />
+            <KPICard label="إعادة تشغيل %" value={`${qualityKpis.reworkRate}%`} iconType="trend" color="amber" />
+            <KPICard label="FPY" value={`${qualityKpis.avgFpy}%`} iconType="trend" color="green" />
+            <KPICard label="بانتظار الاعتماد" value={qualityKpis.pendingQuality} iconType="trend" color={qualityKpis.pendingQuality > 0 ? 'amber' : 'green'} />
+            {canViewCosts && (
+              <KPICard
+                label="تكلفة إكمال متبقية"
+                value={formatCost(workOrderRisk.costToComplete)}
+                unit="ج.م"
+                iconType="money"
+                color="amber"
+                trend={`${workOrderRisk.atRiskCount} أمر متأخر متوقع`}
+                trendUp={workOrderRisk.atRiskCount === 0}
+              />
+            )}
+          </div>
+        </Card>
+      )}
+
       {(() => {
         const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
@@ -1292,6 +1538,8 @@ export const FactoryManagerDashboard: React.FC = () => {
               type="button"
               onClick={() => setSelectedComplianceDate(yesterdayOperationalDate)}
               className="h-8 px-2.5 text-xs"
+              iconName="history"
+              tone="neutral"
             >
               أمس
             </GhostButton>
@@ -1507,9 +1755,10 @@ export const FactoryManagerDashboard: React.FC = () => {
               type="button"
               onClick={() => exportProductionPlanShortages(shortageRows)}
               className="h-8 px-3 text-xs"
+              iconName="download"
+              tone="export"
             >
-              <span className="material-icons-round text-sm">download</span>
-              <span>Excel</span>
+              Excel
             </GhostButton>
           )}
         </div>

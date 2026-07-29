@@ -21,6 +21,7 @@ import {
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 type LoanRequestsPageData = {
   loans: FirestoreEmployeeLoan[];
@@ -450,42 +451,62 @@ export const LoanRequests: React.FC = () => {
             <div className="flex gap-3 justify-end">
               <Button variant="outline" onClick={() => setShowForm(false)}>إلغاء</Button>
               <Button onClick={handleSubmit} disabled={submitting || !formAmount || !formStartMonth || (isHR && !formEmployeeId && !employeeId)}>
-                {submitting && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                <span className="material-icons-round text-sm">save</span>
-                إنشاء السلفة
+                {submitting ? 'جاري الإنشاء...' : 'إنشاء السلفة'}
               </Button>
             </div>
           </div>
         </Card>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-        {isHR && (
-          <SearchableSelect
-            options={[{ value: '', label: 'جميع الموظفين' }, ...employeeOptions]}
-            value={filterEmployee}
-            onChange={setFilterEmployee}
-            placeholder="تصفية بالموظف..."
-            className="sm:w-64"
-          />
-        )}
-        {activeTab === 'monthly_advance' && (
-          <input type="month" className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-            value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} />
-        )}
-        <select
-          className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-          value={filterStatus} onChange={(e) => setFilterStatus(e.target.value as LoanStatus | '')}
-        >
-          <option value="">جميع الحالات</option>
-          <option value="active">نشط</option>
-          <option value="closed">مُغلق</option>
-        </select>
-      </div>
-
-      {/* Table */}
-      <Card>
+      {/* Filters + Table */}
+      <Card className="mb-0 border-0 rounded-none">
+        <SmartFilterBar
+          className="mb-0 border-0 rounded-none"
+          quickFilters={[
+            {
+              key: 'status',
+              placeholder: 'جميع الحالات',
+              options: [
+                { value: 'active', label: 'نشط' },
+                { value: 'closed', label: 'مُغلق' },
+              ],
+            },
+          ]}
+          quickFilterValues={{ status: filterStatus }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'status') setFilterStatus(value as LoanStatus | '');
+          }}
+          advancedFilters={
+            activeTab === 'monthly_advance'
+              ? [
+                  {
+                    key: 'month',
+                    label: 'الشهر',
+                    placeholder: 'اختر شهر',
+                    type: 'month',
+                    options: [],
+                  },
+                ]
+              : []
+          }
+          advancedFilterValues={{ month: filterMonth }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'month') setFilterMonth(value);
+          }}
+          extra={
+            <>
+              {isHR && (
+                <SearchableSelect
+                  options={[{ value: '', label: 'جميع الموظفين' }, ...employeeOptions]}
+                  value={filterEmployee}
+                  onChange={setFilterEmployee}
+                  placeholder="تصفية بالموظف..."
+                  className="sm:w-64"
+                />
+              )}
+            </>
+          }
+        />
         {filtered.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">money_off</span>
@@ -527,9 +548,8 @@ export const LoanRequests: React.FC = () => {
             </div>
             <div className="flex justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleting}>تراجع</Button>
-              <Button onClick={() => handleDeleteLoan(deleteConfirm)} disabled={deleting} className="!bg-rose-600 hover:!bg-rose-700">
-                {deleting ? <span className="material-icons-round animate-spin text-sm">refresh</span> : <span className="material-icons-round text-sm">delete</span>}
-                حذف نهائي
+              <Button variant="danger" onClick={() => handleDeleteLoan(deleteConfirm)} disabled={deleting}>
+                {deleting ? 'جاري الحذف...' : 'حذف نهائي'}
               </Button>
             </div>
           </div>
@@ -602,23 +622,14 @@ const MonthlyAdvanceTable: React.FC<{
               </td>
               {canDisburse && (
                 <td className="py-3 px-3 text-center">
-                  <button
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => onDisburse(loan)}
                     disabled={isProcessing}
-                    className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
-                      loan.disbursed
-                        ? 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-rose-50 hover:text-rose-600'
-                        : 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                    }`}
                   >
-                    {isProcessing ? (
-                      <span className="material-icons-round animate-spin text-sm">refresh</span>
-                    ) : loan.disbursed ? (
-                      <><span className="material-icons-round text-sm align-middle">undo</span> تراجع</>
-                    ) : (
-                      <><span className="material-icons-round text-sm align-middle">check</span> صرف</>
-                    )}
-                  </button>
+                    {isProcessing ? 'جاري...' : loan.disbursed ? 'تراجع' : 'صرف'}
+                  </Button>
                 </td>
               )}
               {canDelete && (
@@ -695,17 +706,14 @@ const InstallmentTable: React.FC<{
                 </td>
                 <td className="py-3 px-3 text-center">
                   {canDisburse ? (
-                    <button
-                      onClick={() => onDisburse(loan)}
-                      disabled={isProcessing}
-                      className={`px-2.5 py-1 rounded-[var(--border-radius-base)] text-xs font-bold transition-all ${
-                        loan.disbursed
-                          ? 'bg-emerald-100 text-emerald-700'
-                          : 'bg-[#f0f2f5] text-[var(--color-text-muted)] hover:bg-emerald-100 hover:text-emerald-700'
-                      }`}
-                    >
-                      {isProcessing ? '...' : loan.disbursed ? 'تم ✓' : 'صرف'}
-                    </button>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => onDisburse(loan)}
+                    disabled={isProcessing}
+                  >
+                    {isProcessing ? 'جاري...' : loan.disbursed ? 'تم ✓' : 'صرف'}
+                  </Button>
                   ) : (
                     loan.disbursed ? <Badge variant="success">تم</Badge> : <Badge variant="warning">لا</Badge>
                   )}

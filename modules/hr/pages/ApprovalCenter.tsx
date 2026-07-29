@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { TableIconAction, ToneActionButton } from '@/src/components/erp';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { syncLeaveApprovalDecision } from '../leaveService';
@@ -34,6 +35,7 @@ import {
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 type ApprovalCenterPageData = {
   requests: FirestoreApprovalRequest[];
@@ -507,6 +509,43 @@ export const ApprovalCenter: React.FC = () => {
         ))}
       </div>
 
+      <SmartFilterBar
+        quickFilters={[
+          {
+            key: 'status',
+            placeholder: 'الحالة',
+            options: [
+              { value: 'actionable', label: 'تتطلب إجرائي' },
+              { value: 'pending', label: 'قيد الانتظار' },
+              { value: 'approved', label: 'مُعتمد' },
+              { value: 'rejected', label: 'مرفوض' },
+              { value: 'escalated', label: 'مُصعّد' },
+            ],
+          },
+          {
+            key: 'type',
+            placeholder: 'النوع',
+            options: [
+              { value: 'overtime', label: 'عمل إضافي' },
+              { value: 'leave', label: 'إجازة' },
+              { value: 'loan', label: 'سلفة' },
+              { value: 'penalty', label: 'جزاء' },
+            ],
+          },
+        ]}
+        quickFilterValues={{
+          status: filterStatus === 'all' ? 'all' : filterStatus,
+          type: filterType || 'all',
+        }}
+        onQuickFilterChange={(key, value) => {
+          if (key === 'status') {
+            setFilterStatus(value === 'all' ? 'all' : (value as ApprovalRequestStatus | 'actionable' | 'all'));
+          } else if (key === 'type') {
+            setFilterType(value === 'all' ? '' : (value as ApprovalRequestType));
+          }
+        }}
+      />
+
       {filtered.length === 0 ? (
         <Card>
           <div className="text-center py-12">
@@ -588,30 +627,20 @@ export const ApprovalCenter: React.FC = () => {
                           onChange={(e) => setActionNotes((prev) => ({ ...prev, [req.id!]: e.target.value }))}
                         />
                         <div className="flex gap-1.5">
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="reject"
                             onClick={() => handleReject(req)}
                             disabled={isProcessing}
-                            title="رفض"
+                            loading={isProcessing}
                             aria-label="رفض الطلب"
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isProcessing
-                              ? <span className="material-icons-round animate-spin text-sm">refresh</span>
-                              : <span className="material-icons-round text-sm">cancel</span>}
-                          </button>
-                          <button
-                            type="button"
+                          />
+                          <TableIconAction
+                            action="approve"
                             onClick={() => handleApprove(req)}
                             disabled={isProcessing}
-                            title="اعتماد"
+                            loading={isProcessing}
                             aria-label="اعتماد الطلب"
-                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            {isProcessing
-                              ? <span className="material-icons-round animate-spin text-sm">refresh</span>
-                              : <span className="material-icons-round text-sm">check_circle</span>}
-                          </button>
+                          />
                         </div>
                       </div>
                     </div>
@@ -619,15 +648,16 @@ export const ApprovalCenter: React.FC = () => {
 
                   {isOwn && req.status === 'pending' && req.currentStep === 0 && (
                     <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
-                      <Button
-                        variant="outline"
+                      <ToneActionButton
+                        action="undo"
+                        icon="block"
                         onClick={() => handleCancel(req)}
                         disabled={isProcessing}
-                        className="!text-slate-500 !border-[var(--color-border)]"
+                        loading={isProcessing}
+                        title="إلغاء الطلب"
                       >
-                        <span className="material-icons-round text-sm">block</span>
                         إلغاء الطلب
-                      </Button>
+                      </ToneActionButton>
                     </div>
                   )}
                 </div>

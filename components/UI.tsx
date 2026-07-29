@@ -31,6 +31,8 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { LegacyLoadingSkeleton } from '@/src/shared/ui/skeletons';
 import { cn } from '@/lib/utils';
+import { tableIconActionToneClass } from '@/src/components/erp/TableIconAction';
+import { resolveButtonLook } from './buttonLook';
 
 const KPI_ICON_MAP: Record<string, LucideIcon> = {
   analytics: BarChart3,
@@ -154,6 +156,14 @@ type LegacyButtonSize = 'sm' | 'default' | 'lg' | 'icon';
 interface LegacyButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: LegacyButtonVariant;
   size?: LegacyButtonSize;
+  /** Material Icons Round ligature — optional; auto-inferred from Arabic label when omitted. */
+  iconName?: string;
+  /** Distinctive ERP tone — optional; auto-inferred from label when omitted. */
+  tone?: import('@/src/components/erp/TableIconAction').TableIconActionTone;
+  /** Force filled solid background. Default: true for primary/secondary/danger. */
+  solid?: boolean;
+  /** Disable auto icon/tone inference from label. */
+  bare?: boolean;
 }
 
 export const Button: React.FC<LegacyButtonProps> = ({
@@ -161,6 +171,10 @@ export const Button: React.FC<LegacyButtonProps> = ({
   variant = 'primary',
   size = 'default',
   className = '',
+  iconName,
+  tone,
+  solid,
+  bare = false,
   ...props
 }) => {
   const mappedVariant = variant === 'danger'
@@ -174,18 +188,58 @@ export const Button: React.FC<LegacyButtonProps> = ({
           : 'default';
 
   const legacyVariantClasses = {
-    primary: 'bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)]',
-    default: 'bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)]',
-    secondary: 'bg-emerald-600 text-white hover:bg-emerald-700',
+    primary: '!bg-[rgb(var(--color-primary))] !text-white hover:!bg-[rgb(var(--color-primary)/0.9)]',
+    default: '!bg-[rgb(var(--color-primary))] !text-white hover:!bg-[rgb(var(--color-primary)/0.9)]',
+    secondary: '!bg-emerald-600 !text-white hover:!bg-emerald-700',
     outline: '',
     ghost: '',
-    danger: 'bg-[#D85A30] text-white hover:bg-[#BF4D28]',
+    danger: '!bg-[#D85A30] !text-white hover:!bg-[#BF4D28]',
   };
+
+  const look = bare || size === 'icon'
+    ? (iconName
+      ? { icon: iconName, tone: tone ?? 'neutral' as const, solid }
+      : null)
+    : resolveButtonLook(children, { iconName, tone, solid });
+
+  const defaultSolid =
+    variant === 'primary'
+    || variant === 'default'
+    || variant === 'secondary'
+    || variant === 'danger';
+  const useSolid = look?.solid ?? (solid ?? defaultSolid);
+
+  if (look) {
+    return (
+      <UiButton
+        variant="outline"
+        size={size}
+        bare
+        className={cn(
+          'inline-flex items-center gap-1.5 text-[13px] font-semibold border shadow-none',
+          tableIconActionToneClass(look.tone, useSolid),
+          className,
+        )}
+        {...props}
+      >
+        {!look.skipIcon && look.icon ? (
+          <span className="material-icons-round text-sm" aria-hidden>
+            {look.icon}
+          </span>
+        ) : null}
+        {children}
+      </UiButton>
+    );
+  }
 
   return (
     <UiButton
       variant={mappedVariant}
       size={size}
+      bare={bare}
+      iconName={iconName}
+      tone={tone}
+      solid={solid}
       className={cn('text-[13px] font-semibold', legacyVariantClasses[variant], className)}
       {...props}
     >

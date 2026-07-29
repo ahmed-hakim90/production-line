@@ -1,10 +1,13 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { useAppStore } from '@/store/useAppStore';
 import { leaveRequestService, leaveBalanceService } from '../leaveService';
+import { createLeaveRequest } from '../usecases/createLeaveRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { employeeService } from '../employeeService';
 import { createRequest, getRequestsByType, type ApprovalEmployeeInfo } from '../approval';
 import { exportLeaveRequests } from '@/utils/exportExcel';
@@ -370,7 +373,10 @@ export const LeaveRequests: React.FC = () => {
         requestedByName: currentEmployee?.name || userDisplayName || '',
         requestedOnBehalf: targetEmployeeId !== (currentEmployee?.id || employeeId),
       };
-      const leaveId = await leaveRequestService.create(leavePayload);
+      const leaveId = unwrapOrThrow(await createLeaveRequest(leavePayload, {
+        userId: uid || undefined,
+        userName: userDisplayName || undefined,
+      })).leaveRequestId;
       const allEmployeesForApproval = await employeeService.getAll();
       const approvalEmployees = allEmployeesForApproval
         .filter((e): e is FirestoreEmployee => Boolean(e.id))
@@ -616,39 +622,41 @@ export const LeaveRequests: React.FC = () => {
               onClick={handleSubmit}
               disabled={submitting || !formStartDate || !formEndDate || formDays <= 0}
             >
-              {submitting && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              <span className="material-icons-round text-sm">send</span>
-              تقديم الطلب
+              {submitting ? 'جاري التقديم...' : 'تقديم الطلب'}
             </Button>
           </div>
         </Card>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        {showEmployeeColumn && (
-          <SearchableSelect
-            options={[{ value: '', label: 'جميع الموظفين' }, ...uniqueEmployees]}
-            value={filterEmployee}
-            onChange={setFilterEmployee}
-            placeholder="تصفية بالموظف..."
-            className="sm:w-64"
-          />
-        )}
-        <select
-          className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-          value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as ApprovalStatus | '')}
-        >
-          <option value="">جميع الحالات</option>
-          <option value="pending">قيد الانتظار</option>
-          <option value="approved">مُعتمد</option>
-          <option value="rejected">مرفوض</option>
-        </select>
-      </div>
-
-      {/* Requests Table */}
-      <Card>
+      {/* Filters + Table in one card */}
+      <Card className="p-0">
+        <SmartFilterBar
+          quickFilters={[
+            {
+              key: 'status',
+              placeholder: 'الحالة',
+              options: [
+                { value: 'pending', label: 'قيد الانتظار' },
+                { value: 'approved', label: 'مُعتمد' },
+                { value: 'rejected', label: 'مرفوض' },
+              ],
+            },
+          ]}
+          quickFilterValues={{ status: filterStatus }}
+          onQuickFilterChange={(key, value) => setFilterStatus(value as ApprovalStatus | '')}
+          extra={
+            showEmployeeColumn ? (
+              <SearchableSelect
+                options={[{ value: '', label: 'جميع الموظفين' }, ...uniqueEmployees]}
+                value={filterEmployee}
+                onChange={setFilterEmployee}
+                placeholder="تصفية بالموظف..."
+                className="w-64"
+              />
+            ) : undefined
+          }
+          className="mb-0 border-0 rounded-none"
+        />
         {filtered.length === 0 ? (
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">
@@ -758,9 +766,8 @@ export const LeaveRequests: React.FC = () => {
             </div>
             <div className="flex justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirm(null)} disabled={deleting}>تراجع</Button>
-              <Button onClick={() => handleDelete(deleteConfirm)} disabled={deleting} className="!bg-rose-600 hover:!bg-rose-700">
-                {deleting ? <span className="material-icons-round animate-spin text-sm">refresh</span> : <span className="material-icons-round text-sm">delete</span>}
-                حذف نهائي
+              <Button variant="danger" onClick={() => handleDelete(deleteConfirm)} disabled={deleting}>
+                {deleting ? 'جاري الحذف...' : 'حذف نهائي'}
               </Button>
             </div>
           </div>

@@ -39,13 +39,33 @@ function testFlagsPreserved() {
       ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
       autoConsumeBomOnProductionReport: true,
       requireIssuedProductionIssueOnReport: false,
+      autoTransferProductionToFinished: false,
+      requireApprovalForProductionEntry: false,
     },
   });
   assert.equal(synced.inventoryRouting?.autoConsumeBomOnProductionReport, true);
   assert.equal(synced.inventoryRouting?.requireIssuedProductionIssueOnReport, false);
+  assert.equal(synced.inventoryRouting?.autoTransferProductionToFinished, false);
+  assert.equal(synced.inventoryRouting?.requireApprovalForProductionEntry, false);
+  assert.equal(synced.requireFinishedStockApprovalForReports, false);
+}
+
+function testApprovalFlagsStayInSync() {
+  const synced = syncPlanSettingsWarehouseRouting({
+    ...DEFAULT_PLAN_SETTINGS,
+    requireFinishedStockApprovalForReports: false,
+    inventoryRouting: {
+      ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+      requireApprovalForProductionEntry: true,
+    },
+  });
+  assert.equal(synced.requireFinishedStockApprovalForReports, true);
+  assert.equal(synced.inventoryRouting?.requireApprovalForProductionEntry, true);
+  assert.equal(synced.inventoryRouting?.autoTransferProductionToFinished, true);
 }
 
 testNestedWinsIncludingClear();
 testLegacySeedWhenNestedAbsent();
 testFlagsPreserved();
+testApprovalFlagsStayInSync();
 console.log('sync-plan-settings-routing tests passed');

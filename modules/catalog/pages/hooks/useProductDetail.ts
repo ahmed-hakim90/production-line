@@ -5,7 +5,7 @@ import type { ProductDetailData } from "../product-details/types";
 import { reportService } from "@/modules/production/services/reportService";
 import { monthlyProductionCostService } from "@/modules/production/services/monthlyProductionCostService";
 import { stockService } from "@/modules/inventory/services/stockService";
-import { productMaterialService } from "@/modules/production/services/productMaterialService";
+import { loadProductMaterials } from "@/modules/catalog/lib/productComponents";
 import { materialService } from "@/modules/manufacturing/services/materialService";
 import {
   calculateAvgAssemblyTime,
@@ -135,7 +135,7 @@ export const useProductDetail = (id?: string) => {
         reportService.getByProduct(id),
         reportService.getByDateRange(`${currentMonth}-01`, `${currentMonth}-31`),
         stockService.getBalances(),
-        productMaterialService.getByProduct(id),
+        loadProductMaterials(id),
         materialService.getAll(),
       ]);
 

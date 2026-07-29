@@ -47,15 +47,13 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
         <div className="erp-page-actions w-full sm:w-auto">
           <Button
             onClick={() => setShowPreview(true)}
-            className="!bg-[var(--color-bg)] !text-[var(--color-text)] hover:!bg-[var(--color-surface-hover)]"
+            variant="outline"
+            solid={false}
           >
-            <span className="material-icons-round text-sm">visibility</span>
             معاينة
           </Button>
-          <Button onClick={onSave} disabled={saving}>
-            {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-            <span className="material-icons-round text-sm">save</span>
-            حفظ التغييرات
+          <Button onClick={onSave} disabled={saving} solid>
+            {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
           </Button>
         </div>
       </div>
@@ -81,25 +79,25 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 />
               )}
               <input ref={logoInputRef} type="file" accept="image/png,image/jpeg,image/webp" className="hidden" onChange={handleLogoUpload} />
-              <button
+              <Button
                 onClick={() => logoInputRef.current?.click()}
                 disabled={uploadingLogo}
-                className="px-4 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all disabled:opacity-50 flex items-center gap-2"
+                variant="outline"
+                solid={false}
               >
-                {uploadingLogo ? (
-                  <span className="material-icons-round animate-spin text-sm">refresh</span>
-                ) : (
-                  <span className="material-icons-round text-sm">upload</span>
-                )}
-                {localPrint.logoUrl ? 'تغيير' : 'رفع'}
-              </button>
+                {uploadingLogo ? 'جاري الرفع...' : localPrint.logoUrl ? 'تغيير الشعار' : 'رفع شعار'}
+              </Button>
               {localPrint.logoUrl && (
-                <button
+                <Button
                   onClick={() => setLocalPrint((p) => ({ ...p, logoUrl: '' }))}
-                  className="px-3 py-2.5 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 dark:bg-rose-900/10 text-rose-600 hover:bg-rose-100 transition-all"
+                  variant="outline"
+                  iconName="delete"
+                  tone="delete"
+                  solid={false}
+                  title="حذف الشعار"
                 >
-                  <span className="material-icons-round text-sm">delete</span>
-                </button>
+                  حذف الشعار
+                </Button>
               )}
             </div>
           </div>
@@ -435,13 +433,9 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
       </Card>
 
       <div className="flex justify-end">
-        <button
-          onClick={onReset}
-          className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
-        >
-          <span className="material-icons-round text-sm">restart_alt</span>
+        <Button onClick={onReset} variant="ghost" solid={false}>
           إعادة تعيين للقيم الافتراضية
-        </button>
+        </Button>
       </div>
 
       {showPreview && (

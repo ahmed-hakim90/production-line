@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
-import { Card } from '../components/UI';
+import { Card, Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
 import type { Warehouse, WarehouseRole } from '../types';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 const ROLE_LABELS: Record<WarehouseRole, string> = {
   general: 'عام',
@@ -18,7 +19,6 @@ import { usePermission } from '../../../utils/permissions';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '@/components/modal-manager/modalKeys';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Pencil, Trash2 } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
@@ -161,18 +161,24 @@ export const Warehouses: React.FC = () => {
       )}
 
       <Card title="قائمة المخازن">
-        <div className="px-4 pt-4 pb-2">
-          <select
-            className="rounded-lg border border-[var(--color-border)] px-3 py-2 text-sm font-bold"
-            value={roleFilter}
-            onChange={(e) => setRoleFilter(e.target.value)}
-          >
-            <option value="">كل الأدوار</option>
-            {(Object.keys(ROLE_LABELS) as WarehouseRole[]).map((role) => (
-              <option key={role} value={role}>{ROLE_LABELS[role]}</option>
-            ))}
-          </select>
-        </div>
+        <SmartFilterBar
+          quickFilters={[
+            {
+              key: 'role',
+              placeholder: 'كل الأدوار',
+              options: (Object.keys(ROLE_LABELS) as WarehouseRole[]).map((role) => ({
+                value: role,
+                label: ROLE_LABELS[role],
+              })),
+              width: 'w-[180px]',
+            },
+          ]}
+          quickFilterValues={{ role: roleFilter }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'role') setRoleFilter(value === 'all' ? '' : value);
+          }}
+          className="mb-0 border-0 rounded-none"
+        />
         {loading ? (
           <div className="space-y-2 p-4">
             <Skeleton className="h-10 w-full" />
@@ -207,23 +213,23 @@ export const Warehouses: React.FC = () => {
                     {canManage && (
                       <td className="py-2.5 px-3 text-end">
                         <div className="flex justify-end gap-1">
-                          <button
+                          <Button
                             type="button"
-                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-primary hover:bg-primary/10"
+                            size="sm"
+                            variant="ghost"
                             onClick={() => startEdit(w)}
                           >
-                            <Pencil size={14} />
                             تعديل
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
-                            className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs font-semibold text-rose-600 hover:bg-rose-50"
+                            size="sm"
+                            variant="ghost"
                             onClick={() => void handleDelete(w)}
                             disabled={deletingId === w.id}
                           >
-                            <Trash2 size={14} />
                             {deletingId === w.id ? 'جاري الحذف...' : 'حذف'}
-                          </button>
+                          </Button>
                         </div>
                       </td>
                     )}

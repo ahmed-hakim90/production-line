@@ -15,6 +15,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 const VEHICLES_CACHE_KEY = 'hr:vehicles';
 
@@ -221,18 +222,13 @@ export const Vehicles: React.FC = () => {
         ))}
       </div>
 
-      {/* Search */}
-      <div className="flex gap-3">
-        <div className="relative flex-1 sm:max-w-sm">
-          <span className="material-icons-round absolute right-3 top-1/2 -translate-y-1/2 text-[var(--color-text-muted)] text-lg">search</span>
-          <input
-            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] pr-10 pl-4 py-3 text-sm font-medium bg-[#f8f9fa] focus:border-primary focus:ring-2 focus:ring-primary/12 outline-none"
-            placeholder="بحث بالاسم أو رقم اللوحة أو السائق..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </div>
+      {/* Search & Filters */}
+      <SmartFilterBar
+        searchPlaceholder="بحث بالاسم أو رقم اللوحة أو السائق..."
+        searchValue={searchQuery}
+        onSearchChange={setSearchQuery}
+        className="mb-0 border-0 rounded-[var(--border-radius-lg)]"
+      />
 
       {/* Vehicle Cards */}
       {filtered.length === 0 ? (
@@ -343,13 +339,13 @@ export const Vehicles: React.FC = () => {
 
                 {/* Expand employees */}
                 <div className="px-4 py-3 mt-2 border-t border-[var(--color-border)]">
-                  <button
+                  <Button
+                    size="sm"
+                    variant="ghost"
                     onClick={() => setExpandedId(isExpanded ? null : v.id!)}
-                    className="flex items-center gap-1 text-xs font-bold text-primary hover:underline"
                   >
-                    <span className="material-icons-round text-sm">{isExpanded ? 'expand_less' : 'expand_more'}</span>
-                    {isExpanded ? 'إخفاء' : 'عرض'} الموظفين ({assignedEmployeeIds.length})
-                  </button>
+                    {isExpanded ? `إخفاء الموظفين (${assignedEmployeeIds.length})` : `عرض الموظفين (${assignedEmployeeIds.length})`}
+                  </Button>
                   {isExpanded && (
                     <div className="mt-2 space-y-1">
                       {assignedEmployeeIds.length === 0 ? (

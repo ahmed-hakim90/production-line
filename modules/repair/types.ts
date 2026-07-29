@@ -279,7 +279,14 @@ export interface RepairSparePart {
   defaultSalePrice?: number;
   /** خصم تلقائي من المخزن كنسبة مئوية من تكلفة الشراء عند احتساب تكلفة الوحدة للطلب */
   warehouseDiscountPercent?: number;
-  /** اختياري: ربط تقريري بمادة خام في مخزون الإنتاج */
+  /**
+   * ربط بماستر داتا المواد التصنيعية (`materials`) — المصدر الرسمي للمكونات.
+   * يُستخدم لمطابقة BOM المنتج عند صرف القطع على طلب صيانة.
+   */
+  materialId?: string;
+  /** منتج المصدر عند الإضافة من BOM (اختياري) */
+  sourceProductId?: string;
+  /** @deprecated استخدم materialId — إبقاء للتوافق مع سجلات قديمة */
   rawMaterialId?: string;
   createdAt: string;
 }

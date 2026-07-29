@@ -86,6 +86,9 @@ export const sparePartsService = {
         | 'unit'
         | 'category'
         | 'name'
+        | 'materialId'
+        | 'sourceProductId'
+        | 'rawMaterialId'
       >
     >,
   ): Promise<void> {
@@ -100,13 +103,60 @@ export const sparePartsService = {
     if (patch.unit !== undefined) data.unit = String(patch.unit || '');
     if (patch.category !== undefined) data.category = String(patch.category || '');
     if (patch.name !== undefined) data.name = String(patch.name || '');
+    if (patch.materialId !== undefined) {
+      const materialId = String(patch.materialId || '').trim();
+      if (materialId) data.materialId = materialId;
+    }
+    if (patch.sourceProductId !== undefined) {
+      const sourceProductId = String(patch.sourceProductId || '').trim();
+      if (sourceProductId) data.sourceProductId = sourceProductId;
+    }
+    if (patch.rawMaterialId !== undefined) {
+      const rawMaterialId = String(patch.rawMaterialId || '').trim();
+      if (rawMaterialId) data.rawMaterialId = rawMaterialId;
+    }
     if (Object.keys(data).length === 0) return;
     await updateDoc(doc(db, REPAIR_SPARE_PARTS_COLLECTION, partId), data);
+  },
+
+  async linkPartsToCatalog(
+    links: Array<{ partId: string; materialId: string; itemType?: 'material' | 'legacy_raw' }>,
+  ): Promise<number> {
+    if (!isConfigured || links.length === 0) return 0;
+    const { materialService } = await import('../../manufacturing/services/materialService');
+    let linked = 0;
+    for (const link of links) {
+      const partId = String(link.partId || '').trim();
+      const materialId = String(link.materialId || '').trim();
+      if (!partId || !materialId) continue;
+      const material = await materialService.getById(materialId);
+      const isLegacyRaw = link.itemType === 'legacy_raw';
+      if (!material && !isLegacyRaw) {
+        throw new Error('المكون غير موجود في ماستر داتا المواد.');
+      }
+      await sparePartsService.updatePartCatalog(partId, {
+        materialId,
+        ...(isLegacyRaw || !material ? { rawMaterialId: materialId } : {}),
+      });
+      linked += 1;
+    }
+    return linked;
   },
 
   async createPart(input: Omit<RepairSparePart, 'id' | 'createdAt' | 'tenantId'>): Promise<string | null> {
     if (!isConfigured) return null;
     const tenantId = getCurrentTenantId();
+    const materialId = String(input.materialId || '').trim();
+    if (materialId) {
+      // Prefer manufacturing materials; allow legacy raw ids only when explicitly set as rawMaterialId
+      const { materialService } = await import('../../manufacturing/services/materialService');
+      const material = await materialService.getById(materialId);
+      const isLegacyRawLink =
+        !material && String(input.rawMaterialId || '').trim() === materialId;
+      if (!material && !isLegacyRawLink) {
+        throw new Error('المكون غير موجود في ماستر داتا المواد.');
+      }
+    }
     const partRef = doc(collection(db, REPAIR_SPARE_PARTS_COLLECTION));
     const batch = writeBatch(db);
 
@@ -120,6 +170,10 @@ export const sparePartsService = {
       tenantId,
       createdAt: nowIso(),
     };
+    if (materialId) partDoc.materialId = materialId;
+    const sourceProductId = String(input.sourceProductId || '').trim();
+    if (sourceProductId) partDoc.sourceProductId = sourceProductId;
+    // Legacy field kept for older clients / backfill
     if (input.rawMaterialId) partDoc.rawMaterialId = input.rawMaterialId;
     if (input.purchaseUnitCost !== undefined) partDoc.purchaseUnitCost = Number(input.purchaseUnitCost || 0);
     if (input.defaultSalePrice !== undefined) partDoc.defaultSalePrice = Number(input.defaultSalePrice || 0);

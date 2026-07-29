@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { TableIconAction } from '@/src/components/erp';
 import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -325,36 +326,25 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                       />
                     </label>
                     <div className="mt-4 flex items-center justify-center gap-1.5">
-                      <button
-                        type="button"
+                      <TableIconAction
+                        action="approve"
                         disabled={disabled}
                         onClick={() => void saveReview(row, 'approved')}
-                        title="اعتماد"
                         aria-label="اعتماد التقييم"
-                        className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">check_circle</span>
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <TableIconAction
+                        action="reject"
                         disabled={disabled}
                         onClick={() => void saveReview(row, 'rejected')}
-                        title="رفض"
                         aria-label="رفض التقييم"
-                        className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">cancel</span>
-                      </button>
-                      <button
-                        type="button"
+                      />
+                      <TableIconAction
+                        action="save"
                         disabled={disabled}
                         onClick={() => void saveReview(row)}
                         title="حفظ فقط"
                         aria-label="حفظ التقييم بدون اعتماد"
-                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">save</span>
-                      </button>
+                      />
                     </div>
                   </div>
                 );
@@ -438,36 +428,25 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
                       </td>
                       <td className="px-4 py-3">
                         <div className="flex items-center justify-center gap-1.5">
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="approve"
                             disabled={disabled}
                             onClick={() => void saveReview(row, 'approved')}
-                            title="اعتماد"
                             aria-label="اعتماد التقييم"
-                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">check_circle</span>
-                          </button>
-                          <button
-                            type="button"
+                          />
+                          <TableIconAction
+                            action="reject"
                             disabled={disabled}
                             onClick={() => void saveReview(row, 'rejected')}
-                            title="رفض"
                             aria-label="رفض التقييم"
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">cancel</span>
-                          </button>
-                          <button
-                            type="button"
+                          />
+                          <TableIconAction
+                            action="save"
                             disabled={disabled}
                             onClick={() => void saveReview(row)}
                             title="حفظ فقط"
                             aria-label="حفظ التقييم بدون اعتماد"
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">save</span>
-                          </button>
+                          />
                         </div>
                       </td>
                     </tr>

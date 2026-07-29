@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, UserPlus, X } from 'lucide-react';
-import { SearchableSelect } from '../../UI';
+import { Button, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreRole } from '../../../types';
@@ -108,11 +108,11 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
           </div>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
-          <button className="btn btn-secondary" onClick={close} disabled={submitting}>{t('ui.cancel')}</button>
-          <button className="btn btn-primary" onClick={() => void handleSubmit()} disabled={submitting}>
+          <Button variant="outline" onClick={close} disabled={submitting} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
+          <Button variant="primary" onClick={() => void handleSubmit()} disabled={submitting} tone="submit">
             {submitting ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}
             {submitting ? t('modalManager.createSystemUser.creating') : t('modalManager.createSystemUser.create')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

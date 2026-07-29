@@ -1243,6 +1243,8 @@ export interface PlanSettings {
   finalProductWarehouseId?: string;
   /** Canonical warehouse routing configuration */
   inventoryRouting?: InventoryRoutingSettings;
+  /** Central report creation/editing behavior switches. */
+  reportBehavior?: ReportBehaviorSettings;
   /** ISO timestamp when inventoryRouting V1 migration completed */
   inventoryRoutingMigratedAt?: string;
   enablePackagingStockTransfer?: boolean;
@@ -1299,6 +1301,20 @@ export interface PlanSettings {
   rawMaterialCodePadding?: number;
   categoryCodePrefix?: string;
   categoryCodePadding?: number;
+}
+
+export interface ReportBehaviorSettings {
+  operationalDayStartHour?: number;
+  preventDuplicateReports?: boolean;
+  requireWorkHoursOnReports?: boolean;
+  requirePositiveQuantityOnReports?: boolean;
+  requireLaborForFinishedReports?: boolean;
+  requireInjectionShift?: boolean;
+  restrictPackagingReportsToPackagingLines?: boolean;
+  allowPackagingLaborOptional?: boolean;
+  autoLinkSupplyCycleOnReportSave?: boolean;
+  autoApplyInventoryOnReportSave?: boolean;
+  autoPostReportToPlanAndWorkOrder?: boolean;
 }
 
 export const DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS: ProductionWorkerPerformanceSettings = {

@@ -31,7 +31,13 @@ export { lineAssignmentService } from './services/lineAssignmentService';
 export { lineAssignmentWorkerBridge } from './services/lineAssignmentWorkerBridge';
 export { supervisorLineAssignmentService } from './services/supervisorLineAssignmentService';
 export { monthlyProductionCostService } from './services/monthlyProductionCostService';
+/** @deprecated Prefer catalog `loadProductMaterials*` — kept for migration/BOM fallback. */
 export { productMaterialService } from './services/productMaterialService';
+export {
+  loadProductMaterials,
+  loadProductMaterialsByProductIds,
+  loadProductComponents,
+} from '../catalog/lib/productComponents';
 export { storageService } from './services/storageService';
 export { supervisorDistributionService } from './services/supervisorDistributionService';
 export { productionWorkerService } from './services/productionWorkerService';

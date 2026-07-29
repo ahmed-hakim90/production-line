@@ -265,9 +265,9 @@ export const PlanBuilderPage: React.FC = () => {
       {!routeProductId && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           معرّف المنتج غير صالح. ارجع إلى{' '}
-          <button type="button" className="font-semibold underline underline-offset-2" onClick={() => navigate('/production/routing')}>
+          <Button type="button" variant="ghost" className="font-semibold underline underline-offset-2 h-auto p-0" onClick={() => navigate('/production/routing')}>
             مسارات الإنتاج
-          </button>{' '}
+          </Button>{' '}
           واختر منتجاً.
         </div>
       )}

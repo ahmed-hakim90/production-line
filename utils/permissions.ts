@@ -10,6 +10,16 @@
  */
 import { useMemo } from 'react';
 import { useAppStore } from '../store/useAppStore';
+import {
+  isPackagingOnlyPermissions,
+  normalizeRolePermissions,
+} from './packagingOnlyPermissions';
+
+export {
+  canCreatePackagingReportsFromMap,
+  isPackagingOnlyPermissions,
+  normalizeRolePermissions,
+} from './packagingOnlyPermissions';
 
 // ─── Permission Names (all known permission keys) ────────────────────────────
 
@@ -35,7 +45,7 @@ export type Permission =
   | 'production.attendance.view' | 'production.attendance.manage'
   | 'lineWorkers.view'
   | 'supervisorAssignments.manage'
-  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
+  | 'reports.view' | 'reports.create' | 'reports.edit' | 'reports.delete' | 'reports.viewCost' | 'reports.componentInjection.manage' | 'reports.componentInjection.only' | 'reports.packaging.create' | 'reports.componentWaste.create'
   | 'supplyCycles.view' | 'supplyCycles.manage' | 'supplyCycles.close' | 'supplyCycles.delete'
   | 'lineStatus.view' | 'lineStatus.edit'
   | 'production.requests.observe'
@@ -176,8 +186,7 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'reports.viewCost', label: 'عرض عمود التكلفة' },
       { key: 'reports.componentInjection.manage', label: 'إدارة تقارير مكونات الحقن' },
       { key: 'reports.componentInjection.only', label: 'وضع حقن فقط (قفل تقرير المنتج العادي)' },
-      { key: 'reports.packaging.only', label: 'تقارير تغليف فقط (إخفاء إنتاج/حقن وقفل النوع على التغليف)' },
-      { key: 'reports.packaging.create', label: 'إنشاء تقرير تغليف (بدون صلاحة إنشاء تقارير الإنتاج العامة)' },
+      { key: 'reports.packaging.create', label: 'إنشاء تقرير تغليف فقط (بدون إنشاء تقارير الإنتاج — يقفل الواجهة على التغليف)' },
       { key: 'reports.componentWaste.create', label: 'إنشاء تقرير هالك مكونات' },
       { key: 'quickAction.view', label: 'الإدخال السريع' },
       { key: 'production.requests.observe', label: 'الاطلاع على طلبات الإنتاج' },
@@ -398,6 +407,12 @@ export function checkPermission(
   const explicit = permissions[permission];
   if (explicit !== undefined) return explicit === true;
 
+  // Legacy: packaging-only used to be a separate restrictive flag.
+  // Now "packaging only" = packaging.create without reports.create.
+  if (permission === 'reports.packaging.create') {
+    return permissions['reports.packaging.only'] === true;
+  }
+
   // Backward compatibility for old role docs created before this permission existed.
   if (permission === 'employees.viewDetails') {
     return permissions['employees.view'] === true;
@@ -520,6 +535,8 @@ export interface PermissionGuards {
   canManageUsers: boolean;
   canViewActivityLog: boolean;
   canUseQuickAction: boolean;
+  /** Derived: packaging.create without reports.create */
+  isPackagingOnly: boolean;
 }
 
 // ─── React Hooks ─────────────────────────────────────────────────────────────
@@ -537,6 +554,7 @@ export function usePermission(): PermissionGuards {
       canManageUsers: can('users.manage') || can('employees.create') || can('employees.edit'),
       canViewActivityLog: can('activityLog.view'),
       canUseQuickAction: can('quickAction.view'),
+      isPackagingOnly: isPackagingOnlyPermissions(permissions),
     };
   }, [permissions]);
 }

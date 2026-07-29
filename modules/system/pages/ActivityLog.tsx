@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { activityLogService } from '../services/activityLogService';
-import { Card, Badge, LoadingSkeleton, SearchableSelect } from '../components/UI';
+import { Card, Badge, Button, LoadingSkeleton, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import type {
   ActivityLog as ActivityLogType,
@@ -382,14 +382,13 @@ export const ActivityLogPage: React.FC = () => {
           </p>
         </div>
         <div className="erp-page-actions">
-          <button
-            className="btn btn-secondary"
+          <Button
+            variant="secondary"
             onClick={() => void reloadLogs()}
             title="تحديث"
           >
-            <span className="material-icons-round" style={{ fontSize: 16 }}>refresh</span>
             تحديث
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -506,16 +505,12 @@ export const ActivityLogPage: React.FC = () => {
 
           <div className="flex items-center justify-between mt-3">
             <span className="text-xs text-[var(--color-text-muted)]">{sendResult}</span>
-            <button
-              className="btn btn-primary"
+            <Button
               onClick={handleSendManual}
               disabled={sending}
             >
-              <span className="material-icons-round" style={{ fontSize: 16 }}>
-                {sending ? 'autorenew' : 'send'}
-              </span>
               {sending ? 'جاري الإرسال...' : 'إرسال الإشعار'}
-            </button>
+            </Button>
           </div>
         </Card>
       )}
@@ -643,7 +638,7 @@ export const ActivityLogPage: React.FC = () => {
 
           {hasMore && (
             <div className="pt-4 mt-4 border-t border-[var(--color-border)] text-center">
-              <button
+              <Button
                 onClick={loadMore}
                 disabled={loadingMore}
                 className="px-6 py-2.5 bg-[#f0f2f5] text-[var(--color-text-muted)] rounded-[var(--border-radius-lg)] text-sm font-bold hover:bg-[#e8eaed] transition-all disabled:opacity-50"
@@ -659,7 +654,7 @@ export const ActivityLogPage: React.FC = () => {
                 ) : (
                   'تحميل المزيد'
                 )}
-              </button>
+              </Button>
             </div>
           )}
         </Card>

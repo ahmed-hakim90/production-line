@@ -480,7 +480,6 @@ export const TenantInsightsPage: React.FC = () => {
                     <div className="flex flex-wrap gap-2 pt-2">
                       <Button type="button" size="sm" className="shrink-0" asChild>
                         <Link to={homePath} target="_blank" rel="noopener noreferrer">
-                          <span className="material-icons-round text-[16px] ml-1">open_in_new</span>
                           زيارة لوحة الشركة
                         </Link>
                       </Button>
@@ -520,10 +519,11 @@ export const TenantInsightsPage: React.FC = () => {
                       disabled={busyTenantAction !== null}
                       onClick={() => void handleToggleTenantStatus(t)}
                     >
-                      {busyTenantAction === `status:${t.id}` ? (
-                        <span className="material-icons-round animate-spin text-sm ml-1">progress_activity</span>
-                      ) : null}
-                      {String(t.status || '').toLowerCase() === 'suspended' ? 'تفعيل الشركة' : 'تعطيل الشركة'}
+                      {busyTenantAction === `status:${t.id}`
+                        ? 'جاري...'
+                        : String(t.status || '').toLowerCase() === 'suspended'
+                          ? 'تفعيل الشركة'
+                          : 'تعطيل الشركة'}
                     </Button>
                     <Button
                       type="button"
@@ -532,10 +532,7 @@ export const TenantInsightsPage: React.FC = () => {
                       disabled={busyTenantAction !== null}
                       onClick={() => void handleExportTenantBackup(t)}
                     >
-                      {busyTenantAction === `backup:${t.id}` ? (
-                        <span className="material-icons-round animate-spin text-sm ml-1">progress_activity</span>
-                      ) : null}
-                      نسخة احتياطية JSON
+                      {busyTenantAction === `backup:${t.id}` ? 'جاري التصدير...' : 'نسخة احتياطية JSON'}
                     </Button>
                     <Button
                       type="button"
@@ -719,9 +716,6 @@ export const TenantInsightsPage: React.FC = () => {
                         className="w-full"
                         onClick={() => setExpanded((prev) => ({ ...prev, [t.id]: !isOpen }))}
                       >
-                        <span className="material-icons-round text-base ml-1">
-                          {isOpen ? 'expand_less' : 'expand_more'}
-                        </span>
                         {isOpen ? 'إخفاء تفاصيل المجموعات' : 'عرض تفاصيل المجموعات'}
                       </Button>
 
@@ -834,10 +828,7 @@ export const TenantInsightsPage: React.FC = () => {
               disabled={busyTenantAction !== null}
               onClick={() => void handleConfirmCascadeDelete()}
             >
-              {busyTenantAction?.startsWith('cascade:') ? (
-                <span className="material-icons-round animate-spin text-sm ml-1">progress_activity</span>
-              ) : null}
-              حذف نهائي
+              {busyTenantAction?.startsWith('cascade:') ? 'جاري الحذف...' : 'حذف نهائي'}
             </Button>
           </DialogFooter>
         </DialogContent>

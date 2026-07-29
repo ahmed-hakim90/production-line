@@ -382,8 +382,6 @@ export const StockBalances: React.FC = () => {
             if (key === 'itemType') setItemTypeFilter(value === 'all' ? '' : value);
             if (key === 'negative') setNegativeOnly(value === 'yes');
           }}
-          onApply={() => undefined}
-          applyLabel="تطبيق"
           className="mb-0 border-0 rounded-none"
         />
 

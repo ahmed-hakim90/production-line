@@ -32,7 +32,10 @@ export function resolveInventoryRoutingV1(systemSettings: SystemSettings): Resol
     packagingSourceWarehouseId: trimId(nested.packagingSourceWarehouseId) || legacyPkgSrc,
     packagingTargetWarehouseId: trimId(nested.packagingTargetWarehouseId) || legacyPkgTgt,
     wasteWarehouseId: trimId(nested.wasteWarehouseId) || legacyWaste,
-    autoTransferProductionToFinished: Boolean(nested.autoTransferProductionToFinished),
+    autoTransferProductionToFinished:
+      nested.autoTransferProductionToFinished !== undefined
+        ? Boolean(nested.autoTransferProductionToFinished)
+        : true,
     autoTransferFinishedToFinal: Boolean(nested.autoTransferFinishedToFinal),
     requireApprovalForProductionEntry:
       nested.requireApprovalForProductionEntry !== undefined
@@ -41,7 +44,7 @@ export function resolveInventoryRoutingV1(systemSettings: SystemSettings): Resol
     requireApprovalForAutoTransfers:
       nested.requireApprovalForAutoTransfers !== undefined
         ? Boolean(nested.requireApprovalForAutoTransfers)
-        : true,
+        : false,
     // Off by default — تقرير الإنتاج لا يخصم BOM؛ الصرف من صفحة «صرف إنتاج» فقط.
     autoConsumeBomOnProductionReport: Boolean(nested.autoConsumeBomOnProductionReport),
     // On by default — لا يُنشأ/يُرحَّل تقرير منتج تام إلا بعد صرف إنتاج معتمد.
@@ -121,10 +124,10 @@ export function buildInventoryRoutingFromLegacy(plan: import('../../../types').P
     packagingSourceWarehouseId: trimId(plan.packagingSourceWarehouseId),
     packagingTargetWarehouseId: trimId(plan.packagingTargetWarehouseId),
     wasteWarehouseId: trimId(plan.wasteReceiveWarehouseId),
-    autoTransferProductionToFinished: false,
+    autoTransferProductionToFinished: true,
     autoTransferFinishedToFinal: false,
     requireApprovalForProductionEntry: plan.requireFinishedStockApprovalForReports !== false,
-    requireApprovalForAutoTransfers: true,
+    requireApprovalForAutoTransfers: false,
     autoConsumeBomOnProductionReport: false,
     requireIssuedProductionIssueOnReport: true,
   };

@@ -59,3 +59,22 @@ Notes:
 - Do not remove legacy service files immediately.
 - Migrate imports first.
 - Delete legacy file only after usage reaches zero and smoke tests pass.
+
+---
+
+## 2026-07-29 - Foundation Harden (Firebase, same repo)
+
+### Decision 005 - Usecase + event-bus foundation (no Supabase / no new repo)
+
+- Stay on Firebase; evolve in place per `PROJECT_REARCHITECTURE_PLAN.md`.
+- Introduce `shared/usecases` result contract and first-wave domain usecases:
+  - production / inventory / system (wired on critical write paths)
+  - manufacturing / quality / hr / repair / costs reference usecases
+- Expand typed `SystemEvents` for report/issue/stock/transfer/role/leave/repair/cost mutations; audit listener maps all events.
+- `scripts/check-legacy-imports.mjs` blocks Firestore write APIs in `modules/*/pages/**` with an empty allowlist (HR pages migrated to services/usecases).
+- Portal home selection centralized in `modules/dashboards/lib/portalHome.ts`.
+
+Reason:
+
+- Enforce UI → usecase → service → Firebase without a big-bang rewrite.
+- Keep security boundary on Firestore rules + Functions; UI permissions remain UX-only.

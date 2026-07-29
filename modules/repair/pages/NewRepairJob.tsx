@@ -17,6 +17,8 @@ import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import { repairJobService } from '../services/repairJobService';
+import { createRepairJob } from '../usecases/createRepairJob';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import {
@@ -193,7 +195,7 @@ export const NewRepairJob: React.FC = () => {
     }
     setLoading(true);
     try {
-      const result = await repairJobService.create({
+      const result = unwrapOrThrow(await createRepairJob({
         serviceEventActor: {
           uid: String(user?.id || ''),
           name: String(user?.displayName || user?.email || 'مستخدم'),
@@ -220,13 +222,16 @@ export const NewRepairJob: React.FC = () => {
         finalCostOverride,
         isServiceOnly,
         serviceOnlyCost: isServiceOnly ? Number(serviceOnlyCost || 0) : 0,
-      });
-      if (!result.id) throw new Error('تعذر إنشاء الطلب.');
+      }, {
+        userId: String(user?.id || '') || undefined,
+        userName: String(user?.displayName || user?.email || 'مستخدم'),
+      }));
+      if (!result.jobId) throw new Error('تعذر إنشاء الطلب.');
       toast.success('تم تسجيل جهاز الصيانة.');
       if (result.usedFallbackReceipt) {
         toast.info('تم استخدام رقم إيصال بديل تلقائيًا بسبب صلاحيات عداد الإيصالات.');
       }
-      navigate(withTenantPath(tenantSlug, `/repair/jobs/${result.id}`));
+      navigate(withTenantPath(tenantSlug, `/repair/jobs/${result.jobId}`));
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إنشاء الطلب.');
     } finally {

@@ -74,6 +74,7 @@ import {
   isInjectionMaterial,
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
+import { resolveReportBehaviorSettings } from '../lib/reportBehaviorSettings';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
@@ -216,7 +217,7 @@ const isQuickActionFormDraftEmpty = (draft: QuickActionFormDraft) => (
 
 export const QuickAction: React.FC = () => {
   const navigate = useTenantNavigate();
-  const { can } = usePermission();
+  const { can, isPackagingOnly } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -226,6 +227,8 @@ export const QuickAction: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const tenantId = useAppStore((s) => s.userProfile?.tenantId);
   const saveErrorFromStore = useAppStore((s) => s.error);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const reportBehavior = useMemo(() => resolveReportBehaviorSettings(systemSettings), [systemSettings]);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
@@ -276,10 +279,10 @@ export const QuickAction: React.FC = () => {
   const [workerOutputs, setWorkerOutputs] = useState<ProductionReportWorkerOutput[]>([]);
   // `today` holds the report date the user is filing for (defaults to the
   // operational day, but can be back-dated to a previous day).
-  const [today, setToday] = useState(() => getOperationalDateString(8));
+  const [today, setToday] = useState(() => getOperationalDateString(reportBehavior.operationalDayStartHour));
   // The current operational day (auto-synced). Used as the default and as the
   // latest selectable report date so future-dated reports are not allowed.
-  const [operationalDate, setOperationalDate] = useState(() => getOperationalDateString(8));
+  const [operationalDate, setOperationalDate] = useState(() => getOperationalDateString(reportBehavior.operationalDayStartHour));
   const reportDateManuallyChangedRef = useRef(false);
   const selectedProduct = useMemo(
     () => _rawProducts.find((p) => p.id === productId) ?? null,
@@ -363,7 +366,7 @@ export const QuickAction: React.FC = () => {
   const storageKey = useMemo(() => quickActionStorageKey(tenantId, uid), [tenantId, uid]);
   const canCreateFinishedReportsBase = can('reports.create');
   const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
-  const forcePackagingOnly = can('reports.packaging.only');
+  const forcePackagingOnly = isPackagingOnly;
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || can('reports.componentInjection.only');
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
@@ -600,7 +603,7 @@ export const QuickAction: React.FC = () => {
 
   useEffect(() => {
     const syncOperationalDate = () => {
-      const next = getOperationalDateString(8);
+      const next = getOperationalDateString(reportBehavior.operationalDayStartHour);
       setOperationalDate((prev) => (prev === next ? prev : next));
       // Only roll the report date forward automatically while the user has not
       // manually picked a back-dated day.
@@ -611,7 +614,7 @@ export const QuickAction: React.FC = () => {
     syncOperationalDate();
     const timer = window.setInterval(syncOperationalDate, 30_000);
     return () => window.clearInterval(timer);
-  }, []);
+  }, [reportBehavior.operationalDayStartHour]);
 
   const handleReportDateChange = useCallback((value: string) => {
     if (!value) return;
@@ -734,8 +737,9 @@ export const QuickAction: React.FC = () => {
   ]);
 
   const packagingLaborOptionalQuick = useMemo(
-    () => reportType === 'packaging' || (reportType === 'finished_product' && isPackagingLineId(lineId, _rawLines)),
-    [reportType, lineId, _rawLines],
+    () => reportBehavior.allowPackagingLaborOptional
+      && (reportType === 'packaging' || (reportType === 'finished_product' && isPackagingLineId(lineId, _rawLines))),
+    [reportBehavior.allowPackagingLaborOptional, reportType, lineId, _rawLines],
   );
   const lineWorkerRoleCounts = useMemo(() => {
     const counts = new Map<LineWorkerAssignment['laborRole'], number>();
@@ -849,19 +853,22 @@ export const QuickAction: React.FC = () => {
       return allowedLinesForUser.filter((line) => line.id && injectionLineIds.has(line.id));
     }
     if (reportType === 'packaging') {
-      return allowedLinesForUser.filter((line) => line.id && line.isPackagingLine);
+      return reportBehavior.restrictPackagingReportsToPackagingLines
+        ? allowedLinesForUser.filter((line) => line.id && line.isPackagingLine)
+        : allowedLinesForUser;
     }
     return allowedLinesForUser;
-  }, [reportType, allowedLinesForUser, injectionLineIds]);
+  }, [reportType, allowedLinesForUser, injectionLineIds, reportBehavior.restrictPackagingReportsToPackagingLines]);
 
   useEffect(() => {
     if (reportType !== 'packaging') return;
+    if (!reportBehavior.restrictPackagingReportsToPackagingLines) return;
     if (_rawLines.length === 0) return;
     if (lineId && !isPackagingLineId(lineId, _rawLines)) {
       setLineId('');
       setSelectedWorkOrderId('');
     }
-  }, [reportType, lineId, _rawLines]);
+  }, [reportType, lineId, _rawLines, reportBehavior.restrictPackagingReportsToPackagingLines]);
 
   useEffect(() => {
     if (reportType !== 'packaging') return;
@@ -1135,19 +1142,19 @@ export const QuickAction: React.FC = () => {
       showAppToast('error', 'أكمل بيانات الخط والمنتج والمشرف أولاً.');
       return;
     }
-    if (reportType === 'component_injection' && !isInjectionShiftSelected(injectionShift)) {
+    if (reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(injectionShift)) {
       showAppToast('error', 'اختر الوردية (صباحي أو مسائي) قبل الحفظ');
       return;
     }
-    if (Number(hours || 0) <= 0) {
+    if (reportBehavior.requireWorkHoursOnReports && Number(hours || 0) <= 0) {
       showAppToast('error', 'أكمل ساعات العمل.');
       return;
     }
-    if (reportType !== 'packaging' && effectiveQuantityProduced <= 0) {
+    if (reportBehavior.requirePositiveQuantityOnReports && reportType !== 'packaging' && effectiveQuantityProduced <= 0) {
       showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية وساعات العمل).');
       return;
     }
-    if (requiresWorkers && workersTotal <= 0 && !packagingLaborOptionalQuick) {
+    if (reportBehavior.requireLaborForFinishedReports && requiresWorkers && workersTotal <= 0 && !packagingLaborOptionalQuick) {
       showAppToast('error', 'أكمل الحقول الإلزامية أولاً (الكمية، تفاصيل العمالة، وساعات العمل).');
       return;
     }
@@ -1227,7 +1234,13 @@ export const QuickAction: React.FC = () => {
         : {}),
     };
 
-    const id = await createReport(data);
+    let id: string | null = null;
+    let saveError: unknown = null;
+    try {
+      id = await createReport(data);
+    } catch (error) {
+      saveError = error;
+    }
 
     if (id) {
       if (reportType === 'packaging') {
@@ -1282,7 +1295,8 @@ export const QuickAction: React.FC = () => {
       });
       showAppToast('success', 'تم حفظ التقرير بنجاح');
     } else {
-      showAppToast('error', getReportDuplicateMessage(saveErrorFromStore, 'تعذر حفظ التقرير'));
+      const latestStoreError = useAppStore.getState().error;
+      showAppToast('error', getReportDuplicateMessage(saveError || latestStoreError || saveErrorFromStore, 'تعذر حفظ التقرير'));
     }
     setSaving(false);
   };
@@ -1676,15 +1690,14 @@ export const QuickAction: React.FC = () => {
                       نوع خانة الكمية يُحدَّد تلقائيًا من بطاقة المنتج: مع «قطع لكل كرتونة» يظهر الكراتين فقط؛ بدونها القطع فقط — دون خلط الاثنين في خانة واحدة.
                     </p>
                   </div>
-                  <button
+                  <Button
                     type="button"
                     title="إضافة صف منتج جديد. بعد اختيار المنتج تظهر خانة الكمية المناسبة تلقائيًا حسب بطاقة المنتج."
                     onClick={() => setPackagingLines((prev) => [...prev, newEmptyPackagingLine()])}
                     className="shrink-0 inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                   >
-                    <Plus size={14} aria-hidden />
                     إضافة منتج
-                  </button>
+                  </Button>
                 </div>
                 {(packagingLines || []).map((row, idx) => {
                   const hasProduct = Boolean(String(row.productId || '').trim());
@@ -1803,28 +1816,27 @@ export const QuickAction: React.FC = () => {
                         </div>
                       )}
                       <div className="sm:col-span-2 flex sm:justify-end">
-                        <button
+                        <Button
                           type="button"
                           disabled={(packagingLines || []).length <= 1}
                           className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-1"
                           onClick={() => setPackagingLines((prev) => prev.filter((_, i) => i !== idx))}
                         >
                           حذف
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   );
                 })}
                 <div className="flex justify-center border-t border-[var(--color-border)] pt-3 mt-1">
-                  <button
+                  <Button
                     type="button"
                     title="إضافة صف منتج جديد. بعد اختيار المنتج تظهر خانة الكمية المناسبة تلقائيًا حسب بطاقة المنتج."
                     onClick={() => setPackagingLines((prev) => [...prev, newEmptyPackagingLine()])}
                     className="inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                   >
-                    <Plus size={14} aria-hidden />
                     إضافة منتج
-                  </button>
+                  </Button>
                 </div>
                 <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
                   سطر واحد على الأقل بكمية أكبر من صفر. لا يُخلط الكراتين مع القطع في خانة واحدة: يظهر نوع الإدخال تلقائيًا من بطاقة المنتج. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
@@ -1923,17 +1935,15 @@ export const QuickAction: React.FC = () => {
             <div className="md:col-span-2 space-y-2">
               <div className="flex items-center justify-between gap-2">
                 <label className="text-sm font-bold text-[var(--color-text-muted)] block">تفصيل العمالة </label>
-                <button
+                <Button
                   type="button"
+                  variant="ghost"
                   onClick={openLineWorkersModal}
                   disabled={loadingWorkersCount}
-                  className="text-xs font-bold text-primary hover:text-primary/80 disabled:text-slate-400 disabled:cursor-not-allowed inline-flex items-center gap-1"
+                  className="text-xs font-bold text-primary hover:text-primary/80 disabled:text-slate-400 disabled:cursor-not-allowed inline-flex items-center gap-1 h-auto p-0"
                 >
-                  <span className={`material-icons-round text-sm ${loadingWorkersCount ? 'animate-spin' : ''}`}>
-                    {loadingWorkersCount ? 'refresh' : 'sync'}
-                  </span>
                   عرض عمالة الخط
-                </button>
+                </Button>
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
                 <div className="sm:col-span-2 lg:col-span-1">
@@ -2047,13 +2057,14 @@ export const QuickAction: React.FC = () => {
                   {' '}
                   من الإعدادات.
                 </p>
-                <button
+                <Button
                   type="button"
-                  className="text-xs font-bold text-primary"
+                  variant="ghost"
+                  className="text-xs font-bold text-primary h-auto p-0"
                   onClick={() => navigate('/settings')}
                 >
                   فتح الإعدادات
-                </button>
+                </Button>
               </div>
             ) : null}
             <div className="md:col-span-2">
@@ -2076,11 +2087,11 @@ export const QuickAction: React.FC = () => {
                 || !lineId
                 || (reportType !== 'packaging' && !productId)
                 || !employeeId
-                || (reportType !== 'packaging' && effectiveQuantityProduced <= 0)
+                || (reportBehavior.requirePositiveQuantityOnReports && reportType !== 'packaging' && effectiveQuantityProduced <= 0)
                 || (reportType === 'packaging' && !packagingFormValid)
-                || (reportType !== 'component_injection' && !packagingLaborOptionalQuick && workersTotal <= 0)
-                || !hours
-                || (reportType === 'component_injection' && !isInjectionShiftSelected(injectionShift))
+                || (reportBehavior.requireLaborForFinishedReports && reportType !== 'component_injection' && !packagingLaborOptionalQuick && workersTotal <= 0)
+                || (reportBehavior.requireWorkHoursOnReports && !hours)
+                || (reportBehavior.requireInjectionShift && reportType === 'component_injection' && !isInjectionShiftSelected(injectionShift))
                 || (reportType === 'component_injection'
                   ? !canManageComponentInjectionReports
                   : reportType === 'packaging'
@@ -2088,21 +2099,9 @@ export const QuickAction: React.FC = () => {
                     : !canCreateFinishedReports)
               }
               className="w-full sm:w-auto"
+              solid
             >
-              {saving ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                  </svg>
-                  جاري الحفظ...
-                </>
-              ) : (
-                <>
-                  <span className="material-icons-round text-lg">save</span>
-                  حفظ
-                </>
-              )}
+              {saving ? 'جاري الحفظ...' : 'حفظ'}
             </Button>
             {/* <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
               <span className="material-icons-round text-lg">refresh</span>
@@ -2132,15 +2131,12 @@ export const QuickAction: React.FC = () => {
               تصدير PDF
             </Button> */}
             <Button variant="secondary" disabled={exporting} onClick={handleExportImage} className="w-full sm:w-auto">
-              <span className="material-icons-round text-lg">image</span>
               تصدير كصورة
             </Button>
             <Button variant="outline" disabled={exporting || sharingImage} onClick={handleShareWhatsApp} className="w-full sm:w-auto">
-              <span className="material-icons-round text-lg">share</span>
               {sharingImage ? 'جاري تجهيز الصورة...' : 'مشاركة عبر WhatsApp'}
             </Button>
             <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto">
-              <span className="material-icons-round text-lg">add</span>
               تقرير جديد
             </Button>
           </div>
@@ -2352,35 +2348,31 @@ export const QuickAction: React.FC = () => {
                       <div className="mt-3 grid grid-cols-1 sm:grid-cols-[minmax(180px,220px)_minmax(160px,200px)_auto] gap-2 sm:items-end">
                         <div className="space-y-1.5">
                           <p className="text-[11px] font-black text-[var(--color-text-muted)]">الحضور</p>
-                          <div className="grid grid-cols-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-1">
-                            <button
+                          <div className="grid grid-cols-2 gap-1 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-1">
+                            <Button
                               type="button"
                               disabled={(!w.id && !w.permanentAssignmentId) || presenceUpdating}
                               onClick={() => void handleQuickWorkerPresenceChange(w, true)}
-                              className={cn(
-                                'min-h-10 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
-                                isPresent
-                                  ? 'bg-emerald-600 text-white shadow-sm'
-                                  : 'text-[var(--color-text-muted)] hover:bg-emerald-50 hover:text-emerald-700',
-                              )}
+                              iconName="check_circle"
+                              tone="approve"
+                              solid={isPresent}
+                              className="min-h-10 justify-center text-sm font-black shadow-none"
                               aria-pressed={isPresent}
                             >
                               حاضر
-                            </button>
-                            <button
+                            </Button>
+                            <Button
                               type="button"
                               disabled={(!w.id && !w.permanentAssignmentId) || presenceUpdating}
                               onClick={() => void handleQuickWorkerPresenceChange(w, false)}
-                              className={cn(
-                                'min-h-10 rounded-[var(--border-radius-base)] px-3 text-sm font-black transition-all disabled:cursor-not-allowed disabled:opacity-60',
-                                !isPresent
-                                  ? 'bg-rose-600 text-white shadow-sm'
-                                  : 'text-[var(--color-text-muted)] hover:bg-rose-50 hover:text-rose-700',
-                              )}
+                              iconName="cancel"
+                              tone="reject"
+                              solid={!isPresent}
+                              className="min-h-10 justify-center text-sm font-black shadow-none"
                               aria-pressed={!isPresent}
                             >
                               غائب
-                            </button>
+                            </Button>
                           </div>
                           {presenceUpdating && (
                             <p className="text-[11px] font-bold text-primary">جاري حفظ الحضور...</p>
@@ -2421,14 +2413,12 @@ export const QuickAction: React.FC = () => {
                             variant="outline"
                             onClick={() => void handleQuickEndLineWorkerAssignment(w)}
                             disabled={!w.permanentAssignmentId || endingWorker}
-                            className="h-11 w-full justify-center text-xs text-rose-600 border-rose-200 hover:bg-rose-50"
+                            iconName="link_off"
+                            tone="delete"
+                            solid={false}
+                            className="h-11 w-full justify-center text-xs"
                           >
-                            {endingWorker ? (
-                              <span className="material-icons-round animate-spin text-sm">refresh</span>
-                            ) : (
-                              <span className="material-icons-round text-sm">link_off</span>
-                            )}
-                            إلغاء الربط
+                            {endingWorker ? 'جاري الإلغاء...' : 'إلغاء الربط'}
                           </Button>
                         </div>
                         <p className="sm:col-span-3 text-[11px] font-bold text-[var(--color-text-muted)]">

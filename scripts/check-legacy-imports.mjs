@@ -33,6 +33,15 @@ const forbidden = [
   /^services\/adminService$/,
 ];
 
+/** Firestore write APIs must not be used from pages — go through usecases/services. */
+const PAGE_FIRESTORE_WRITE_APIS = /\b(addDoc|setDoc|updateDoc|deleteDoc|writeBatch|runTransaction)\b/;
+
+/**
+ * Empty allowlist: all module pages must use services/usecases for writes.
+ * Re-add a path only as a temporary exception during an active migration PR.
+ */
+const PAGE_FIRESTORE_WRITE_ALLOWLIST = new Set([]);
+
 function walk(dir, out) {
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   for (const e of entries) {
@@ -62,13 +71,19 @@ function resolveToProjectPath(fromFile, imp) {
   return normalizeImportPath(rel);
 }
 
+function isModulePageFile(relPath) {
+  return /(?:^|\/)modules\/[^/]+\/pages\//.test(relPath);
+}
+
 const files = [];
 walk(root, files);
 
 const importRe = /from\s+['"]([^'"]+)['"]/g;
 const offenders = [];
+const pageWriteOffenders = [];
 
 for (const file of files) {
+  const rel = path.relative(root, file).replace(/\\/g, '/');
   const content = fs.readFileSync(file, 'utf8');
   let m;
   while ((m = importRe.exec(content)) !== null) {
@@ -76,21 +91,43 @@ for (const file of files) {
     const resolved = resolveToProjectPath(file, imp);
     if (forbidden.some((rx) => rx.test(resolved))) {
       offenders.push({
-        file: path.relative(root, file).replace(/\\/g, '/'),
+        file: rel,
         importPath: imp,
         resolved,
       });
     }
   }
+
+  if (
+    isModulePageFile(rel)
+    && PAGE_FIRESTORE_WRITE_APIS.test(content)
+    && !PAGE_FIRESTORE_WRITE_ALLOWLIST.has(rel)
+  ) {
+    pageWriteOffenders.push(rel);
+  }
 }
 
-if (offenders.length === 0) {
-  console.log('No forbidden legacy imports found.');
+let failed = false;
+
+if (offenders.length > 0) {
+  failed = true;
+  console.error('Forbidden legacy imports found:\n');
+  for (const o of offenders) {
+    console.error(`- ${o.file}\n  import: ${o.importPath}\n  resolved: ${o.resolved}`);
+  }
+}
+
+if (pageWriteOffenders.length > 0) {
+  failed = true;
+  console.error('\nForbidden Firestore write APIs in module pages (use usecases/services):\n');
+  for (const file of pageWriteOffenders) {
+    console.error(`- ${file}`);
+  }
+}
+
+if (!failed) {
+  console.log('No forbidden legacy imports or page Firestore writes found.');
   process.exit(0);
 }
 
-console.error('Forbidden legacy imports found:\n');
-for (const o of offenders) {
-  console.error(`- ${o.file}\n  import: ${o.importPath}\n  resolved: ${o.resolved}`);
-}
 process.exit(1);

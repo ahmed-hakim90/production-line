@@ -1,13 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { deleteField, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 
 import { PageHeader } from '../../../../components/PageHeader';
 import { toast } from '../../../../components/Toast';
 import { useGlobalModalManager } from '../../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../../components/modal-manager/modalKeys';
-import { db, isConfigured } from '../../../auth/services/firebase';
+import { isConfigured } from '../../../auth/services/firebase';
 import { useAppStore, useShallowStore } from '../../../../store/useAppStore';
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import { addDaysToDate, formatNumber } from '../../../../utils/calculations';
@@ -16,6 +15,11 @@ import { exportWorkOrders, type WorkOrderExportRow } from '../../../../utils/exp
 import { useManagedPrint } from '../../../../utils/printManager';
 import { usePermission } from '../../../../utils/permissions';
 import { reportService } from '../../services/reportService';
+import {
+  reopenCompletedWorkOrder,
+  updateWorkOrderStatus,
+} from '../../usecases/updateWorkOrderStatus';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { sumQuantityProducedForWorkOrderExcludingPackaging } from '../../utils/packagingLine';
 import { WorkOrderPrint } from '../../components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../components/ProductionReportPrint';
@@ -396,7 +400,7 @@ export const WorkOrders: React.FC = () => {
   }, [counts, rowViews]);
 
   const handleStatusChange = async (id: string, status: WorkOrderStatus) => {
-    if (!id || !isConfigured || !db) return;
+    if (!id || !isConfigured) return;
     const previous = orderMap[id]?.status;
     if (!previous || previous === status) return;
 
@@ -404,11 +408,11 @@ export const WorkOrders: React.FC = () => {
     setSyncingStatus(id);
 
     try {
-      await updateDoc(doc(db, 'work_orders', id), {
-        status,
-        updatedAt: serverTimestamp(),
-        [`statusHistory.${status}`]: serverTimestamp(),
-      });
+      unwrapOrThrow(await updateWorkOrderStatus({
+        workOrderId: id,
+        toStatus: status,
+        fromStatus: previous,
+      }));
       toast.success('تم تحديث الحالة');
     } catch (updateError) {
       updateOrder(id, { status: previous });
@@ -434,7 +438,7 @@ export const WorkOrders: React.FC = () => {
   const handleReopenCompletedOrder = useCallback(
     async (order: WorkOrder) => {
       const id = order.id;
-      if (!id || !isConfigured || !db) return;
+      if (!id || !isConfigured) return;
       if (!can('workOrders.edit')) {
         toast.error('غير مصرح بإعادة فتح أمر الشغل.');
         return;
@@ -454,13 +458,7 @@ export const WorkOrders: React.FC = () => {
       setSyncingStatus(id);
 
       try {
-        await updateDoc(doc(db, 'work_orders', id), {
-          status: 'in_progress',
-          updatedAt: serverTimestamp(),
-          completedAt: deleteField(),
-          scanSessionClosedAt: deleteField(),
-          reopenedFromCompletedAt: serverTimestamp(),
-        });
+        unwrapOrThrow(await reopenCompletedWorkOrder({ workOrderId: id }));
         toast.success('تم إعادة فتح أمر الشغل.');
       } catch (reopenError) {
         if (previous) updateOrder(id, { status: previous.status });
@@ -470,7 +468,7 @@ export const WorkOrders: React.FC = () => {
         setSyncingStatus(null);
       }
     },
-    [can, db, isConfigured, orderMap, updateOrder],
+    [can, isConfigured, orderMap, updateOrder],
   );
 
   const handleEditOrder = (order: WorkOrder) => {

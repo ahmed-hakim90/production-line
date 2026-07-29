@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { Button, Card } from '@/components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '@/components/SelectableTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import type { FirestoreProductionLine, FirestoreProduct, ProductionAttendanceRecord } from '@/types';
@@ -46,6 +48,7 @@ export const ProductionAttendance: React.FC = () => {
   const [endDate, setEndDate] = useState(getTodayDateString);
   const [lineId, setLineId] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
+  const [search, setSearch] = useState('');
   const attendanceCacheKey = `production:attendance:${startDate}:${endDate}:${lineId || 'all'}:${status}`;
   const initialCache = peekPageDataCache<ProductionAttendanceRecord[]>(attendanceCacheKey);
   const [records, setRecords] = useState<ProductionAttendanceRecord[]>(() => initialCache ?? []);
@@ -222,99 +225,94 @@ export const ProductionAttendance: React.FC = () => {
         </div>
       </div>
 
-      <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
-          <label className="space-y-1 text-sm font-bold">
-            <span>من تاريخ</span>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(event) => setStartDate(event.target.value)}
-              className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2"
-            />
-          </label>
-          <label className="space-y-1 text-sm font-bold">
-            <span>إلى تاريخ</span>
-            <input
-              type="date"
-              value={endDate}
-              onChange={(event) => setEndDate(event.target.value)}
-              className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2"
-            />
-          </label>
-          <label className="space-y-1 text-sm font-bold">
-            <span>الخط</span>
-            <select
-              value={lineId}
-              onChange={(event) => setLineId(event.target.value)}
-              className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2"
-            >
-              <option value="">كل الخطوط</option>
-              {lines.map((line: FirestoreProductionLine) => (
-                <option key={line.id} value={line.id}>{line.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="space-y-1 text-sm font-bold">
-            <span>الحالة</span>
-            <select
-              value={status}
-              onChange={(event) => setStatus(event.target.value as StatusFilter)}
-              className="w-full rounded-md border border-[var(--color-border)] bg-white px-3 py-2"
-            >
-              <option value="all">الكل</option>
-              <option value="present">حضور</option>
-              <option value="absent">غياب</option>
-            </select>
-          </label>
-          <div className="flex items-end">
-            <button
-              type="button"
-              onClick={() => void reload()}
-              disabled={loading}
-              className="w-full rounded-md bg-primary px-4 py-2 text-sm font-bold text-white disabled:opacity-60"
-            >
-              {loading ? 'جاري التحميل...' : 'تطبيق الفلاتر'}
-            </button>
-          </div>
-        </div>
-      </div>
+      <Card className="!p-0 overflow-hidden">
+      <SmartFilterBar
+        searchPlaceholder="بحث باسم العامل أو التقرير..."
+        searchValue={search}
+        onSearchChange={setSearch}
+        quickFilters={[
+          {
+            key: 'lineId',
+            placeholder: 'كل الخطوط',
+            options: lines.map((line: FirestoreProductionLine) => ({
+              value: line.id,
+              label: line.name,
+            })),
+          },
+          {
+            key: 'status',
+            placeholder: 'كل الحالات',
+            options: [
+              { value: 'present', label: 'حضور' },
+              { value: 'absent', label: 'غياب' },
+            ],
+          },
+        ]}
+        quickFilterValues={{
+          lineId: lineId || 'all',
+          status: status === 'all' ? 'all' : status,
+        }}
+        onQuickFilterChange={(key, value) => {
+          if (key === 'lineId') setLineId(value === 'all' ? '' : value);
+          if (key === 'status') setStatus(value === 'all' ? 'all' : (value as StatusFilter));
+        }}
+        advancedFilters={[
+          { key: 'startDate', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+          { key: 'endDate', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+        ]}
+        advancedFilterValues={{ startDate, endDate }}
+        onAdvancedFilterChange={(key, value) => {
+          if (key === 'startDate') setStartDate(value);
+          if (key === 'endDate') setEndDate(value);
+        }}
+        onApply={() => void reload()}
+        applyLabel={loading ? 'جاري التحميل...' : 'تطبيق الفلاتر'}
+        className="mb-0 border-0 rounded-none"
+      />
 
       <SelectableTable
         data={records}
         columns={columns}
         getId={(row) => row.id || `${row.reportId}-${row.employeeId || row.workerId}`}
         bulkActions={canManage ? bulkActions : []}
+        enableSearch={false}
         renderActions={(row) => canManage ? (
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
+              size="sm"
+              iconName="check_circle"
+              tone="approve"
+              solid={row.status === 'present'}
               disabled={busyId === row.id || row.status === 'present'}
               onClick={() => void updateStatus(row, 'present')}
-              className="rounded-md border border-emerald-200 px-2 py-1 text-xs font-bold text-emerald-700 disabled:opacity-50"
+              className="!h-auto !px-2 !py-1 text-xs"
             >
               حضور
-            </button>
-            <button
+            </Button>
+            <Button
               type="button"
+              size="sm"
+              iconName="cancel"
+              tone="reject"
+              solid={row.status === 'absent'}
               disabled={busyId === row.id || row.status === 'absent'}
               onClick={() => void updateStatus(row, 'absent')}
-              className="rounded-md border border-rose-200 px-2 py-1 text-xs font-bold text-rose-700 disabled:opacity-50"
+              className="!h-auto !px-2 !py-1 text-xs"
             >
               غياب
-            </button>
+            </Button>
           </div>
         ) : null}
         actionsHeader="إدارة"
         loading={loading}
         pageSize={20}
-        enableSearch
-        searchPlaceholder="بحث باسم العامل أو التقرير..."
         tableId="production-attendance-records"
         emptyIcon="fact_check"
         emptyTitle="لا توجد سجلات حضور إنتاج"
         emptySubtitle="سيتم إنشاء السجلات عند حفظ أو إغلاق تقرير إنتاج يحتوي على عمال."
       />
+      </Card>
     </div>
   );
 };

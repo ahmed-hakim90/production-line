@@ -108,10 +108,14 @@ export const PackagingControl: React.FC = () => {
         icon={<Package size={18} />}
         actions={(
           <div className="flex flex-wrap gap-2">
-            <GhostButton onClick={() => void reload()} disabled={loading}>تحديث</GhostButton>
+            <GhostButton iconName="refresh" tone="neutral" onClick={() => void reload()} disabled={loading}>
+              تحديث
+            </GhostButton>
             {can('reports.view') || can('reports.packaging.create') ? (
               <Link to={withTenantPath(tenantSlug, '/reports')}>
-                <PrimaryButton>تقرير تغليف</PrimaryButton>
+                <PrimaryButton iconName="description" tone="execute">
+                  تقرير تغليف
+                </PrimaryButton>
               </Link>
             ) : null}
           </div>
@@ -143,17 +147,21 @@ export const PackagingControl: React.FC = () => {
       <div className="flex flex-wrap gap-2">
         {sourceWarehouseId && can('inventory.view') && (
           <Link to={withTenantPath(tenantSlug, `/inventory/balances?warehouseId=${encodeURIComponent(sourceWarehouseId)}`)}>
-            <GhostButton>أرصدة تم الإنتاج</GhostButton>
+            <GhostButton iconName="inventory_2" tone="share">
+              أرصدة تم الإنتاج
+            </GhostButton>
           </Link>
         )}
         {targetWarehouseId && can('inventory.view') && (
           <Link to={withTenantPath(tenantSlug, `/inventory/balances?warehouseId=${encodeURIComponent(targetWarehouseId)}`)}>
-            <GhostButton>أرصدة المنتج التام</GhostButton>
+            <GhostButton iconName="inventory" tone="view">
+              أرصدة المنتج التام
+            </GhostButton>
           </Link>
         )}
         {can('inventory.view') && (
           <Link to={withTenantPath(tenantSlug, '/inventory/transfer-approvals')}>
-            <GhostButton>
+            <GhostButton iconName="fact_check" tone="approve">
               اعتماد التحويلات
               {pendingPackaging > 0 ? ` (${pendingPackaging})` : ''}
             </GhostButton>

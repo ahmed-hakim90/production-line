@@ -24,6 +24,8 @@ import { KPIBox, Card, Badge, Button } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
 import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
+import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
+import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import {
   formatNumber,
@@ -158,6 +160,7 @@ export const Dashboard: React.FC = () => {
 
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
+  const { snapshot: decisionSnapshot, loading: decisionLoading } = useOperationalDecisionSnapshot();
 
   const linkedEmployee = useMemo(
     () => _rawEmployees.find((s) => s.userId === uid),
@@ -590,7 +593,7 @@ export const Dashboard: React.FC = () => {
     <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
       <PageHeader
         title="لوحة التشغيل"
-        subtitle="نظرة موحّدة على الإنتاج اليومي، الخطوط، والتكاليف"
+        subtitle="طابور قرارات · إنتاج يومي · خطوط · تكاليف"
         icon={<CalendarDays className="h-4 w-4" strokeWidth={2} />}
         actions={
           <span
@@ -608,6 +611,13 @@ export const Dashboard: React.FC = () => {
         systemSettings={systemSettings}
         renderBuiltin={(widgetId) => {
           switch (widgetId) {
+            case 'decision_queue':
+              return (
+                <OperationalDecisionQueue
+                  snapshot={decisionSnapshot}
+                  loading={decisionLoading}
+                />
+              );
             case 'kpi_row':
               return (
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">

@@ -556,13 +556,15 @@ export const WarehouseLocations: React.FC = () => {
                       <td className="p-3" />
                       <td className="p-3 text-center">{rack.isActive === false ? 'موقوف' : 'نشط'}</td>
                       {canManage && (
-                        <td className="p-3 text-center space-x-2 space-x-reverse">
-                          <button className="text-xs font-bold text-primary" onClick={() => openEditRack(rack)}>
-                            تعديل
-                          </button>
-                          <button className="text-xs font-bold text-primary" onClick={() => void toggleRack(rack)}>
-                            {rack.isActive === false ? 'تفعيل الراك' : 'تعطيل الراك'}
-                          </button>
+                        <td className="p-3 text-center">
+                          <div className="inline-flex flex-wrap items-center justify-center gap-1">
+                            <Button size="sm" variant="ghost" onClick={() => openEditRack(rack)}>
+                              تعديل
+                            </Button>
+                            <Button size="sm" variant="ghost" onClick={() => void toggleRack(rack)}>
+                              {rack.isActive === false ? 'تفعيل الراك' : 'تعطيل الراك'}
+                            </Button>
+                          </div>
                         </td>
                       )}
                     </tr>
@@ -581,9 +583,9 @@ export const WarehouseLocations: React.FC = () => {
                           <td className="p-3 text-center">{isEffectivelyInactive ? 'موقوف' : 'نشط'}</td>
                           {canManage && (
                             <td className="p-3 text-center">
-                              <button className="text-xs font-bold text-primary" onClick={() => void toggleLocation(loc)}>
+                              <Button size="sm" variant="ghost" onClick={() => void toggleLocation(loc)}>
                                 {loc.isActive === false ? 'تفعيل الرف' : 'تعطيل الرف'}
-                              </button>
+                              </Button>
                             </td>
                           )}
                         </tr>

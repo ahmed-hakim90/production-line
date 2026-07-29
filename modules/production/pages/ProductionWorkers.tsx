@@ -653,6 +653,7 @@ export const ProductionWorkers: React.FC = () => {
         />
       </div>
 
+      <Card className="!p-0 overflow-hidden">
       <SmartFilterBar
         searchValue={search}
         onSearchChange={setSearch}
@@ -720,10 +721,10 @@ export const ProductionWorkers: React.FC = () => {
             <Button variant="outline" onClick={exportExcel}>تصدير Excel</Button>
           </div>
         )}
+        className="mb-0 border-0 rounded-none"
       />
 
-      <Card>
-        <SelectableTable
+      <SelectableTable
           data={filtered}
           columns={columns}
           getId={(row) => row.id ?? row.code}

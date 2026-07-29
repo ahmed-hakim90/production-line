@@ -209,7 +209,7 @@ export const GlobalCreateVehicleModal: React.FC = () => {
           </div>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
+          <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={saving || !form.name.trim() || !form.plateNumber.trim()}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Save size={14} />

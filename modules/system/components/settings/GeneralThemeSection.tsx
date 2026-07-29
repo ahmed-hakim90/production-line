@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card } from '../UI';
+import { Card, Button } from '../UI';
 import { resolveContentMaxWidthForPath } from '@/core/ui-engine/theme/tenantTheme';
 import type { ThemeSettings } from '../../../../types';
 
@@ -574,12 +574,14 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               ))}
             </div>
             <div className="erp-page-actions">
-              <button className="px-3 py-1.5 rounded-[var(--border-radius-base)] text-white text-[10px] font-bold"
+              <button className="px-3 py-1.5 rounded-[var(--border-radius-base)] text-white text-[10px] font-bold inline-flex items-center gap-1"
                 style={{ backgroundColor: localTheme.primaryColor }}>
-                + إضافة جديد
+                <span className="material-icons-round text-[12px]" aria-hidden>add</span>
+                إضافة جديد
               </button>
-              <button className="px-3 py-1.5 rounded-[var(--border-radius-base)] text-[10px] font-bold border"
+              <button className="px-3 py-1.5 rounded-[var(--border-radius-base)] text-[10px] font-bold border inline-flex items-center gap-1"
                 style={{ color: localTheme.primaryColor, borderColor: `${localTheme.primaryColor}40`, backgroundColor: `${localTheme.primaryColor}08` }}>
+                <span className="material-icons-round text-[12px]" aria-hidden>download</span>
                 تصدير
               </button>
               <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-[var(--border-radius-base)] text-[9px] font-bold"
@@ -614,13 +616,13 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           ))}
         </div>
 
-        <button
+        <Button
+          variant="ghost"
           onClick={() => setLocalTheme({ ...defaultTheme })}
-          className="text-xs font-bold text-primary hover:underline flex items-center gap-1"
+          className="text-xs font-bold text-primary hover:underline h-auto px-0"
         >
-          <span className="material-icons-round text-sm">restart_alt</span>
           إعادة تعيين للقيم الافتراضية
-        </button>
+        </Button>
       </div>
     </Card>
   );

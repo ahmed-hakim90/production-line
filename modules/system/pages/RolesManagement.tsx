@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card } from '../components/UI';
+import { Card, Button } from '../components/UI';
 import {
   usePermission,
   PERMISSION_GROUPS,
@@ -203,14 +203,12 @@ export const RolesManagement: React.FC = () => {
         </div>
         {can('roles.manage') && (
           <div className="erp-page-actions">
-            <button
-              className="btn btn-primary"
+            <Button
               onClick={() => openModal(MODAL_KEYS.SYSTEM_ROLES_CREATE)}
               data-modal-key={MODAL_KEYS.SYSTEM_ROLES_CREATE}
             >
-              <span className="material-icons-round" style={{ fontSize: 16 }}>add</span>
               إنشاء دور جديد
-            </button>
+            </Button>
           </div>
         )}
       </div>
@@ -314,14 +312,13 @@ export const RolesManagement: React.FC = () => {
                 {/* Card footer */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 border-t border-[var(--color-border)] bg-[#f8f9fa]/60/30">
                   {can('roles.manage') && (
-                    <button
+                    <Button
                       onClick={() => openModal(MODAL_KEYS.SYSTEM_ROLES_CREATE, { role })}
                       data-modal-key={MODAL_KEYS.SYSTEM_ROLES_CREATE}
                       className="w-full sm:flex-1 flex items-center justify-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-lg)] text-xs font-bold bg-[var(--color-card)] text-[var(--color-text-muted)] border border-[var(--color-border)] hover:border-primary hover:text-primary hover:bg-primary/5 transition-all"
                     >
-                      <span className="material-icons-round text-sm">edit</span>
                       تعديل الصلاحيات
-                    </button>
+                    </Button>
                   )}
                   {role.id !== userRoleId && can('roles.manage') && (
                     <button
@@ -359,21 +356,19 @@ export const RolesManagement: React.FC = () => {
               )}
             </p>
             <div className="flex items-center justify-center gap-2">
-              <button className="btn btn-secondary" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusy}>
+              <Button variant="secondary" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusy}>
                 إلغاء
-              </button>
-              <button
-                className="btn disabled:opacity-50"
-                style={{ background: '#ef4444', color: '#fff', borderColor: '#ef4444' }}
+              </Button>
+              <Button
+                variant="danger"
                 onClick={() => handleDelete(deleteConfirmId)}
                 disabled={
                   deleteBusy ||
                   Boolean(deleteConfirmId && (visibleUserCountByRoleId[deleteConfirmId] ?? 0) > 0)
                 }
               >
-                <span className="material-icons-round" style={{ fontSize: 15 }}>delete</span>
                 نعم، احذف
-              </button>
+              </Button>
             </div>
           </div>
         </div>

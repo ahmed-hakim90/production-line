@@ -3,6 +3,11 @@ import { useSearchParams } from 'react-router-dom';
 import { Card, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
+import {
+  approveTransferRequest,
+  rejectTransferRequest,
+} from '../usecases/approveTransferRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { warehouseService } from '../services/warehouseService';
 import type { InventoryItemType, InventoryTransferRequest, StockTransaction, TransferRequestLine, Warehouse } from '../types';
 import { formatNumber } from '../../../utils/calculations';
@@ -739,10 +744,14 @@ export const StockTransactions: React.FC = () => {
               })),
               width: 'w-[170px]',
             },
+            { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
+            { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
           ]}
           advancedFilterValues={{
             warehouse: warehouseFilter || 'all',
             sourceModule: sourceModuleFilter || 'all',
+            dateFrom,
+            dateTo,
           }}
           onAdvancedFilterChange={(key, value) => {
             if (key === 'warehouse') {
@@ -751,29 +760,10 @@ export const StockTransactions: React.FC = () => {
               setWarehouseFilter(value === 'all' ? '' : value);
             }
             if (key === 'sourceModule') setSourceModuleFilter(value === 'all' ? '' : value);
+            if (key === 'dateFrom') setDateFrom(value);
+            if (key === 'dateTo') setDateTo(value);
           }}
-          onApply={() => undefined}
-          applyLabel="عرض"
           extra={(
-            <div className="flex flex-wrap items-center gap-2">
-              <label className="text-xs font-bold text-slate-600">
-                من
-                <input
-                  type="date"
-                  className="mr-1 border rounded-lg px-2 py-1 text-sm"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                />
-              </label>
-              <label className="text-xs font-bold text-slate-600">
-                إلى
-                <input
-                  type="date"
-                  className="mr-1 border rounded-lg px-2 py-1 text-sm"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                />
-              </label>
             <div className="inline-flex h-[34px] items-center gap-2">
               <Select
                 value={bulkAction || 'none'}
@@ -799,9 +789,8 @@ export const StockTransactions: React.FC = () => {
                 تنفيذ
               </Button>
             </div>
-            </div>
           )}
-          className="mb-0 border-0"
+          className="mb-0 border-0 rounded-none"
         />
       </Card>
 
@@ -837,9 +826,11 @@ export const StockTransactions: React.FC = () => {
               if (!row.id) return;
               setProcessing(true);
               try {
-                await transferApprovalService.approveRequest(row.id, actorName, {
+                unwrapOrThrow(await approveTransferRequest({
+                  requestId: row.id,
+                  approvedBy: actorName,
                   approverUserId: uid || undefined,
-                });
+                }));
                 await loadData();
               } catch (error: unknown) {
                 toast.error(error instanceof Error ? error.message : 'تعذر الاعتماد.');
@@ -851,7 +842,12 @@ export const StockTransactions: React.FC = () => {
               if (!row.id) return;
               setProcessing(true);
               try {
-                await transferApprovalService.rejectRequest(row.id, actorName, '', uid || undefined);
+                unwrapOrThrow(await rejectTransferRequest({
+                  requestId: row.id,
+                  rejectedBy: actorName,
+                  reason: '',
+                  rejectedByUserId: uid || undefined,
+                }));
                 await loadData();
               } catch (error: unknown) {
                 toast.error(error instanceof Error ? error.message : 'تعذر الرفض.');

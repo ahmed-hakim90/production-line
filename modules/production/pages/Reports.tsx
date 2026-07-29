@@ -133,6 +133,7 @@ import {
   isInjectionMaterial,
   parseInjectionCategoryTokens,
 } from '../utils/injectionMaterialFilter';
+import { resolveReportBehaviorSettings } from '../lib/reportBehaviorSettings';
 import { countsTowardFinishedGoodsProduction, effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
 import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import {
@@ -189,7 +190,7 @@ const emptyForm = {
   productId: '',
   lineId: '',
   workOrderId: '',
-  date: getOperationalDateString(8),
+  date: getOperationalDateString(),
   shift: '' as ProductionReportShift | '',
   quantityProduced: 0,
   workersCount: 0,
@@ -500,6 +501,17 @@ const toDateInputValue = (date: Date): string => {
   return `${y}-${m}-${d}`;
 };
 
+const addDaysToDateInputValue = (dateValue: string, days: number): string => {
+  const [year, month, day] = dateValue.split('-').map(Number);
+  if (!year || !month || !day) return dateValue;
+  const date = new Date(year, month - 1, day);
+  date.setDate(date.getDate() + days);
+  return toDateInputValue(date);
+};
+
+const getPreviousOperationalDateString = (startHour = 8): string =>
+  addDaysToDateInputValue(getOperationalDateString(startHour), -1);
+
 const getMonthInputValueFromDate = (d: Date): string => {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -559,11 +571,13 @@ export const Reports: React.FC = () => {
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
   const laborSettings = useAppStore((s) => s.laborSettings);
-  const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
-  const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const reportBehavior = useMemo(() => resolveReportBehaviorSettings(systemSettings), [systemSettings]);
+  const printTemplate = systemSettings.printTemplate;
+  const exportImportSettings = systemSettings.exportImport;
   const productionPlans = useAppStore((s) => s.productionPlans);
   const workOrders = useAppStore((s) => s.workOrders);
-  const planSettings = useAppStore((s) => s.systemSettings.planSettings);
+  const planSettings = systemSettings.planSettings;
   const productionWorkerSettings = useAppStore(
     (s) => s.systemSettings.productionWorkerSettings ?? DEFAULT_PRODUCTION_WORKER_SETTINGS,
   );
@@ -573,11 +587,11 @@ export const Reports: React.FC = () => {
   const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
   const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
 
-  const { can } = usePermission();
+  const { can, isPackagingOnly } = usePermission();
   const canViewCosts = can('reports.viewCost');
   const canCreateFinishedReportsBase = can('reports.create');
   const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
-  const forcePackagingOnly = can('reports.packaging.only');
+  const forcePackagingOnly = isPackagingOnly;
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = can('reports.create') && !forceInjectionOnly;
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || forceInjectionOnly;
@@ -845,8 +859,8 @@ export const Reports: React.FC = () => {
   }, [selectedReportDrawer?.id]);
 
   // Date range filter
-  const [startDate, setStartDate] = useState(getOperationalDateString(8));
-  const [endDate, setEndDate] = useState(getOperationalDateString(8));
+  const [startDate, setStartDate] = useState(getOperationalDateString(reportBehavior.operationalDayStartHour));
+  const [endDate, setEndDate] = useState(getOperationalDateString(reportBehavior.operationalDayStartHour));
   const [viewMode, setViewMode] = useState<'today' | 'range' | 'general'>('today');
   const [rangeCursor, setRangeCursor] = useState<FirestoreCursor>(null);
   const [rangeHasMore, setRangeHasMore] = useState(false);
@@ -899,12 +913,12 @@ export const Reports: React.FC = () => {
     setSaveToast(null);
     setForm({
       ...emptyForm,
-      date: getOperationalDateString(8),
+      date: getOperationalDateString(reportBehavior.operationalDayStartHour),
       reportType: forcePackagingOnly ? 'packaging' : 'finished_product',
       packagingLines: forcePackagingOnly ? [newEmptyPackagingLine()] : [],
     });
     setShowModal(true);
-  }, [forcePackagingOnly]);
+  }, [forcePackagingOnly, reportBehavior.operationalDayStartHour]);
 
   const openCreateComponent = useCallback(() => {
     openModal(MODAL_KEYS.REPORTS_CREATE, { source: 'reports.page', reportType: 'component_injection' });
@@ -1081,10 +1095,11 @@ export const Reports: React.FC = () => {
       if (!append) setRangeError(null);
       try {
         const employeeIdForQuery = myEmployeeId ?? (filterEmployeeId.trim() || undefined);
+        const pageLimit = from === to ? 500 : 50;
         const page = await reportService.listByDateRangePaged({
           startDate: from,
           endDate: to,
-          limit: 50,
+          limit: pageLimit,
           cursor: append ? rangeCursor : null,
           lineId: filterLineId.trim() || undefined,
           employeeId: employeeIdForQuery,
@@ -1844,22 +1859,27 @@ export const Reports: React.FC = () => {
     }
   };
 
-  const handleShowToday = () => {
-    setViewMode('today');
-    setStartDate(getOperationalDateString(8));
-    setEndDate(getOperationalDateString(8));
+  const resetPeriodFilters = useCallback(() => {
+    setFactorySearch('');
     setFilterLineId('');
     setFilterReportKind('all');
+    setFilterProductCategory('');
     setFilterEmployeeId('');
     setRangeError(null);
     setRangeHasMore(false);
     setRangeCursor(null);
+  }, []);
+
+  const handleShowToday = () => {
+    setViewMode('today');
+    setStartDate(getOperationalDateString(reportBehavior.operationalDayStartHour));
+    setEndDate(getOperationalDateString(reportBehavior.operationalDayStartHour));
+    resetPeriodFilters();
   };
 
   const handleShowYesterday = async () => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const yesterday = toDateInputValue(d);
+    const yesterday = getPreviousOperationalDateString(reportBehavior.operationalDayStartHour);
+    resetPeriodFilters();
     setStartDate(yesterday);
     setEndDate(yesterday);
     await fetchReports(yesterday, yesterday);
@@ -1872,6 +1892,7 @@ export const Reports: React.FC = () => {
     start.setDate(start.getDate() - 6);
     const startStr = toDateInputValue(start);
     const endStr = toDateInputValue(end);
+    resetPeriodFilters();
     setStartDate(startStr);
     setEndDate(endStr);
     await fetchReports(startStr, endStr);
@@ -1883,6 +1904,7 @@ export const Reports: React.FC = () => {
     const start = new Date(end.getFullYear(), end.getMonth(), 1);
     const startStr = toDateInputValue(start);
     const endStr = toDateInputValue(end);
+    resetPeriodFilters();
     setStartDate(startStr);
     setEndDate(endStr);
     await fetchReports(startStr, endStr);
@@ -1931,13 +1953,8 @@ export const Reports: React.FC = () => {
     setViewMode('range');
   };
 
-  const activeFilterCount =
-    (filterLineId ? 1 : 0)
-    + (filterReportKind !== 'production' ? 1 : 0)
-    + (filterProductCategory ? 1 : 0)
-    + (filterEmployeeId ? 1 : 0);
   const reportPeriod = useMemo(() => {
-    const todayValue = getOperationalDateString(8);
+    const todayValue = getOperationalDateString(reportBehavior.operationalDayStartHour);
     if (viewMode === 'today') return 'today';
     if (viewMode === 'general') return 'all';
     if (startDate === endDate && startDate !== todayValue) return 'yesterday';
@@ -1950,13 +1967,13 @@ export const Reports: React.FC = () => {
       if (startDate === toDateInputValue(weeklyStartDate)) return 'week';
     }
     return 'all';
-  }, [viewMode, startDate, endDate]);
+  }, [viewMode, startDate, endDate, reportBehavior.operationalDayStartHour]);
   const handleLoadMoreRange = async () => {
     if ((viewMode !== 'range' && viewMode !== 'general') || rangeLoading || !rangeHasMore) return;
     await loadRangeReports(startDate, endDate, true);
   };
 
-  const tableToolbarFilters = (
+  const reportsFilterBar = (
     <SmartFilterBar
       searchPlaceholder="ابحث: كود التقرير، كود/اسم المنتج، الخط، المشرف، الكمية، الساعات…"
       searchValue={factorySearch}
@@ -2062,21 +2079,7 @@ export const Reports: React.FC = () => {
       }}
       onApply={handleFetchRange}
       applyLabel={(reportsLoading || rangeLoading) ? 'جار التحميل...' : 'عرض'}
-      extra={activeFilterCount > 0 ? (
-        <button
-          type="button"
-          className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
-          onClick={() => {
-            setFilterLineId('');
-            setFilterReportKind('production');
-            setFilterProductCategory('');
-            setFilterEmployeeId('');
-          }}
-        >
-          مسح ({activeFilterCount})
-        </button>
-      ) : undefined}
-      className="mb-0"
+      className="mb-0 border-0 rounded-none"
     />
   );
 
@@ -2213,10 +2216,12 @@ export const Reports: React.FC = () => {
       return base.filter((line) => line.id && injectionLineIds.has(line.id));
     }
     if (form.reportType === 'packaging') {
-      return base.filter((line) => line.id && line.isPackagingLine);
+      return reportBehavior.restrictPackagingReportsToPackagingLines
+        ? base.filter((line) => line.id && line.isPackagingLine)
+        : base;
     }
     return base;
-  }, [form.reportType, _rawLines, injectionLineIds, shouldRestrictSupervisorLines, assignedLineIds]);
+  }, [form.reportType, _rawLines, injectionLineIds, shouldRestrictSupervisorLines, assignedLineIds, reportBehavior.restrictPackagingReportsToPackagingLines]);
 
   const selectableProducts = useMemo(
     () => (
@@ -2287,24 +2292,29 @@ export const Reports: React.FC = () => {
   const handleSave = async (printAfterSave = false) => {
     const requiresWorkers = form.reportType !== 'component_injection';
     const packagingLaborOptional =
-      form.reportType === 'packaging'
-      || (form.reportType === 'finished_product' && isPackagingLineForm);
-    const workersRequired = requiresWorkers && effectiveFormWorkersCount <= 0 && !packagingLaborOptional;
+      reportBehavior.allowPackagingLaborOptional
+      && (
+        form.reportType === 'packaging'
+        || (form.reportType === 'finished_product' && isPackagingLineForm)
+      );
+    const workersRequired = reportBehavior.requireLaborForFinishedReports && requiresWorkers && effectiveFormWorkersCount <= 0 && !packagingLaborOptional;
     const packagingLinesValid = (form.packagingLines || []).filter(
       (l) => String(l.productId || '').trim() && effectivePackagingPieces(l, getUnitsPerCarton) > 0,
     );
     const packagingQtyOk = form.reportType !== 'packaging'
       || packagingLinesValid.length > 0;
-    const productQtyOk = form.reportType === 'packaging'
+    const productQtyOk = !reportBehavior.requirePositiveQuantityOnReports
+      ? Boolean(form.reportType === 'packaging' ? packagingQtyOk : form.productId)
+      : form.reportType === 'packaging'
       ? packagingQtyOk
       : Boolean(form.productId && effectiveFormQuantityProduced);
-    if (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift)) {
+    if (form.reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(form.shift)) {
       setSaveToastType('error');
       setSaveToast('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
       setTimeout(() => setSaveToast(null), 3500);
       return;
     }
-    if (!form.lineId || !form.employeeId || !productQtyOk || !form.workHours || workersRequired) {
+    if (!form.lineId || !form.employeeId || !productQtyOk || (reportBehavior.requireWorkHoursOnReports && !form.workHours) || workersRequired) {
       setSaveToastType('error');
       setSaveToast(requiresWorkers
         ? (packagingLaborOptional
@@ -2428,7 +2438,7 @@ export const Reports: React.FC = () => {
     if (editId) {
       payload.supplyCycleId = autoSupplyCycleId || '';
     }
-    const duplicated = await hasDuplicateLineSupervisorReport(
+    const duplicated = reportBehavior.preventDuplicateReports && await hasDuplicateLineSupervisorReport(
       {
         date: payload.date,
         lineId: payload.lineId,
@@ -2775,7 +2785,7 @@ export const Reports: React.FC = () => {
         caption: formatBulkProductionReportsShareCaption({
           title:
             viewMode === 'today'
-              ? `تقارير إنتاج اليوم — ${getOperationalDateString(8)}`
+              ? `تقارير إنتاج اليوم — ${getOperationalDateString(reportBehavior.operationalDayStartHour)}`
               : `تقارير الإنتاج — ${startDate} إلى ${endDate}`,
           subtitle: `${printRows.length} تقرير`,
           totals: printTotals,
@@ -3595,8 +3605,8 @@ export const Reports: React.FC = () => {
 
   const handleExportFilteredReports = useCallback(async () => {
     if (!canExportFromPage) return;
-    const from = viewMode === 'today' ? getOperationalDateString(8) : startDate;
-    const to = viewMode === 'today' ? getOperationalDateString(8) : endDate;
+    const from = viewMode === 'today' ? getOperationalDateString(reportBehavior.operationalDayStartHour) : startDate;
+    const to = viewMode === 'today' ? getOperationalDateString(reportBehavior.operationalDayStartHour) : endDate;
     setExporting(true);
     try {
       const allRangeReports = await reportService.getByDateRange(from, to);
@@ -4011,70 +4021,72 @@ export const Reports: React.FC = () => {
           )}
         </Card>
       ) : (
-        reportGroupBy !== 'none' ? (
-          <div className="space-y-4">
-            <Card className="!p-0 overflow-hidden">
-              {tableToolbarFilters}
-            </Card>
-            {groupedReports.length === 0 ? (
-              <Card>
-                <div className="py-16 text-center text-[var(--color-text-muted)]">
-                  لا توجد تقارير{viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}
-                </div>
-              </Card>
-            ) : groupedReports.map((group) => (
-              <Card key={group.key} className="!p-0 overflow-hidden">
-                <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60 flex flex-wrap items-center gap-3">
-                  <span className="text-sm font-black text-[var(--color-text)]">{group.label || 'غير محدد'}</span>
-                  <span className="text-xs font-bold text-[var(--color-text-muted)]">{group.reports.length} تقرير</span>
-                  <span className="text-xs font-bold text-emerald-600">إنتاج: {formatNumber(group.produced)}</span>
-                  <span className="text-xs font-bold text-rose-500">هالك: {formatNumber(group.waste)}</span>
-                </div>
-                <SelectableTable<ProductionReport>
-                  tableId={`production-reports-${reportGroupBy}-${group.key}`}
-                  data={group.reports}
-                  columns={reportColumns}
-                  selectAllScope="filtered"
-                  enableColumnVisibility
-                  toolbarContent={null}
-                  highlightRowId={highlightReportId}
-                  getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
-                  bulkActions={reportBulkActions}
-                  renderActions={renderReportActions}
-                  onRowClick={(row) => {
-                    setSelectedReportDrawer(row);
-                    setReportDrawerTab('summary');
-                  }}
-                  emptyIcon="bar_chart"
-                  emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-                  emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
-                />
-              </Card>
-            ))}
-            {reportTableFooter}
-          </div>
-        ) : (
-          <SelectableTable<ProductionReport>
-            tableId="production-reports-main"
-            data={searchFilteredReports}
-            columns={reportColumns}
-            selectAllScope="filtered"
-            enableColumnVisibility
-            toolbarContent={tableToolbarFilters}
-            highlightRowId={highlightReportId}
-            getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
-            bulkActions={reportBulkActions}
-            renderActions={renderReportActions}
-            onRowClick={(row) => {
-              setSelectedReportDrawer(row);
-              setReportDrawerTab('summary');
-            }}
-            emptyIcon="bar_chart"
-            emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-            emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
-            footer={reportTableFooter}
-          />
-        )
+        <div className="space-y-4">
+          <Card className="!p-0 overflow-hidden">
+            {reportsFilterBar}
+          </Card>
+          {reportGroupBy !== 'none' ? (
+            <>
+              {groupedReports.length === 0 ? (
+                <Card>
+                  <div className="py-16 text-center text-[var(--color-text-muted)]">
+                    لا توجد تقارير{viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}
+                  </div>
+                </Card>
+              ) : groupedReports.map((group) => (
+                <Card key={group.key} className="!p-0 overflow-hidden">
+                  <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60 flex flex-wrap items-center gap-3">
+                    <span className="text-sm font-black text-[var(--color-text)]">{group.label || 'غير محدد'}</span>
+                    <span className="text-xs font-bold text-[var(--color-text-muted)]">{group.reports.length} تقرير</span>
+                    <span className="text-xs font-bold text-emerald-600">إنتاج: {formatNumber(group.produced)}</span>
+                    <span className="text-xs font-bold text-rose-500">هالك: {formatNumber(group.waste)}</span>
+                  </div>
+                  <SelectableTable<ProductionReport>
+                    tableId={`production-reports-${reportGroupBy}-${group.key}`}
+                    data={group.reports}
+                    columns={reportColumns}
+                    selectAllScope="filtered"
+                    enableColumnVisibility
+                    enableSearch={false}
+                    highlightRowId={highlightReportId}
+                    getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
+                    bulkActions={reportBulkActions}
+                    renderActions={renderReportActions}
+                    onRowClick={(row) => {
+                      setSelectedReportDrawer(row);
+                      setReportDrawerTab('summary');
+                    }}
+                    emptyIcon="bar_chart"
+                    emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
+                    emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+                  />
+                </Card>
+              ))}
+              {reportTableFooter}
+            </>
+          ) : (
+            <SelectableTable<ProductionReport>
+              tableId="production-reports-main"
+              data={searchFilteredReports}
+              columns={reportColumns}
+              selectAllScope="filtered"
+              enableColumnVisibility
+              enableSearch={false}
+              highlightRowId={highlightReportId}
+              getId={(r) => r.id || r.reportCode || `${r.date}-${r.lineId}-${r.employeeId}-${r.productId}`}
+              bulkActions={reportBulkActions}
+              renderActions={renderReportActions}
+              onRowClick={(row) => {
+                setSelectedReportDrawer(row);
+                setReportDrawerTab('summary');
+              }}
+              emptyIcon="bar_chart"
+              emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
+              emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+              footer={reportTableFooter}
+            />
+          )}
+        </div>
       )}
       {(viewMode === 'range' || viewMode === 'general') && (
         <div className="flex items-center justify-center">
@@ -4112,7 +4124,7 @@ export const Reports: React.FC = () => {
       >
         <ProductionReportPrint
           ref={bulkPrintRef}
-          title={viewMode === 'today' ? `تقارير إنتاج اليوم — ${getOperationalDateString(8)}` : `تقارير الإنتاج — ${startDate} إلى ${endDate}`}
+          title={viewMode === 'today' ? `تقارير إنتاج اليوم — ${getOperationalDateString(reportBehavior.operationalDayStartHour)}` : `تقارير الإنتاج — ${startDate} إلى ${endDate}`}
           subtitle={`${printRows.length} تقرير`}
           rows={printRows}
           totals={printTotals}
@@ -4375,7 +4387,7 @@ export const Reports: React.FC = () => {
               </div>
 
               <div className="sticky bottom-10 bg-[var(--color-card)] p-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] border-t border-[var(--color-border)] grid grid-cols-4 gap-2">
-                <button
+                <Button
                   type="button"
                   onClick={() => {
                     triggerSinglePrint(row);
@@ -4383,16 +4395,16 @@ export const Reports: React.FC = () => {
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
                 >
                   طباعة
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => void handleReapplyReportInventory(row)}
                   disabled={reapplyingInventory || !row.id || !can('inventory.transactions.create')}
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold disabled:opacity-50"
                 >
                   {reapplyingInventory ? 'جاري...' : 'ترحيل'}
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => {
                     const rt = resolveReportType(row.reportType);
@@ -4410,8 +4422,8 @@ export const Reports: React.FC = () => {
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
                 >
                   تعديل
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => {
                     if (linkedWo) {
@@ -4423,7 +4435,7 @@ export const Reports: React.FC = () => {
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold disabled:opacity-50"
                 >
                   أمر الشغل
-                </button>
+                </Button>
               </div>
             </aside>
           </>
@@ -4670,7 +4682,7 @@ export const Reports: React.FC = () => {
                         نوع خانة الكمية يُحدَّد تلقائيًا من بطاقة المنتج وليس اختيارًا يدويًا: إن وُجد «قطع لكل كرتونة» يظهر إدخال الكراتين فقط؛ وإلا يظهر إدخال القطع فقط — دون خلط الاثنين في خانة واحدة.
                       </p>
                     </div>
-                    <button
+                    <Button
                       type="button"
                       title="إضافة صف منتج جديد. بعد اختيار المنتج تظهر خانة الكمية المناسبة تلقائيًا حسب بطاقة المنتج."
                       className="shrink-0 inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
@@ -4679,9 +4691,8 @@ export const Reports: React.FC = () => {
                         packagingLines: [...(prev.packagingLines || []), newEmptyPackagingLine()],
                       }))}
                     >
-                      <Plus size={14} aria-hidden />
                       إضافة منتج
-                    </button>
+                    </Button>
                   </div>
                   {(form.packagingLines || []).map((row, idx) => {
                     const hasProduct = Boolean(String(row.productId || '').trim());
@@ -4789,7 +4800,7 @@ export const Reports: React.FC = () => {
                           </div>
                         )}
                         <div className={cn('flex sm:justify-end', cartonMode && upc > 1 ? 'sm:col-span-2' : 'sm:col-span-2')}>
-                          <button
+                          <Button
                             type="button"
                             disabled={(form.packagingLines || []).length <= 1}
                             className="text-sm font-bold text-rose-600 disabled:opacity-40 disabled:cursor-not-allowed px-2 py-2"
@@ -4799,24 +4810,22 @@ export const Reports: React.FC = () => {
                             }))}
                           >
                             حذف
-                          </button>
+                          </Button>
                         </div>
                       </div>
                     );
                   })}
                   <div className="flex justify-center border-t border-[var(--color-border)] pt-3 mt-1">
-                    <button
+                    <Button
                       type="button"
                       title="إضافة صف منتج جديد. بعد اختيار المنتج تظهر خانة الكمية المناسبة تلقائيًا حسب بطاقة المنتج."
                       className="inline-flex items-center gap-1 rounded-[var(--border-radius-lg)] border border-primary/25 bg-primary/5 px-3 py-2 text-xs font-bold text-primary hover:bg-primary/10 transition-colors"
                       onClick={() => setForm((prev) => ({
                         ...prev,
                         packagingLines: [...(prev.packagingLines || []), newEmptyPackagingLine()],
-                      }))}
-                    >
-                      <Plus size={14} aria-hidden />
-                      إضافة منتج
-                    </button>
+                      }))}>
+                    إضافة منتج
+                  </Button>
                   </div>
                   <p className="text-[11px] font-semibold text-[var(--color-text-muted)] leading-relaxed">
                     تقرير تغليف: الكميات للتتبع فقط ولا تُحسب في إنجاز أمر الشغل. إن وُجد «قطع لكل كرتونة» للمنتج يُدخل الكراتين والمتبقي حسب الحقول؛ وإلا القطع فقط. يمكن إدخال إجمالي العمالة اختياريًا أدناه. يمكن تسجيل أكثر من تقرير تغليف لنفس المنتج في اليوم.
@@ -5095,13 +5104,14 @@ export const Reports: React.FC = () => {
                     {' '}
                     من الإعدادات ← إعدادات عمال الإنتاج.
                   </p>
-                  <button
+                  <Button
                     type="button"
-                    className="text-xs font-bold text-primary"
+                    variant="ghost"
+                    className="text-xs font-bold text-primary h-auto p-0"
                     onClick={() => navigate('/settings')}
                   >
                     فتح الإعدادات
-                  </button>
+                  </Button>
                 </div>
               ) : null}
               <div className="space-y-2">
@@ -5222,13 +5232,18 @@ export const Reports: React.FC = () => {
                   || !form.employeeId
                   || (form.reportType === 'packaging'
                     ? !hasValidPackagingReportLine
-                    : (!form.productId || !effectiveFormQuantityProduced))
-                  || !form.workHours
-                  || (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
+                    : (!form.productId || (reportBehavior.requirePositiveQuantityOnReports && !effectiveFormQuantityProduced)))
+                  || (reportBehavior.requireWorkHoursOnReports && !form.workHours)
+                  || (reportBehavior.requireInjectionShift && form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
                   || (
+                    reportBehavior.requireLaborForFinishedReports
+                    &&
                     form.reportType !== 'component_injection'
                     && formWorkersTotal <= 0
-                    && !(form.reportType === 'packaging' || (form.reportType === 'finished_product' && isPackagingLineForm))
+                    && !(
+                      reportBehavior.allowPackagingLaborOptional
+                      && (form.reportType === 'packaging' || (form.reportType === 'finished_product' && isPackagingLineForm))
+                    )
                   )
                 }
               >
@@ -5257,19 +5272,14 @@ export const Reports: React.FC = () => {
             )}
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)} disabled={deleteBusy}>إلغاء</Button>
-              <button
+              <Button
                 type="button"
+                variant="danger"
                 onClick={() => handleDelete(deleteConfirmId)}
                 disabled={deleteBusy}
-                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
-                {deleteBusy ? (
-                  <ReportIcon name="refresh" className="text-sm animate-spin" />
-                ) : (
-                  <ReportIcon name="delete" className="text-sm" />
-                )}
                 {deleteBusy ? 'جاري الحذف...' : 'نعم، احذف'}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -5285,25 +5295,20 @@ export const Reports: React.FC = () => {
             <h3 className="text-lg font-bold mb-2">حذف {bulkDeleteItems.length} تقرير</h3>
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف التقارير المحددة؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
-              <button
+              <Button
+                variant="outline"
                 onClick={() => setBulkDeleteItems(null)}
                 disabled={bulkDeleting}
-                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-[var(--color-card)] text-[var(--color-text)] border border-[var(--color-border)] hover:bg-[#f8f9fa] transition-all disabled:opacity-50"
               >
                 إلغاء
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="danger"
                 onClick={handleBulkDeleteConfirmed}
                 disabled={bulkDeleting}
-                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2 disabled:opacity-50"
               >
-                {bulkDeleting ? (
-                  <ReportIcon name="refresh" className="animate-spin text-sm" />
-                ) : (
-                  <ReportIcon name="delete" className="text-sm" />
-                )}
                 {bulkDeleting ? 'جاري الحذف...' : `حذف ${bulkDeleteItems.length} تقرير`}
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -5322,17 +5327,17 @@ export const Reports: React.FC = () => {
                 <div>
                   <div className="flex items-center gap-3">
                     <h3 className="text-lg font-bold">استيراد تقارير من Excel</h3>
-                    <button
+                    <Button
+                      variant="ghost"
                       onClick={() =>
                         void import('../../../utils/downloadTemplates').then(({ downloadReportsTemplate }) =>
                           downloadReportsTemplate(templateLookups),
                         )
                       }
-                      className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline"
+                      className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline h-auto p-0"
                     >
-                      <ReportIcon name="download" className="text-sm" />
                       تحميل نموذج
-                    </button>
+                    </Button>
                   </div>
                   {importMode === 'create' && importResult && (
                     <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
@@ -5366,17 +5371,17 @@ export const Reports: React.FC = () => {
                   <ReportIcon name="warning" className="text-5xl text-[var(--color-text-muted)] block mb-3" />
                   <p className="font-bold text-[var(--color-text-muted)]">لا توجد بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد أن الملف يحتوي على أعمدة: التاريخ، خط الإنتاج، المنتج، المشرف، الكمية المنتجة، الهالك، عدد العمال، ساعات العمل</p>
-                  <button
+                  <Button
+                  variant="ghost"
                   onClick={() =>
                     void import('../../../utils/downloadTemplates').then(({ downloadReportsTemplate }) =>
                       downloadReportsTemplate(templateLookups),
                     )
                   }
-                  className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto"
+                  className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto h-auto p-0"
                 >
-                    <ReportIcon name="download" className="text-sm" />
                     تحميل نموذج التقارير
-                  </button>
+                  </Button>
                 </div>
               ) : importMode === 'updateDate' && importDateUpdateResult && importDateUpdateResult.rows.length === 0 ? (
                 <div className="text-center py-12">

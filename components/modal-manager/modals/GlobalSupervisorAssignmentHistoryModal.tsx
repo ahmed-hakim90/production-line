@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { Button } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useSupervisorStore } from '../../../modules/production/stores/useSupervisorStore';
@@ -78,13 +79,17 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
         onClick={(event) => event.stopPropagation()}
       >
         <div className="relative border-b border-gray-200 p-4">
-          <button
+          <Button
             type="button"
-            className="absolute left-4 top-4 rounded-lg border border-gray-200 px-2 py-1 text-xs font-normal text-gray-600"
+            variant="outline"
+            size="sm"
+            className="absolute left-4 top-4"
             onClick={close}
+            iconName="close"
+            tone="neutral"
           >
             {t('ui.close')}
-          </button>
+          </Button>
           <h3 className="text-base font-medium text-gray-800">{t('modalManager.supervisorAssignmentHistory.title', { lineName })}</h3>
         </div>
 

@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
   Select,
   SelectContent,
@@ -31,8 +32,12 @@ import { sparePartsService } from '../services/sparePartsService';
 import { repairBranchService } from '../services/repairBranchService';
 import { useLowStockAlert } from '../hooks/useLowStockAlert';
 import { LowStockAlert } from '../components/LowStockAlert';
-import { productMaterialService } from '../../production/services/productMaterialService';
-import type { ProductMaterial } from '../../../types';
+import {
+  loadAllCatalogMaterials,
+  loadProductComponents,
+  type CatalogComponent,
+} from '../../catalog/lib/productComponents';
+import { planSparePartCatalogLinks } from '../utils/sparePartCatalogBackfill';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { sparePartMarginPreview, effectiveSparePartUnitCost } from '../utils/sparePartPricing';
@@ -94,10 +99,12 @@ export const SparePartsInventory: React.FC = () => {
   const [parts, setParts] = useState<RepairSparePart[]>([]);
   const [stock, setStock] = useState<RepairSparePartStock[]>([]);
   const products = useAppStore((s) => s._rawProducts);
-  const [materials, setMaterials] = useState<ProductMaterial[]>([]);
+  const [catalogComponents, setCatalogComponents] = useState<CatalogComponent[]>([]);
+  const [bomComponents, setBomComponents] = useState<CatalogComponent[]>([]);
   const [form, setForm] = useState({
+    sourceMode: 'product_bom' as 'product_bom' | 'all_materials',
     productId: '',
-    materialKey: '',
+    materialId: '',
     unit: 'قطعة',
     minStock: String(repairSettings.defaults.defaultMinStock),
     purchaseUnitCost: '',
@@ -109,6 +116,7 @@ export const SparePartsInventory: React.FC = () => {
   }, [repairSettings.defaults.defaultMinStock]);
 
   const [isCreatePartModalOpen, setIsCreatePartModalOpen] = useState(false);
+  const [linkingCatalog, setLinkingCatalog] = useState(false);
   const [partPendingDelete, setPartPendingDelete] = useState<RepairSparePart | null>(null);
   const [partPricingEdit, setPartPricingEdit] = useState<RepairSparePart | null>(null);
   const [pricingForm, setPricingForm] = useState({
@@ -163,8 +171,28 @@ export const SparePartsInventory: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, activeWarehouseId]);
   useEffect(() => {
-    void productMaterialService.getAll().then(setMaterials).catch(() => setMaterials([]));
+    void loadAllCatalogMaterials()
+      .then(setCatalogComponents)
+      .catch(() => setCatalogComponents([]));
   }, []);
+  useEffect(() => {
+    const productId = String(form.productId || '').trim();
+    if (form.sourceMode !== 'product_bom' || !productId) {
+      setBomComponents([]);
+      return;
+    }
+    let cancelled = false;
+    void loadProductComponents(productId)
+      .then((rows) => {
+        if (!cancelled) setBomComponents(rows);
+      })
+      .catch(() => {
+        if (!cancelled) setBomComponents([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [form.productId, form.sourceMode]);
   useEffect(() => {
     void repairBranchService.list().then((rows) => {
       setBranches(rows);
@@ -215,21 +243,41 @@ export const SparePartsInventory: React.FC = () => {
     return `SP-${String(maxSerial + 1).padStart(3, '0')}`;
   };
 
+  const selectableComponents = useMemo(() => {
+    if (form.sourceMode === 'all_materials') return catalogComponents;
+    return bomComponents;
+  }, [bomComponents, catalogComponents, form.sourceMode]);
+
+  const applyComponentSelection = (materialId: string) => {
+    const selected = selectableComponents.find((row) => row.materialId === materialId);
+    setForm((prev) => ({
+      ...prev,
+      materialId,
+      unit: selected?.unitLabel || prev.unit || 'قطعة',
+      purchaseUnitCost:
+        selected?.purchaseCost && selected.purchaseCost > 0
+          ? String(selected.purchaseCost)
+          : prev.purchaseUnitCost,
+    }));
+  };
+
   const createPart = async () => {
     if (!branchId) return;
-    const selectedMaterial = materials.find((material) => {
-      const materialId = String(material.materialId || '').trim();
-      const materialName = String(material.materialName || '').trim();
-      const key = materialId || materialName;
-      return key === form.materialKey;
-    });
+    const selectedMaterial = selectableComponents.find(
+      (material) => material.materialId === form.materialId,
+    );
     if (!selectedMaterial) {
-      toast.error('اختر مكونًا أولًا.');
+      toast.error('اختر مكونًا من الماستر داتا أولًا.');
       return;
     }
     const partName = String(selectedMaterial.materialName || '').trim();
+    const materialId = String(selectedMaterial.materialId || '').trim();
     const partCode = getNextSparePartCode();
-    const existing = parts.find((part) => String(part.name || '').trim().toLowerCase() === partName.toLowerCase());
+    const existing = parts.find((part) => {
+      const linkedId = String(part.materialId || part.rawMaterialId || '').trim();
+      if (materialId && linkedId && linkedId === materialId) return true;
+      return String(part.name || '').trim().toLowerCase() === partName.toLowerCase();
+    });
     if (existing) {
       toast.error('هذا المكون مضاف بالفعل كقطعة غيار.');
       return;
@@ -242,9 +290,14 @@ export const SparePartsInventory: React.FC = () => {
         branchId,
         name: partName,
         code: partCode,
-        category: 'مكونات منتج',
-        unit: form.unit || 'قطعة',
+        category: selectedMaterial.categoryName || 'مكونات منتج',
+        unit: form.unit || selectedMaterial.unitLabel || 'قطعة',
         minStock: Number(form.minStock || 0),
+        materialId,
+        ...(form.sourceMode === 'product_bom' && form.productId
+          ? { sourceProductId: form.productId }
+          : {}),
+        ...(selectedMaterial.itemType === 'legacy_raw' ? { rawMaterialId: materialId } : {}),
         ...(Number.isFinite(purchase) && purchase > 0 ? { purchaseUnitCost: purchase } : {}),
         ...(Number.isFinite(sale) && sale > 0 ? { defaultSalePrice: sale } : {}),
         ...(Number.isFinite(disc) && disc > 0 ? { warehouseDiscountPercent: Math.min(100, disc) } : {}),
@@ -252,7 +305,7 @@ export const SparePartsInventory: React.FC = () => {
       toast.success('تمت إضافة القطعة.');
       setForm((prev) => ({
         ...prev,
-        materialKey: '',
+        materialId: '',
         unit: 'قطعة',
         minStock: String(repairSettings.defaults.defaultMinStock),
         purchaseUnitCost: '',
@@ -265,11 +318,6 @@ export const SparePartsInventory: React.FC = () => {
       toast.error(e?.message || 'تعذر إضافة القطعة.');
     }
   };
-
-  const productMaterials = useMemo(() => {
-    if (!form.productId) return [];
-    return materials.filter((material) => material.productId === form.productId);
-  }, [form.productId, materials]);
 
   const increaseStock = async (part: RepairSparePart) => {
     if (!canManageParts) {
@@ -337,6 +385,47 @@ export const SparePartsInventory: React.FC = () => {
     }
   };
 
+  const unlinkedPartsCount = useMemo(
+    () =>
+      parts.filter(
+        (part) =>
+          !String(part.materialId || '').trim() && !String(part.rawMaterialId || '').trim(),
+      ).length,
+    [parts],
+  );
+
+  const linkUnlinkedPartsToCatalog = async () => {
+    if (!canManageParts || linkingCatalog) return;
+    setLinkingCatalog(true);
+    try {
+      const components =
+        catalogComponents.length > 0 ? catalogComponents : await loadAllCatalogMaterials();
+      if (catalogComponents.length === 0) setCatalogComponents(components);
+      const plans = planSparePartCatalogLinks(parts, components);
+      if (plans.length === 0) {
+        toast.error(
+          unlinkedPartsCount > 0
+            ? 'لا توجد مطابقات واضحة بالاسم في ماستر داتا المواد.'
+            : 'كل القطع مرتبطة بالفعل بالماستر داتا.',
+        );
+        return;
+      }
+      const linked = await sparePartsService.linkPartsToCatalog(
+        plans.map((plan) => ({
+          partId: plan.partId,
+          materialId: plan.materialId,
+          itemType: plan.itemType,
+        })),
+      );
+      toast.success(`تم ربط ${linked} قطعة بماستر داتا المواد.`);
+      await load({ force: true });
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر ربط القطع بالماستر داتا.');
+    } finally {
+      setLinkingCatalog(false);
+    }
+  };
+
   const removePart = async () => {
     if (!partPendingDelete?.id || !branchId) return;
     try {
@@ -357,7 +446,9 @@ export const SparePartsInventory: React.FC = () => {
             <div className="flex items-start justify-between gap-3 flex-wrap">
               <div>
                 <h1 className="text-2xl font-bold">مخزون قطع الغيار</h1>
-                <p className="text-sm text-muted-foreground mt-1">إدارة الأصناف، متابعة الحد الأدنى، والإضافة السريعة للمخزون.</p>
+                <p className="text-sm text-muted-foreground mt-1">
+                  إدارة أصناف الفرع مرتبطة بماستر داتا المنتجات والمكونات المشتركة في المشروع.
+                </p>
               </div>
               <div className="flex items-center gap-2 flex-wrap">
                 {(canManageAllBranches || branchOptions.length > 1) && (
@@ -418,7 +509,16 @@ export const SparePartsInventory: React.FC = () => {
         </div>
       )}
       {canManageParts && (
-        <div className="flex justify-end">
+        <div className="flex justify-end gap-2 flex-wrap">
+          {unlinkedPartsCount > 0 && (
+            <Button
+              variant="outline"
+              disabled={linkingCatalog || !branchId}
+              onClick={() => void linkUnlinkedPartsToCatalog()}
+            >
+              {linkingCatalog ? 'جاري الربط...' : `ربط بالماستر داتا (${unlinkedPartsCount})`}
+            </Button>
+          )}
           <Dialog open={isCreatePartModalOpen} onOpenChange={setIsCreatePartModalOpen}>
             <DialogTrigger asChild>
               <Button>إضافة صنف جديد</Button>
@@ -426,37 +526,78 @@ export const SparePartsInventory: React.FC = () => {
             <DialogContent dir={dir} className="max-w-3xl">
               <DialogHeader>
                 <DialogTitle>إضافة صنف جديد</DialogTitle>
-                <DialogDescription>اختيار القطعة يكون من مكونات الأصناف المعرفة على النظام.</DialogDescription>
+                <DialogDescription>
+                  القطع تُختار من ماستر داتا المكونات المشتركة (المواد التصنيعية / BOM المنتج) — نفس الكتالوج المستخدم في الإنتاج والمخزون.
+                  {' '}
+                  <Link className="underline text-primary" to={withTenantPath(tenantSlug, '/manufacturing/materials')}>
+                    إدارة المواد
+                  </Link>
+                </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
                 <div className="xl:col-span-2">
-                  <Label>المنتج</Label>
-                  <Select value={form.productId} onValueChange={(value) => setForm((p) => ({ ...p, productId: value, materialKey: '' }))}>
-                    <SelectTrigger><SelectValue placeholder="اختر المنتج" /></SelectTrigger>
+                  <Label>مصدر المكون</Label>
+                  <Select
+                    value={form.sourceMode}
+                    onValueChange={(value) =>
+                      setForm((p) => ({
+                        ...p,
+                        sourceMode: value as 'product_bom' | 'all_materials',
+                        materialId: '',
+                        productId: value === 'all_materials' ? '' : p.productId,
+                      }))
+                    }
+                  >
+                    <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
-                      {products.filter((p) => p.id).map((product) => (
-                        <SelectItem key={product.id} value={String(product.id)}>
-                          {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
-                        </SelectItem>
-                      ))}
+                      <SelectItem value="product_bom">مكونات منتج (BOM)</SelectItem>
+                      <SelectItem value="all_materials">كل المواد التصنيعية</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {form.sourceMode === 'product_bom' && (
+                  <div className="xl:col-span-2">
+                    <Label>المنتج</Label>
+                    <Select
+                      value={form.productId}
+                      onValueChange={(value) => setForm((p) => ({ ...p, productId: value, materialId: '' }))}
+                    >
+                      <SelectTrigger><SelectValue placeholder="اختر المنتج" /></SelectTrigger>
+                      <SelectContent>
+                        {products.filter((p) => p.id).map((product) => (
+                          <SelectItem key={product.id} value={String(product.id)}>
+                            {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                )}
                 <div className="xl:col-span-2">
                   <Label>المكون</Label>
-                  <Select value={form.materialKey} onValueChange={(value) => setForm((p) => ({ ...p, materialKey: value }))}>
-                    <SelectTrigger><SelectValue placeholder={form.productId ? 'اختر مكونًا' : 'اختر المنتج أولًا'} /></SelectTrigger>
+                  <Select
+                    value={form.materialId}
+                    onValueChange={applyComponentSelection}
+                    disabled={form.sourceMode === 'product_bom' && !form.productId}
+                  >
+                    <SelectTrigger>
+                      <SelectValue
+                        placeholder={
+                          form.sourceMode === 'product_bom' && !form.productId
+                            ? 'اختر المنتج أولًا'
+                            : selectableComponents.length === 0
+                              ? 'لا توجد مكونات'
+                              : 'اختر مكونًا'
+                        }
+                      />
+                    </SelectTrigger>
                     <SelectContent>
-                      {productMaterials.map((material) => {
-                        const materialId = String(material.materialId || '').trim();
-                        const materialName = String(material.materialName || '').trim();
-                        const key = materialId || materialName;
-                        return (
-                          <SelectItem key={`${material.productId}-${key}`} value={key}>
-                            {materialName}
-                          </SelectItem>
-                        );
-                      })}
+                      {selectableComponents.map((material) => (
+                        <SelectItem key={material.materialId} value={material.materialId}>
+                          {material.materialName}
+                          {material.materialCode ? ` (${material.materialCode})` : ''}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
@@ -474,19 +615,24 @@ export const SparePartsInventory: React.FC = () => {
         </div>
       )}
       <Card>
-        <CardContent className="pt-6">
-          <div className="grid md:grid-cols-3 gap-2">
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="ابحث بالاسم أو الكود أو التصنيف..." />
-            <div className="flex items-center gap-2">
-              <Label className="whitespace-nowrap">الزيادة السريعة</Label>
-              <Input type="number" min={1} value={increaseQty} onChange={(e) => setIncreaseQty(e.target.value)} />
-            </div>
-            <div className="flex items-center justify-end gap-2">
-              <Button variant={viewMode === 'simple' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('simple')}>مبسط</Button>
-              <Button variant={viewMode === 'dense' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('dense')}>كثيف البيانات</Button>
-            </div>
-          </div>
-        </CardContent>
+        <SmartFilterBar
+          searchPlaceholder="ابحث بالاسم أو الكود أو التصنيف..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          extra={
+            <>
+              <div className="flex items-center gap-2">
+                <Label className="whitespace-nowrap">الزيادة السريعة</Label>
+                <Input type="number" min={1} value={increaseQty} onChange={(e) => setIncreaseQty(e.target.value)} className="h-[34px] w-[100px]" />
+              </div>
+              <div className="flex items-center gap-2">
+                <Button variant={viewMode === 'simple' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('simple')} className="h-[34px]">مبسط</Button>
+                <Button variant={viewMode === 'dense' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('dense')} className="h-[34px]">كثيف البيانات</Button>
+              </div>
+            </>
+          }
+          className="mb-0 border-0 rounded-none"
+        />
       </Card>
       <Card>
         <CardHeader>
@@ -502,6 +648,7 @@ export const SparePartsInventory: React.FC = () => {
                   <th className="p-2 text-right">الكود</th>
                   {viewMode === 'dense' && <th className="p-2 text-right">التصنيف</th>}
                   {viewMode === 'dense' && <th className="p-2 text-right">الوحدة</th>}
+                  {viewMode === 'dense' && <th className="p-2 text-right">الكتالوج</th>}
                   <th className="p-2 text-right">الرصيد</th>
                   <th className="p-2 text-right">الحد الأدنى</th>
                   {viewMode === 'dense' && <th className="p-2 text-right">تكلفة بعد خصم</th>}
@@ -518,12 +665,22 @@ export const SparePartsInventory: React.FC = () => {
                   const isLow = qty <= Number(part.minStock || 0);
                   const eff = effectiveSparePartUnitCost(part);
                   const margin = sparePartMarginPreview(part);
+                  const isLinked = Boolean(
+                    String(part.materialId || '').trim() || String(part.rawMaterialId || '').trim(),
+                  );
                   return (
                     <tr key={part.id} className="border-t">
                       <td className="p-2">{part.name}</td>
                       <td className="p-2">{part.code}</td>
                       {viewMode === 'dense' && <td className="p-2">{part.category || '—'}</td>}
                       {viewMode === 'dense' && <td className="p-2">{part.unit || '—'}</td>}
+                      {viewMode === 'dense' && (
+                        <td className="p-2">
+                          <Badge variant={isLinked ? 'secondary' : 'outline'}>
+                            {isLinked ? 'مرتبط' : 'غير مرتبط'}
+                          </Badge>
+                        </td>
+                      )}
                       <td className="p-2 font-mono">{qty}</td>
                       <td className="p-2 font-mono">{part.minStock}</td>
                       {viewMode === 'dense' && (
@@ -562,10 +719,24 @@ export const SparePartsInventory: React.FC = () => {
                           >
                             تسعير
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => increaseStock(part)} disabled={!canManageParts}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            iconName="add"
+                            tone="submit"
+                            onClick={() => increaseStock(part)}
+                            disabled={!canManageParts}
+                          >
                             +{Math.max(1, Number(increaseQty || 1))}
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => decreaseStock(part)} disabled={!canManageParts}>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            iconName="remove"
+                            tone="undo"
+                            onClick={() => decreaseStock(part)}
+                            disabled={!canManageParts}
+                          >
                             -{Math.max(1, Number(increaseQty || 1))}
                           </Button>
                           <Button variant="destructive" size="sm" onClick={() => setPartPendingDelete(part)} disabled={!canManageParts}>
@@ -578,7 +749,7 @@ export const SparePartsInventory: React.FC = () => {
                 })}
                 {visibleParts.length === 0 && (
                   <tr>
-                    <td className="p-3 text-center text-muted-foreground" colSpan={viewMode === 'dense' ? 12 : 6}>
+                    <td className="p-3 text-center text-muted-foreground" colSpan={viewMode === 'dense' ? 13 : 6}>
                       لا توجد قطع مطابقة.
                     </td>
                   </tr>

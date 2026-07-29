@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { Button } from '@/components/ui/button';
 import { hrNotificationService } from '../approval/notifications';
 import { employeeService } from '../employeeService';
 import type { HRNotification } from '../types';
@@ -56,12 +57,15 @@ export const HRNotificationBell: React.FC<HRNotificationBellProps> = ({ employee
         <div className="absolute left-0 mt-2 w-[340px] max-w-[90vw] bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl shadow-xl z-40">
           <div className="px-3 py-2 border-b border-[var(--color-border)] flex items-center justify-between">
             <div className="text-xs font-bold">الإشعارات</div>
-            <button
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
               onClick={() => userId && hrNotificationService.markAllRead(userId)}
-              className="text-xs text-primary font-bold"
+              className="!h-auto !px-1.5 !py-0.5 text-xs font-bold text-primary hover:underline"
             >
               تحديد الكل كمقروء
-            </button>
+            </Button>
           </div>
           <div className="max-h-80 overflow-y-auto">
             {sorted.length === 0 ? (

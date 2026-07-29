@@ -9,6 +9,7 @@ import { qualityPrintService } from '../services/qualityPrintService';
 import { workOrderService } from '@/modules/production/services/workOrderService';
 import type { QualityDefect } from '@/types';
 import { QualityDefectsPrint, QualityReportPrint } from '../components/QualityReportPrint';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 export const QualityReports: React.FC = () => {
   const { can } = usePermission();
@@ -191,15 +192,14 @@ export const QualityReports: React.FC = () => {
         </div>
         <div className="erp-page-actions">
           {canPrint && selectedWorkOrder && (
-            <button className="btn btn-primary" onClick={() => handlePrint()}>
-              <span className="material-icons-round" style={{ fontSize: 16 }}>print</span>
+            <Button variant="primary" onClick={() => handlePrint()}>
               طباعة
-            </button>
+            </Button>
           )}
           {canPrint && selectedWorkOrder?.id && (
             <div className="relative" id="quality-more-menu-anchor">
-              <button
-                className="btn btn-secondary"
+              <Button
+                variant="secondary"
                 title="تصدير PDF"
                 onClick={async () => {
                   if (!printRef.current) return;
@@ -217,14 +217,13 @@ export const QualityReports: React.FC = () => {
                   }
                 }}
               >
-                <span className="material-icons-round" style={{ fontSize: 16 }}>picture_as_pdf</span>
-                <span className="hidden sm:inline">PDF KPI</span>
-              </button>
+                PDF KPI
+              </Button>
             </div>
           )}
           {canPrint && selectedWorkOrder?.id && defectsPrintRef && (
-            <button
-              className="btn btn-secondary"
+            <Button
+              variant="secondary"
               onClick={async () => {
                 if (!defectsPrintRef.current || !selectedWorkOrder?.id) return;
                 try {
@@ -241,9 +240,8 @@ export const QualityReports: React.FC = () => {
                 }
               }}
             >
-              <span className="material-icons-round" style={{ fontSize: 16 }}>picture_as_pdf</span>
-              <span className="hidden sm:inline">PDF العيوب</span>
-            </button>
+              PDF العيوب
+            </Button>
           )}
         </div>
       </div>
@@ -277,25 +275,29 @@ export const QualityReports: React.FC = () => {
         </Card>
 
         <Card title="جدول تقارير الجودة">
-          <div className="mb-4 grid md:grid-cols-3 gap-3">
-            <input
-              value={tableQuery}
-              onChange={(e) => setTableQuery(e.target.value)}
-              placeholder="بحث برقم أمر الشغل / كود التقرير / المنتج / الخط"
-              className="md:col-span-2 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
-            />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
-              className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-sm"
-            >
-              <option value="all">كل الحالات</option>
-              <option value="approved">معتمد</option>
-              <option value="rejected">مرفوض</option>
-              <option value="pending">قيد المراجعة</option>
-              <option value="not_required">غير مطلوب</option>
-            </select>
-          </div>
+          <SmartFilterBar
+            searchPlaceholder="بحث برقم أمر الشغل / كود التقرير / المنتج / الخط"
+            searchValue={tableQuery}
+            onSearchChange={setTableQuery}
+            quickFilters={[
+              {
+                key: 'status',
+                placeholder: 'كل الحالات',
+                options: [
+                  { value: 'approved', label: 'معتمد' },
+                  { value: 'rejected', label: 'مرفوض' },
+                  { value: 'pending', label: 'قيد المراجعة' },
+                  { value: 'not_required', label: 'غير مطلوب' },
+                ],
+                width: 'w-[160px]',
+              },
+            ]}
+            quickFilterValues={{ status: statusFilter }}
+            onQuickFilterChange={(key, value) => {
+              if (key === 'status') setStatusFilter(value === 'all' ? 'all' : value as typeof statusFilter);
+            }}
+            className="mb-4 border-0 rounded-none"
+          />
           {qualityReportRows.length === 0 ? (
             <p className="text-sm text-slate-500">لا توجد تقارير جودة مرتبطة بأوامر الشغل حاليًا.</p>
           ) : filteredQualityReportRows.length === 0 ? (

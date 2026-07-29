@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { Card } from '../components/UI';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { TableIconAction } from '@/src/components/erp';
 import { SuppliesReceiptPrint } from '../components/SuppliesReceiptPrint';
 import { componentCompensationService } from '../services/componentCompensationService';
 import { disassemblyService } from '../services/disassemblyService';
@@ -292,28 +293,20 @@ export const ProductionInventoryApprovals: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1.5">
                         {row.status === 'pending' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="approve"
                             disabled={!can('productionIssue.approve')}
                             onClick={() => void approveCompensation(row)}
-                            title="اعتماد"
                             aria-label="اعتماد التعويض"
-                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">check_circle</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'pending' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="reject"
                             disabled={!can('productionIssue.approve')}
                             onClick={() => void rejectCompensation(row)}
-                            title="رفض"
                             aria-label="رفض التعويض"
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">cancel</span>
-                          </button>
+                          />
                         )}
                       </div>
                     </td>
@@ -362,63 +355,44 @@ export const ProductionInventoryApprovals: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1.5">
                         {row.status === 'submitted' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="approve"
                             disabled={!can('inventory.transactions.create')}
                             onClick={() => void actionReceipt(row, 'approve')}
-                            title="اعتماد"
                             aria-label={`اعتماد إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">check_circle</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'submitted' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="reject"
                             disabled={!can('inventory.transactions.create')}
                             onClick={() => void actionReceipt(row, 'reject')}
-                            title="رفض"
                             aria-label={`رفض إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">cancel</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'approved' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="execute"
                             disabled={!can('inventory.transactions.create')}
                             onClick={() => void actionReceipt(row, 'execute')}
-                            title="تنفيذ"
                             aria-label={`تنفيذ إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">play_circle</span>
-                          </button>
+                          />
                         )}
                         {(row.status === 'draft' || row.status === 'rejected' || row.status === 'cancelled') && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="delete"
                             disabled={!can('inventory.transactions.create')}
                             onClick={() => void actionReceipt(row, 'delete')}
-                            title="حذف"
                             aria-label={`حذف إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">delete</span>
-                          </button>
+                          />
                         )}
                         {canPrint && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="print"
                             onClick={() => void printReceipt(row)}
                             title="طباعة إذن الاستلام"
                             aria-label={`طباعة إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors"
-                          >
-                            <span className="material-icons-round text-sm">print</span>
-                          </button>
+                          />
                         )}
                       </div>
                     </td>
@@ -464,40 +438,28 @@ export const ProductionInventoryApprovals: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1.5">
                         {row.status === 'submitted' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="approve"
                             disabled={!can('inventory.disassembly.manage')}
                             onClick={() => void actionDisassembly(row, 'approve')}
-                            title="اعتماد"
                             aria-label={`اعتماد طلب التفكيك ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">check_circle</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'submitted' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="reject"
                             disabled={!can('inventory.disassembly.manage')}
                             onClick={() => void actionDisassembly(row, 'reject')}
-                            title="رفض"
                             aria-label={`رفض طلب التفكيك ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">cancel</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'approved' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="execute"
                             disabled={!can('inventory.disassembly.manage')}
                             onClick={() => void actionDisassembly(row, 'execute')}
-                            title="تنفيذ"
                             aria-label={`تنفيذ طلب التفكيك ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">play_circle</span>
-                          </button>
+                          />
                         )}
                       </div>
                     </td>

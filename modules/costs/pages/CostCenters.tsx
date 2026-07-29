@@ -3,17 +3,11 @@ import { Download, Eye, Pencil, Trash2 } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button } from '../../../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '../../../components/ui/select';
 import { DataTable, type Column } from '../../../src/components/erp/DataTable';
 import type { RowActionMenuItem } from '../../../src/components/erp/RowActionsMenu';
 import { KPICard } from '../../../src/components/erp/KPICard';
 import { StatusBadge } from '../../../src/components/erp/StatusBadge';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import type { CostCenter } from '../../../types';
@@ -314,50 +308,53 @@ export const CostCenters: React.FC = () => {
       </div>
 
       <Card>
-        <div className="flex items-center gap-2 flex-wrap">
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث باسم المركز أو المعرف..."
-            className="h-10 flex-1 min-w-0 w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 bg-[var(--color-bg)] text-sm outline-none focus:ring-2 focus:ring-primary/20 sm:w-auto"
-          />
-          <Select value={typeFilter} onValueChange={(v) => setTypeFilter(v as 'all' | 'direct' | 'indirect')}>
-            <SelectTrigger className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white text-sm">
-              <SelectValue placeholder="كل الأنواع" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل الأنواع</SelectItem>
-              <SelectItem value="indirect">غير مباشر</SelectItem>
-              <SelectItem value="direct">مباشر</SelectItem>
-            </SelectContent>
-          </Select>
-          <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as 'all' | 'active' | 'inactive')}>
-            <SelectTrigger className="h-10 min-w-[150px] rounded-lg border border-slate-200 bg-white text-sm">
-              <SelectValue placeholder="كل الحالات" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">كل الحالات</SelectItem>
-              <SelectItem value="active">مفعل</SelectItem>
-              <SelectItem value="inactive">معطل</SelectItem>
-            </SelectContent>
-          </Select>
-          <div className="flex items-center rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden sm:ms-auto">
-            <button
-              type="button"
-              onClick={() => setViewMode('table')}
-              className={`px-3 py-2 text-xs font-medium ${viewMode === 'table' ? 'bg-[#4F46E5] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
-            >
-              جدول
-            </button>
-            <button
-              type="button"
-              onClick={() => setViewMode('cards')}
-              className={`px-3 py-2 text-xs font-medium ${viewMode === 'cards' ? 'bg-[#4F46E5] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
-            >
-              بطاقات
-            </button>
-          </div>
-        </div>
+        <SmartFilterBar
+          searchPlaceholder="بحث باسم المركز أو المعرف..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'type',
+              placeholder: 'كل الأنواع',
+              options: [
+                { value: 'indirect', label: 'غير مباشر' },
+                { value: 'direct', label: 'مباشر' },
+              ],
+            },
+            {
+              key: 'status',
+              placeholder: 'كل الحالات',
+              options: [
+                { value: 'active', label: 'مفعل' },
+                { value: 'inactive', label: 'معطل' },
+              ],
+            },
+          ]}
+          quickFilterValues={{ type: typeFilter, status: statusFilter }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'type') setTypeFilter(value as typeof typeFilter);
+            if (key === 'status') setStatusFilter(value as typeof statusFilter);
+          }}
+          extra={
+            <div className="flex items-center rounded-[var(--border-radius-base)] border border-[var(--color-border)] overflow-hidden sm:ms-auto">
+              <button
+                type="button"
+                onClick={() => setViewMode('table')}
+                className={`px-3 py-2 text-xs font-medium ${viewMode === 'table' ? 'bg-[#4F46E5] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
+              >
+                جدول
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode('cards')}
+                className={`px-3 py-2 text-xs font-medium ${viewMode === 'cards' ? 'bg-[#4F46E5] text-white' : 'bg-[var(--color-card)] text-[var(--color-text-muted)]'}`}
+              >
+                بطاقات
+              </button>
+            </div>
+          }
+          className="mb-0 border-0 rounded-none"
+        />
       </Card>
 
       {filteredCenters.length === 0 ? (

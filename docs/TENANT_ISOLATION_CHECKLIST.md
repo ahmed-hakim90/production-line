@@ -31,3 +31,9 @@ Use a **new tenant / company** with **no seed data** (or a fresh test tenant) af
 ## Legacy data
 
 Documents **without** `tenantId` may still be readable under `sameTenantOrLegacyRead()` until a backfill completes. After backfill, plan to tighten rules per comment in `firestore.rules`.
+
+## Foundation helpers (automated)
+
+- [ ] `npx --yes tsx tests/foundation-harden.test.ts` — tenant stamp overwrites client `tenantId`; cross-tenant `assertSameTenant` rejects.
+- [ ] `npm run arch:check:legacy-imports` — no new page-level Firestore write APIs outside HR allowlist.
+- [ ] Role create/update/delete go through `modules/system/usecases` (emits audit events).

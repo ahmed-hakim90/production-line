@@ -179,7 +179,6 @@ export const DelegationManagement: React.FC = () => {
           </div>
         </div>
         <Button onClick={() => setShowForm(!showForm)}>
-          <span className="material-icons-round text-sm">{showForm ? 'close' : 'add'}</span>
           {showForm ? 'إلغاء' : 'تفويض جديد'}
         </Button>
       </div>
@@ -254,11 +253,7 @@ export const DelegationManagement: React.FC = () => {
 
             <div className="flex justify-end">
               <Button onClick={handleCreate} disabled={saving}>
-                {saving ? (
-                  <><span className="material-icons-round animate-spin text-sm">refresh</span> جاري الحفظ...</>
-                ) : (
-                  <><span className="material-icons-round text-sm">save</span> إنشاء التفويض</>
-                )}
+                {saving ? 'جاري الحفظ...' : 'إنشاء التفويض'}
               </Button>
             </div>
           </div>

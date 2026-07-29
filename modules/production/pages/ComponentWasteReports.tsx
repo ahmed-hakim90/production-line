@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, PackageX, Plus, Share2, Trash2 } from 'lucide-react';
+import { Loader2, PackageX } from 'lucide-react';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { Card, Button, SearchableSelect, Badge } from '../components/UI';
 import { loadWasteComponentOptions } from '../utils/wasteComponentOptions';
@@ -389,7 +389,6 @@ export const ComponentWasteReports: React.FC = () => {
                 onClick={addRow}
                 disabled={!productId || materialsLoading || rows.length >= materialOptions.length || materialOptions.length === 0}
               >
-                <Plus size={14} />
                 إضافة مكون
               </Button>
             </div>
@@ -442,9 +441,7 @@ export const ComponentWasteReports: React.FC = () => {
                         variant="outline"
                         onClick={() => removeRow(row.key)}
                         disabled={rows.length <= 1}
-                        className="text-rose-700 border-rose-200 hover:bg-rose-50"
                       >
-                        <Trash2 size={14} />
                         حذف
                       </Button>
                     </div>
@@ -474,8 +471,7 @@ export const ComponentWasteReports: React.FC = () => {
               سيتم خصم الكميات من مخزن المفكك وإضافتها إلى مخزن الهالك.
             </p>
             <Button type="button" onClick={handleSave} disabled={!canSave || saving}>
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <PackageX size={16} />}
-              حفظ تقرير الهالك
+              {saving ? 'جاري الحفظ...' : 'حفظ تقرير الهالك'}
             </Button>
           </div>
         </Card>
@@ -564,8 +560,7 @@ export const ComponentWasteReports: React.FC = () => {
                           onClick={() => handleShare(report)}
                           disabled={Boolean(exportingId)}
                         >
-                          {exportingId === report.id ? <Loader2 size={14} className="animate-spin" /> : <Share2 size={14} />}
-                          واتساب
+                          {exportingId === report.id ? 'جاري المشاركة...' : 'واتساب'}
                         </Button>
                       </td>
                     </tr>

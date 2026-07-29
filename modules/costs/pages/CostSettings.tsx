@@ -113,18 +113,7 @@ export const CostSettings: React.FC = () => {
               />
             </div>
             <Button variant="primary" onClick={handleSave} disabled={saving || hourlyRate <= 0}>
-              {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              {saved ? (
-                <>
-                  <span className="material-icons-round text-sm">check</span>
-                  تم الحفظ
-                </>
-              ) : (
-                <>
-                  <span className="material-icons-round text-sm">save</span>
-                  حفظ
-                </>
-              )}
+              {saving ? 'جاري الحفظ...' : saved ? 'تم الحفظ' : 'حفظ'}
             </Button>
           </div>
 
@@ -153,18 +142,7 @@ export const CostSettings: React.FC = () => {
               />
             </div>
             <Button variant="primary" onClick={handleSaveCny} disabled={savingCny || cnyToEgpRate <= 0}>
-              {savingCny && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              {savedCny ? (
-                <>
-                  <span className="material-icons-round text-sm">check</span>
-                  تم الحفظ
-                </>
-              ) : (
-                <>
-                  <span className="material-icons-round text-sm">save</span>
-                  حفظ
-                </>
-              )}
+              {savingCny ? 'جاري الحفظ...' : savedCny ? 'تم الحفظ' : 'حفظ'}
             </Button>
           </div>
 
@@ -204,7 +182,6 @@ export const CostSettings: React.FC = () => {
                 onClick={() => setWorkingDaysYear((prev) => prev - 1)}
                 disabled={savingDays}
               >
-                <span className="material-icons-round text-sm">chevron_right</span>
                 السنة السابقة
               </Button>
               <span className="px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-black text-[var(--color-text)] min-w-[86px] text-center">
@@ -216,22 +193,10 @@ export const CostSettings: React.FC = () => {
                 disabled={savingDays}
               >
                 السنة التالية
-                <span className="material-icons-round text-sm">chevron_left</span>
               </Button>
             </div>
             <Button variant="primary" onClick={handleSaveWorkingDays} disabled={savingDays}>
-              {savingDays && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-              {savedDays ? (
-                <>
-                  <span className="material-icons-round text-sm">check</span>
-                  تم الحفظ
-                </>
-              ) : (
-                <>
-                  <span className="material-icons-round text-sm">save</span>
-                  حفظ أيام السنة
-                </>
-              )}
+              {savingDays ? 'جاري الحفظ...' : savedDays ? 'تم الحفظ' : 'حفظ أيام السنة'}
             </Button>
           </div>
           <div className="overflow-x-auto">

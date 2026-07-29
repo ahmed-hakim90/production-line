@@ -97,9 +97,9 @@ export const InventoryExceptions: React.FC = () => {
         actions={(
           <div className="flex flex-wrap gap-2">
             <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')}>
-              <GhostButton>تنبيهات المستلزمات</GhostButton>
+              <GhostButton iconName="warning_amber" tone="undo">تنبيهات المستلزمات</GhostButton>
             </Link>
-            <PrimaryButton onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
+            <PrimaryButton iconName="refresh" tone="neutral" onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
           </div>
         )}
       />
@@ -126,6 +126,8 @@ export const InventoryExceptions: React.FC = () => {
                   </div>
                   {row.balance && (
                     <PrimaryButton
+                      iconName="tune"
+                      tone="edit"
                       onClick={() =>
                         openModal(MODAL_KEYS.INVENTORY_STOCK_ADJUSTMENT, {
                           warehouseId: row.balance!.warehouseId,

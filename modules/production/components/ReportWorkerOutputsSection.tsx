@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FirestoreProduct, ProductionReportWorkerOutput, ProductionWorkerSettings } from '@/types';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '@/types';
+import { Button } from './UI';
 import { lineAssignmentWorkerBridge } from '../services/lineAssignmentWorkerBridge';
 import { productionWorkerPerformanceService } from '../services/productionWorkerPerformanceService';
 import { productionWorkerService } from '../services/productionWorkerService';
@@ -307,14 +308,16 @@ export const ReportWorkerOutputsSection: React.FC<Props> = ({
                 : ''}
           </p>
         </div>
-        <button
+        <Button
           type="button"
-          className="text-xs font-bold text-primary"
+          variant="ghost"
+          size="sm"
           onClick={() => void loadWorkers()}
           disabled={disabled || loading}
+          className="!h-auto !px-1.5 !py-0.5 text-xs font-bold text-primary"
         >
           تحديث العمال
-        </button>
+        </Button>
       </div>
 
       {loading ? (

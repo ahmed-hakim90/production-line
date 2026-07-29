@@ -1,5 +1,7 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/UI';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
 import { attendanceProcessingService } from '../services/attendanceProcessingService';
 import type { AttendanceMonthlySummary } from '../types';
@@ -20,6 +22,7 @@ type MonthlyReportPageData = {
 
 export const AttendanceMonthlyReport: React.FC = () => {
   const [month, setMonth] = useState(getCurrentMonth);
+  const [monthFilter, setMonthFilter] = useState(getCurrentMonth);
   const [search, setSearch] = useState('');
   const [recalculating, setRecalculating] = useState(false);
   const fetchEmployees = useAppStore((s) => s.fetchEmployees);
@@ -66,6 +69,14 @@ export const AttendanceMonthlyReport: React.FC = () => {
     await reloadCached(true);
   }, [month, rawEmployees.length, fetchEmployees, REPORT_CACHE_KEY, reloadCached]);
 
+  const handleApplyMonth = useCallback(() => {
+    setMonth(monthFilter);
+  }, [monthFilter]);
+
+  const handleMonthFilterChange = (key: string, value: string) => {
+    setMonthFilter(value);
+  };
+
   const filteredRows = useMemo(() => {
     const term = search.trim().toLowerCase();
     if (!term) return rows;
@@ -100,26 +111,31 @@ export const AttendanceMonthlyReport: React.FC = () => {
         <div className="erp-kpi-card"><div className="erp-kpi-label">إضافي (دقيقة)</div><div className="erp-kpi-value">{kpis.overtimeMinutes}</div></div>
       </div>
 
-      <div className="erp-filter-bar">
-        <div className="erp-filter-date">
-          <span className="erp-filter-label">الشهر</span>
-          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-        </div>
-        <input
-          className="erp-search-input"
-          placeholder="بحث باسم الموظف أو الكود"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
+      <div className="card overflow-x-auto p-0">
+        <SmartFilterBar
+          searchPlaceholder="بحث باسم الموظف أو الكود"
+          searchValue={search}
+          onSearchChange={setSearch}
+          advancedFilters={[
+            {
+              key: 'month',
+              label: 'الشهر',
+              placeholder: 'الشهر',
+              type: 'month',
+              options: [],
+            },
+          ]}
+          advancedFilterValues={{ month: monthFilter }}
+          onAdvancedFilterChange={handleMonthFilterChange}
+          onApply={handleApplyMonth}
+          applyLabel="تحديث"
+          extra={
+            <Button onClick={() => void load(true)} disabled={loading || recalculating}>
+              {recalculating ? 'جار إعادة الاحتساب...' : 'إعادة احتساب'}
+            </Button>
+          }
+          className="mb-0 border-0 rounded-none"
         />
-        <button className="erp-filter-apply" onClick={() => void load(false)} disabled={loading || recalculating}>
-          {loading ? 'جار التحميل...' : 'تحديث'}
-        </button>
-        <button className="erp-filter-apply" onClick={() => void load(true)} disabled={loading || recalculating}>
-          {recalculating ? 'جار إعادة الاحتساب...' : 'إعادة احتساب'}
-        </button>
-      </div>
-
-      <div className="card overflow-x-auto">
         <table className="erp-table w-full text-right">
           <thead className="erp-thead">
             <tr>

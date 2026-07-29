@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Card, KPIBox } from '../components/UI';
+import { Card, KPIBox, Button } from '../components/UI';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useShallowStore } from '../../../store/useAppStore';
@@ -568,17 +568,18 @@ export const CostDataHealth: React.FC = () => {
               <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
             </div>
             {activeFiltersCount > 0 && (
-              <button
+              <Button
                 type="button"
-                className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
+                size="sm"
+                variant="ghost"
                 onClick={() => {
                   setSearch('');
                   setSeverityFilter('');
                   setTypeFilter('');
                 }}
               >
-                مسح ({activeFiltersCount})
-              </button>
+                {`مسح (${activeFiltersCount})`}
+              </Button>
             )}
           </div>
         )}

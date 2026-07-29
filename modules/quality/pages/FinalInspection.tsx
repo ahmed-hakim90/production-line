@@ -6,6 +6,8 @@ import { usePermission } from '@/utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
 import type { FileAttachmentMeta, QualityInspectionStatus, QualityReasonCatalogItem } from '@/types';
 import { qualityInspectionService } from '../services/qualityInspectionService';
+import { createQualityInspection } from '../usecases/createQualityInspection';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { qualityNotificationService } from '../services/qualityNotificationService';
 import { qualityPrintService } from '../services/qualityPrintService';
 import { qualitySettingsService } from '../services/qualitySettingsService';
@@ -132,7 +134,7 @@ export const FinalInspection: React.FC = () => {
         attachments.push(uploaded);
       }
 
-      const inspectionId = await qualityInspectionService.createInspection({
+      const inspectionId = unwrapOrThrow(await createQualityInspection({
         workOrderId: selectedWorkOrder.id!,
         lineId: selectedWorkOrder.lineId,
         productId: selectedWorkOrder.productId,
@@ -141,7 +143,7 @@ export const FinalInspection: React.FC = () => {
         inspectedBy: currentEmployee.id,
         notes,
         attachments,
-      });
+      })).inspectionId;
       if (!inspectionId) {
         throw new Error('تعذر الحفظ: Backend غير مهيأ (Firebase).');
       }
@@ -395,17 +397,18 @@ export const FinalInspection: React.FC = () => {
                     <img src={url} alt={`qc-${idx}`} className="w-full h-full object-cover" />
                   </div>
                 ))}
-                <button
-                  type="button"
-                  onClick={() => {
-                    setPhotoFiles([]);
-                    setPhotoPreviews([]);
-                    setUploadProgress(0);
-                  }}
-                  className="px-3 py-2 text-xs font-bold rounded-[var(--border-radius-base)] border border-rose-200 text-rose-600 hover:bg-rose-50 dark:border-rose-900/60 dark:hover:bg-rose-900/20 transition-all"
-                >
-                  إزالة الصور
-                </button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => {
+                      setPhotoFiles([]);
+                      setPhotoPreviews([]);
+                      setUploadProgress(0);
+                    }}
+                  >
+                    إزالة الصور
+                  </Button>
               </div>
             )}
             {busy && photoFiles.length > 0 && (

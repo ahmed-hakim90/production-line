@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useAppStore, useShallowStore } from '../store/useAppStore';
 import type { AppNotification } from '../types';
+import { Button } from '@/components/ui/button';
 
 const TYPE_ICONS: Record<string, string> = {
   production_report: 'description',
@@ -161,12 +162,18 @@ export const NotificationBell: React.FC = () => {
               )}
             </div>
             {unreadCount > 0 && (
-              <button
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
                 onClick={handleMarkAll}
-                className="text-[11px] font-semibold text-primary hover:underline"
+                iconName="done_all"
+                tone="approve"
+                solid={false}
+                className="!h-auto !px-1.5 !py-0.5 text-[11px] font-semibold text-primary hover:underline"
               >
                 {t('notifications.markAllRead')}
-              </button>
+              </Button>
             )}
           </div>
 

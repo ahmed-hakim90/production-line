@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { Printer, Trash2, Plus } from 'lucide-react';
+import { Trash2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -23,7 +23,11 @@ import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import { sparePartsService } from '../services/sparePartsService';
-import { productMaterialService } from '../../production/services/productMaterialService';
+import { loadProductComponentsForProducts } from '../../catalog/lib/productComponents';
+import {
+  collectJobProductIds,
+  sparePartMatchesCatalogComponents,
+} from '../utils/sparePartCatalogMatch';
 import { userService } from '../../../services/userService';
 import { employeeService } from '../../hr/employeeService';
 import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
@@ -142,34 +146,36 @@ export const RepairJobDetail: React.FC = () => {
     void repairBranchService.list().then(setBranches);
   }, [jobId, repairSettings.workflow.initialStatusId, repairSettings.defaults.defaultWarranty]);
 
+  const catalogProductIdsKey = useMemo(
+    () =>
+      collectJobProductIds({
+        productId: job?.productId,
+        jobProducts: jobProducts.length > 0 ? jobProducts : job?.jobProducts,
+      }).join('|'),
+    [job?.productId, job?.jobProducts, jobProducts],
+  );
+
   useEffect(() => {
     if (!job?.branchId) return;
+    const productIds = catalogProductIdsKey ? catalogProductIdsKey.split('|') : [];
     void Promise.all([
       sparePartsService.listParts(job.branchId),
-      job.productId ? productMaterialService.getByProduct(job.productId) : Promise.resolve([]),
-    ]).then(([partsRows, materials]) => {
-      const normalizedMaterials = materials
-        .map((m) => ({
-          materialId: String(m.materialId || '').trim(),
-          materialName: String(m.materialName || '').trim().toLowerCase(),
-        }))
-        .filter((m) => m.materialId || m.materialName);
+      productIds.length > 0 ? loadProductComponentsForProducts(productIds) : Promise.resolve([]),
+    ]).then(([partsRows, components]) => {
       const allowedIds = new Set<string>();
-      if (normalizedMaterials.length > 0) {
+      if (components.length > 0) {
         partsRows.forEach((part) => {
           const partId = String(part.id || '').trim();
-          const partName = String(part.name || '').trim().toLowerCase();
-          const isAllowed = normalizedMaterials.some(
-            (m) => (m.materialId && m.materialId === partId) || (m.materialName && m.materialName === partName),
-          );
-          if (isAllowed && partId) allowedIds.add(partId);
+          if (partId && sparePartMatchesCatalogComponents(part, components)) {
+            allowedIds.add(partId);
+          }
         });
       }
       setAllowedPartIds(allowedIds);
-      setHasProductComponents(normalizedMaterials.length > 0);
+      setHasProductComponents(components.length > 0);
       setParts(partsRows);
     });
-  }, [job?.branchId, job?.productId]);
+  }, [job?.branchId, catalogProductIdsKey]);
 
   const filteredParts = useMemo(
     () => parts.filter((part) => part.id && allowedPartIds.has(part.id)),
@@ -708,7 +714,7 @@ export const RepairJobDetail: React.FC = () => {
               </div>
               <div className="flex items-center gap-2 flex-wrap no-print">
                 <Button variant="outline" size="sm" onClick={handlePrintRepairRequest}>
-                  <Printer className="h-4 w-4 ms-1" /> طباعة
+                  طباعة
                 </Button>
                 <div className="w-full sm:w-auto"><WhatsAppShare text={whatsappText} phone={job.customerPhone} /></div>
                 <Button variant="outline" size="sm" onClick={exportReceipt}>تنزيل PDF</Button>
@@ -916,7 +922,6 @@ export const RepairJobDetail: React.FC = () => {
               ))}
               <div className="flex flex-wrap items-center gap-2">
                 <Button type="button" variant="outline" onClick={addProductRow}>
-                  <Plus className="h-4 w-4 ms-1" />
                   إضافة منتج / Add Product
                 </Button>
                     <Button type="button" onClick={saveMultiProductDetails} disabled={!canEditThisJob}>

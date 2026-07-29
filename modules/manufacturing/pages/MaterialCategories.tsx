@@ -249,9 +249,10 @@ export const MaterialCategories: React.FC = () => {
                     <td className="px-4 py-3">{category.isActive !== false ? 'نشطة' : 'موقفة'}</td>
                     {canManage && (
                       <td className="px-4 py-3 text-center">
-                        <button
+                        <Button
                           type="button"
-                          className="text-primary text-sm font-bold mx-1"
+                          size="sm"
+                          variant="ghost"
                           onClick={() => {
                             setEditId(id);
                             setForm({
@@ -262,14 +263,15 @@ export const MaterialCategories: React.FC = () => {
                           }}
                         >
                           تعديل
-                        </button>
-                        <button
+                        </Button>
+                        <Button
                           type="button"
-                          className="text-amber-700 text-sm font-bold mx-1"
+                          size="sm"
+                          variant="ghost"
                           onClick={() => void materialCategoryService.deactivateCategory(id).then(loadData)}
                         >
                           إيقاف
-                        </button>
+                        </Button>
                       </td>
                     )}
                   </tr>

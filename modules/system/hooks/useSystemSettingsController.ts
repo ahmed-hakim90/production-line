@@ -225,30 +225,74 @@ export const useSystemSettingsController = ({
     const savedQuickActionsSorted = (systemSettings.quickActions ?? [])
       .slice()
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+    const savedPlanSettings = syncPlanSettingsWarehouseRouting({
+      ...DEFAULT_PLAN_SETTINGS,
+      ...systemSettings.planSettings,
+      inventoryRouting: {
+        ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+        ...(systemSettings.planSettings?.inventoryRouting ?? {}),
+      },
+    });
+    const localSyncedPlanSettings = syncPlanSettingsWarehouseRouting(localPlanSettings);
+    const pickPlanSettings = <K extends keyof PlanSettings>(source: PlanSettings, keys: readonly K[]): Pick<PlanSettings, K> =>
+      keys.reduce((acc, key) => {
+        acc[key] = source[key];
+        return acc;
+      }, {} as Pick<PlanSettings, K>);
+    const generalPlanKeys = [
+      'allowMultipleActivePlans',
+      'autoClosePlan',
+      'autoGenerateMaterialRequirements',
+      'allowNegativeDecomposedStock',
+      'allowNegativeFinishedTransferStock',
+      'useOperationalPeriodDailyTarget',
+      'maxWasteThreshold',
+      'efficiencyCalculationMode',
+      'averageProductionMode',
+      'operationalMonthStartDay',
+      'supplyCycleBatchCodePrefix',
+      'productCodePrefix',
+      'productCodePadding',
+      'rawMaterialCodePrefix',
+      'rawMaterialCodePadding',
+      'categoryCodePrefix',
+      'categoryCodePadding',
+      'injectionRawMaterialCategoryKeywords',
+      'transferApprovalPermission',
+      'transferDisplayUnit',
+      'hrApproverUserIds',
+    ] as const;
+    const productionPlanKeys = [
+      'allowReportWithoutPlan',
+      'allowOverProduction',
+      'reportBehavior',
+      'inventoryRouting',
+      'inventoryRoutingMigratedAt',
+      'enablePackagingStockTransfer',
+      'rawMaterialWarehouseId',
+      'decomposedSourceWarehouseId',
+      'defaultProductionWarehouseId',
+      'finishedReceiveWarehouseId',
+      'finalProductWarehouseId',
+      'wasteReceiveWarehouseId',
+      'packagingSourceWarehouseId',
+      'packagingTargetWarehouseId',
+      'requireFinishedStockApprovalForReports',
+      'productionRequestFirstApproverEmployeeId',
+      'productionRequestFinalApproverEmployeeId',
+      'productionRequestObserverEmployeeIds',
+      'productionRequestObserverUserIds',
+    ] as const;
 
     return {
       general:
-        serialize(syncPlanSettingsWarehouseRouting({
-          ...DEFAULT_PLAN_SETTINGS,
-          ...systemSettings.planSettings,
-          inventoryRouting: {
-            ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
-            ...(systemSettings.planSettings?.inventoryRouting ?? {}),
-          },
-        })) !== serialize(syncPlanSettingsWarehouseRouting(localPlanSettings)) ||
+        serialize(pickPlanSettings(savedPlanSettings, generalPlanKeys)) !== serialize(pickPlanSettings(localSyncedPlanSettings, generalPlanKeys)) ||
         (systemSettings.defaultHomeLogicalPath ?? '') !== localDefaultHomePath,
       appearance:
         serialize({ ...DEFAULT_BRANDING, ...systemSettings.branding }) !== serialize(localBranding) ||
         serialize({ ...DEFAULT_THEME, ...systemSettings.theme }) !== serialize(localTheme),
       production:
-        serialize(syncPlanSettingsWarehouseRouting({
-          ...DEFAULT_PLAN_SETTINGS,
-          ...systemSettings.planSettings,
-          inventoryRouting: {
-            ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
-            ...(systemSettings.planSettings?.inventoryRouting ?? {}),
-          },
-        })) !== serialize(syncPlanSettingsWarehouseRouting(localPlanSettings)) ||
+        serialize(pickPlanSettings(savedPlanSettings, productionPlanKeys)) !== serialize(pickPlanSettings(localSyncedPlanSettings, productionPlanKeys)) ||
         serialize(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings)) !== serialize(localProductionWorkerSettings),
       dashboards:
         serialize({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay }) !== serialize(localDashboardDisplay) ||

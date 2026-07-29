@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { TableIconAction, ToneActionButton } from '@/src/components/erp';
 import {
   Dialog,
   DialogContent,
@@ -15,6 +16,8 @@ import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { employeeService } from '@/modules/hr/employeeService';
 import { employeeDeductionService } from '@/modules/hr/employeeFinancialsService';
 import { leaveBalanceService, leaveRequestService, syncLeaveApprovalDecision } from '@/modules/hr/leaveService';
+import { createLeaveRequest } from '@/modules/hr/usecases/createLeaveRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { loanService } from '@/modules/hr/loanService';
 import {
   approveRequest,
@@ -1037,7 +1040,7 @@ export const SupervisorTeamActions: React.FC = () => {
       const { approvalEmployees } = getApprovalContext();
       const leaveTypeLabel = selectedLeaveType?.label || LEAVE_TYPE_LABELS[leaveType] || leaveType;
       const leaveReasonLabel = selectedLeaveReason.label;
-      const leaveId = await leaveRequestService.create({
+      const leaveId = unwrapOrThrow(await createLeaveRequest({
         employeeId: selectedWorker.employeeId,
         employeeName: selectedWorker.employeeName,
         leaveType,
@@ -1056,7 +1059,7 @@ export const SupervisorTeamActions: React.FC = () => {
         requestedByEmployeeId: supervisorId,
         requestedByName: resolvedSupervisor?.name || userDisplayName || '',
         requestedOnBehalf: true,
-      });
+      }, { userId: uid || undefined, userName: userDisplayName || undefined })).leaveRequestId;
       const approvalResult = await productionApprovalRequestService.create({
         requestType: 'leave',
         employeeId: selectedWorker.employeeId,
@@ -1299,8 +1302,7 @@ export const SupervisorTeamActions: React.FC = () => {
             </p>
           </div>
           <Button variant="outline" onClick={handleExportFilteredReport} disabled={reportExportRows.length === 0}>
-            <span className="material-icons-round text-sm">download</span>
-            تصدير التقرير ({reportExportRows.length})
+            {`تصدير التقرير (${reportExportRows.length})`}
           </Button>
         </div>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
@@ -1345,7 +1347,6 @@ export const SupervisorTeamActions: React.FC = () => {
               disabled={!exportDateFrom && !exportDateTo && exportRequestTypeFilter === 'all' && exportStatusFilter === 'all'}
               className="w-full"
             >
-              <span className="material-icons-round text-sm">filter_alt_off</span>
               مسح الفلاتر
             </Button>
           </div>
@@ -1383,7 +1384,6 @@ export const SupervisorTeamActions: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={handleExportHistory} disabled={filteredHistoryRequests.length === 0}>
-                <span className="material-icons-round text-sm">download</span>
                 تصدير Excel
               </Button>
               <Button
@@ -1391,7 +1391,6 @@ export const SupervisorTeamActions: React.FC = () => {
                 onClick={() => { void handleExportApprovalsPdf(); }}
                 disabled={filteredHistoryRequests.length === 0 || exportingApprovalsPdf}
               >
-                <span className="material-icons-round text-sm">{exportingApprovalsPdf ? 'hourglass_empty' : 'picture_as_pdf'}</span>
                 {exportingApprovalsPdf ? 'جاري التصدير...' : 'تصدير PDF'}
               </Button>
             </div>
@@ -1429,7 +1428,6 @@ export const SupervisorTeamActions: React.FC = () => {
               }}
               disabled={historyStatusFilter === 'all' && !historyParticipantFilter}
             >
-              <span className="material-icons-round text-sm">filter_alt_off</span>
               مسح الفلاتر
             </Button>
           </div>
@@ -1512,7 +1510,6 @@ export const SupervisorTeamActions: React.FC = () => {
             </div>
             <div className="flex flex-wrap gap-2">
               <Button variant="outline" onClick={handleExportApprovals} disabled={filteredApprovalRequests.length === 0}>
-                <span className="material-icons-round text-sm">download</span>
                 تصدير Excel
               </Button>
               <Button
@@ -1520,7 +1517,6 @@ export const SupervisorTeamActions: React.FC = () => {
                 onClick={() => { void handleExportApprovalsPdf(); }}
                 disabled={filteredApprovalRequests.length === 0 || exportingApprovalsPdf}
               >
-                <span className="material-icons-round text-sm">{exportingApprovalsPdf ? 'hourglass_empty' : 'picture_as_pdf'}</span>
                 {exportingApprovalsPdf ? 'جاري التصدير...' : 'تصدير PDF'}
               </Button>
             </div>
@@ -1627,46 +1623,36 @@ export const SupervisorTeamActions: React.FC = () => {
                             onChange={(e) => setApprovalActionNotes((prev) => ({ ...prev, [requestId]: e.target.value }))}
                           />
                           <div className="flex gap-1.5">
-                            <button
-                              type="button"
+                            <TableIconAction
+                              action="reject"
                               onClick={() => handleApprovalAction(req, 'rejected')}
                               disabled={isProcessing}
-                              title="رفض"
+                              loading={isProcessing}
                               aria-label="رفض الطلب"
-                              className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isProcessing
-                                ? <span className="material-icons-round animate-spin text-sm">refresh</span>
-                                : <span className="material-icons-round text-sm">cancel</span>}
-                            </button>
-                            <button
-                              type="button"
+                            />
+                            <TableIconAction
+                              action="approve"
                               onClick={() => handleApprovalAction(req, 'approved')}
                               disabled={isProcessing}
-                              title="اعتماد"
+                              loading={isProcessing}
                               aria-label="اعتماد الطلب"
-                              className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                              {isProcessing
-                                ? <span className="material-icons-round animate-spin text-sm">refresh</span>
-                                : <span className="material-icons-round text-sm">check_circle</span>}
-                            </button>
+                            />
                           </div>
                         </div>
                       )}
 
                       {canCancel && (
                         <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
-                          <Button
-                            variant="outline"
+                          <ToneActionButton
+                            action="undo"
+                            icon="block"
                             onClick={() => { void handleCancelApprovalRequest(req); }}
                             disabled={isProcessing}
-                            className="!border-slate-200 !text-slate-600 hover:!bg-slate-50"
+                            loading={isProcessing}
+                            title="إلغاء الطلب"
                           >
-                            {isProcessing && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                            <span className="material-icons-round text-sm">block</span>
                             إلغاء الطلب
-                          </Button>
+                          </ToneActionButton>
                         </div>
                       )}
                     </div>
@@ -1686,7 +1672,6 @@ export const SupervisorTeamActions: React.FC = () => {
               </p>
             </div>
             <Button onClick={() => setCreateModalOpen(true)} disabled={workerOptions.length === 0}>
-              <span className="material-icons-round text-sm">add</span>
               طلب جديد
             </Button>
           </div>
@@ -2041,8 +2026,13 @@ export const SupervisorTeamActions: React.FC = () => {
                   disabled={isCreateRequestDisabled}
                   className="w-full sm:w-auto"
                 >
-                  {submitting === activeTab && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                  {activeTab === 'leave' ? 'إرسال طلب الإجازة' : activeTab === 'loan' ? 'إرسال طلب السلفة' : 'إرسال طلب الجزاء'}
+                  {submitting === activeTab
+                    ? 'جاري...'
+                    : activeTab === 'leave'
+                      ? 'إرسال طلب الإجازة'
+                      : activeTab === 'loan'
+                        ? 'إرسال طلب السلفة'
+                        : 'إرسال طلب الجزاء'}
                 </Button>
               </div>
             </div>

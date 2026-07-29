@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { TableIconAction } from '@/src/components/erp';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { SuppliesReceiptPrint } from '../components/SuppliesReceiptPrint';
 import { suppliesReceiptService } from '../services/suppliesReceiptService';
@@ -13,7 +14,6 @@ import { rawMaterialService } from '../services/rawMaterialService';
 import { useRawMaterialWarehouse } from '../hooks/useRawMaterialWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 import { MaterialsWarehouseScopeBanner } from '../components/MaterialsWarehouseScopeBanner';
-import { validateSuppliesReceiptDraft } from '../lib/suppliesReceipt';
 import type {
   InventoryItemType,
   SuppliesReceiptLine,
@@ -407,10 +407,7 @@ export const SuppliesReceipt: React.FC = () => {
     setPrintOrder(order);
     await waitForExportPaint(80);
     if (isMobilePrint && printRef.current) {
-      const fileRef = order.id
-        ? order.referenceNo
-        : 'مسودة-قبل-الحفظ';
-      await exportToPDF(printRef.current, `اذن-استلام-${fileRef}`, {
+      await exportToPDF(printRef.current, `اذن-استلام-${order.referenceNo}`, {
         paperSize: printTemplate?.paperSize,
         orientation: printTemplate?.orientation,
         copies: 1,
@@ -420,38 +417,7 @@ export const SuppliesReceipt: React.FC = () => {
     handlePrint();
   };
 
-  const buildFormPrintOrder = (): SuppliesReceiptOrder => {
-    const payloadGroups: SuppliesReceiptProductGroup[] = groups.map(({ key: _key, ...rest }) => rest);
-    validateSuppliesReceiptDraft({
-      warehouseId,
-      groups: payloadGroups,
-      standaloneLines,
-      locationsRequired,
-    });
-    return {
-      referenceNo: 'مسودة — قبل الحفظ',
-      status: 'draft',
-      warehouseId,
-      warehouseName: warehouse?.name || suppliesWarehouseName || warehouseId,
-      ...(containerRef.trim() ? { containerRef: containerRef.trim() } : {}),
-      groups: payloadGroups,
-      standaloneLines,
-      createdBy: actor,
-      createdAt: new Date().toISOString(),
-      ...(note.trim() ? { note: note.trim() } : {}),
-    };
-  };
-
-  const printBeforeSave = async () => {
-    setMessage('');
-    try {
-      await print(buildFormPrintOrder());
-    } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : 'تعذر تجهيز إذن الطباعة.');
-    }
-  };
-
-  const createDraft = async (andPrint = false) => {
+  const createDraft = async () => {
     setMessage('');
     setBusy(true);
     try {
@@ -467,10 +433,12 @@ export const SuppliesReceipt: React.FC = () => {
         note: note || undefined,
       });
       const created = id ? await suppliesReceiptService.getById(id) : null;
-      setMessage(id ? 'تم حفظ إذن الاستلام كمسودة.' : 'تعذر الحفظ.');
+      setMessage(id
+        ? (canPrint ? 'تم حفظ إذن الاستلام كمسودة وطباعته.' : 'تم حفظ إذن الاستلام كمسودة.')
+        : 'تعذر الحفظ.');
       resetForm();
       await reloadList();
-      if (andPrint && created) {
+      if (canPrint && created) {
         await print(created);
       }
     } catch (error: unknown) {
@@ -582,7 +550,7 @@ export const SuppliesReceipt: React.FC = () => {
         )}
       </td>
       <td className="p-3 text-center">
-        <button type="button" className="text-xs font-bold text-rose-700" onClick={onRemove}>حذف</button>
+        <Button type="button" size="sm" variant="ghost" onClick={onRemove}>حذف</Button>
       </td>
     </tr>
   );
@@ -631,27 +599,13 @@ export const SuppliesReceipt: React.FC = () => {
         <div className="flex flex-wrap gap-2 px-4 pb-4">
           <Button variant="secondary" disabled={busy} onClick={addProductGroup}>إضافة منتج مفكك</Button>
           <Button variant="secondary" disabled={busy} onClick={addStandalone}>إضافة مكون فقط</Button>
-          {canPrint && (
-            <Button
-              variant="secondary"
-              disabled={busy || (!groups.length && !standaloneLines.length)}
-              onClick={() => void printBeforeSave()}
-            >
-              طباعة قبل الحفظ
-            </Button>
-          )}
-          <Button disabled={busy || (!groups.length && !standaloneLines.length)} onClick={() => void createDraft(false)}>
-            حفظ مسودة
+          <Button
+            variant="primary"
+            disabled={busy || (!groups.length && !standaloneLines.length)}
+            onClick={() => void createDraft()}
+          >
+            {canPrint ? 'حفظ مسودة وطباعة' : 'حفظ مسودة'}
           </Button>
-          {canPrint && (
-            <Button
-              variant="secondary"
-              disabled={busy || (!groups.length && !standaloneLines.length)}
-              onClick={() => void createDraft(true)}
-            >
-              حفظ وطباعة
-            </Button>
-          )}
         </div>
       </Card>
 
@@ -795,76 +749,53 @@ export const SuppliesReceipt: React.FC = () => {
                     <td className="px-4 py-3">
                       <div className="flex items-center justify-center gap-1.5">
                         {row.status === 'draft' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="submit"
                             disabled={busy}
                             onClick={() => void actionOrder(row, 'submit')}
-                            title="تقديم"
                             aria-label={`تقديم إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">send</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'submitted' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="approve"
                             disabled={busy}
                             onClick={() => void actionOrder(row, 'approve')}
-                            title="اعتماد"
                             aria-label={`اعتماد إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-emerald-200 dark:border-emerald-900/60 text-emerald-700 hover:bg-emerald-50 dark:hover:bg-emerald-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">check_circle</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'submitted' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="reject"
                             disabled={busy}
                             onClick={() => void actionOrder(row, 'reject')}
-                            title="رفض"
                             aria-label={`رفض إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">cancel</span>
-                          </button>
+                          />
                         )}
                         {row.status === 'approved' && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="execute"
                             disabled={busy}
                             onClick={() => void actionOrder(row, 'execute')}
-                            title="تنفيذ"
                             aria-label={`تنفيذ إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-primary hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">play_circle</span>
-                          </button>
+                          />
                         )}
                         {(row.status === 'draft' || row.status === 'rejected' || row.status === 'cancelled') && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="delete"
                             disabled={busy}
                             onClick={() => void actionOrder(row, 'delete')}
-                            title="حذف"
                             aria-label={`حذف إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">delete</span>
-                          </button>
+                          />
                         )}
                         {canPrint && (
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="print"
                             disabled={busy}
                             onClick={() => void print(row)}
                             title="طباعة إذن الاستلام"
                             aria-label={`طباعة إذن الاستلام ${row.referenceNo}`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                          >
-                            <span className="material-icons-round text-sm">print</span>
-                          </button>
+                          />
                         )}
                       </div>
                     </td>

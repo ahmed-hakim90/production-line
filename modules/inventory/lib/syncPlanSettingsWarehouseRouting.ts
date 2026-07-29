@@ -1,22 +1,5 @@
 import type { InventoryRoutingSettings, PlanSettings } from '../../../types';
-
-const emptyRouting = (): InventoryRoutingSettings => ({
-  rawMaterialWarehouseId: '',
-  decomposedWarehouseId: '',
-  productionWipWarehouseId: '',
-  finishedStagingWarehouseId: '',
-  finalProductWarehouseId: '',
-  packagingSourceWarehouseId: '',
-  packagingTargetWarehouseId: '',
-  wasteWarehouseId: '',
-  autoTransferProductionToFinished: true,
-  autoTransferFinishedToFinal: false,
-  requireApprovalForProductionEntry: true,
-  requireApprovalForAutoTransfers: false,
-  autoConsumeBomOnProductionReport: false,
-  /** Default on: finished report requires issued صرف إنتاج (no auto BOM consume). */
-  requireIssuedProductionIssueOnReport: true,
-});
+import { createEmptyInventoryRouting } from './recommendedInventoryRouting';
 
 const trimId = (value: unknown) => String(value ?? '').trim();
 
@@ -26,10 +9,13 @@ const trimId = (value: unknown) => String(value ?? '').trim();
  *
  * When `inventoryRouting` is present, nested warehouse IDs are authoritative
  * (including empty clears). When absent, values are seeded from legacy fields.
+ *
+ * Also keeps `requireFinishedStockApprovalForReports` aligned with
+ * `inventoryRouting.requireApprovalForProductionEntry`.
  */
 export function syncPlanSettingsWarehouseRouting(plan: PlanSettings): PlanSettings {
   const hasNested = plan.inventoryRouting != null;
-  const nested = { ...emptyRouting(), ...(plan.inventoryRouting ?? {}) };
+  const nested = { ...createEmptyInventoryRouting(), ...(plan.inventoryRouting ?? {}) };
 
   const pick = (nestedVal: unknown, legacyVal: unknown) => (
     hasNested ? trimId(nestedVal) : (trimId(nestedVal) || trimId(legacyVal))
@@ -45,6 +31,8 @@ export function syncPlanSettingsWarehouseRouting(plan: PlanSettings): PlanSettin
   const pkgSrc = pick(nested.packagingSourceWarehouseId, plan.packagingSourceWarehouseId);
   const pkgTgt = pick(nested.packagingTargetWarehouseId, plan.packagingTargetWarehouseId);
 
+  const requireApprovalForProductionEntry = nested.requireApprovalForProductionEntry !== false;
+
   const inventoryRouting: InventoryRoutingSettings = {
     ...nested,
     rawMaterialWarehouseId: raw,
@@ -55,6 +43,10 @@ export function syncPlanSettingsWarehouseRouting(plan: PlanSettings): PlanSettin
     packagingSourceWarehouseId: pkgSrc,
     packagingTargetWarehouseId: pkgTgt,
     wasteWarehouseId: waste,
+    autoTransferProductionToFinished: nested.autoTransferProductionToFinished !== false,
+    autoTransferFinishedToFinal: Boolean(nested.autoTransferFinishedToFinal),
+    requireApprovalForProductionEntry,
+    requireApprovalForAutoTransfers: nested.requireApprovalForAutoTransfers === true,
     autoConsumeBomOnProductionReport: Boolean(nested.autoConsumeBomOnProductionReport),
     requireIssuedProductionIssueOnReport: nested.requireIssuedProductionIssueOnReport !== false,
   };
@@ -62,6 +54,7 @@ export function syncPlanSettingsWarehouseRouting(plan: PlanSettings): PlanSettin
   return {
     ...plan,
     inventoryRouting,
+    requireFinishedStockApprovalForReports: requireApprovalForProductionEntry,
     rawMaterialWarehouseId: raw,
     decomposedSourceWarehouseId: decomposed,
     defaultProductionWarehouseId: inventoryRouting.productionWipWarehouseId,

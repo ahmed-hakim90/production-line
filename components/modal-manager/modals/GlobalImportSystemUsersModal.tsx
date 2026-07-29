@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Download, Loader2, Upload, X } from 'lucide-react';
+import { Button } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreEmployee, FirestoreRole } from '../../../types';
@@ -163,14 +164,12 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && void handlePickFile(e.target.files[0])} />
 
           <div className="flex flex-wrap items-center gap-2">
-            <button className="btn btn-secondary" onClick={() => fileInputRef.current?.click()} disabled={parsing || creating}>
-              {parsing ? <Loader2 size={15} className="animate-spin" /> : <Upload size={15} />}
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()} disabled={parsing || creating}>
               {parsing ? t('modalManager.importSystemUsers.readingFile') : t('modalManager.importSystemUsers.selectImportFile')}
-            </button>
-            <button className="btn btn-secondary" onClick={downloadUsersTemplate} disabled={parsing || creating}>
-              <Download size={15} />
+            </Button>
+            <Button variant="secondary" onClick={downloadUsersTemplate} disabled={parsing || creating}>
               {t('modalManager.importSystemUsers.downloadTemplate')}
-            </button>
+            </Button>
             <button
               className={`px-2.5 py-1 rounded-[var(--border-radius-sm)] text-[12px] font-medium border transition-colors ${filter === 'all' ? 'bg-primary text-white border-primary' : 'bg-[var(--color-card)] border-[var(--color-border)] text-[var(--color-text-muted)]'}`}
               onClick={() => setFilter('all')}
@@ -269,32 +268,36 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
-          <button className="btn btn-secondary" onClick={handleClose} disabled={creating}>{t('ui.close')}</button>
-          <button
-            className="btn btn-secondary"
+          <Button variant="outline" onClick={handleClose} disabled={creating} iconName="close" tone="neutral">{t('ui.close')}</Button>
+          <Button
+            variant="outline"
             onClick={() => {
               setEntries((prev) =>
                 prev.map((entry) => (entry.status === 'pending' ? { ...entry, selected: true } : entry)),
               );
             }}
             disabled={creating || pendingEntries.length === 0}
+            iconName="select_all"
+            tone="neutral"
           >
             {t('modalManager.importSystemUsers.selectAllPending')}
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => void runCreateForEntries(selectedPending)}
             disabled={creating || selectedPending.length === 0}
+            tone="submit"
           >
             {t('modalManager.importSystemUsers.createSelected', { count: selectedPending.length })}
-          </button>
-          <button
-            className="btn btn-primary"
+          </Button>
+          <Button
+            variant="primary"
             onClick={() => void runCreateForEntries(pendingEntries)}
             disabled={creating || pendingEntries.length === 0}
+            tone="submit"
           >
             {t('modalManager.importSystemUsers.createAllPending', { count: pendingEntries.length })}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

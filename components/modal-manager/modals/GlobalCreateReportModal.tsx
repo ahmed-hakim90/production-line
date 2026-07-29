@@ -28,6 +28,7 @@ import {
   INJECTION_SHIFT_OPTIONS,
   isInjectionShiftSelected,
 } from '@/modules/production/utils/injectionReportShift';
+import { resolveReportBehaviorSettings } from '@/modules/production/lib/reportBehaviorSettings';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import type { LineWorkerAssignment } from '../../../types';
 import {
@@ -66,13 +67,13 @@ const newEmptyPackagingLine = (): PackagingReportLine => ({
   remainderPieces: 0,
 });
 
-const emptyForm = (): ReportFormState => ({
+const emptyForm = (operationalDayStartHour = 8): ReportFormState => ({
   reportType: 'finished_product',
   employeeId: '',
   productId: '',
   lineId: '',
   workOrderId: '',
-  date: getOperationalDateString(8),
+  date: getOperationalDateString(operationalDayStartHour),
   shift: '',
   quantityProduced: 0,
   workersCount: 0,
@@ -102,8 +103,10 @@ export const GlobalCreateReportModal: React.FC = () => {
     shift?: ProductionReportShift;
     workOrderId?: string;
   } | undefined;
-  const { can } = usePermission();
+  const { can, isPackagingOnly } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const reportBehavior = useMemo(() => resolveReportBehaviorSettings(systemSettings), [systemSettings]);
   const employees = useAppStore((s) => s.employees);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
   const uid = useAppStore((s) => s.uid);
@@ -112,7 +115,7 @@ export const GlobalCreateReportModal: React.FC = () => {
   const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
   const lineStatuses = useAppStore((s) => s.lineStatuses);
   const workOrders = useAppStore((s) => s.workOrders);
-  const [form, setForm] = useState<ReportFormState>(emptyForm());
+  const [form, setForm] = useState<ReportFormState>(() => emptyForm(reportBehavior.operationalDayStartHour));
   const [rawMaterialOptions, setRawMaterialOptions] = useState<Array<{ id: string; name: string; code: string; categoryName?: string }>>([]);
   const [saving, setSaving] = useState(false);
   const [formLineWorkers, setFormLineWorkers] = useState<LineWorkerAssignment[]>([]);
@@ -133,7 +136,7 @@ export const GlobalCreateReportModal: React.FC = () => {
 
   const canCreateFinishedReportsBase = can('reports.create');
   const canCreatePackagingReports = can('reports.create') || can('reports.packaging.create');
-  const forcePackagingOnly = can('reports.packaging.only');
+  const forcePackagingOnly = isPackagingOnly;
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || forceInjectionOnly;
@@ -190,8 +193,11 @@ export const GlobalCreateReportModal: React.FC = () => {
     () => lines.some((l) => l.id === form.lineId && l.isPackagingLine),
     [lines, form.lineId],
   );
-  const packagingLaborOptional = form.reportType === 'packaging'
-    || (form.reportType === 'finished_product' && isPackagingLineForm);
+  const packagingLaborOptional = reportBehavior.allowPackagingLaborOptional
+    && (
+      form.reportType === 'packaging'
+      || (form.reportType === 'finished_product' && isPackagingLineForm)
+    );
   const totalComponentScrapQty = useMemo(
     () => (form.componentScrapItems || []).reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     [form.componentScrapItems],
@@ -216,10 +222,12 @@ export const GlobalCreateReportModal: React.FC = () => {
       return lines.filter((line) => line.id && injectionLineIds.has(line.id));
     }
     if (form.reportType === 'packaging') {
-      return lines.filter((line) => line.id && line.isPackagingLine);
+      return reportBehavior.restrictPackagingReportsToPackagingLines
+        ? lines.filter((line) => line.id && line.isPackagingLine)
+        : lines;
     }
     return lines;
-  }, [form.reportType, lines, injectionLineIds]);
+  }, [form.reportType, lines, injectionLineIds, reportBehavior.restrictPackagingReportsToPackagingLines]);
 
   const injectionRawMaterialOptions = useMemo(
     () => rawMaterialOptions.filter((row) => isInjectionMaterial(row, injectionCategoryTokens)),
@@ -297,10 +305,11 @@ export const GlobalCreateReportModal: React.FC = () => {
 
   useEffect(() => {
     if (form.reportType !== 'packaging') return;
+    if (!reportBehavior.restrictPackagingReportsToPackagingLines) return;
     if (form.lineId && !lines.some((l) => l.id === form.lineId && l.isPackagingLine)) {
       setForm((prev) => ({ ...prev, lineId: '', workOrderId: '' }));
     }
-  }, [form.reportType, form.lineId, lines]);
+  }, [form.reportType, form.lineId, lines, reportBehavior.restrictPackagingReportsToPackagingLines]);
 
   useEffect(() => {
     if (!isOpen || form.reportType !== 'packaging') return;
@@ -460,19 +469,30 @@ export const GlobalCreateReportModal: React.FC = () => {
       openErrorOverlay(t('modalManager.createReport.injectionPermissionDenied'));
       return;
     }
-    if (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift)) {
+    if (form.reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(form.shift)) {
       openErrorOverlay('اختر الوردية (صباحي أو مسائي) قبل الحفظ');
       return;
     }
-    const workersRequired = requiresWorkers && effectiveWorkersCount <= 0 && !packagingLaborOptional;
+    const workersRequired = reportBehavior.requireLaborForFinishedReports && requiresWorkers && effectiveWorkersCount <= 0 && !packagingLaborOptional;
     const validPackagingLines = (form.packagingLines || [])
       .map((l) => canonicalPackagingLine(l, getUnitsPerCarton))
       .map(({ productId, quantityPieces }) => ({ productId, quantityPieces }))
       .filter((l) => l.productId && l.quantityPieces > 0);
     const packagingLinesOk = form.reportType !== 'packaging' || validPackagingLines.length > 0;
     const baseFieldsOk = form.reportType === 'packaging'
-      ? Boolean(form.lineId && form.employeeId && form.workHours && packagingLinesOk)
-      : Boolean(form.lineId && form.productId && form.employeeId && form.quantityProduced && form.workHours);
+      ? Boolean(
+        form.lineId
+        && form.employeeId
+        && (!reportBehavior.requireWorkHoursOnReports || form.workHours)
+        && (!reportBehavior.requirePositiveQuantityOnReports || packagingLinesOk),
+      )
+      : Boolean(
+        form.lineId
+        && form.productId
+        && form.employeeId
+        && (!reportBehavior.requirePositiveQuantityOnReports || form.quantityProduced)
+        && (!reportBehavior.requireWorkHoursOnReports || form.workHours),
+      );
     if (!baseFieldsOk || workersRequired) {
       openErrorOverlay(
         form.reportType === 'packaging' && !packagingLinesOk
@@ -515,7 +535,7 @@ export const GlobalCreateReportModal: React.FC = () => {
         return;
       }
       showAppToast('success', t('modalManager.createReport.saveSuccess'));
-      setForm(emptyForm());
+      setForm(emptyForm(reportBehavior.operationalDayStartHour));
     } catch (error) {
       const errorMessage = getReportDuplicateMessage(error, t('modalManager.createReport.saveError'));
       openErrorOverlay(errorMessage);
@@ -1099,7 +1119,7 @@ export const GlobalCreateReportModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={closeModal}>{t('ui.cancel')}</Button>
+          <Button variant="outline" onClick={closeModal} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}
@@ -1109,10 +1129,12 @@ export const GlobalCreateReportModal: React.FC = () => {
               || !form.employeeId
               || (form.reportType === 'packaging'
                 ? !hasValidPackagingReportLine
-                : (!form.productId || !form.quantityProduced))
-              || !form.workHours
-              || (form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
+                : (!form.productId || (reportBehavior.requirePositiveQuantityOnReports && !form.quantityProduced)))
+              || (reportBehavior.requireWorkHoursOnReports && !form.workHours)
+              || (reportBehavior.requireInjectionShift && form.reportType === 'component_injection' && !isInjectionShiftSelected(form.shift))
               || (
+                reportBehavior.requireLaborForFinishedReports
+                &&
                 form.reportType !== 'component_injection'
                 && effectiveWorkersCount <= 0
                 && !packagingLaborOptional
@@ -1129,4 +1151,3 @@ export const GlobalCreateReportModal: React.FC = () => {
     </>
   );
 };
-

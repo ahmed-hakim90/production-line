@@ -1,14 +1,11 @@
 import React from 'react';
 import { Card } from '../UI';
 import type { PlanSettings } from '../../../../types';
-import type { Warehouse } from '../../../inventory/types';
-import { syncPlanSettingsWarehouseRouting } from '../../../inventory/lib/syncPlanSettingsWarehouseRouting';
 
 type GeneralSystemBehaviorSectionProps = {
   isAdmin: boolean;
   localPlanSettings: PlanSettings;
   setLocalPlanSettings: React.Dispatch<React.SetStateAction<PlanSettings>>;
-  inventoryWarehouses: Warehouse[];
   allPermissions: string[];
   hrUsers: Array<{ id: string; label: string }>;
 };
@@ -17,7 +14,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
   isAdmin,
   localPlanSettings,
   setLocalPlanSettings,
-  inventoryWarehouses,
   allPermissions,
   hrUsers,
 }) => {
@@ -28,11 +24,8 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
       <div className="space-y-4">
         {([
           { key: 'allowMultipleActivePlans' as keyof PlanSettings, label: 'السماح بخطط متعددة نشطة على نفس الخط', icon: 'playlist_add', desc: 'عند التعطيل لن يُسمح بإنشاء خطة جديدة على خط يحتوي بالفعل على خطة نشطة.' },
-          { key: 'allowReportWithoutPlan' as keyof PlanSettings, label: 'السماح بالتقارير بدون خطة', icon: 'assignment', desc: 'عند التعطيل لن يتمكن المشرفون من إنشاء تقارير إنتاج بدون خطة نشطة.' },
-          { key: 'allowOverProduction' as keyof PlanSettings, label: 'السماح بالإنتاج الزائد', icon: 'trending_up', desc: 'عند التعطيل لن يُسمح بإضافة تقارير بعد الوصول إلى الكمية المخططة.' },
           { key: 'autoClosePlan' as keyof PlanSettings, label: 'إغلاق الخطة تلقائياً عند الاكتمال', icon: 'event_available', desc: 'عند التفعيل، يتم تغيير حالة الخطة إلى "مكتملة" تلقائياً عند الوصول للكمية المخططة.' },
           { key: 'autoGenerateMaterialRequirements' as keyof PlanSettings, label: 'توليد احتياجات المواد تلقائياً', icon: 'checklist', desc: 'عند التفعيل، يُحدَّث احتياج المواد لكل خطة بعد الحفظ (يتطلب صلاحية توليد الاحتياجات).' },
-          { key: 'requireFinishedStockApprovalForReports' as keyof PlanSettings, label: 'اعتماد دخول تم الصنع من التقارير', icon: 'approval', desc: 'عند التفعيل، لا تتم إضافة المنتج التام تلقائياً للمخزن بعد التقرير، بل يتطلب طلب اعتماد للمستخدم المخول.' },
           { key: 'allowNegativeDecomposedStock' as keyof PlanSettings, label: 'السماح بالسالب في مخزن المفكك', icon: 'remove_circle_outline', desc: 'عند التفعيل، يمكن خصم مواد خام من مخزن المفكك حتى لو الرصيد غير كافٍ في التقارير، واعتماد تحويلات صادرة من مخزن المفكك المحدد في الإعدادات بنفس الشرط (مع صلاحية الموافقة على التحويل بالسالب).' },
           { key: 'allowNegativeFinishedTransferStock' as keyof PlanSettings, label: 'السماح بتحويل تم الصنع بالسالب', icon: 'swap_horiz', desc: 'عند التفعيل، يمكن اعتماد تحويلات صادرة من مخزن "تم الصنع" حتى لو الرصيد أقل من الكمية (مع صلاحية الموافقة على التحويل بالسالب).' },
           { key: 'useOperationalPeriodDailyTarget' as keyof PlanSettings, label: 'هدف يومي من فترة التشغيل (٢٦→٢٦)', icon: 'calendar_month', desc: 'عند التفعيل وبدون تارجت يدوي: الهدف اليومي = كمية الخطة ÷ أيام الشغل في فترة التشغيل (الجمعة إجازة). مناسب للخطط الجماعية والتقييم بالخطة.' },
@@ -246,250 +239,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               />
             </div>
           </div>
-        </div>
-
-        <p className="text-xs font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-3 py-2 mb-3">
-          إعدادات المخازن أدناه للتوافق مع البيانات القديمة. التوجيه الرسمي للإنتاج (WIP، تم الصنع، التام، الهالك) من قسم «توجيه المخازن والإنتاج» أعلاه.
-        </p>
-
-        <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="material-icons-round text-primary text-lg">warehouse</span>
-            <p className="text-sm font-bold text-[var(--color-text)]">مخزن استقبال الإنتاج (قديم)</p>
-          </div>
-          <p className="text-xs text-[var(--color-text-muted)] mb-3">
-            يُستخدم كاحتياط عند عدم تعبئة توجيه WIP. التقارير الجديدة تدخل أولاً إلى مخزن WIP حسب التوجيه الجديد.
-          </p>
-          <select
-            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-            value={localPlanSettings.defaultProductionWarehouseId ?? ''}
-            onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-              ...p,
-              defaultProductionWarehouseId: e.target.value,
-              inventoryRouting: {
-                ...p.inventoryRouting,
-                productionWipWarehouseId: e.target.value,
-              },
-            }))}
-          >
-            <option value="">بدون ترحيل تلقائي</option>
-            {inventoryWarehouses.map((w) => (
-              <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-            ))}
-          </select>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-2">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-icons-round text-primary text-lg">science</span>
-              <p className="text-sm font-bold text-[var(--color-text)]">مخزن المواد الخام</p>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              المنتجات التي لها رصيد في هذا المخزن يتم اعتبارها "خامات" ولن تظهر في الإنتاج أو التكاليف أو قوائم اختيار المنتج.
-            </p>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-              value={localPlanSettings.rawMaterialWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-                ...p,
-                rawMaterialWarehouseId: e.target.value,
-                inventoryRouting: {
-                  ...p.inventoryRouting,
-                  rawMaterialWarehouseId: e.target.value,
-                },
-              }))}
-            >
-              <option value="">غير محدد</option>
-              {inventoryWarehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-icons-round text-primary text-lg">call_split</span>
-              <p className="text-sm font-bold text-[var(--color-text)]">مخزن المفكك (مستلزم إنتاج)</p>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              رصيد مكونات BOM المتاح للصرف والإنتاج. صرف الإنتاج وخصم BOM يخصمان من هذا المخزن.
-            </p>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-              value={localPlanSettings.decomposedSourceWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-                ...p,
-                decomposedSourceWarehouseId: e.target.value,
-                inventoryRouting: {
-                  ...p.inventoryRouting,
-                  decomposedWarehouseId: e.target.value,
-                },
-              }))}
-            >
-              <option value="">غير محدد</option>
-              {inventoryWarehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-icons-round text-primary text-lg">inventory_2</span>
-              <p className="text-sm font-bold text-[var(--color-text)]">مخزن تم الصنع</p>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              الكمية المنتجة (تم الصنع) تُضاف تلقائيًا إلى هذا المخزن من تقرير الإنتاج.
-            </p>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-              value={localPlanSettings.finishedReceiveWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-                ...p,
-                finishedReceiveWarehouseId: e.target.value,
-                inventoryRouting: {
-                  ...p.inventoryRouting,
-                  finishedStagingWarehouseId: e.target.value,
-                },
-              }))}
-            >
-              <option value="">غير محدد</option>
-              {inventoryWarehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-icons-round text-primary text-lg">delete_sweep</span>
-              <p className="text-sm font-bold text-[var(--color-text)]">مخزن الهالك</p>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              كمية الهالك في تقرير الإنتاج تُرحَّل تلقائيًا إلى هذا المخزن.
-            </p>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-              value={localPlanSettings.wasteReceiveWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-                ...p,
-                wasteReceiveWarehouseId: e.target.value,
-                inventoryRouting: {
-                  ...p.inventoryRouting,
-                  wasteWarehouseId: e.target.value,
-                },
-              }))}
-            >
-              <option value="">غير محدد</option>
-              {inventoryWarehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-              ))}
-            </select>
-          </div>
-
-          <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-            <div className="flex items-center gap-2 mb-3">
-              <span className="material-icons-round text-primary text-lg">inventory</span>
-              <p className="text-sm font-bold text-[var(--color-text)]">مخزن المنتج التام</p>
-            </div>
-            <p className="text-xs text-[var(--color-text-muted)] mb-3">
-              يستخدم للعرض في مؤشرات "منتج تام". لا يتم إضافة حركة إنتاج تلقائية عليه حاليًا.
-            </p>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-              value={localPlanSettings.finalProductWarehouseId ?? ''}
-              onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-                ...p,
-                finalProductWarehouseId: e.target.value,
-                inventoryRouting: {
-                  ...p.inventoryRouting,
-                  finalProductWarehouseId: e.target.value,
-                },
-              }))}
-            >
-              <option value="">غير محدد</option>
-              {inventoryWarehouses.map((w) => (
-                <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-              ))}
-            </select>
-          </div>
-        </div>
-
-        <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
-          <div className="flex items-start gap-4">
-            <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
-              <span className="material-icons-round text-primary">inventory</span>
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-bold text-[var(--color-text)]">تأثير تقرير التغليف على المخزون</p>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
-                عند التفعيل، كل تقرير تغليف ينشئ حركة تحويل مباشرة للأصناف المغلفة من مخزن المصدر إلى مخزن الوجهة.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setLocalPlanSettings((prev) => ({ ...prev, enablePackagingStockTransfer: !prev.enablePackagingStockTransfer }))}
-              className={`relative w-12 h-7 rounded-full transition-colors shrink-0 ${localPlanSettings.enablePackagingStockTransfer ? 'bg-primary' : 'bg-slate-300 dark:bg-slate-600'}`}
-            >
-              <span className={`absolute top-0.5 w-6 h-6 bg-[var(--color-card)] rounded-full transition-all ${localPlanSettings.enablePackagingStockTransfer ? 'left-0.5' : 'left-[calc(100%-1.625rem)]'}`} />
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text)] mb-2">مخزن التغليف من</label>
-              <select
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                value={localPlanSettings.packagingSourceWarehouseId ?? ''}
-                onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-                  ...p,
-                  packagingSourceWarehouseId: e.target.value,
-                  inventoryRouting: {
-                    ...p.inventoryRouting,
-                    packagingSourceWarehouseId: e.target.value,
-                  },
-                }))}
-              >
-                <option value="">غير محدد</option>
-                {inventoryWarehouses.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="block text-xs font-bold text-[var(--color-text)] mb-2">مخزن التغليف إلى</label>
-              <select
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all"
-                value={localPlanSettings.packagingTargetWarehouseId ?? ''}
-                onChange={(e) => setLocalPlanSettings((p) => syncPlanSettingsWarehouseRouting({
-                  ...p,
-                  packagingTargetWarehouseId: e.target.value,
-                  inventoryRouting: {
-                    ...p.inventoryRouting,
-                    packagingTargetWarehouseId: e.target.value,
-                  },
-                }))}
-              >
-                <option value="">غير محدد</option>
-                {inventoryWarehouses.map((w) => (
-                  <option key={w.id} value={w.id}>{w.name} ({w.code})</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          {localPlanSettings.enablePackagingStockTransfer
-            && (
-              !localPlanSettings.packagingSourceWarehouseId
-              || !localPlanSettings.packagingTargetWarehouseId
-              || localPlanSettings.packagingSourceWarehouseId === localPlanSettings.packagingTargetWarehouseId
-            ) && (
-            <p className="text-xs font-bold text-amber-600 dark:text-amber-400 mt-3">
-              اختر مخزنين مختلفين لتفعيل تحويلات التغليف عند حفظ التقارير.
-            </p>
-          )}
         </div>
 
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">

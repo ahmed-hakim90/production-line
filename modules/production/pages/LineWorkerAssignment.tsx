@@ -736,17 +736,13 @@ export const LineWorkerAssignment: React.FC = () => {
             </Select>
           </div>
           <Button
-            variant="danger"
             onClick={() => void handleClearPermanentAssignments()}
             disabled={loading || clearingPermanentAssignments || cancellablePermanentAssignments.length === 0}
             className="h-[42px] shrink-0"
           >
-            {clearingPermanentAssignments ? (
-              <span className="material-icons-round animate-spin text-sm">refresh</span>
-            ) : (
-              <span className="material-icons-round text-sm">link_off</span>
-            )}
-            {selectedLineId ? 'إلغاء عمال الخط' : 'إلغاء عمال كل الخطوط'}
+            {clearingPermanentAssignments
+              ? 'جاري الإلغاء...'
+              : (selectedLineId ? 'إلغاء عمال الخط' : 'إلغاء عمال كل الخطوط')}
           </Button>
         </div>
         <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
@@ -829,12 +825,7 @@ export const LineWorkerAssignment: React.FC = () => {
                 disabled={!scanInput.trim() || savingPermanentLink}
                 className="h-[46px] shrink-0"
               >
-                {savingPermanentLink ? (
-                  <span className="material-icons-round animate-spin text-sm">refresh</span>
-                ) : (
-                  <span className="material-icons-round text-sm">link</span>
-                )}
-                ربط دائم
+                {savingPermanentLink ? 'جاري...' : 'ربط دائم'}
               </Button>
             </div>
           </div>
@@ -918,13 +909,11 @@ export const LineWorkerAssignment: React.FC = () => {
                         <td className="py-2.5 px-3 text-[var(--color-text-muted)] text-xs">{formatTime(a.assignedAt)}</td>
                         <td className="py-2.5 px-1">
                           <Button
-                            variant="outline"
                             onClick={() => void handleEndPermanentAssignment(a)}
                             disabled={ending}
                             className="text-xs"
                           >
-                            {ending && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-                            إلغاء الربط
+                            {ending ? 'جاري الإلغاء...' : 'إلغاء الربط'}
                           </Button>
                         </td>
                       </tr>

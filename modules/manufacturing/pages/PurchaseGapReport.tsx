@@ -45,7 +45,7 @@ export const PurchaseGapReport: React.FC = () => {
         subtitle="المواد الناقصة مقارنة باحتياجات الخطط في مستودع المواد الخام"
         actions={
           <>
-            <PrimaryButton onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
+            <PrimaryButton onClick={() => void load()} disabled={loading} iconName="refresh" tone="neutral">تحديث</PrimaryButton>
             <PrimaryButton
               onClick={() =>
                 exportGenericRows(
@@ -61,10 +61,12 @@ export const PurchaseGapReport: React.FC = () => {
                 )
               }
               disabled={!list.length}
+              iconName="download"
+              tone="export"
             >
               Excel
             </PrimaryButton>
-            <PrimaryButton onClick={() => void createDraft()} disabled={!list.length}>
+            <PrimaryButton onClick={() => void createDraft()} disabled={!list.length} iconName="add_circle" tone="submit">
               مسودة طلب شراء
             </PrimaryButton>
           </>

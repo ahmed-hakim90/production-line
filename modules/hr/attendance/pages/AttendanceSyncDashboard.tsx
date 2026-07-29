@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/UI';
 import { SelectableTable, type TableColumn } from '@/components/SelectableTable';
 import { useAppStore } from '@/store/useAppStore';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
@@ -10,6 +11,7 @@ import { attendanceImportHistoryService } from '@/modules/hr/attendanceService';
 import type { FirestoreAttendanceImportHistory } from '@/modules/hr/types';
 import { useJobsStore } from '@/components/background-jobs/useJobsStore';
 import * as XLSX from 'xlsx';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 function getToday(): string {
   const d = new Date();
@@ -671,85 +673,67 @@ export const AttendanceSyncDashboard: React.FC = () => {
         </div>
       </div>
 
-      <div className="erp-filter-bar">
-        <div className="erp-date-seg">
-          <button
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="inline-flex overflow-hidden rounded-lg border border-[var(--color-border)]">
+          <Button
             type="button"
-            className={`erp-date-seg-btn ${tab === 'new_import' ? 'active' : ''}`}
+            variant="ghost"
+            className={`h-[34px] rounded-none px-3 text-xs ${tab === 'new_import' ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:text-white' : ''}`}
             onClick={() => setTab('new_import')}
           >
             استيراد جديد
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className={`erp-date-seg-btn ${tab === 'history' ? 'active' : ''}`}
+            variant="ghost"
+            className={`h-[34px] rounded-none px-3 text-xs ${tab === 'history' ? 'bg-indigo-600 text-white hover:bg-indigo-700 hover:text-white' : ''}`}
             onClick={() => {
               setTab('history');
               void loadHistory();
             }}
           >
-            سجل الاستيراد ({history.length})
-          </button>
+            {`سجل الاستيراد (${history.length})`}
+          </Button>
         </div>
-
-        {tab === 'history' && (
-          <>
-            <div className="erp-date-seg">
-              <button
-                type="button"
-                className={`erp-date-seg-btn ${historyRangePreset === 'today' ? 'active' : ''}`}
-                onClick={() => applyHistoryRangePreset('today')}
-              >
-                اليوم
-              </button>
-              <button
-                type="button"
-                className={`erp-date-seg-btn ${historyRangePreset === 'month' ? 'active' : ''}`}
-                onClick={() => applyHistoryRangePreset('month')}
-              >
-                هذا الشهر
-              </button>
-            </div>
-
-            <label className="erp-filter-date">
-              <span className="erp-filter-label">من</span>
-              <input
-                type="date"
-                value={batchRangeStart}
-                onChange={(e) => {
-                  setHistoryRangePreset('custom');
-                  setBatchRangeStart(e.target.value);
-                }}
-              />
-            </label>
-            <label className="erp-filter-date">
-              <span className="erp-filter-label">إلى</span>
-              <input
-                type="date"
-                value={batchRangeEnd}
-                onChange={(e) => {
-                  setHistoryRangePreset('custom');
-                  setBatchRangeEnd(e.target.value);
-                }}
-              />
-            </label>
-            <button className="erp-filter-apply" onClick={() => void loadHistory()} disabled={historyLoading}>
-              <span className="material-icons-round text-sm">sync</span>
-              {historyLoading ? 'جار التحميل...' : 'تحديث'}
-            </button>
-          </>
-        )}
       </div>
 
       {tab === 'history' && (
-        <div className="card p-4 space-y-3">
-          <p className="text-xs text-[var(--color-text-muted)]">
-            الحذف الجزئي حسب نطاق التاريخ على الدفعة المحددة فقط.
-          </p>
+        <div className="card p-0 overflow-hidden space-y-0">
+          <SmartFilterBar
+            periods={[
+              { label: 'اليوم', value: 'today' },
+              { label: 'هذا الشهر', value: 'month' },
+            ]}
+            activePeriod={historyRangePreset === 'custom' ? undefined : historyRangePreset}
+            onPeriodChange={(value) => {
+              if (value === 'today' || value === 'month') applyHistoryRangePreset(value);
+            }}
+            advancedFilters={[
+              { key: 'batchRangeStart', label: 'من', placeholder: 'من', type: 'date', options: [] },
+              { key: 'batchRangeEnd', label: 'إلى', placeholder: 'إلى', type: 'date', options: [] },
+            ]}
+            advancedFilterValues={{
+              batchRangeStart,
+              batchRangeEnd,
+            }}
+            onAdvancedFilterChange={(key, value) => {
+              setHistoryRangePreset('custom');
+              if (key === 'batchRangeStart') setBatchRangeStart(value);
+              if (key === 'batchRangeEnd') setBatchRangeEnd(value);
+            }}
+            onApply={() => void loadHistory()}
+            applyLabel={historyLoading ? 'جار التحميل...' : 'تحديث'}
+            className="mb-0 border-0 rounded-none"
+          />
+          <div className="px-4 pb-2">
+            <p className="text-xs text-[var(--color-text-muted)]">
+              الحذف الجزئي حسب نطاق التاريخ على الدفعة المحددة فقط.
+            </p>
+          </div>
           {historyLoading ? (
-            <div className="text-sm text-[var(--color-text-muted)]">جار التحميل...</div>
+            <div className="px-4 pb-4 text-sm text-[var(--color-text-muted)]">جار التحميل...</div>
           ) : history.length === 0 ? (
-            <div className="text-sm text-[var(--color-text-muted)]">لا يوجد سجل استيراد.</div>
+            <div className="px-4 pb-4 text-sm text-[var(--color-text-muted)]">لا يوجد سجل استيراد.</div>
           ) : (
             <SelectableTable<FirestoreAttendanceImportHistory>
               data={history}
@@ -811,36 +795,24 @@ export const AttendanceSyncDashboard: React.FC = () => {
         />
         <div className="flex flex-wrap items-center gap-2 mt-4">
           {previewRows.length > 0 && (
-            <button
-              className="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/30 transition-colors"
+            <Button
+              className="text-xs"
               onClick={clearPreviewDraft}
               disabled={busy}
               title="مسح البيانات المؤقتة"
             >
-              <span className="material-icons-round" style={{ fontSize: 14 }}>delete_sweep</span>
               مسح المسودة
-            </button>
+            </Button>
           )}
 
           <div className="flex-1" />
 
-          <button className="btn btn-secondary text-xs" onClick={() => void handlePreparePreview()} disabled={busy || !file}>
-            <span className="material-icons-round" style={{ fontSize: 14 }}>visibility</span>
+          <Button className="text-xs" variant="secondary" onClick={() => void handlePreparePreview()} disabled={busy || !file}>
             معاينة محلية
-          </button>
-          <button className="btn btn-primary text-xs" onClick={() => void handleUpload()} disabled={busy || previewRows.length === 0}>
-            {busy ? (
-              <>
-                <span className="material-icons-round animate-spin" style={{ fontSize: 14 }}>sync</span>
-                جاري الرفع...
-              </>
-            ) : (
-              <>
-                <span className="material-icons-round" style={{ fontSize: 14 }}>cloud_upload</span>
-                اعتماد ورفع البيانات
-              </>
-            )}
-          </button>
+          </Button>
+          <Button className="text-xs" onClick={() => void handleUpload()} disabled={busy || previewRows.length === 0}>
+            {busy ? 'جاري الرفع...' : 'اعتماد ورفع البيانات'}
+          </Button>
         </div>
         <div className="text-xs text-[var(--color-text-muted)]">
           يتم حفظ المعاينة محليًا تلقائيًا حتى لا تضيع التعديلات عند انقطاع الإنترنت أو إغلاق المتصفح.
@@ -924,17 +896,23 @@ export const AttendanceSyncDashboard: React.FC = () => {
             </div>
           )}
 
-          <div className="erp-filter-bar">
-            <select
-              value={previewFilter}
-              onChange={(e) => setPreviewFilter(e.target.value as 'all' | 'incomplete' | 'absent')}
-              className="erp-filter-select"
-            >
-              <option value="all">كل السجلات</option>
-              <option value="incomplete">بصمة واحدة فقط</option>
-              <option value="absent">بدون بصمات</option>
-            </select>
-          </div>
+          <SmartFilterBar
+            quickFilters={[
+              {
+                key: 'previewFilter',
+                placeholder: 'كل السجلات',
+                options: [
+                  { value: 'incomplete', label: 'بصمة واحدة فقط' },
+                  { value: 'absent', label: 'بدون بصمات' },
+                ],
+              },
+            ]}
+            quickFilterValues={{ previewFilter }}
+            onQuickFilterChange={(key, value) => {
+              if (key === 'previewFilter') setPreviewFilter(value as 'all' | 'incomplete' | 'absent');
+            }}
+            className="mb-0 border-0 rounded-none"
+          />
           <SelectableTable<RawPunchRecord>
             data={visibleRecords}
             columns={previewTableColumns}
@@ -989,8 +967,8 @@ export const AttendanceSyncDashboard: React.FC = () => {
               سيتم حذف السجلات المرتبطة بالدفعة: {confirmDeleteBatchId}
             </div>
             <div className="flex justify-end gap-2">
-              <button className="erp-filter-apply !bg-slate-500" onClick={() => setConfirmDeleteBatchId(null)}>إلغاء</button>
-              <button className="erp-filter-apply !bg-rose-600" onClick={() => void handleDeleteBatch(confirmDeleteBatchId)}>تأكيد الحذف</button>
+              <Button onClick={() => setConfirmDeleteBatchId(null)}>إلغاء</Button>
+              <Button tone="delete" solid onClick={() => void handleDeleteBatch(confirmDeleteBatchId)}>تأكيد الحذف</Button>
             </div>
           </div>
         </div>

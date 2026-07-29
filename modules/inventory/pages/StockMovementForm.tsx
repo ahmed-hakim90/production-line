@@ -3,7 +3,9 @@ import { useLocation } from 'react-router-dom';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { stockService } from '../services/stockService';
-import { transferApprovalService } from '../services/transferApprovalService';
+import { createStockMovement } from '../usecases/createStockMovement';
+import { createTransferRequest } from '../usecases/createTransferRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
@@ -477,7 +479,7 @@ export const StockMovementForm: React.FC = () => {
               });
               return;
             }
-            txId = await stockService.createMovement({
+            txId = unwrapOrThrow(await createStockMovement({
               warehouseId: effectiveWarehouseId,
               toWarehouseId: effectiveWarehouseId,
               locationId,
@@ -499,7 +501,7 @@ export const StockMovementForm: React.FC = () => {
               note: 'نقل رف → رف داخل نفس المخزن',
               sourceModule: 'manual_movement',
               createdBy: userDisplayName || 'Current User',
-            });
+            })).transactionId;
           }
         } else {
           // Prefer posting identity with available stock for each component line.
@@ -520,7 +522,7 @@ export const StockMovementForm: React.FC = () => {
             return;
           }
 
-          txId = await transferApprovalService.createRequest({
+          txId = unwrapOrThrow(await createTransferRequest({
             requestType: 'manual_transfer',
             fromWarehouseId: effectiveWarehouseId,
             fromWarehouseName: selectedFromWarehouse?.name || '',
@@ -532,7 +534,7 @@ export const StockMovementForm: React.FC = () => {
             sourceModule: 'manual_movement',
             createdBy: userDisplayName || userEmail || 'Current User',
             createdByUserId: uid || undefined,
-          });
+          })).requestId;
         }
       } else {
         if (!selectedItem) {
@@ -566,7 +568,7 @@ export const StockMovementForm: React.FC = () => {
         }
         const effectiveQuantity = Number(quantity || 0);
 
-        txId = await stockService.createMovement({
+        txId = unwrapOrThrow(await createStockMovement({
           warehouseId: effectiveWarehouseId,
           locationId: locationId || undefined,
           locationCode: selectedLocation?.code,
@@ -582,7 +584,7 @@ export const StockMovementForm: React.FC = () => {
           sourceModule: 'manual_movement',
           adjustmentReason: movementType === 'ADJUSTMENT' ? adjustmentReason : undefined,
           createdBy: userDisplayName || 'Current User',
-        });
+        })).transactionId;
       }
       setMessage({
         type: 'success',
@@ -930,15 +932,15 @@ export const StockMovementForm: React.FC = () => {
             <div className="md:col-span-2 space-y-3">
               <div className="flex items-center justify-between">
                 <label className={labelClass} style={{ marginBottom: 0 }}>أصناف التحويلة</label>
-                <button
+                <Button
                   type="button"
-                  className="btn btn-secondary hidden sm:inline-flex"
+                  variant="secondary"
+                  className="hidden sm:inline-flex"
                   onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                   disabled={saving}
                 >
-                  <span className="material-icons-round" style={{ fontSize: 15 }}>add</span>
                   إضافة منتج
-                </button>
+                </Button>
               </div>
 
               {/* Lines table */}
@@ -1099,15 +1101,15 @@ export const StockMovementForm: React.FC = () => {
               </div>
 
               {/* Add row button (mobile) */}
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary w-full sm:hidden"
+                variant="secondary"
+                className="w-full sm:hidden"
                 onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                 disabled={saving}
               >
-                <span className="material-icons-round" style={{ fontSize: 15 }}>add</span>
                 إضافة منتج
-              </button>
+              </Button>
             </div>
           )}
         </div>
@@ -1128,29 +1130,25 @@ export const StockMovementForm: React.FC = () => {
           style={{ background: '#f8f9fa', borderRadius: '0 0 var(--border-radius-lg) var(--border-radius-lg)' }}
         >
           {movementType === 'TRANSFER' && (
-            <button
+            <Button
               type="button"
-              className="btn btn-secondary w-full sm:w-auto"
+              variant="secondary"
+              className="w-full sm:w-auto"
               onClick={() => void handleSubmit('share')}
               disabled={!can('inventory.transactions.create') || saving}
             >
-              <span className="material-icons-round" style={{ fontSize: 15 }}>
-                {saving ? 'hourglass_top' : 'share'}
-              </span>
-              حفظ ومشاركة واتساب
-            </button>
+              {saving ? 'جاري الحفظ...' : 'حفظ ومشاركة واتساب'}
+            </Button>
           )}
-          <button
+          <Button
             type="button"
-            className="btn btn-primary w-full sm:w-auto"
+            variant="primary"
+            className="w-full sm:w-auto"
             onClick={() => void handleSubmit('none')}
             disabled={!can('inventory.transactions.create') || saving}
           >
-            <span className="material-icons-round" style={{ fontSize: 15 }}>
-              {saving ? 'hourglass_top' : 'save'}
-            </span>
             {saving ? 'جاري الحفظ...' : 'حفظ الحركة'}
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -1218,13 +1216,12 @@ export const StockMovementForm: React.FC = () => {
               className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2"
               style={{ background: '#f8f9fa' }}
             >
-              <button className="btn btn-secondary w-full sm:w-auto" onClick={() => setShowPrintPreview(false)}>
+              <Button className="w-full sm:w-auto" variant="secondary" onClick={() => setShowPrintPreview(false)}>
                 إغلاق
-              </button>
-              <button className="btn btn-primary w-full sm:w-auto" onClick={() => void handlePrintFromPreview()}>
-                <span className="material-icons-round" style={{ fontSize: 15 }}>print</span>
+              </Button>
+              <Button className="w-full sm:w-auto" variant="primary" onClick={() => void handlePrintFromPreview()}>
                 طباعة الآن
-              </button>
+              </Button>
             </div>
           </div>
         </div>

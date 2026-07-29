@@ -77,6 +77,8 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
       fontSize: isThermal ? '7pt' : '10pt',
       background: ps.primaryColor,
       color: '#ffffff',
+      WebkitPrintColorAdjust: 'exact',
+      printColorAdjust: 'exact',
       fontWeight: 900,
       textAlign: 'center',
       whiteSpace: 'nowrap',
@@ -99,7 +101,6 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
       }>,
     ) => (
       <table
-        className="erp-table"
         style={{
           width: '100%',
           borderCollapse: 'collapse',
@@ -109,7 +110,7 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
         }}
       >
         <thead>
-          <tr>
+          <tr style={{ background: ps.primaryColor, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
             <th style={{ ...thStyle, width: '8%' }}>م</th>
             <th style={{ ...thStyle, width: '16%' }}>كود الصنف</th>
             <th style={{ ...thStyle, width: '36%' }}>اسم المكون</th>
@@ -289,11 +290,9 @@ export const SuppliesReceiptPrint = React.forwardRef<HTMLDivElement, SuppliesRec
           </div>
         )}
 
-        <table className="erp-table" style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '4mm' : '7mm' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '4mm' : '7mm' }}>
           <tbody>
-            {summaryPairRow('المخزن', order.warehouseName || order.warehouseId, 'المنشئ', order.createdBy || '—')}
-            {summaryPairRow('أمر التوريد', supplyOrderNo || '—', 'إجمالي الكميات', totalQty.toLocaleString('en-US'), true)}
-            {summaryPairRow('المعتمد', order.approvedBy || '—', 'المنفّذ', order.executedBy || '—')}
+            {summaryPairRow('أمر التوريد', supplyOrderNo || '—', 'إجمالي الكميات', totalQty.toLocaleString('en-US'))}
             {order.note ? summaryPairRow('ملاحظة', order.note, '', '', true) : null}
           </tbody>
         </table>

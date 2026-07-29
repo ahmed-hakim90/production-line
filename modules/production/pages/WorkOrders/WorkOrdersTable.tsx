@@ -5,6 +5,7 @@ import type { WorkOrderGroupBy } from './hooks/useWorkOrderFilters';
 import { WorkOrderRow, type WorkOrderRowView } from './WorkOrderRow';
 import styles from './WorkOrders.module.css';
 import { TableSkeleton } from '@/src/shared/ui/skeletons';
+import { Button } from '@/components/UI';
 
 interface WorkOrdersTableProps {
   rows: WorkOrderRowView[];
@@ -155,9 +156,9 @@ export function WorkOrdersTable({
       <div className={styles.tableFooter}>
         {hasMore && <div ref={loaderRef} className={styles.loadSentinel} aria-hidden="true" />}
         {hasMore ? (
-          <button type="button" className={styles.loadMoreBtn} onClick={onLoadMore} disabled={loadingMore}>
+          <Button type="button" className={styles.loadMoreBtn} onClick={onLoadMore} disabled={loadingMore}>
             {loadingMore ? 'جاري التحميل...' : 'تحميل المزيد'}
-          </button>
+          </Button>
         ) : (
           <span className={styles.endText}>تم تحميل كل النتائج</span>
         )}

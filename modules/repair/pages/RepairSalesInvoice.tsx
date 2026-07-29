@@ -5,7 +5,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { FileDown, MessageCircle, Pencil, PlusCircle, Printer, Trash2, XCircle } from 'lucide-react';
+import { Pencil, Trash2, XCircle } from 'lucide-react';
 import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { toast } from '../../../components/Toast';
@@ -467,7 +467,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
               <p className="text-sm text-muted-foreground mt-1">واجهة محسنة لإنشاء الفاتورة، مراجعتها، ثم طباعتها أو مشاركتها مباشرة.</p>
             </div>
             <Button variant="outline" onClick={handleCreateNewInvoice}>
-              <PlusCircle className="h-4 w-4 ms-1" /> فاتورة جديدة
+              فاتورة جديدة
             </Button>
           </div>
         </CardContent>
@@ -574,7 +574,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   </Button>
                 )}
                 <Button variant="outline" onClick={handleCreateNewInvoice}>
-                  <PlusCircle className="h-4 w-4 ms-1" /> فاتورة جديدة
+                  فاتورة جديدة
                 </Button>
               </div>
             </CardContent>
@@ -589,16 +589,16 @@ export const RepairSalesInvoicePage: React.FC = () => {
             <CardContent className="pt-0 space-y-3">
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" onClick={handlePrint} disabled={!printableInvoice}>
-                  <Printer className="h-4 w-4 ms-1" /> طباعة A4
+                  طباعة A4
                 </Button>
                 <Button variant="outline" onClick={handleExportPdf} disabled={!printableInvoice || isExportingPdf}>
-                  <FileDown className="h-4 w-4 ms-1" /> {isExportingPdf ? 'جارٍ التصدير...' : 'تصدير PDF'}
+                  {isExportingPdf ? 'جارٍ التصدير...' : 'تصدير PDF'}
                 </Button>
                 <Button variant="outline" onClick={handleShareWhatsAppText} disabled={!printableInvoice}>
-                  <MessageCircle className="h-4 w-4 ms-1" /> واتساب (نص)
+                  واتساب (نص)
                 </Button>
                 <Button variant="outline" onClick={() => void handleShareWhatsAppWithPdfHint()} disabled={!printableInvoice || isExportingPdf}>
-                  <MessageCircle className="h-4 w-4 ms-1" /> واتساب + PDF
+                  واتساب + PDF
                 </Button>
               </div>
               <div className="rounded-md border p-2 text-xs text-muted-foreground">
@@ -699,8 +699,8 @@ export const RepairSalesInvoicePage: React.FC = () => {
             <div className="xl:col-span-2 flex flex-wrap xl:justify-end gap-2">
               <Button variant="outline" onClick={handleClearInvoiceFilters}>مسح الفلاتر</Button>
               <Button variant="outline" onClick={handleExportInvoicesExcel}>
-              <FileDown className="h-4 w-4 ms-1" /> تصدير Excel
-            </Button>
+                تصدير Excel
+              </Button>
             </div>
           </div>
           <div className="flex justify-end">

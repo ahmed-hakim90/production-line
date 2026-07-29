@@ -6,7 +6,6 @@ import {
   ChevronLeft,
   Eye,
   Factory,
-  LogOut,
   PanelLeftClose,
   UserCircle2,
   X,
@@ -18,6 +17,7 @@ import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSideba
 import type { SidebarIconStyle } from '@/types';
 import { resolveMenuIcon } from './menuIconMap';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { Button } from '@/components/ui/button';
 import { useAppDirection } from './useAppDirection';
 
 export interface SidebarProps {
@@ -492,13 +492,17 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         <span>{t('sidebar.myProfile')}</span>
                       </NavLink>
                     )}
-                    <button
+                    <Button
+                      type="button"
+                      variant="ghost"
                       onClick={logout}
-                      className="w-full flex items-center gap-2.5 px-2.5 py-2 rounded-[var(--border-radius-sm)] text-[12.5px] font-semibold text-rose-600 hover:bg-rose-50 transition-colors text-start border-t border-[var(--color-border)] mt-1 pt-2"
+                      iconName="logout"
+                      tone="delete"
+                      solid={false}
+                      className="!w-full !justify-start gap-2.5 !px-2.5 !py-2 !rounded-[var(--border-radius-sm)] !text-[12.5px] font-semibold border-t border-[var(--color-border)] mt-1 pt-2"
                     >
-                      <LogOut size={16} />
-                      <span>{t('sidebar.logout')}</span>
-                    </button>
+                      تسجيل الخروج
+                    </Button>
                   </div>
                 </div>
               )}

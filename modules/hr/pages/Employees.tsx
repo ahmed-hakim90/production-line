@@ -27,6 +27,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../../shared/components/SelectableTable';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import type { FirestoreEmployee, FirestoreUser, EmploymentType } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -35,8 +36,14 @@ import { activityLogService } from '../../system/services/activityLogService';
 import { employeeService, type EmployeePageCursor } from '../employeeService';
 import { JOB_LEVEL_LABELS } from '../types';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift, FirestoreVehicle } from '../types';
-import { getDocs, addDoc, serverTimestamp } from 'firebase/firestore';
+import { getDocs } from 'firebase/firestore';
 import { departmentsRef, jobPositionsRef, shiftsRef } from '../collections';
+import {
+  createDepartment,
+  createJobPosition,
+  createShift,
+} from '../usecases/manageOrganization';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { vehicleService } from '../vehicleService';
 import type { JobLevel } from '../types';
 import { getTodayDateString } from '../../../utils/calculations';
@@ -143,11 +150,13 @@ export const Employees: React.FC = () => {
   const [productionEmployeeContext, setProductionEmployeeContext] = useState<Map<string, ProductionEmployeeContext>>(new Map());
 
   const [search, setSearch] = useState('');
-  const [filterDepartment, setFilterDepartment] = useState('');
-  const [filterStatus, setFilterStatus] = useState<'all' | 'active' | 'inactive'>('all');
-  const [filterEmploymentType, setFilterEmploymentType] = useState('');
-  const [filterJobPosition, setFilterJobPosition] = useState('');
-  const [filterSystemAccess, setFilterSystemAccess] = useState<'all' | 'yes' | 'no'>('all');
+  const [filterValues, setFilterValues] = useState({
+    department: '',
+    jobPosition: '',
+    status: 'all',
+    employmentType: '',
+    systemAccess: 'all',
+  });
 
   const [showModal, setShowModal] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
@@ -329,15 +338,15 @@ export const Employees: React.FC = () => {
           getEffectiveManagerName(e).toLowerCase().includes(q)
       );
     }
-    if (filterDepartment) list = list.filter((e) => e.departmentId === filterDepartment);
-    if (filterJobPosition) list = list.filter((e) => e.jobPositionId === filterJobPosition);
-    if (filterStatus === 'active') list = list.filter((e) => e.isActive !== false);
-    if (filterStatus === 'inactive') list = list.filter((e) => e.isActive === false);
-    if (filterEmploymentType) list = list.filter((e) => e.employmentType === filterEmploymentType);
-    if (filterSystemAccess === 'yes') list = list.filter((e) => e.hasSystemAccess);
-    if (filterSystemAccess === 'no') list = list.filter((e) => !e.hasSystemAccess);
+    if (filterValues.department && filterValues.department !== 'all') list = list.filter((e) => e.departmentId === filterValues.department);
+    if (filterValues.jobPosition && filterValues.jobPosition !== 'all') list = list.filter((e) => e.jobPositionId === filterValues.jobPosition);
+    if (filterValues.status === 'active') list = list.filter((e) => e.isActive !== false);
+    if (filterValues.status === 'inactive') list = list.filter((e) => e.isActive === false);
+    if (filterValues.employmentType && filterValues.employmentType !== 'all') list = list.filter((e) => e.employmentType === filterValues.employmentType);
+    if (filterValues.systemAccess === 'yes') list = list.filter((e) => e.hasSystemAccess);
+    if (filterValues.systemAccess === 'no') list = list.filter((e) => !e.hasSystemAccess);
     return list;
-  }, [listEmployees, _rawEmployees, search, filterDepartment, filterJobPosition, filterStatus, filterEmploymentType, filterSystemAccess, productionEmployeeContext]);
+  }, [listEmployees, _rawEmployees, search, filterValues, productionEmployeeContext]);
 
   const filteredSalaryTotal = useMemo(
     () => filtered.reduce((sum, emp) => sum + Number(emp.baseSalary ?? 0), 0),
@@ -504,33 +513,27 @@ export const Employees: React.FC = () => {
     setQuickAddSaving(true);
     try {
       if (quickAddType === 'department') {
-        const ref = await addDoc(departmentsRef(), {
+        const departmentId = unwrapOrThrow(await createDepartment({
           name: quickAddName.trim(),
           code: quickAddCode.trim() || quickAddName.trim().substring(0, 3).toUpperCase(),
-          managerId: '',
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
+        })).departmentId;
         const newDept: FirestoreDepartment = {
-          id: ref.id,
+          id: departmentId,
           name: quickAddName.trim(),
           code: quickAddCode.trim() || quickAddName.trim().substring(0, 3).toUpperCase(),
           managerId: '',
           isActive: true,
         };
         setDepartments((prev) => [...prev, newDept]);
-        setForm((prev) => ({ ...prev, departmentId: ref.id }));
+        setForm((prev) => ({ ...prev, departmentId }));
       } else if (quickAddType === 'position') {
-        const ref = await addDoc(jobPositionsRef(), {
+        const positionId = unwrapOrThrow(await createJobPosition({
           title: quickAddName.trim(),
           departmentId: form.departmentId || '',
           level: (form.level || 1) as JobLevel,
-          hasSystemAccessDefault: false,
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
+        })).positionId;
         const newPos: FirestoreJobPosition = {
-          id: ref.id,
+          id: positionId,
           title: quickAddName.trim(),
           departmentId: form.departmentId || '',
           level: (form.level || 1) as JobLevel,
@@ -538,22 +541,13 @@ export const Employees: React.FC = () => {
           isActive: true,
         };
         setJobPositions((prev) => [...prev, newPos]);
-        setForm((prev) => ({ ...prev, jobPositionId: ref.id }));
+        setForm((prev) => ({ ...prev, jobPositionId: positionId }));
       } else if (quickAddType === 'shift') {
-        const ref = await addDoc(shiftsRef(), {
+        const shiftId = unwrapOrThrow(await createShift({
           name: quickAddName.trim(),
-          startTime: '08:00',
-          endTime: '16:00',
-          latestCheckInTime: '11:59',
-          firstCheckOutTime: '12:00',
-          breakMinutes: 60,
-          lateGraceMinutes: 15,
-          crossesMidnight: false,
-          isActive: true,
-          createdAt: serverTimestamp(),
-        });
+        })).shiftId;
         const newShift: FirestoreShift = {
-          id: ref.id,
+          id: shiftId,
           name: quickAddName.trim(),
           startTime: '08:00',
           endTime: '16:00',
@@ -565,7 +559,7 @@ export const Employees: React.FC = () => {
           isActive: true,
         };
         setShifts((prev) => [...prev, newShift]);
-        setForm((prev) => ({ ...prev, shiftId: ref.id }));
+        setForm((prev) => ({ ...prev, shiftId }));
       }
       setQuickAddType(null);
       setQuickAddName('');
@@ -907,21 +901,8 @@ export const Employees: React.FC = () => {
     return actions;
   }, [handleBulkActivate, handleBulkDeactivate, handleBulkExport, canExportFromPage]);
 
-  const hasActiveFilters =
-    search.trim() ||
-    filterDepartment ||
-    filterJobPosition ||
-    filterStatus !== 'all' ||
-    filterEmploymentType ||
-    filterSystemAccess !== 'all';
-
-  const clearFilters = () => {
-    setSearch('');
-    setFilterDepartment('');
-    setFilterJobPosition('');
-    setFilterStatus('all');
-    setFilterEmploymentType('');
-    setFilterSystemAccess('all');
+  const handleFilterChange = (key: string, value: string) => {
+    setFilterValues((prev) => ({ ...prev, [key]: value }));
   };
 
   if (dataLoading && departments.length === 0) {
@@ -984,17 +965,17 @@ export const Employees: React.FC = () => {
         ]}
       />
 
-      {/* 2. Stats bar */}
+      {/* 2. Stats bar - KPI chips ABOVE filter card */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <Card className={`p-4 cursor-pointer transition-all ${filterStatus === 'all' ? 'ring-2 ring-primary' : ''}`} onClick={() => setFilterStatus('all')}>
+        <Card className={`p-4 cursor-pointer transition-all ${filterValues.status === 'all' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleFilterChange('status', 'all')}>
           <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الإجمالي</p>
           <p className="text-2xl font-bold text-[var(--color-text)]">{summaryKpis.total}</p>
         </Card>
-        <Card className={`p-4 cursor-pointer transition-all ${filterStatus === 'active' ? 'ring-2 ring-emerald-400' : ''}`} onClick={() => setFilterStatus(filterStatus === 'active' ? 'all' : 'active')}>
+        <Card className={`p-4 cursor-pointer transition-all ${filterValues.status === 'active' ? 'ring-2 ring-emerald-400' : ''}`} onClick={() => handleFilterChange('status', filterValues.status === 'active' ? 'all' : 'active')}>
           <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نشط</p>
           <p className="text-2xl font-bold text-emerald-600">{summaryKpis.active}</p>
         </Card>
-        <Card className={`p-4 cursor-pointer transition-all ${filterStatus === 'inactive' ? 'ring-2 ring-slate-400' : ''}`} onClick={() => setFilterStatus(filterStatus === 'inactive' ? 'all' : 'inactive')}>
+        <Card className={`p-4 cursor-pointer transition-all ${filterValues.status === 'inactive' ? 'ring-2 ring-slate-400' : ''}`} onClick={() => handleFilterChange('status', filterValues.status === 'inactive' ? 'all' : 'inactive')}>
           <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">غير نشط</p>
           <p className="text-2xl font-bold text-slate-500">{summaryKpis.inactive}</p>
         </Card>
@@ -1022,99 +1003,56 @@ export const Employees: React.FC = () => {
               </p>
             </div>
             <Button variant="secondary" onClick={() => navigate('/system/users')}>
-              <EmployeeIcon name="manage_accounts" className="text-sm" />
               فتح إدارة المستخدمين
             </Button>
           </div>
         </Card>
       )}
 
-      {/* 4. Filters */}
-      <Card>
-        <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-end">
-          <div className="flex-1 min-w-0 sm:min-w-[200px]">
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">بحث (اسم / رمز)</label>
-            <input
-              type="text"
-              className="erp-filter-select w-full"
-              placeholder="بحث..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div className="w-full sm:w-40">
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">القسم</label>
-            <select
-              className="erp-filter-select w-full"
-              value={filterDepartment}
-              onChange={(e) => setFilterDepartment(e.target.value)}
-            >
-              <option value="">الكل</option>
-              {departments.map((d) => (
-                <option key={d.id} value={d.id}>{d.name}</option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full sm:w-40">
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">المنصب</label>
-            <select
-              className="erp-filter-select w-full"
-              value={filterJobPosition}
-              onChange={(e) => setFilterJobPosition(e.target.value)}
-            >
-              <option value="">الكل</option>
-              {jobPositions.map((j) => (
-                <option key={j.id} value={j.id}>{j.title}</option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full sm:w-40">
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">نوع التوظيف</label>
-            <select
-              className="erp-filter-select w-full"
-              value={filterEmploymentType}
-              onChange={(e) => setFilterEmploymentType(e.target.value)}
-            >
-              <option value="">الكل</option>
-              {(Object.entries(EMPLOYMENT_TYPE_LABELS) as [EmploymentType, string][]).map(([k, v]) => (
-                <option key={k} value={k}>{v}</option>
-              ))}
-            </select>
-          </div>
-          <div className="w-full sm:w-32">
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الحالة</label>
-            <select
-              className="erp-filter-select w-full"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value as 'all' | 'active' | 'inactive')}
-            >
-              <option value="all">الكل</option>
-              <option value="active">نشط</option>
-              <option value="inactive">غير نشط</option>
-            </select>
-          </div>
-          <div className="w-full sm:w-36">
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">دخول النظام</label>
-            <select
-              className="erp-filter-select w-full"
-              value={filterSystemAccess}
-              onChange={(e) => setFilterSystemAccess(e.target.value as 'all' | 'yes' | 'no')}
-            >
-              <option value="all">الكل</option>
-              <option value="yes">نعم</option>
-              <option value="no">لا</option>
-            </select>
-          </div>
-          {hasActiveFilters && (
-            <Button variant="outline" onClick={clearFilters}>
-              مسح الفلاتر
-            </Button>
-          )}
-        </div>
-      </Card>
-
-      {/* 5. SelectableTable with bulk actions */}
-      <SelectableTable<FirestoreEmployee>
+      {/* 4. SmartFilterBar + Table in one card */}
+      <Card className="p-0">
+        <SmartFilterBar
+          searchPlaceholder="بحث باسم / رمز / خط إنتاج / مدير"
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'department',
+              placeholder: 'القسم',
+              options: departments.map((d) => ({ value: d.id!, label: d.name })),
+            },
+            {
+              key: 'jobPosition',
+              placeholder: 'المنصب',
+              options: jobPositions.map((j) => ({ value: j.id!, label: j.title })),
+            },
+            {
+              key: 'employmentType',
+              placeholder: 'نوع التوظيف',
+              options: (Object.entries(EMPLOYMENT_TYPE_LABELS) as [EmploymentType, string][]).map(([k, v]) => ({ value: k, label: v })),
+            },
+            {
+              key: 'status',
+              placeholder: 'الحالة',
+              options: [
+                { value: 'active', label: 'نشط' },
+                { value: 'inactive', label: 'غير نشط' },
+              ],
+            },
+            {
+              key: 'systemAccess',
+              placeholder: 'دخول النظام',
+              options: [
+                { value: 'yes', label: 'نعم' },
+                { value: 'no', label: 'لا' },
+              ],
+            },
+          ]}
+          quickFilterValues={filterValues}
+          onQuickFilterChange={handleFilterChange}
+          className="mb-0 border-0 rounded-none"
+        />
+        <SelectableTable<FirestoreEmployee>
         data={filtered}
         columns={employeeColumns}
         getId={(emp) => emp.id!}
@@ -1126,6 +1064,7 @@ export const Employees: React.FC = () => {
         emptySubtitle={can('employees.create') ? 'اضغط "إضافة موظف" لإضافة أول موظف' : undefined}
         pageSize={15}
       />
+      </Card>
 
       {(listHasMore || listLoading) && (
         <div className="flex justify-center">
@@ -1489,7 +1428,6 @@ export const Employees: React.FC = () => {
                       الحالة الحالية لهذا الموظف: {form.hasSystemAccess ? 'لديه حساب مرتبط' : 'غير مرتبط بحساب'}.
                     </div>
                     <Button variant="secondary" onClick={() => navigate('/system/users')}>
-                      <EmployeeIcon name="manage_accounts" className="text-sm" />
                       فتح صفحة المستخدمين
                     </Button>
                   </div>
@@ -1507,7 +1445,6 @@ export const Employees: React.FC = () => {
             {shareCredentials && (
               <div className="mx-6 mb-2">
                 <Button variant="outline" onClick={shareCredentialsToWhatsApp}>
-                  <EmployeeIcon name="share" className="text-sm" />
                   مشاركة بيانات الدخول واتساب
                 </Button>
               </div>
@@ -1521,7 +1458,6 @@ export const Employees: React.FC = () => {
               <div className="flex items-center gap-3">
                 <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>
                 <Button variant="primary" onClick={handleSave} disabled={saving || !isFormValid}>
-                  {saving && <EmployeeIcon name="refresh" className="animate-spin text-sm" />}
                   {editId ? 'حفظ التعديلات' : 'إضافة موظف'}
                 </Button>
               </div>
@@ -1544,13 +1480,9 @@ export const Employees: React.FC = () => {
             <p className="text-xs text-[var(--color-text-muted)] mb-6">يمكنك إعادة تفعيله لاحقاً. البيانات والتقارير السابقة ستبقى محفوظة.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
-              <button
-                onClick={() => handleDeactivate(deleteConfirmId)}
-                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-amber-500 text-white hover:bg-amber-600 flex items-center gap-2"
-              >
-                <EmployeeIcon name="person_off" className="text-sm" />
+              <Button variant="primary" tone="undo" solid onClick={() => handleDeactivate(deleteConfirmId)}>
                 تعطيل
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1578,13 +1510,9 @@ export const Employees: React.FC = () => {
             </div>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setPermanentDeleteId(null)}>إلغاء</Button>
-              <button
-                onClick={() => handlePermanentDelete(permanentDeleteId)}
-                className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 flex items-center gap-2"
-              >
-                <EmployeeIcon name="delete_forever" className="text-sm" />
+              <Button variant="danger" onClick={() => handlePermanentDelete(permanentDeleteId)}>
                 حذف نهائي
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -1604,7 +1532,6 @@ export const Employees: React.FC = () => {
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setToggleConfirmId(null)}>إلغاء</Button>
               <Button variant="primary" onClick={() => handleToggleActive(toggleConfirmId)}>
-                <EmployeeIcon name="check_circle" className="text-sm" />
                 تفعيل
               </Button>
             </div>
@@ -1667,7 +1594,6 @@ export const Employees: React.FC = () => {
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
               <Button variant="outline" onClick={() => setQuickAddType(null)}>إلغاء</Button>
               <Button variant="primary" onClick={handleQuickAdd} disabled={quickAddSaving || !quickAddName.trim()}>
-                {quickAddSaving && <EmployeeIcon name="refresh" className="animate-spin text-sm" />}
                 إضافة
               </Button>
             </div>

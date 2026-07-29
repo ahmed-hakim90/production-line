@@ -380,7 +380,7 @@ export const GlobalOrganizationModal: React.FC = () => {
             <Badge variant="neutral">{t(MODAL_LABEL_KEYS[tab])}</Badge>
           </div>
           <div className="flex items-center gap-3">
-            <Button variant="outline" onClick={() => { if (!saving) close(); }}>{t('ui.close')}</Button>
+            <Button variant="outline" onClick={() => { if (!saving) close(); }} iconName="close" tone="neutral">{t('ui.close')}</Button>
             <Button variant="primary" onClick={handleSave} disabled={saving}>
               {saving && <Loader2 size={14} className="animate-spin" />}
               {isEdit ? t('modalManager.organization.saveChanges') : t('modalManager.organization.add')}

@@ -1,5 +1,6 @@
 import React from 'react';
 import { Button } from '../../components/UI';
+import { TableIconAction, ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { formatNumber } from '../../../../utils/calculations';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../../utils/transferUnits';
 import type { InventoryTransferRequest, StockTransaction, TransferRequestLine } from '../../types';
@@ -156,12 +157,9 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
             <Button variant="outline" onClick={onClosePending}>
               إغلاق
             </Button>
-            <Button variant="primary" onClick={() => onPrintPendingFromModal(selectedPending)}>
-              <span className="material-icons-round text-sm" aria-hidden>
-                print
-              </span>
+            <ToneActionButton action="print" onClick={() => onPrintPendingFromModal(selectedPending)}>
               طباعة
-            </Button>
+            </ToneActionButton>
           </div>
         </div>
       </div>
@@ -243,18 +241,13 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
                       </td>
                       {canPrint && (
                         <td className="px-3 py-2 text-center">
-                          <button
-                            type="button"
+                          <TableIconAction
+                            action="share"
                             onClick={() => void onShareTransfer(line, 'line')}
                             disabled={processing}
                             title="مشاركة واتساب"
                             aria-label={`مشاركة ${line.itemName} (${line.itemCode}) على واتساب`}
-                            className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed inline-flex"
-                          >
-                            <span className="material-icons-round text-sm" aria-hidden>
-                              share
-                            </span>
-                          </button>
+                          />
                         </td>
                       )}
                     </tr>
@@ -268,12 +261,12 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               إغلاق
             </Button>
             {canPrint && selectedApprovedTransfer.lines[0] && (
-              <Button variant="primary" onClick={() => onPrintApprovedFromModal(selectedApprovedTransfer.lines[0])}>
-                <span className="material-icons-round text-sm" aria-hidden>
-                  print
-                </span>
+              <ToneActionButton
+                action="print"
+                onClick={() => onPrintApprovedFromModal(selectedApprovedTransfer.lines[0])}
+              >
                 طباعة
-              </Button>
+              </ToneActionButton>
             )}
           </div>
         </div>
@@ -356,12 +349,14 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
             <Button variant="outline" onClick={onCloseEdit} disabled={processing}>
               إلغاء
             </Button>
-            <Button variant="primary" onClick={() => void onSaveEdit()} disabled={processing}>
-              <span className="material-icons-round text-sm" aria-hidden>
-                {processing ? 'hourglass_top' : 'save'}
-              </span>
+            <ToneActionButton
+              action="save"
+              onClick={() => void onSaveEdit()}
+              disabled={processing}
+              loading={processing}
+            >
               حفظ التعديلات
-            </Button>
+            </ToneActionButton>
           </div>
         </div>
       </div>

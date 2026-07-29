@@ -39,6 +39,7 @@ import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionWorkerSettings } fro
 import { InventoryRoutingSettingsSection } from '../components/settings/InventoryRoutingSettingsSection';
 import { WarehouseLocationSettingsSection } from '../components/settings/WarehouseLocationSettingsSection';
 import { ProductionRequestRoutingSettingsSection } from '../components/settings/ProductionRequestRoutingSettingsSection';
+import { ProductionReportBehaviorSettingsSection } from '../components/settings/ProductionReportBehaviorSettingsSection';
 import { GeneralDashboardDisplaySection } from '../components/settings/GeneralDashboardDisplaySection';
 import { GeneralAlertsSection } from '../components/settings/GeneralAlertsSection';
 import { KPIThresholdsSection } from '../components/settings/KPIThresholdsSection';
@@ -283,6 +284,22 @@ const ALERT_FIELDS: { key: keyof AlertSettings; label: string; icon: string; uni
   { key: 'overProductionThreshold', label: 'حد الإنتاج الزائد', icon: 'trending_up', unit: '%', description: 'نسبة تجاوز الهدف المسموحة — تنبيه عند التجاوز' },
 ];
 
+const SettingsGroupTitle: React.FC<{ title: string; description: string; icon: string }> = ({
+  title,
+  description,
+  icon,
+}) => (
+  <div className="flex items-start gap-3 pt-2">
+    <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 text-primary flex items-center justify-center shrink-0">
+      <span className="material-icons-round text-xl">{icon}</span>
+    </div>
+    <div className="min-w-0">
+      <h3 className="text-base font-bold text-[var(--color-text)]">{title}</h3>
+      <p className="text-sm text-[var(--color-text-muted)] leading-6">{description}</p>
+    </div>
+  </div>
+);
+
 type SettingsProps = {
   section?: SettingsSectionKey;
 };
@@ -350,9 +367,9 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     saving,
     saveMessage,
     setSaveMessage,
+    dirtyBySection,
     hasUnsavedChanges,
     handleSave,
-    handleSaveAll,
   } = useSystemSettingsController({
     systemSettings,
     updateSystemSettings,
@@ -378,6 +395,7 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     normalizeCustomWidgets,
     resolveProductionWorkerSettings,
   });
+  const activeSectionHasUnsavedChanges = dirtyBySection[activeSection] === true;
   const [inventoryWarehouses, setInventoryWarehouses] = useState<Warehouse[]>([]);
   const [productionApproverEmployees, setProductionApproverEmployees] = useState<FirestoreEmployee[]>([]);
   const [systemUsers, setSystemUsers] = useState<FirestoreUser[]>([]);
@@ -747,15 +765,15 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
           label: 'حفظ الصفحة',
           icon: 'save',
           onClick: () => handleSave(activeSection),
-          disabled: saving || !hasUnsavedChanges,
+          disabled: saving || !activeSectionHasUnsavedChanges,
         }}
         loading={saving}
       />
 
-      {hasUnsavedChanges && (
+      {activeSectionHasUnsavedChanges && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-accent text-accent-foreground border border-border">
           <span className="material-icons-round text-base">info</span>
-          لديك تعديلات غير محفوظة. احفظ التغييرات قبل مغادرة الصفحة.
+          لديك تعديلات غير محفوظة في هذه الصفحة. احفظ التغييرات قبل مغادرتها.
         </div>
       )}
 
@@ -778,21 +796,18 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
         <>
           <GeneralSettingsHeader
             isAdmin={isAdmin}
-            saving={saving}
-            onSave={handleSaveAll}
           />
+
+          <CompanyTenantSection isAdmin={isAdmin} />
 
           {can('settings.edit') && (
             <DefaultHomePathSection value={localDefaultHomePath} onChange={setLocalDefaultHomePath} />
           )}
 
-          <CompanyTenantSection isAdmin={isAdmin} />
-
           <GeneralSystemBehaviorSection
             isAdmin={isAdmin}
             localPlanSettings={localPlanSettings}
             setLocalPlanSettings={setLocalPlanSettings}
-            inventoryWarehouses={inventoryWarehouses}
             allPermissions={ALL_PERMISSIONS}
             hrUsers={systemUsers.map((user) => ({
               id: user.id || '',
@@ -807,8 +822,6 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {activeSection === 'appearance' && (
         <>
-          <UiDensitySection />
-
           <GeneralBrandingSection
             isAdmin={isAdmin}
             localBranding={localBranding}
@@ -828,6 +841,8 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             fontFamilies={FONT_FAMILIES}
             defaultTheme={DEFAULT_THEME}
           />
+
+          <UiDensitySection />
         </>
       )}
 
@@ -836,17 +851,17 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
       {/* ════════════════════════════════════════════════════════════════════ */}
       {activeSection === 'production' && isAdmin && (
         <>
-          <ProductionWorkerSettingsSection
-            value={localProductionWorkerSettings}
-            onChange={setLocalProductionWorkerSettings}
-            disabled={!isAdmin}
+          <SettingsGroupTitle
+            title="مسار التقرير والمخزون"
+            description="المصدر الوحيد لقرار إذن الصرف، اعتماد إدخال الإنتاج، خصم BOM، وتوجيه مخازن الإنتاج والتغليف."
+            icon="account_tree"
           />
-
-          <ProductionRequestRoutingSettingsSection
+          <ProductionReportBehaviorSettingsSection
             isAdmin={isAdmin}
             localPlanSettings={localPlanSettings}
             setLocalPlanSettings={setLocalPlanSettings}
-            employees={productionApproverEmployees}
+            localProductionWorkerSettings={localProductionWorkerSettings}
+            setLocalProductionWorkerSettings={setLocalProductionWorkerSettings}
           />
 
           <InventoryRoutingSettingsSection
@@ -856,6 +871,34 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             inventoryWarehouses={inventoryWarehouses}
           />
 
+          <SettingsGroupTitle
+            title="طلبات واعتمادات الإنتاج"
+            description="موافقو طلبات الإنتاج وجهات الاطلاع بدون خلطها مع اعتماد حركات المخزون."
+            icon="approval"
+          />
+          <ProductionRequestRoutingSettingsSection
+            isAdmin={isAdmin}
+            localPlanSettings={localPlanSettings}
+            setLocalPlanSettings={setLocalPlanSettings}
+            employees={productionApproverEmployees}
+          />
+
+          <SettingsGroupTitle
+            title="طاقم الإنتاج"
+            description="ربط عمال الإنتاج وقواعد الأداء والمكافآت."
+            icon="groups"
+          />
+          <ProductionWorkerSettingsSection
+            value={localProductionWorkerSettings}
+            onChange={setLocalProductionWorkerSettings}
+            disabled={!isAdmin}
+          />
+
+          <SettingsGroupTitle
+            title="لوكيشن المخازن"
+            description="إلزام الرفوف واللوكيشن لكل مخزن بشكل مستقل عن مسار تقرير الإنتاج."
+            icon="location_on"
+          />
           <WarehouseLocationSettingsSection
             isAdmin={isAdmin}
             inventoryWarehouses={inventoryWarehouses}
@@ -925,6 +968,14 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             setLocalAlertToggles={setLocalAlertToggles}
           />
 
+          <KPIThresholdsSection
+            isAdmin={isAdmin}
+            saving={saving}
+            localKPIs={localKPIs}
+            setLocalKPIs={setLocalKPIs}
+            onSave={() => handleSave('alerts')}
+          />
+
           <AlertRulesSection
             isAdmin={isAdmin}
             saving={saving}
@@ -932,14 +983,6 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             setLocalAlerts={setLocalAlerts}
             onSave={() => handleSave('alerts')}
             alertFields={ALERT_FIELDS}
-          />
-
-          <KPIThresholdsSection
-            isAdmin={isAdmin}
-            saving={saving}
-            localKPIs={localKPIs}
-            setLocalKPIs={setLocalKPIs}
-            onSave={() => handleSave('alerts')}
           />
         </>
       )}

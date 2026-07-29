@@ -7,6 +7,7 @@ import { qualityWorkersService } from '../services/qualityWorkersService';
 import type { QualityWorkerAssignment } from '@/types';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 type QualityRole = QualityWorkerAssignment['qualityRole'];
 
@@ -250,14 +251,12 @@ export const QualityWorkers: React.FC = () => {
         </Card>
 
         <Card className="xl:col-span-2" title="تعيينات الجودة الحالية">
-          <div className="mb-3">
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="بحث بالاسم أو الكود أو الدور..."
-              className="w-full px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa]"
-            />
-          </div>
+          <SmartFilterBar
+            searchPlaceholder="بحث بالاسم أو الكود أو الدور..."
+            searchValue={search}
+            onSearchChange={setSearch}
+            className="mb-3 border-0 rounded-none"
+          />
 
           <div className="overflow-x-auto">
             <table className="erp-table min-w-full text-sm">

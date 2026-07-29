@@ -54,7 +54,7 @@ import {
   buildManufacturingItemNameMap,
   resolveManufacturingItemName,
 } from '../../../utils/manufacturingItemLabels';
-import { Card, KPIBox, Badge } from '../components/UI';
+import { Card, KPIBox, Badge, Button } from '../components/UI';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -62,6 +62,7 @@ import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
+import type { TableIconActionTone } from '@/src/components/erp/TableIconAction';
 import { CustomDashboardWidgets } from '../../../components/CustomDashboardWidgets';
 import { adminService, type SystemUsers } from '../services/adminService';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
@@ -109,6 +110,18 @@ import {
   fetchCachedPageData,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
+import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
+import {
+  averageScheduleAdherence,
+  computeProductionHealthBreakdown,
+  isPlanBehindSchedule,
+  laborUtilizationPercent,
+  outputVsIdealPercent,
+  qualityRatesFromTotals,
+  volumeWeightedPlanAchievement,
+  yieldEfficiencyPercent,
+} from '../lib/decisionMetrics';
 import {
   ResponsiveContainer,
   ComposedChart,
@@ -204,13 +217,13 @@ const PRESET_LABELS: Record<PeriodPreset, string> = {
   custom: 'مخصص',
 };
 
-const QUICK_ACTION_COLOR_CLASSES: Record<QuickActionColor, string> = {
-  primary: 'bg-primary/10 text-primary border-primary/20 hover:bg-primary/15',
-  emerald: 'bg-emerald-50 dark:bg-emerald-900/10 text-emerald-600 border-emerald-200 hover:bg-emerald-100 dark:hover:bg-emerald-900/20',
-  amber: 'bg-amber-50 dark:bg-amber-900/10 text-amber-600 border-amber-200 hover:bg-amber-100 dark:hover:bg-amber-900/20',
-  rose: 'bg-rose-50 dark:bg-rose-900/10 text-rose-600 border-rose-200 hover:bg-rose-100 dark:hover:bg-rose-900/20',
-  violet: 'bg-violet-50 dark:bg-violet-900/10 text-violet-600 border-violet-200 dark:border-violet-800 hover:bg-violet-100 dark:hover:bg-violet-900/20',
-  slate: 'bg-[#f0f2f5] text-[var(--color-text-muted)] border-[var(--color-border)] hover:bg-[#e8eaed]',
+const QUICK_ACTION_TONE: Record<QuickActionColor, TableIconActionTone> = {
+  primary: 'execute',
+  emerald: 'approve',
+  amber: 'edit',
+  rose: 'reject',
+  violet: 'save',
+  slate: 'neutral',
 };
 
 const ACTION_LABELS: Record<string, string> = {
@@ -286,6 +299,19 @@ const DASHBOARD_ICON_MAP: Record<string, LucideIcon> = {
   delete: Trash2,
   person_add: UserPlus,
   toggle_on: Settings2,
+  compare_arrows: TrendingUp,
+  rule: ShieldCheck,
+  package_2: Package2,
+  event_note: CalendarDays,
+  hourglass_top: Clock3,
+  error: AlertTriangle,
+  build: Settings2,
+  priority_high: AlertTriangle,
+  insights: BarChart3,
+  pending_actions: Clock3,
+  build_circle: Settings2,
+  timelapse: Clock3,
+  local_shipping: Package2,
 };
 
 const renderDashboardIcon = (
@@ -448,6 +474,9 @@ export const AdminDashboard: React.FC = () => {
     (widgetId: string) => isWidgetVisible(systemSettings, 'adminDashboard', widgetId),
     [systemSettings]
   );
+  const { snapshot: decisionSnapshot, loading: decisionLoading } = useOperationalDecisionSnapshot({
+    planDelayDays: alertCfg.planDelayDays,
+  });
 
   // â”€â”€ Period filter state (local to this dashboard) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
   const [preset, setPreset] = useState<PeriodPreset>('month');
@@ -814,9 +843,7 @@ export const AdminDashboard: React.FC = () => {
     const totalProduction = productionReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
     const totalWaste = productionReports.reduce((s, r) => s + getReportWaste(r), 0);
     const wastePercent = calculateWasteRatio(totalWaste, totalProduction + totalWaste);
-    const efficiency = totalProduction + totalWaste > 0
-      ? Number(((totalProduction / (totalProduction + totalWaste)) * 100).toFixed(1))
-      : 0;
+    const efficiency = yieldEfficiencyPercent(totalProduction, totalWaste);
 
     const totalLaborCost = monthlyCostMode
       ? Number(monthlyCostSummary?.totals.directCost || 0)
@@ -851,18 +878,24 @@ export const AdminDashboard: React.FC = () => {
       : 0;
 
     const activePlans = productionPlans.filter(
-      (p) => p.status === 'in_progress' || p.status === 'completed'
+      (p) => p.status === 'in_progress' || p.status === 'completed' || p.status === 'planned',
     );
-    let achievedCount = 0;
-    activePlans.forEach((plan) => {
+    const planActuals = activePlans.map((plan) => {
       const key = `${plan.lineId}_${plan.productId}`;
       const pReports = planReports[key] || [];
-      const actual = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-      if (actual >= plan.plannedQuantity * 0.9) achievedCount++;
+      const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+      return {
+        plannedQuantity: plan.plannedQuantity,
+        actualQuantity: Math.max(Number(plan.producedQuantity || 0), fromReports),
+        startDate: plan.plannedStartDate || plan.startDate,
+        plannedEndDate: plan.plannedEndDate,
+        status: plan.status,
+      };
     });
-    const planAchievementRate = activePlans.length > 0
-      ? Number(((achievedCount / activePlans.length) * 100).toFixed(0))
-      : 0;
+    const planAchievementRate = volumeWeightedPlanAchievement(planActuals);
+    const scheduleAdherence = averageScheduleAdherence(
+      planActuals.filter((p) => p.status === 'in_progress' || p.status === 'planned'),
+    );
 
     return {
       totalProduction,
@@ -871,11 +904,45 @@ export const AdminDashboard: React.FC = () => {
       wastePercent,
       efficiency,
       planAchievementRate,
+      scheduleAdherence,
       totalLaborCost,
       totalIndirectCost,
       totalCost,
     };
-  }, [productionReports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary]);
+  }, [productionReports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary, reports]);
+
+  const utilizationMetrics = useMemo(() => {
+    const actualLaborHours = productionReports.reduce(
+      (sum, report) => sum + Number(report.workersCount || 0) * Number(report.workHours || 0),
+      0,
+    );
+    const byLineDay = new Map<string, { workers: number; lineHours: number }>();
+    let idealUnits = 0;
+    productionReports.forEach((report) => {
+      const line = _rawLines.find((row) => row.id === report.lineId);
+      const lineHours = Number(line?.dailyWorkingHours || 0);
+      const key = `${report.lineId}|${report.date}`;
+      const prev = byLineDay.get(key) || { workers: 0, lineHours };
+      prev.workers = Math.max(prev.workers, Number(report.workersCount || 0));
+      prev.lineHours = lineHours;
+      byLineDay.set(key, prev);
+
+      const product = _rawProducts.find((row) => row.id === report.productId);
+      const avgDaily = Number(product?.avgDailyProduction || 0);
+      const workHours = Number(report.workHours || 0);
+      if (avgDaily > 0 && lineHours > 0 && workHours > 0) {
+        idealUnits += avgDaily * (workHours / lineHours);
+      }
+    });
+    const scheduledLaborHours = Array.from(byLineDay.values()).reduce(
+      (sum, row) => sum + row.workers * row.lineHours,
+      0,
+    );
+    return {
+      laborUtilization: laborUtilizationPercent(actualLaborHours, scheduledLaborHours),
+      performanceProxy: outputVsIdealPercent(kpis.totalProduction, idealUnits),
+    };
+  }, [productionReports, _rawLines, _rawProducts, kpis.totalProduction]);
 
   // â”€â”€ Cost Allocation Completion % â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -893,29 +960,6 @@ export const AdminDashboard: React.FC = () => {
     });
     return Number(((allocated / activeCenters.length) * 100).toFixed(0));
   }, [costCenters, costCenterValues, costAllocations]);
-
-  // â”€â”€ Production Health Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const healthScore = useMemo(() => {
-    const efficiencyScore = Math.min(kpis.efficiency, 100);
-
-    const varianceAbs = Math.abs(kpis.costVariance);
-    const varianceScore = varianceAbs <= 5 ? 100 : varianceAbs <= 15 ? 70 : varianceAbs <= 30 ? 40 : 10;
-
-    const wasteScore = kpis.wastePercent <= 2 ? 100 : kpis.wastePercent <= 5 ? 75 : kpis.wastePercent <= 10 ? 40 : 10;
-
-    const planScore = kpis.planAchievementRate;
-
-    const weights = { efficiency: 0.3, variance: 0.2, waste: 0.25, plan: 0.25 };
-    const score = Math.round(
-      efficiencyScore * weights.efficiency +
-      varianceScore * weights.variance +
-      wasteScore * weights.waste +
-      planScore * weights.plan
-    );
-
-    return Math.max(0, Math.min(100, score));
-  }, [kpis]);
 
   // â”€â”€ Charts Data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1206,21 +1250,74 @@ export const AdminDashboard: React.FC = () => {
       { inspected: 0, failed: 0, rework: 0, fpyTotal: 0, fpyCount: 0 },
     );
 
-    const defectRate = totals.inspected > 0
-      ? Number((((totals.failed + totals.rework) / totals.inspected) * 100).toFixed(2))
-      : 0;
-    const avgFpy = totals.fpyCount > 0 ? Number((totals.fpyTotal / totals.fpyCount).toFixed(2)) : 0;
+    const rates = qualityRatesFromTotals(totals);
     const pendingQuality = active.filter((wo) => wo.qualityStatus && wo.qualityStatus !== 'approved').length;
 
     return {
       inspected: totals.inspected,
       failed: totals.failed,
       rework: totals.rework,
-      defectRate,
-      avgFpy,
+      defectRate: rates.defectRate,
+      failRate: rates.failRate,
+      reworkRate: rates.reworkRate,
+      avgFpy: rates.avgFpy,
       pendingQuality,
     };
   }, [workOrders]);
+
+  const healthBreakdown = useMemo(() => {
+    return computeProductionHealthBreakdown({
+      yieldEfficiency: kpis.efficiency,
+      costVarianceAbs: Math.abs(kpis.costVariance),
+      wastePercent: kpis.wastePercent,
+      planVolumeAchievement: kpis.planAchievementRate,
+      scheduleAdherence: kpis.scheduleAdherence,
+      openIssueCount: decisionSnapshot.issues.openCount,
+      packagingAwaitingUnits: decisionSnapshot.packaging.awaitingUnits,
+      pendingApprovals:
+        decisionSnapshot.transfers.pendingProductionEntry +
+        decisionSnapshot.transfers.pendingPackaging +
+        decisionSnapshot.receipts.awaitingCount +
+        decisionSnapshot.inventory.negativeCount +
+        decisionSnapshot.materials.plansWithShortage,
+      qualityFailRate: qualityKpis.failRate,
+    });
+  }, [kpis, decisionSnapshot, qualityKpis.failRate]);
+
+  const healthScore = healthBreakdown.total;
+
+  const workOrderRisk = useMemo(() => {
+    let costToCompleteTotal = 0;
+    let atRiskCount = 0;
+    activeWorkOrders.forEach((wo) => {
+      const producedNow = Math.max(
+        Number(wo.producedQuantity || 0),
+        Number(wo.actualProducedFromScans || wo.scanSummary?.completedUnits || 0),
+      );
+      const remaining = Math.max(Number(wo.quantity || 0) - producedNow, 0);
+      const unitCost =
+        Number(wo.quantity || 0) > 0
+          ? Number(wo.estimatedCost || 0) / Number(wo.quantity || 0)
+          : 0;
+      costToCompleteTotal += remaining * unitCost;
+
+      const product = _rawProducts.find((p) => p.id === wo.productId);
+      const daily = Math.max(0, Number(product?.avgDailyProduction || 0));
+      if (daily > 0 && remaining > 0 && wo.targetDate) {
+        const daysNeeded = Math.ceil(remaining / daily);
+        const forecast = new Date();
+        forecast.setDate(forecast.getDate() + daysNeeded);
+        const target = new Date(wo.targetDate);
+        if (Number.isFinite(target.getTime()) && forecast.getTime() > target.getTime()) {
+          atRiskCount += 1;
+        }
+      }
+    });
+    return {
+      costToComplete: Number(costToCompleteTotal.toFixed(2)),
+      atRiskCount,
+    };
+  }, [activeWorkOrders, _rawProducts]);
 
   // â”€â”€ Product Summary (products worked on during the period) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1412,20 +1509,116 @@ export const AdminDashboard: React.FC = () => {
       if (p.status !== 'in_progress' && p.status !== 'planned') return false;
       const key = `${p.lineId}_${p.productId}`;
       const pReports = planReports[key] || [];
-      const actual = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
-      const progress = p.plannedQuantity > 0 ? (actual / p.plannedQuantity) * 100 : 0;
-
-      const start = new Date(p.startDate);
-      const now = new Date();
-      const elapsed = Math.max(1, Math.ceil((now.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)));
-      const expectedProgress = Math.min(100, (elapsed / Math.max(1, elapsed)) * (progress > 0 ? 50 : 30));
-      return progress < expectedProgress * 0.5 && elapsed > alertCfg.planDelayDays;
+      const fromReports = pReports.reduce((s, r) => s + (r.quantityProduced || 0), 0);
+      return isPlanBehindSchedule(
+        {
+          plannedQuantity: p.plannedQuantity,
+          actualQuantity: Math.max(Number(p.producedQuantity || 0), fromReports),
+          startDate: p.plannedStartDate || p.startDate,
+          plannedEndDate: p.plannedEndDate,
+          status: p.status,
+        },
+        { minElapsedDays: alertCfg.planDelayDays, gapPercent: 20 },
+      );
     });
     if (delayedPlans.length > 0) {
       result.push({
         type: 'warning',
         icon: 'schedule',
-        message: `${delayedPlans.length} خطط إنتاج متأخرة عن الجدول الزمني`,
+        message: `${delayedPlans.length} خطط إنتاج متأخرة عن الجدول (التزام ${kpis.scheduleAdherence}%)`,
+      });
+    }
+
+    if (decisionSnapshot.issues.openCount > 0) {
+      result.push({
+        type: decisionSnapshot.issues.agingOver72h > 0 ? 'danger' : 'warning',
+        icon: 'fact_check',
+        message: `${decisionSnapshot.issues.openCount} طلب صرف إنتاج معلّق (تنفيذ ${decisionSnapshot.issues.fulfilmentPercent}%)`,
+      });
+    }
+
+    if (decisionSnapshot.packaging.awaitingUnits > 0 || decisionSnapshot.transfers.pendingPackaging > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'package_2',
+        message: `${formatNumber(decisionSnapshot.packaging.awaitingUnits)} وحدة بانتظار التغليف · ${decisionSnapshot.transfers.pendingPackaging} تحويل تغليف معلّق`,
+      });
+    }
+
+    if (decisionSnapshot.transfers.pendingProductionEntry > 0) {
+      result.push({
+        type: 'info',
+        icon: 'inventory_2',
+        message: `${decisionSnapshot.transfers.pendingProductionEntry} اعتماد دخول إنتاج بانتظار المراجعة`,
+      });
+    }
+
+    if (decisionSnapshot.inventory.negativeCount > 0) {
+      result.push({
+        type: 'danger',
+        icon: 'report_problem',
+        message: `${decisionSnapshot.inventory.negativeCount} رصيد سالب يحتاج مراجعة فورية`,
+      });
+    } else if (decisionSnapshot.inventory.lowStockCount > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'inventory_2',
+        message: `${decisionSnapshot.inventory.lowStockCount} صنف تحت الحد الأدنى للمخزون`,
+      });
+    }
+
+    if (
+      decisionSnapshot.inventory.finishedDaysOfCover != null &&
+      decisionSnapshot.inventory.finishedDaysOfCover < 3
+    ) {
+      result.push({
+        type: 'warning',
+        icon: 'timelapse',
+        message: `تغطية تم الصنع ${decisionSnapshot.inventory.finishedDaysOfCover} يوم فقط مقابل الطلب اليومي للخطط`,
+      });
+    }
+
+    if (decisionSnapshot.receipts.awaitingCount > 0) {
+      result.push({
+        type: decisionSnapshot.receipts.agingOver72h > 0 ? 'danger' : 'info',
+        icon: 'local_shipping',
+        message: `${decisionSnapshot.receipts.awaitingCount} إيصال مستلزمات بانتظار الإتمام`,
+      });
+    }
+
+    if (decisionSnapshot.stockCounts.awaitingApproval > 0 || decisionSnapshot.stockCounts.openSessions > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'fact_check',
+        message: `جرد: ${decisionSnapshot.stockCounts.openSessions} مفتوح · ${decisionSnapshot.stockCounts.awaitingApproval} بانتظار الاعتماد${
+          decisionSnapshot.stockCounts.accuracyPercent != null
+            ? ` · دقة ${decisionSnapshot.stockCounts.accuracyPercent}%`
+            : ''
+        }`,
+      });
+    }
+
+    if (decisionSnapshot.materials.plansWithShortage > 0) {
+      result.push({
+        type: decisionSnapshot.materials.readinessPercent < 70 ? 'danger' : 'warning',
+        icon: 'report_problem',
+        message: `جاهزية المواد ${decisionSnapshot.materials.readinessPercent}% · ${decisionSnapshot.materials.plansWithShortage} خطة بنواقص مكونات`,
+      });
+    }
+
+    if (qualityKpis.pendingQuality > 0) {
+      result.push({
+        type: 'warning',
+        icon: 'verified',
+        message: `${qualityKpis.pendingQuality} أمر شغل بانتظار اعتماد الجودة`,
+      });
+    }
+
+    if (workOrderRisk.atRiskCount > 0) {
+      result.push({
+        type: 'danger',
+        icon: 'assignment',
+        message: `${workOrderRisk.atRiskCount} أمر شغل متوقع تأخره عن تاريخ الهدف`,
       });
     }
 
@@ -1447,7 +1640,7 @@ export const AdminDashboard: React.FC = () => {
       result.push({
         type: 'warning',
         icon: 'speed',
-        message: `الكفاءة أقل من الحد المطلوب: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
+        message: `عائد الإنتاج (بدون هدر) أقل من الحد: ${kpis.efficiency}% (الحد: ${alertCfg.efficiencyThreshold}%)`,
       });
     }
 
@@ -1468,7 +1661,7 @@ export const AdminDashboard: React.FC = () => {
     }
 
     return result;
-  }, [kpis, productionPlans, planReports, systemUsers, alertCfg]);
+  }, [kpis, productionPlans, planReports, systemUsers, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, workOrderRisk.atRiskCount]);
 
   const reportAnalysis = useMemo(() => {
     const productionDays = new Set(productionReports.map((report) => report.date)).size;
@@ -1671,7 +1864,7 @@ export const AdminDashboard: React.FC = () => {
       {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <PageHeader
         title="لوحة مدير النظام"
-        subtitle="نظرة شاملة على الإنتاج والنظام والصحة العامة"
+        subtitle="قرارات تشغيلية · إنتاج · صرف · تغليف · تكاليف وصحة النظام"
         actions={
           isFinalLoading ? (
             <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
@@ -1708,8 +1901,6 @@ export const AdminDashboard: React.FC = () => {
             setPreset('custom');
           }
         }}
-        onApply={() => undefined}
-        applyLabel="عرض"
         extra={(
           <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
             {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
@@ -1744,10 +1935,11 @@ export const AdminDashboard: React.FC = () => {
                 <GhostButton
                   key={action.id}
                   onClick={() => runQuickAction(action)}
-                  className={`h-9 px-3 text-sm font-medium ${QUICK_ACTION_COLOR_CLASSES[action.color]}`}
+                  className="h-9 px-3 text-sm font-medium"
+                  iconName={action.icon}
+                  tone={action.actionType === 'export_excel' ? 'export' : QUICK_ACTION_TONE[action.color]}
                 >
-                  {renderDashboardIcon(action.icon, 'text-sm')}
-                  <span>{action.label}</span>
+                  {action.label}
                 </GhostButton>
               ))}
             </div>
@@ -1756,6 +1948,18 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       <CustomDashboardWidgets dashboardKey="adminDashboard" systemSettings={systemSettings} />
+
+      {isVisible('decision_queue') && (
+        <OperationalDecisionQueue
+          snapshot={decisionSnapshot}
+          loading={decisionLoading}
+          costToComplete={canViewCosts ? workOrderRisk.costToComplete : null}
+          atRiskWorkOrders={workOrderRisk.atRiskCount}
+          qualityPending={qualityKpis.pendingQuality}
+          laborUtilizationPercent={utilizationMetrics.laborUtilization}
+          performanceProxyPercent={utilizationMetrics.performanceProxy}
+        />
+      )}
 
       {/* â”€â”€ Operational KPIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('operational_kpis') && (
@@ -1815,11 +2019,11 @@ export const AdminDashboard: React.FC = () => {
                 const mappedColor = effColor === 'good' ? 'green' : effColor === 'warning' ? 'amber' : 'red';
                 return (
                   <KPICard
-                    label="الكفاءة العامة"
+                    label="عائد الإنتاج"
                     value={`${kpis.efficiency}%`}
                     iconType="trend"
                     color={mappedColor}
-                    trend={effColor === 'good' ? 'ممتاز' : effColor === 'warning' ? 'جيد' : 'يحتاج تحسين'}
+                    trend={`تحقيق موزون ${kpis.planAchievementRate}% · جدول ${kpis.scheduleAdherence}%`}
                     trendUp={effColor !== 'danger'}
                   />
                 );
@@ -2073,7 +2277,8 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </Card>
 
-      {/* <Card>
+      {(liveScanKpis.completedUnits > 0 || liveScanKpis.inProgressUnits > 0) && (
+      <Card>
         <div className="flex items-center gap-2 mb-4">
           {renderDashboardIcon('bolt', 'text-blue-500')}
           <h3 className="text-lg font-bold">الإنتاج اللحظي (الباركود)</h3>
@@ -2087,7 +2292,8 @@ export const AdminDashboard: React.FC = () => {
         <p className="text-xs text-[var(--color-text-muted)] mt-4">
           أعلى نشاط حالي: <span className="font-bold text-[var(--color-text)]">{liveScanKpis.hotLineProduct}</span>
         </p>
-      </Card> */}
+      </Card>
+      )}
 {/* â”€â”€ Product Summary Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
 {productSummary.length > 0 && (() => {
         return (
@@ -2112,18 +2318,17 @@ export const AdminDashboard: React.FC = () => {
                 ]}
                 quickFilterValues={{ category: productCategoryFilter || 'all' }}
                 onQuickFilterChange={(_, value) => setProductCategoryFilter(value)}
-                onApply={() => undefined}
-                applyLabel="عرض"
                 extra={canExportFromPage ? (
-                  <button
+                  <Button
                     type="button"
+                    variant="outline"
+                    size="sm"
                     onClick={() => exportProductSummary(filteredProductSummary, canViewCosts, prevUnitCostByProductId)}
-                    className="inline-flex h-[34px] items-center justify-center gap-1.5 rounded-lg border border-slate-200 px-3 text-sm font-medium hover:bg-slate-50"
+                    className="!h-[34px] rounded-lg"
                     title="تصدير Excel"
                   >
-                    {renderDashboardIcon('download', 'text-sm')}
-                    <span>Excel</span>
-                  </button>
+                    Excel
+                  </Button>
                 ) : undefined}
                 className="mb-0"
               />
@@ -2289,14 +2494,15 @@ export const AdminDashboard: React.FC = () => {
             <Badge variant="warning">{shortageRows.length}</Badge>
           </div>
           {canExportFromPage && shortageRows.length > 0 && (
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => exportProductionPlanShortages(shortageRows)}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 hover:bg-primary/5 transition-all"
+              className="!h-auto !px-3 !py-2 text-xs font-bold"
             >
-              {renderDashboardIcon('download', 'text-sm')}
-              <span>Excel</span>
-            </button>
+              Excel
+            </Button>
           )}
         </div>
         {shortageRows.length === 0 ? (
@@ -2343,13 +2549,15 @@ export const AdminDashboard: React.FC = () => {
               onChange={(e) => setSelectedComplianceDate(e.target.value)}
               className="px-2.5 py-1.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-xs font-bold text-[var(--color-text)] outline-none focus:border-primary focus:ring-1 focus:ring-primary/20"
             />
-            <button
+            <Button
               type="button"
+              variant="outline"
+              size="sm"
               onClick={() => setSelectedComplianceDate(yesterdayOperationalDate)}
-              className="px-2.5 py-1.5 text-xs font-bold rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] text-[var(--color-text-muted)] hover:text-primary hover:border-primary/30 transition-all"
+              className="!h-auto !px-2.5 !py-1.5 text-xs font-bold"
             >
               أمس
-            </button>
+            </Button>
            
           </div>
         </div>
@@ -2431,9 +2639,10 @@ export const AdminDashboard: React.FC = () => {
           <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600" />
           <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600" />
           <KPIBox label="إعادة تشغيل" value={qualityKpis.rework} icon="build" colorClass="bg-amber-100 text-amber-600" />
-          <KPIBox label="Defect Rate" value={qualityKpis.defectRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
-          <KPIBox label="FPY" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600" />
-          <KPIBox label="Pending Quality" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
+          <KPIBox label="نسبة الفشل" value={qualityKpis.failRate} unit="%" icon="priority_high" colorClass="bg-violet-100 text-violet-600 dark:bg-violet-900/30 dark:text-violet-400" />
+          <KPIBox label="نسبة إعادة التشغيل" value={qualityKpis.reworkRate} unit="%" icon="build_circle" colorClass="bg-amber-100 text-amber-700" />
+          <KPIBox label="أول مرة صحيحة (FPY)" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600" />
+          <KPIBox label="جودة بانتظار الاعتماد" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
         </div>
       </Card>
 
@@ -2649,9 +2858,9 @@ export const AdminDashboard: React.FC = () => {
             colorClass={systemUsers.disabled > 0 ? 'bg-rose-100 text-rose-600' : 'bg-[#f0f2f5] text-slate-500'}
           />
           <KPIBox
-            label="أوامر الشغل النشطة"
+            label="خطط إنتاج نشطة"
             value={productionPlans.filter((p) => p.status === 'in_progress' || p.status === 'planned').length}
-            icon="assignment"
+            icon="event_note"
             colorClass="bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400"
           />
           {canViewCosts && (() => {
@@ -2673,8 +2882,7 @@ export const AdminDashboard: React.FC = () => {
      
       {/* â”€â”€ Production Health Score + Charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Health Score Gauge */}
-        {/* {isVisible('health_score') &&
+        {isVisible('health_score') && (
         <Card>
           <div className="flex items-center gap-2 mb-4">
             {renderDashboardIcon('monitor_heart', 'text-rose-500')}
@@ -2685,10 +2893,13 @@ export const AdminDashboard: React.FC = () => {
           </div>
           <div className="mt-4 space-y-3 border-t border-[var(--color-border)] pt-4">
             {[
-              { label: 'الكفاءة', value: kpis.efficiency, weight: '30%', icon: 'speed' },
-              { label: 'انحراف التكلفة', value: Math.abs(kpis.costVariance) <= 5 ? 100 : Math.abs(kpis.costVariance) <= 15 ? 70 : 40, weight: '20%', icon: 'compare_arrows' },
-              { label: 'الهدر', value: kpis.wastePercent <= 2 ? 100 : kpis.wastePercent <= 5 ? 75 : 40, weight: '25%', icon: 'delete_sweep' },
-              { label: 'تحقيق الخطة', value: kpis.planAchievementRate, weight: '25%', icon: 'fact_check' },
+              { label: 'عائد الإنتاج', value: healthBreakdown.yield, weight: '20%', icon: 'speed' },
+              { label: 'انحراف التكلفة', value: healthBreakdown.cost, weight: '12%', icon: 'compare_arrows' },
+              { label: 'الهدر', value: healthBreakdown.waste, weight: '15%', icon: 'delete_sweep' },
+              { label: 'تحقيق موزون', value: healthBreakdown.plan, weight: '18%', icon: 'fact_check' },
+              { label: 'التزام الجدول', value: healthBreakdown.schedule, weight: '15%', icon: 'schedule' },
+              { label: 'الطابور التشغيلي', value: healthBreakdown.operations, weight: '12%', icon: 'rule' },
+              { label: 'الجودة', value: healthBreakdown.quality, weight: '8%', icon: 'verified' },
             ].map((metric) => (
               <div key={metric.label} className="flex items-center gap-3">
                 {renderDashboardIcon(metric.icon, 'text-[14px] text-[var(--color-text-muted)]')}
@@ -2708,7 +2919,7 @@ export const AdminDashboard: React.FC = () => {
             ))}
           </div>
         </Card>
-        } */}
+        )}
 
         {/* Roles Distribution Pie */}
         {isVisible('roles_distribution') && <Card>

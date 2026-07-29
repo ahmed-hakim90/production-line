@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { AlertTriangle, Pause, Play, RotateCcw } from 'lucide-react';
+import { AlertTriangle } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -366,19 +366,12 @@ export const ExecutionPage: React.FC = () => {
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button variant="secondary" disabled={exporting} onClick={() => void handleExecExportPdf()} className="w-full sm:w-auto">
-            {exporting ? (
-              <span className="material-icons-round animate-spin text-sm">refresh</span>
-            ) : (
-              <span className="material-icons-round text-lg">picture_as_pdf</span>
-            )}
-            تصدير PDF
+            {exporting ? 'جاري التصدير...' : 'تصدير PDF'}
           </Button>
           <Button variant="secondary" disabled={exporting} onClick={() => void handleExecExportImage()} className="w-full sm:w-auto">
-            <span className="material-icons-round text-lg">image</span>
             تصدير كصورة
           </Button>
           <Button variant="outline" disabled={exporting} onClick={() => void handleExecShareWhatsApp()} className="w-full sm:w-auto">
-            <span className="material-icons-round text-lg">share</span>
             مشاركة عبر WhatsApp
           </Button>
         </div>
@@ -428,10 +421,9 @@ export const ExecutionPage: React.FC = () => {
             className="w-full sm:flex-1"
             onClick={() => navigate(`/production/routing/execution/new?productId=${encodeURIComponent(execution.productId)}`)}
           >
-            <span className="material-icons-round text-lg">add</span>
             تنفيذ جديد لنفس المنتج
           </Button>
-          <Button size="lg" className="w-full min-h-12 text-base sm:flex-1" onClick={() => navigate('/production/routing')}>
+          <Button type="button" size="lg" variant="outline" className="w-full min-h-12 text-base sm:flex-1" onClick={() => navigate('/production/routing')}>
             العودة للمسارات
           </Button>
         </div>
@@ -636,20 +628,17 @@ export const ExecutionPage: React.FC = () => {
                   type="button"
                   size="lg"
                   variant={isRunning ? 'secondary' : 'default'}
-                  className="min-h-11 gap-1.5"
+                  className="min-h-11"
                   disabled={isRunning}
                   onClick={startOrResume}
                 >
-                  <Play className="size-4 shrink-0" aria-hidden />
-                  <span className="text-xs sm:text-sm">{elapsedSeconds > 0 ? 'استئناف' : 'بدء'}</span>
+                  {elapsedSeconds > 0 ? 'استئناف' : 'بدء'}
                 </Button>
-                <Button type="button" size="lg" variant="outline" className="min-h-11 gap-1.5" disabled={!isRunning} onClick={pause}>
-                  <Pause className="size-4 shrink-0" aria-hidden />
-                  <span className="text-xs sm:text-sm">إيقاف</span>
+                <Button type="button" size="lg" variant="outline" className="min-h-11" disabled={!isRunning} onClick={pause}>
+                  إيقاف
                 </Button>
-                <Button type="button" size="lg" variant="outline" className="min-h-11 gap-1.5" disabled={isRunning || elapsedSeconds === 0} onClick={reset}>
-                  <RotateCcw className="size-4 shrink-0" aria-hidden />
-                  <span className="text-xs sm:text-sm">تصفير</span>
+                <Button type="button" size="lg" variant="outline" className="min-h-11" disabled={isRunning || elapsedSeconds === 0} onClick={reset}>
+                  تصفير
                 </Button>
               </div>
             </div>

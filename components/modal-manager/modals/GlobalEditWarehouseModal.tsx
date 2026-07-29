@@ -87,11 +87,17 @@ export const GlobalEditWarehouseModal: React.FC = () => {
               {message.text}
             </div>
           )}
-          <input className="w-full rounded-lg border px-3 py-2.5" placeholder="اسم المخزن" value={name} onChange={(e) => setName(e.target.value)} />
+          <input className="w-full rounded-lg border px-3 py-2.5" placeholder="اسم المخزن (حر — زي ما تحب تسمّيه)" value={name} onChange={(e) => setName(e.target.value)} />
           <input className="w-full rounded-lg border px-3 py-2.5" placeholder="الكود" value={code} onChange={(e) => setCode(e.target.value)} />
-          <select className="w-full rounded-lg border px-3 py-2.5 font-bold text-sm" value={warehouseRole} onChange={(e) => setWarehouseRole(e.target.value as WarehouseRole)}>
-            {WAREHOUSE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
-          </select>
+          <div>
+            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الدور التشغيلي (مش الاسم)</label>
+            <select className="w-full rounded-lg border px-3 py-2.5 font-bold text-sm" value={warehouseRole} onChange={(e) => setWarehouseRole(e.target.value as WarehouseRole)}>
+              {WAREHOUSE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+            </select>
+            <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+              الاسم يظهر في الشاشات؛ الدور يساعد الربط في إعدادات التوجيه.
+            </p>
+          </div>
           <label className="flex items-center gap-2 text-sm font-bold">
             <input type="checkbox" checked={isActive} onChange={(e) => setIsActive(e.target.checked)} />
             مخزن نشط

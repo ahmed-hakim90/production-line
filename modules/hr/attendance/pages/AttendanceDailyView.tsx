@@ -1,7 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '@/components/SelectableTable';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
+import { TableIconAction } from '@/src/components/erp/TableIconAction';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import type { FirestoreEmployee } from '@/types';
@@ -32,7 +35,6 @@ const STATUS_LABELS: Partial<Record<AttendanceRecordStatus, string>> = {
   partial: 'ناقص',
   single_punch: 'بصمة واحدة',
 };
-const ROW_ACTION_BASE_CLASS = 'p-1.5 rounded-[var(--border-radius-base)] text-[var(--color-text-muted)] transition-all';
 
 function getToday(): string {
   const d = new Date();
@@ -78,7 +80,8 @@ export const AttendanceDailyView: React.FC = () => {
   const deleteAttendanceRecordsByIds = useAppStore((s) => s.deleteAttendanceRecordsByIds);
   const [startDate, setStartDate] = useState(getMonthStart);
   const [endDate, setEndDate] = useState(getToday);
-  const [activeRange, setActiveRange] = useState<DateRangePreset>('month');
+  const [activePeriod, setActivePeriod] = useState<DateRangePreset>('month');
+  const [dateFilters, setDateFilters] = useState({ startDate: getMonthStart(), endDate: getToday() });
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState({ visible: false, done: 0, total: 0 });
@@ -158,21 +161,28 @@ export const AttendanceDailyView: React.FC = () => {
   const applyDatePreset = useCallback((preset: Exclude<DateRangePreset, 'custom'>) => {
     if (preset === 'today') {
       const today = getToday();
-      setActiveRange('today');
-      setStartDate(today);
-      setEndDate(today);
+      setActivePeriod('today');
+      setDateFilters({ startDate: today, endDate: today });
       return;
     }
     if (preset === 'week') {
-      setActiveRange('week');
-      setEndDate(getToday());
-      setStartDate(shiftDate(new Date(), -6));
+      setActivePeriod('week');
+      setDateFilters({ startDate: shiftDate(new Date(), -6), endDate: getToday() });
       return;
     }
-    setActiveRange('month');
-    setStartDate(getMonthStart());
-    setEndDate(getToday());
+    setActivePeriod('month');
+    setDateFilters({ startDate: getMonthStart(), endDate: getToday() });
   }, []);
+
+  const handleApplyDates = useCallback(() => {
+    setStartDate(dateFilters.startDate);
+    setEndDate(dateFilters.endDate);
+    setActivePeriod('custom');
+  }, [dateFilters]);
+
+  const handleDateFilterChange = (key: string, value: string) => {
+    setDateFilters((prev) => ({ ...prev, [key]: value }));
+  };
 
   const handleSaveEdit = useCallback(async (recordId: string) => {
     setActionBusy(true);
@@ -333,38 +343,34 @@ export const AttendanceDailyView: React.FC = () => {
     if (isEditing) {
       return (
         <div className="flex items-center justify-end gap-2">
-          <button
-            className="btn btn-primary btn-sm"
+          <Button
+            size="sm"
             disabled={actionBusy}
             onClick={() => void handleSaveEdit(record.id)}
           >
             حفظ
-          </button>
-          <button className="btn btn-secondary btn-sm" onClick={clearEdit}>
+          </Button>
+          <Button size="sm" variant="secondary" onClick={clearEdit}>
             إلغاء
-          </button>
+          </Button>
         </div>
       );
     }
 
     return (
       <div className="flex items-center justify-end gap-1">
-        <button
-          className={`${ROW_ACTION_BASE_CLASS} hover:text-blue-600 hover:bg-blue-50`}
+        <TableIconAction
+          action="edit"
+          title="تعديل"
           disabled={actionBusy}
           onClick={() => startEdit(record.id, checkInClock, checkOutClock)}
-          title="تعديل"
-        >
-          <span className="material-icons-round text-sm">edit</span>
-        </button>
-        <button
-          className={`${ROW_ACTION_BASE_CLASS} hover:text-rose-500 hover:bg-rose-50`}
+        />
+        <TableIconAction
+          action="delete"
+          title="حذف نهائي"
           disabled={actionBusy}
           onClick={() => void handleDeleteRows([record.id])}
-          title="حذف نهائي"
-        >
-          <span className="material-icons-round text-sm">delete</span>
-        </button>
+        />
       </div>
     );
   }, [editingId, actionBusy, handleSaveEdit, clearEdit, startEdit, handleDeleteRows]);
@@ -400,67 +406,6 @@ export const AttendanceDailyView: React.FC = () => {
         ))}
       </div>
 
-      <div className="erp-filter-bar">
-        <div className="erp-date-seg">
-          <button
-            type="button"
-            className={`erp-date-seg-btn ${activeRange === 'today' ? 'active' : ''}`}
-            onClick={() => applyDatePreset('today')}
-          >
-            اليوم
-          </button>
-          <button
-            type="button"
-            className={`erp-date-seg-btn ${activeRange === 'week' ? 'active' : ''}`}
-            onClick={() => applyDatePreset('week')}
-          >
-            آخر 7 أيام
-          </button>
-          <button
-            type="button"
-            className={`erp-date-seg-btn ${activeRange === 'month' ? 'active' : ''}`}
-            onClick={() => applyDatePreset('month')}
-          >
-            هذا الشهر
-          </button>
-        </div>
-
-        <label className="erp-filter-date">
-          <span className="erp-filter-label">من</span>
-          <input
-            type="date"
-            value={startDate}
-            onChange={(e) => {
-              setActiveRange('custom');
-              setStartDate(e.target.value);
-            }}
-          />
-        </label>
-        <label className="erp-filter-date">
-          <span className="erp-filter-label">إلى</span>
-          <input
-            type="date"
-            value={endDate}
-            onChange={(e) => {
-              setActiveRange('custom');
-              setEndDate(e.target.value);
-            }}
-          />
-        </label>
-
-        <button
-          className="erp-filter-apply"
-          onClick={() => {
-            invalidatePageDataCache(`hr:attendance-daily:${startDate}:${endDate}`);
-            void load({ force: true });
-          }}
-          disabled={loading}
-        >
-          <span className="material-icons-round text-sm">sync</span>
-          {loading ? 'جار التحميل...' : 'تحديث'}
-        </button>
-      </div>
-
       {deleteProgress.visible && (
         <div className="card p-3 space-y-2">
           <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)]">
@@ -473,25 +418,57 @@ export const AttendanceDailyView: React.FC = () => {
         </div>
       )}
 
-      <SelectableTable<AttendanceRecord>
-        data={records}
-        columns={tableColumns}
-        getId={(record) => record.id}
-        bulkActions={bulkActions}
-        renderActions={canEdit ? renderActions : undefined}
-        actionsHeader="إجراءات"
-        emptyIcon="fact_check"
-        emptyTitle="لا توجد بيانات معالجة"
-        emptySubtitle="غيّر نطاق التاريخ أو حدّث البيانات"
-        tableId="attendance-daily-processed"
-        pageSize={25}
-        enableSearch={true}
-        searchPlaceholder="بحث بالموظف أو الحالة أو التاريخ"
-        enableColumnVisibility={true}
-        checkboxSelection={canEdit}
-        selectAllScope="filtered"
-        loading={loading}
-      />
+      <div className="card p-0">
+        <SmartFilterBar
+          periods={[
+            { label: 'اليوم', value: 'today' },
+            { label: 'آخر 7 أيام', value: 'week' },
+            { label: 'هذا الشهر', value: 'month' },
+          ]}
+          activePeriod={activePeriod}
+          onPeriodChange={(value) => applyDatePreset(value as Exclude<DateRangePreset, 'custom'>)}
+          advancedFilters={[
+            {
+              key: 'startDate',
+              label: 'من',
+              placeholder: 'من',
+              type: 'date',
+              options: [],
+            },
+            {
+              key: 'endDate',
+              label: 'إلى',
+              placeholder: 'إلى',
+              type: 'date',
+              options: [],
+            },
+          ]}
+          advancedFilterValues={dateFilters}
+          onAdvancedFilterChange={handleDateFilterChange}
+          onApply={handleApplyDates}
+          applyLabel="تحديث"
+          className="mb-0 border-0 rounded-none"
+        />
+        <SelectableTable<AttendanceRecord>
+          data={records}
+          columns={tableColumns}
+          getId={(record) => record.id}
+          bulkActions={bulkActions}
+          renderActions={canEdit ? renderActions : undefined}
+          actionsHeader="إجراءات"
+          emptyIcon="fact_check"
+          emptyTitle="لا توجد بيانات معالجة"
+          emptySubtitle="غيّر نطاق التاريخ أو حدّث البيانات"
+          tableId="attendance-daily-processed"
+          pageSize={25}
+          enableSearch={true}
+          searchPlaceholder="بحث بالموظف أو الحالة أو التاريخ"
+          enableColumnVisibility={true}
+          checkboxSelection={canEdit}
+          selectAllScope="filtered"
+          loading={loading}
+        />
+      </div>
     </div>
   );
 };

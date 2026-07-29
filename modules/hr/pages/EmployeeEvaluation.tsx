@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, Button, Badge } from '../components/UI';
+import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { employeeService } from '../employeeService';
 import { performanceService } from '../services/performanceService';
 import {
@@ -222,10 +223,15 @@ export const EmployeeEvaluation: React.FC = () => {
             className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2 text-sm bg-[var(--color-card)]"
           />
           {canApprove && pendingBonuses > 0 && (
-            <Button onClick={handleApproveAllBonuses} disabled={approvingAll}>
-              <span className="material-icons-round text-sm">done_all</span>
+            <ToneActionButton
+              action="approve"
+              icon="done_all"
+              onClick={handleApproveAllBonuses}
+              disabled={approvingAll}
+              loading={approvingAll}
+            >
               اعتماد {pendingBonuses} مكافأة
-            </Button>
+            </ToneActionButton>
           )}
         </div>
       </div>

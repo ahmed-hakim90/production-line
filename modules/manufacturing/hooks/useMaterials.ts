@@ -1,5 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { materialService } from '../services/materialService';
+import { createMaterial } from '../usecases/createMaterial';
+import { unwrapOrThrow } from '@/shared/usecases';
 import type { Material } from '../types';
 
 export const manufacturingQueryKeys = {
@@ -31,8 +33,10 @@ export function useMaterialMutations() {
   const invalidate = () => qc.invalidateQueries({ queryKey: manufacturingQueryKeys.materials });
 
   const create = useMutation({
-    mutationFn: (payload: Omit<Material, 'id' | 'createdAt' | 'tenantId'>) =>
-      materialService.create(payload),
+    mutationFn: async (payload: Omit<Material, 'id' | 'createdAt' | 'tenantId'>) => {
+      const { materialId } = unwrapOrThrow(await createMaterial(payload));
+      return materialId;
+    },
     onSuccess: invalidate,
   });
 

@@ -112,9 +112,12 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
               <option key={r.value} value={r.value}>{r.label}</option>
             ))}
           </select>
+          <p className="text-[11px] text-[var(--color-text-muted)] -mt-2">
+            الاسم حر (زي ما تحب تسمّيه). الدور التشغيلي منفصل ويُستخدم في توجيه الإنتاج.
+          </p>
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
+          <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving || !name.trim() || !code.trim()}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Warehouse size={14} />

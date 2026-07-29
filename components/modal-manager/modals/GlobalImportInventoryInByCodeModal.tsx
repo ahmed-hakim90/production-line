@@ -288,13 +288,18 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             <h3 className="text-lg font-bold">{t('modalManager.importInventoryInByCode.title', { itemType: itemTypeLabel })}</h3>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">{importFileName || '—'}</p>
           </div>
-          <button
+          <Button
             type="button"
+            variant="ghost"
+            size="sm"
             onClick={downloadTemplate}
-            className="text-primary hover:text-primary/80 text-xs font-bold underline shrink-0"
+            iconName="download"
+            tone="export"
+            solid={false}
+            className="!h-auto text-primary hover:text-primary/80 text-xs font-bold underline shrink-0"
           >
             تحميل القالب (مع اللوكيشن)
-          </button>
+          </Button>
         </div>
 
         <div className="p-6 overflow-auto flex-1 space-y-4">
@@ -412,7 +417,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
-          <Button variant="outline" onClick={handleClose} disabled={importSaving}>
+          <Button variant="outline" onClick={handleClose} disabled={importSaving} iconName="close" tone="neutral">
             {t('ui.close')}
           </Button>
           <Button variant="primary" onClick={() => void handleImportSave()} disabled={importSaving || importParsing || !importResult}>

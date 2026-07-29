@@ -121,8 +121,7 @@ export const getTodayDateString = (): string => {
  * Operational day starts at the configured hour (default: 8 AM).
  * Example: at 02:00, it returns the previous calendar date.
  */
-export const getOperationalDateString = (startHour = 8): string => {
-  const now = new Date();
+export const getOperationalDateString = (startHour = 8, now = new Date()): string => {
   const date = new Date(now);
   if (now.getHours() < startHour) {
     date.setDate(date.getDate() - 1);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ShieldCheck, Trash2, X } from 'lucide-react';
-import { Badge, SearchableSelect } from '../../UI';
+import { X } from 'lucide-react';
+import { Badge, Button, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { FirestoreRole } from '../../../types';
@@ -154,29 +154,25 @@ export const GlobalManageUserModal: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-            <button
-              className="btn btn-secondary"
+            <Button
               onClick={() => void run(() => modalPayload.onUpdateRole(roleTargetId), t('modalManager.manageUser.updateRoleSuccess'))}
               disabled={submitting || !roleTargetId}
             >
               {t('modalManager.manageUser.saveRole')}
-            </button>
-            <button
-              className="btn btn-secondary"
+            </Button>
+            <Button
               onClick={() => void run(() => modalPayload.onLinkEmployee(employeeTargetId), t('modalManager.manageUser.linkEmployeeSuccess'))}
               disabled={submitting || !employeeTargetId}
             >
               {t('modalManager.manageUser.linkEmployee')}
-            </button>
-            <button
-              className="btn btn-secondary"
+            </Button>
+            <Button
               onClick={() => void run(() => modalPayload.onUnlinkEmployee(), t('modalManager.manageUser.unlinkSuccess'))}
               disabled={submitting || !row.employee?.id}
             >
               {t('modalManager.manageUser.unlink')}
-            </button>
-            <button
-              className="btn btn-secondary"
+            </Button>
+            <Button
               onClick={() =>
                 void run(
                   () =>
@@ -190,10 +186,9 @@ export const GlobalManageUserModal: React.FC = () => {
               disabled={submitting || (!emailTarget.trim() && !passwordTarget.trim())}
             >
               {t('modalManager.manageUser.updateEmailPassword')}
-            </button>
+            </Button>
             {!row.user.isActive && (
-              <button
-                className="btn btn-primary"
+              <Button
                 onClick={() =>
                   void run(
                     () => modalPayload.onApproveAccess(roleTargetId, employeeTargetId),
@@ -203,25 +198,24 @@ export const GlobalManageUserModal: React.FC = () => {
                 }
                 disabled={submitting || !roleTargetId}
               >
-                <ShieldCheck size={15} />
                 {t('modalManager.manageUser.approveAndActivate')}
-              </button>
+              </Button>
             )}
-            <button
-              className="btn btn-secondary"
+            <Button
               onClick={() => void run(() => modalPayload.onToggleActive(), undefined, true)}
               disabled={submitting}
             >
               {row.user.isActive ? t('modalManager.manageUser.disableUser') : t('modalManager.manageUser.enableUser')}
-            </button>
-            <button
-              className="w-full inline-flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-[var(--border-radius-base,6px)] text-[13px] font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100"
+            </Button>
+            <Button
+              tone="delete"
+              solid
+              className="w-full"
               onClick={() => void run(() => modalPayload.onHardDelete(), undefined, true)}
               disabled={submitting}
             >
-              <Trash2 size={15} />
               {t('modalManager.manageUser.hardDelete')}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

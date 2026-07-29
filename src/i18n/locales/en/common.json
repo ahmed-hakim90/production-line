@@ -137,6 +137,9 @@
       "searchPlaceholder": "Search...",
       "applyLabel": "Apply",
       "advancedFilters": "Advanced filters",
+      "addFilter": "Add filter",
+      "availableFilters": "Available filters",
+      "noMoreFilters": "No more filters",
       "clearAll": "Clear all",
       "activeFilters": "Active filters:"
     },

@@ -512,7 +512,7 @@ export const GlobalCreateProductModal: React.FC = () => {
               إخفاء قسم المواد
             </Button>
           )}
-          <Button variant="outline" onClick={handleClose}>{t('ui.cancel')}</Button>
+          <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}

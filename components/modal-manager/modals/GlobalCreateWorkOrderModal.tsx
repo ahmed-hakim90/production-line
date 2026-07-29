@@ -585,7 +585,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           )}
         </div>
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
-          <Button variant="outline" onClick={handleClose} disabled={saving || loadingEdit}>{t('ui.cancel')}</Button>
+          <Button variant="outline" onClick={handleClose} disabled={saving || loadingEdit} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button
             variant="primary"
             onClick={handleSave}

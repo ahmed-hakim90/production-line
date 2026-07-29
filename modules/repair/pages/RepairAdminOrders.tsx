@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
   Dialog,
   DialogContent,
@@ -195,16 +195,12 @@ export const RepairAdminOrders: React.FC = () => {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>فلترة سريعة</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="بحث: رقم الطلب، العميل، الهاتف، الجهاز، الفني"
-          />
-        </CardContent>
+        <SmartFilterBar
+          searchPlaceholder="بحث: رقم الطلب، العميل، الهاتف، الجهاز، الفني"
+          searchValue={search}
+          onSearchChange={setSearch}
+          className="mb-0 border-0 rounded-none"
+        />
       </Card>
 
       <Card>

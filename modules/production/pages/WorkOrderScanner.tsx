@@ -578,19 +578,15 @@ export const WorkOrderScanner: React.FC = () => {
                   </td>
                   <td className="py-3 px-3">
                     {workOrder.status !== 'completed' ? (
-                      <button
+                      <Button
                         type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => handleDeleteSession(session.sessionId)}
                         disabled={deletingSessionId === session.sessionId}
-                        className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-[var(--border-radius-base)] text-xs font-bold text-rose-600 bg-rose-50 hover:bg-rose-100 dark:hover:bg-rose-900/30 disabled:opacity-60 transition-colors"
                       >
-                        {deletingSessionId === session.sessionId ? (
-                          <span className="material-icons-round animate-spin text-sm">refresh</span>
-                        ) : (
-                          <span className="material-icons-round text-sm">delete</span>
-                        )}
-                        إزالة
-                      </button>
+                        {deletingSessionId === session.sessionId ? 'جاري الحذف...' : 'إزالة'}
+                      </Button>
                     ) : (
                       <span className="text-xs text-[var(--color-text-muted)] font-bold">—</span>
                     )}

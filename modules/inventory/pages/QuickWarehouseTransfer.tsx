@@ -2,7 +2,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
-import { transferApprovalService } from '../services/transferApprovalService';
+import { createTransferRequest } from '../usecases/createTransferRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
@@ -368,7 +369,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
     setSaving(true);
     try {
       const resolvedReferenceNo = referenceNo;
-      const txId = await transferApprovalService.createRequest({
+      const txId = unwrapOrThrow(await createTransferRequest({
         requestType: 'manual_transfer',
         sourceModule: 'manual_movement',
         fromWarehouseId: warehouseId,
@@ -380,7 +381,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
         note: '',
         createdBy: userDisplayName || userEmail || 'Current User',
         createdByUserId: uid || undefined,
-      });
+      })).requestId;
 
       if (!txId) {
         setSaveError('تعذر حفظ الطلب — تحقق من إعدادات الاتصال.');
@@ -553,15 +554,15 @@ export const QuickWarehouseTransfer: React.FC = () => {
           <div className="mt-6 space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-bold text-[var(--color-text-muted)]">أصناف التحويلة</label>
-              <button
+              <Button
                 type="button"
-                className="btn btn-secondary hidden sm:inline-flex text-sm"
+                variant="secondary"
+                className="hidden sm:inline-flex text-sm"
                 onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                 disabled={saving}
               >
-                <span className="material-icons-round text-base">add</span>
                 إضافة صنف
-              </button>
+              </Button>
             </div>
 
             <div
@@ -788,40 +789,22 @@ export const QuickWarehouseTransfer: React.FC = () => {
               })}
             </div>
 
-            <button
+            <Button
               type="button"
-              className="btn btn-secondary w-full sm:hidden text-sm"
+              variant="secondary"
+              className="w-full sm:hidden text-sm"
               onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
               disabled={saving}
             >
-              <span className="material-icons-round text-base">add</span>
               إضافة صنف
-            </button>
+            </Button>
           </div>
 
           <div className="flex flex-col-reverse sm:flex-row sm:flex-wrap gap-3 mt-6 pt-4 border-t border-[var(--color-border)]">
             <Button onClick={() => void handleSave()} disabled={saving || !canSubmit} className="w-full sm:w-auto">
-              {saving ? (
-                <>
-                  <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" aria-hidden>
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                    <path
-                      className="opacity-75"
-                      fill="currentColor"
-                      d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"
-                    />
-                  </svg>
-                  جاري الحفظ...
-                </>
-              ) : (
-                <>
-                  <span className="material-icons-round text-lg">save</span>
-                  حفظ
-                </>
-              )}
+              {saving ? 'جاري الحفظ...' : 'حفظ'}
             </Button>
             <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto" type="button">
-              <span className="material-icons-round text-lg">refresh</span>
               مسح
             </Button>
           </div>
@@ -844,27 +827,18 @@ export const QuickWarehouseTransfer: React.FC = () => {
               type="button"
               onClick={() => void printTransfer(`اذن-تحويل-${savedPrintData?.transferNo ?? 'transfer'}`)}
             >
-              <span className="material-icons-round text-lg">print</span>
               طباعة المرجع
             </Button>
             <Button variant="secondary" disabled={exporting} onClick={() => void handleExportPDF()} className="w-full sm:w-auto" type="button">
-              {exporting ? (
-                <span className="material-icons-round animate-spin text-sm">refresh</span>
-              ) : (
-                <span className="material-icons-round text-lg">picture_as_pdf</span>
-              )}
-              تصدير PDF
+              {exporting ? 'جاري التصدير...' : 'تصدير PDF'}
             </Button>
             <Button variant="secondary" disabled={exporting} onClick={() => void handleExportImage()} className="w-full sm:w-auto" type="button">
-              <span className="material-icons-round text-lg">image</span>
               تصدير كصورة
             </Button>
             <Button variant="outline" disabled={exporting} onClick={() => void handleShareWhatsApp()} className="w-full sm:w-auto" type="button">
-              <span className="material-icons-round text-lg">share</span>
               مشاركة عبر WhatsApp
             </Button>
             <Button variant="outline" onClick={handleReset} className="w-full sm:w-auto" type="button">
-              <span className="material-icons-round text-lg">add</span>
               تحويل جديد
             </Button>
           </div>

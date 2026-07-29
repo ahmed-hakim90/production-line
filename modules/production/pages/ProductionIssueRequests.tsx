@@ -15,6 +15,8 @@ import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '../../../utils/printManager';
 import { productionIssueService } from '../../inventory/services/productionIssueService';
+import { createProductionIssueRequest } from '../usecases/createProductionIssueRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { componentCompensationService } from '../../inventory/services/componentCompensationService';
 import { assemblableCapacityService, type AssemblableCapacityRow } from '../../inventory/services/assemblableCapacityService';
 import { warehouseService } from '../../inventory/services/warehouseService';
@@ -613,13 +615,13 @@ export const ProductionIssueRequests: React.FC = () => {
     setBusy(true);
     setMessage('');
     try {
-      await productionIssueService.createRequest({
+      unwrapOrThrow(await createProductionIssueRequest({
         workOrderId: sourceKind === 'work_order' ? sourceId : undefined,
         productionPlanId: sourceKind === 'production_plan' ? sourceId : undefined,
         quantity: qty,
         createdBy: actor,
         createdByUserId: uid || undefined,
-      });
+      }));
       setMessage('تم إرسال طلب الصرف إلى مخزن المستلزمات.');
       setQuantity('');
       setRequestModalOpen(false);
@@ -698,11 +700,13 @@ export const ProductionIssueRequests: React.FC = () => {
           <div className="flex flex-wrap gap-2">
             {canRequest && (
               <>
-                <PrimaryButton onClick={openBlankRequestModal}>طلب صرف</PrimaryButton>
-                <GhostButton onClick={openCompensationModal}>طلب تعويضي</GhostButton>
+                <PrimaryButton iconName="precision_manufacturing" tone="edit" onClick={openBlankRequestModal}>طلب صرف</PrimaryButton>
+                <GhostButton iconName="replay" tone="undo" onClick={openCompensationModal}>طلب تعويضي</GhostButton>
               </>
             )}
             <GhostButton
+              iconName="print"
+              tone="print"
               disabled={loading || shortageReportSections.length === 0}
               onClick={() => void printShortageReport(
                 shortageReportSections,
@@ -712,6 +716,8 @@ export const ProductionIssueRequests: React.FC = () => {
               طباعة تقرير الناقص
             </GhostButton>
             <GhostButton
+              iconName="refresh"
+              tone="neutral"
               onClick={() => {
                 invalidatePageDataCache(ISSUE_REQUESTS_CACHE_KEY);
                 void reload();
@@ -815,6 +821,8 @@ export const ProductionIssueRequests: React.FC = () => {
                               {openPlan?.id ? (
                                 canRequest ? (
                                   <PrimaryButton
+                                    iconName="precision_manufacturing"
+                                    tone="edit"
                                     onClick={() => openRequestModalForPlan(openPlan.id!, Number(row.maxAssemblable || 0))}
                                   >
                                     طلب صرف
@@ -823,7 +831,7 @@ export const ProductionIssueRequests: React.FC = () => {
                                   <span className="text-xs text-slate-400">يلزم صلاحية طلب الصرف</span>
                                 )
                               ) : canCreatePlan ? (
-                                <PrimaryButton onClick={() => openCreatePlan(row)}>
+                                <PrimaryButton iconName="add_circle" tone="submit" onClick={() => openCreatePlan(row)}>
                                   إنشاء خطة
                                 </PrimaryButton>
                               ) : (
@@ -934,6 +942,8 @@ export const ProductionIssueRequests: React.FC = () => {
                     </p>
                   </div>
                   <GhostButton
+                    iconName="print"
+                    tone="print"
                     onClick={() => void printShortageReport(
                       shortageReportSections.filter((row) => row.kind === 'none'),
                       'خطط مفتوحة بدون مكونات (متاح تجميع = 0)',
@@ -959,6 +969,8 @@ export const ProductionIssueRequests: React.FC = () => {
                             متبقي خطط {formatNumber(row.remaining)} · متاح تجميع 0
                           </span>
                           <GhostButton
+                            iconName={expanded ? 'visibility_off' : 'visibility'}
+                            tone="view"
                             onClick={() =>
                               setExpandedShortageProductId((prev) => (prev === row.productId ? null : row.productId))
                             }
@@ -967,6 +979,8 @@ export const ProductionIssueRequests: React.FC = () => {
                           </GhostButton>
                           {section && section.lines.length > 0 && (
                             <GhostButton
+                              iconName="print"
+                              tone="print"
                               onClick={() => void printShortageReport(
                                 [section],
                                 `ناقص المنتج: ${row.productName}`,
@@ -1034,6 +1048,8 @@ export const ProductionIssueRequests: React.FC = () => {
                     </p>
                   </div>
                   <GhostButton
+                    iconName="print"
+                    tone="print"
                     onClick={() => void printShortageReport(
                       shortageReportSections.filter((row) => row.kind === 'partial'),
                       'تغطية جزئية — مكونات ناقصة لباقي الخطط',
@@ -1059,6 +1075,8 @@ export const ProductionIssueRequests: React.FC = () => {
                             متاح {formatNumber(row.maxAssemblable)} / متبقي {formatNumber(row.remaining)}
                           </span>
                           <GhostButton
+                            iconName={expanded ? 'visibility_off' : 'visibility'}
+                            tone="view"
                             onClick={() =>
                               setExpandedShortageProductId((prev) =>
                                 prev === `partial:${row.productId}` ? null : `partial:${row.productId}`,
@@ -1069,6 +1087,8 @@ export const ProductionIssueRequests: React.FC = () => {
                           </GhostButton>
                           {section && section.lines.length > 0 && (
                             <GhostButton
+                              iconName="print"
+                              tone="print"
                               onClick={() => void printShortageReport(
                                 [section],
                                 `ناقص المنتج: ${row.productName}`,
@@ -1258,8 +1278,8 @@ export const ProductionIssueRequests: React.FC = () => {
             </label>
           </div>
           <DialogFooter className="gap-2">
-            <GhostButton onClick={() => setPlanModalOpen(false)} disabled={planSaving}>إلغاء</GhostButton>
-            <PrimaryButton disabled={planSaving || !planLineId} onClick={() => void savePlan()}>
+            <GhostButton iconName="close" tone="neutral" onClick={() => setPlanModalOpen(false)} disabled={planSaving}>إلغاء</GhostButton>
+            <PrimaryButton iconName="add_circle" tone="submit" disabled={planSaving || !planLineId} onClick={() => void savePlan()}>
               {planSaving ? 'جاري الحفظ…' : 'إنشاء الخطة'}
             </PrimaryButton>
           </DialogFooter>
@@ -1356,8 +1376,10 @@ export const ProductionIssueRequests: React.FC = () => {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <GhostButton onClick={() => setRequestModalOpen(false)} disabled={busy}>إلغاء</GhostButton>
+            <GhostButton iconName="close" tone="neutral" onClick={() => setRequestModalOpen(false)} disabled={busy}>إلغاء</GhostButton>
             <PrimaryButton
+              iconName="send"
+              tone="submit"
               disabled={busy || !sourceId || !(maxAssemblable > 0)}
               onClick={() => void createRequest()}
             >
@@ -1463,8 +1485,10 @@ export const ProductionIssueRequests: React.FC = () => {
             )}
           </div>
           <DialogFooter className="gap-2">
-            <GhostButton onClick={() => setCompensationModalOpen(false)} disabled={compBusy}>إلغاء</GhostButton>
+            <GhostButton iconName="close" tone="neutral" onClick={() => setCompensationModalOpen(false)} disabled={compBusy}>إلغاء</GhostButton>
             <PrimaryButton
+              iconName="send"
+              tone="submit"
               disabled={compBusy || !compIssueId || !selectedCompLine}
               onClick={() => void createCompensationRequest()}
             >

@@ -4,7 +4,7 @@ export const WAREHOUSE_ROLE_LABELS: Record<WarehouseRole, string> = {
   general: 'عام',
   raw_material: 'مواد خام',
   decomposed: 'مفكك / مستلزم إنتاج',
-  production_wip: 'WIP',
+  production_wip: 'إنتاج تحت التشغيل (WIP)',
   finished_staging: 'تم الإنتاج',
   final_product: 'منتج تام',
   packaging: 'تغليف',

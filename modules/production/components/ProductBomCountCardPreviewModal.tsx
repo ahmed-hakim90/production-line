@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
-import { Loader2, Printer, X } from 'lucide-react';
+import { Loader2, X } from 'lucide-react';
+import { Button } from '@/components/UI';
 import type { PrintTemplateSettings } from '../../../types';
 import { useManagedPrint } from '../../../utils/printManager';
 import {
@@ -98,18 +99,18 @@ export const ProductBomCountCardPreviewModal: React.FC<ProductBomCountCardPrevie
           className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2 shrink-0"
           style={{ background: '#f8f9fa' }}
         >
-          <button type="button" className="btn btn-secondary w-full sm:w-auto" onClick={onClose}>
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={onClose}>
             إغلاق
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
-            className="btn btn-primary w-full sm:w-auto gap-1"
+            variant="primary"
+            className="w-full sm:w-auto"
             disabled={loading || cards.length === 0}
             onClick={() => handlePrint()}
           >
-            <Printer className="size-3.5" />
             طباعة الآن
-          </button>
+          </Button>
         </div>
       </div>
     </div>

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Loader2, Plus, Trash2, Calculator, ListChecks } from 'lucide-react';
+import { Loader2, Trash2, Calculator } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useProductBom, useBomItemMutations } from '../hooks/useProductBom';
 import { useMaterials as useMaterialsCatalog } from '../hooks/useMaterials';
@@ -155,13 +155,11 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
               onChange={(e) => setPlanQty(Number(e.target.value) || 1)}
             />
           </div>
-          <Button type="button" variant="outline" size="sm" className="gap-1" disabled={reqLoading} onClick={() => void handleViewRequirements()}>
-            {reqLoading ? <Loader2 className="h-4 w-4 animate-spin" /> : <ListChecks className="h-4 w-4" />}
-            عرض الاحتياجات
+          <Button type="button" variant="outline" size="sm" disabled={reqLoading} onClick={() => void handleViewRequirements()}>
+            {reqLoading ? 'جاري التحميل...' : 'عرض الاحتياجات'}
           </Button>
           {canManage && (
-            <Button type="button" size="sm" className="gap-1" onClick={() => setShowForm(true)}>
-              <Plus className="h-4 w-4" />
+            <Button type="button" size="sm" onClick={() => setShowForm(true)}>
               إضافة مادة
             </Button>
           )}
@@ -276,7 +274,7 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
           </div>
           <div className="flex gap-2">
             <Button type="button" size="sm" disabled={saving} onClick={() => void handleAdd()}>
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'حفظ'}
+              {saving ? 'جاري الحفظ...' : 'حفظ'}
             </Button>
             <Button type="button" variant="ghost" size="sm" onClick={() => setShowForm(false)}>
               إلغاء

@@ -315,11 +315,6 @@ export const UsersManagement: React.FC = () => {
     'الموظف المرتبط': row.employee?.id ? getEmployeeDisplayName(row.employee) : 'غير مربوط',
     'الحالة': row.user.isActive ? 'مفعل' : 'انتظار الموافقة',
   }));
-  const activeFilterCount = [
-    query.trim(),
-    statusFilter !== 'all' ? statusFilter : '',
-    roleFilter !== 'all' ? roleFilter : '',
-  ].filter(Boolean).length;
 
   const handleApproveUserAccess = async (
     row: UserManagementRow,
@@ -519,21 +514,6 @@ export const UsersManagement: React.FC = () => {
             if (key === 'status') setStatusFilter(value as 'all' | 'active' | 'pending' | 'not_created');
             if (key === 'role') setRoleFilterParam(value);
           }}
-          onApply={() => undefined}
-          applyLabel="عرض"
-          extra={activeFilterCount > 0 ? (
-            <button
-              type="button"
-              className="inline-flex h-[34px] items-center rounded-lg border border-rose-200 px-2.5 text-xs font-medium text-rose-600 hover:bg-rose-50"
-              onClick={() => {
-                setQuery('');
-                setStatusFilter('all');
-                setRoleFilterParam('all');
-              }}
-            >
-              مسح ({activeFilterCount})
-            </button>
-          ) : undefined}
         />
         {loading ? (
           <LoadingSkeleton rows={7} type="table" />
@@ -566,14 +546,16 @@ export const UsersManagement: React.FC = () => {
                         <StatusBadge label={row.user.isActive ? 'مفعل' : 'انتظار الموافقة'} type={row.user.isActive ? 'success' : 'warning'} dot />
                       </td>
                       <td className="py-2.5 px-3">
-                        <button
+                        <Button
                           type="button"
-                          className="text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
+                          variant="ghost"
+                          size="sm"
+                          className="!h-auto !px-1.5 !py-0.5 text-xs font-medium text-indigo-600 hover:text-indigo-700 hover:underline"
                           onClick={() => openManageUserModal(row)}
                           data-modal-key={MODAL_KEYS.SYSTEM_USERS_MANAGE}
                         >
                           إدارة المستخدم
-                        </button>
+                        </Button>
                       </td>
                     </tr>
                   );

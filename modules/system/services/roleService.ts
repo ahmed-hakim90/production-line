@@ -165,7 +165,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'routing.execute',
           'quickAction.view',
           'supplyCycles.view',
-          'inventory.view',
+          // No inventory.view — supervisors request issues via production portal only.
           'productionIssue.request',
           'plans.view',
           'leave.view',

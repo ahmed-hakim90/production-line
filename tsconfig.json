@@ -30,6 +30,7 @@
   "exclude": [
     "functions",
     "node_modules",
-    "dist"
+    "dist",
+    "tests/catalog-product-components.test.ts"
   ]
 }

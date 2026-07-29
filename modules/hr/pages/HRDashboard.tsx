@@ -8,6 +8,8 @@ import { useAppStore } from '@/store/useAppStore';
 import { employeeService } from '../employeeService';
 import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService } from '../leaveService';
+import { createLeaveRequest } from '../usecases/createLeaveRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { loanService } from '../loanService';
 import { createRequest, type ApprovalEmployeeInfo } from '../approval';
 import { departmentsRef, allowanceTypesRef } from '../collections';
@@ -733,13 +735,13 @@ export const HRDashboard: React.FC = () => {
             throw new Error(approvalResult.error || 'تعذر إنشاء موافقة طلب السلفة');
           }
         } else if (item.type === 'leave') {
-          const leaveId = await leaveRequestService.create({
+          const leaveId = unwrapOrThrow(await createLeaveRequest({
             employeeId: item.empId, leaveType: item.leaveType as any,
             startDate: item.startDate!, endDate: item.endDate!, totalDays: item.totalDays!,
             affectsSalary: item.leaveType !== 'unpaid',
             status: 'pending', approvalChain: [], finalStatus: 'pending',
             reason: item.reason || '—', createdBy: uid || '',
-          });
+          }, { userId: uid || undefined, userName: userDisplayName || undefined })).leaveRequestId;
           const approvalEmployees = employees
             .filter((e): e is FirestoreEmployee => Boolean(e.id))
             .map((e) => toApprovalEmployeeInfo(e));
@@ -969,24 +971,24 @@ export const HRDashboard: React.FC = () => {
           {/* Search + Quick Actions toolbar */}
           <div className="flex flex-wrap items-center gap-2">
             {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
-            <button
+            <Button
               type="button"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40 hover:text-primary"
+              size="sm"
+              variant="ghost"
               onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SHIFT_RULES)}
               data-modal-key={MODAL_KEYS.ATTENDANCE_SHIFT_RULES}
             >
-              <span className="material-icons-round text-base">settings</span>
-              <span className="hidden sm:inline">قواعد الوردية</span>
-            </button>
-            <button
+              قواعد الوردية
+            </Button>
+            <Button
               type="button"
-              className="flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-primary/40 hover:text-primary"
+              size="sm"
+              variant="ghost"
               onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX)}
               data-modal-key={MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX}
             >
-              <span className="material-icons-round text-base">edit_calendar</span>
-              <span className="hidden sm:inline">إشعار توقيع</span>
-            </button>
+              إشعار توقيع
+            </Button>
             {/* Quick Action buttons */}
             {qaActions.map((a) => (
               <button
@@ -1198,14 +1200,13 @@ export const HRDashboard: React.FC = () => {
                   )}
 
                   <div className="flex justify-end">
-                    <button
+                    <Button
+                      size="sm"
                       onClick={stageQaLoan}
                       disabled={(qaEmpIds.length === 0 && !qaEmpId) || qaLoanAmount <= 0}
-                      className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <span className="material-icons-round text-sm">add</span>
                       إضافة إلى الجدول
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1336,14 +1337,13 @@ export const HRDashboard: React.FC = () => {
                   )}
 
                   <div className="flex justify-end">
-                    <button
+                    <Button
+                      size="sm"
                       onClick={stageQaLeave}
                       disabled={(qaEmpIds.length === 0 && !qaEmpId) || !qaLeaveStart || !qaLeaveEnd}
-                      className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <span className="material-icons-round text-sm">add</span>
                       إضافة إلى الجدول
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1457,14 +1457,13 @@ export const HRDashboard: React.FC = () => {
                     )}
 
                     <div className="flex justify-end">
-                      <button
+                      <Button
+                        size="sm"
                         onClick={stageQaAllowance}
                         disabled={qaEmpIds.length === 0 || !qaAllowTypeId}
-                        className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
                       >
-                        <span className="material-icons-round text-sm">add</span>
                         إضافة إلى الجدول
-                      </button>
+                      </Button>
                     </div>
                   </div>
                   {qaEmpIds.length > 0 && (
@@ -1618,14 +1617,13 @@ export const HRDashboard: React.FC = () => {
                   )}
 
                   <div className="flex justify-end">
-                    <button
+                    <Button
+                      size="sm"
                       onClick={stageQaPenalty}
                       disabled={(qaEmpIds.length === 0 && !qaEmpId) || !qaPenaltyName.trim() || qaPenaltyAmount <= 0}
-                      className="erp-filter-apply disabled:opacity-40 disabled:cursor-not-allowed"
                     >
-                      <span className="material-icons-round text-sm">add</span>
                       إضافة إلى الجدول
-                    </button>
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1682,8 +1680,7 @@ export const HRDashboard: React.FC = () => {
                 إلغاء
               </Button>
               <Button size="sm" onClick={handleSaveAllStaged} disabled={qaSaving || qaStaged.length === 0}>
-                <span className="material-icons-round text-sm">save</span>
-                حفظ وإغلاق ({qaStaged.length})
+                {qaSaving ? 'جاري الحفظ...' : `حفظ وإغلاق (${qaStaged.length})`}
               </Button>
             </div>
           </div>
@@ -1857,10 +1854,9 @@ export const HRDashboard: React.FC = () => {
                 </table>
               </div>
             )}
-            <button onClick={() => navigate('/hr/leave-requests')} className="w-full text-xs text-primary font-bold hover:underline mt-4 flex items-center justify-center gap-1">
+            <Button variant="ghost" size="sm" className="w-full mt-4" onClick={() => navigate('/hr/leave-requests')}>
               عرض كل الإجازات
-              <span className="material-icons-round text-xs">arrow_forward</span>
-            </button>
+            </Button>
           </Card>
 
           <Card title="آخر طلبات السُلف">
@@ -1892,10 +1888,9 @@ export const HRDashboard: React.FC = () => {
                 </table>
               </div>
             )}
-            <button onClick={() => navigate('/hr/loan-requests')} className="w-full text-xs text-primary font-bold hover:underline mt-4 flex items-center justify-center gap-1">
+            <Button variant="ghost" size="sm" className="w-full mt-4" onClick={() => navigate('/hr/loan-requests')}>
               عرض كل السُلف
-              <span className="material-icons-round text-xs">arrow_forward</span>
-            </button>
+            </Button>
           </Card>
         </div>
       </section>

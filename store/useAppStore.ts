@@ -59,6 +59,13 @@ import { lineService } from '../modules/production/services/lineService';
 import { employeeService } from '../modules/hr/employeeService';
 import { qualitySettingsService } from '../modules/quality/services/qualitySettingsService';
 import { reportService } from '../modules/production/services/reportService';
+import { createProductionReport } from '../modules/production/usecases/createProductionReport';
+import {
+  createRole as createRoleUseCase,
+  updateRole as updateRoleUseCase,
+  deleteRole as deleteRoleUseCase,
+} from '../modules/system/usecases/manageRole';
+import { unwrapOrThrow } from '../shared/usecases';
 import {
   excludePackagingLineReportsForWorkOrderProduction,
   isPackagingLineId,
@@ -84,6 +91,7 @@ import { productionPlanFollowUpService } from '../modules/production/services/pr
 import { workOrderService } from '../modules/production/services/workOrderService';
 import { notificationService } from '../services/notificationService';
 import { costCenterService } from '../modules/costs/services/costCenterService';
+import { createCostCenter as createCostCenterUseCase } from '../modules/costs/usecases/createCostCenter';
 import { costCenterValueService } from '../modules/costs/services/costCenterValueService';
 import { costAllocationService } from '../modules/costs/services/costAllocationService';
 import { laborSettingsService } from '../modules/costs/services/laborSettingsService';
@@ -108,7 +116,6 @@ import { catalogRawMaterialService as rawMaterialService } from '../modules/cata
 import { materialService } from '../modules/manufacturing/services/materialService';
 import { loadReportsComponentLabelOptions } from '../modules/production/utils/injectionComponentOptions';
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
-import { productMaterialService } from '../modules/production/services/productMaterialService';
 import {
   categoryService,
   isProductCategoryRow,
@@ -122,7 +129,7 @@ import { DUPLICATE_ENTITY_CODE } from '../modules/shared/services/entityCodeSequ
 import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
-import { ALL_PERMISSIONS } from '../utils/permissions';
+import { ALL_PERMISSIONS, checkPermission, isPackagingOnlyPermissions, normalizeRolePermissions, type Permission } from '../utils/permissions';
 import { DEFAULT_PLAN_SETTINGS, DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
 import {
   applyAppTheme,
@@ -154,6 +161,9 @@ import {
   isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift';
+import {
+  resolveReportBehaviorSettings,
+} from '../modules/production/lib/reportBehaviorSettings';
 import {
   buildTeamPlanWorkerOutputs,
   computeAchievementPercent,
@@ -533,7 +543,7 @@ function hasPermission(
   permissions: Record<string, boolean>,
   key: string,
 ): boolean {
-  return permissions[key] === true;
+  return checkPermission(permissions, key as Permission);
 }
 
 function collectHiddenProductIdsFromRawMaster(
@@ -1048,6 +1058,10 @@ function invalidateProductionReportsRangeCacheForDates(
   set({ productionReportsRangeCache: next });
 }
 
+function getReportOperationalDateString(systemSettings: Pick<SystemSettings, 'planSettings'> | null | undefined): string {
+  return getOperationalDateString(resolveReportBehaviorSettings(systemSettings).operationalDayStartHour);
+}
+
 // Flag to prevent onAuthStateChanged from running initializeApp during admin user creation
 let _creatingUser = false;
 
@@ -1143,7 +1157,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       userRoleId: role.id!,
       userRoleName: role.name,
       userRoleColor: role.color,
-      userPermissions: isSystemAdmin ? adminPermissions() : role.permissions,
+      userPermissions: isSystemAdmin
+        ? adminPermissions()
+        : normalizeRolePermissions(role.permissions),
     });
   },
 
@@ -1509,7 +1525,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       tenantId ? tenantService.getById(tenantId) : Promise.resolve(null),
     ]);
 
-    const today = getOperationalDateString(8);
+    const today = getReportOperationalDateString(get().systemSettings);
     const [todayReports, lineStatuses] = await Promise.all([
       reportService.getByDateRange(today, today),
       lineStatusService.getAll(),
@@ -1755,9 +1771,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createRole: async (data) => {
     try {
-      const id = await roleService.create(data);
-      if (id) await get().fetchRoles();
-      return id;
+      const created = unwrapOrThrow(await createRoleUseCase(
+        {
+          ...data,
+          permissions: normalizeRolePermissions(data.permissions),
+        },
+        {
+          userId: get().uid ?? undefined,
+          userName: get().userDisplayName ?? get().userEmail ?? undefined,
+        },
+      ));
+      await get().fetchRoles();
+      return created.roleId;
     } catch (error) {
       set({ error: (error as Error).message });
       return null;
@@ -1766,7 +1791,13 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   updateRole: async (id, data) => {
     try {
-      await roleService.update(id, data);
+      const payload = data.permissions
+        ? { ...data, permissions: normalizeRolePermissions(data.permissions) }
+        : data;
+      unwrapOrThrow(await updateRoleUseCase(id, payload, {
+        userId: get().uid ?? undefined,
+        userName: get().userDisplayName ?? get().userEmail ?? undefined,
+      }));
       await get().fetchRoles();
 
       if (id === get().userRoleId) {
@@ -1780,7 +1811,10 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   deleteRole: async (id) => {
     try {
-      await roleService.delete(id);
+      unwrapOrThrow(await deleteRoleUseCase(id, {
+        userId: get().uid ?? undefined,
+        userName: get().userDisplayName ?? get().userEmail ?? undefined,
+      }));
       await get().fetchRoles();
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -2174,7 +2208,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   fetchReports: async (startDate?: string, endDate?: string) => {
     set({ reportsLoading: true, error: null });
     try {
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const from = startDate || today;
       const to = endDate || today;
       const reports: ProductionReport[] = [];
@@ -2735,10 +2769,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         );
         if (reportsForAutoClose.length === 0) {
           const toLocalDateString = (value: any): string => {
-            if (!value) return getOperationalDateString(8);
+            if (!value) return getReportOperationalDateString(get().systemSettings);
             if (typeof value === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
             const dt = typeof value?.toDate === 'function' ? value.toDate() : new Date(value);
-            if (Number.isNaN(dt.getTime())) return getOperationalDateString(8);
+            if (Number.isNaN(dt.getTime())) return getReportOperationalDateString(get().systemSettings);
             const y = dt.getFullYear();
             const m = String(dt.getMonth() + 1).padStart(2, '0');
             const day = String(dt.getDate()).padStart(2, '0');
@@ -2793,7 +2827,10 @@ export const useAppStore = create<AppState>((set, get) => ({
             workOrderId: id,
           };
 
-          const closeReportId = await reportService.create(woCloseReportPayload);
+          const closeReportId = unwrapOrThrow(await createProductionReport(woCloseReportPayload, {
+            userId: get().uid ?? undefined,
+            userName: get().userDisplayName ?? get().userEmail ?? undefined,
+          })).reportId;
 
           const autoCloseIndustrialCost = calculateIndustrialReportTotalCost({
             workersCount: Number(
@@ -2836,7 +2873,7 @@ export const useAppStore = create<AppState>((set, get) => ({
             }
           }
 
-          const today = getOperationalDateString(8);
+          const today = getReportOperationalDateString(get().systemSettings);
           const { start: monthStart, end: monthEnd } = getMonthDateRange();
           const [todayReports, monthlyReports] = await Promise.all([
             reportService.getByDateRange(today, today),
@@ -3196,7 +3233,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         description: 'Create component waste report',
       });
 
-      const id = await reportService.create(reportData);
+      let id: string;
+      try {
+        id = unwrapOrThrow(await createProductionReport(reportData, {
+          userId: uid ?? undefined,
+          userName: userDisplayName ?? userEmail ?? undefined,
+        })).reportId;
+      } catch (createError) {
+        const createErr = createError instanceof Error ? createError : new Error(String(createError));
+        if (trackedOperation) {
+          actionTrackerService.failOperation(trackedOperation, {
+            error: createErr,
+            errorCode: 'REPORT_CREATE_FAILED',
+          });
+        }
+        set({ error: createErr.message || 'تعذر حفظ تقرير الهالك' });
+        return null;
+      }
       if (!id) {
         if (trackedOperation) {
           actionTrackerService.failOperation(trackedOperation, {
@@ -3229,7 +3282,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       try {
-        const today = getOperationalDateString(8);
+        const today = getReportOperationalDateString(get().systemSettings);
         const { start: monthStart, end: monthEnd } = getMonthDateRange();
         const [todayReports, monthlyReports] = await Promise.all([
           reportService.getByDateRange(today, today),
@@ -3324,7 +3377,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const canCreatePackagingReports =
         hasPermission(permissions, 'reports.create')
         || hasPermission(permissions, 'reports.packaging.create');
-      const forcePackagingOnly = hasPermission(permissions, 'reports.packaging.only');
+      const forcePackagingOnly = isPackagingOnlyPermissions(permissions);
       const forceInjectionOnly =
         hasPermission(permissions, 'reports.componentInjection.only') && !canCreateFinishedReports;
       const canManageComponentInjection =
@@ -3349,11 +3402,6 @@ export const useAppStore = create<AppState>((set, get) => ({
         set({ error: msg });
         return null;
       }
-      if (reportType === 'packaging' && !isPackagingLineId(data.lineId, get()._rawLines)) {
-        const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
-        set({ error: msg });
-        return null;
-      }
       const {
         systemSettings,
         laborSettings,
@@ -3364,6 +3412,16 @@ export const useAppStore = create<AppState>((set, get) => ({
         _rawProducts,
         lineProductConfigs,
       } = get();
+      const reportBehavior = resolveReportBehaviorSettings(systemSettings);
+      if (
+        reportType === 'packaging'
+        && reportBehavior.restrictPackagingReportsToPackagingLines
+        && !isPackagingLineId(data.lineId, get()._rawLines)
+      ) {
+        const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
+        set({ error: msg });
+        return null;
+      }
       const planSettings = systemSettings.planSettings ?? { allowReportWithoutPlan: true, allowOverProduction: true, allowMultipleActivePlans: true };
       const componentScrapItems = reportType === 'packaging'
         ? []
@@ -3384,18 +3442,27 @@ export const useAppStore = create<AppState>((set, get) => ({
         getUnitsPerCarton,
       );
       if (reportType === 'component_injection') {
-        if (!isInjectionShiftSelected((data as ProductionReport).shift)) {
+        if (reportBehavior.requireInjectionShift && !isInjectionShiftSelected((data as ProductionReport).shift)) {
           const msg = 'يجب اختيار الوردية (صباحي أو مسائي) قبل حفظ تقرير الحقن.';
           set({ error: msg });
           return null;
         }
-        savePayload.shift = (data as ProductionReport).shift;
+        if (isInjectionShiftSelected((data as ProductionReport).shift)) {
+          savePayload.shift = (data as ProductionReport).shift;
+        } else {
+          delete savePayload.shift;
+        }
       } else {
         delete savePayload.shift;
       }
 
-      if (Number(savePayload.quantityProduced || 0) <= 0 || Number(savePayload.workHours || 0) <= 0) {
-        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة وساعات عمل.';
+      if (reportBehavior.requirePositiveQuantityOnReports && Number(savePayload.quantityProduced || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة.';
+        set({ error: msg });
+        return null;
+      }
+      if (reportBehavior.requireWorkHoursOnReports && Number(savePayload.workHours || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون ساعات عمل.';
         set({ error: msg });
         return null;
       }
@@ -3405,9 +3472,14 @@ export const useAppStore = create<AppState>((set, get) => ({
         + Number(savePayload.workersMaintenanceCount || 0)
         + Number(savePayload.workersExternalCount || 0);
       const packagingLaborOptional =
-        (reportType === 'finished_product' && isPackagingLineId(savePayload.lineId, get()._rawLines))
-        || reportType === 'packaging';
+        reportBehavior.allowPackagingLaborOptional
+        && (
+          (reportType === 'finished_product' && isPackagingLineId(savePayload.lineId, get()._rawLines))
+          || reportType === 'packaging'
+        );
       if (
+        reportBehavior.requireLaborForFinishedReports
+        &&
         reportType === 'finished_product'
         && !packagingLaborOptional
         && Number(savePayload.workersCount || 0) <= 0
@@ -3418,7 +3490,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         return null;
       }
 
-      if (reportType !== 'packaging') {
+      if (reportBehavior.preventDuplicateReports && reportType !== 'packaging') {
         const sameDayReports = await reportService.getByDateRange(savePayload.date, savePayload.date);
         const duplicateCandidate = {
           ...savePayload,
@@ -3505,7 +3577,10 @@ export const useAppStore = create<AppState>((set, get) => ({
           : !activeWO
             ? (activePlans.find(planMatchesReport) ?? null)
             : null;
-      const shouldPostToPlan = Boolean(activePlan?.id) && reportType !== 'packaging';
+      const shouldPostToPlan =
+        reportBehavior.autoPostReportToPlanAndWorkOrder &&
+        Boolean(activePlan?.id) &&
+        reportType !== 'packaging';
       const hasMatchingPlanContext = planMatchesReportContext(explicitPlan)
         || planMatchesReportContext(workOrderPlan)
         || activePlans.some(planMatchesReportContext);
@@ -3584,6 +3659,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         : individualWorkerTargetsEnabled
           ? 'line_product'
           : 'none';
+      const requireWorkerOutputMatch =
+        systemSettings.productionWorkerSettings?.performance?.productionWorkerOutputMustMatchReportQty === true;
+      if (
+        requireWorkerOutputMatch
+        && reportType === 'finished_product'
+        && individualWorkerTargetsEnabled
+        && scopedWorkerOutputs.length > 0
+      ) {
+        const workerOutputTotal = scopedWorkerOutputs.reduce((sum, row) => (
+          sum + (row.isPresent === false ? 0 : Number(row.outputQty || 0))
+        ), 0);
+        if (workerOutputTotal !== Number(savePayload.quantityProduced || 0)) {
+          const msg = 'مجموع إنتاج العمال يجب أن يطابق كمية التقرير';
+          set({ error: msg });
+          return null;
+        }
+      }
 
       let reportData: Omit<ProductionReport, 'id' | 'createdAt'> = {
         ...savePayload,
@@ -3604,7 +3696,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         typeof (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId === 'string'
           ? (savePayload as ProductionReport & { supplyCycleId?: string }).supplyCycleId!.trim()
           : '';
-      if (!rawCycleId) {
+      if (!rawCycleId && reportBehavior.autoLinkSupplyCycleOnReportSave) {
         try {
           const linkedCycleId = await supplyCycleService.findAutoLinkForReport({
             productId: String(savePayload.productId || '').trim(),
@@ -3620,7 +3712,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const packagingStockTransferEnabled =
-        reportType === 'packaging' && Boolean(systemSettings.planSettings?.enablePackagingStockTransfer);
+        reportBehavior.autoApplyInventoryOnReportSave &&
+        reportType === 'packaging' &&
+        Boolean(systemSettings.planSettings?.enablePackagingStockTransfer);
       if (packagingStockTransferEnabled) {
         const packagingSourceWarehouseId = String(systemSettings.planSettings?.packagingSourceWarehouseId || '').trim();
         const packagingTargetWarehouseId = String(systemSettings.planSettings?.packagingTargetWarehouseId || '').trim();
@@ -3664,7 +3758,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         description: 'Create production report',
       });
 
-      const id = await reportService.create(reportData);
+      let id: string;
+      try {
+        id = unwrapOrThrow(await createProductionReport(reportData, {
+          userId: uid ?? undefined,
+          userName: userDisplayName ?? userEmail ?? undefined,
+        })).reportId;
+      } catch (createError) {
+        const createErr = createError instanceof Error ? createError : new Error(String(createError));
+        if (trackedOperation) {
+          actionTrackerService.failOperation(trackedOperation, {
+            error: createErr,
+            errorCode: 'REPORT_CREATE_FAILED',
+          });
+        }
+        set({ error: createErr.message || 'تعذر حفظ التقرير' });
+        return null;
+      }
       if (!id) {
         if (trackedOperation) {
           actionTrackerService.failOperation(trackedOperation, {
@@ -3704,21 +3814,23 @@ export const useAppStore = create<AppState>((set, get) => ({
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث متوسط الإنتاج اليومي';
       }
 
-      try {
-        await productionInventoryService.applyProductionReportInventory({
-          reportId: id,
-          report: reportData,
-          systemSettings,
-          actor: {
-            name: get().userDisplayName || get().userEmail || 'System',
-            userId: get().uid || undefined,
-          },
-          products: get()._rawProducts,
-          componentScrapItems,
-        });
-      } catch (error) {
-        postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
-        set({ error: postSaveWarning });
+      if (reportBehavior.autoApplyInventoryOnReportSave) {
+        try {
+          await productionInventoryService.applyProductionReportInventory({
+            reportId: id,
+            report: reportData,
+            systemSettings,
+            actor: {
+              name: get().userDisplayName || get().userEmail || 'System',
+              userId: get().uid || undefined,
+            },
+            products: get()._rawProducts,
+            componentScrapItems,
+          });
+        } catch (error) {
+          postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تنفيذ حركات المخزون الآلية';
+          set({ error: postSaveWarning });
+        }
       }
 
       const skipWoProgress = isPackagingThroughputReport(
@@ -3726,7 +3838,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         get()._rawLines,
       );
       try {
-        if (activeWO?.id && !skipWoProgress) {
+        if (reportBehavior.autoPostReportToPlanAndWorkOrder && activeWO?.id && !skipWoProgress) {
           await workOrderService.incrementProduced(activeWO.id, reportData.quantityProduced, reportIndustrialCost);
           const newProduced = (activeWO.producedQuantity ?? 0) + reportData.quantityProduced;
           if (newProduced >= activeWO.quantity) {
@@ -3766,7 +3878,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       try {
-        const today = getOperationalDateString(8);
+        const today = getReportOperationalDateString(get().systemSettings);
         const { start: monthStart, end: monthEnd } = getMonthDateRange();
         const [todayReports, monthlyReports, workOrders] = await Promise.all([
           reportService.getByDateRange(today, today),
@@ -3885,20 +3997,25 @@ export const useAppStore = create<AppState>((set, get) => ({
       const canEditPackagingReports =
         hasPermission(permissions, 'reports.edit')
         || hasPermission(permissions, 'reports.packaging.create');
-      const forcePackagingOnly = hasPermission(permissions, 'reports.packaging.only');
+      const forcePackagingOnly = isPackagingOnlyPermissions(permissions);
       const forceInjectionOnly =
         hasPermission(permissions, 'reports.componentInjection.only') && !canEditFinishedReports;
       const canManageComponentInjection =
         hasPermission(permissions, 'reports.componentInjection.manage') || forceInjectionOnly;
       const lines = get()._rawLines;
       const nextLineId = String(data.lineId ?? existingReport?.lineId ?? '').trim();
+      const reportBehavior = resolveReportBehaviorSettings(get().systemSettings);
 
       if (forcePackagingOnly && nextReportType !== 'packaging') {
         const msg = 'غير مصرح بتعديل نوع التقرير إلى غير التغليف.';
         set({ error: msg });
         throw new Error(msg);
       }
-      if (nextReportType === 'packaging' && !isPackagingLineId(nextLineId, lines)) {
+      if (
+        nextReportType === 'packaging'
+        && reportBehavior.restrictPackagingReportsToPackagingLines
+        && !isPackagingLineId(nextLineId, lines)
+      ) {
         const msg = 'تقرير التغليف يجب أن يُسجَّل على خط مُعلَّم كخط تغليف.';
         set({ error: msg });
         throw new Error(msg);
@@ -3921,14 +4038,51 @@ export const useAppStore = create<AppState>((set, get) => ({
       let updatePayload: Partial<ProductionReport> = { ...data };
       if (nextReportType === 'component_injection') {
         const rawShift = data.shift !== undefined ? data.shift : existingReport?.shift;
-        if (!isInjectionShiftSelected(rawShift)) {
+        if (reportBehavior.requireInjectionShift && !isInjectionShiftSelected(rawShift)) {
           const msg = 'يجب اختيار الوردية (صباحي أو مسائي) قبل حفظ تقرير الحقن.';
           set({ error: msg });
           throw new Error(msg);
         }
-        updatePayload.shift = rawShift;
+        if (isInjectionShiftSelected(rawShift)) {
+          updatePayload.shift = rawShift;
+        } else {
+          delete updatePayload.shift;
+        }
       } else {
         delete updatePayload.shift;
+      }
+      const mergedReport = { ...(existingReport ?? {}), ...updatePayload } as ProductionReport;
+      if (reportBehavior.requirePositiveQuantityOnReports && Number(mergedReport.quantityProduced || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون كمية منتجة.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      if (reportBehavior.requireWorkHoursOnReports && Number(mergedReport.workHours || 0) <= 0) {
+        const msg = 'لا يمكن حفظ تقرير بدون ساعات عمل.';
+        set({ error: msg });
+        throw new Error(msg);
+      }
+      const detailedWorkersTotal = Number(mergedReport.workersProductionCount || 0)
+        + Number(mergedReport.workersPackagingCount || 0)
+        + Number(mergedReport.workersQualityCount || 0)
+        + Number(mergedReport.workersMaintenanceCount || 0)
+        + Number(mergedReport.workersExternalCount || 0);
+      const packagingLaborOptional =
+        reportBehavior.allowPackagingLaborOptional
+        && (
+          (nextReportType === 'finished_product' && isPackagingLineId(nextLineId, lines))
+          || nextReportType === 'packaging'
+        );
+      if (
+        reportBehavior.requireLaborForFinishedReports
+        && nextReportType === 'finished_product'
+        && !packagingLaborOptional
+        && Number(mergedReport.workersCount || 0) <= 0
+        && detailedWorkersTotal <= 0
+      ) {
+        const msg = 'لا يمكن حفظ تقرير بدون عمالة.';
+        set({ error: msg });
+        throw new Error(msg);
       }
       if (nextReportType === 'packaging') {
         updatePayload.componentScrapItems = [];
@@ -3951,6 +4105,50 @@ export const useAppStore = create<AppState>((set, get) => ({
           componentScrapItems: [],
         };
       }
+      const finalMergedReport = { ...(existingReport ?? {}), ...updatePayload } as ProductionReport;
+      if (reportBehavior.preventDuplicateReports && nextReportType !== 'packaging') {
+        const sameDayReports = await reportService.getByDateRange(finalMergedReport.date, finalMergedReport.date);
+        const duplicateCandidate = {
+          ...finalMergedReport,
+          reportType: nextReportType,
+          shift: nextReportType === 'component_injection' && isInjectionShiftSelected(finalMergedReport.shift)
+            ? finalMergedReport.shift
+            : undefined,
+        };
+        const hasDuplicate = sameDayReports.some((report) =>
+          report.id !== id && isDuplicateProductionReport(report, duplicateCandidate)
+        );
+        if (hasDuplicate) {
+          const msg = nextReportType === 'component_injection'
+            ? INJECTION_REPORT_DUPLICATE_MESSAGE
+            : REPORT_DUPLICATE_MESSAGE;
+          set({ error: msg });
+          throw new Error(msg);
+        }
+      }
+      const requireWorkerOutputMatch =
+        get().systemSettings.productionWorkerSettings?.performance?.productionWorkerOutputMustMatchReportQty === true;
+      const reportProduct = get()._rawProducts.find((p) => p.id === finalMergedReport.productId) ?? null;
+      const individualWorkerTargetsEnabled = nextReportType === 'finished_product'
+        && getProductAssemblyMode(reportProduct) === 'individual'
+        && hasLineSpecificWorkerTarget(get().lineProductConfigs, finalMergedReport.lineId, finalMergedReport.productId);
+      const scopedWorkerOutputs = (finalMergedReport.workerOutputs || []).filter((row) => (
+        row.productId === finalMergedReport.productId && row.lineId === finalMergedReport.lineId
+      ));
+      if (
+        requireWorkerOutputMatch
+        && individualWorkerTargetsEnabled
+        && scopedWorkerOutputs.length > 0
+      ) {
+        const workerOutputTotal = scopedWorkerOutputs.reduce((sum, row) => (
+          sum + (row.isPresent === false ? 0 : Number(row.outputQty || 0))
+        ), 0);
+        if (workerOutputTotal !== Number(finalMergedReport.quantityProduced || 0)) {
+          const msg = 'مجموع إنتاج العمال يجب أن يطابق كمية التقرير';
+          set({ error: msg });
+          throw new Error(msg);
+        }
+      }
       await reportService.update(id, updatePayload);
       const affectedProductIds = new Set<string>();
       if (existingReport?.productId) affectedProductIds.add(existingReport.productId);
@@ -3963,7 +4161,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           syncProductAvgDailyProduction(productId)
         )
       );
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -4123,7 +4321,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       await Promise.all(
         Array.from(productIdsToResync).map((pid) => syncProductAvgDailyProduction(pid)),
       );
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, workOrders] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -4265,12 +4463,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       const systemSettings = get().systemSettings;
-      const requiresFinishedApproval = systemSettings.planSettings?.requireFinishedStockApprovalForReports !== false;
-      if (!requiresFinishedApproval) {
+      const routing = await resolveInventoryRoutingV1Async(systemSettings);
+      if (!routing.requireApprovalForProductionEntry) {
         return { processed: 0, created: 0, skipped: 0, failed: 0 };
       }
-
-      const routing = await resolveInventoryRoutingV1Async(systemSettings);
       if (!routing.productionWipWarehouseId) {
         throw new Error('لم يتم تحديد مخزن إنتاج تحت التشغيل في إعدادات توجيه المخزون.');
       }
@@ -4310,7 +4506,6 @@ export const useAppStore = create<AppState>((set, get) => ({
             fromWarehouseId: '__production_report__',
             fromWarehouseName: 'تقارير الإنتاج',
             toWarehouseId: routing.productionWipWarehouseId,
-            toWarehouseName: 'مخزن إنتاج تحت التشغيل',
             note: `Backfill production entry from report ${report.id}`,
             sourceReportId: report.id,
             lines: [{
@@ -4441,7 +4636,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .map((r) => String(r.date || '').trim())
         .filter(Boolean);
       invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -4566,7 +4761,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         .map((r) => String(r.date || '').trim())
         .filter(Boolean);
       invalidateProductionReportsRangeCacheForDates(touchedDates, get, set);
-      const today = getOperationalDateString(8);
+      const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
       const [todayReports, monthlyReports, latestWorkOrders] = await Promise.all([
         reportService.getByDateRange(today, today),
@@ -4665,9 +4860,12 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   createCostCenter: async (data) => {
     try {
-      const id = await costCenterService.create(data);
-      if (id) await get().fetchCostData();
-      return id;
+      const { costCenterId } = unwrapOrThrow(await createCostCenterUseCase(data, {
+        userId: get().uid ?? undefined,
+        userName: get().userDisplayName ?? get().userEmail ?? undefined,
+      }));
+      await get().fetchCostData();
+      return costCenterId;
     } catch (error) {
       set({ error: (error as Error).message });
       return null;
@@ -4895,7 +5093,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Real-time Subscriptions ───────────────────────────────────────────────
 
   subscribeToDashboard: () => {
-    const today = getOperationalDateString(8);
+    const today = getReportOperationalDateString(get().systemSettings);
     return reportService.subscribeToday(today, (reports) => {
       set({ todayReports: reports });
       get()._rebuildProducts();
@@ -4939,7 +5137,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   },
 
   subscribeToScanEventsToday: () => {
-    const today = getOperationalDateString(8);
+    const today = getReportOperationalDateString(get().systemSettings);
     return scanEventService.subscribeLiveToday(today, (events) => {
       const validWorkOrderIds = new Set(
         get().workOrders

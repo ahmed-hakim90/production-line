@@ -5,6 +5,7 @@ import {
   getTenantSlugValidationError,
 } from '../../../services/tenantService';
 import { AuthShell } from '../components/AuthShell';
+import { Button } from '@/components/UI';
 
 /** Root `/login` — user enters company slug, then navigates to `/t/:slug/login`. */
 export const TenantLoginGateway: React.FC = () => {
@@ -63,9 +64,9 @@ export const TenantLoginGateway: React.FC = () => {
               </p>
             </div>
 
-            <button type="submit" className="erp-auth-btn">
+            <Button type="submit" className="erp-auth-btn w-full">
               متابعة إلى تسجيل الدخول
-            </button>
+            </Button>
           </form>
 
           <p className="erp-auth-footer-text mt-4 text-center text-sm text-[var(--color-text-muted)]">

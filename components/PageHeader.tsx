@@ -259,22 +259,24 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
             className="btn btn-secondary"
             onClick={secondaryAction.onClick}
             disabled={secondaryAction.disabled}
+            iconName={secondaryAction.icon || undefined}
+            solid={false}
           >
-            {renderActionIcon(secondaryAction.icon)}
-            <span className="hidden sm:inline">{secondaryAction.label}</span>
+            {secondaryAction.label}
           </Button>
         )}
 
-        {/* Primary button */}
+        {/* Primary button — single icon via iconName (never Lucide + auto icon) */}
         {primaryAction && (
           <Button
             type="button"
-            className="btn btn-primary bg-[rgb(var(--color-primary))] text-white hover:bg-[rgb(var(--color-primary)/0.9)]"
+            className="btn btn-primary"
             onClick={primaryAction.onClick}
             disabled={primaryAction.disabled}
             data-modal-key={primaryAction.dataModalKey}
+            iconName={primaryAction.icon || undefined}
+            solid
           >
-            {renderActionIcon(primaryAction.icon)}
             {primaryAction.label}
           </Button>
         )}
@@ -283,8 +285,16 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
         {visibleMoreActions.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button type="button" variant="outline" className="btn btn-secondary" title={t('pageHeader.moreActions')}>
-                <MoreHorizontal size={16} />
+              <Button
+                type="button"
+                variant="outline"
+                className="btn btn-secondary"
+                title={t('pageHeader.moreActions')}
+                iconName="more_horiz"
+                tone="neutral"
+                solid={false}
+              >
+                <span className="sr-only">{t('pageHeader.moreActions')}</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[220px]">

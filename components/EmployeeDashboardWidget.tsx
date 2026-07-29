@@ -28,7 +28,7 @@ import {
   Users,
   type LucideIcon,
 } from 'lucide-react';
-import { Card, Badge, LoadingSkeleton } from './UI';
+import { Card, Badge, Button, LoadingSkeleton } from './UI';
 import {
   Dialog,
   DialogContent,
@@ -614,21 +614,27 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                 <p className="text-sm font-bold text-[var(--color-text)]">{worker.employeeName}</p>
                 <p className="text-[11px] text-[var(--color-text-muted)]">{worker.employeeCode || worker.employeeId}</p>
               </div>
-              <div className="flex rounded-[var(--border-radius-base)] bg-[#f0f2f5] p-1">
-                <button
+              <div className="flex gap-1 rounded-[var(--border-radius-base)] bg-[#f0f2f5] p-1">
+                <Button
                   type="button"
                   onClick={() => updateWorker(worker.employeeId, { isPresent: true })}
-                  className={`px-3 py-1 text-xs font-bold rounded ${worker.isPresent !== false ? 'bg-emerald-100 text-emerald-700' : 'text-slate-500'}`}
+                  iconName="check_circle"
+                  tone="approve"
+                  solid={worker.isPresent !== false}
+                  className="px-3 py-1 text-xs font-bold shadow-none"
                 >
                   حاضر
-                </button>
-                <button
+                </Button>
+                <Button
                   type="button"
                   onClick={() => updateWorker(worker.employeeId, { isPresent: false })}
-                  className={`px-3 py-1 text-xs font-bold rounded ${worker.isPresent === false ? 'bg-rose-100 text-rose-700' : 'text-slate-500'}`}
+                  iconName="cancel"
+                  tone="reject"
+                  solid={worker.isPresent === false}
+                  className="px-3 py-1 text-xs font-bold shadow-none"
                 >
                   غائب
-                </button>
+                </Button>
               </div>
               <select
                 className="erp-input text-xs py-2"
@@ -746,43 +752,37 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
         </div>
 
         <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
-          <button
-            type="button"
-            onClick={() => setStartDialogOpen(false)}
-            disabled={saving}
-            className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text-muted)] disabled:opacity-60"
-          >
+          <Button type="button" variant="outline" onClick={() => setStartDialogOpen(false)} disabled={saving}>
             إلغاء
-          </button>
+          </Button>
           {startStep > 0 && (
-            <button
+            <Button
               type="button"
+              variant="outline"
               onClick={() => setStartStep((step) => Math.max(step - 1, 0))}
               disabled={saving}
-              className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text)] disabled:opacity-60"
             >
               السابق
-            </button>
+            </Button>
           )}
           {startStep < 2 ? (
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={() => setStartStep((step) => Math.min(step + 1, 2))}
               disabled={saving || loadingWorkers || !workerLineId || !startProductSelectionId || (startStep === 1 && workers.length === 0)}
-              className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
             >
               التالي
-            </button>
+            </Button>
           ) : (
-            <button
+            <Button
               type="button"
+              variant="primary"
               onClick={handleStart}
               disabled={saving || loadingWorkers || !workerLineId || !startProductSelectionId || workers.length === 0}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
             >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <PlayCircle size={16} />}
-              بدء الوردية الآن
-            </button>
+              {saving ? 'جاري...' : 'بدء الوردية الآن'}
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>
@@ -809,14 +809,9 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <Badge variant="success">مستمرة</Badge>
-            <button
-              type="button"
-              onClick={() => openCloseDialog(shift)}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold"
-            >
-              <Save size={16} />
+            <Button type="button" variant="secondary" onClick={() => openCloseDialog(shift)}>
               متابعة / إغلاق
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -870,15 +865,14 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                     وقت الإغلاق: {formatShiftTime(closeFlowReport.shiftClosedAt)}
                   </p>
                 </div>
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => void handleShareClosedReport()}
                   disabled={sharing}
-                  className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
                 >
-                  {sharing ? <Loader2 size={16} className="animate-spin" /> : <Share2 size={16} />}
-                  مشاركة واتساب
-                </button>
+                  {sharing ? 'جاري...' : 'مشاركة واتساب'}
+                </Button>
               </div>
             </div>
           ) : (
@@ -930,24 +924,18 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
         </div>
 
         <DialogFooter className="px-6 py-4 border-t border-[var(--color-border)] flex-col-reverse sm:flex-row gap-3 sm:space-x-0">
-          <button
+          <Button
             type="button"
+            variant="outline"
             onClick={() => handleCloseDialogOpenChange(false)}
             disabled={saving || sharing}
-            className="inline-flex items-center justify-center px-4 py-2.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-sm font-bold text-[var(--color-text-muted)] disabled:opacity-60"
           >
             {closeSucceeded ? 'إغلاق' : 'إلغاء'}
-          </button>
+          </Button>
           {!closeSucceeded && (
-            <button
-              type="button"
-              onClick={handleClose}
-              disabled={saving}
-              className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-emerald-600 text-white text-sm font-bold disabled:opacity-60"
-            >
-              {saving ? <Loader2 size={16} className="animate-spin" /> : <Save size={16} />}
-              إغلاق الوردية
-            </button>
+            <Button type="button" variant="secondary" onClick={handleClose} disabled={saving}>
+              {saving ? 'جاري...' : 'إغلاق الوردية'}
+            </Button>
           )}
         </DialogFooter>
       </DialogContent>
@@ -977,15 +965,14 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
             </div>
             <div className="flex flex-col sm:flex-row sm:items-center gap-2">
               <Badge variant="info">جاهزة للبدء</Badge>
-              <button
+              <Button
                 type="button"
+                variant="primary"
                 onClick={openStartDialog}
                 disabled={isGeneralContext && linesAvailableForStart.length === 0}
-                className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-[var(--border-radius-base)] bg-primary text-white text-sm font-bold disabled:opacity-60"
               >
-                <PlayCircle size={16} />
                 بدء الوردية
-              </button>
+              </Button>
             </div>
           </div>
           {startDialog}

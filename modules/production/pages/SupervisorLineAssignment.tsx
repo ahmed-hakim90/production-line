@@ -1,12 +1,14 @@
 import React, { memo, useEffect, useMemo, useState } from 'react';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { Button } from '../components/UI';
 import { useSupervisorStore } from '../stores/useSupervisorStore';
 import type {
   HistoryPeriod,
   SupervisorDistributionLine,
   SupervisorDistributionSupervisor,
 } from '../services/supervisorDistributionService';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 type ViewMode = 'grid' | 'list';
 
@@ -193,14 +195,14 @@ const LineCard = memo(({
               <p className="truncate text-sm font-medium text-gray-800">{activeSupervisor?.name}</p>
               <p className="text-xs font-normal text-gray-400">المعرف: {activeSupervisor?.code ?? '—'}</p>
             </div>
-            <button
+            <Button
               type="button"
               className="rounded-lg border border-red-200 px-2 py-1 text-xs font-normal text-red-700 hover:bg-red-50 disabled:opacity-50"
               onClick={() => onUnassign(line.id)}
               disabled={isSaving}
             >
               فك
-            </button>
+            </Button>
           </div>
           <SearchableSupervisorField
             supervisors={supervisors}
@@ -212,7 +214,7 @@ const LineCard = memo(({
       )}
 
       <footer className="flex flex-wrap items-center gap-2 border-t border-gray-100 pt-2">
-        <button
+        <Button
           type="button"
           className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-normal text-gray-600"
           onClick={() => onShowHistory(line)}
@@ -220,16 +222,16 @@ const LineCard = memo(({
           disabled={isSaving}
         >
           عرض السجل
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           className="rounded-lg border border-gray-200 px-2 py-1 text-xs font-normal text-gray-600 disabled:cursor-not-allowed disabled:opacity-50"
           onClick={() => onUnassign(line.id)}
           disabled={!hasSupervisor || isSaving}
         >
           فك التعيين
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           className="mr-auto rounded-lg px-3 py-1 text-xs font-normal text-white disabled:cursor-not-allowed disabled:opacity-50"
           style={{ backgroundColor: 'rgb(var(--color-primary))' }}
@@ -237,7 +239,7 @@ const LineCard = memo(({
           disabled={!pending || isSaving}
         >
           حفظ / تغيير
-        </button>
+        </Button>
       </footer>
     </article>
   );
@@ -364,15 +366,15 @@ export const SupervisorLineAssignment: React.FC = () => {
             </div>
           </div>
           <div className="flex items-center gap-2">
-            <button
+            <Button
               type="button"
               className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-normal text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
               onClick={() => void saveAll()}
               disabled={pendingCount === 0 || isSaving}
             >
-              حفظ الكل {pendingCount > 0 ? `(${toAr(pendingCount)})` : ''}
-            </button>
-            <button
+              {pendingCount > 0 ? `حفظ الكل (${toAr(pendingCount)})` : 'حفظ الكل'}
+            </Button>
+            <Button
               type="button"
               className="rounded-lg px-4 py-2 text-sm font-normal text-white disabled:cursor-not-allowed disabled:opacity-50"
               style={{ backgroundColor: 'rgb(var(--color-primary))' }}
@@ -380,7 +382,7 @@ export const SupervisorLineAssignment: React.FC = () => {
               disabled={refreshing || isSaving}
             >
               {refreshing ? 'جاري التحديث...' : 'تحديث'}
-            </button>
+            </Button>
           </div>
         </div>
       </section>
@@ -421,64 +423,56 @@ export const SupervisorLineAssignment: React.FC = () => {
         </div>
       </section>
 
-      <section className="rounded-xl border border-gray-200 bg-white p-3">
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center rounded-lg border border-gray-200 p-1">
-            <button
-              type="button"
-              className="rounded-lg px-3 py-1 text-sm font-normal"
-              style={period === 'today' ? { backgroundColor: 'rgb(var(--color-primary))', color: '#fff' } : undefined}
-              onClick={() => setPeriod('today')}
-            >
-              اليوم
-            </button>
-            <button
-              type="button"
-              className="rounded-lg px-3 py-1 text-sm font-normal"
-              style={period === 'yesterday' ? { backgroundColor: 'rgb(var(--color-primary))', color: '#fff' } : undefined}
-              onClick={() => setPeriod('yesterday')}
-            >
-              أمس
-            </button>
-          </div>
-
-          <input
-            type="date"
-            className="rounded-lg border border-gray-200 px-3 py-2 text-sm font-normal"
-            value={referenceDate}
-            onChange={(event) => setReferenceDate(event.target.value)}
-          />
-
-          <div className="relative w-full min-w-[220px] flex-1">
-            <span className="pointer-events-none absolute right-3 top-2.5 text-xs text-gray-400">⌕</span>
-            <input
-              type="search"
-              className="w-full rounded-lg border border-gray-200 py-2 pr-8 pl-3 text-sm font-normal outline-none focus:border-[rgb(var(--color-primary))]"
-              placeholder="ابحث بالخط أو المشرف الحالي..."
-              value={searchInput}
-              onChange={(event) => setSearchInput(event.target.value)}
-            />
-          </div>
-
-          <div className="flex items-center rounded-lg border border-gray-200 p-1">
-            <button
-              type="button"
-              className={`rounded-lg px-2 py-1 text-xs font-normal ${viewMode === 'grid' ? 'bg-gray-100' : ''}`}
-              onClick={() => setViewMode('grid')}
-              title="عرض شبكي"
-            >
-              ⊞
-            </button>
-            <button
-              type="button"
-              className={`rounded-lg px-2 py-1 text-xs font-normal ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
-              onClick={() => setViewMode('list')}
-              title="عرض قائمة"
-            >
-              ☰
-            </button>
-          </div>
-        </div>
+      <section className="rounded-xl border border-gray-200 bg-white p-0">
+        <SmartFilterBar
+          className="mb-0 border-0 rounded-xl"
+          searchPlaceholder="ابحث بالخط أو المشرف الحالي..."
+          searchValue={searchInput}
+          onSearchChange={setSearchInput}
+          periods={[
+            { label: 'اليوم', value: 'today' },
+            { label: 'أمس', value: 'yesterday' },
+          ]}
+          activePeriod={period}
+          onPeriodChange={(value) => setPeriod(value as HistoryPeriod)}
+          advancedFilters={[
+            {
+              key: 'referenceDate',
+              label: 'تاريخ مرجعي',
+              placeholder: 'اختر تاريخ',
+              type: 'date',
+              options: [],
+            },
+          ]}
+          advancedFilterValues={{ referenceDate }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'referenceDate') setReferenceDate(value);
+          }}
+          extra={
+            <div className="flex items-center rounded-lg border border-gray-200 p-1">
+              <Button
+                type="button"
+                size="icon"
+                iconName="grid_view"
+                tone="view"
+                className={`rounded-lg px-2 py-1 text-xs font-normal h-8 w-8 ${viewMode === 'grid' ? 'bg-gray-100' : ''}`}
+                onClick={() => setViewMode('grid')}
+                title="عرض شبكي"
+                aria-label="عرض شبكي"
+              />
+              <Button
+                type="button"
+                size="icon"
+                iconName="view_list"
+                tone="view"
+                className={`rounded-lg px-2 py-1 text-xs font-normal h-8 w-8 ${viewMode === 'list' ? 'bg-gray-100' : ''}`}
+                onClick={() => setViewMode('list')}
+                title="عرض قائمة"
+                aria-label="عرض قائمة"
+              />
+            </div>
+          }
+        />
       </section>
 
       {toast && (

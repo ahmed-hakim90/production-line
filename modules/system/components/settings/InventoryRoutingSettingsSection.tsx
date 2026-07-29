@@ -3,18 +3,13 @@ import type { InventoryRoutingSettings, PlanSettings } from '../../../../types';
 import type { Warehouse } from '../../../inventory/types';
 import { migrateInventoryRoutingV1 } from '../../../inventory/services/inventoryMigrationService';
 import { syncPlanSettingsWarehouseRouting } from '../../../inventory/lib/syncPlanSettingsWarehouseRouting';
+import {
+  applyRecommendedInventoryRoutingPolicy,
+  createEmptyInventoryRouting,
+  mapRoutingWarehouseIdsFromRoles,
+} from '../../../inventory/lib/recommendedInventoryRouting';
+import { WAREHOUSE_ROLE_LABELS } from '../../../inventory/lib/stockLabels';
 import { useAppStore } from '../../../../store/useAppStore';
-
-const WAREHOUSE_ROLE_LABELS: Record<string, string> = {
-  raw_material: 'مواد خام',
-  decomposed: 'مفكك / مستلزم إنتاج',
-  production_wip: 'إنتاج تحت التشغيل (WIP)',
-  finished_staging: 'تم الإنتاج',
-  final_product: 'منتج تام',
-  packaging: 'تغليف',
-  waste: 'هالك',
-  general: 'عام',
-};
 
 type Props = {
   isAdmin: boolean;
@@ -22,23 +17,6 @@ type Props = {
   setLocalPlanSettings: React.Dispatch<React.SetStateAction<PlanSettings>>;
   inventoryWarehouses: Warehouse[];
 };
-
-const emptyRouting = (): InventoryRoutingSettings => ({
-  rawMaterialWarehouseId: '',
-  decomposedWarehouseId: '',
-  productionWipWarehouseId: '',
-  finishedStagingWarehouseId: '',
-  finalProductWarehouseId: '',
-  packagingSourceWarehouseId: '',
-  packagingTargetWarehouseId: '',
-  wasteWarehouseId: '',
-  autoTransferProductionToFinished: true,
-  autoTransferFinishedToFinal: false,
-  requireApprovalForProductionEntry: true,
-  requireApprovalForAutoTransfers: false,
-  autoConsumeBomOnProductionReport: false,
-  requireIssuedProductionIssueOnReport: true,
-});
 
 export const InventoryRoutingSettingsSection: React.FC<Props> = ({
   isAdmin,
@@ -53,20 +31,43 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
   if (!isAdmin) return null;
 
   const synced = syncPlanSettingsWarehouseRouting(localPlanSettings);
-  const routing = { ...emptyRouting(), ...synced.inventoryRouting };
+  const routing = { ...createEmptyInventoryRouting(), ...synced.inventoryRouting };
 
   const patchRouting = (patch: Partial<InventoryRoutingSettings>) => {
     setLocalPlanSettings((prev) =>
       syncPlanSettingsWarehouseRouting({
         ...prev,
-        inventoryRouting: { ...emptyRouting(), ...prev.inventoryRouting, ...patch },
+        ...(Object.prototype.hasOwnProperty.call(patch, 'requireApprovalForProductionEntry')
+          ? { requireFinishedStockApprovalForReports: patch.requireApprovalForProductionEntry !== false }
+          : {}),
+        inventoryRouting: { ...createEmptyInventoryRouting(), ...prev.inventoryRouting, ...patch },
       }),
     );
   };
 
-  const conflictBomAndIssue =
-    Boolean(routing.autoConsumeBomOnProductionReport) &&
-    routing.requireIssuedProductionIssueOnReport !== false;
+  const applyRecommendedPolicy = () => {
+    setLocalPlanSettings((prev) =>
+      syncPlanSettingsWarehouseRouting(
+        applyRecommendedInventoryRoutingPolicy(prev, inventoryWarehouses),
+      ),
+    );
+    setMigrateMsg(
+      'تم تطبيق توصية المصنع + ربط الفراغات حسب دور كل مخزن (بدون تغيير الأسماء). احفظ الإعدادات.',
+    );
+  };
+
+  const linkByWarehouseRole = (overwrite: boolean) => {
+    setLocalPlanSettings((prev) =>
+      syncPlanSettingsWarehouseRouting(
+        mapRoutingWarehouseIdsFromRoles(prev, inventoryWarehouses, { overwrite }),
+      ),
+    );
+    setMigrateMsg(
+      overwrite
+        ? 'تم إعادة ربط كل الأدوار بمخازنك حسب الدور التشغيلي. راجع القوائم ثم احفظ.'
+        : 'تم ملء الخانات الفارغة فقط حسب دور كل مخزن. راجع القوائم ثم احفظ.',
+    );
+  };
 
   const runMigration = async () => {
     setMigrating(true);
@@ -80,7 +81,7 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
           ...localPlanSettings,
           ...freshPlan,
           inventoryRouting: {
-            ...emptyRouting(),
+            ...createEmptyInventoryRouting(),
             ...localPlanSettings.inventoryRouting,
             ...freshPlan.inventoryRouting,
           },
@@ -107,7 +108,7 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
   ) => (
     <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
       <p className="text-sm font-bold text-[var(--color-text)]">{label}</p>
-      {roleHint && <p className="text-xs text-[var(--color-text-muted)] mt-0.5">دور مقترح: {roleHint}</p>}
+      {roleHint && <p className="text-xs text-[var(--color-text-muted)] mt-0.5">دور تشغيلي: {roleHint} — اختَر مخزنك باسمه من القائمة</p>}
       <p className="text-xs text-[var(--color-text-muted)] mb-3">{hint}</p>
       <select
         className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3"
@@ -146,27 +147,61 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
         <div>
           <h3 className="text-base font-bold text-[var(--color-text)]">توجيه المخازن والإنتاج</h3>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            المسار التشغيلي: صرف إنتاج → تقرير → اعتماد إدخال → تم الإنتاج (بانتظار التغليف) → تغليف → منتج تام.
+            أسماء المخازن عندك حرة تماماً. العناوين أدناه أدوار تشغيلية — اختَر من القائمة المخزن باسمه اللي أنت سمّيته.
           </p>
         </div>
-        <button
-          type="button"
-          disabled={migrating}
-          onClick={() => void runMigration()}
-          className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold disabled:opacity-50"
-        >
-          {migrating ? 'جاري المزامنة...' : 'مزامنة إعدادات V1'}
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={applyRecommendedPolicy}
+            className="px-4 py-2 rounded-lg border border-emerald-600 text-emerald-800 bg-emerald-50 text-sm font-bold"
+          >
+            تطبيق توصية المصنع
+          </button>
+          <button
+            type="button"
+            onClick={() => linkByWarehouseRole(false)}
+            className="px-4 py-2 rounded-lg border border-sky-600 text-sky-900 bg-sky-50 text-sm font-bold"
+          >
+            ربط الفراغات حسب الدور
+          </button>
+          <button
+            type="button"
+            onClick={() => linkByWarehouseRole(true)}
+            className="px-4 py-2 rounded-lg border border-amber-600 text-amber-950 bg-amber-50 text-sm font-bold"
+          >
+            إعادة ربط الكل حسب الدور
+          </button>
+          <button
+            type="button"
+            disabled={migrating}
+            onClick={() => void runMigration()}
+            className="px-4 py-2 rounded-lg bg-primary text-white text-sm font-bold disabled:opacity-50"
+          >
+            {migrating ? 'جاري المزامنة...' : 'مزامنة إعدادات V1'}
+          </button>
+        </div>
       </div>
       {migrateMsg && <p className="text-sm font-medium text-slate-600">{migrateMsg}</p>}
+
+      <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
+        <p className="font-bold">اسم المخزن ≠ دور المخزن</p>
+        <p className="mt-1 text-xs leading-relaxed">
+          مثال: لو سمّيت المخزن «مخزن التجميع» أو «الجاهز»، سيّبه باسمه وعيّن له الدور المناسب من شاشة المخازن،
+          ثم اضغط «ربط الفراغات حسب الدور» هنا. النظام يشتغل بالـ ID، مش باسم الدور المكتوب في الكود.
+        </p>
+      </div>
 
       <div className="rounded-lg border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm text-emerald-950">
         <p className="font-bold">التوصية المعتمدة للمصنع</p>
         <ul className="mt-1 text-xs leading-relaxed list-disc pr-5 space-y-0.5">
-          <li>إلزام صرف إنتاج قبل التقرير + إيقاف خصم BOM من التقرير</li>
-          <li>اعتماد إدخال الإنتاج مرة واحدة؛ الترحيل إلى «تم الإنتاج» يتم تلقائياً بعده</li>
-          <li>مخزن التغليف (من) = تم الإنتاج، (إلى) = منتج تام</li>
+          <li>إيقاف خصم BOM من التقرير؛ الصرف يتم من صفحة صرف إنتاج عند تفعيل الإلزام.</li>
+          <li>اعتماد إدخال الإنتاج مرة واحدة؛ الترحيل للدور «تم الإنتاج» يتم تلقائياً بعده</li>
+          <li>تغليف: من = دور تم الإنتاج، إلى = دور منتج تام (بأسماء مخازنك أنت)</li>
         </ul>
+        <p className="mt-2 text-[11px] text-emerald-900/80">
+          «تطبيق توصية المصنع» يضبط أعلام الاعتماد ويملأ الخانات الفارغة من أدوار مخازنك الحالية دون تغيير أسمائها. ثم احفظ من أعلى الصفحة.
+        </p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -185,38 +220,20 @@ export const InventoryRoutingSettingsSection: React.FC<Props> = ({
         {toggle('تحويل تلقائي تم الإنتاج → منتج تام', 'غير موصى به إذا كان التغليف يمر عبر تقرير تغليف.', Boolean(routing.autoTransferFinishedToFinal), () => patchRouting({ autoTransferFinishedToFinal: !routing.autoTransferFinishedToFinal }))}
         {toggle('اعتماد إدخال الإنتاج', 'طلب اعتماد واحد قبل أن يسمع الرصيد في تم الإنتاج.', routing.requireApprovalForProductionEntry !== false, () => patchRouting({ requireApprovalForProductionEntry: !routing.requireApprovalForProductionEntry }))}
         {toggle('اعتماد التحويلات التلقائية الأخرى', 'لا يشمل ترحيل WIP→تم الإنتاج بعد اعتماد الإدخال (يُنفَّذ تلقائياً). يؤثر على مسارات أخرى مثل تم الإنتاج→التام.', routing.requireApprovalForAutoTransfers === true, () => patchRouting({ requireApprovalForAutoTransfers: !(routing.requireApprovalForAutoTransfers === true) }))}
-        {toggle(
-          'إلزام صرف إنتاج معتمد قبل تقرير الإنتاج',
-          'مفعّل افتراضياً: لا يُحفظ تقرير منتج تام إلا بعد اعتماد وإصدار إذن صرف. التقرير لا يخصم المكونات بنفسه.',
-          routing.requireIssuedProductionIssueOnReport !== false,
-          () => patchRouting({ requireIssuedProductionIssueOnReport: !(routing.requireIssuedProductionIssueOnReport !== false) }),
-        )}
-        {toggle(
-          'خصم BOM تلقائي عند حفظ التقرير',
-          'مطفأ افتراضياً. لا تستخدمه مع مسار صرف الإنتاج.',
-          Boolean(routing.autoConsumeBomOnProductionReport),
-          () => patchRouting({ autoConsumeBomOnProductionReport: !routing.autoConsumeBomOnProductionReport }),
-        )}
       </div>
 
-      {conflictBomAndIssue && (
-        <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
-          <p className="font-bold">تعارض إعدادات</p>
-          <p className="mt-1 text-xs leading-relaxed">
-            لا تجمع بين «إلزام صرف إنتاج» و«خصم BOM من التقرير» — سيحدث خصم مزدوج أو مسار غير واضح.
-            أوقف خصم BOM من التقرير واعتمد صفحة صرف الإنتاج فقط.
-          </p>
-          <button
-            type="button"
-            className="mt-2 text-xs font-bold underline"
-            onClick={() => patchRouting({ autoConsumeBomOnProductionReport: false })}
-          >
-            إيقاف خصم BOM من التقرير الآن
-          </button>
-        </div>
+      {localPlanSettings.enablePackagingStockTransfer
+        && (
+          !routing.packagingSourceWarehouseId
+          || !routing.packagingTargetWarehouseId
+          || routing.packagingSourceWarehouseId === routing.packagingTargetWarehouseId
+        ) && (
+        <p className="text-xs font-bold text-amber-600 dark:text-amber-400">
+          اختر مخزنين مختلفين للتغليف من/إلى لتفعيل تحويلات التغليف عند حفظ التقارير.
+        </p>
       )}
 
-      {routing.requireIssuedProductionIssueOnReport !== false && !conflictBomAndIssue && (
+      {routing.requireIssuedProductionIssueOnReport !== false && (
         <div className="rounded-lg border border-sky-300 bg-sky-50 px-4 py-3 text-sm text-sky-950">
           <p className="font-bold">مسار: صرف إنتاج أولاً ثم التقرير</p>
           <p className="mt-1 text-xs leading-relaxed">

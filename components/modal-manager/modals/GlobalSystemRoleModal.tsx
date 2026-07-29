@@ -1,10 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, CheckCircle2, Loader2, Pencil, Save, ShieldPlus, X } from 'lucide-react';
+import { Button } from '../../UI';
 import { useAppStore } from '../../../store/useAppStore';
 import {
   usePermission,
   PERMISSION_GROUPS,
   ALL_PERMISSIONS,
+  normalizeRolePermissions,
 } from '../../../utils/permissions';
 import type { FirestoreRole } from '../../../types';
 import { useManagedModalController } from '../GlobalModalManager';
@@ -59,7 +61,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
     const role = modalPayload?.role || null;
     setEditingRole(role);
     if (role) {
-      setEditPerms({ ...buildEmptyPerms(), ...role.permissions });
+      setEditPerms(normalizeRolePermissions({ ...buildEmptyPerms(), ...role.permissions }));
       setEditName(role.name || '');
       setEditColor(role.color || COLOR_OPTIONS[0].value);
     } else {
@@ -100,7 +102,11 @@ export const GlobalSystemRoleModal: React.FC = () => {
     setSaving(true);
     setSaveMsg(null);
     try {
-      const data = { name: editName.trim(), color: editColor, permissions: editPerms };
+      const data = {
+        name: editName.trim(),
+        color: editColor,
+        permissions: normalizeRolePermissions(editPerms),
+      };
       if (editingRole?.id) {
         await updateRole(editingRole.id, data);
         setSaveMsg({ type: 'success', text: t('modalManager.systemRole.updateSuccess') });
@@ -239,15 +245,15 @@ export const GlobalSystemRoleModal: React.FC = () => {
             {t('modalManager.systemRole.enabledPermissionsCount', { enabled: enabledCount, total: ALL_PERMISSIONS.length })}
           </span>
           <div className="flex items-center gap-2 w-full sm:w-auto">
-            <button className="btn btn-secondary w-full sm:w-auto" onClick={handleClose}>{t('ui.cancel')}</button>
-            <button
-              className="btn btn-primary w-full sm:w-auto"
+            <Button className="w-full sm:w-auto" variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
+            <Button
+              className="w-full sm:w-auto"
+              variant="primary"
               onClick={handleSave}
               disabled={saving || !editName.trim()}
             >
-              {saving ? <Loader2 size={15} className="animate-spin" /> : <Save size={15} />}
-              {editingRole ? t('modalManager.systemRole.saveChanges') : t('modalManager.systemRole.createRole')}
-            </button>
+              {saving ? 'جاري...' : (editingRole ? t('modalManager.systemRole.saveChanges') : t('modalManager.systemRole.createRole'))}
+            </Button>
           </div>
         </div>
       </div>

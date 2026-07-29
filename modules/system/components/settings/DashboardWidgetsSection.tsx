@@ -66,9 +66,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
           <p className="page-subtitle">تحكم في ترتيب وظهور العناصر من مكان واحد، مع إمكانية إضافة Widget جديد.</p>
         </div>
         <Button onClick={onSave} disabled={saving}>
-          {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
-          <span className="material-icons-round text-sm">save</span>
-          حفظ التغييرات
+          {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </Button>
       </div>
 
@@ -284,7 +282,6 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
         </div>
         <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
           <Button variant="outline" onClick={addCustomWidget}>
-            <span className="material-icons-round text-sm">add</span>
             إضافة Widget
           </Button>
         </div>

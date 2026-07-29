@@ -36,6 +36,7 @@ function testRecommendedRoutingDefaults() {
 function testArabicStageLabels() {
   assert.equal(WAREHOUSE_ROLE_LABELS.finished_staging, 'تم الإنتاج');
   assert.equal(WAREHOUSE_ROLE_LABELS.final_product, 'منتج تام');
+  assert.equal(WAREHOUSE_ROLE_LABELS.production_wip, 'إنتاج تحت التشغيل (WIP)');
   assert.equal(transferRequestTypeLabel('production_auto_transfer'), 'ترحيل إلى تم الإنتاج');
   assert.equal(transferRequestTypeLabel('packaging_transfer'), 'تحويل تغليف');
 }

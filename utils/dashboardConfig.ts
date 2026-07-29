@@ -4,6 +4,7 @@ import type {
   QuickActionColor, QuickActionType, CustomWidgetType, CustomWidgetConfig,
   ExportImportSettings, ExportImportPageControl, SidebarIconStyle, AttendanceIntegrationSettings,
 } from '../types';
+import { DEFAULT_REPORT_BEHAVIOR_SETTINGS } from '../modules/production/lib/reportBehaviorSettings';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../types';
 
 // ─── Widget Registry ─────────────────────────────────────────────────────────
@@ -28,6 +29,7 @@ export const CUSTOM_WIDGET_TYPES: WidgetTypeDefinition[] = [
 
 export const DASHBOARD_WIDGETS: Record<string, WidgetDefinition[]> = {
   dashboard: [
+    { id: 'decision_queue', label: 'طابور القرارات التشغيلية', icon: 'rule' },
     { id: 'kpi_row', label: 'مؤشرات الأداء', icon: 'speed' },
     { id: 'product_cost_analysis', label: 'تحليل تكلفة المنتجات', icon: 'price_check' },
     { id: 'daily_cost_chart', label: 'الإنتاج اليومي مقابل التكلفة', icon: 'insights' },
@@ -35,6 +37,7 @@ export const DASHBOARD_WIDGETS: Record<string, WidgetDefinition[]> = {
     { id: 'smart_planning', label: 'التخطيط الذكي', icon: 'calculate' },
   ],
   adminDashboard: [
+    { id: 'decision_queue', label: 'طابور القرارات التشغيلية', icon: 'rule' },
     { id: 'operational_kpis', label: 'مؤشرات تشغيلية', icon: 'precision_manufacturing' },
     { id: 'system_kpis', label: 'مؤشرات النظام', icon: 'computer' },
     { id: 'alerts', label: 'التنبيهات', icon: 'notifications_active' },
@@ -51,6 +54,7 @@ export const DASHBOARD_WIDGETS: Record<string, WidgetDefinition[]> = {
     { id: 'product_performance', label: 'ملخص أداء المنتجات', icon: 'table_chart' },
   ],
   factoryDashboard: [
+    { id: 'decision_queue', label: 'طابور القرارات التشغيلية', icon: 'rule' },
     { id: 'kpis', label: 'مؤشرات الأداء', icon: 'speed' },
     { id: 'alerts', label: 'التنبيهات', icon: 'notifications_active' },
     { id: 'production_cost_chart', label: 'الإنتاج مقابل التكلفة', icon: 'show_chart' },
@@ -90,9 +94,10 @@ export const ALL_DASHBOARD_WIDGET_DEFS: Record<string, WidgetDefinition> = (() =
  * When empty, saved `dashboardWidgets[dashboardKey]` is the full source of truth for built-ins.
  */
 export const DASHBOARD_BUILTIN_WIDGET_MIGRATIONS: Record<string, readonly string[]> = {
-  dashboard: [],
-  adminDashboard: [],
+  dashboard: ['decision_queue'],
+  adminDashboard: ['decision_queue', 'health_score'],
   factoryDashboard: [
+    'decision_queue',
     'top_workers',
     'workers_below_target',
     'today_avg_worker_achievement',
@@ -252,6 +257,7 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   inventoryExceptionManualThreshold: 500,
   operationalMonthStartDay: 26,
   useOperationalPeriodDailyTarget: true,
+  reportBehavior: DEFAULT_REPORT_BEHAVIOR_SETTINGS,
   inventoryRouting: {
     rawMaterialWarehouseId: '',
     decomposedWarehouseId: '',
@@ -261,10 +267,12 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
     packagingSourceWarehouseId: '',
     packagingTargetWarehouseId: '',
     wasteWarehouseId: '',
-    autoTransferProductionToFinished: false,
+    /** Factory path: after production_entry approval, move WIP → تم الإنتاج */
+    autoTransferProductionToFinished: true,
     autoTransferFinishedToFinal: false,
     requireApprovalForProductionEntry: true,
-    requireApprovalForAutoTransfers: true,
+    /** Defer WIP→staging via production_entry approval; other autos optional */
+    requireApprovalForAutoTransfers: false,
     autoConsumeBomOnProductionReport: false,
     requireIssuedProductionIssueOnReport: true,
   },
@@ -446,7 +454,12 @@ export function getWidgetOrder(
   );
   const missingCustom = customDefaults.filter((widget) => !knownIds.has(widget.id));
 
-  return [...savedOrder, ...missingMigrated, ...missingCustom];
+  // Decision queue should surface first for operational dashboards after migration.
+  const priorityIds = new Set(['decision_queue']);
+  const prependMigrated = missingMigrated.filter((widget) => priorityIds.has(widget.id));
+  const appendMigrated = missingMigrated.filter((widget) => !priorityIds.has(widget.id));
+
+  return [...prependMigrated, ...savedOrder, ...appendMigrated, ...missingCustom];
 }
 
 export function isWidgetVisible(

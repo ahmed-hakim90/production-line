@@ -1284,21 +1284,8 @@ export const Supervisors: React.FC = () => {
         </button>
       </div>
 
-      {/* Advanced Filters */}
-      <Card className="erpnext-filter-card">
-        <div className="erpnext-filter-head mb-4">
-          <p className="erpnext-filter-title">فلترة المشرفين</p>
-          <div className="flex items-center gap-2">
-            <span className="erpnext-filter-chip">{filtered.length} نتيجة</span>
-            {hasActiveFilters && (
-              <Button variant="outline" className="text-xs !py-1.5 !px-2.5" onClick={clearAllFilters}>
-                <span className="material-icons-round text-sm">filter_alt_off</span>
-                مسح
-              </Button>
-            )}
-          </div>
-        </div>
-
+      {/* Filters + table */}
+      <Card className="!p-0 overflow-hidden">
         <SmartFilterBar
           searchPlaceholder="ابحث باسم المشرف أو الكود..."
           searchValue={search}
@@ -1340,18 +1327,15 @@ export const Supervisors: React.FC = () => {
           }}
           onApply={handleApplyDateRange}
           applyLabel={reportsLoading ? 'جار التحميل...' : 'عرض'}
-          className="mb-4"
+          className="mb-0 border-0 rounded-none"
         />
 
-        <div className="mb-4 erpnext-date-scope">
-          {rangeError && (
-            <div className="text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-[var(--border-radius-base)] px-3 py-2">
-              {rangeError}
-            </div>
-          )}
-        </div>
+        {rangeError && (
+          <div className="mx-3 mb-3 text-xs text-rose-600 bg-rose-50 border border-rose-100 rounded-[var(--border-radius-base)] px-3 py-2">
+            {rangeError}
+          </div>
+        )}
 
-        {/* Table */}
         <SelectableTable<SupervisorRow>
           data={filtered}
           columns={columns}

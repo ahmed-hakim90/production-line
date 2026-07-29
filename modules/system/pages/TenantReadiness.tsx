@@ -36,7 +36,7 @@ export const TenantReadiness: React.FC = () => {
         title="جاهزية المستأجر"
         subtitle="فحص إعداد التشغيل الأساسي قبل الاعتماد على التقارير والمخزون"
         actions={
-          <PrimaryButton onClick={() => void load()} disabled={loading}>
+          <PrimaryButton onClick={() => void load()} disabled={loading} iconName="refresh" tone="neutral">
             إعادة الفحص
           </PrimaryButton>
         }

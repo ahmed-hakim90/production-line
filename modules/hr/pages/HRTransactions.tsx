@@ -25,6 +25,7 @@ import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '../types';
 import { PageHeader } from '../../../components/PageHeader';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 const TX_CACHE_KEY = 'hr:transactions';
 
@@ -488,83 +489,56 @@ export const HRTransactions: React.FC = () => {
         ))}
       </div>
 
-      {/* Filters */}
-      <Card>
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">Ř¨Ř­ŘŤ</label>
-            <input
-              type="text"
-              className="input input-sm w-full"
-              placeholder="إکآ§إکإ‚إ®آ… / إ®آƒإ®آˆŘŻ / إ®آˆŘľŮ..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکآ§إ®آ„إ®آ…إ®آˆإکآ¸Ů</label>
+      {/* Filters + Table */}
+      <Card className="mb-0 border-0 rounded-none">
+        <SmartFilterBar
+          className="mb-0 border-0 rounded-none"
+          searchPlaceholder="بحث بالاسم / كود / وصف..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'status',
+              placeholder: 'جميع الحالات',
+              options: uniqueStatuses,
+            },
+          ]}
+          quickFilterValues={{ status: filterStatus }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'status') setFilterStatus(value);
+          }}
+          advancedFilters={[
+            {
+              key: 'dateFrom',
+              label: 'من تاريخ',
+              placeholder: 'من',
+              type: 'date',
+              options: [],
+            },
+            {
+              key: 'dateTo',
+              label: 'إلى تاريخ',
+              placeholder: 'إلى',
+              type: 'date',
+              options: [],
+            },
+          ]}
+          advancedFilterValues={{ dateFrom: filterFrom, dateTo: filterTo }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'dateFrom') setFilterFrom(value);
+            else if (key === 'dateTo') setFilterTo(value);
+          }}
+          extra={
             <SearchableSelect
-              options={empOptions}
+              options={[{ value: '', label: 'كل الموظفين' }, ...empOptions]}
               value={filterEmployee}
               onChange={setFilterEmployee}
-              placeholder="إ®آƒإ®آ„ إکآ§إ®آ„إ®آ…إ®آˆإکآ¸ŮŮإ®آ†"
+              placeholder="تصفية بالموظف..."
+              className="sm:w-64"
             />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکآ§إ®آ„إکآ­إکآ§إ®آ„إکإ </label>
-            <select
-              className="input input-sm w-full"
-              value={filterStatus}
-              onChange={(e) => setFilterStatus(e.target.value)}
-            >
-              <option value="">إکآ§إ®آ„إ®آƒإ®آ„</option>
-              {uniqueStatuses.map((s) => (
-                <option key={s.value} value={s.value}>{s.label}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إ®آ…إ®آ† إکإ‍إکآ§إکؤ…ŮŘŽ</label>
-            <input
-              type="date"
-              className="input input-sm w-full"
-              value={filterFrom}
-              onChange={(e) => setFilterFrom(e.target.value)}
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">إکؤ½إ®آ„إ®آ‰ إکإ‍إکآ§إکؤ…ŮŘŽ</label>
-            <input
-              type="date"
-              className="input input-sm w-full"
-              value={filterTo}
-              onChange={(e) => setFilterTo(e.target.value)}
-            />
-          </div>
-        </div>
-        {(filterType !== 'all' || filterEmployee || filterStatus || filterFrom || filterTo || search) && (
-          <div className="mt-3 flex items-center gap-2 text-xs text-slate-500">
-            <span className="material-icons-round text-sm">filter_list</span>
-            إکإ،إکؤ…إکإ› {filtered.length} إ®آ…إ®آ† {transactions.length} إکآ­إکؤ…إ®آƒإکإ 
-            <button
-              className="text-primary hover:underline"
-              onClick={() => {
-                setFilterType('all');
-                setFilterEmployee('');
-                setFilterStatus('');
-                setFilterFrom('');
-                setFilterTo('');
-                setSearch('');
-              }}
-            >
-              إ®آ…إکإ‚إکآ­ إکآ§إ®آ„Ůإ®آ„إکإ‍إکؤ…
-            </button>
-          </div>
-        )}
-      </Card>
+          }
+        />
 
-      {/* Table */}
-      <Card>
         {filtered.length === 0 ? (
           <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-5xl mb-2">inbox</span>

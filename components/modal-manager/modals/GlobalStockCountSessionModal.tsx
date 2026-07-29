@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '../../../modules/production/components/UI';
+import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { stockService } from '../../../modules/inventory/services/stockService';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -149,8 +150,12 @@ export const GlobalStockCountSessionModal: React.FC = () => {
           <Button variant="outline" onClick={() => close()}>إغلاق</Button>
           {session.status !== 'approved' && data.canManage && (
             <>
-              <Button variant="outline" onClick={() => void saveLines()} disabled={saving}>حفظ الكميات</Button>
-              <Button variant="primary" onClick={() => void approve()} disabled={saving}>مطابقة واعتماد الفروقات</Button>
+              <ToneActionButton action="save" onClick={() => void saveLines()} disabled={saving} loading={saving}>
+                حفظ الكميات
+              </ToneActionButton>
+              <ToneActionButton action="approve" icon="playlist_add_check" onClick={() => void approve()} disabled={saving} loading={saving}>
+                مطابقة واعتماد الفروقات
+              </ToneActionButton>
             </>
           )}
         </div>

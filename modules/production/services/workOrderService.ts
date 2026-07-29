@@ -186,6 +186,29 @@ export const workOrderService = {
     }
   },
 
+  /** Status change with history stamp — prefer usecase `updateWorkOrderStatus`. */
+  async updateStatus(id: string, status: WorkOrder['status']): Promise<void> {
+    if (!isConfigured) return;
+    await updateDoc(doc(db, COLLECTION, id), {
+      status,
+      updatedAt: serverTimestamp(),
+      [`statusHistory.${status}`]: serverTimestamp(),
+    });
+  },
+
+  /** Reopen a completed work order for correction — prefer usecase `reopenCompletedWorkOrder`. */
+  async reopenFromCompleted(id: string): Promise<void> {
+    if (!isConfigured) return;
+    await updateDoc(doc(db, COLLECTION, id), {
+      status: 'in_progress',
+      updatedAt: serverTimestamp(),
+      completedAt: deleteField(),
+      scanSessionClosedAt: deleteField(),
+      reopenedFromCompletedAt: serverTimestamp(),
+      'statusHistory.in_progress': serverTimestamp(),
+    });
+  },
+
   async delete(id: string): Promise<void> {
     if (!isConfigured) return;
     try {

@@ -11,7 +11,7 @@ import {
   buildSupervisorHourlyRatesMap,
   computeLiveProductCosts,
 } from '../../../utils/costCalculations';
-import { productMaterialService } from '../../production/services/productMaterialService';
+import { loadProductMaterialsByProductIds } from '../../catalog/lib/productComponents';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { MonthlyProductionCost, ProductMaterial } from '../../../types';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
@@ -489,13 +489,15 @@ export const MonthlyProductionCosts: React.FC = () => {
     const loadMaterialTotals = async () => {
       if (missingProductIds.length > 0) {
         try {
-          const allMaterials = await productMaterialService.getAll();
+          const lists = await loadProductMaterialsByProductIds(missingProductIds);
           const manufacturingMaterials = await materialService.getAll();
           const linkContext = buildInternalMaterialLinkContext(_rawProducts, manufacturingMaterials);
           const linkedProductIds = new Set<string>();
-          allMaterials.forEach((material) => {
-            const linkedProductId = resolveLinkedProductIdForMaterial(material, linkContext);
-            if (linkedProductId) linkedProductIds.add(linkedProductId);
+          Object.values(lists).forEach((materials) => {
+            materials.forEach((material) => {
+              const linkedProductId = resolveLinkedProductIdForMaterial(material, linkContext);
+              if (linkedProductId) linkedProductIds.add(linkedProductId);
+            });
           });
 
           const missingLinkedProductIds = Array.from(linkedProductIds).filter(
@@ -508,13 +510,6 @@ export const MonthlyProductionCosts: React.FC = () => {
             });
           }
 
-          const lists: Record<string, ProductMaterial[]> = {};
-          allMaterials.forEach((material) => {
-            const pid = String(material.productId || '');
-            if (!pid) return;
-            if (!lists[pid]) lists[pid] = [];
-            lists[pid].push(material);
-          });
           const manufacturingAvgByProductId = new Map<string, number>();
           Object.entries(manufacturingAvgCacheRef.current).forEach(([productId, avg]) => {
             manufacturingAvgByProductId.set(productId, Number(avg || 0));
@@ -529,8 +524,14 @@ export const MonthlyProductionCosts: React.FC = () => {
               unitCost: line.resolvedUnitCost,
             }));
           });
-          materialTotalCacheRef.current = resolvedAggregated;
-          materialsListByProductCacheRef.current = resolvedLists;
+          materialTotalCacheRef.current = {
+            ...materialTotalCacheRef.current,
+            ...resolvedAggregated,
+          };
+          materialsListByProductCacheRef.current = {
+            ...materialsListByProductCacheRef.current,
+            ...resolvedLists,
+          };
         } catch {
           missingProductIds.forEach((pid) => {
             materialTotalCacheRef.current[pid] = materialTotalCacheRef.current[pid] ?? 0;

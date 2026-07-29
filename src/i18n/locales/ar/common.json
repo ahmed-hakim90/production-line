@@ -137,6 +137,9 @@
       "searchPlaceholder": "ابحث...",
       "applyLabel": "عرض",
       "advancedFilters": "فلاتر إضافية",
+      "addFilter": "إضافة فلتر",
+      "availableFilters": "الفلاتر المتاحة",
+      "noMoreFilters": "لا فلاتر إضافية",
       "clearAll": "مسح الكل",
       "activeFilters": "فلاتر نشطة:"
     },

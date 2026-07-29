@@ -164,14 +164,16 @@ export const LineProductWorkerTargetsSection: React.FC<Props> = ({ lineId }) => 
                     </td>
                     {canManage && (
                       <td className="py-2 text-center">
-                        <button
+                        <Button
                           type="button"
-                          className="text-xs font-bold text-primary disabled:opacity-40"
+                          variant="ghost"
+                          size="sm"
+                          className="!h-auto !px-1.5 !py-0.5 text-xs font-bold text-primary disabled:opacity-40"
                           disabled={!dirty || savingId === configId}
                           onClick={() => void saveTarget(configId, value)}
                         >
                           {savingId === configId ? '...' : 'حفظ'}
-                        </button>
+                        </Button>
                       </td>
                     )}
                   </tr>

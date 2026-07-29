@@ -312,22 +312,21 @@ export const GlobalAttendanceShiftRulesModal: React.FC = () => {
         </div>
 
         <div className="flex items-center justify-between gap-3 pt-4 border-t border-[var(--color-border)] mt-4">
-          <button type="button" className="btn btn-secondary" onClick={() => close()}>
+          <Button type="button" variant="outline" onClick={() => close()} iconName="close" tone="neutral">
             {t('ui.close')}
-          </button>
-          <button type="button" className="btn btn-primary" onClick={() => void handleSaveRules()} disabled={savingRules || !selectedShiftId}>
-            {savingRules ? (
-              <>
-                <span className="material-icons-round animate-spin text-sm">sync</span>
-                {t('modalManager.attendanceShiftRules.saving')}
-              </>
-            ) : (
-              <>
-                <span className="material-icons-round text-sm">save</span>
-                {t('modalManager.attendanceShiftRules.saveRules')}
-              </>
-            )}
-          </button>
+          </Button>
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => void handleSaveRules()}
+            disabled={savingRules || !selectedShiftId}
+            iconName={savingRules ? 'sync' : 'save'}
+            tone="save"
+          >
+            {savingRules
+              ? t('modalManager.attendanceShiftRules.saving')
+              : t('modalManager.attendanceShiftRules.saveRules')}
+          </Button>
         </div>
       </div>
     </div>

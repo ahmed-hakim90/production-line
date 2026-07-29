@@ -3,6 +3,7 @@ import { Badge } from '../../components/UI';
 import { formatNumber } from '../../../../utils/calculations';
 import { getTransferDisplay, type TransferDisplayUnitMode } from '../../utils/transferUnits';
 import { Skeleton } from '@/components/ui/skeleton';
+import { TableIconAction } from '@/src/components/erp';
 import type { InventoryTransferRequest, StockTransaction } from '../../types';
 import type { ApprovedTransferGroup, CombinedRow } from './types';
 import { movementLabel } from './types';
@@ -152,63 +153,45 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
                       {perm.export && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="export"
                           onClick={() => onExportExcel([tx])}
                           title="تصدير Excel"
                           aria-label={`تصدير Excel للحركة ${tx.itemName}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors"
-                        >
-                          <span className="material-icons-round text-sm">download</span>
-                        </button>
+                        />
                       )}
                       {perm.print && tx.movementType === 'TRANSFER' && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="print"
                           onClick={() => void onPrintTransfer(tx)}
                           disabled={processing}
-                          title="طباعة"
                           aria-label={`طباعة تحويلة ${tx.referenceNo ?? ''}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">print</span>
-                        </button>
+                        />
                       )}
                       {perm.print && tx.movementType === 'TRANSFER' && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="share"
                           onClick={() => void onShareTransfer(tx)}
                           disabled={processing}
                           title="مشاركة واتساب"
                           aria-label={`مشاركة تحويلة ${tx.referenceNo ?? ''} على واتساب`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">share</span>
-                        </button>
+                        />
                       )}
                       {perm.edit && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="edit"
                           onClick={() => void onEditRow(tx)}
                           disabled={processing}
-                          title="تعديل"
                           aria-label={`تعديل حركة ${tx.itemName}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">edit</span>
-                        </button>
+                        />
                       )}
                       {perm.delete && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="delete"
                           onClick={() => void onDeleteRows([tx])}
                           disabled={processing}
-                          title="حذف"
                           aria-label={`حذف حركة ${tx.itemName}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">delete</span>
-                        </button>
+                        />
                       )}
                     </div>
                   </td>
@@ -260,62 +243,45 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                   <td className="px-4 py-3 text-sm">{group.createdBy}</td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1.5">
-                      <button
-                        type="button"
+                      <TableIconAction
+                        action="view"
                         onClick={() => onOpenApproved(group)}
                         disabled={processing}
                         title="عرض التفاصيل"
                         aria-label={`عرض تفاصيل التحويلة ${group.referenceNo}`}
-                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">visibility</span>
-                      </button>
+                      />
                       {perm.print && group.lines[0] && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="print"
                           onClick={() => void onPrintTransfer(group.lines[0])}
                           disabled={processing}
-                          title="طباعة"
                           aria-label={`طباعة التحويلة ${group.referenceNo}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">print</span>
-                        </button>
+                        />
                       )}
                       {perm.print && group.lines[0] && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="share"
                           onClick={() => void onShareTransfer(group.lines[0], 'transfer')}
                           disabled={processing}
                           title="مشاركة واتساب"
                           aria-label={`مشاركة التحويلة ${group.referenceNo}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">share</span>
-                        </button>
+                        />
                       )}
                       {perm.export && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="export"
                           onClick={() => onExportExcel(group.lines)}
                           title="تصدير Excel"
                           aria-label={`تصدير Excel للتحويلة ${group.referenceNo}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors"
-                        >
-                          <span className="material-icons-round text-sm">download</span>
-                        </button>
+                        />
                       )}
                       {perm.delete && group.lines[0] && (
-                        <button
-                          type="button"
+                        <TableIconAction
+                          action="delete"
                           onClick={() => void onDeleteRows([group.lines[0]])}
                           disabled={processing}
-                          title="حذف"
                           aria-label={`حذف التحويلة ${group.referenceNo}`}
-                          className="p-2 rounded-[var(--border-radius-base)] border border-rose-200 dark:border-rose-900/60 text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          <span className="material-icons-round text-sm">delete</span>
-                        </button>
+                        />
                       )}
                     </div>
                   </td>
@@ -364,49 +330,35 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
                 <td className="px-4 py-3 text-sm">{row.createdBy}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
+                    <TableIconAction
+                      action="view"
                       onClick={() => onOpenPending(row)}
                       disabled={processing}
                       title="عرض التفاصيل"
                       aria-label={`عرض تحويلة معلقة ${row.referenceNo}`}
-                      className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <span className="material-icons-round text-sm">visibility</span>
-                    </button>
-                    <button
-                      type="button"
+                    />
+                    <TableIconAction
+                      action="print"
                       onClick={() => void onPrintPending(row)}
                       disabled={processing}
-                      title="طباعة"
                       aria-label={`طباعة تحويلة معلقة ${row.referenceNo}`}
-                      className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                    >
-                      <span className="material-icons-round text-sm">print</span>
-                    </button>
+                    />
                     {perm.print && (
-                      <button
-                        type="button"
+                      <TableIconAction
+                        action="share"
                         onClick={() => void onSharePending(row)}
                         disabled={processing}
                         title="مشاركة واتساب"
                         aria-label={`مشاركة تحويلة معلقة ${row.referenceNo}`}
-                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">share</span>
-                      </button>
+                      />
                     )}
                     {perm.edit && (
-                      <button
-                        type="button"
+                      <TableIconAction
+                        action="edit"
                         onClick={() => onOpenPendingEdit(row)}
                         disabled={processing}
-                        title="تعديل"
                         aria-label={`تعديل تحويلة معلقة ${row.referenceNo}`}
-                        className="p-2 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-[var(--color-text-muted)] hover:bg-[#f8f9fa] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <span className="material-icons-round text-sm">edit</span>
-                      </button>
+                      />
                     )}
                   </div>
                 </td>

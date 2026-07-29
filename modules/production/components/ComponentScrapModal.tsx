@@ -3,12 +3,11 @@ import { createPortal } from 'react-dom';
 import { Loader2, Package2, Plus, Save, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from './UI';
-import { productMaterialService } from '../services/productMaterialService';
-import { rawMaterialService } from '../../inventory/services/rawMaterialService';
+import { loadProductComponents } from '../../catalog/lib/productComponents';
 import { stockService } from '../../inventory/services/stockService';
 import { useAppStore } from '../../../store/useAppStore';
-import type { ProductMaterial, ReportComponentScrapItem } from '../../../types';
-import type { RawMaterial, StockItemBalance } from '../../inventory/types';
+import type { ReportComponentScrapItem } from '../../../types';
+import type { StockItemBalance } from '../../inventory/types';
 import { formatNumber } from '../../../utils/calculations';
 import { useTranslation } from 'react-i18next';
 import { getPortalContainer } from '@/lib/portalRoot';
@@ -33,16 +32,6 @@ const getModalPortalContainer = (): HTMLElement | null => {
   if (typeof document === 'undefined') return null;
   return document.getElementById('erp-modal-root') ?? getPortalContainer();
 };
-
-const normalizeText = (value: string) =>
-  String(value || '')
-    .trim()
-    .toLowerCase()
-    .replace(/[\u064B-\u065F\u0670]/g, '')
-    .replace(/[أإآٱ]/g, 'ا')
-    .replace(/ة/g, 'ه')
-    .replace(/ى/g, 'ي')
-    .replace(/\s+/g, ' ');
 
 export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
   open,
@@ -83,13 +72,12 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
       setLoading(true);
       try {
         const decomposedWarehouseId = String(settings?.decomposedSourceWarehouseId || '').trim();
-        const [linkedMaterials, rawMaterials, balances] = await Promise.all([
-          productMaterialService.getByProduct(trimmedProductId),
-          rawMaterialService.getAll(),
+        const [components, balances] = await Promise.all([
+          loadProductComponents(trimmedProductId),
           stockService.getBalances(),
         ]);
         if (cancelled) return;
-        setOptions(resolveMaterialOptions(linkedMaterials, rawMaterials, balances, decomposedWarehouseId));
+        setOptions(resolveMaterialOptionsFromCatalog(components, balances, decomposedWarehouseId));
       } catch {
         if (cancelled) return;
         setOptions([]);
@@ -260,13 +248,16 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
                         />
                       </div>
                       <div className="flex items-end">
-                        <button
+                        <Button
                           type="button"
-                          className="px-3 py-2.5 rounded-md bg-rose-500/10 text-rose-700 hover:bg-rose-500/15 dark:text-rose-400 dark:hover:bg-rose-500/20 text-sm font-bold transition-colors"
+                          variant="outline"
+                          className="px-3 py-2.5"
                           onClick={() => removeRow(index)}
+                          iconName="delete"
+                          tone="delete"
                         >
                           {t('modalManager.componentScrap.remove')}
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   );
@@ -282,10 +273,10 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
           )}
         </div>
         <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
-          <Button variant="outline" onClick={onClose}>
+          <Button variant="outline" onClick={onClose} iconName="close" tone="neutral">
             {t('ui.close')}
           </Button>
-          <Button variant="primary" onClick={handleSave} disabled={!canSave}>
+          <Button variant="primary" onClick={handleSave} disabled={!canSave} tone="save">
             <Save size={14} />
             {t('modalManager.componentScrap.save')}
           </Button>
@@ -299,38 +290,33 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
   return createPortal(modalContent, portalTarget);
 };
 
-function resolveMaterialOptions(
-  linkedMaterials: ProductMaterial[],
-  rawMaterials: RawMaterial[],
+function resolveMaterialOptionsFromCatalog(
+  components: Array<{
+    materialId: string;
+    materialName: string;
+    qtyPerUnit?: number;
+    purchaseCost?: number;
+  }>,
   balances: StockItemBalance[],
   decomposedWarehouseId: string,
 ): MaterialOption[] {
-  const rawById = new Map(rawMaterials.filter((rm) => Boolean(rm.id)).map((rm) => [String(rm.id), rm]));
-  const rawByName = new Map(rawMaterials.map((rm) => [normalizeText(rm.name), rm]));
-  const balanceKey = (materialId: string) => `${decomposedWarehouseId}__${materialId}`;
-  const balanceByMaterial = new Map<string, number>();
-
+  const balanceByKey = new Map<string, number>();
   for (const row of balances) {
-    if (row.itemType !== 'raw_material') continue;
+    if (row.itemType !== 'raw_material' && row.itemType !== 'material') continue;
     if (!row.itemId || !row.warehouseId) continue;
-    balanceByMaterial.set(`${row.warehouseId}__${row.itemId}`, Number(row.quantity || 0));
+    const key = `${row.warehouseId}__${row.itemId}`;
+    balanceByKey.set(key, (balanceByKey.get(key) || 0) + Number(row.quantity || 0));
   }
 
-  const unique = new Map<string, MaterialOption>();
-  for (const material of linkedMaterials) {
-    const raw =
-      (material.materialId ? rawById.get(material.materialId) : undefined)
-      ?? rawByName.get(normalizeText(material.materialName || ''));
-    if (!raw?.id) continue;
-    if (unique.has(raw.id)) continue;
-    unique.set(raw.id, {
-      materialId: raw.id,
-      materialName: raw.name,
-      quantityUsed: Number(material.quantityUsed || 0),
-      unitCost: Number(material.unitCost || 0),
-      balanceInDecomposed: Number(balanceByMaterial.get(balanceKey(raw.id)) || 0),
-    });
-  }
-
-  return Array.from(unique.values()).sort((a, b) => a.materialName.localeCompare(b.materialName, 'ar'));
+  return components
+    .map((component) => ({
+      materialId: component.materialId,
+      materialName: component.materialName,
+      quantityUsed: Number(component.qtyPerUnit || 0),
+      unitCost: Number(component.purchaseCost || 0),
+      balanceInDecomposed: Number(
+        balanceByKey.get(`${decomposedWarehouseId}__${component.materialId}`) || 0,
+      ),
+    }))
+    .sort((a, b) => a.materialName.localeCompare(b.materialName, 'ar'));
 }

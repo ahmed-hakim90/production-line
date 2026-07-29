@@ -5,6 +5,8 @@ import { Card, Button, Badge } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
+import { createLeaveRequest } from '../usecases/createLeaveRequest';
+import { unwrapOrThrow } from '@/shared/usecases';
 import { getLeaveTypesFromConfig, leaveTypeMapByKey, type LeaveTypeDefinition } from '../leaveTypes';
 import { loanService } from '../loanService';
 import { createRequest, getPendingApprovals, type ApprovalEmployeeInfo, type FirestoreApprovalRequest } from '../approval';
@@ -335,7 +337,7 @@ export const EmployeeSelfService: React.FC = () => {
         ? allEmployees
         : [...allEmployees, requester];
 
-      const leaveRequestId = await leaveRequestService.create({
+      const leaveRequestId = unwrapOrThrow(await createLeaveRequest({
         employeeId,
         leaveType,
         leaveTypeLabel: selectedLeaveType?.label || LEAVE_TYPE_LABELS[leaveType] || leaveType,
@@ -349,7 +351,7 @@ export const EmployeeSelfService: React.FC = () => {
         finalStatus: 'pending',
         reason: reason.trim() || '—',
         createdBy: uid,
-      });
+      }, { userId: uid || undefined })).leaveRequestId;
       const approvalEmployees = employeesForApproval
         .filter((e): e is FirestoreEmployee => Boolean(e.id))
         .map((e) => toApprovalEmployeeInfo(e));
@@ -618,7 +620,6 @@ export const EmployeeSelfService: React.FC = () => {
                 </p>
               </div>
               <Button onClick={() => navigate('/hr/approval-center')}>
-                <span className="material-icons-round text-sm">open_in_new</span>
                 فتح مركز الموافقات
               </Button>
             </div>
@@ -918,7 +919,6 @@ export const EmployeeSelfService: React.FC = () => {
                     </p>
                   </div>
                   <Button onClick={handlePrintLockedPayslip}>
-                    <span className="material-icons-round text-sm">print</span>
                     طباعة الكشف
                   </Button>
                 </div>

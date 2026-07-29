@@ -15,6 +15,8 @@ import {
   Download,
   Eye,
   GripVertical,
+  LayoutGrid,
+  List,
   Loader2,
   Package,
   Pencil,
@@ -63,7 +65,7 @@ import { exportAllProducts, exportProductBomExcel } from '../../../utils/exportE
 import type { ProductExportOptions, ProductBomExportRow } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import type { ProductMaterial } from '../../../types';
-import { productMaterialService } from '../services/productMaterialService';
+import { loadProductMaterials, loadProductMaterialsByProductIds } from '../../catalog/lib/productComponents';
 import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { BomItem } from '../../manufacturing/types';
@@ -76,7 +78,9 @@ import type { StockItemBalance } from '../../inventory/types';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { TableIconAction, ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { Warehouse as InventoryWarehouse } from '../../inventory/types';
 import { useRawMaterialWarehouse } from '../../inventory/hooks/useRawMaterialWarehouse';
@@ -116,6 +120,8 @@ type ProductTableColumnKey =
   | 'productionOverheadPerUnit';
 
 const COLUMN_PREFS_KEY = 'products_table_visible_columns_v1';
+const LAYOUT_PREFS_KEY = 'products_list_layout_v1';
+type ProductsLayoutMode = 'table' | 'grid';
 
 const PRODUCT_ICON_MAP: Record<string, LucideIcon> = {
   unfold_more: ChevronsUpDown,
@@ -299,6 +305,22 @@ export const Products: React.FC = () => {
       return DEFAULT_VISIBLE_COLUMNS;
     }
   });
+  const [layoutMode, setLayoutMode] = useState<ProductsLayoutMode>(() => {
+    if (typeof window === 'undefined') return 'table';
+    try {
+      const raw = window.localStorage.getItem(LAYOUT_PREFS_KEY);
+      return raw === 'grid' || raw === 'table' ? raw : 'table';
+    } catch {
+      return 'table';
+    }
+  });
+
+  const setLayoutModePersist = (mode: ProductsLayoutMode) => {
+    setLayoutMode(mode);
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(LAYOUT_PREFS_KEY, mode);
+    }
+  };
 
   // Import from Excel
   const [showImportModal, setShowImportModal] = useState(false);
@@ -414,8 +436,7 @@ export const Products: React.FC = () => {
     }
     let cancelled = false;
     setDrawerMaterialsLoading(true);
-    void productMaterialService
-      .getByProduct(detailDrawerProductId)
+    void loadProductMaterials(detailDrawerProductId)
       .then((m) => {
         if (!cancelled) setDrawerMaterials(m);
       })
@@ -613,21 +634,13 @@ export const Products: React.FC = () => {
       setMaterialsByProductId({});
       return;
     }
-    void Promise.all(
-      ids.map(async (id) => {
-        try {
-          const mats = await productMaterialService.getByProduct(id);
-          return { id, mats };
-        } catch {
-          return { id, mats: [] as ProductMaterial[] };
-        }
-      }),
-    ).then((rows) => {
-      if (cancelled) return;
-      const next: Record<string, ProductMaterial[]> = {};
-      for (const { id, mats } of rows) next[id] = mats;
-      setMaterialsByProductId(next);
-    });
+    void loadProductMaterialsByProductIds(ids)
+      .then((next) => {
+        if (!cancelled) setMaterialsByProductId(next);
+      })
+      .catch(() => {
+        if (!cancelled) setMaterialsByProductId({});
+      });
     return () => {
       cancelled = true;
     };
@@ -688,9 +701,10 @@ export const Products: React.FC = () => {
   }, [filtered, sortKey, sortDir, monthlyQtyByProductId, costBreakdownByProductId]);
 
   const totalPages = Math.max(1, Math.ceil(sorted.length / PAGE_SIZE));
+  const page = Math.min(currentPage, totalPages);
   const paginated = useMemo(
-    () => sorted.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE),
-    [sorted, currentPage],
+    () => sorted.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE),
+    [sorted, page],
   );
 
   const allPageSelected = paginated.length > 0 && paginated.every((p) => selectedIds.has(p.id));
@@ -1783,15 +1797,16 @@ export const Products: React.FC = () => {
     };
 
     const materialsByProduct = new Map<string, ProductMaterial[]>();
-    await Promise.all(_rawProducts.map(async (rp) => {
-      if (!rp.id) return;
-      try {
-        const mats = await productMaterialService.getByProduct(rp.id);
-        materialsByProduct.set(rp.id, mats);
-      } catch {
-        materialsByProduct.set(rp.id, []);
-      }
-    }));
+    try {
+      const loaded = await loadProductMaterialsByProductIds(
+        _rawProducts.map((rp) => rp.id).filter(Boolean) as string[],
+      );
+      Object.entries(loaded).forEach(([id, mats]) => materialsByProduct.set(id, mats));
+    } catch {
+      _rawProducts.forEach((rp) => {
+        if (rp.id) materialsByProduct.set(rp.id, []);
+      });
+    }
 
     const selectedWarehouse = warehouseId
       ? warehouses.find((w) => w.id === warehouseId)
@@ -1996,7 +2011,7 @@ export const Products: React.FC = () => {
             label: 'إدارة الأعمدة الظاهرة',
             icon: 'view_column',
             group: 'تصدير',
-            hidden: !canExportFromPage,
+            hidden: !canExportFromPage || layoutMode !== 'table',
             onClick: () => setShowColumnsModal(true),
           },
           {
@@ -2076,48 +2091,89 @@ export const Products: React.FC = () => {
         onAdvancedFilterChange={(key, value) => {
           if (key === 'category') setCategoryFilter(value === 'all' ? '' : value);
         }}
-        onApply={() => undefined}
-        applyLabel="عرض"
       />
 
-      {/* Table */}
+      {/* Table / Grid */}
       <Card className="!p-0 border-none overflow-hidden ">
+        <div className="px-5 py-3 border-b border-[var(--color-border)] flex items-center justify-between gap-3 flex-wrap">
+          <div className="text-sm font-bold text-[var(--color-text)]">
+            قائمة المنتجات
+            {sorted.length > 0 ? (
+              <span className="ms-2 text-[var(--color-text-muted)] font-medium tabular-nums">({sorted.length})</span>
+            ) : null}
+          </div>
+          <div
+            className="inline-flex items-center gap-0.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-0.5"
+            role="group"
+            aria-label="طريقة العرض"
+          >
+            <button
+              type="button"
+              onClick={() => setLayoutModePersist('table')}
+              className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
+                layoutMode === 'table'
+                  ? 'bg-primary text-white'
+                  : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
+              }`}
+              title="عرض جدول"
+              aria-pressed={layoutMode === 'table'}
+            >
+              <List className="size-3.5" aria-hidden />
+              جدول
+            </button>
+            <button
+              type="button"
+              onClick={() => setLayoutModePersist('grid')}
+              className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
+                layoutMode === 'grid'
+                  ? 'bg-primary text-white'
+                  : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
+              }`}
+              title="عرض بطاقات"
+              aria-pressed={layoutMode === 'grid'}
+            >
+              <LayoutGrid className="size-3.5" aria-hidden />
+              بطاقات
+            </button>
+          </div>
+        </div>
         {/* Bulk bar */}
         {selectedIds.size > 0 && (
           <div className="px-5 py-3 bg-primary/5 border-b border-primary/20 flex items-center gap-3 flex-wrap">
             <span className="text-sm font-bold text-primary">{selectedIds.size} منتج محدد</span>
             {can('products.delete') && (
-              <button
-                className="btn btn-danger btn-sm gap-1"
+              <Button
+                variant="danger"
+                size="sm"
                 onClick={() => {
                   if (!window.confirm(`هل تريد حذف ${selectedIds.size} منتج؟`)) return;
                   Promise.all([...selectedIds].map((id) => deleteProduct(id))).then(() => setSelectedIds(new Set()));
                 }}
               >
-                <ProductIcon name="delete" className="text-[15px]" />
                 حذف المحدد
-              </button>
+              </Button>
             )}
             {can('products.edit') && (
               <>
-                <button
-                  className="btn btn-secondary btn-sm gap-1"
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={bulkToggleSaving}
                   onClick={() => void handleBulkAssemblyModeChange('individual')}
                 >
-                  <ProductIcon name="precision_manufacturing" className="text-[15px]" />
                   تحويل لفردي
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm gap-1"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={bulkToggleSaving}
                   onClick={() => void handleBulkAssemblyModeChange('team')}
                 >
-                  <ProductIcon name="call_split" className="text-[15px]" />
                   تحويل لجماعي
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm gap-1"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={bulkToggleSaving}
                   onClick={async () => {
                     if (bulkToggleSaving) return;
@@ -2136,11 +2192,11 @@ export const Products: React.FC = () => {
                     }
                   }}
                 >
-                  <ProductIcon name="done_all" className="text-[15px]" />
                   تفعيل خصم الهالك
-                </button>
-                <button
-                  className="btn btn-secondary btn-sm gap-1"
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
                   disabled={bulkToggleSaving}
                   onClick={async () => {
                     if (bulkToggleSaving) return;
@@ -2159,31 +2215,46 @@ export const Products: React.FC = () => {
                     }
                   }}
                 >
-                  <ProductIcon name="remove_done" className="text-[15px]" />
                   تعطيل خصم الهالك
-                </button>
+                </Button>
               </>
             )}
-            <button
-              className="btn btn-secondary btn-sm gap-1"
+            <Button
+              variant="secondary"
+              size="sm"
               disabled={countCardPreviewBusy}
               onClick={() => void openProductBomCountCardPreview([...selectedIds])}
               title="معاينة وطباعة كروت جرد بالمكونات والأرصدة للمنتجات المحددة"
             >
-              {countCardPreviewBusy ? (
-                <Loader2 className="size-3.5 animate-spin" />
-              ) : (
-                <Printer className="size-3.5" />
-              )}
-              كروت الجرد
-            </button>
-            <button className="btn btn-secondary btn-sm" onClick={() => setSelectedIds(new Set())}>
-              <ProductIcon name="close" className="text-[15px]" />
+              {countCardPreviewBusy ? 'جاري...' : 'كروت الجرد'}
+            </Button>
+            <Button variant="secondary" size="sm" onClick={() => setSelectedIds(new Set())}>
               إلغاء التحديد
-            </button>
+            </Button>
           </div>
         )}
 
+        {productsLoading ? (
+          <div className="p-4 space-y-3" aria-busy="true" aria-label="جاري تحميل المنتجات">
+            {layoutMode === 'grid' ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="h-44 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] animate-pulse"
+                  />
+                ))}
+              </div>
+            ) : (
+              Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-12 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8f9fa] animate-pulse"
+                />
+              ))
+            )}
+          </div>
+        ) : layoutMode === 'table' ? (
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">
@@ -2260,6 +2331,7 @@ export const Products: React.FC = () => {
                   key={product.id}
                   className={`cursor-pointer hover:bg-[#f8f9fa]/50 transition-colors group${selectedIds.has(product.id) ? ' bg-primary/5' : ''}`}
                   onClick={() => setDetailDrawerProductId(product.id)}
+                  title="عرض ملخص المنتج"
                 >
                   <td className="px-4 py-4 text-center" onClick={(e) => e.stopPropagation()}>
                     <input type="checkbox" checked={selectedIds.has(product.id)} onChange={() => toggleRow(product.id)} className="cursor-pointer" />
@@ -2275,7 +2347,7 @@ export const Products: React.FC = () => {
                           title={product.name}
                           onClick={(e) => {
                             e.stopPropagation();
-                            navigate(`/products/${product.id}`);
+                            setDetailDrawerProductId(product.id);
                           }}
                         >
                           {shortProductName(product.name)}
@@ -2409,24 +2481,22 @@ export const Products: React.FC = () => {
                     );
                   })()}
                   <td className="px-4 py-4" onClick={(e) => e.stopPropagation()}>
-                    <div className="flex items-center gap-0.5 justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
+                    <div className="flex items-center gap-1 justify-center sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
+                      <TableIconAction
+                        action="view"
                         onClick={() => setDetailDrawerProductId(product.id)}
-                        className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all"
-                        title="ملخص سريع"
-                      >
-                        <ProductIcon name="visibility" className="text-[18px]" />
-                      </button>
+                      />
                       {can("products.edit") && (
-                        <button type="button" onClick={() => openEdit(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
-                          <ProductIcon name="edit" className="text-[18px]" />
-                        </button>
+                        <TableIconAction
+                          action="edit"
+                          onClick={() => openEdit(product.id)}
+                        />
                       )}
                       {can("products.delete") && (
-                        <button type="button" onClick={() => setDeleteConfirmId(product.id)} className="p-1.5 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف">
-                          <ProductIcon name="delete" className="text-[18px]" />
-                        </button>
+                        <TableIconAction
+                          action="delete"
+                          onClick={() => setDeleteConfirmId(product.id)}
+                        />
                       )}
                     </div>
                   </td>
@@ -2435,29 +2505,157 @@ export const Products: React.FC = () => {
             </tbody>
           </table>
         </div>
-        {/* Footer: count + pagination */}
-        <div className="px-5 py-3 bg-[#f8f9fa]/50 border-t border-[var(--color-border)] flex items-center justify-between flex-wrap gap-2">
-          <div className="text-sm text-[var(--color-text-muted)] font-bold">
-            {sorted.length > 0
-              ? `صفحة ${currentPage} من ${totalPages} — إجمالي ${sorted.length} منتج`
-              : 'لا توجد منتجات'}
-          </div>
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1">
-              <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage(1)}>آ«</button>
-              <button className="btn btn-secondary btn-sm" disabled={currentPage === 1} onClick={() => setCurrentPage((p) => p - 1)}>‹</button>
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                const start = Math.max(1, Math.min(currentPage - 2, totalPages - 4));
-                const page = start + i;
-                return page <= totalPages ? (
-                  <button key={page} className={`btn btn-sm ${currentPage === page ? 'btn-primary' : 'btn-secondary'}`} onClick={() => setCurrentPage(page)}>{page}</button>
-                ) : null;
-              })}
-              <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage((p) => p + 1)}>›</button>
-              <button className="btn btn-secondary btn-sm" disabled={currentPage === totalPages} onClick={() => setCurrentPage(totalPages)}>آ»</button>
+        ) : (
+        <div className="p-4">
+          {sorted.length === 0 ? (
+            <div className="px-6 py-16 text-center text-slate-400">
+              <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30 mx-auto" />
+              <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter ? ' مطابقة للبحث' : ' بعد'}</p>
+              <p className="text-sm mt-1">
+                {can('products.create')
+                  ? 'اضغط "إضافة منتج جديد" لإضافة أول منتج'
+                  : 'لا توجد منتجات لعرضها حالياً'}
+              </p>
             </div>
+          ) : (
+            <>
+              <div className="mb-3 flex items-center gap-2 px-1">
+                <input
+                  type="checkbox"
+                  checked={allPageSelected}
+                  ref={(el) => {
+                    if (el) el.indeterminate = somePageSelected;
+                  }}
+                  onChange={toggleSelectAll}
+                  className="cursor-pointer"
+                  id="products-grid-select-all"
+                />
+                <label htmlFor="products-grid-select-all" className="text-xs font-bold text-[var(--color-text-muted)] cursor-pointer">
+                  تحديد صفوف الصفحة ({paginated.length})
+                </label>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+                {paginated.map((product) => {
+                  const finalBalance = productWarehouseBalances.getValue(
+                    planSettings?.finalProductWarehouseId,
+                    product.id,
+                  );
+                  const selling = _rawProducts.find((r) => r.id === product.id)?.sellingPrice ?? 0;
+                  const selected = selectedIds.has(product.id);
+                  return (
+                    <div
+                      key={product.id}
+                      className={`rounded-[var(--border-radius-lg)] border bg-[var(--color-card)] p-4 transition-colors cursor-pointer hover:border-primary/40 ${
+                        selected ? 'border-primary/40 bg-primary/5' : 'border-[var(--color-border)]'
+                      }`}
+                      onClick={() => setDetailDrawerProductId(product.id)}
+                      title="عرض ملخص المنتج"
+                    >
+                      <div className="flex items-start gap-3">
+                        <input
+                          type="checkbox"
+                          checked={selected}
+                          onChange={() => toggleRow(product.id)}
+                          onClick={(e) => e.stopPropagation()}
+                          className="mt-1 cursor-pointer shrink-0"
+                          aria-label={`تحديد ${product.name}`}
+                        />
+                        <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center shrink-0 border border-primary/10">
+                          <ProductIcon name="inventory_2" className="text-primary text-lg" />
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="font-bold text-sm text-[var(--color-text)] truncate" title={product.name}>
+                            {shortProductName(product.name)}
+                          </p>
+                          <p className="font-mono text-[11px] text-slate-400 mt-0.5">{product.code}</p>
+                          <div className="flex flex-wrap items-center gap-1.5 mt-2">
+                            {product.category ? <Badge variant="neutral">{product.category}</Badge> : null}
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                product.assemblyMode === 'team'
+                                  ? 'bg-indigo-50 text-indigo-600'
+                                  : 'bg-emerald-50 text-emerald-600'
+                              }`}
+                            >
+                              {product.assemblyMode === 'team' ? 'جماعي' : 'فردي'}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <span className="text-[10px] text-[var(--color-text-muted)] block mb-0.5">منتج تام</span>
+                          <span
+                            className={`font-black tabular-nums ${
+                              finalBalance > 100
+                                ? 'text-[var(--color-text)]'
+                                : finalBalance > 0
+                                  ? 'text-amber-600'
+                                  : 'text-rose-500'
+                            }`}
+                          >
+                            {formatNumber(finalBalance)}
+                          </span>
+                        </div>
+                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2">
+                          <span className="text-[10px] text-[var(--color-text-muted)] block mb-0.5">إنتاج الشهر</span>
+                          <span className="font-black tabular-nums text-sky-700">
+                            {formatNumber(monthlyQtyByProductId[product.id] ?? 0)}
+                          </span>
+                        </div>
+                        {canViewSellingPrice && (
+                          <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] px-2.5 py-2 col-span-2">
+                            <span className="text-[10px] text-[var(--color-text-muted)] block mb-0.5">سعر البيع</span>
+                            <span className="font-black tabular-nums text-[var(--color-text)]">
+                              {formatCost(selling)} ج.م
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      <div
+                        className="mt-3 flex items-center justify-end gap-1.5 border-t border-[var(--color-border)] pt-3"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <ToneActionButton
+                          action="view"
+                          onClick={() => setDetailDrawerProductId(product.id)}
+                        >
+                          عرض
+                        </ToneActionButton>
+                        {can('products.edit') && (
+                          <ToneActionButton
+                            action="edit"
+                            onClick={() => openEdit(product.id)}
+                          >
+                            تعديل
+                          </ToneActionButton>
+                        )}
+                        {can('products.delete') && (
+                          <TableIconAction
+                            action="delete"
+                            onClick={() => setDeleteConfirmId(product.id)}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
           )}
         </div>
+        )}
+        {!productsLoading && (
+          <DataPaginationFooter
+            page={page}
+            totalPages={totalPages}
+            totalItems={sorted.length}
+            onPageChange={setCurrentPage}
+            itemLabel="منتج"
+          />
+        )}
       </Card>
 
       {detailDrawerProductId && detailDrawerProduct && (() => {
@@ -2647,18 +2845,32 @@ export const Products: React.FC = () => {
                   )}
                 </div>
 
-                <div className="flex flex-col gap-2 pt-1">
-                  <Button
-                    variant="primary"
-                    className="w-full justify-center"
+                <div className="flex flex-col gap-2 pt-1 sticky bottom-0 bg-[var(--color-card)] pb-1">
+                  <ToneActionButton
+                    action="open"
+                    solid
+                    className="w-full"
                     onClick={() => {
                       const id = p.id;
                       setDetailDrawerProductId(null);
                       navigate(`/products/${id}`);
                     }}
                   >
-                    فتح صفحة التفاصيل الكاملة
-                  </Button>
+                    عرض كامل
+                  </ToneActionButton>
+                  {can('products.edit') && (
+                    <ToneActionButton
+                      action="edit"
+                      className="w-full"
+                      onClick={() => {
+                        const id = p.id;
+                        setDetailDrawerProductId(null);
+                        openEdit(id);
+                      }}
+                    >
+                      تعديل
+                    </ToneActionButton>
+                  )}
                 </div>
               </div>
             </aside>
@@ -2678,13 +2890,13 @@ export const Products: React.FC = () => {
             <p className="text-sm text-[var(--color-text-muted)] mb-6">هل أنت متأكد من حذف هذا المنتج؟ لا يمكن التراجع عن هذا الإجراء.</p>
             <div className="flex items-center justify-center gap-3">
               <Button variant="outline" onClick={() => setDeleteConfirmId(null)}>إلغاء</Button>
-              <button
+              <Button
+                variant="danger"
                 onClick={() => handleDelete(deleteConfirmId)}
                 className="px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm bg-rose-500 text-white hover:bg-rose-600 shadow-rose-500/20 transition-all flex items-center gap-2"
               >
-                <ProductIcon name="delete" className="text-sm" />
                 نعم، احذف
-              </button>
+              </Button>
             </div>
           </div>
         </div>
@@ -2700,10 +2912,9 @@ export const Products: React.FC = () => {
                   <ProductIcon name="drag_indicator" className="text-[var(--color-text-muted)] cursor-move select-none" aria-hidden="true" />
                   <h3 className="text-lg font-bold">رفع المنتجات (Excel)</h3>
                 </div>
-                <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline">
-                  <ProductIcon name="download" className="text-sm" />
+                <Button variant="ghost" onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline h-auto p-0">
                   تحميل قالب المنتجات
-                </button>
+                </Button>
               </div>
                 <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
                 <ProductIcon name="close" />
@@ -2723,10 +2934,9 @@ export const Products: React.FC = () => {
                   <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد من وجود شيت المنتجات (اسم المنتج، الكود...) ويمكن إضافة شيت المواد الخام اختياريًا</p>
-                  <button onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto">
-                    <ProductIcon name="download" className="text-sm" />
+                  <Button variant="ghost" onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto h-auto p-0">
                     تحميل قالب المنتجات
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -2874,13 +3084,13 @@ export const Products: React.FC = () => {
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <h3 className="text-lg font-bold">رفع/تحديث مكونات المنتجات</h3>
-                <button
+                <Button
+                  variant="ghost"
                   onClick={downloadProductComponentsTemplate}
-                  className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline"
+                  className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline h-auto p-0"
                 >
-                  <ProductIcon name="download" className="text-sm" />
                   تحميل قالب المكونات
-                </button>
+                </Button>
               </div>
               <button
                 onClick={() => {
@@ -2910,13 +3120,13 @@ export const Products: React.FC = () => {
                     صدّر المكونات أولاً أو حمّل القالب. الأعمدة: كود المنتج، كود/اسم المادة، الكمية المستخدمة.
                     رصيد المكون اختياري = الكمية الفعلية (جرد). كود اللوكيشن السابق = للنقل وتصفير اللوكيشن القديم.
                   </p>
-                  <button
+                  <Button
+                    variant="ghost"
                     onClick={downloadProductComponentsTemplate}
-                    className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto"
+                    className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto h-auto p-0"
                   >
-                    <ProductIcon name="download" className="text-sm" />
                     تحميل قالب المكونات
-                  </button>
+                  </Button>
                 </div>
               )}
 
@@ -3359,16 +3569,17 @@ export const Products: React.FC = () => {
               ))}
             </div>
             <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between">
-              <button
+              <Button
+                variant="ghost"
                 onClick={() => {
                   const empty = Object.keys(DEFAULT_VISIBLE_COLUMNS).reduce((acc, key) => ({ ...acc, [key]: false }), {} as Record<ProductTableColumnKey, boolean>);
                   setVisibleColumns(empty);
                   if (typeof window !== 'undefined') window.localStorage.setItem(COLUMN_PREFS_KEY, JSON.stringify(empty));
                 }}
-                className="text-xs font-bold text-[var(--color-text-muted)] hover:text-slate-600"
+                className="text-xs font-bold text-[var(--color-text-muted)] hover:text-slate-600 h-auto p-0"
               >
                 إلغاء تحديد الكل
-              </button>
+              </Button>
               <div className="flex items-center gap-3">
                 <Button variant="outline" onClick={() => setShowColumnsModal(false)}>إغلاق</Button>
               </div>

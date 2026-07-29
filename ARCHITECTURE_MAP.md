@@ -11,19 +11,53 @@ Rules:
 - Pages/components do not call Firebase directly.
 - Business rules live in usecases/store, not in rendering layer.
 - Services perform IO and persistence access only.
+- Domain events emit via `shared/events` (in-process bus) for audit and cross-domain signals.
 
 ---
 
 ## Top-Level Layers
 
 - `core/`
-  - auth, permission model, cross-cutting app policies.
+  - auth, permission model, tenant context, cross-cutting app policies.
+  - `core/auth/tenantContext.ts` — trusted tenant stamping helpers.
+  - `core/auth/authBoundary.ts` — UI vs server authorization boundary notes.
 - `shared/` and `src/shared/`
   - reusable UI primitives, shared hooks/events/helpers.
+  - `shared/usecases/` — UseCaseResult contract (`ok` / `err` / `runUseCase`).
+  - `shared/events/` — typed event bus + system event catalog.
 - `modules/`
   - domain features and feature-local services/usecases/pages.
 - `functions/`
   - Firebase Functions/runtime scripts.
+
+---
+
+## UseCases (canonical)
+
+First-wave domains:
+
+- Production: `modules/production/usecases/*`
+  - `createProductionReport`, `createProductionIssueRequest`, `updateWorkOrderStatus`, `reopenCompletedWorkOrder`
+- Inventory: `modules/inventory/usecases/*`
+  - `approveProductionIssueRequest`, `rejectProductionIssueRequest`, `issueProductionIssueOrder`, `createStockMovement`
+  - `approveTransferRequest`, `rejectTransferRequest`, `createTransferRequest`
+- System: `modules/system/usecases/*`
+  - `createRole`, `updateRole`, `deleteRole`
+
+Rollout domains (reference usecases wired):
+
+- Manufacturing: `modules/manufacturing/usecases/createMaterial` (via `useMaterialMutations`)
+- Quality: `modules/quality/usecases/createQualityInspection`
+- HR: `modules/hr/usecases/createLeaveRequest` (LeaveRequests, SelfService, HRDashboard, Financials, SupervisorTeamActions)
+  - `createDepartment` / `createJobPosition` / `createShift` / `deleteOrganizationEntity`
+  - `confirmPayrollDisbursement` / `recordPayrollDistribution`
+  - Page Firestore writes allowlist cleared (Organization, Employees, HRImport, Payroll, PayrollAccounts)
+- Repair: `modules/repair/usecases/createRepairJob` (NewRepairJob)
+- Costs: `modules/costs/usecases/createCostCenter` (store `createCostCenter`)
+
+Portals (single SPA):
+
+- `modules/dashboards/lib/portalHome.ts` — portal kind + supervisor/employee curated paths.
 
 ---
 

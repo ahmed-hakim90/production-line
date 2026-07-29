@@ -345,7 +345,6 @@ export const Categories: React.FC = () => {
             {canCreate && (
               <>
                 <Button variant="outline" onClick={() => resetForm(null)}>
-                  <span className="material-icons-round text-sm">add</span>
                   فئة رئيسية
                 </Button>
                 <Button variant="primary" onClick={handleMigrate} disabled={migrating}>
@@ -355,7 +354,6 @@ export const Categories: React.FC = () => {
             )}
             {(canCreate || (canEdit && editId)) && (
               <Button variant="outline" onClick={() => resetForm(form.parentId)}>
-                <span className="material-icons-round text-sm">restart_alt</span>
                 إعادة تعيين
               </Button>
             )}
@@ -443,7 +441,6 @@ export const Categories: React.FC = () => {
                   (!editId && !categoryCodeLocked && !categoryCode.trim())
                 }
               >
-                <span className="material-icons-round text-sm">{editId ? 'save' : 'add'}</span>
                 {editId ? 'حفظ التعديلات' : form.parentId ? 'إضافة فئة فرعية' : 'إضافة فئة رئيسية'}
               </Button>
             </div>
@@ -526,17 +523,18 @@ export const Categories: React.FC = () => {
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-1 flex-wrap">
                         {canCreate && (
-                          <button
+                          <Button
                             type="button"
+                            size="sm"
+                            variant="ghost"
                             onClick={() => {
                               setEditId(null);
                               setForm(buildEmptyForm(id));
                             }}
-                            className="text-xs text-primary font-bold px-2"
                             title="إضافة فرعية"
                           >
                             + فرعية
-                          </button>
+                          </Button>
                         )}
                         {canEdit && (
                           <button

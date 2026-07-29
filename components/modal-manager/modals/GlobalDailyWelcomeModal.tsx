@@ -1,5 +1,6 @@
 import React from 'react';
 import { Check, Sparkles } from 'lucide-react';
+import { Button } from '../../UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -72,10 +73,10 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
         </div>
 
         <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end">
-          <button className="btn btn-primary" onClick={close}>
+          <Button variant="primary" onClick={close} tone="approve">
             <Check size={16} />
             {t('modalManager.dailyWelcome.continue')}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

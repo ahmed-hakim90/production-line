@@ -342,7 +342,8 @@ const ConfirmDialog: React.FC<{
         <p className="text-sm text-[var(--color-text-muted)] mb-6">{message}</p>
         <div className="flex gap-3 justify-end">
           <Button variant="outline" onClick={onCancel}>{cancelLabel}</Button>
-          <button
+          <Button
+            variant={variant === 'danger' ? 'danger' : 'primary'}
             onClick={onConfirm}
             className={`px-4 py-2.5 rounded-[var(--border-radius-base)] font-bold text-sm text-white transition-all ${
               variant === 'danger'
@@ -351,7 +352,7 @@ const ConfirmDialog: React.FC<{
             }`}
           >
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -570,7 +571,6 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
           <p className="text-xs text-[var(--color-text-muted)] mt-1">هذه الاختيارات تظهر في طلبات إجازات الفريق كقائمة قابلة للبحث.</p>
         </div>
         <Button variant="primary" onClick={addLeaveReason} disabled={readOnly}>
-          <span className="material-icons-round text-sm">add</span>
           إضافة سبب
         </Button>
       </div>
@@ -619,7 +619,6 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
 
                 {!readOnly && (
                   <Button variant="danger" size="sm" onClick={() => removeLeaveReason(idx)} className="sm:mt-6">
-                    <span className="material-icons-round text-sm">delete</span>
                     حذف
                   </Button>
                 )}
@@ -635,7 +634,6 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
           <p className="text-xs text-[var(--color-text-muted)] mt-1">أضف نوع إجازة جديد وحدد رصيده وطريقة تأثيره على الراتب.</p>
         </div>
         <Button variant="primary" onClick={addLeaveType} disabled={readOnly}>
-          <span className="material-icons-round text-sm">add</span>
           إضافة نوع إجازة
         </Button>
       </div>
@@ -654,7 +652,6 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
             </div>
             {!readOnly && (
               <Button variant="danger" size="sm" onClick={() => removeLeaveType(idx)}>
-                <span className="material-icons-round text-sm">delete</span>
                 حذف
               </Button>
             )}
@@ -1058,7 +1055,6 @@ const TransportForm: React.FC<TabFormProps<'transport'>> = ({ config, onChange, 
             <h4 className="text-sm font-bold text-[var(--color-text)]">مناطق النقل</h4>
             {!readOnly && (
               <Button variant="outline" onClick={addZone}>
-                <span className="material-icons-round text-sm">add</span>
                 إضافة منطقة
               </Button>
             )}
@@ -1579,17 +1575,9 @@ export const HRSettings: React.FC = () => {
                     onClick={handleSaveAttendanceIntegration}
                     disabled={!attendanceIntegrationHasChanges || savingAttendanceIntegration}
                   >
-                    {savingAttendanceIntegration ? (
-                      <>
-                        <span className="material-icons-round animate-spin text-sm">refresh</span>
-                        جاري حفظ تكامل الحضور...
-                      </>
-                    ) : (
-                      <>
-                        <span className="material-icons-round text-sm">save</span>
-                        حفظ إعدادات تكامل الحضور
-                      </>
-                    )}
+                    {savingAttendanceIntegration
+                      ? 'جاري حفظ تكامل الحضور...'
+                      : 'حفظ إعدادات تكامل الحضور'}
                   </Button>
                 </div>
               )}
@@ -1601,13 +1589,13 @@ export const HRSettings: React.FC = () => {
           {/* Actions */}
           {!readOnly && (
             <div className="flex items-center justify-between mt-8 pt-6 border-t border-[var(--color-border)]">
-              <button
+              <Button
+                variant="ghost"
                 onClick={handleReset}
-                className="text-sm font-medium text-rose-500 hover:text-rose-600 transition-colors flex items-center gap-1"
+                className="text-sm font-medium text-rose-500 hover:text-rose-600 transition-colors flex items-center gap-1 h-auto p-0"
               >
-                <span className="material-icons-round text-sm">restart_alt</span>
                 إعادة تعيين للقيم الافتراضية
-              </button>
+              </Button>
               <div className="flex items-center gap-3">
                 {hasChanges && (
                   <Button variant="outline" onClick={handleDiscard}>تجاهل التغييرات</Button>
@@ -1616,17 +1604,7 @@ export const HRSettings: React.FC = () => {
                   onClick={handleSave}
                   disabled={!hasChanges || saving}
                 >
-                  {saving ? (
-                    <>
-                      <span className="material-icons-round animate-spin text-sm">refresh</span>
-                      جاري الحفظ...
-                    </>
-                  ) : (
-                    <>
-                      <span className="material-icons-round text-sm">save</span>
-                      حفظ التغييرات
-                    </>
-                  )}
+                  {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
                 </Button>
               </div>
             </div>

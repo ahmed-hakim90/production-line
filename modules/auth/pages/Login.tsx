@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { Button } from '@/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useTenantSlugResolve } from '../context/TenantSlugResolveContext';
 
@@ -192,14 +193,15 @@ export const Login: React.FC = () => {
                 </div>
 
                 <div className="erp-auth-helper-row" style={{ marginBottom: 16 }}>
-                  <button
+                  <Button
                     type="button"
+                    variant="ghost"
                     className="erp-auth-link-btn"
                     onClick={() => void handleForgotPassword()}
                     disabled={loading}
                   >
                     نسيت كلمة المرور؟
-                  </button>
+                  </Button>
                 </div>
 
                 <button
@@ -225,7 +227,7 @@ export const Login: React.FC = () => {
 
                 <div className="erp-auth-footer">
                   ليس لديك حساب؟{' '}
-                  <button type="button" onClick={() => switchMode('register')}>إنشاء حساب جديد</button>
+                  <Button type="button" variant="ghost" className="h-auto p-0" onClick={() => switchMode('register')}>إنشاء حساب جديد</Button>
                 </div>
               </form>
             )}
@@ -320,7 +322,7 @@ export const Login: React.FC = () => {
 
                 <div className="erp-auth-footer">
                   عندك حساب بالفعل؟{' '}
-                  <button type="button" onClick={() => switchMode('login')}>تسجيل الدخول</button>
+                  <Button type="button" variant="ghost" className="h-auto p-0" onClick={() => switchMode('login')}>تسجيل الدخول</Button>
                 </div>
               </form>
             )}
