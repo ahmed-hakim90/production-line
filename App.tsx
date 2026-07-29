@@ -193,6 +193,8 @@ const isDynamicImportLoadFailure = (reason: unknown): boolean => {
     msg.includes('Failed to fetch dynamically imported module') ||
     msg.includes('error loading dynamically imported module') ||
     lower.includes('importing a module script failed') ||
+    lower.includes('failed to load module script') ||
+    (lower.includes('mime type') && lower.includes('module')) ||
     (lower.includes('loading chunk') && lower.includes('failed'))
   );
 };
@@ -1082,19 +1084,27 @@ const App: React.FC = () => {
       toast.error(String(message ?? 'حدث تنبيه'));
     };
 
+    const recoverFromStaleChunk = (event: Event) => {
+      if (sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY)) return false;
+      sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, '1');
+      event.preventDefault();
+      toast.error('تعذّر تحميل جزء من التطبيق (غالباً نسخة مخزّنة قديمة). جارٍ التحديث…');
+      void hardClientReload();
+      return true;
+    };
+
     const onUnhandledError = (event: ErrorEvent) => {
       const message = event.error?.message || event.message || 'حدث خطأ غير متوقع';
+      if (isDynamicImportLoadFailure(message) || isDynamicImportLoadFailure(event.error)) {
+        if (recoverFromStaleChunk(event)) return;
+      }
       toast.error(message);
     };
 
     const onUnhandledRejection = (event: PromiseRejectionEvent) => {
       const reason = event.reason;
-      if (isDynamicImportLoadFailure(reason) && !sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY)) {
-        sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, '1');
-        event.preventDefault();
-        toast.error('تعذّر تحميل جزء من التطبيق (غالباً نسخة مخزّنة قديمة). جارٍ التحديث…');
-        void hardClientReload();
-        return;
+      if (isDynamicImportLoadFailure(reason)) {
+        if (recoverFromStaleChunk(event)) return;
       }
       const message = typeof reason === 'string'
         ? reason

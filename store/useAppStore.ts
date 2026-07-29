@@ -4664,7 +4664,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       };
       if (nextStatus === 'completed') {
         statusPatch.completedAt = wo.completedAt || new Date().toISOString();
-      } else if (wo.status === 'completed' && nextStatus !== 'completed') {
+      } else if (wo.status === 'completed') {
         statusPatch.completedAt = null;
       }
       await workOrderService.update(id, statusPatch);

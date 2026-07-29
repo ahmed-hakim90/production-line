@@ -82,7 +82,9 @@ if (isConfigured) {
   purgeLeakedFirestoreLocalStorage();
   try {
     db = initializeFirestore(app, {
-      experimentalAutoDetectLongPolling: true,
+      // Force long-polling to avoid Chromium QUIC/WebChannel Listen failures
+      // (ERR_QUIC_PROTOCOL_ERROR / QUIC_TOO_MANY_RTOS) on flaky networks.
+      experimentalForceLongPolling: true,
       localCache: persistentLocalCache({
         tabManager: persistentSingleTabManager({ forceOwnership: true }),
       }),
@@ -94,7 +96,7 @@ if (isConfigured) {
       err,
     );
     db = initializeFirestore(app, {
-      experimentalAutoDetectLongPolling: true,
+      experimentalForceLongPolling: true,
       localCache: memoryLocalCache(),
     });
     firestoreOfflinePersistenceEnabled = false;
