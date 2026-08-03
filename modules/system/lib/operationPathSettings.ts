@@ -104,6 +104,7 @@ export const INVENTORY_OPERATION_KEYS = {
   transferCreate: 'inventory.transfer.create',
   transferApprove: 'inventory.transfer.approve',
   transferReject: 'inventory.transfer.reject',
+  productionHandoverConfirm: 'inventory.productionHandover.confirmReceipt',
 } as const;
 
 export const INVENTORY_STOCK_MOVE_PATHS = {
@@ -129,6 +130,10 @@ export const INVENTORY_TRANSFER_CREATE_PATHS = {
 export const INVENTORY_TRANSFER_DECISION_PATHS = {
   transferApprovalsPage: 'transfer_approvals_page',
   stockTransactionsPage: 'stock_transactions_page',
+} as const;
+
+export const INVENTORY_HANDOVER_RECEIPT_PATHS = {
+  packagingControl: 'packaging_control',
 } as const;
 
 export const INVENTORY_DOCUMENT_OPERATION_KEYS = {
@@ -289,6 +294,19 @@ export const OPERATION_PATH_REGISTRY: ReadonlyArray<OperationPathRegistryEntry> 
     paths: [
       { key: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage, label: 'صفحة اعتماد التحويلات', description: 'رفض من قائمة الاعتمادات.' },
       { key: INVENTORY_TRANSFER_DECISION_PATHS.stockTransactionsPage, label: 'صفحة حركات المخزون', description: 'رفض من سجل الحركات.' },
+    ],
+  },
+  {
+    key: INVENTORY_OPERATION_KEYS.productionHandoverConfirm,
+    module: 'inventory',
+    label: 'استلام تغليف بكمية',
+    description: 'تأكيد الكمية الفعلية من تحت التسليم إلى بانتظار التغليف، مع إمكانية إقفال الفرق على المحوّل.',
+    paths: [
+      {
+        key: INVENTORY_HANDOVER_RECEIPT_PATHS.packagingControl,
+        label: 'تحكم التغليف',
+        description: 'استلام جزئي أو إقفال نهائي بفرق من صفحة تحكم التغليف.',
+      },
     ],
   },
   ...([
@@ -508,6 +526,34 @@ const MENU_ITEM_OPERATION_PATHS: Readonly<Record<string, {
   quick: {
     operationKey: PRODUCTION_REPORT_OPERATION_KEYS.create,
     pathKey: PRODUCTION_REPORT_CREATE_PATHS.quickAction,
+  },
+  reports: {
+    operationKey: PRODUCTION_REPORT_OPERATION_KEYS.create,
+    pathKey: PRODUCTION_REPORT_CREATE_PATHS.reportsPage,
+  },
+  plans: {
+    operationKey: PRODUCTION_PLAN_OPERATION_KEYS.create,
+    pathKey: PRODUCTION_PLAN_CREATE_PATHS.plansPage,
+  },
+  'work-orders': {
+    operationKey: WORK_ORDER_OPERATION_KEYS.create,
+    pathKey: WORK_ORDER_CREATE_PATHS.workOrdersPage,
+  },
+  'packaging-control': {
+    operationKey: INVENTORY_OPERATION_KEYS.productionHandoverConfirm,
+    pathKey: INVENTORY_HANDOVER_RECEIPT_PATHS.packagingControl,
+  },
+  'inv-transfer-approvals': {
+    operationKey: INVENTORY_OPERATION_KEYS.transferApprove,
+    pathKey: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage,
+  },
+  'inv-production-issues': {
+    operationKey: INVENTORY_OPERATION_KEYS.stockMove,
+    pathKey: INVENTORY_STOCK_MOVE_PATHS.movementsForm,
+  },
+  'line-workers': {
+    operationKey: WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+    pathKey: PERMANENT_WORKER_ASSIGNMENT_PATHS.lineWorkersPage,
   },
 };
 

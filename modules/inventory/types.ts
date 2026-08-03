@@ -339,6 +339,14 @@ export interface InventoryTransferRequest {
   receivedQuantity?: number;
   /** Remaining qty still in WIP pending receipt. */
   remainingQuantity?: number;
+  /** Shortage closed against the transferor (المحوّل) on final short receipt. */
+  varianceQuantity?: number;
+  varianceReason?: string;
+  varianceRecordedAgainstUserId?: string;
+  varianceRecordedAgainstName?: string;
+  varianceClosedBy?: string;
+  varianceClosedByUserId?: string;
+  varianceClosedAt?: string;
   createdBy: string;
   createdByUserId?: string;
   createdAt: string;

@@ -315,6 +315,10 @@ export const TransferApprovals: React.FC = () => {
   const handleApprove = async (requestId?: string) => {
     if (!requestId || !canApprovePermission || !approvePathEnabled) return;
     const request = requests.find((row) => row.id === requestId);
+    if ((request?.requestType || '') === 'production_handover') {
+      toast.warning('استلام التغليف يتم بكمية من صفحة تحكم التغليف، وليس الاعتماد الكامل من هنا.');
+      return;
+    }
     if (isSelfProductionEntryRequest(request)) {
       toast.warning('لا يمكن لمنشئ التقرير اعتماد إدخال الإنتاج الخاص به. يجب اعتمادها من مستخدم آخر مخوّل.');
       return;
@@ -379,14 +383,17 @@ export const TransferApprovals: React.FC = () => {
 
   const openRequest = (row: InventoryTransferRequest) => {
     const rowIsSelfProductionEntry = isSelfProductionEntryRequest(row);
+    const isHandover = (row.requestType || '') === 'production_handover';
     openModal(MODAL_KEYS.INVENTORY_APPROVE_TRANSFER, {
       request: row,
       warehouseMap,
-      canApprove,
+      canApprove: canApprove && !isHandover,
       canCancelMovement: row.status === 'approved',
-      approveDisabledReason: rowIsSelfProductionEntry
-        ? 'لا يمكن اعتماد طلب أنشأته بنفسك.'
-        : undefined,
+      approveDisabledReason: isHandover
+        ? 'استلم الكمية من صفحة تحكم التغليف.'
+        : rowIsSelfProductionEntry
+          ? 'لا يمكن اعتماد طلب أنشأته بنفسك.'
+          : undefined,
       onPrint: () => void printRequest(row),
       onApprove: async () => {
         if (!row.id) return;
@@ -622,7 +629,15 @@ export const TransferApprovals: React.FC = () => {
                         disabled={rowProcessing}
                         aria-label={`طباعة طلب ${row.referenceNo}`}
                       />
-                      {row.status === 'pending' && (
+                      {row.status === 'pending' && (row.requestType || '') === 'production_handover' && (
+                        <Link
+                          to={withTenantPath(tenantSlug, '/production/packaging/control')}
+                          className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800"
+                        >
+                          استلام بكمية
+                        </Link>
+                      )}
+                      {row.status === 'pending' && (row.requestType || '') !== 'production_handover' && (
                         <>
                           <TableIconAction
                             action="approve"
@@ -743,7 +758,15 @@ export const TransferApprovals: React.FC = () => {
                             disabled={rowProcessing}
                             aria-label={`طباعة طلب ${row.referenceNo}`}
                           />
-                          {row.status === 'pending' && (
+                          {row.status === 'pending' && requestType === 'production_handover' && (
+                            <Link
+                              to={withTenantPath(tenantSlug, '/production/packaging/control')}
+                              className="inline-flex items-center rounded-md border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-800"
+                            >
+                              استلام بكمية
+                            </Link>
+                          )}
+                          {row.status === 'pending' && requestType !== 'production_handover' && (
                             <>
                               <TableIconAction
                                 action="approve"

@@ -19,6 +19,11 @@ import { stockService } from '../../inventory/services/stockService';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { transferApprovalService } from '../../inventory/services/transferApprovalService';
 import { productionHandoverService } from '../../inventory/services/productionHandoverService';
+import {
+  assertOperationPathEnabled,
+  INVENTORY_HANDOVER_RECEIPT_PATHS,
+  INVENTORY_OPERATION_KEYS,
+} from '../../system/lib/operationPathSettings';
 import type {
   InventoryTransferRequest,
   StockItemBalance,
@@ -56,6 +61,8 @@ export const PackagingControl: React.FC = () => {
   const CACHE_KEY = `production:packaging-control:v2:${wipWarehouseId}:${sourceWarehouseId}:${targetWarehouseId}`;
 
   const [receiptQtyById, setReceiptQtyById] = useState<Record<string, string>>({});
+  const [finalReceiptById, setFinalReceiptById] = useState<Record<string, boolean>>({});
+  const [varianceReasonById, setVarianceReasonById] = useState<Record<string, string>>({});
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const {
@@ -131,6 +138,16 @@ export const PackagingControl: React.FC = () => {
 
   const confirmHandover = async (row: InventoryTransferRequest) => {
     if (!row.id) return;
+    try {
+      assertOperationPathEnabled(
+        systemSettings,
+        INVENTORY_OPERATION_KEYS.productionHandoverConfirm,
+        INVENTORY_HANDOVER_RECEIPT_PATHS.packagingControl,
+      );
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'مسار استلام التغليف متوقف من الإعدادات.');
+      return;
+    }
     const remaining = Number(row.remainingQuantity ?? row.lines?.[0]?.quantity ?? 0);
     const reported = Number(
       row.reportedQuantity
@@ -144,12 +161,19 @@ export const PackagingControl: React.FC = () => {
     );
     const raw = receiptQtyById[row.id];
     const qty = Number(raw != null && String(raw).trim() !== '' ? raw : remaining);
+    const isFinalReceipt = finalReceiptById[row.id] === true;
+    const varianceReason = String(varianceReasonById[row.id] || '').trim();
     if (!(qty > 0)) {
       toast.error('أدخل كمية استلام أكبر من صفر.');
       return;
     }
     if (qty > remaining + 0.000001) {
       toast.error(`الكمية تتجاوز المتبقي (${formatNumber(remaining)}).`);
+      return;
+    }
+    const shortfall = Math.max(0, remaining - qty);
+    if (isFinalReceipt && shortfall > 0.000001 && !varianceReason) {
+      toast.error('عند الإقفال بفرق اكتب سبب الفرق المسجّل على المحوّل.');
       return;
     }
     setBusyId(row.id);
@@ -160,13 +184,31 @@ export const PackagingControl: React.FC = () => {
         expectedReceivedQuantity,
         actor,
         actorUserId: uid || currentEmployee?.id || undefined,
+        isFinalReceipt,
+        varianceReason: isFinalReceipt ? varianceReason : undefined,
       });
-      toast.success(
-        result.remainingQuantity > 0
-          ? `تم استلام ${formatNumber(qty)} — المتبقي ${formatNumber(result.remainingQuantity)}`
-          : `تم استلام الكمية بالكامل (${formatNumber(qty)})`,
-      );
+      if (result.varianceQuantity > 0) {
+        toast.success(
+          `تم الإقفال: استلام ${formatNumber(qty)} — فرق ${formatNumber(result.varianceQuantity)} على المحوّل (${row.createdBy || '—'})`,
+        );
+      } else {
+        toast.success(
+          result.remainingQuantity > 0
+            ? `تم استلام ${formatNumber(qty)} — المتبقي ${formatNumber(result.remainingQuantity)}`
+            : `تم استلام الكمية بالكامل (${formatNumber(qty)})`,
+        );
+      }
       setReceiptQtyById((prev) => {
+        const next = { ...prev };
+        delete next[row.id!];
+        return next;
+      });
+      setFinalReceiptById((prev) => {
+        const next = { ...prev };
+        delete next[row.id!];
+        return next;
+      });
+      setVarianceReasonById((prev) => {
         const next = { ...prev };
         delete next[row.id!];
         return next;
@@ -264,7 +306,7 @@ export const PackagingControl: React.FC = () => {
             طابور استلام التغليف (تحت التسليم)
           </CardTitle>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            أكّد الكمية الفعلية المستلمة (يمكن أقل من المبلّغ). المتبقي يبقى تحت التسليم.
+            أكّد الكمية الفعلية. الاستلام الجزئي يبقي المتبقي معلّقًا. الإقفال بفرق يسجّل النقص على المحوّل.
           </p>
         </CardHeader>
         <CardContent className="p-0">
@@ -272,11 +314,12 @@ export const PackagingControl: React.FC = () => {
             <table className="erp-table w-full">
               <thead className="erp-thead">
                 <tr>
-                  <th className="erp-th text-start">المرجع / المنتج</th>
+                  <th className="erp-th text-start">المرجع / المنتج / المحوّل</th>
                   <th className="erp-th text-center">مبلّغ</th>
                   <th className="erp-th text-center">مستلم</th>
                   <th className="erp-th text-center">متبقي</th>
                   <th className="erp-th text-center">المستلم فعلياً</th>
+                  <th className="erp-th text-center">إقفال بفرق</th>
                   <th className="erp-th text-center">إجراء</th>
                 </tr>
               </thead>
@@ -284,14 +327,14 @@ export const PackagingControl: React.FC = () => {
                 {loading ? (
                   Array.from({ length: 3 }).map((_, i) => (
                     <tr key={`hk-${i}`}>
-                      <td className="px-4 py-3" colSpan={6}>
+                      <td className="px-4 py-3" colSpan={7}>
                         <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
                       </td>
                     </tr>
                   ))
                 ) : pendingHandovers.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
+                    <td colSpan={7} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       لا توجد كميات بانتظار تأكيد مشرف التغليف.
                     </td>
                   </tr>
@@ -301,12 +344,22 @@ export const PackagingControl: React.FC = () => {
                     const reported = Number(row.reportedQuantity ?? line?.reportedQuantity ?? line?.quantity ?? 0);
                     const received = Number(row.receivedQuantity ?? line?.receivedQuantity ?? 0);
                     const remaining = Number(row.remainingQuantity ?? Math.max(0, reported - received));
+                    const isFinal = finalReceiptById[row.id || ''] === true;
+                    const typedQty = Number(
+                      receiptQtyById[row.id || ''] != null && String(receiptQtyById[row.id || '']).trim() !== ''
+                        ? receiptQtyById[row.id || '']
+                        : remaining,
+                    );
+                    const projectedShortfall = Math.max(0, remaining - (Number.isFinite(typedQty) ? typedQty : 0));
                     return (
                       <tr key={row.id} className="border-b border-[var(--color-border)]">
                         <td className="px-4 py-3">
                           <p className="text-sm font-bold">{row.referenceNo}</p>
                           <p className="text-sm font-medium">{line?.itemName || '—'}</p>
                           <p className="text-xs text-slate-400 font-mono">{line?.itemCode || '—'}</p>
+                          <p className="text-xs text-slate-500 mt-1">
+                            المحوّل: <span className="font-semibold">{row.createdBy || '—'}</span>
+                          </p>
                         </td>
                         <td className="px-4 py-3 text-center tabular-nums font-bold">{formatNumber(reported)}</td>
                         <td className="px-4 py-3 text-center tabular-nums">{formatNumber(received)}</td>
@@ -326,13 +379,42 @@ export const PackagingControl: React.FC = () => {
                           />
                         </td>
                         <td className="px-4 py-3 text-center">
+                          <label className="inline-flex items-center gap-1.5 text-xs font-medium text-slate-700">
+                            <input
+                              type="checkbox"
+                              checked={isFinal}
+                              disabled={!canConfirmHandover || busyId === row.id || remaining <= 0}
+                              onChange={(e) =>
+                                setFinalReceiptById((prev) => ({ ...prev, [row.id!]: e.target.checked }))
+                              }
+                            />
+                            نهائي
+                          </label>
+                          {isFinal && projectedShortfall > 0.000001 ? (
+                            <input
+                              type="text"
+                              className="mt-2 w-full min-w-[10rem] rounded border px-2 py-1.5 text-xs"
+                              placeholder="سبب الفرق على المحوّل"
+                              disabled={!canConfirmHandover || busyId === row.id}
+                              value={varianceReasonById[row.id || ''] ?? ''}
+                              onChange={(e) =>
+                                setVarianceReasonById((prev) => ({ ...prev, [row.id!]: e.target.value }))
+                              }
+                            />
+                          ) : null}
+                        </td>
+                        <td className="px-4 py-3 text-center">
                           <PrimaryButton
                             iconName="fact_check"
                             tone="approve"
                             disabled={!canConfirmHandover || busyId === row.id || remaining <= 0}
                             onClick={() => void confirmHandover(row)}
                           >
-                            {busyId === row.id ? 'جاري…' : 'تأكيد الاستلام'}
+                            {busyId === row.id
+                              ? 'جاري…'
+                              : isFinal && projectedShortfall > 0.000001
+                                ? 'إقفال بفرق'
+                                : 'تأكيد الاستلام'}
                           </PrimaryButton>
                         </td>
                       </tr>

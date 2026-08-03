@@ -28,7 +28,13 @@ import { useAppStore } from '@/store/useAppStore';
 import { binaryFilterItems, buildBinarySearchIndex } from '@/utils/binarySearch';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { getPortalContainer } from '@/lib/portalRoot';
-import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
+import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  INVENTORY_TRANSFER_CREATE_PATHS,
+  isMenuItemOperationPathEnabled,
+  isOperationPathEnabled,
+} from '@/modules/system/lib/operationPathSettings';
 
 interface PaletteItem {
   key: string;
@@ -53,6 +59,8 @@ const SUPPLIES_WAREHOUSE_SHORTCUTS: Array<{
   path: string;
   permission: Parameters<ReturnType<typeof usePermission>['can']>[0];
   keywords: string[];
+  operationKey?: string;
+  pathKey?: string;
 }> = [
   {
     key: 'supplies-balances',
@@ -69,6 +77,8 @@ const SUPPLIES_WAREHOUSE_SHORTCUTS: Array<{
     path: '/inventory/raw-materials/receive',
     permission: 'inventory.transactions.create',
     keywords: ['مستلزم', 'استلام', 'مكونات', 'وارد'],
+    operationKey: INVENTORY_OPERATION_KEYS.stockMove,
+    pathKey: INVENTORY_STOCK_MOVE_PATHS.suppliesReceipt,
   },
   {
     key: 'supplies-issue',
@@ -77,6 +87,8 @@ const SUPPLIES_WAREHOUSE_SHORTCUTS: Array<{
     path: '/inventory/production-issues',
     permission: 'inventory.view',
     keywords: ['مستلزم', 'صرف', 'إنتاج', 'مكونات'],
+    operationKey: INVENTORY_OPERATION_KEYS.stockMove,
+    pathKey: INVENTORY_STOCK_MOVE_PATHS.movementsForm,
   },
   {
     key: 'supplies-out',
@@ -85,6 +97,8 @@ const SUPPLIES_WAREHOUSE_SHORTCUTS: Array<{
     path: '/inventory/movements?itemType=raw_material&movementType=OUT',
     permission: 'inventory.transactions.create',
     keywords: ['مستلزم', 'صرف', 'يدوي', 'خروج'],
+    operationKey: INVENTORY_OPERATION_KEYS.stockMove,
+    pathKey: INVENTORY_STOCK_MOVE_PATHS.movementsForm,
   },
   {
     key: 'supplies-transfer',
@@ -93,6 +107,8 @@ const SUPPLIES_WAREHOUSE_SHORTCUTS: Array<{
     path: '/inventory/movements?itemType=raw_material&movementType=TRANSFER',
     permission: 'inventory.transactions.create',
     keywords: ['مستلزم', 'تحويل', 'مكونات'],
+    operationKey: INVENTORY_OPERATION_KEYS.transferCreate,
+    pathKey: INVENTORY_TRANSFER_CREATE_PATHS.movementsForm,
   },
   {
     key: 'supplies-count-match',
@@ -177,6 +193,13 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
     SUPPLIES_WAREHOUSE_SHORTCUTS.forEach((shortcut) => {
       if (!can(shortcut.permission)) return;
       if (existingKeys.has(shortcut.key)) return;
+      if (
+        shortcut.operationKey
+        && shortcut.pathKey
+        && !isOperationPathEnabled(operationPaths, shortcut.operationKey, shortcut.pathKey)
+      ) {
+        return;
+      }
       items.push({
         key: shortcut.key,
         label: shortcut.label,

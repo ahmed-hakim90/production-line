@@ -60,6 +60,22 @@ export const systemSettingsService = {
               ),
             }
             : {}),
+          ...(data.planSettings
+            ? {
+              planSettings: {
+                ...(latest.planSettings ?? {}),
+                ...data.planSettings,
+                inventoryRouting: {
+                  ...(latest.planSettings?.inventoryRouting ?? {}),
+                  ...(data.planSettings.inventoryRouting ?? {}),
+                },
+                reportBehavior: {
+                  ...(latest.planSettings?.reportBehavior ?? {}),
+                  ...(data.planSettings.reportBehavior ?? {}),
+                },
+              },
+            }
+            : {}),
         } as SystemSettings;
         transaction.set(ref, next, { merge: true });
         return next;

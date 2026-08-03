@@ -21,6 +21,13 @@ import {
   type InventoryMovementIntent,
   type InventoryOperationState,
 } from './productionReportInventoryCore.js';
+import {
+  assertOperationPathEnabledServer,
+  isOperationPathEnabledServer,
+} from './operationPathGuard.js';
+
+const REPORT_CREATE_OPERATION_KEY = 'production.report.create';
+const REPORT_DELETE_OPERATION_KEY = 'production.report.delete';
 
 const db = getDb();
 
@@ -852,6 +859,13 @@ export const applyProductionReportInventory = onCall(
     }
 
     const reportId = requireReportId(request);
+    {
+      const pathSettingsSnap = await db.collection(SYSTEM_SETTINGS).doc(actor.tenantId).get();
+      assertOperationPathEnabledServer(
+        pathSettingsSnap.data() || {},
+        REPORT_CREATE_OPERATION_KEY,
+      );
+    }
 
     const reportSnap = await db.collection(REPORTS).doc(reportId).get();
     if (!reportSnap.exists) throw new HttpsError('not-found', 'تقرير الإنتاج غير موجود.');
@@ -1096,6 +1110,17 @@ export const reverseProductionReportInventory = onCall(
     }
 
     const reportId = requireReportId(request);
+    {
+      const pathSettingsSnap = await db.collection(SYSTEM_SETTINGS).doc(actor.tenantId).get();
+      const settings = pathSettingsSnap.data() || {};
+      // Reverse stays available while create or delete pipelines remain enabled.
+      if (
+        !isOperationPathEnabledServer(settings, REPORT_DELETE_OPERATION_KEY)
+        && !isOperationPathEnabledServer(settings, REPORT_CREATE_OPERATION_KEY)
+      ) {
+        assertOperationPathEnabledServer(settings, REPORT_DELETE_OPERATION_KEY);
+      }
+    }
 
     const claim = await claimReverseOperation(actor, reportId);
     if (claim === 'missing' || claim === 'done') {

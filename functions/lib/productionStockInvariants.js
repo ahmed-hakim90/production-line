@@ -10,9 +10,9 @@ export const canonicalProductionQuantity = (value) => {
         / (10 ** QUANTITY_DECIMAL_PLACES);
     return rounded.toFixed(QUANTITY_DECIMAL_PLACES);
 };
-export const buildProductionHandoverIdempotencyKey = (handoverRequestId, expectedReceivedQuantity, quantity) => [
+export const buildProductionHandoverIdempotencyKey = (handoverRequestId, expectedReceivedQuantity, quantity, options) => [
     'production-handover',
-    'v1',
+    options?.isFinalReceipt ? 'v2-final' : 'v1',
     encodeURIComponent(handoverRequestId.trim()),
     canonicalProductionQuantity(expectedReceivedQuantity),
     canonicalProductionQuantity(quantity),

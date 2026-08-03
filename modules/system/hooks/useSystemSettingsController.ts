@@ -26,8 +26,13 @@ import type {
   ThemeSettings,
   WidgetConfig,
 } from '../../../types';
+import {
+  assertDistinctProductionRoutingWarehouses,
+  resolveInventoryRoutingV1,
+} from '../../inventory/lib/inventoryRoutingResolver';
 import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import { diffOperationPathSettings } from '../lib/operationPathSettings';
+import { toast } from '../../../components/Toast';
 
 export type SettingsSectionKey =
   | 'general'
@@ -97,10 +102,26 @@ export const useSystemSettingsController = ({
   const [saveMessage, setSaveMessage] = useState('');
   const serialize = useCallback((value: unknown) => JSON.stringify(value), []);
 
+  const validatePlanRouting = useCallback((planSettings: PlanSettings) => {
+    const routing = resolveInventoryRoutingV1({ planSettings } as SystemSettings);
+    assertDistinctProductionRoutingWarehouses(routing);
+    if (routing.requirePackagingHandoverReceipt) {
+      if (!routing.productionWipWarehouseId || !routing.finishedStagingWarehouseId) {
+        throw new Error('عند تفعيل استلام التغليف يجب تعيين مخزن تحت التسليم وبانتظار التغليف.');
+      }
+    }
+  }, []);
+
   const handleSave = useCallback(async (section: SettingsSectionKey) => {
     setSaving(true);
     setSaveMessage('');
     try {
+      const nextPlanSettings = section === 'general' || section === 'production'
+        ? syncPlanSettingsWarehouseRouting(localPlanSettings)
+        : (systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS);
+      if (section === 'general' || section === 'production') {
+        validatePlanRouting(nextPlanSettings);
+      }
       const updated: SystemSettings = {
         ...systemSettings,
         dashboardWidgets: section === 'dashboards' ? localWidgets : systemSettings.dashboardWidgets,
@@ -110,9 +131,7 @@ export const useSystemSettingsController = ({
         alertSettings: section === 'alerts' ? localAlerts : systemSettings.alertSettings,
         kpiThresholds: section === 'alerts' ? localKPIs : systemSettings.kpiThresholds,
         printTemplate: section === 'reports' ? localPrint : systemSettings.printTemplate,
-        planSettings: section === 'general' || section === 'production'
-          ? syncPlanSettingsWarehouseRouting(localPlanSettings)
-          : (systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS),
+        planSettings: nextPlanSettings,
         branding: section === 'appearance' ? localBranding : (systemSettings.branding ?? DEFAULT_BRANDING),
         theme: section === 'appearance' ? localTheme : (systemSettings.theme ?? DEFAULT_THEME),
         dashboardDisplay: section === 'dashboards' ? localDashboardDisplay : (systemSettings.dashboardDisplay ?? DEFAULT_DASHBOARD_DISPLAY),
@@ -139,10 +158,12 @@ export const useSystemSettingsController = ({
       if (section === 'general' || section === 'production') {
         setLocalPlanSettings(updated.planSettings ?? localPlanSettings);
       }
-      setSaveMessage('تم الحفظ بنجاح');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.success('تم الحفظ بنجاح');
+      setSaveMessage('');
     } catch (error) {
-      setSaveMessage((error as Error)?.message || 'فشل الحفظ');
+      const message = (error as Error)?.message || 'فشل الحفظ';
+      toast.error(message);
+      setSaveMessage(message);
     }
     setSaving(false);
   }, [
@@ -169,12 +190,15 @@ export const useSystemSettingsController = ({
     localDefaultHomePath,
     localProductionWorkerSettings,
     updateSystemSettings,
+    validatePlanRouting,
   ]);
 
   const handleSaveAll = useCallback(async () => {
     setSaving(true);
     setSaveMessage('');
     try {
+      const planSettings = syncPlanSettingsWarehouseRouting(localPlanSettings);
+      validatePlanRouting(planSettings);
       const updated: SystemSettings = {
         ...systemSettings,
         dashboardWidgets: localWidgets,
@@ -182,7 +206,7 @@ export const useSystemSettingsController = ({
         alertSettings: localAlerts,
         kpiThresholds: localKPIs,
         printTemplate: localPrint,
-        planSettings: syncPlanSettingsWarehouseRouting(localPlanSettings),
+        planSettings,
         branding: localBranding,
         theme: localTheme,
         dashboardDisplay: localDashboardDisplay,
@@ -198,10 +222,12 @@ export const useSystemSettingsController = ({
       };
       await updateSystemSettings(updated);
       setLocalPlanSettings(updated.planSettings ?? localPlanSettings);
-      setSaveMessage('تم حفظ جميع الإعدادات بنجاح');
-      setTimeout(() => setSaveMessage(''), 3000);
+      toast.success('تم حفظ جميع الإعدادات بنجاح');
+      setSaveMessage('');
     } catch (error) {
-      setSaveMessage((error as Error)?.message || 'فشل حفظ جميع الإعدادات');
+      const message = (error as Error)?.message || 'فشل حفظ جميع الإعدادات';
+      toast.error(message);
+      setSaveMessage(message);
     } finally {
       setSaving(false);
     }
@@ -229,6 +255,7 @@ export const useSystemSettingsController = ({
     normalizeCustomWidgets,
     normalizeQuickActions,
     updateSystemSettings,
+    validatePlanRouting,
   ]);
 
   const dirtyBySection = useMemo(() => {

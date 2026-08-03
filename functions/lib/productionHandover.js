@@ -4,6 +4,7 @@ import { HttpsError, onCall } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import { assertActorWarehouseInvolved, resolveBoundInventoryWarehouseId, } from './inventoryWarehouseScope.js';
 import { buildProductionHandoverIdempotencyKey, PRODUCTION_QUANTITY_TOLERANCE, quantitiesMatch, } from './productionStockInvariants.js';
+import { assertOperationPathEnabledServer } from './operationPathGuard.js';
 const db = getDb();
 const USERS = 'users';
 const ROLES = 'roles';
@@ -12,6 +13,9 @@ const RECEIPTS = 'production_handover_receipts';
 const WAREHOUSES = 'warehouses';
 const STOCK_ITEMS = 'stock_items';
 const STOCK_TX = 'stock_transactions';
+const SYSTEM_SETTINGS = 'system_settings';
+const HANDOVER_OPERATION_KEY = 'inventory.productionHandover.confirmReceipt';
+const HANDOVER_PATH_KEY = 'packaging_control';
 const toNumber = (value) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
@@ -73,6 +77,8 @@ export const confirmProductionHandoverReceipt = onCall({
     ])) {
         throw new HttpsError('permission-denied', 'لا تملك صلاحية اعتماد استلام التغليف.');
     }
+    const settingsSnap = await db.collection(SYSTEM_SETTINGS).doc(actor.tenantId).get();
+    assertOperationPathEnabledServer(settingsSnap.data() || {}, HANDOVER_OPERATION_KEY, HANDOVER_PATH_KEY);
     if (!request.data || typeof request.data !== 'object' || Array.isArray(request.data)) {
         throw new HttpsError('invalid-argument', 'بيانات عملية الاستلام غير صالحة.');
     }
@@ -83,6 +89,8 @@ export const confirmProductionHandoverReceipt = onCall({
         'expectedReceivedQuantity',
         'note',
         'idempotencyKey',
+        'isFinalReceipt',
+        'varianceReason',
     ]);
     if (Object.keys(input).some((key) => !allowedFields.has(key))) {
         throw new HttpsError('invalid-argument', 'تحتوي عملية الاستلام على حقول غير مسموحة.');
@@ -91,13 +99,17 @@ export const confirmProductionHandoverReceipt = onCall({
         || typeof input.quantity !== 'number'
         || typeof input.expectedReceivedQuantity !== 'number'
         || typeof input.idempotencyKey !== 'string'
-        || (input.note !== undefined && typeof input.note !== 'string')) {
+        || (input.note !== undefined && typeof input.note !== 'string')
+        || (input.isFinalReceipt !== undefined && typeof input.isFinalReceipt !== 'boolean')
+        || (input.varianceReason !== undefined && typeof input.varianceReason !== 'string')) {
         throw new HttpsError('invalid-argument', 'بيانات عملية الاستلام غير صالحة.');
     }
     const handoverRequestId = input.handoverRequestId.trim();
     const qty = input.quantity;
     const expectedReceivedQuantity = input.expectedReceivedQuantity;
     const note = String(input.note || '').trim();
+    const isFinalReceipt = input.isFinalReceipt === true;
+    const varianceReason = String(input.varianceReason || '').trim();
     const idempotencyKey = input.idempotencyKey.trim();
     if (!handoverRequestId)
         throw new HttpsError('invalid-argument', 'معرف طلب الاستلام مطلوب.');
@@ -113,7 +125,10 @@ export const confirmProductionHandoverReceipt = onCall({
     if (note.length > 1000) {
         throw new HttpsError('invalid-argument', 'ملاحظة الاستلام طويلة جداً.');
     }
-    const expectedIdempotencyKey = buildProductionHandoverIdempotencyKey(handoverRequestId, expectedReceivedQuantity, qty);
+    if (varianceReason.length > 1000) {
+        throw new HttpsError('invalid-argument', 'سبب الفرق طويل جداً.');
+    }
+    const expectedIdempotencyKey = buildProductionHandoverIdempotencyKey(handoverRequestId, expectedReceivedQuantity, qty, { isFinalReceipt });
     if (idempotencyKey !== expectedIdempotencyKey) {
         throw new HttpsError('invalid-argument', 'مفتاح عملية الاستلام غير صالح.');
     }
@@ -191,6 +206,18 @@ export const confirmProductionHandoverReceipt = onCall({
         if (qty > remaining + PRODUCTION_QUANTITY_TOLERANCE) {
             throw new HttpsError('failed-precondition', `كمية الاستلام تتجاوز المتبقي (${remaining}).`);
         }
+        const receivedTotal = received + qty;
+        const shortfallBeforeClose = Math.max(0, reported - receivedTotal);
+        if (isFinalReceipt
+            && shortfallBeforeClose > PRODUCTION_QUANTITY_TOLERANCE
+            && !varianceReason) {
+            throw new HttpsError('invalid-argument', 'عند الإقفال بفرق يجب كتابة سبب الفرق المسجّل على المحوّل.');
+        }
+        const remainingTotal = (isFinalReceipt
+            || receivedTotal >= reported - PRODUCTION_QUANTITY_TOLERANCE)
+            ? 0
+            : shortfallBeforeClose;
+        const varianceQuantity = isFinalReceipt ? shortfallBeforeClose : 0;
         const sourceBalRef = db.collection(STOCK_ITEMS).doc(balanceDocId(fromWarehouseId, line.itemType, line.itemId));
         const targetBalRef = db.collection(STOCK_ITEMS).doc(balanceDocId(toWarehouseId, line.itemType, line.itemId));
         const [sourceBalSnap, targetBalSnap] = await Promise.all([
@@ -211,10 +238,6 @@ export const confirmProductionHandoverReceipt = onCall({
         const outTxRef = db.collection(STOCK_TX).doc(`handover_${receiptRef.id}_out`);
         const inTxRef = db.collection(STOCK_TX).doc(`handover_${receiptRef.id}_in`);
         const referenceNo = `${String(req.referenceNo || handoverRequestId)}-R-${receiptRef.id.slice(0, 10)}`;
-        const receivedTotal = received + qty;
-        const remainingTotal = receivedTotal >= reported - PRODUCTION_QUANTITY_TOLERANCE
-            ? 0
-            : reported - receivedTotal;
         const now = new Date().toISOString();
         const lineage = {
             unit: line.unit || 'piece',
@@ -231,6 +254,8 @@ export const confirmProductionHandoverReceipt = onCall({
                 quantity: remainingTotal,
             }
             : row));
+        const transferorName = String(req.createdBy || '').trim() || 'غير معروف';
+        const transferorUserId = String(req.createdByUserId || '').trim() || null;
         t.set(outTxRef, {
             warehouseId: fromWarehouseId,
             toWarehouseId,
@@ -304,6 +329,17 @@ export const confirmProductionHandoverReceipt = onCall({
                     resolvedAt: now,
                 }
                 : {}),
+            ...(varianceQuantity > PRODUCTION_QUANTITY_TOLERANCE
+                ? {
+                    varianceQuantity,
+                    varianceReason,
+                    varianceRecordedAgainstUserId: transferorUserId,
+                    varianceRecordedAgainstName: transferorName,
+                    varianceClosedBy: actor.displayName,
+                    varianceClosedByUserId: actor.uid,
+                    varianceClosedAt: now,
+                }
+                : {}),
         }, { merge: true });
         t.set(receiptRef, {
             handoverRequestId,
@@ -317,6 +353,15 @@ export const confirmProductionHandoverReceipt = onCall({
             toWarehouseId,
             movementReferenceNo: outTxRef.id,
             note: note || null,
+            isFinalReceipt,
+            varianceQuantity: varianceQuantity > PRODUCTION_QUANTITY_TOLERANCE ? varianceQuantity : null,
+            varianceReason: varianceQuantity > PRODUCTION_QUANTITY_TOLERANCE ? varianceReason : null,
+            varianceRecordedAgainstUserId: varianceQuantity > PRODUCTION_QUANTITY_TOLERANCE
+                ? transferorUserId
+                : null,
+            varianceRecordedAgainstName: varianceQuantity > PRODUCTION_QUANTITY_TOLERANCE
+                ? transferorName
+                : null,
             receivedBy: actor.displayName,
             receivedByUserId: actor.uid,
             createdAt: now,
@@ -328,6 +373,7 @@ export const confirmProductionHandoverReceipt = onCall({
         return {
             receiptId: receiptRef.id,
             remainingQuantity: remainingTotal,
+            varianceQuantity,
             idempotent: false,
         };
     });

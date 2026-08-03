@@ -58,7 +58,9 @@ export const productionHandoverService = {
     actor: string;
     actorUserId?: string;
     note?: string;
-  }): Promise<{ receiptId: string; remainingQuantity: number }> {
+    isFinalReceipt?: boolean;
+    varianceReason?: string;
+  }): Promise<{ receiptId: string; remainingQuantity: number; varianceQuantity: number }> {
     if (!isConfigured || !functionsClient) {
       throw new Error('النظام غير مهيأ أو لم تُنشر دوال الخادم.');
     }
@@ -68,10 +70,13 @@ export const productionHandoverService = {
     if (!Number.isFinite(expectedReceivedQuantity) || expectedReceivedQuantity < 0) {
       throw new Error('تعذر تحديد الكمية المستلمة السابقة.');
     }
+    const isFinalReceipt = input.isFinalReceipt === true;
+    const varianceReason = String(input.varianceReason || '').trim();
     const idempotencyKey = buildProductionHandoverIdempotencyKey(
       input.handoverRequestId,
       expectedReceivedQuantity,
       qty,
+      { isFinalReceipt },
     );
 
     const callable = httpsCallable<
@@ -80,9 +85,16 @@ export const productionHandoverService = {
         quantity: number;
         expectedReceivedQuantity: number;
         note?: string;
+        isFinalReceipt?: boolean;
+        varianceReason?: string;
         idempotencyKey: string;
       },
-      { receiptId: string; remainingQuantity: number; idempotent?: boolean }
+      {
+        receiptId: string;
+        remainingQuantity: number;
+        varianceQuantity?: number;
+        idempotent?: boolean;
+      }
     >(functionsClient, 'confirmProductionHandoverReceipt');
 
     try {
@@ -91,11 +103,14 @@ export const productionHandoverService = {
         quantity: qty,
         expectedReceivedQuantity,
         note: input.note,
+        ...(isFinalReceipt ? { isFinalReceipt: true } : {}),
+        ...(varianceReason ? { varianceReason } : {}),
         idempotencyKey,
       });
       return {
         receiptId: String(result.data.receiptId || ''),
         remainingQuantity: Number(result.data.remainingQuantity || 0),
+        varianceQuantity: Number(result.data.varianceQuantity || 0),
       };
     } catch (error: unknown) {
       const callableError = error as { code?: string; message?: string };

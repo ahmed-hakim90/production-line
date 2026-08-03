@@ -51,6 +51,7 @@ const LEGACY_WAREHOUSE_KEYS: (keyof PlanSettings)[] = [
 const ROUTING_WAREHOUSE_KEYS: (keyof InventoryRoutingSettings)[] = [
   'rawMaterialWarehouseId',
   'decomposedWarehouseId',
+  'productionFloorWarehouseId',
   'productionWipWarehouseId',
   'finishedStagingWarehouseId',
   'finalProductWarehouseId',

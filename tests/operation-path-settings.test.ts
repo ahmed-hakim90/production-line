@@ -1,11 +1,14 @@
 import assert from 'node:assert/strict';
 import {
+  INVENTORY_HANDOVER_RECEIPT_PATHS,
+  INVENTORY_OPERATION_KEYS,
   OPERATION_PATH_REGISTRY,
   OperationPathDisabledError,
   PRODUCTION_REPORT_CREATE_PATHS,
   PRODUCTION_REPORT_OPERATION_KEYS,
   assertOperationPathEnabled,
   diffOperationPathSettings,
+  isMenuItemOperationPathEnabled,
   isOperationPathEnabled,
   mergeOperationPathSettingsPatch,
   patchOperationPathControl,
@@ -112,5 +115,25 @@ for (const operation of OPERATION_PATH_REGISTRY) {
   const pathKeys = operation.paths.map((path) => path.key);
   assert.equal(pathKeys.length, new Set(pathKeys).size, `duplicate path key in ${operation.key}`);
 }
+
+assert.equal(
+  registryKeys.has(INVENTORY_OPERATION_KEYS.productionHandoverConfirm),
+  true,
+  'registry must include packaging handover receipt operation',
+);
+
+const packagingDisabled = patchOperationPathControl(undefined, INVENTORY_OPERATION_KEYS.productionHandoverConfirm, {
+  paths: { [INVENTORY_HANDOVER_RECEIPT_PATHS.packagingControl]: false },
+});
+assert.equal(
+  isMenuItemOperationPathEnabled(packagingDisabled, 'packaging-control'),
+  false,
+  'packaging-control menu must honor handover receipt path flag',
+);
+assert.equal(
+  isMenuItemOperationPathEnabled(undefined, 'packaging-control'),
+  true,
+  'packaging-control menu stays available by default',
+);
 
 console.log('operation-path-settings tests passed');

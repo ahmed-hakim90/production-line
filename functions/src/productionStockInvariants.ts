@@ -18,9 +18,10 @@ export const buildProductionHandoverIdempotencyKey = (
   handoverRequestId: string,
   expectedReceivedQuantity: number,
   quantity: number,
+  options?: { isFinalReceipt?: boolean },
 ): string => [
   'production-handover',
-  'v1',
+  options?.isFinalReceipt ? 'v2-final' : 'v1',
   encodeURIComponent(handoverRequestId.trim()),
   canonicalProductionQuantity(expectedReceivedQuantity),
   canonicalProductionQuantity(quantity),

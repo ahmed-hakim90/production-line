@@ -1289,6 +1289,12 @@ interface AppState {
     reportCount: number;
     producedQuantity: number;
   }>;
+  /** Recompute produced/status for one plan from its linked reports (includes completed → reopen). */
+  reconcileProductionPlanFromReports: (planId: string) => Promise<{
+    producedQuantity: number;
+    status: PlanStatus;
+    patched: boolean;
+  } | null>;
   unlinkReportsWorkOrdersInRange: (
     startDate: string,
     endDate: string,
@@ -2824,13 +2830,14 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const productionPlans = await productionPlanService.getAll();
         const productionPlanFollowUps = await productionPlanFollowUpService.getAll();
-        const activePlans = productionPlans.filter(
-          (p) => p.status === 'in_progress' || p.status === 'planned'
+        // Include completed plans so deleting/reducing linked reports can reopen them.
+        const reconcilablePlans = productionPlans.filter(
+          (p) => p.status === 'in_progress' || p.status === 'planned' || p.status === 'completed',
         );
         const planReports: Record<string, ProductionReport[]> = {};
         const planAutoPatches: Array<{ id: string; patch: Partial<ProductionPlan> }> = [];
         await Promise.all(
-          activePlans.map(async (plan) => {
+          reconcilablePlans.map(async (plan) => {
             const key = `${plan.lineId}_${plan.productId}`;
             const reports = await reportService.getByLineAndProduct(
               plan.lineId, plan.productId, plan.startDate
@@ -4259,7 +4266,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           await get().reconcileWorkOrderFromReports(activeWO.id, { internal: true });
         }
         if (activePlan?.id && shouldPostToPlan && !skipWoProgress) {
-          await get().fetchProductionPlans({ force: true });
+          await get().reconcileProductionPlanFromReports(activePlan.id);
         }
       } catch (error) {
         postSaveWarning = (error as Error)?.message
@@ -4301,7 +4308,9 @@ export const useAppStore = create<AppState>((set, get) => ({
         } catch (syncErr) {
           console.warn('syncWorkerDailyPerformanceFromReport (create):', syncErr);
         }
-        if (activePlan) await get().fetchProductionPlans({ force: true });
+        if (activePlan?.id && shouldPostToPlan && !skipWoProgress) {
+          await get().reconcileProductionPlanFromReports(activePlan.id);
+        }
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث البيانات المعروضة';
       }
@@ -4334,8 +4343,18 @@ export const useAppStore = create<AppState>((set, get) => ({
 
       if (postSaveWarning) {
         console.warn('createReport post-save warning:', postSaveWarning);
+        set({ error: postSaveWarning });
+        try {
+          const { toast } = await import('../components/Toast');
+          toast.warning(
+            `${postSaveWarning} — يمكنك إعادة ترحيل المخزون من شاشة التقرير إن لزم.`,
+          );
+        } catch {
+          // toast is best-effort
+        }
+      } else {
+        set({ error: null });
       }
-      set({ error: null });
       if (trackedOperation) {
         actionTrackerService.succeedOperation(trackedOperation, {
           metadata: {
@@ -4772,7 +4791,19 @@ export const useAppStore = create<AppState>((set, get) => ({
       } catch (syncErr) {
         console.warn('syncWorkerDailyPerformanceFromReport (update):', syncErr);
       }
-      await get().fetchProductionPlans({ force: true });
+      {
+        const affectedPlanIds = new Set(
+          [existingReport?.productionPlanId, savedReport.productionPlanId]
+            .map((planId) => String(planId || '').trim())
+            .filter(Boolean),
+        );
+        for (const planId of affectedPlanIds) {
+          await get().reconcileProductionPlanFromReports(planId);
+        }
+        if (affectedPlanIds.size === 0) {
+          await get().fetchProductionPlans({ force: true });
+        }
+      }
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -4897,6 +4928,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       if (linkedWorkOrderId) {
         await get().reconcileWorkOrderFromReports(linkedWorkOrderId, { internal: true });
       }
+      const linkedPlanId = String(reportToDelete.productionPlanId || '').trim();
+      if (linkedPlanId) {
+        await get().reconcileProductionPlanFromReports(linkedPlanId);
+      }
       const productIdsToResync = new Set<string>();
       if (reportToDelete.productId) productIdsToResync.add(String(reportToDelete.productId));
       (reportToDelete.packagingLines || []).forEach((l) => {
@@ -4933,7 +4968,9 @@ export const useAppStore = create<AppState>((set, get) => ({
       }));
       get()._rebuildProducts();
       get()._rebuildLines();
-      await get().fetchProductionPlans({ force: true });
+      if (!linkedPlanId) {
+        await get().fetchProductionPlans({ force: true });
+      }
 
       eventBus.emit(SystemEvents.USER_ACTION, {
         module: 'production',
@@ -5234,6 +5271,41 @@ export const useAppStore = create<AppState>((set, get) => ({
     }
   },
 
+  reconcileProductionPlanFromReports: async (planId) => {
+    const id = String(planId || '').trim();
+    if (!id) return null;
+    try {
+      const plan = await productionPlanService.getById(id);
+      if (!plan?.id) {
+        throw new Error('خطة الإنتاج غير موجودة.');
+      }
+      const reports = await reportService.getByLineAndProduct(
+        plan.lineId,
+        plan.productId,
+        plan.startDate || plan.plannedStartDate || undefined,
+      );
+      const patch = deriveProductionPlanAutoPatch(plan, reports);
+      if (patch) {
+        await productionPlanService.update(id, patch);
+      }
+      await get().fetchProductionPlans({ force: true, silent: true });
+      const refreshed = get().productionPlans.find((row) => row.id === id) || { ...plan, ...patch };
+      const planReports = filterReportsForProductionPlan(refreshed, reports);
+      const producedQuantity = planReports.reduce(
+        (sum, report) => sum + Number(report.quantityProduced || 0),
+        0,
+      );
+      return {
+        producedQuantity,
+        status: refreshed.status,
+        patched: Boolean(patch),
+      };
+    } catch (error) {
+      console.warn('reconcileProductionPlanFromReports failed:', error);
+      throw error;
+    }
+  },
+
   reconcileWorkOrderFromReports: async (workOrderId, context) => {
     set({ error: null });
     if ('path' in context) {
@@ -5302,10 +5374,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       await workOrderService.update(id, statusPatch);
 
-      await Promise.all([
-        get().fetchWorkOrders({ force: true }),
-        get().fetchProductionPlans({ force: true, silent: true }),
-      ]);
+      await get().fetchWorkOrders({ force: true });
+      if (planId) {
+        try {
+          await get().reconcileProductionPlanFromReports(planId);
+        } catch (planErr) {
+          console.warn('reconcileProductionPlanFromReports after WO reconcile failed:', planErr);
+          await get().fetchProductionPlans({ force: true, silent: true });
+        }
+      } else {
+        await get().fetchProductionPlans({ force: true, silent: true });
+      }
 
       const touchedDates = refreshedLinked
         .map((r) => String(r.date || '').trim())

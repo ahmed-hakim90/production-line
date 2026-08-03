@@ -26,6 +26,11 @@ function testStableHandoverOperationKeys() {
   // A later partial receipt with a new pre-receipt total is a different operation.
   assert.notEqual(first, buildServerKey('handover-1', 25, 25));
   assert.notEqual(first, buildServerKey('handover-1', 0, 20));
+
+  const finalKey = buildServerKey('handover-1', 0, 20, { isFinalReceipt: true });
+  assert.equal(finalKey, buildClientKey('handover-1', 0, 20, { isFinalReceipt: true }));
+  assert.notEqual(finalKey, buildServerKey('handover-1', 0, 20));
+  assert.match(finalKey, /v2-final/);
 }
 
 function testCanonicalFloatingPointKeys() {
