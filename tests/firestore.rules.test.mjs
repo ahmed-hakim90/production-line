@@ -972,6 +972,38 @@ await seed();
     tenantId: 'tenantB',
   }));
 
+  // P0: self-create cannot set privileged roleId / isActive:true.
+  const selfEscalationDb = testEnv.authenticatedContext('userSelfEscalation').firestore();
+  await assertFails(selfEscalationDb.collection('users').doc('userSelfEscalation').set({
+    email: 'evil@example.com',
+    displayName: 'Evil',
+    roleId: 'tenantA__admin',
+    tenantId: 'tenantA',
+    isActive: true,
+  }));
+  await assertFails(selfEscalationDb.collection('users').doc('userSelfEscalation').set({
+    email: 'evil@example.com',
+    displayName: 'Evil',
+    roleId: 'tenantA__admin',
+    tenantId: 'tenantA',
+    isActive: false,
+  }));
+  await assertSucceeds(selfEscalationDb.collection('users').doc('userSelfEscalation').set({
+    email: 'pending@example.com',
+    displayName: 'Pending',
+    roleId: 'tenantA__inventory_viewer',
+    tenantId: 'tenantA',
+    isActive: false,
+  }));
+  await assertSucceeds(testEnv.authenticatedContext('userCompanyPending').firestore()
+    .collection('users').doc('userCompanyPending').set({
+      email: 'company@example.com',
+      displayName: 'Company Admin Pending',
+      roleId: '',
+      tenantId: 'pendingTenant1',
+      isActive: false,
+    }));
+
   // P0: inventory.view alone cannot write stock ledger.
   await assertFails(boundDb.collection('stock_items').doc('whA__material__item3').set({
     tenantId: 'tenantA',

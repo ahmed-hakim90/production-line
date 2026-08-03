@@ -486,6 +486,7 @@ export const roleService = {
       }
 
       await this.ensureProductionWorkerPermissionsOnRoles();
+      await this.ensureAdminRoleCatalogPermissions();
       return this.getAll();
     })();
     roleMigrationInFlight.set(tid, migration);
@@ -529,6 +530,37 @@ export const roleService = {
         await this.update(role.id, {
           permissions: next,
           ...(role.roleKey ? {} : { roleKey }),
+        });
+        patched += 1;
+      }
+    }
+    return patched;
+  },
+
+  /**
+   * Keep built-in admin role docs aligned with the permission catalog in DB
+   * (replaces client-side adminPermissions() override).
+   */
+  async ensureAdminRoleCatalogPermissions(): Promise<number> {
+    if (!isConfigured) return 0;
+    const roles = await this.getAll();
+    let patched = 0;
+    for (const role of roles) {
+      const roleKey = resolveDefaultRoleKey(role);
+      if (!role.id || roleKey !== 'admin') continue;
+      const current = role.permissions ?? {};
+      const next = { ...current };
+      let changed = false;
+      for (const perm of ALL_PERMISSIONS) {
+        if (next[perm] !== true) {
+          next[perm] = true;
+          changed = true;
+        }
+      }
+      if (changed) {
+        await this.update(role.id, {
+          permissions: next,
+          ...(role.roleKey ? {} : { roleKey: 'admin' }),
         });
         patched += 1;
       }

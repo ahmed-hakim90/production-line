@@ -1925,3 +1925,4 @@ export {
   applyProductionReportInventory,
   reverseProductionReportInventory,
 } from './productionReportInventory.js';
+export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.js';

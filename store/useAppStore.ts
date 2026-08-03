@@ -151,7 +151,7 @@ import { DUPLICATE_ENTITY_CODE } from '../modules/shared/services/entityCodeSequ
 import { assetService } from '../modules/costs/services/assetService';
 import { assetDepreciationService } from '../modules/costs/services/assetDepreciationService';
 import { assetDepreciationJobService } from '../modules/costs/services/assetDepreciationJobService';
-import { ALL_PERMISSIONS, checkPermission, isPackagingOnlyPermissions, normalizeRolePermissions, type Permission } from '../utils/permissions';
+import { checkPermission, isPackagingOnlyPermissions, normalizeRolePermissions, type Permission } from '../utils/permissions';
 import { DEFAULT_PLAN_SETTINGS, DEFAULT_SYSTEM_SETTINGS, DEFAULT_THEME } from '../utils/dashboardConfig';
 import {
   applyAppTheme,
@@ -228,18 +228,9 @@ import type {
   NormalizedAttendanceLogInput,
 } from '../modules/hr/attendance/types';
 
-// ─── Helper: build full admin permissions map (fallback) ─────────────────────
-
-function adminPermissions(): Record<string, boolean> {
-  const perms: Record<string, boolean> = {};
-  ALL_PERMISSIONS.forEach((p) => { perms[p] = true; });
-  return perms;
-}
-
 function emptyPermissions(): Record<string, boolean> {
   // Missing permission keys already fail closed in checkPermission().
-  // Avoid reading ALL_PERMISSIONS while this store is initialized because
-  // utils/permissions also imports the store for its React hooks.
+  // Grants are loaded from Firestore roles.permissions only.
   return {};
 }
 
@@ -1603,18 +1594,13 @@ export const useAppStore = create<AppState>((set, get) => ({
   // ── Internal: apply a role to the store ─────────────────────────────────────
 
   _applyRole: (role: FirestoreRole) => {
-    // System admin must always receive every current permission key. Stale Firestore
-    // role docs (seeded before a new permission existed) otherwise leave new keys undefined/false.
-    const isSystemAdmin =
-      role.roleKey === 'admin'
-      || String(role.name || '').trim() === 'مدير النظام';
+    // Grants come from Firestore roles.permissions only (DB source of truth).
+    // Stale admin role docs are repaired by roleService.ensureAdminRoleCatalogPermissions.
     set({
       userRoleId: role.id!,
       userRoleName: role.name,
       userRoleColor: role.color,
-      userPermissions: isSystemAdmin
-        ? adminPermissions()
-        : normalizeRolePermissions(role.permissions),
+      userPermissions: normalizeRolePermissions(role.permissions),
     });
   },
 

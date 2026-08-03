@@ -646,9 +646,19 @@ service cloud.firestore {
         pl_isSuperAdmin()
         || (pl_isActiveUser() && (pl_hasErpPermission('users.manage') || pl_hasErpPermission('roles.manage')))
       );
+      // Self-create is pending-only (least privilege). Privileged roleId/isActive
+      // must be written by Admin SDK (adminCreateUser / bootstrapTenantAdmin / approve).
       allow create: if (pl_authSignedIn()
         && request.auth.uid == userId
         && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive'])
+        && request.resource.data.isActive == false
+        && request.resource.data.tenantId is string
+        && request.resource.data.tenantId.size() > 0
+        && request.resource.data.roleId is string
+        && (
+          request.resource.data.roleId == ''
+          || request.resource.data.roleId == request.resource.data.tenantId + '__inventory_viewer'
+        )
         && (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false))
         || (pl_isSuperAdmin()
         && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive'])

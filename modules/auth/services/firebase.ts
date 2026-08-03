@@ -1,4 +1,4 @@
-import { initializeApp, deleteApp, FirebaseApp } from 'firebase/app';
+import { initializeApp, FirebaseApp } from 'firebase/app';
 import {
   Firestore,
   initializeFirestore,
@@ -156,6 +156,10 @@ export const signInWithEmail = async (
   return signInWithEmailAndPassword(auth, email, password);
 };
 
+/**
+ * Privileged user create (Auth + users doc with role/isActive) via Admin SDK.
+ * Do not write privileged fields from the client — Firestore self-create is pending-only.
+ */
 export const createUserWithEmail = async (
   email: string,
   password: string,
@@ -167,42 +171,60 @@ export const createUserWithEmail = async (
     isActive?: boolean;
   },
 ): Promise<{ uid: string }> => {
-  if (!isConfigured) throw new Error('Firebase not configured');
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
 
-  const appName = `userCreation_${Date.now()}`;
-  const secondaryApp = initializeApp(firebaseConfig, appName);
-  const secondaryAuth = getAuth(secondaryApp);
+  if (!userData) {
+    throw new Error('إنشاء المستخدم يتطلب بيانات الدور عبر الخادم.');
+  }
+
+  const callable = httpsCallable<
+    {
+      email: string;
+      password: string;
+      displayName: string;
+      roleId: string;
+      isActive?: boolean;
+      tenantId?: string;
+    },
+    { ok: boolean; uid: string }
+  >(functionsClient, 'adminCreateUser');
 
   try {
-    const cred = await createUserWithEmailAndPassword(secondaryAuth, email, password);
-    const uid = cred.user.uid;
-
-    if (userData) {
-      const {
-        getFirestore: getFs,
-        doc: fsDoc,
-        setDoc: fsSetDoc,
-        serverTimestamp: fsTs,
-      } = await import('firebase/firestore');
-      const secondaryDb = getFs(secondaryApp);
-      await fsSetDoc(fsDoc(secondaryDb, 'users', uid), {
-        email,
-        displayName: userData.displayName,
-        roleId: userData.roleId,
-        tenantId: userData.tenantId,
-        isActive: userData.isActive ?? true,
-        createdBy: userData.createdBy,
-        createdAt: fsTs(),
-      });
-    }
-
-    await firebaseSignOut(secondaryAuth);
-    await deleteApp(secondaryApp);
+    const result = await callable({
+      email,
+      password,
+      displayName: userData.displayName,
+      roleId: userData.roleId,
+      isActive: userData.isActive ?? true,
+      tenantId: userData.tenantId,
+    });
+    const uid = String(result.data?.uid || '').trim();
+    if (!uid) throw new Error('تعذر إنشاء المستخدم.');
     return { uid };
-  } catch (err) {
-    await firebaseSignOut(secondaryAuth).catch(() => {});
-    await deleteApp(secondaryApp).catch(() => {});
-    throw err;
+  } catch (error: unknown) {
+    throw normalizeCallableError(error);
+  }
+};
+
+/** First tenant admin after Auth sign-up on Setup (Admin SDK writes privileged fields). */
+export const bootstrapTenantAdminAccount = async (input: {
+  displayName: string;
+  tenantId: string;
+  email?: string;
+}): Promise<{ uid: string; roleId: string }> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    { displayName: string; tenantId: string; email?: string },
+    { ok: boolean; uid: string; roleId: string }
+  >(functionsClient, 'bootstrapTenantAdmin');
+  try {
+    const result = await callable(input);
+    return {
+      uid: String(result.data?.uid || '').trim(),
+      roleId: String(result.data?.roleId || '').trim(),
+    };
+  } catch (error: unknown) {
+    throw normalizeCallableError(error);
   }
 };
 

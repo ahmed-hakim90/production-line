@@ -5,7 +5,12 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { createUserWithEmail, signOut, isConfigured } from '../../../services/firebase';
+import {
+  bootstrapTenantAdminAccount,
+  registerWithEmail,
+  signOut,
+  isConfigured,
+} from '../../../services/firebase';
 import { userService } from '../../../services/userService';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { roleService } from '../../system/services/roleService';
@@ -52,17 +57,19 @@ export const Setup: React.FC = () => {
 
     setLoading(true);
     try {
-      const roles    = await roleService.migrateDefaultRoles();
-      const adminRole = roles[0];
-      const cred     = await createUserWithEmail(email, password);
-      await userService.set(cred.uid, {
-        email,
+      const tenantId = getCurrentTenantId();
+      await registerWithEmail(email, password);
+      await bootstrapTenantAdminAccount({
         displayName: name,
-        roleId: adminRole.id!,
-        tenantId: getCurrentTenantId(),
-        isActive: true,
-        createdBy: 'setup',
+        tenantId,
+        email,
       });
+      // Fill full admin permission catalog in DB (roles.manage granted by bootstrap).
+      try {
+        await roleService.migrateDefaultRoles();
+      } catch {
+        /* bootstrap already created a usable admin role */
+      }
       await signOut();
       setSuccess(true);
       setTimeout(() => navigate(`/t/${tenantSlug}/login`, { replace: true }), 2000);
@@ -70,9 +77,9 @@ export const Setup: React.FC = () => {
       const code = err?.code ?? '';
       setError(
         code === 'auth/email-already-in-use' ? 'البريد الإلكتروني مستخدم بالفعل' :
-        code === 'auth/weak-password'         ? 'كلمة المرور ضعيفة جداظ‹' :
+        code === 'auth/weak-password'         ? 'كلمة المرور ضعيفة جداً' :
         code === 'auth/invalid-email'         ? 'البريد الإلكتروني غير صالح' :
-        'فشل إنشاء الحساب',
+        (typeof err?.message === 'string' && err.message.trim() ? err.message : 'فشل إنشاء الحساب'),
       );
       setLoading(false);
     }
