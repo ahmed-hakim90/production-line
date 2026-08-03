@@ -49,8 +49,8 @@ const KPI_ICON_MAP: Record<string, LucideIcon> = {
 
 function renderKpiIcon(icon: string, className?: string) {
   const Lucide = KPI_ICON_MAP[icon];
-  if (Lucide) return <Lucide size={20} className={className} />;
-  return <Circle size={20} className={className} />;
+  if (Lucide) return <Lucide size={16} className={className} />;
+  return <Circle size={16} className={className} />;
 }
 
 interface CardProps {
@@ -87,20 +87,20 @@ interface KPIBoxProps {
 
 export const KPIBox: React.FC<KPIBoxProps> = ({ label, value, icon, trend, trendUp, colorClass = 'bg-primary/10 text-primary', unit }) => (
   <div
-    className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-xl,12px)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 flex items-center gap-3.5 min-h-[108px] h-full"
-    style={{ boxShadow: 'var(--shadow-card, 0 1px 3px rgba(0,0,0,0.08))' }}
+    className="erp-kpi-card bg-[var(--color-card)] p-4 rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 flex items-center gap-3.5 min-h-[108px] h-full"
+    style={{ boxShadow: 'var(--shadow-desk-card, var(--shadow-card))' }}
   >
-    <div className={`w-11 h-11 ${colorClass} rounded-[var(--border-radius-lg,8px)] flex items-center justify-center shrink-0`}>
-      {renderKpiIcon(icon)}
+    <div className={`w-8 h-8 ${colorClass} rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0`}>
+      {renderKpiIcon(icon, 'h-4 w-4')}
     </div>
     <div className="min-w-0 flex-1">
-      <p className="text-[11.5px] text-[var(--color-text-muted)] mb-0.5 font-medium leading-tight">{label}</p>
-      <h3 className="text-[18px] font-bold flex items-baseline gap-1 leading-tight text-[var(--color-text)]">
+      <p className="text-xs text-[var(--color-text-muted)] mb-0.5 font-medium leading-tight">{label}</p>
+      <h3 className="text-xl font-semibold flex items-baseline gap-1.5 leading-none tracking-tight text-[var(--color-text)]">
         {value}
-        {unit && <span className="text-[11px] font-normal text-[var(--color-text-muted)]">{unit}</span>}
+        {unit && <span className="text-xs font-normal text-[var(--color-text-muted)]">{unit}</span>}
       </h3>
       {trend && (
-        <div className={`flex items-center gap-0.5 text-[11px] mt-0.5 font-semibold ${trendUp ? 'text-emerald-600' : 'text-rose-500'}`}>
+        <div className={`inline-flex items-center gap-0.5 text-xs mt-1 font-medium rounded-[var(--border-radius-base)] px-2 py-0.5 ${trendUp ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
           {trendUp ? <TrendingUp size={12} /> : <TrendingDown size={12} />}
           <span>{trend}</span>
         </div>

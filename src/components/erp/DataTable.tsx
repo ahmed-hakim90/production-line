@@ -84,16 +84,16 @@ export function DataTable<T>({
   }
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white">
+    <div className="overflow-hidden rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-[var(--shadow-card)]">
       <Table>
-        <TableHeader>
-          <TableRow>
+        <TableHeader className="bg-[var(--color-bg)]">
+          <TableRow className="hover:bg-transparent">
             {columns.map((col) => (
               <TableHead
                 key={col.key}
                 style={col.width ? { width: col.width } : undefined}
                 className={cn(
-                  "text-xs font-medium text-[#64748B]",
+                  "text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]",
                   getAlignClass(col.align),
                   col.sortable && "cursor-pointer select-none"
                 )}
@@ -104,19 +104,19 @@ export function DataTable<T>({
                   {col.sortable && (
                     sortKey === col.key ? (
                       sortDirection === "asc" ? (
-                        <ArrowUp className="h-3.5 w-3.5 text-[#4F46E5]" />
+                        <ArrowUp className="h-3.5 w-3.5 text-[rgb(var(--color-primary))]" />
                       ) : (
-                        <ArrowDown className="h-3.5 w-3.5 text-[#4F46E5]" />
+                        <ArrowDown className="h-3.5 w-3.5 text-[rgb(var(--color-primary))]" />
                       )
                     ) : (
-                      <ChevronsUpDown className="h-3.5 w-3.5 text-[#94A3B8]" />
+                      <ChevronsUpDown className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
                     )
                   )}
                 </span>
               </TableHead>
             ))}
             {hasActions && (
-              <TableHead className="w-[76px] text-left text-xs font-medium text-[#64748B]">
+              <TableHead className="w-[76px] text-left text-xs font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
                 {resolvedActionsHeader}
               </TableHead>
             )}
@@ -142,18 +142,18 @@ export function DataTable<T>({
             <TableRow>
               <TableCell
                 colSpan={columns.length + (hasActions ? 1 : 0)}
-                className="h-24 text-center text-sm font-normal text-[#64748B]"
+                className="h-24 text-center text-sm font-normal text-[var(--color-text-muted)]"
               >
                 {resolvedEmptyMessage}
               </TableCell>
             </TableRow>
           ) : (
             sortedData.map((row, i) => (
-              <TableRow key={`row-${i}`} className={cn("transition-colors hover:bg-slate-50", rowClassName?.(row))}>
+              <TableRow key={`row-${i}`} className={cn("transition-colors hover:bg-[var(--color-bg)]", rowClassName?.(row))}>
                 {columns.map((col) => (
                   <TableCell
                     key={`${col.key}-${i}`}
-                    className={cn("text-sm font-normal text-[#0F172A]", getAlignClass(col.align))}
+                    className={cn("text-sm font-normal text-[var(--color-text)]", getAlignClass(col.align))}
                   >
                     {col.cell(row)}
                   </TableCell>

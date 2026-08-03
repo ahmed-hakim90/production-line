@@ -1409,12 +1409,12 @@ button {
   font-size: 11.5px;
   font-weight: 600;
   padding: 2px 6px;
-  border-radius: 99px;
+  border-radius: var(--border-radius-base);
 }
 
-.erp-kpi-change.up   { background: #e8f5e9; color: #2e7d32; }
-.erp-kpi-change.down { background: #fce4ec; color: #c62828; }
-.erp-kpi-change.flat { background: #f0f2f5; color: var(--color-text-muted); }
+.erp-kpi-change.up   { background: rgb(var(--color-success) / 0.12); color: rgb(var(--color-success)); }
+.erp-kpi-change.down { background: rgb(var(--color-danger) / 0.12); color: rgb(var(--color-danger)); }
+.erp-kpi-change.flat { background: var(--color-surface-hover); color: var(--color-text-muted); }
 
 /* ───────────────── ERPNext style: Supervisors page ───────────────── */
 .erpnext-supervisors .erp-card {
@@ -2111,15 +2111,21 @@ table.erp-table tbody tr[data-selected="true"] {
    ERPNext FILTER BAR
    ══════════════════════════════════════════════════════════ */
 
+/*
+ * Filter bar: one surface only.
+ * Inside a table card → bottom divider (no second card).
+ * Standalone → single bordered toolbar (no nested search shell).
+ */
 .erp-filter-bar {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  padding: 12px;
-  border: 1px solid #e2e8f0;
-  border-radius: 0.75rem;
-  background: #fff;
+  gap: var(--filter-bar-gap, 8px);
+  padding: var(--filter-bar-pad-y, 8px) var(--filter-bar-pad-x, 12px);
+  border: none;
+  border-bottom: 1px solid var(--color-border);
+  border-radius: 0;
+  background: transparent;
   min-width: 0;
 }
 
@@ -2129,26 +2135,30 @@ table.erp-table tbody tr[data-selected="true"] {
   min-width: 0;
 }
 
-/* Standalone filter bar (not inside a DataTable) — add card border + radius */
+/* Standalone filter bar (not inside a DataTable) — single card, not nested boxes */
 .space-y-6 > .erp-filter-bar,
-.space-y-4 > .erp-filter-bar {
-  border: 1px solid var(--color-border);
-  border-radius: var(--border-radius-base);
-  padding: 8px 14px;
+.space-y-4 > .erp-filter-bar,
+.erp-filter-bar--standalone,
+.erp-filter-bar.border {
+  border: 1px solid var(--color-border) !important;
+  border-radius: var(--border-radius-lg);
+  background: var(--color-card);
+  padding: var(--filter-bar-pad-y, 8px) var(--filter-bar-pad-x, 12px);
 }
 
-/* Search input in filter bar */
+/* Search field: one control border — never pad a second box around the input */
 .erp-search-input {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
+  padding: 0 var(--control-pad-x, 10px);
   border-radius: var(--border-radius-base);
   border: 1px solid var(--color-border);
-  background: #f8f9fa;
-  transition: all 150ms;
+  background: var(--color-card);
+  transition: border-color var(--motion-duration, 150ms) var(--motion-ease, ease),
+    box-shadow var(--motion-duration, 150ms) var(--motion-ease, ease);
   min-width: 160px;
-  height: 34px;
+  height: var(--control-height, 36px);
 }
 .erp-search-input--table {
   min-width: 160px;
@@ -2156,7 +2166,7 @@ table.erp-table tbody tr[data-selected="true"] {
   flex: 1 1 260px;
 }
 .erp-search-input:focus-within {
-  background: #fff;
+  background: var(--color-card);
   border-color: rgb(var(--color-primary));
   box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.1);
 }
@@ -2171,15 +2181,16 @@ table.erp-table tbody tr[data-selected="true"] {
   box-shadow: none !important;
   min-width: 0;
   flex: 1;
-  font-family: 'Cairo', sans-serif !important;
+  height: 100%;
+  font-family: var(--font-family-base) !important;
 }
 
-/* ─── Date segmented control (ERPNext style) ──────────────────────────────── */
+/* ─── Date segmented control ─────────────────────────────────────────────── */
 .erp-date-seg {
   display: inline-flex;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-base);
-  background: #f8f9fa;
+  background: var(--color-card);
   flex-shrink: 0;
   align-items: stretch;
   max-width: 100%;
@@ -2194,7 +2205,7 @@ table.erp-table tbody tr[data-selected="true"] {
   justify-content: center;
   gap: 4px;
   padding: 0 12px;
-  height: 34px;
+  height: var(--control-height, 36px);
   font-size: 12.5px;
   font-weight: 500;
   line-height: 1.4;
@@ -2223,16 +2234,17 @@ table.erp-table tbody tr[data-selected="true"] {
   padding: 0 8px;
   border: 1px solid var(--color-border);
   border-radius: var(--border-radius-base);
-  background: #f8f9fa;
+  background: var(--color-card);
   font-size: 12.5px;
   line-height: 1.4;
   color: var(--color-text-muted);
-  transition: all 150ms;
+  transition: border-color var(--motion-duration, 150ms) var(--motion-ease, ease),
+    box-shadow var(--motion-duration, 150ms) var(--motion-ease, ease);
   flex-shrink: 0;
-  height: 34px;
+  height: var(--control-height, 36px);
 }
 .erp-filter-date:focus-within {
-  background: #fff;
+  background: var(--color-card);
   border-color: rgb(var(--color-primary));
   box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.1);
 }
@@ -2246,7 +2258,7 @@ table.erp-table tbody tr[data-selected="true"] {
   padding: 0 !important;
   box-shadow: none !important;
   cursor: pointer;
-  font-family: 'Cairo', sans-serif;
+  font-family: var(--font-family-base);
 }
 
 /* ─── Filter select (in toolbar) ─────────────────────────────────────────── */
@@ -2254,20 +2266,20 @@ table.erp-table tbody tr[data-selected="true"] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0 10px;
+  padding: 0 var(--control-pad-x, 10px);
   border-radius: var(--border-radius-base);
   border: 1px solid var(--color-border);
-  background: #f8f9fa;
+  background: var(--color-card);
   font-size: 12.5px;
   line-height: 1.4;
   color: var(--color-text);
   cursor: pointer;
-  transition: all 120ms;
+  transition: border-color 120ms ease, background 120ms ease, box-shadow 120ms ease;
   appearance: none;
   -webkit-appearance: none;
-  font-family: 'Cairo', sans-serif;
+  font-family: var(--font-family-base);
   min-width: 110px;
-  height: 34px;
+  height: var(--control-height, 36px);
 }
 .erp-filter-select:hover { border-color: rgb(var(--color-primary) / 0.4); background: rgb(var(--color-primary) / 0.04); }
 .erp-filter-select:focus { outline: none; border-color: rgb(var(--color-primary)); box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.1); }
@@ -2288,39 +2300,60 @@ table.erp-table tbody tr[data-selected="true"] {
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0 10px;
+  padding: 0 var(--control-pad-x, 10px);
   border-radius: var(--border-radius-base);
-  border: 1px solid #fca5a5;
-  background: #fef2f2;
-  color: #dc2626;
+  border: 1px solid rgb(var(--color-danger) / 0.45);
+  background: rgb(var(--color-danger) / 0.06);
+  color: rgb(var(--color-danger));
   font-size: 12px;
   font-weight: 600;
   line-height: 1.4;
   cursor: pointer;
-  transition: all 120ms;
+  transition: background 120ms ease, border-color 120ms ease;
   flex-shrink: 0;
-  font-family: 'Cairo', sans-serif;
-  height: 34px;
+  font-family: var(--font-family-base);
+  height: var(--control-height, 36px);
 }
-.erp-filter-clear:hover { background: #fee2e2; border-color: #f87171; }
+.erp-filter-clear:hover { background: rgb(var(--color-danger) / 0.12); border-color: rgb(var(--color-danger) / 0.65); }
 
-/* ─── Full-width filter input (inside card/grid filter panels) ───────────── */
+/*
+ * Filter field used inside labeled groups.
+ * Parent may already be a toolbar — this is the ONLY bordered control (no wrapper padding box).
+ */
 .erp-filter-input-inner {
   width: 100%;
   border: 1px solid var(--color-border) !important;
   border-radius: var(--border-radius-base) !important;
-  background: #f8f9fa !important;
-  padding: 6px 12px !important;
+  background: var(--color-card) !important;
+  padding: 0 var(--control-pad-x, 10px) !important;
   font-size: 13px !important;
   color: var(--color-text) !important;
   outline: none !important;
-  transition: all 150ms !important;
-  height: 36px;
+  transition: border-color var(--motion-duration, 150ms) var(--motion-ease, ease),
+    box-shadow var(--motion-duration, 150ms) var(--motion-ease, ease) !important;
+  height: var(--control-height, 36px);
+  box-shadow: none !important;
 }
 .erp-filter-input-inner:focus {
-  background: #fff !important;
+  background: var(--color-card) !important;
   border-color: rgb(var(--color-primary)) !important;
   box-shadow: 0 0 0 3px rgb(var(--color-primary) / 0.1) !important;
+}
+
+/* Avoid label+field reading as stacked cards: labels stay text-only, no padded shell */
+.erp-filter-bar .erp-filter-label {
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  border: none;
+}
+.erp-filter-bar > div:has(> .erp-filter-label) {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0;
+  border: none;
+  background: transparent;
 }
 
 /* ─── Filter separator ────────────────────────────────────────────────────── */
@@ -2345,10 +2378,10 @@ table.erp-table tbody tr[data-selected="true"] {
   font-weight: 600;
   line-height: 1.4;
   cursor: pointer;
-  transition: all 120ms;
+  transition: background 120ms ease;
   flex-shrink: 0;
-  font-family: 'Cairo', sans-serif;
-  height: 34px;
+  font-family: var(--font-family-base);
+  height: var(--control-height, 36px);
 }
 .erp-filter-apply:hover { background: rgb(var(--color-primary) / 0.14); }
 .erp-filter-apply:active { background: rgb(var(--color-primary) / 0.2); }

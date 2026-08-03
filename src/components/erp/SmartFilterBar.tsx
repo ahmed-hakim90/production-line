@@ -349,7 +349,7 @@ export function SmartFilterBar({
           value={value}
           onChange={(event) => setValue(filter.key, event.target.value)}
           className={cn(
-            'h-[34px] rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm text-[var(--color-text)]',
+            'h-[var(--control-height)] rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm text-[var(--color-text)]',
             widthClass,
           )}
         />
@@ -358,7 +358,7 @@ export function SmartFilterBar({
 
     return (
       <Select value={value || 'all'} onValueChange={(next) => setValue(filter.key, next)}>
-        <SelectTrigger className={cn('h-[34px] border-[var(--color-border)] text-sm', widthClass)}>
+        <SelectTrigger className={cn('h-[var(--control-height)] border-[var(--color-border)] bg-[var(--color-card)] text-sm', widthClass)}>
           <SelectValue placeholder={filter.placeholder ?? filter.label} />
         </SelectTrigger>
         <SelectContent dir={dir}>
@@ -407,8 +407,8 @@ export function SmartFilterBar({
                   setMenuOpen(false);
                 }}
                 className={cn(
-                  'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-indigo-50 hover:text-indigo-700',
-                  selected && 'bg-indigo-50 font-medium text-indigo-700',
+                  'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-[rgb(var(--color-primary)/0.06)] hover:text-[rgb(var(--color-primary))]',
+                  selected && 'bg-[rgb(var(--color-primary)/0.08)] font-medium text-[rgb(var(--color-primary))]',
                 )}
               >
                 <span className="truncate">{option.label}</span>
@@ -438,14 +438,14 @@ export function SmartFilterBar({
           type="button"
           variant="ghost"
           className={cn(
-            'flex h-full min-h-[34px] flex-shrink-0 items-center gap-1 rounded-none border-0 px-2.5 text-sm shadow-none hover:bg-indigo-50',
-            activeCount > 0 ? 'text-indigo-700' : 'text-[var(--color-text-muted)]',
+            'flex h-[var(--control-height)] flex-shrink-0 items-center gap-1 rounded-[var(--border-radius-base)] border-0 px-2.5 text-sm shadow-none hover:bg-[rgb(var(--color-primary)/0.06)]',
+            activeCount > 0 ? 'text-[rgb(var(--color-primary))]' : 'text-[var(--color-text-muted)]',
           )}
           aria-label={t('erpComponents.smartFilterBar.filters')}
         >
           <ChevronDown className={cn('h-4 w-4 transition-transform', menuOpen && 'rotate-180')} />
           {activeCount > 0 && (
-            <span className="min-w-[16px] rounded-full bg-indigo-600 px-1.5 py-px text-center text-[10px] leading-none text-white">
+            <span className="min-w-[16px] rounded-full bg-[rgb(var(--color-primary))] px-1.5 py-px text-center text-[10px] leading-none text-white">
               {activeCount}
             </span>
           )}
@@ -466,7 +466,7 @@ export function SmartFilterBar({
                   value={menuQuery}
                   onChange={(event) => setMenuQuery(event.target.value)}
                   placeholder={resolvedSearchPlaceholder}
-                  className="h-8 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-card)] ps-8 pe-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                  className="h-8 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-card)] ps-8 pe-2 text-xs focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-primary)/0.35)]"
                 />
               </div>
             )}
@@ -492,18 +492,18 @@ export function SmartFilterBar({
                           handleActivateFilter(filter.key);
                         }}
                         className={cn(
-                          'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-indigo-50 hover:text-indigo-700',
-                          active && 'bg-indigo-50/70 text-indigo-700',
+                          'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-[rgb(var(--color-primary)/0.06)] hover:text-[rgb(var(--color-primary))]',
+                          active && 'bg-[rgb(var(--color-primary)/0.08)] text-[rgb(var(--color-primary))]',
                         )}
                       >
                         <span className="truncate">{filter.label}</span>
                         <span className="flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]">
                           {active ? (
-                            <span className="max-w-[100px] truncate font-medium text-indigo-600">
+                            <span className="max-w-[100px] truncate font-medium text-[rgb(var(--color-primary))]">
                               {displayValueLabel(filter, value)}
                             </span>
                           ) : null}
-                          {active ? <Check className="h-3.5 w-3.5 text-indigo-600" /> : null}
+                          {active ? <Check className="h-3.5 w-3.5 text-[rgb(var(--color-primary))]" /> : null}
                           <ChevronDown className={cn('h-3 w-3', expanded && 'rotate-180')} />
                         </span>
                       </button>
@@ -548,11 +548,11 @@ export function SmartFilterBar({
                       <button
                         type="button"
                         onClick={() => handleApplyFavorite(favorite)}
-                        className="min-w-0 flex-1 truncate rounded px-1 py-1.5 text-start text-sm hover:text-indigo-700"
+                        className="min-w-0 flex-1 truncate rounded px-1 py-1.5 text-start text-sm hover:text-[rgb(var(--color-primary))]"
                         title={t('erpComponents.smartFilterBar.applyFavorite')}
                       >
                         {favorite.pinned && (
-                          <Pin className="me-1 inline h-3 w-3 fill-indigo-600 text-indigo-600" />
+                          <Pin className="me-1 inline h-3 w-3 fill-[rgb(var(--color-primary))] text-[rgb(var(--color-primary))]" />
                         )}
                         {favorite.name}
                       </button>
@@ -560,8 +560,8 @@ export function SmartFilterBar({
                         type="button"
                         onClick={() => handleTogglePin(favorite)}
                         className={cn(
-                          'rounded p-1 text-[var(--color-text-muted)] hover:bg-indigo-50 hover:text-indigo-700',
-                          favorite.pinned && 'text-indigo-600',
+                          'rounded p-1 text-[var(--color-text-muted)] hover:bg-[rgb(var(--color-primary)/0.06)] hover:text-[rgb(var(--color-primary))]',
+                          favorite.pinned && 'text-[rgb(var(--color-primary))]',
                         )}
                         title={t('erpComponents.smartFilterBar.pinDefault')}
                       >
@@ -587,7 +587,7 @@ export function SmartFilterBar({
                     value={saveName}
                     onChange={(event) => setSaveName(event.target.value)}
                     placeholder={t('erpComponents.smartFilterBar.favoriteName')}
-                    className="h-8 w-full rounded-md border border-[var(--color-border)] px-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                    className="h-8 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-card)] px-2 text-xs focus:outline-none focus:ring-1 focus:ring-[rgb(var(--color-primary)/0.35)]"
                     autoFocus
                   />
                   <label className="flex items-center gap-2 text-xs text-[var(--color-text)]">
@@ -628,7 +628,7 @@ export function SmartFilterBar({
                 <button
                   type="button"
                   onClick={() => setShowSaveForm(true)}
-                  className="w-full rounded-md px-2 py-1.5 text-start text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                  className="w-full rounded-md px-2 py-1.5 text-start text-xs font-medium text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.06)]"
                 >
                   {t('erpComponents.smartFilterBar.saveCurrent')}
                 </button>
@@ -645,7 +645,7 @@ export function SmartFilterBar({
   const renderFacetChip = (filter: FilterDef) => {
     const value = getValue(filter.key);
     const chipClass =
-      'inline-flex max-w-[200px] items-center gap-1 truncate rounded-none border-0 bg-transparent px-2 py-0.5 text-start text-[12px] text-[#714B67] shadow-none hover:bg-[#714B67]/10 focus:ring-0 dark:text-indigo-200 dark:hover:bg-indigo-500/30 h-auto';
+      'inline-flex max-w-[200px] items-center gap-1 truncate rounded-none border-0 bg-transparent px-2 py-0.5 text-start text-[12px] text-[rgb(var(--color-primary))] shadow-none hover:bg-[rgb(var(--color-primary)/0.08)] focus:ring-0 h-auto';
 
     const clearButton = (
       <button
@@ -655,7 +655,7 @@ export function SmartFilterBar({
           event.stopPropagation();
           handleClearFilter(filter.key);
         }}
-        className="flex h-full items-center border-s border-[#714B67]/20 px-1.5 py-0.5 text-[#714B67] hover:bg-[#714B67]/20 dark:border-indigo-400/30 dark:text-indigo-200 dark:hover:bg-indigo-500/40"
+        className="flex h-full items-center border-s border-[rgb(var(--color-primary)/0.2)] px-1.5 py-0.5 text-[rgb(var(--color-primary))] hover:bg-[rgb(var(--color-primary)/0.12)]"
         aria-label={t('erpComponents.smartFilterBar.clearFilter')}
       >
         <X className="h-3 w-3" />
@@ -663,7 +663,7 @@ export function SmartFilterBar({
     );
 
     const chipShellClass =
-      'inline-flex max-w-full items-center overflow-hidden rounded-md bg-[#714B67]/12 text-[12px] text-[#714B67] dark:bg-indigo-500/20 dark:text-indigo-200';
+      'inline-flex max-w-full items-center overflow-hidden rounded-[var(--border-radius-base)] bg-[rgb(var(--color-primary)/0.1)] text-[12px] text-[rgb(var(--color-primary))]';
 
     // Dates: open native picker directly from the chip (no intermediate box).
     if (filter.type === 'date' || filter.type === 'month') {
@@ -731,56 +731,49 @@ export function SmartFilterBar({
     );
   };
 
-  const searchFacetsBox = (
-    <div className="flex min-w-[220px] max-w-3xl flex-1 items-stretch overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus-within:border-indigo-300 focus-within:ring-1 focus-within:ring-indigo-300">
-      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-2 py-1">
-        <Search className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-text-muted)]" />
-        {activeFacets.map((filter) => renderFacetChip(filter))}
-        {onSearchChange != null ? (
-          <input
-            type="text"
-            value={searchValue}
-            onChange={(event) => onSearchChange(event.target.value)}
-            placeholder={activeFacets.length > 0 ? '' : resolvedSearchPlaceholder}
-            className="h-7 min-w-[120px] flex-1 border-0 bg-transparent px-1 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none"
-          />
-        ) : activeFacets.length === 0 ? (
-          <span className="px-1 text-sm text-[var(--color-text-muted)]">
-            {t('erpComponents.smartFilterBar.filters')}
-          </span>
-        ) : null}
-      </div>
-      {showFilterMenu && (
-        <div className="flex flex-shrink-0 items-stretch border-s border-[var(--color-border)] self-stretch">
-          {filterMenu}
-        </div>
-      )}
-    </div>
-  );
+  const showSearchRow = onSearchChange != null || showFilterMenu || activeFacets.length > 0;
 
   return (
-    <div
-      dir={dir}
-      className={cn(
-        'mb-4 overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]',
-        className,
-      )}
-    >
-      <div className="flex flex-wrap items-center gap-2 p-3">
-        {(onSearchChange != null || showFilterMenu || activeFacets.length > 0) && searchFacetsBox}
+    <div dir={dir} className={cn('erp-smart-filter mb-4', className)}>
+      {/* Single surface — no nested card around the search field */}
+      <div className="flex flex-wrap items-center gap-[var(--filter-bar-gap)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-[var(--filter-bar-pad-x)] py-[var(--filter-bar-pad-y)]">
+        {showSearchRow && (
+          <div className="flex min-h-[var(--control-height)] min-w-[220px] max-w-3xl flex-1 flex-wrap items-center gap-1.5">
+            <Search className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-text-muted)]" aria-hidden />
+            {activeFacets.map((filter) => renderFacetChip(filter))}
+            {onSearchChange != null ? (
+              <input
+                type="text"
+                value={searchValue}
+                onChange={(event) => onSearchChange(event.target.value)}
+                placeholder={activeFacets.length > 0 ? '' : resolvedSearchPlaceholder}
+                className="h-8 min-w-[120px] flex-1 border-0 bg-transparent px-0.5 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] shadow-none outline-none focus:outline-none focus:ring-0"
+              />
+            ) : activeFacets.length === 0 ? (
+              <span className="px-0.5 text-sm text-[var(--color-text-muted)]">
+                {t('erpComponents.smartFilterBar.filters')}
+              </span>
+            ) : null}
+            {showFilterMenu ? (
+              <div className="ms-auto flex flex-shrink-0 items-center self-stretch">
+                {filterMenu}
+              </div>
+            ) : null}
+          </div>
+        )}
 
         {periods && periods.length > 0 && (
-          <div className="flex flex-shrink-0 overflow-hidden rounded-lg border border-[var(--color-border)]">
+          <div className="flex flex-shrink-0 overflow-hidden rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
             {periods.map((period) => (
               <button
                 key={period.value}
                 type="button"
                 onClick={() => onPeriodChange?.(period.value)}
                 className={cn(
-                  'h-[34px] whitespace-nowrap border-none px-3 text-xs transition-colors',
+                  'h-[var(--control-height)] whitespace-nowrap border-none px-3 text-xs transition-colors',
                   activePeriod === period.value
-                    ? 'bg-indigo-600 font-medium text-white'
-                    : 'bg-transparent text-[var(--color-text-muted)] hover:bg-slate-50 dark:hover:bg-slate-900/40',
+                    ? 'bg-[rgb(var(--color-primary))] font-medium text-white'
+                    : 'bg-transparent text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]',
                 )}
               >
                 {period.label}
@@ -795,7 +788,8 @@ export function SmartFilterBar({
           <Button
             type="button"
             onClick={onApply}
-            className="ms-auto flex h-[34px] flex-shrink-0 items-center gap-1.5 rounded-lg bg-indigo-600 px-4 text-sm font-medium text-white transition-colors hover:bg-indigo-700"
+            bare
+            className="ms-auto flex h-[var(--control-height)] flex-shrink-0 items-center gap-1.5 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-primary))] px-4 text-sm font-medium text-white transition-colors hover:bg-[rgb(var(--color-primary-hover))]"
           >
             <Search className="h-3.5 w-3.5" />
             {resolvedApplyLabel}

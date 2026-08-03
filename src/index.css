@@ -51,6 +51,20 @@
     --border-radius-lg: 8px;
     --border-radius-xl: 12px;
 
+    /*
+     * Control contract (filters, inputs, selects, dense toolbar buttons)
+     * - sm: compact toolbar chips / period toggles
+     * - default: filter bar controls & form fields in dense ERP views
+     * - lg: shadcn default (h-10)
+     */
+    --control-height-sm: 32px;
+    --control-height: 36px;
+    --control-height-lg: 40px;
+    --control-pad-x: 10px;
+    --filter-bar-gap: 8px;
+    --filter-bar-pad-y: 8px;
+    --filter-bar-pad-x: 12px;
+
     --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.08), 0 1px 2px rgba(0, 0, 0, 0.04);
     /* Desk / ERPNext-style layered elevation (dashboards, KPI strips) */
     --shadow-desk-card:
@@ -109,7 +123,8 @@
     --border: 214 32% 91%;
     --input: 214 32% 91%;
     --ring: 239 84% 60%;
-    --radius: 0.75rem;
+    /* Align shadcn radius with ERP xl so cards/inputs share one corner language */
+    --radius: 0.5rem;
   }
 
   * {

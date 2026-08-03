@@ -8,11 +8,11 @@ export const colors = {
     200: '#c7d2fe',
     300: '#a5b4fc',
     400: '#818cf8',
-    500: '#24308f',
-    600: '#1e2877',
-    700: '#19215f',
-    800: '#131a4a',
-    900: '#0e1338',
+    500: '#4F46E5',
+    600: '#4338CA',
+    700: '#3730A3',
+    800: '#312E81',
+    900: '#1E1B4B',
   },
   secondary: {
     DEFAULT: '#64748b',
@@ -158,17 +158,24 @@ export const components = {
     heightSm: '4rem',
   },
   input: {
-    height:   '2.75rem',
-    heightSm: '2.25rem',
-    heightLg: '3rem',
+    /** Matches CSS `--control-height` (36px) */
+    height:   '2.25rem',
+    heightSm: '2rem',
+    /** Matches CSS `--control-height-lg` / shadcn h-10 */
+    heightLg: '2.5rem',
   },
   card: {
-    padding:    '1.5rem',
-    paddingSm:  '1rem',
+    padding:    '1rem',
+    paddingSm:  '0.75rem',
   },
   table: {
-    rowHeight: '3.5rem',
-    headerHeight: '3rem',
+    rowHeight: '2.75rem',
+    headerHeight: '2.5rem',
+  },
+  filterBar: {
+    gap: '0.5rem',
+    padY: '0.5rem',
+    padX: '0.75rem',
   },
 } as const;
 

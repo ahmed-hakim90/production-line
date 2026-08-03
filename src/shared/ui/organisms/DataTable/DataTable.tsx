@@ -387,8 +387,8 @@ export function DataTable<T>({
         {/* Table */}
         <div className="erp-table-scroll">
           <Table className="w-full text-right border-collapse">
-            <TableHeader className="sticky top-0 z-10" style={{ background: '#f8f9fa' }}>
-              <TableRow style={{ borderBottom: '1px solid var(--color-border)' }}>
+            <TableHeader className="sticky top-0 z-10 bg-[var(--color-bg)]">
+              <TableRow className="border-b border-[var(--color-border)] hover:bg-transparent">
                 {canSelectRows && (
                   <TableHead className="w-10 px-3 py-2.5">
                     <Checkbox checked={allSelected} onCheckedChange={toggleAllSelection} />

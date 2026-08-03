@@ -19,11 +19,11 @@ interface KPICardProps {
 }
 
 const iconBoxClasses: Record<KPIColor, string> = {
-  indigo: "bg-[#4F46E5]/10 text-[#4F46E5]",
-  green: "bg-[#059669]/10 text-[#059669]",
-  red: "bg-[#DC2626]/10 text-[#DC2626]",
-  amber: "bg-[#D97706]/10 text-[#D97706]",
-  gray: "bg-[#94A3B8]/15 text-[#64748B]",
+  indigo: "bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]",
+  green: "bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]",
+  red: "bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]",
+  amber: "bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]",
+  gray: "bg-[var(--color-surface-hover)] text-[var(--color-text-muted)]",
 }
 
 const iconMap = {
@@ -49,8 +49,8 @@ export function KPICard({
   return (
     <article
       className={cn(
-        "flex min-h-[118px] flex-col justify-between rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-5",
-        "shadow-[var(--shadow-desk-card)] ring-1 ring-slate-900/[0.05] dark:ring-white/10",
+        "erp-kpi-card flex min-h-[108px] flex-col justify-between rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4",
+        "shadow-[var(--shadow-desk-card)] ring-1 ring-slate-900/[0.04] dark:ring-white/10",
         className
       )}
     >
@@ -60,7 +60,7 @@ export function KPICard({
         ) : (
           <p className="text-xs font-medium text-[var(--color-text-muted)]">{label}</p>
         )}
-        <span className={cn("flex h-7 w-7 items-center justify-center rounded-lg", iconBoxClasses[color])}>
+        <span className={cn("flex h-8 w-8 items-center justify-center rounded-[var(--border-radius-lg)]", iconBoxClasses[color])}>
           <Icon className="h-4 w-4" />
         </span>
       </div>
@@ -81,8 +81,10 @@ export function KPICard({
             {trend && (
               <span
                 className={cn(
-                  "rounded-lg px-2 py-0.5 text-xs font-medium",
-                  trendUp ? "bg-[#059669]/10 text-[#059669]" : "bg-[#DC2626]/10 text-[#DC2626]"
+                  "rounded-[var(--border-radius-base)] px-2 py-0.5 text-xs font-medium",
+                  trendUp
+                    ? "bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]"
+                    : "bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]"
                 )}
               >
                 {trend}
