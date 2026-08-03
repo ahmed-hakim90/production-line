@@ -1926,3 +1926,4 @@ export {
   reverseProductionReportInventory,
 } from './productionReportInventory.js';
 export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.js';
+export { syncBuiltInRolePermissionGrants } from './rolePermissionMigration.js';

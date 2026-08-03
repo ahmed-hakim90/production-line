@@ -54,10 +54,13 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'dashboard.view',
           'employeeDashboard.view',
           'products.view',
+          'products.create',
+          'products.edit',
           'lines.view',
           'employees.view',
           'employees.viewDetails',
           'reports.view',
+          'reports.create',
           'reports.edit',
           'reports.componentInjection.manage',
           'reports.componentWaste.create',
@@ -332,7 +335,7 @@ function existingDefaultRoleKeys(roles: FirestoreRole[]): Set<string> {
 
 const roleMigrationInFlight = new Map<string, Promise<FirestoreRole[]>>();
 
-/** Production worker permissions to merge onto built-in roles (does not revoke custom perms). */
+/** Additive grants for built-in roles (does not revoke custom perms). */
 const FACTORY_MANAGER_PRODUCTION_WORKER_PERMS: Permission[] = [
   'productionWorkers.view',
   'production.workers.view',
@@ -345,8 +348,12 @@ const FACTORY_MANAGER_PRODUCTION_WORKER_PERMS: Permission[] = [
   'production.workerBonus.manage',
   'lineWorkers.view',
   'approval.view',
+  // Keep factory ops unblocked after DB-only grants (no client admin bypass).
+  'reports.create',
   'reports.edit',
   'reports.componentInjection.manage',
+  'products.create',
+  'products.edit',
 ];
 
 const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [

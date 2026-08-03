@@ -50,6 +50,7 @@ import {
   signOut,
   createUserWithEmail,
   registerWithEmail,
+  syncBuiltInRolePermissionGrants,
   resetPassword,
   auth,
   db as firestoreDb,
@@ -1850,6 +1851,29 @@ export const useAppStore = create<AppState>((set, get) => ({
         roles = await roleService.migrateDefaultRoles();
         role = roles.find((r) => r.id === userDoc.roleId);
       }
+
+      // Self-heal built-in factory ops grants in DB when missing (Admin SDK, additive only).
+      const roleKey = String(role?.roleKey || '').trim();
+      const roleName = String(role?.name || '').trim();
+      const isFactoryManagerRole =
+        roleKey === 'factory_manager' || roleName === 'مدير المصنع';
+      const missingFactoryOpsGrant =
+        isFactoryManagerRole
+        && (
+          role?.permissions?.['reports.create'] !== true
+          || role?.permissions?.['products.create'] !== true
+          || role?.permissions?.['products.edit'] !== true
+        );
+      if (missingFactoryOpsGrant) {
+        try {
+          await syncBuiltInRolePermissionGrants();
+          roles = await roleService.getAll();
+          role = roles.find((r) => r.id === userDoc.roleId);
+        } catch (syncError) {
+          console.warn('syncBuiltInRolePermissionGrants failed:', syncError);
+        }
+      }
+
       set({ roles });
       if (!role) throw new Error('دور المستخدم غير موجود. تواصل مع مدير النظام.');
 

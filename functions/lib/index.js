@@ -1556,3 +1556,4 @@ export { confirmProductionHandoverReceipt } from './productionHandover.js';
 export { issueProductionIssueStock } from './productionIssueStock.js';
 export { applyProductionReportInventory, reverseProductionReportInventory, } from './productionReportInventory.js';
 export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.js';
+export { syncBuiltInRolePermissionGrants } from './rolePermissionMigration.js';

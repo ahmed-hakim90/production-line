@@ -264,6 +264,27 @@ export const deleteUserHard = async (targetUid: string): Promise<void> => {
   }
 };
 
+/** Additive built-in role permission sync (Admin SDK). Safe for any active tenant user. */
+export const syncBuiltInRolePermissionGrants = async (): Promise<{
+  patchedRoles: number;
+  grantedKeys: number;
+}> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<
+    Record<string, never>,
+    { ok: boolean; patchedRoles: number; grantedKeys: number }
+  >(functionsClient, 'syncBuiltInRolePermissionGrants');
+  try {
+    const result = await callable({});
+    return {
+      patchedRoles: Number(result.data?.patchedRoles || 0),
+      grantedKeys: Number(result.data?.grantedKeys || 0),
+    };
+  } catch (error: unknown) {
+    throw normalizeCallableError(error);
+  }
+};
+
 export const updateUserCredentialsHard = async (input: {
   targetUid: string;
   email?: string;
