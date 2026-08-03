@@ -311,6 +311,7 @@ export const RepairJobs: React.FC = () => {
       <Card className="mb-0 border-0 rounded-none">
         <CardContent className="p-0">
           <SmartFilterBar
+      pageId="repair-jobs"
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="بحث: الاسم، الهاتف، الإيصال، نوع الجهاز..."

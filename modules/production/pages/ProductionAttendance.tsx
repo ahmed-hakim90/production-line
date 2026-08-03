@@ -227,6 +227,7 @@ export const ProductionAttendance: React.FC = () => {
 
       <Card className="!p-0 overflow-hidden">
       <SmartFilterBar
+      pageId="production-attendance"
         searchPlaceholder="بحث باسم العامل أو التقرير..."
         searchValue={search}
         onSearchChange={setSearch}

@@ -75,6 +75,17 @@ const none = pickBestAutoLinkedWorkOrder(
 );
 assert.equal(none, null);
 
+const wrongLine = pickBestAutoLinkedWorkOrder(
+  [wo({ id: 'wo-other-line', lineId: 'line-2' })],
+  {
+    lineId: 'line-1',
+    productId: 'product-1',
+    reportType: 'finished_product',
+    reportDate: '2026-07-12',
+  },
+);
+assert.equal(wrongLine, null);
+
 const linkedReports = [
   report({ id: 'a', workOrderId: 'wo-1', quantityProduced: 10 }),
   report({ id: 'b', workOrderId: 'wo-1', quantityProduced: 15 }),

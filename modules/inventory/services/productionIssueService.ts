@@ -5,11 +5,12 @@ import {
   getDoc,
   getDocs,
   orderBy,
-  query,
   updateDoc,
   where,
+  type QueryConstraint,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { httpsCallable } from 'firebase/functions';
+import { db, functionsClient, isConfigured } from '../../auth/services/firebase';
 import type { FirestoreProduct, ProductionPlan, WorkOrder } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
@@ -38,11 +39,48 @@ import {
 } from '../lib/productionIssueRequest';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
+
+function callableUserError(error: unknown, fallback: string): Error {
+  const message = String((error as { message?: string })?.message || '').trim();
+  if (message.includes('permission-denied') || message.includes('Permission')) {
+    return new Error('لا تملك صلاحية تنفيذ هذه العملية.');
+  }
+  if (message.includes('unauthenticated')) {
+    return new Error('يجب تسجيل الدخول أولاً.');
+  }
+  const cleaned = message.replace(/^Firebase:\s*/i, '').replace(/\s*\(.*\)$/, '').trim();
+  return new Error(cleaned || fallback);
+}
 import { assemblableCapacityService } from './assemblableCapacityService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { allocateNextProductionIssueReference } from './productionIssueSequence';
+import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'production_issue_orders';
+
+async function loadWarehouseScopedIssueOrders(
+  ...constraints: QueryConstraint[]
+): Promise<ProductionIssueOrder[]> {
+  const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+  const load = async (warehouseField?: 'sourceWarehouseId' | 'targetWarehouseId') => {
+    const snap = await getDocs(tenantQuery(
+      db,
+      COLLECTION,
+      ...(warehouseField
+        ? [where(warehouseField, '==', boundWarehouseId)]
+        : []),
+      ...constraints,
+    ));
+    return snap.docs;
+  };
+  const docs = boundWarehouseId
+    ? [...await load('sourceWarehouseId'), ...await load('targetWarehouseId')]
+    : await load();
+  return [...new Map(docs.map((row) => [
+    row.id,
+    { id: row.id, ...row.data() } as ProductionIssueOrder,
+  ])).values()];
+}
 
 const toIsoNow = () => new Date().toISOString();
 const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
@@ -202,11 +240,7 @@ async function listOrdersForSource(params: {
   const field = params.workOrderId ? 'workOrderId' : 'productionPlanId';
   const value = params.workOrderId || params.productionPlanId;
   if (!value) return [];
-  const snap = await getDocs(query(
-    tenantQuery(db, COLLECTION),
-    where(field, '==', value),
-  ));
-  return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionIssueOrder));
+  return loadWarehouseScopedIssueOrders(where(field, '==', value));
 }
 
 async function assertNoBlockingOpenIssue(params: {
@@ -231,11 +265,28 @@ async function resolveSuppliesWarehouse(): Promise<Warehouse> {
   return warehouse;
 }
 
+async function resolveProductionFloorWarehouse(): Promise<Warehouse> {
+  const settings = await systemSettingsService.get();
+  if (!settings) throw new Error('تعذر تحميل إعدادات النظام.');
+  const routing = resolveInventoryRoutingV1(settings);
+  const floorId = String(routing.productionFloorWarehouseId || '').trim();
+  if (!floorId) {
+    throw new Error('حدّد مخزن صالة الإنتاج في توجيه المخازن أولاً.');
+  }
+  if (floorId === String(routing.decomposedWarehouseId || '').trim()) {
+    throw new Error('مخزن صالة الإنتاج يجب أن يختلف عن مخزن المفكك.');
+  }
+  const warehouses = await warehouseService.getAllWarehouses();
+  const warehouse = warehouses.find((w) => w.id === floorId);
+  if (!warehouse?.id) throw new Error('مخزن صالة الإنتاج غير موجود أو غير نشط.');
+  return warehouse;
+}
+
 export const productionIssueService = {
   async getAll(): Promise<ProductionIssueOrder[]> {
     if (!isConfigured) return [];
-    const snap = await getDocs(tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc')));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionIssueOrder));
+    const rows = await loadWarehouseScopedIssueOrders(orderBy('createdAt', 'desc'));
+    return rows.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   },
 
   async getById(id: string): Promise<ProductionIssueOrder | null> {
@@ -277,25 +328,22 @@ export const productionIssueService = {
     if (!isConfigured) return false;
 
     if (params.productionReportId) {
-      const reportSnap = await getDocs(query(
-        tenantQuery(db, COLLECTION),
+      const reportRows = await loadWarehouseScopedIssueOrders(
         where('productionReportId', '==', params.productionReportId),
         where('status', '==', 'issued'),
-      ));
-      if (!reportSnap.empty) return true;
+      );
+      if (reportRows.length > 0) return true;
     }
 
     const field = params.workOrderId ? 'workOrderId' : 'productionPlanId';
     const value = params.workOrderId || params.productionPlanId;
     if (!value) return false;
-    const snap = await getDocs(query(
-      tenantQuery(db, COLLECTION),
+    const rows = await loadWarehouseScopedIssueOrders(
       where(field, '==', value),
       where('status', '==', 'issued'),
-    ));
+    );
     // Report-scoped issues must not block other reports on the same WO/plan.
-    return snap.docs.some((d) => {
-      const row = d.data() as ProductionIssueOrder;
+    return rows.some((row) => {
       return row.sourceType !== 'production_report';
     });
   },
@@ -334,6 +382,7 @@ export const productionIssueService = {
     const warehouses = await warehouseService.getAllWarehouses();
     const warehouse = warehouses.find((w) => w.id === input.sourceWarehouseId) as Warehouse | undefined;
     if (!warehouse?.id) throw new Error('حدد مخزن صرف المكونات.');
+    const floorWarehouse = await resolveProductionFloorWarehouse();
     const lines = await buildLines(product.id, quantity, warehouse.id);
     const now = toIsoNow();
     const referenceNo = await allocateNextProductionIssueReference();
@@ -349,6 +398,8 @@ export const productionIssueService = {
       quantity,
       sourceWarehouseId: warehouse.id,
       sourceWarehouseName: warehouse.name,
+      targetWarehouseId: floorWarehouse.id,
+      targetWarehouseName: floorWarehouse.name,
       status: 'draft',
       origin: 'warehouse',
       lines,
@@ -396,6 +447,7 @@ export const productionIssueService = {
     const product = await productService.getById(source.productId) as FirestoreProduct | null;
     if (!product?.id) throw new Error('تعذر تحميل المنتج المرتبط.');
     const warehouse = await resolveSuppliesWarehouse();
+    const floorWarehouse = await resolveProductionFloorWarehouse();
 
     const capacityRows = await assemblableCapacityService.getForWarehouse(warehouse.id);
     const capacity = capacityRows.find((row) => row.productId === product.id);
@@ -424,6 +476,8 @@ export const productionIssueService = {
       requestedQuantity: quantity,
       sourceWarehouseId: warehouse.id,
       sourceWarehouseName: warehouse.name,
+      targetWarehouseId: floorWarehouse.id,
+      targetWarehouseName: floorWarehouse.name,
       status: 'requested',
       origin: 'production_request',
       lines: [],
@@ -612,103 +666,23 @@ export const productionIssueService = {
     await updateDoc(doc(db, COLLECTION, order.id), { lines });
   },
 
-  async issue(id: string, actor: string): Promise<void> {
+  async issue(id: string, _actor: string): Promise<void> {
+    if (!isConfigured || !functionsClient) {
+      throw new Error('النظام غير مهيأ أو لم تُنشر دوال الخادم.');
+    }
     const order = await this.getById(id);
     if (!order?.id) throw new Error('أمر الصرف غير موجود.');
     if (order.status === 'issued') return;
-    if (order.status === 'requested') {
-      throw new Error('اعتمد طلب الإنتاج أولاً قبل ترحيل الصرف.');
+
+    const callable = httpsCallable<{ orderId: string }, { ok: boolean; idempotent?: boolean }>(
+      functionsClient,
+      'issueProductionIssueStock',
+    );
+    try {
+      await callable({ orderId: order.id });
+    } catch (error: unknown) {
+      throw callableUserError(error, 'تعذر ترحيل صرف الإنتاج.');
     }
-    if (order.status === 'rejected' || order.status === 'cancelled') {
-      throw new Error('لا يمكن صرف طلب مرفوض أو ملغى.');
-    }
-    if (!order.lines.length) throw new Error('أمر الصرف بلا بنود مكونات.');
-    const activeLocations = await warehouseLocationService.getActiveByWarehouse(order.sourceWarehouseId);
-    const activeLocationIds = new Set(activeLocations.map((loc) => loc.id).filter(Boolean));
-    const shortages: ProductionIssueShortageRow[] = [];
-    for (const line of order.lines) {
-      const requiredQty = Number(line.requiredQty || 0);
-      const allocatedQty = line.allocations.reduce((total, row) => total + Number(row.quantity || 0), 0);
-      if (allocatedQty + 0.000001 < requiredQty) {
-        shortages.push({
-          itemName: line.itemName,
-          itemCode: line.itemCode,
-          unit: line.unit,
-          requiredQty,
-          availableQty: Number(line.availableQty || allocatedQty || 0),
-          kind: 'insufficient_allocation',
-        });
-        continue;
-      }
-      for (const allocation of line.allocations) {
-        if (!activeLocationIds.has(allocation.locationId)) {
-          shortages.push({
-            itemName: line.itemName,
-            itemCode: line.itemCode,
-            unit: line.unit,
-            requiredQty: Number(allocation.quantity || 0),
-            availableQty: 0,
-            kind: 'inactive_location',
-            locationCode: allocation.locationCode,
-          });
-          continue;
-        }
-        const balances = await stockService.getLocationBalances({
-          warehouseId: order.sourceWarehouseId,
-          locationId: allocation.locationId,
-          itemType: line.itemType,
-          itemId: line.itemId,
-        });
-        const availableQty = balances.reduce((total, row) => total + Number(row.quantity || 0), 0);
-        const allocationQty = Number(allocation.quantity || 0);
-        if (availableQty + 0.000001 < allocationQty) {
-          shortages.push({
-            itemName: line.itemName,
-            itemCode: line.itemCode,
-            unit: line.unit,
-            requiredQty: allocationQty,
-            availableQty,
-            kind: 'stale_balance',
-            locationCode: allocation.locationCode,
-          });
-        }
-      }
-    }
-    if (shortages.length) throw new ProductionIssueApprovalError(shortages);
-    for (const line of order.lines) {
-      for (const allocation of line.allocations) {
-        if (Number(allocation.quantity || 0) <= 0) continue;
-        await stockService.createMovement({
-          warehouseId: order.sourceWarehouseId,
-          locationId: allocation.locationId,
-          locationCode: allocation.locationCode,
-          itemType: line.itemType,
-          itemId: line.itemId,
-          itemName: line.itemName,
-          itemCode: line.itemCode,
-          unit: line.unit,
-          movementType: 'OUT',
-          quantity: Number(allocation.quantity || 0),
-          sourceModule: 'production_issue',
-          sourceId: order.id,
-          sourceReportId: order.productionReportId,
-          sourceIssueOrderId: order.id,
-          sourceWorkOrderId: order.workOrderId,
-          sourcePlanId: order.productionPlanId,
-          note: order.productionReportCode
-            ? `Production issue ${order.referenceNo} for report ${order.productionReportCode}`
-            : `Production issue ${order.referenceNo}`,
-          createdBy: actor,
-        });
-      }
-      line.issuedQty = Number(line.requiredQty || 0);
-    }
-    await updateDoc(doc(db, COLLECTION, order.id), {
-      status: 'issued',
-      issuedAt: toIsoNow(),
-      issuedBy: actor,
-      lines: order.lines,
-    });
   },
 
   async recordActualScrap(issueOrderId: string, materialId: string, quantity: number): Promise<void> {

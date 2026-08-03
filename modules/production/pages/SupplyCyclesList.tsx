@@ -324,6 +324,7 @@ export const SupplyCyclesList: React.FC = () => {
         <Card className={cn('overflow-hidden', SURFACE_CARD)}>
           <CardContent className="p-3 md:p-4">
             <SmartFilterBar
+      pageId="supply-cycles"
               searchPlaceholder="بحث بالكود أو الصنف أو التسمية الخارجية…"
               searchValue={searchTerm}
               onSearchChange={setSearchTerm}

@@ -28,7 +28,11 @@ export interface ProductionReportExportRow {
 
 export interface ProductionReportExportLookupFns {
   getLineName: (id: string) => string;
-  getProductName: (id: string) => string;
+  getProductName: (
+    id: string,
+    reportType?: ProductionReport['reportType'],
+    productNameSnapshot?: string,
+  ) => string;
   getEmployeeName: (id: string) => string;
   getWorkOrder?: (id: string) => WorkOrder | undefined;
 }
@@ -53,7 +57,7 @@ export const buildProductionReportExportRows = (
       'كود التقرير': r.reportCode || '—',
       التاريخ: r.date,
       'خط الإنتاج': lookups.getLineName(r.lineId),
-      المنتج: lookups.getProductName(r.productId),
+      المنتج: lookups.getProductName(r.productId, r.reportType, r.productNameSnapshot),
       الموظف: lookups.getEmployeeName(r.employeeId),
       'الكمية المنتجة': r.quantityProduced || 0,
       الهالك: wasteQuantity,

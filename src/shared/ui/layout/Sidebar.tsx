@@ -19,6 +19,7 @@ import { resolveMenuIcon } from './menuIconMap';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { Button } from '@/components/ui/button';
 import { useAppDirection } from './useAppDirection';
+import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
 
 export interface SidebarProps {
   open: boolean;
@@ -83,6 +84,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const currentEmployee    = useAppStore((s) => s.currentEmployee);
   const logout             = useAppStore((s) => s.logout);
   const sidebarIconStyle   = useAppStore((s) => (s.systemSettings?.theme?.sidebarIconStyle ?? 'colorful') as SidebarIconStyle);
+  const operationPaths     = useAppStore((s) => s.systemSettings.operationPaths);
   const sidebarCompanyTitleRaw = useAppStore((s) => {
     const tenantName = s.tenantCompanyName?.trim();
     if (tenantName) return tenantName;
@@ -118,11 +120,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         .map((g) => ({
           ...g,
           children: g.children.filter((i) => (
-            canAccessMenuItem(can, i, roleKey) && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
+            canAccessMenuItem(can, i, roleKey)
+            && isMenuItemOperationPathEnabled(operationPaths, i.key)
+            && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
           )),
         }))
         .filter((g) => g.children.length > 0),
-    [can, currentEmployee?.level, roleKey],
+    [can, currentEmployee?.level, operationPaths, roleKey],
   );
 
   /** مجموعات الأكورديون فقط (غير flat). لو 1 أو 2 يبقوا مفتوحين دائماً في الشريط الموسّع */

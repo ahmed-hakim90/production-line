@@ -16,6 +16,7 @@ import {
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import { INVENTORY_DOCUMENT_PATHS } from '../../system/lib/operationPathSettings';
 
 const DISASSEMBLY_CACHE_KEY = 'inventory:disassembly';
 
@@ -194,11 +195,27 @@ export const Disassembly: React.FC = () => {
     setMessage('');
     try {
       if (action === 'submit') await disassemblyService.submit(order.id);
-      if (action === 'approve') await disassemblyService.approve(order.id, actor, uid || undefined);
-      if (action === 'execute') await disassemblyService.execute(order.id, actor, uid || undefined);
+      if (action === 'approve') await disassemblyService.approve(
+        order.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.operationPage },
+        uid || undefined,
+      );
+      if (action === 'execute') await disassemblyService.execute(
+        order.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.operationPage },
+        uid || undefined,
+      );
       if (action === 'reject') {
         const reason = window.prompt('سبب الرفض:', '') || '';
-        await disassemblyService.reject(order.id, actor, reason, uid || undefined);
+        await disassemblyService.reject(
+          order.id,
+          actor,
+          { path: INVENTORY_DOCUMENT_PATHS.operationPage },
+          reason,
+          uid || undefined,
+        );
       }
       setMessage('تم تحديث طلب التفكيك.');
       await reload();

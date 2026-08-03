@@ -26,26 +26,23 @@ export function resolveInventoryRoutingV1(systemSettings: SystemSettings): Resol
   return {
     rawMaterialWarehouseId: trimId(nested.rawMaterialWarehouseId) || legacyRaw,
     decomposedWarehouseId: trimId(nested.decomposedWarehouseId) || legacyDecomposed,
+    productionFloorWarehouseId: trimId(nested.productionFloorWarehouseId),
     productionWipWarehouseId: productionWip || finishedStaging,
     finishedStagingWarehouseId: finishedStaging || productionWip,
     finalProductWarehouseId: trimId(nested.finalProductWarehouseId) || legacyFinal,
     packagingSourceWarehouseId: trimId(nested.packagingSourceWarehouseId) || legacyPkgSrc,
     packagingTargetWarehouseId: trimId(nested.packagingTargetWarehouseId) || legacyPkgTgt,
     wasteWarehouseId: trimId(nested.wasteWarehouseId) || legacyWaste,
-    autoTransferProductionToFinished:
-      nested.autoTransferProductionToFinished !== undefined
-        ? Boolean(nested.autoTransferProductionToFinished)
-        : true,
+    autoTransferProductionToFinished: Boolean(nested.autoTransferProductionToFinished),
     autoTransferFinishedToFinal: Boolean(nested.autoTransferFinishedToFinal),
-    requireApprovalForProductionEntry:
-      nested.requireApprovalForProductionEntry !== undefined
-        ? Boolean(nested.requireApprovalForProductionEntry)
-        : plan?.requireFinishedStockApprovalForReports !== false,
+    requireApprovalForProductionEntry: Boolean(nested.requireApprovalForProductionEntry),
     requireApprovalForAutoTransfers:
       nested.requireApprovalForAutoTransfers !== undefined
         ? Boolean(nested.requireApprovalForAutoTransfers)
         : false,
-    // Off by default — تقرير الإنتاج لا يخصم BOM؛ الصرف من صفحة «صرف إنتاج» فقط.
+    // On by default for V2: packaging supervisor must confirm actual received qty.
+    requirePackagingHandoverReceipt: nested.requirePackagingHandoverReceipt !== false,
+    // Off by default — تقرير الإنتاج لا يخصم BOM من المفكك مباشرة؛ الصرف إلى الصالة أولاً.
     autoConsumeBomOnProductionReport: Boolean(nested.autoConsumeBomOnProductionReport),
     // On by default — لا يُنشأ/يُرحَّل تقرير منتج تام إلا بعد صرف إنتاج معتمد.
     requireIssuedProductionIssueOnReport: nested.requireIssuedProductionIssueOnReport !== false,
@@ -61,6 +58,7 @@ export type RoutingRequirement =
   | 'final'
   | 'raw'
   | 'decomposed'
+  | 'floor'
   | 'waste'
   | 'packagingSource'
   | 'packagingTarget';
@@ -71,6 +69,7 @@ const REQUIREMENT_KEYS: Record<RoutingRequirement, keyof ResolvedInventoryRoutin
   final: 'finalProductWarehouseId',
   raw: 'rawMaterialWarehouseId',
   decomposed: 'decomposedWarehouseId',
+  floor: 'productionFloorWarehouseId',
   waste: 'wasteWarehouseId',
   packagingSource: 'packagingSourceWarehouseId',
   packagingTarget: 'packagingTargetWarehouseId',
@@ -83,11 +82,12 @@ export function assertRoutingConfigured(
   const missing = required.filter((key) => !trimId(routing[REQUIREMENT_KEYS[key]]));
   if (missing.length === 0) return;
   const labels: Record<RoutingRequirement, string> = {
-    wip: 'مخزن إنتاج تحت التشغيل',
-    staging: 'مخزن تم الصنع',
+    wip: 'مخزن تم الإنتاج — تحت التسليم',
+    staging: 'مخزن بانتظار التغليف',
     final: 'مخزن المنتج التام',
     raw: 'مخزن المواد الخام',
     decomposed: 'مخزن المفكك (مستلزم إنتاج)',
+    floor: 'مخزن صالة الإنتاج',
     waste: 'مخزن الهالك',
     packagingSource: 'مخزن التغليف (مصدر)',
     packagingTarget: 'مخزن التغليف (هدف)',
@@ -97,9 +97,8 @@ export function assertRoutingConfigured(
 
 /**
  * Warehouse for BOM component consumption on production.
- * مستلزم إنتاج (مفكك) is the operational stock of BOM components;
- * raw-material warehouse is only a fallback when decomposed is unset.
- * Packaging keeps its dedicated source when configured.
+ * V2: production floor holds issued components; decomposed is only the issue source.
+ * Packaging materials keep their dedicated source when configured.
  */
 export function pickConsumptionWarehouse(
   material: Pick<Material, 'type'> | null | undefined,
@@ -107,9 +106,42 @@ export function pickConsumptionWarehouse(
 ): string {
   const type = material?.type ?? 'raw_material';
   if (type === 'packaging') {
-    return routing.packagingSourceWarehouseId || routing.decomposedWarehouseId || routing.rawMaterialWarehouseId;
+    return (
+      routing.packagingSourceWarehouseId
+      || routing.productionFloorWarehouseId
+      || routing.decomposedWarehouseId
+      || routing.rawMaterialWarehouseId
+    );
   }
-  return routing.decomposedWarehouseId || routing.rawMaterialWarehouseId;
+  return (
+    routing.productionFloorWarehouseId
+    || routing.decomposedWarehouseId
+    || routing.rawMaterialWarehouseId
+  );
+}
+
+/** Distinct warehouse IDs that must not collide for V2 production flow. */
+export function assertDistinctProductionRoutingWarehouses(
+  routing: Pick<
+    ResolvedInventoryRouting,
+    | 'decomposedWarehouseId'
+    | 'productionFloorWarehouseId'
+    | 'productionWipWarehouseId'
+    | 'finishedStagingWarehouseId'
+  >,
+): void {
+  const pairs: Array<[string, string, string, string]> = [
+    ['decomposedWarehouseId', 'productionFloorWarehouseId', 'المفكك', 'صالة الإنتاج'],
+    ['productionFloorWarehouseId', 'productionWipWarehouseId', 'صالة الإنتاج', 'تحت التسليم'],
+    ['productionWipWarehouseId', 'finishedStagingWarehouseId', 'تحت التسليم', 'بانتظار التغليف'],
+  ];
+  for (const [aKey, bKey, aLabel, bLabel] of pairs) {
+    const a = trimId((routing as Record<string, string>)[aKey]);
+    const b = trimId((routing as Record<string, string>)[bKey]);
+    if (a && b && a === b) {
+      throw new Error(`مخزن «${aLabel}» يجب أن يختلف عن مخزن «${bLabel}».`);
+    }
+  }
 }
 
 export function buildInventoryRoutingFromLegacy(plan: import('../../../types').PlanSettings): InventoryRoutingSettings {
@@ -118,16 +150,19 @@ export function buildInventoryRoutingFromLegacy(plan: import('../../../types').P
   return {
     rawMaterialWarehouseId: trimId(plan.rawMaterialWarehouseId),
     decomposedWarehouseId: trimId(plan.decomposedSourceWarehouseId),
+    productionFloorWarehouseId: '',
     productionWipWarehouseId: legacyWip || legacyStaging,
     finishedStagingWarehouseId: legacyStaging || legacyWip,
     finalProductWarehouseId: trimId(plan.finalProductWarehouseId),
     packagingSourceWarehouseId: trimId(plan.packagingSourceWarehouseId),
     packagingTargetWarehouseId: trimId(plan.packagingTargetWarehouseId),
     wasteWarehouseId: trimId(plan.wasteReceiveWarehouseId),
-    autoTransferProductionToFinished: true,
+    autoTransferProductionToFinished: false,
     autoTransferFinishedToFinal: false,
-    requireApprovalForProductionEntry: plan.requireFinishedStockApprovalForReports !== false,
+    // V2: packaging handover replaces legacy production-entry approval gate by default.
+    requireApprovalForProductionEntry: false,
     requireApprovalForAutoTransfers: false,
+    requirePackagingHandoverReceipt: true,
     autoConsumeBomOnProductionReport: false,
     requireIssuedProductionIssueOnReport: true,
   };

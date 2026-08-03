@@ -9,6 +9,11 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage, isReportDuplicateError } from '../../../modules/production/utils/reportDuplicateError';
 import { useTranslation } from 'react-i18next';
+import {
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../../modules/system/lib/operationPathSettings';
 
 export const GlobalImportReportsModal: React.FC = () => {
   const { t } = useTranslation();
@@ -17,6 +22,7 @@ export const GlobalImportReportsModal: React.FC = () => {
   const { isOpen, close } = useManagedModalController(MODAL_KEYS.REPORTS_IMPORT);
   const { can } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const products = useAppStore((s) => s._rawProducts);
   const lines = useAppStore((s) => s._rawLines);
   const employees = useAppStore((s) => s._rawEmployees);
@@ -49,6 +55,11 @@ export const GlobalImportReportsModal: React.FC = () => {
 
   if (!isOpen) return null;
   if (!can('import')) return null;
+  if (!isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    PRODUCTION_REPORT_CREATE_PATHS.globalImport,
+  )) return null;
 
   const handleClose = () => {
     if (saving) return;
@@ -109,7 +120,9 @@ export const GlobalImportReportsModal: React.FC = () => {
     let duplicate = 0;
     for (const row of validRows) {
       try {
-        const created = await createReport(toReportData(row));
+        const created = await createReport(toReportData(row), {
+          path: PRODUCTION_REPORT_CREATE_PATHS.globalImport,
+        });
         if (!created) {
           const storeErr = useAppStore.getState().error;
           if (isReportDuplicateError(storeErr)) duplicate += 1;

@@ -90,4 +90,28 @@ assert.deepEqual(
   },
 );
 
+const injectionRows = buildProductionReportExportRows(
+  [{
+    id: 'injection-report-1',
+    date: '2026-07-01',
+    lineId: 'injection-line-1',
+    productId: 'component-1',
+    productNameSnapshot: 'نجمة فاكيوم',
+    employeeId: 'sup-1',
+    reportType: 'component_injection',
+    quantityProduced: 4800,
+    workersCount: 1,
+    workHours: 8,
+  }],
+  {
+    getLineName: (id) => id,
+    getProductName: (_id, reportType, snapshot) => (
+      reportType === 'component_injection' ? snapshot || '—' : 'منتج نهائي'
+    ),
+    getEmployeeName: (id) => id,
+  },
+);
+
+assert.equal(injectionRows[0]['المنتج'], 'نجمة فاكيوم');
+
 console.log('production-report-export-rows.test.ts: ok');

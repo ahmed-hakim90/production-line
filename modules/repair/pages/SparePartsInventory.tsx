@@ -616,6 +616,7 @@ export const SparePartsInventory: React.FC = () => {
       )}
       <Card>
         <SmartFilterBar
+      pageId="spare-parts-inventory"
           searchPlaceholder="ابحث بالاسم أو الكود أو التصنيف..."
           searchValue={search}
           onSearchChange={setSearch}

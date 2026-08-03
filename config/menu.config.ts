@@ -224,11 +224,20 @@ export const MENU_CONFIG: MenuGroup[] = [
       // استعلام
       { key: 'inv-balances', label: 'الأرصدة', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
       { key: 'inv-transactions', label: 'الحركات', icon: 'sync_alt', path: '/inventory/transactions', permission: 'inventory.view' },
+      {
+        key: 'inv-department-consumables',
+        label: 'مستهلكات الأقسام',
+        icon: 'shopping_bag',
+        path: '/inventory/department-consumables',
+        permission: 'departmentConsumables.view',
+        anyOfPermissions: ['departmentConsumables.view', 'inventory.view'],
+      },
       // عمليات ومتابعة
       { key: 'inv-transfer-approvals', label: 'اعتماد التحويلات', icon: 'verified_user', path: '/inventory/transfer-approvals', permission: 'inventory.view' },
       { key: 'inv-counts', label: 'الجرد والمطابقة', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
       // مخزون الإنتاج
       { key: 'inv-production-issues', label: 'صرف إنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view', badgeSource: badgeSources.pendingProductionIssueRequests },
+      { key: 'inv-production-floor', label: 'مخزون صالة الإنتاج', icon: 'precision_manufacturing', path: '/inventory/production-floor', permission: 'inventory.view' },
       {
         key: 'inv-production-approvals',
         label: 'اعتمادات الإنتاج المخزنية',

@@ -17,6 +17,7 @@ import type {
   DashboardDisplaySettings,
   ExportImportSettings,
   KPIThreshold,
+  OperationPathSettings,
   PlanSettings,
   PrintTemplateSettings,
   ProductionWorkerSettings,
@@ -26,6 +27,7 @@ import type {
   WidgetConfig,
 } from '../../../types';
 import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
+import { diffOperationPathSettings } from '../lib/operationPathSettings';
 
 export type SettingsSectionKey =
   | 'general'
@@ -40,7 +42,7 @@ export type SettingsSectionKey =
 
 type UseSystemSettingsControllerParams = {
   systemSettings: SystemSettings;
-  updateSystemSettings: (settings: SystemSettings) => Promise<void>;
+  updateSystemSettings: (settings: Partial<SystemSettings>) => Promise<void>;
   localWidgets: Record<string, WidgetConfig[]>;
   localCustomWidgets: CustomWidgetConfig[];
   localAlerts: AlertSettings;
@@ -54,6 +56,7 @@ type UseSystemSettingsControllerParams = {
   localAlertToggles: AlertToggleSettings;
   localQuickActions: QuickActionItem[];
   localExportImport: ExportImportSettings;
+  localOperationPaths: OperationPathSettings;
   localMinimumClientVersion: string;
   localForceClientUpdate: boolean;
   localClientUpdateMessageAr: string;
@@ -80,6 +83,7 @@ export const useSystemSettingsController = ({
   localAlertToggles,
   localQuickActions,
   localExportImport,
+  localOperationPaths,
   localMinimumClientVersion,
   localForceClientUpdate,
   localClientUpdateMessageAr,
@@ -115,6 +119,9 @@ export const useSystemSettingsController = ({
         alertToggles: section === 'alerts' ? localAlertToggles : (systemSettings.alertToggles ?? DEFAULT_ALERT_TOGGLES),
         quickActions: section === 'dashboards' ? normalizeQuickActions(localQuickActions) : (systemSettings.quickActions ?? []),
         exportImport: section === 'data' ? localExportImport : (systemSettings.exportImport ?? { pages: {} }),
+        operationPaths: section === 'production'
+          ? diffOperationPathSettings(systemSettings.operationPaths, localOperationPaths)
+          : (systemSettings.operationPaths ?? { operations: {} }),
         minimumClientVersion:
           section === 'clientVersion' ? localMinimumClientVersion.trim() : systemSettings.minimumClientVersion,
         forceClientUpdate:
@@ -155,6 +162,7 @@ export const useSystemSettingsController = ({
     normalizeCustomWidgets,
     localQuickActions,
     localExportImport,
+    localOperationPaths,
     localMinimumClientVersion,
     localForceClientUpdate,
     localClientUpdateMessageAr,
@@ -181,6 +189,7 @@ export const useSystemSettingsController = ({
         alertToggles: localAlertToggles,
         quickActions: normalizeQuickActions(localQuickActions),
         exportImport: localExportImport,
+        operationPaths: diffOperationPathSettings(systemSettings.operationPaths, localOperationPaths),
         minimumClientVersion: localMinimumClientVersion.trim(),
         forceClientUpdate: localForceClientUpdate,
         clientUpdateMessageAr: localClientUpdateMessageAr.trim(),
@@ -211,6 +220,7 @@ export const useSystemSettingsController = ({
     localAlertToggles,
     localQuickActions,
     localExportImport,
+    localOperationPaths,
     localMinimumClientVersion,
     localForceClientUpdate,
     localClientUpdateMessageAr,
@@ -293,7 +303,8 @@ export const useSystemSettingsController = ({
         serialize({ ...DEFAULT_THEME, ...systemSettings.theme }) !== serialize(localTheme),
       production:
         serialize(pickPlanSettings(savedPlanSettings, productionPlanKeys)) !== serialize(pickPlanSettings(localSyncedPlanSettings, productionPlanKeys)) ||
-        serialize(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings)) !== serialize(localProductionWorkerSettings),
+        serialize(resolveProductionWorkerSettings(systemSettings.productionWorkerSettings)) !== serialize(localProductionWorkerSettings) ||
+        serialize(systemSettings.operationPaths ?? { operations: {} }) !== serialize(localOperationPaths),
       dashboards:
         serialize({ ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay }) !== serialize(localDashboardDisplay) ||
         serialize(systemSettings.dashboardWidgets) !== serialize(localWidgets) ||
@@ -321,6 +332,7 @@ export const useSystemSettingsController = ({
     localBranding,
     localTheme,
     localProductionWorkerSettings,
+    localOperationPaths,
     localDashboardDisplay,
     localWidgets,
     localCustomWidgets,

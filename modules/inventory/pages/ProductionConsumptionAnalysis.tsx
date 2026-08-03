@@ -86,6 +86,7 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
       <PageHeader title="تحليل استهلاك أوامر الشغل" subtitle="مقارنة BOM بالمصروف والتعويض والمرتجع والهالك الفعلي." icon="analytics" />
       <Card>
         <SmartFilterBar
+      pageId="production-consumption-analysis"
           searchPlaceholder="بحث بإذن الصرف، المنتج، أمر الشغل، أو المكون"
           searchValue={search}
           onSearchChange={setSearch}

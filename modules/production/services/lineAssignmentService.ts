@@ -18,6 +18,11 @@ import { DEFAULT_LINE_WORKER_LABOR_ROLE } from '../utils/lineWorkerLaborRoles';
 import { resolveEffectiveLineAssignmentsForDate } from '../utils/effectiveLineAssignments';
 import { productionLineWorkerAssignmentService } from './productionLineWorkerAssignmentService';
 import { productionWorkerService } from './productionWorkerService';
+import {
+  WORKER_ASSIGNMENT_OPERATION_KEYS,
+  assertCurrentTenantOperationPathEnabled,
+  type DailyWorkerAssignmentPath,
+} from '../../system/lib/operationPathSettings';
 
 const COLLECTION = 'line_worker_assignments';
 
@@ -154,7 +159,14 @@ export const lineAssignmentService = {
     }
   },
 
-  async create(data: Omit<LineWorkerAssignment, 'id' | 'assignedAt'>): Promise<string | null> {
+  async create(
+    data: Omit<LineWorkerAssignment, 'id' | 'assignedAt'>,
+    context: { path: DailyWorkerAssignmentPath },
+  ): Promise<string | null> {
+    await assertCurrentTenantOperationPathEnabled(
+      WORKER_ASSIGNMENT_OPERATION_KEYS.daily,
+      context.path,
+    );
     if (!isConfigured) return null;
     try {
       const existingAssignments = await getExactByLineAndDate(data.lineId, data.date);
@@ -175,7 +187,15 @@ export const lineAssignmentService = {
     }
   },
 
-  async update(id: string, data: Partial<Pick<LineWorkerAssignment, 'laborRole' | 'isPresent'>>): Promise<void> {
+  async update(
+    id: string,
+    data: Partial<Pick<LineWorkerAssignment, 'laborRole' | 'isPresent'>>,
+    context: { path: DailyWorkerAssignmentPath },
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      WORKER_ASSIGNMENT_OPERATION_KEYS.daily,
+      context.path,
+    );
     if (!isConfigured) return;
     try {
       await updateDoc(doc(db, COLLECTION, id), {
@@ -188,15 +208,27 @@ export const lineAssignmentService = {
     }
   },
 
-  async updateLaborRole(id: string, laborRole: LineWorkerLaborRole): Promise<void> {
-    return this.update(id, { laborRole });
+  async updateLaborRole(
+    id: string,
+    laborRole: LineWorkerLaborRole,
+    context: { path: DailyWorkerAssignmentPath },
+  ): Promise<void> {
+    return this.update(id, { laborRole }, context);
   },
 
-  async updatePresence(id: string, isPresent: boolean): Promise<void> {
-    return this.update(id, { isPresent });
+  async updatePresence(
+    id: string,
+    isPresent: boolean,
+    context: { path: DailyWorkerAssignmentPath },
+  ): Promise<void> {
+    return this.update(id, { isPresent }, context);
   },
 
-  async delete(id: string): Promise<void> {
+  async delete(id: string, context: { path: DailyWorkerAssignmentPath }): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      WORKER_ASSIGNMENT_OPERATION_KEYS.daily,
+      context.path,
+    );
     if (!isConfigured) return;
     try {
       await deleteDoc(doc(db, COLLECTION, id));
@@ -206,7 +238,15 @@ export const lineAssignmentService = {
     }
   },
 
-  async deleteByLineAndDate(lineId: string, date: string): Promise<void> {
+  async deleteByLineAndDate(
+    lineId: string,
+    date: string,
+    context: { path: DailyWorkerAssignmentPath },
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      WORKER_ASSIGNMENT_OPERATION_KEYS.daily,
+      context.path,
+    );
     if (!isConfigured) return;
     try {
       const assignments = await getExactByLineAndDate(lineId, date);

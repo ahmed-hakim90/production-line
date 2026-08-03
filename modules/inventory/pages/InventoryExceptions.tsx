@@ -12,6 +12,7 @@ import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import type { StockItemBalance, StockTransaction } from '../types';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 
 type ExceptionRow = {
   id: string;
@@ -29,18 +30,27 @@ export const InventoryExceptions: React.FC = () => {
   const threshold = useAppStore(
     (s) => Number(s.systemSettings.planSettings?.inventoryExceptionManualThreshold || 500),
   );
+  const { scoped, warehouseIds } = useMaterialsWarehouseScope();
+  const scopeKey = scoped ? warehouseIds.slice().sort().join(',') : 'all';
 
   const {
     data: rowsData,
     loading,
     reload: reloadCached,
   } = useCachedPageLoad<ExceptionRow[]>(
-    `${EXCEPTIONS_CACHE_KEY}:${threshold}`,
+    `${EXCEPTIONS_CACHE_KEY}:${threshold}:${scopeKey}`,
     async () => {
-      const [balances, transactions] = await Promise.all([
-        stockService.getBalances(),
-        stockService.getTransactions(),
-      ]);
+      const warehouseFetches = !scoped
+        ? [undefined as string | undefined]
+        : warehouseIds;
+      const balanceChunks = await Promise.all(
+        warehouseFetches.map((warehouseId) => stockService.getBalances(warehouseId)),
+      );
+      const txChunks = await Promise.all(
+        warehouseFetches.map((warehouseId) => stockService.getTransactions(warehouseId)),
+      );
+      const balances = balanceChunks.flat();
+      const transactions = txChunks.flat();
       const exceptions: ExceptionRow[] = [];
 
       balances.forEach((b) => {

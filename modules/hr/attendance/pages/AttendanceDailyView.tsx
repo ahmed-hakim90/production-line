@@ -420,6 +420,7 @@ export const AttendanceDailyView: React.FC = () => {
 
       <div className="card p-0">
         <SmartFilterBar
+      pageId="attendance-daily-view"
           periods={[
             { label: 'اليوم', value: 'today' },
             { label: 'آخر 7 أيام', value: 'week' },

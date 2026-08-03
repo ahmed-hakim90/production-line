@@ -83,6 +83,10 @@ export const userManagementService = {
     await userService.updateRoleId(userId, roleId);
   },
 
+  async updateInventoryWarehouseId(userId: string, warehouseId: string | null): Promise<void> {
+    await userService.updateInventoryWarehouseId(userId, warehouseId);
+  },
+
   async toggleUserActive(userId: string, isActive: boolean): Promise<void> {
     await userService.toggleActive(userId, isActive);
   },

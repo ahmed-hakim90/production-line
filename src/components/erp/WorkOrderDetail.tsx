@@ -36,8 +36,8 @@ interface WorkOrderDetailProps {
   }
   open: boolean
   onClose: () => void
-  onEdit: () => void
-  onClose_order: () => void
+  onEdit?: () => void
+  onClose_order?: () => void
   onPrint: () => void
   /** فتح شاشة مسح الباركود لأمر الشغل (مسار /work-orders/:id/scanner) */
   onOpenScanner?: () => void
@@ -330,7 +330,7 @@ export function WorkOrderDetail({
               {t("erpComponents.workOrderDetail.actions.openScanner")}
             </Button>
           ) : null}
-          {!isCompletedFooter ? (
+          {!isCompletedFooter && onClose_order ? (
             <Button
               type="button"
               variant="outline"
@@ -351,9 +351,11 @@ export function WorkOrderDetail({
           ) : (
             <div className="min-h-9" aria-hidden />
           )}
-          <Button type="button" variant="default" onClick={onEdit}>
-            {t("erpComponents.workOrderDetail.actions.edit")}
-          </Button>
+          {onEdit ? (
+            <Button type="button" variant="default" onClick={onEdit}>
+              {t("erpComponents.workOrderDetail.actions.edit")}
+            </Button>
+          ) : null}
         </footer>
       </aside>
     </div>

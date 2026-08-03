@@ -35,6 +35,12 @@ import {
   type TransferFormLine,
   type TransferItemOption,
 } from '../utils/transferFormShared';
+import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  INVENTORY_TRANSFER_CREATE_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import {
@@ -273,6 +279,23 @@ export const StockMovementForm: React.FC = () => {
     movementType === 'TRANSFER' &&
     Boolean(effectiveWarehouseId) &&
     toWarehouseId === effectiveWarehouseId;
+  const selectedOperationPathEnabled = movementType === 'TRANSFER'
+    ? isShelfTransfer
+      ? isOperationPathEnabled(
+          systemSettings,
+          INVENTORY_OPERATION_KEYS.stockMove,
+          INVENTORY_STOCK_MOVE_PATHS.immediateTransfer,
+        )
+      : isOperationPathEnabled(
+          systemSettings,
+          INVENTORY_OPERATION_KEYS.transferCreate,
+          INVENTORY_TRANSFER_CREATE_PATHS.movementsForm,
+        )
+    : isOperationPathEnabled(
+        systemSettings,
+        INVENTORY_OPERATION_KEYS.stockMove,
+        INVENTORY_STOCK_MOVE_PATHS.movementsForm,
+      );
   const inactiveRackIds = useMemo(
     () => new Set(warehouseRacks.filter((rack) => rack.isActive === false).map((rack) => rack.id).filter(Boolean)),
     [warehouseRacks],
@@ -433,6 +456,10 @@ export const StockMovementForm: React.FC = () => {
   };
 
   const handleSubmit = async (afterSaveAction: 'none' | 'print' | 'preview' | 'share' = 'none') => {
+    if (!selectedOperationPathEnabled) {
+      setMessage({ type: 'error', text: 'هذا المسار متوقف من إعدادات النظام.' });
+      return;
+    }
     if (!effectiveWarehouseId) {
       setMessage({ type: 'error', text: 'اختر المخزن أولاً.' });
       return;
@@ -501,7 +528,7 @@ export const StockMovementForm: React.FC = () => {
               note: 'نقل رف → رف داخل نفس المخزن',
               sourceModule: 'manual_movement',
               createdBy: userDisplayName || 'Current User',
-            })).transactionId;
+            }, { path: INVENTORY_STOCK_MOVE_PATHS.immediateTransfer })).transactionId;
           }
         } else {
           // Prefer posting identity with available stock for each component line.
@@ -534,7 +561,7 @@ export const StockMovementForm: React.FC = () => {
             sourceModule: 'manual_movement',
             createdBy: userDisplayName || userEmail || 'Current User',
             createdByUserId: uid || undefined,
-          })).requestId;
+          }, { path: INVENTORY_TRANSFER_CREATE_PATHS.movementsForm })).requestId;
         }
       } else {
         if (!selectedItem) {
@@ -584,7 +611,7 @@ export const StockMovementForm: React.FC = () => {
           sourceModule: 'manual_movement',
           adjustmentReason: movementType === 'ADJUSTMENT' ? adjustmentReason : undefined,
           createdBy: userDisplayName || 'Current User',
-        })).transactionId;
+        }, { path: INVENTORY_STOCK_MOVE_PATHS.movementsForm })).transactionId;
       }
       setMessage({
         type: 'success',

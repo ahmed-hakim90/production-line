@@ -243,6 +243,18 @@ export interface ProductionReport {
   reportCode?: string;
   employeeId: string;
   productId: string;
+  /** Immutable catalog label captured when the report is saved. */
+  productNameSnapshot?: string;
+  /** Immutable catalog code captured when the report is saved. */
+  productCodeSnapshot?: string;
+  /** Entry path used for the original report mutation; informational audit snapshot. */
+  operationPathSnapshot?: string;
+  /** Most recent mutation entry path; informational audit snapshot. */
+  lastOperationPathSnapshot?: string;
+  /** Industrial cost amount already posted to the linked work order aggregate. */
+  workOrderCostPostedSnapshot?: number;
+  /** Industrial cost amount already posted to the linked production plan aggregate. */
+  productionPlanCostPostedSnapshot?: number;
   lineId: string;
   date: string;
   /** Required for component_injection reports; legacy rows without shift are treated as morning. */
@@ -984,6 +996,7 @@ export type PresenceState = 'online' | 'idle' | 'offline';
 export interface UserPresence {
   id?: string; // userId
   userId: string;
+  tenantId?: string;
   employeeId?: string;
   userEmail?: string;
   displayName?: string;
@@ -1201,7 +1214,11 @@ export interface PrintTemplateSettings {
 export interface InventoryRoutingSettings {
   rawMaterialWarehouseId?: string;
   decomposedWarehouseId?: string;
+  /** BOM components issued for production (صالة الإنتاج). */
+  productionFloorWarehouseId?: string;
+  /** Finished goods awaiting packaging supervisor receipt (تحت التسليم). */
   productionWipWarehouseId?: string;
+  /** Accepted finished goods awaiting packaging (بانتظار التغليف). */
   finishedStagingWarehouseId?: string;
   finalProductWarehouseId?: string;
   packagingSourceWarehouseId?: string;
@@ -1211,6 +1228,8 @@ export interface InventoryRoutingSettings {
   autoTransferFinishedToFinal?: boolean;
   requireApprovalForProductionEntry?: boolean;
   requireApprovalForAutoTransfers?: boolean;
+  /** Require packaging supervisor to confirm actual received qty before staging. */
+  requirePackagingHandoverReceipt?: boolean;
   /**
    * When true, saving a production report deducts BOM components directly
    * (without a production issue order). Prefer off + صرف إنتاج.
@@ -1285,6 +1304,12 @@ export interface PlanSettings {
   /** Manual stock movement qty threshold for exception board */
   inventoryExceptionManualThreshold?: number;
   /**
+   * سياسة اعتماد صرف مستهلكات الأقسام (إعداد عام للشركة):
+   * - direct: مسودة → صرف فوري
+   * - required: مسودة → تقديم → اعتماد → صرف
+   */
+  departmentConsumableIssueApprovalMode?: 'direct' | 'required';
+  /**
    * يوم بداية شهر التشغيل (1–28). مثال: 26 يعني الفترة من ٢٦ إلى ٢٦ الشهر التالي (نهاية حصرية).
    * يُستخدم لحساب الهدف اليومي = كمية الخطة ÷ أيام الشغل في الفترة.
    */
@@ -1314,6 +1339,7 @@ export interface ReportBehaviorSettings {
   allowPackagingLaborOptional?: boolean;
   autoLinkSupplyCycleOnReportSave?: boolean;
   autoApplyInventoryOnReportSave?: boolean;
+  /** @deprecated Report progress is always reconciled with matching plans/work orders. */
   autoPostReportToPlanAndWorkOrder?: boolean;
 }
 
@@ -1437,6 +1463,17 @@ export interface ExportImportSettings {
   pages: Record<string, ExportImportPageControl>;
 }
 
+export interface OperationPathControl {
+  /** Master switch for the business operation. Missing keeps backward-compatible enabled behavior. */
+  enabled?: boolean;
+  /** Independent switches for known UI/application entry paths. Missing paths remain enabled. */
+  paths?: Record<string, boolean>;
+}
+
+export interface OperationPathSettings {
+  operations?: Record<string, OperationPathControl>;
+}
+
 export interface AttendanceIntegrationSettings {
   watchFolderPath: string;
   watchFolderEnabled: boolean;
@@ -1519,6 +1556,8 @@ export interface SystemSettings {
   alertToggles?: AlertToggleSettings;
   quickActions?: QuickActionItem[];
   exportImport?: ExportImportSettings;
+  /** Tenant-scoped controls for business operations that have multiple entry paths. */
+  operationPaths?: OperationPathSettings;
   attendanceIntegration?: AttendanceIntegrationSettings;
   productionWorkerSettings?: ProductionWorkerSettings;
   /** ط£ظ‚ظ„ ط¥طµط¯ط§ط± ط¹ظ…ظٹظ„ ظ…ط³ظ…ظˆط­ (طµظٹط؛ط© x.y.z) ط¹ظ†ط¯ طھظپط¹ظٹظ„ forceClientUpdate */
@@ -1580,7 +1619,8 @@ export type FirestoreRoleKey =
   | 'supervisor'
   | 'hr_manager'
   | 'accountant'
-  | 'materials_warehouse';
+  | 'materials_warehouse'
+  | 'inventory_viewer';
 
 export interface FirestoreRole {
   id?: string;
@@ -1601,6 +1641,11 @@ export interface FirestoreUser {
   tenantId: string;
   isSuperAdmin?: boolean;
   isActive: boolean;
+  /**
+   * When set, inventory module pages are limited to this warehouse
+   * (balances, movements, transfers, approvals involving this warehouse).
+   */
+  inventoryWarehouseId?: string | null;
   notifications?: {
     productionReports?: boolean;
     workOrderAlerts?: boolean;

@@ -9,6 +9,12 @@ import { workOrderService } from '../../../modules/production/services/workOrder
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useTranslation } from 'react-i18next';
+import {
+  WORK_ORDER_CREATE_PATHS,
+  WORK_ORDER_OPERATION_KEYS,
+  WORK_ORDER_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '../../../modules/system/lib/operationPathSettings';
 
 const DEFAULT_BREAK_START = '12:00';
 const DEFAULT_BREAK_END = '12:30';
@@ -74,6 +80,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const [form, setForm] = useState<WorkOrderFormState>(emptyForm());
   const [editingId, setEditingId] = useState<string | null>(null);
   const [loadingEdit, setLoadingEdit] = useState(false);
@@ -220,8 +227,18 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
     payload.workOrderId.trim().length > 0;
 
   const isEditMode = Boolean(editingId);
+  const createEntryPath = payload?.source === 'workOrders.queryParams'
+    ? WORK_ORDER_CREATE_PATHS.productionPlan
+    : WORK_ORDER_CREATE_PATHS.workOrdersPage;
+  const editOperation = openForEdit || isEditMode;
+  const operationPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    editOperation ? WORK_ORDER_OPERATION_KEYS.update : WORK_ORDER_OPERATION_KEYS.create,
+    editOperation ? WORK_ORDER_UPDATE_PATHS.workOrderModal : createEntryPath,
+  );
 
   if (!isOpen) return null;
+  if (!operationPathEnabled) return null;
 
   const canUseModal =
     canCreateFinishedWorkOrders ||
@@ -279,7 +296,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
           workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
           ...(form.planId ? { planId: form.planId } : {}),
-        });
+        }, { path: WORK_ORDER_UPDATE_PATHS.workOrderModal });
         setMessage(t('modalManager.createWorkOrder.editSuccess'));
       } else {
         const woNumber = await workOrderService.generateNextNumber();
@@ -317,7 +334,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
           breakEndTime: form.breakEndTime || DEFAULT_BREAK_END,
           workdayEndTime: form.workdayEndTime || DEFAULT_WORKDAY_END,
           createdBy: uid || '',
-        });
+        }, { path: createEntryPath });
         if (!createdId) throw new Error('Failed create');
         setMessage(t('modalManager.createWorkOrder.createSuccess'));
         setForm(emptyForm());

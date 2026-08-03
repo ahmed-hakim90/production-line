@@ -13,6 +13,7 @@ import {
   DocumentReference,
 } from 'firebase/firestore';
 import { db } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 
 // ─── Collection Names ───────────────────────────────────────────────────────
 
@@ -46,7 +47,8 @@ export const HR_COLLECTIONS = {
 
 // ─── Single-Document Collection ─────────────────────────────────────────────
 
-const HR_SETTINGS_DOC_ID = 'global';
+/** @deprecated Legacy shared doc — dual-read only during migration. */
+export const HR_SETTINGS_LEGACY_DOC_ID = 'global';
 
 // ─── Reference Helpers ──────────────────────────────────────────────────────
 
@@ -66,8 +68,14 @@ export function shiftsRef(): CollectionReference {
   return collection(db, HR_COLLECTIONS.SHIFTS);
 }
 
+/** Tenant-scoped HR settings document (`hr_settings/{tenantId}`). */
 export function hrSettingsDocRef(): DocumentReference {
-  return doc(db, HR_COLLECTIONS.HR_SETTINGS, HR_SETTINGS_DOC_ID);
+  return doc(db, HR_COLLECTIONS.HR_SETTINGS, getCurrentTenantId());
+}
+
+/** Legacy shared document for dual-read migration. */
+export function hrSettingsLegacyDocRef(): DocumentReference {
+  return doc(db, HR_COLLECTIONS.HR_SETTINGS, HR_SETTINGS_LEGACY_DOC_ID);
 }
 
 export function penaltyRulesRef(): CollectionReference {
@@ -107,6 +115,11 @@ export function approvalRequestsRef(): CollectionReference {
 }
 
 export function approvalSettingsDocRef(): DocumentReference {
+  return doc(db, HR_COLLECTIONS.APPROVAL_SETTINGS, getCurrentTenantId());
+}
+
+/** Legacy shared approval settings — dual-read during migration. */
+export function approvalSettingsLegacyDocRef(): DocumentReference {
   return doc(db, HR_COLLECTIONS.APPROVAL_SETTINGS, 'global');
 }
 

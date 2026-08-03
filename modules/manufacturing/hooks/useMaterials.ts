@@ -3,6 +3,10 @@ import { materialService } from '../services/materialService';
 import { createMaterial } from '../usecases/createMaterial';
 import { unwrapOrThrow } from '@/shared/usecases';
 import type { Material } from '../types';
+import type {
+  MaterialCreatePath,
+  MaterialUpdatePath,
+} from '../../system/lib/operationPathSettings';
 
 export const manufacturingQueryKeys = {
   materials: ['manufacturing', 'materials'] as const,
@@ -33,16 +37,29 @@ export function useMaterialMutations() {
   const invalidate = () => qc.invalidateQueries({ queryKey: manufacturingQueryKeys.materials });
 
   const create = useMutation({
-    mutationFn: async (payload: Omit<Material, 'id' | 'createdAt' | 'tenantId'>) => {
-      const { materialId } = unwrapOrThrow(await createMaterial(payload));
+    mutationFn: async ({
+      data,
+      path,
+    }: {
+      data: Omit<Material, 'id' | 'createdAt' | 'tenantId'>;
+      path: MaterialCreatePath;
+    }) => {
+      const { materialId } = unwrapOrThrow(await createMaterial(data, { path }));
       return materialId;
     },
     onSuccess: invalidate,
   });
 
   const update = useMutation({
-    mutationFn: ({ id, data }: { id: string; data: Partial<Material> }) =>
-      materialService.update(id, data),
+    mutationFn: ({
+      id,
+      data,
+      path,
+    }: {
+      id: string;
+      data: Partial<Material>;
+      path: MaterialUpdatePath;
+    }) => materialService.update(id, data, { path }),
     onSuccess: invalidate,
   });
 

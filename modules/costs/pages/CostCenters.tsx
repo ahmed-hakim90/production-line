@@ -309,6 +309,7 @@ export const CostCenters: React.FC = () => {
 
       <Card>
         <SmartFilterBar
+      pageId="cost-centers"
           searchPlaceholder="بحث باسم المركز أو المعرف..."
           searchValue={search}
           onSearchChange={setSearch}

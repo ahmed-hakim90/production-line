@@ -14,8 +14,7 @@ import { usePermission } from '@/utils/permissions';
 import { exportGenericRows } from '@/utils/exportExcel';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
 import { employeeService } from '@/modules/hr/employeeService';
-import { employeeDeductionService } from '@/modules/hr/employeeFinancialsService';
-import { leaveBalanceService, leaveRequestService, syncLeaveApprovalDecision } from '@/modules/hr/leaveService';
+import { leaveBalanceService, leaveRequestService } from '@/modules/hr/leaveService';
 import { createLeaveRequest } from '@/modules/hr/usecases/createLeaveRequest';
 import { unwrapOrThrow } from '@/shared/usecases';
 import { loanService } from '@/modules/hr/loanService';
@@ -25,7 +24,6 @@ import {
   canViewAllRequests,
   getAllRequests,
   getPendingApprovals,
-  getRequestById,
   getRequestsCreatedBy,
   rejectRequest,
   type ApprovalChainSnapshot,
@@ -37,7 +35,6 @@ import {
 } from '@/modules/hr/approval';
 import {
   calculatePenaltyAmountFromDuration,
-  buildPenaltyDeductionInput,
   formatPenaltyDuration,
   formatPenaltyRequestSummary,
   getPenaltyDurationLabel,
@@ -54,7 +51,7 @@ import {
 } from '@/modules/hr/leaveTypes';
 import type { FirestoreEmployee } from '@/types';
 import type { FirestoreDepartment, FirestoreJobPosition } from '@/modules/hr/types';
-import type { ApprovalChainItem, ApprovalStatus, FirestoreLeaveBalance, FirestoreLeaveRequest, FirestoreEmployeeLoan, LeaveType, LoanType } from '@/modules/hr/types';
+import type { ApprovalStatus, FirestoreLeaveBalance, FirestoreLeaveRequest, FirestoreEmployeeLoan, LeaveType, LoanType } from '@/modules/hr/types';
 import { LEAVE_TYPE_LABELS, LOAN_TYPE_LABELS } from '@/modules/hr/types';
 import { departmentsRef, jobPositionsRef } from '@/modules/hr/collections';
 import { getDocs } from 'firebase/firestore';
@@ -262,22 +259,6 @@ function applyProductionRequestReportFilters(
     .filter((request) => isRequestInDateRange(request, filters.dateFrom, filters.dateTo))
     .filter((request) => filters.requestType === 'all' || request.requestType === filters.requestType)
     .filter((request) => filters.status === 'all' || request.status === filters.status);
-}
-
-function mapApprovalStatusToLegacy(status: ApprovalRequestStatus): ApprovalStatus {
-  if (status === 'approved') return 'approved';
-  if (status === 'rejected' || status === 'cancelled') return 'rejected';
-  return 'pending';
-}
-
-function mapSnapshotChainToLegacy(chain: ApprovalChainSnapshot[]): ApprovalChainItem[] {
-  return chain.map((step) => ({
-    approverEmployeeId: step.approverEmployeeId,
-    level: step.level,
-    status: step.status === 'approved' || step.status === 'skipped' ? 'approved' : step.status === 'rejected' ? 'rejected' : 'pending',
-    actionDate: step.actionDate,
-    notes: step.notes || '',
-  }));
 }
 
 function toApprovalEmployeeInfo(
@@ -825,36 +806,6 @@ export const SupervisorTeamActions: React.FC = () => {
     }
   }, [historyParticipantFilter, historyParticipantOptions]);
 
-  const syncSourceRequestApproval = useCallback(async (request: FirestoreApprovalRequest) => {
-    const mappedStatus = mapApprovalStatusToLegacy(request.status);
-    const mappedChain = mapSnapshotChainToLegacy(getRequestApprovalChain(request));
-
-    if (request.requestType === 'leave' && request.sourceRequestId) {
-      const syncResult = await syncLeaveApprovalDecision({
-        leaveRequestId: request.sourceRequestId,
-        approvalChain: mappedChain,
-        decisionStatus: mappedStatus,
-      });
-      if (!syncResult.success) {
-        console.warn('Leave sync warning (team approvals):', syncResult.error);
-      }
-    } else if (request.requestType === 'loan' && request.sourceRequestId) {
-      await loanService.updateApproval(
-        request.sourceRequestId,
-        mappedChain,
-        mappedStatus,
-      );
-    } else if (request.requestType === 'penalty' && request.status === 'approved') {
-      const employee = await employeeService.getById(request.employeeId).catch(() => null);
-      const deductionInput = buildPenaltyDeductionInput(request, employee);
-      if (deductionInput) {
-        await employeeDeductionService.create(deductionInput).catch((err) => {
-          console.warn('Penalty deduction sync warning (team approvals):', err);
-        });
-      }
-    }
-  }, []);
-
   const addCreatedApprovalToStatusList = useCallback(async (requestId?: string) => {
     if (!requestId || !supervisorId) return;
     try {
@@ -903,13 +854,6 @@ export const SupervisorTeamActions: React.FC = () => {
         return;
       }
 
-      const updatedRequest = isLegacy
-        ? await getRequestById(req.id).then((request) => request ? markLegacyProductionApprovalRequest(request) : null)
-        : await productionApprovalRequestService.getById(req.id);
-      if (updatedRequest) {
-        await syncSourceRequestApproval(updatedRequest);
-      }
-
       setApprovalActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
       setToast({ type: 'success', message: action === 'approved' ? 'تم اعتماد الطلب' : 'تم رفض الطلب' });
       await fetchPendingApprovalRequests({ silent: true });
@@ -919,7 +863,7 @@ export const SupervisorTeamActions: React.FC = () => {
     } finally {
       setApprovalActionLoading(null);
     }
-  }, [approvalActionNotes, approvalCaller, fetchPendingApprovalRequests, supervisorId, syncSourceRequestApproval]);
+  }, [approvalActionNotes, approvalCaller, fetchPendingApprovalRequests, supervisorId]);
 
   const handleCancelApprovalRequest = useCallback(async (req: FirestoreApprovalRequest) => {
     if (!req.id || !supervisorId) return;
@@ -950,13 +894,6 @@ export const SupervisorTeamActions: React.FC = () => {
         return;
       }
 
-      const updatedRequest = isLegacy
-        ? await getRequestById(req.id).then((request) => request ? markLegacyProductionApprovalRequest(request) : null)
-        : await productionApprovalRequestService.getById(req.id);
-      if (updatedRequest) {
-        await syncSourceRequestApproval(updatedRequest);
-      }
-
       setToast({ type: 'success', message: 'تم إلغاء الطلب' });
       await fetchPendingApprovalRequests({ silent: true });
     } catch (err) {
@@ -965,7 +902,7 @@ export const SupervisorTeamActions: React.FC = () => {
     } finally {
       setApprovalActionLoading(null);
     }
-  }, [approvalCaller, fetchPendingApprovalRequests, supervisorId, syncSourceRequestApproval, uid]);
+  }, [approvalCaller, fetchPendingApprovalRequests, supervisorId, uid]);
 
   const toggleApprovalDetails = useCallback((requestId: string) => {
     setExpandedApprovalIds((prev) => {

@@ -5,21 +5,42 @@ service firebase.storage {
       return request.auth != null;
     }
 
-    // Current single-company structure:
-    // company/{module}/{documentId}/{timestamp}_{filename}
-    match /company/{module}/{documentId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn()
-        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents', 'repair_jobs'];
+    function userDoc() {
+      return firestore.get(/databases/(default)/documents/users/$(request.auth.uid));
     }
 
-    // Reserved for future multi-company isolation:
-    // company/{companyId}/{module}/{documentId}/{fileName}
-    match /company/{companyId}/{module}/{documentId}/{fileName} {
-      allow read: if isSignedIn();
-      allow write: if isSignedIn()
-        && module in ['employees', 'products', 'production_batches', 'qc_reports', 'documents', 'repair_jobs'];
+    function isActiveTenantUser() {
+      return isSignedIn()
+        && userDoc().data.isActive == true
+        && userDoc().data.tenantId is string
+        && userDoc().data.tenantId.size() > 0;
+    }
+
+    function currentTenantId() {
+      return userDoc().data.tenantId;
+    }
+
+    function allowedModules() {
+      return ['employees', 'products', 'production_batches', 'qc_reports', 'documents', 'repair_jobs'];
+    }
+
+    // Preferred multi-tenant path:
+    // company/{tenantId}/{module}/{documentId}/{fileName}
+    match /company/{tenantId}/{module}/{documentId}/{fileName} {
+      allow read: if isActiveTenantUser()
+        && tenantId == currentTenantId()
+        && module in allowedModules();
+      allow write: if isActiveTenantUser()
+        && tenantId == currentTenantId()
+        && module in allowedModules()
+        && request.resource.size < 15 * 1024 * 1024;
+    }
+
+    // Legacy single-company path (compat). Authenticated only — migrate to tenant path.
+    // Deny after Storage migration completes for all tenants.
+    match /company/{module}/{documentId}/{fileName} {
+      allow read: if isActiveTenantUser() && module in allowedModules();
+      allow write: if false;
     }
   }
 }
-

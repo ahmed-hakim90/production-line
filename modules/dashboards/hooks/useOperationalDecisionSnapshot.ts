@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
+import { getCurrentTenantIdOrNull } from '../../../lib/currentTenant';
 import {
   fetchCachedPageData,
+  isPageDataCacheFresh,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import { resolveInventoryRoutingV1 } from '../../inventory/lib/inventoryRoutingResolver';
@@ -10,6 +12,7 @@ import { stockService } from '../../inventory/services/stockService';
 import { suppliesReceiptService } from '../../inventory/services/suppliesReceiptService';
 import { transferApprovalService } from '../../inventory/services/transferApprovalService';
 import { countRawMaterialWarehouseAlerts } from '../../inventory/services/rawMaterialWarehouseAlertsService';
+import { assemblableCapacityService } from '../../inventory/services/assemblableCapacityService';
 import type {
   InventoryTransferRequest,
   ProductionIssueOrder,
@@ -32,10 +35,20 @@ import {
   volumeWeightedPlanAchievement,
   type PlanActualInput,
 } from '../lib/decisionMetrics';
+import {
+  OPERATIONAL_DECISION_SNAPSHOT_MAX_AGE_MS,
+  resolveOperationalDecisionSnapshotCacheKey,
+} from '../lib/operationalDecisionSnapshotCache';
 import type { ProductionPlan, ProductionPlanFollowUp, ProductionReport } from '../../../types';
 
-const CACHE_KEY = 'dashboard:operational-decision-snapshot:v3';
-const MAX_AGE_MS = 45_000;
+export {
+  OPERATIONAL_DECISION_SNAPSHOT_MAX_AGE_MS,
+  resolveOperationalDecisionSnapshotCacheKey,
+} from '../lib/operationalDecisionSnapshotCache';
+
+function snapshotCacheKey(): string {
+  return resolveOperationalDecisionSnapshotCacheKey(getCurrentTenantIdOrNull());
+}
 
 export type OperationalDecisionSnapshot = {
   issues: ReturnType<typeof summarizeProductionIssuesForDecision>;
@@ -64,6 +77,9 @@ type RawSnapshot = {
   wasteQty: number;
   receipts: SuppliesReceiptOrder[];
   countSessions: StockCountSession[];
+  /** productId → max assemblable units from raw warehouse */
+  maxAssemblableByProductId: Record<string, number>;
+  assemblableConfigured: boolean;
 };
 
 const EMPTY: OperationalDecisionSnapshot = {
@@ -131,16 +147,22 @@ export function useOperationalDecisionSnapshot(options?: {
   const planReports = useAppStore((s) => s.planReports);
   const productionPlanFollowUps = useAppStore((s) => s.productionPlanFollowUps);
   const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
+  const cacheKey = snapshotCacheKey();
 
-  const cached = peekPageDataCache<RawSnapshot>(CACHE_KEY);
+  const cached = peekPageDataCache<RawSnapshot>(cacheKey);
   const [raw, setRaw] = useState<RawSnapshot | null>(() => cached ?? null);
   const [loading, setLoading] = useState(() => cached == null);
 
   const load = useCallback(async (force = false) => {
-    const existing = peekPageDataCache<RawSnapshot>(CACHE_KEY);
+    const key = snapshotCacheKey();
+    const existing = peekPageDataCache<RawSnapshot>(key);
     if (existing) {
       setRaw(existing);
       setLoading(false);
+      // Fresh within TTL: skip network; concurrent mounts share this via pageDataCache.
+      if (!force && isPageDataCacheFresh(key, OPERATIONAL_DECISION_SNAPSHOT_MAX_AGE_MS)) {
+        return;
+      }
     } else {
       setLoading(true);
     }
@@ -154,8 +176,9 @@ export function useOperationalDecisionSnapshot(options?: {
       const wasteId = String(routing.wasteWarehouseId || '').trim();
       const rawId = String(routing.rawMaterialWarehouseId || '').trim();
 
+      // fetchCachedPageData dedupes in-flight loaders for the same key within TTL.
       const { data } = await fetchCachedPageData(
-        CACHE_KEY,
+        key,
         async () => {
           const [
             allIssues,
@@ -169,6 +192,7 @@ export function useOperationalDecisionSnapshot(options?: {
             wasteBalances,
             rawBalances,
             countSessions,
+            assemblableRows,
           ] = await Promise.all([
             productionIssueService.getAll().catch(() => [] as ProductionIssueOrder[]),
             transferApprovalService.getByStatus('pending').catch(() => [] as InventoryTransferRequest[]),
@@ -189,6 +213,9 @@ export function useOperationalDecisionSnapshot(options?: {
             loadWarehouseBalances(wasteId),
             loadWarehouseBalances(rawId),
             stockService.getCountSessions().catch(() => [] as StockCountSession[]),
+            rawId
+              ? assemblableCapacityService.getForWarehouse(rawId).catch(() => [])
+              : Promise.resolve([]),
           ]);
 
           const packagingFinished = packagingBalances.filter(
@@ -216,6 +243,16 @@ export function useOperationalDecisionSnapshot(options?: {
           ];
           const localCounts = countNegativeAndLow(routingBalances);
 
+          const maxAssemblableByProductId: Record<string, number> = {};
+          for (const row of assemblableRows) {
+            const productId = String(row.productId || '').trim();
+            if (!productId) continue;
+            maxAssemblableByProductId[productId] = Math.max(
+              0,
+              Number(row.maxAssemblable || 0),
+            );
+          }
+
           return {
             issues: allIssues,
             pendingTransfers,
@@ -229,9 +266,11 @@ export function useOperationalDecisionSnapshot(options?: {
             wasteQty,
             receipts: allReceipts,
             countSessions,
+            maxAssemblableByProductId,
+            assemblableConfigured: Boolean(rawId),
           } satisfies RawSnapshot;
         },
-        { force, maxAgeMs: MAX_AGE_MS },
+        { force, maxAgeMs: OPERATIONAL_DECISION_SNAPSHOT_MAX_AGE_MS },
       );
       setRaw(data);
     } finally {
@@ -262,6 +301,10 @@ export function useOperationalDecisionSnapshot(options?: {
       awaitingUnits: raw.packagingAwaitingUnits,
       skuCount: raw.packagingSkuCount,
       pendingPackagingTransfers: transfers.pendingPackaging,
+      pendingHandover: transfers.pendingHandover,
+      handoverRemainingUnits: raw.pendingTransfers
+        .filter((t) => t.status === 'pending' && (t.requestType || '') === 'production_handover')
+        .reduce((sum, t) => sum + Number(t.remainingQuantity ?? t.lines?.[0]?.quantity ?? 0), 0),
       sourceWarehouseId: routing.packagingSourceWarehouseId || routing.finishedStagingWarehouseId,
       targetWarehouseId: routing.packagingTargetWarehouseId || routing.finalProductWarehouseId,
     });
@@ -294,6 +337,9 @@ export function useOperationalDecisionSnapshot(options?: {
     const materials = summarizeMaterialReadiness({
       plans: productionPlans,
       followUps: productionPlanFollowUps as ProductionPlanFollowUp[],
+      maxAssemblableByProductId: raw.assemblableConfigured
+        ? raw.maxAssemblableByProductId
+        : undefined,
     });
 
     return {

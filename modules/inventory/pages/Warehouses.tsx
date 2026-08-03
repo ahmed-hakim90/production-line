@@ -9,8 +9,9 @@ const ROLE_LABELS: Record<WarehouseRole, string> = {
   general: 'عام',
   raw_material: 'مواد خام',
   decomposed: 'مفكك',
-  production_wip: 'WIP',
-  finished_staging: 'تم الإنتاج',
+  production_floor: 'صالة الإنتاج',
+  production_wip: 'تحت التسليم',
+  finished_staging: 'بانتظار التغليف',
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
@@ -23,6 +24,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 
 const DELETE_CONFIRM = (name: string) =>
   `سيتم حذف المخزن «${name}» وجميع البيانات المرتبطة به نهائيًا:\n`
@@ -57,6 +59,9 @@ export const Warehouses: React.FC = () => {
   }, [routing]);
   const canView = can('inventory.view');
   const canManage = can('inventory.warehouses.manage');
+  const { scoped, filterWarehouses } = useMaterialsWarehouseScope();
+  /** Bound / materials-scoped users may view their warehouse but not create/delete. */
+  const canCreateWarehouse = canManage && !scoped;
 
   const {
     data: rowsData,
@@ -68,7 +73,10 @@ export const Warehouses: React.FC = () => {
     () => warehouseService.getAllWarehouses(),
     { maxAgeMs: 60_000 },
   );
-  const rows = rowsData ?? [];
+  const rows = useMemo(
+    () => filterWarehouses(rowsData ?? []),
+    [rowsData, filterWarehouses],
+  );
 
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [roleFilter, setRoleFilter] = useState('');
@@ -117,7 +125,7 @@ export const Warehouses: React.FC = () => {
   };
 
   const openCreate = () => {
-    if (!canManage) return;
+    if (!canCreateWarehouse) return;
     openModal(MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE, {
       onSaved: () => void load(),
     });
@@ -137,7 +145,7 @@ export const Warehouses: React.FC = () => {
         title="المخازن"
         subtitle="عرض المخازن وتعديلها. عند الحذف يُزال المخزن مع كل الحركات والأرصدة والطلبات المرتبطة به نهائيًا."
         primaryAction={
-          canManage
+          canCreateWarehouse
             ? {
                 label: 'إضافة مخزن',
                 icon: 'add',
@@ -162,6 +170,7 @@ export const Warehouses: React.FC = () => {
 
       <Card title="قائمة المخازن">
         <SmartFilterBar
+      pageId="warehouses"
           quickFilters={[
             {
               key: 'role',

@@ -1,6 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Package } from 'lucide-react';
+import { toast } from 'sonner';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
@@ -17,31 +18,45 @@ import { sourceModuleLabel } from '../../inventory/lib/stockLabels';
 import { stockService } from '../../inventory/services/stockService';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import { transferApprovalService } from '../../inventory/services/transferApprovalService';
-import type { StockItemBalance, StockTransaction, Warehouse } from '../../inventory/types';
+import { productionHandoverService } from '../../inventory/services/productionHandoverService';
+import type {
+  InventoryTransferRequest,
+  StockItemBalance,
+  StockTransaction,
+  Warehouse,
+} from '../../inventory/types';
 
 type PackagingControlPageData = {
   warehouses: Warehouse[];
-  balances: StockItemBalance[];
+  stagingBalances: StockItemBalance[];
+  wipBalances: StockItemBalance[];
   transactions: StockTransaction[];
   pendingPackaging: number;
+  pendingHandovers: InventoryTransferRequest[];
 };
 
 /**
  * Production packaging hub:
- * balances waiting in تم الإنتاج → packaging reports → final product warehouse.
+ * WIP (تحت التسليم) → packaging supervisor receipt → staging (بانتظار التغليف) → final.
  */
 export const PackagingControl: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const uid = useAppStore((s) => s.uid);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
 
+  const wipWarehouseId = String(routing.productionWipWarehouseId || '').trim();
   const sourceWarehouseId =
     String(routing.packagingSourceWarehouseId || routing.finishedStagingWarehouseId || '').trim();
   const targetWarehouseId =
     String(routing.packagingTargetWarehouseId || routing.finalProductWarehouseId || '').trim();
 
-  const CACHE_KEY = `production:packaging-control:${sourceWarehouseId}:${targetWarehouseId}`;
+  const CACHE_KEY = `production:packaging-control:v2:${wipWarehouseId}:${sourceWarehouseId}:${targetWarehouseId}`;
+
+  const [receiptQtyById, setReceiptQtyById] = useState<Record<string, string>>({});
+  const [busyId, setBusyId] = useState<string | null>(null);
 
   const {
     data,
@@ -50,15 +65,23 @@ export const PackagingControl: React.FC = () => {
   } = useCachedPageLoad<PackagingControlPageData>(
     CACHE_KEY,
     async () => {
-      const [whs, bals, txs, pending] = await Promise.all([
+      const [whs, stagingBals, wipBals, txs, pending] = await Promise.all([
         warehouseService.getAllWarehouses(),
         sourceWarehouseId ? stockService.getBalances(sourceWarehouseId) : Promise.resolve([]),
-        sourceWarehouseId ? stockService.getTransactions(sourceWarehouseId) : Promise.resolve([]),
+        wipWarehouseId ? stockService.getBalances(wipWarehouseId) : Promise.resolve([]),
+        sourceWarehouseId
+          ? stockService.getTransactions(sourceWarehouseId)
+          : wipWarehouseId
+            ? stockService.getTransactions(wipWarehouseId)
+            : Promise.resolve([]),
         transferApprovalService.getByStatus('pending'),
       ]);
       return {
         warehouses: whs,
-        balances: bals.filter(
+        stagingBalances: stagingBals.filter(
+          (row) => row.itemType === 'finished_good' && Number(row.quantity || 0) !== 0,
+        ),
+        wipBalances: wipBals.filter(
           (row) => row.itemType === 'finished_good' && Number(row.quantity || 0) !== 0,
         ),
         transactions: txs.slice(0, 10),
@@ -67,15 +90,18 @@ export const PackagingControl: React.FC = () => {
             (row.requestType || '') === 'packaging_transfer' &&
             (row.fromWarehouseId === sourceWarehouseId || row.toWarehouseId === targetWarehouseId),
         ).length,
+        pendingHandovers: pending.filter((row) => (row.requestType || '') === 'production_handover'),
       };
     },
     { maxAgeMs: 45_000 },
   );
 
   const warehouses = data?.warehouses ?? [];
-  const balances = data?.balances ?? [];
+  const stagingBalances = data?.stagingBalances ?? [];
+  const wipBalances = data?.wipBalances ?? [];
   const transactions = data?.transactions ?? [];
   const pendingPackaging = data?.pendingPackaging ?? 0;
+  const pendingHandovers = data?.pendingHandovers ?? [];
 
   const reload = async () => {
     invalidatePageDataCache(CACHE_KEY);
@@ -84,13 +110,74 @@ export const PackagingControl: React.FC = () => {
 
   const sourceWarehouse = warehouses.find((w) => w.id === sourceWarehouseId) || null;
   const targetWarehouse = warehouses.find((w) => w.id === targetWarehouseId) || null;
+  const wipWarehouse = warehouses.find((w) => w.id === wipWarehouseId) || null;
 
-  const totalQty = useMemo(
-    () => balances.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
-    [balances],
+  const stagingTotalQty = useMemo(
+    () => stagingBalances.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+    [stagingBalances],
+  );
+  const wipTotalQty = useMemo(
+    () => wipBalances.reduce((sum, row) => sum + Number(row.quantity || 0), 0),
+    [wipBalances],
+  );
+  const handoverRemainingQty = useMemo(
+    () => pendingHandovers.reduce((sum, row) => sum + Number(row.remainingQuantity ?? row.lines?.[0]?.quantity ?? 0), 0),
+    [pendingHandovers],
   );
 
   const configured = Boolean(sourceWarehouseId && targetWarehouseId && sourceWarehouseId !== targetWarehouseId);
+  const canConfirmHandover = can('productionHandover.approve') || can('inventory.transfers.approve');
+  const actor = currentEmployee?.name || 'مستخدم';
+
+  const confirmHandover = async (row: InventoryTransferRequest) => {
+    if (!row.id) return;
+    const remaining = Number(row.remainingQuantity ?? row.lines?.[0]?.quantity ?? 0);
+    const reported = Number(
+      row.reportedQuantity
+      ?? row.lines?.[0]?.reportedQuantity
+      ?? (remaining + Number(row.receivedQuantity ?? row.lines?.[0]?.receivedQuantity ?? 0)),
+    );
+    const expectedReceivedQuantity = Number(
+      row.receivedQuantity
+      ?? row.lines?.[0]?.receivedQuantity
+      ?? Math.max(0, reported - remaining),
+    );
+    const raw = receiptQtyById[row.id];
+    const qty = Number(raw != null && String(raw).trim() !== '' ? raw : remaining);
+    if (!(qty > 0)) {
+      toast.error('أدخل كمية استلام أكبر من صفر.');
+      return;
+    }
+    if (qty > remaining + 0.000001) {
+      toast.error(`الكمية تتجاوز المتبقي (${formatNumber(remaining)}).`);
+      return;
+    }
+    setBusyId(row.id);
+    try {
+      const result = await productionHandoverService.confirmReceipt({
+        handoverRequestId: row.id,
+        quantity: qty,
+        expectedReceivedQuantity,
+        actor,
+        actorUserId: uid || currentEmployee?.id || undefined,
+      });
+      toast.success(
+        result.remainingQuantity > 0
+          ? `تم استلام ${formatNumber(qty)} — المتبقي ${formatNumber(result.remainingQuantity)}`
+          : `تم استلام الكمية بالكامل (${formatNumber(qty)})`,
+      );
+      setReceiptQtyById((prev) => {
+        const next = { ...prev };
+        delete next[row.id!];
+        return next;
+      });
+      await reload();
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تأكيد الاستلام.');
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   if (loading && warehouses.length === 0) {
     return <PageContentSkeleton variant="dashboard" />;
@@ -102,8 +189,8 @@ export const PackagingControl: React.FC = () => {
         title="تحكم التغليف"
         subtitle={
           configured
-            ? `بانتظار التغليف في «${sourceWarehouse?.name || 'تم الإنتاج'}» → «${targetWarehouse?.name || 'منتج تام'}»`
-            : 'حدّد مخزن تم الإنتاج ومخزن المنتج التام في توجيه المخازن'
+            ? `تحت التسليم → بانتظار التغليف («${sourceWarehouse?.name || 'بانتظار التغليف'}») → «${targetWarehouse?.name || 'منتج تام'}»`
+            : 'حدّد مخازن تحت التسليم / بانتظار التغليف / المنتج التام في توجيه المخازن'
         }
         icon={<Package size={18} />}
         actions={(
@@ -124,31 +211,33 @@ export const PackagingControl: React.FC = () => {
 
       {!configured && (
         <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
-          التوجيه غير مكتمل: عيّن «مخزن التغليف (من)» = تم الإنتاج و«إلى» = منتج تام من الإعدادات.
+          التوجيه غير مكتمل: عيّن مخزن تحت التسليم وبانتظار التغليف والمنتج التام من الإعدادات.
           <Link className="font-bold underline ms-2" to={withTenantPath(tenantSlug, '/settings/production')}>
             فتح الإعدادات
           </Link>
         </p>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KPICard label="أصناف بانتظار التغليف" value={balances.length} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="إجمالي الوحدات" value={formatNumber(totalQty)} iconType="metric" color="green" loading={loading} />
-        <KPICard label="تحويلات تغليف معلّقة" value={pendingPackaging} iconType="trend" color="amber" loading={loading} />
-        <KPICard
-          label="مخزن الوجهة"
-          value={targetWarehouse?.name || '—'}
-          iconType="metric"
-          color="indigo"
-          loading={loading}
-        />
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+        <KPICard label="تحت التسليم (وحدات)" value={formatNumber(wipTotalQty)} iconType="metric" color="amber" loading={loading} />
+        <KPICard label="استلام معلّق" value={pendingHandovers.length} iconType="trend" color="amber" loading={loading} />
+        <KPICard label="متبقي للاستلام" value={formatNumber(handoverRemainingQty)} iconType="metric" color="indigo" loading={loading} />
+        <KPICard label="بانتظار التغليف" value={formatNumber(stagingTotalQty)} iconType="metric" color="green" loading={loading} />
+        <KPICard label="تحويلات تغليف معلّقة" value={pendingPackaging} iconType="trend" color="indigo" loading={loading} />
       </div>
 
       <div className="flex flex-wrap gap-2">
+        {wipWarehouseId && can('inventory.view') && (
+          <Link to={withTenantPath(tenantSlug, `/inventory/balances?warehouseId=${encodeURIComponent(wipWarehouseId)}`)}>
+            <GhostButton iconName="warehouse" tone="share">
+              أرصدة تحت التسليم{wipWarehouse?.name ? ` (${wipWarehouse.name})` : ''}
+            </GhostButton>
+          </Link>
+        )}
         {sourceWarehouseId && can('inventory.view') && (
           <Link to={withTenantPath(tenantSlug, `/inventory/balances?warehouseId=${encodeURIComponent(sourceWarehouseId)}`)}>
             <GhostButton iconName="inventory_2" tone="share">
-              أرصدة تم الإنتاج
+              أرصدة بانتظار التغليف
             </GhostButton>
           </Link>
         )}
@@ -172,10 +261,97 @@ export const PackagingControl: React.FC = () => {
       <Card className="border-slate-200 shadow-none overflow-hidden">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-slate-800">
+            طابور استلام التغليف (تحت التسليم)
+          </CardTitle>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            أكّد الكمية الفعلية المستلمة (يمكن أقل من المبلّغ). المتبقي يبقى تحت التسليم.
+          </p>
+        </CardHeader>
+        <CardContent className="p-0">
+          <div className="overflow-x-auto">
+            <table className="erp-table w-full">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th text-start">المرجع / المنتج</th>
+                  <th className="erp-th text-center">مبلّغ</th>
+                  <th className="erp-th text-center">مستلم</th>
+                  <th className="erp-th text-center">متبقي</th>
+                  <th className="erp-th text-center">المستلم فعلياً</th>
+                  <th className="erp-th text-center">إجراء</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  Array.from({ length: 3 }).map((_, i) => (
+                    <tr key={`hk-${i}`}>
+                      <td className="px-4 py-3" colSpan={6}>
+                        <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                      </td>
+                    </tr>
+                  ))
+                ) : pendingHandovers.length === 0 ? (
+                  <tr>
+                    <td colSpan={6} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
+                      لا توجد كميات بانتظار تأكيد مشرف التغليف.
+                    </td>
+                  </tr>
+                ) : (
+                  pendingHandovers.map((row) => {
+                    const line = row.lines?.[0];
+                    const reported = Number(row.reportedQuantity ?? line?.reportedQuantity ?? line?.quantity ?? 0);
+                    const received = Number(row.receivedQuantity ?? line?.receivedQuantity ?? 0);
+                    const remaining = Number(row.remainingQuantity ?? Math.max(0, reported - received));
+                    return (
+                      <tr key={row.id} className="border-b border-[var(--color-border)]">
+                        <td className="px-4 py-3">
+                          <p className="text-sm font-bold">{row.referenceNo}</p>
+                          <p className="text-sm font-medium">{line?.itemName || '—'}</p>
+                          <p className="text-xs text-slate-400 font-mono">{line?.itemCode || '—'}</p>
+                        </td>
+                        <td className="px-4 py-3 text-center tabular-nums font-bold">{formatNumber(reported)}</td>
+                        <td className="px-4 py-3 text-center tabular-nums">{formatNumber(received)}</td>
+                        <td className="px-4 py-3 text-center tabular-nums text-amber-700 font-bold">{formatNumber(remaining)}</td>
+                        <td className="px-4 py-3 text-center">
+                          <input
+                            type="number"
+                            min="0"
+                            step="0.001"
+                            className="w-28 rounded border px-2 py-1.5 text-sm tabular-nums text-center"
+                            disabled={!canConfirmHandover || busyId === row.id}
+                            placeholder={String(remaining)}
+                            value={receiptQtyById[row.id || ''] ?? ''}
+                            onChange={(e) =>
+                              setReceiptQtyById((prev) => ({ ...prev, [row.id!]: e.target.value }))
+                            }
+                          />
+                        </td>
+                        <td className="px-4 py-3 text-center">
+                          <PrimaryButton
+                            iconName="fact_check"
+                            tone="approve"
+                            disabled={!canConfirmHandover || busyId === row.id || remaining <= 0}
+                            onClick={() => void confirmHandover(row)}
+                          >
+                            {busyId === row.id ? 'جاري…' : 'تأكيد الاستلام'}
+                          </PrimaryButton>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border-slate-200 shadow-none overflow-hidden">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-slate-800">
             أرصدة بانتظار التغليف
           </CardTitle>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            منتجات في مخزن تم الإنتاج جاهزة لتقرير التغليف ثم التحويل إلى منتج تام.
+            كميات أكدها مشرف التغليف وجاهزة لتقرير التغليف ثم التحويل إلى منتج تام.
           </p>
         </CardHeader>
         <CardContent className="p-0">
@@ -198,14 +374,14 @@ export const PackagingControl: React.FC = () => {
                       </td>
                     </tr>
                   ))
-                ) : balances.length === 0 ? (
+                ) : stagingBalances.length === 0 ? (
                   <tr>
                     <td colSpan={4} className="px-4 py-8 text-center text-sm text-[var(--color-text-muted)]">
                       لا توجد أرصدة بانتظار التغليف في هذا المخزن.
                     </td>
                   </tr>
                 ) : (
-                  balances
+                  stagingBalances
                     .slice()
                     .sort((a, b) => Number(b.quantity || 0) - Number(a.quantity || 0))
                     .map((row) => (
@@ -248,10 +424,10 @@ export const PackagingControl: React.FC = () => {
                 <div className="min-w-0">
                   <p className="text-sm font-medium truncate">{tx.itemName}</p>
                   <p className="text-xs text-[var(--color-text-muted)]">
-                    {tx.movementType} · {sourceModuleLabel(tx.sourceModule)} · {tx.referenceNo || '—'}
+                    {sourceModuleLabel(tx.sourceModule)} · {tx.movementType}
                   </p>
                 </div>
-                <span className="text-sm font-bold tabular-nums shrink-0">{formatNumber(tx.quantity)}</span>
+                <p className="text-sm font-bold tabular-nums shrink-0">{formatNumber(tx.quantity)}</p>
               </div>
             ))
           )}

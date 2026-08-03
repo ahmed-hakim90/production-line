@@ -4,6 +4,7 @@ export const TRANSFER_LIKE_TYPES: TransferRequestType[] = [
   'transfer',
   'manual_transfer',
   'production_auto_transfer',
+  'production_handover',
   'finished_to_final',
   'packaging_transfer',
 ];

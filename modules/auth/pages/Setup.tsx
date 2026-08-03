@@ -52,7 +52,7 @@ export const Setup: React.FC = () => {
 
     setLoading(true);
     try {
-      const roles    = await roleService.seedIfEmpty();
+      const roles    = await roleService.migrateDefaultRoles();
       const adminRole = roles[0];
       const cred     = await createUserWithEmail(email, password);
       await userService.set(cred.uid, {

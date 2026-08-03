@@ -1,4 +1,4 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, updateDoc, where } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
@@ -7,6 +7,12 @@ import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { rawMaterialService } from './rawMaterialService';
 import { stockService } from './stockService';
+import {
+  INVENTORY_DOCUMENT_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  assertCurrentTenantOperationPathEnabled,
+  type InventoryDocumentPath,
+} from '../../system/lib/operationPathSettings';
 import { defaultItemLocationService } from './defaultItemLocationService';
 import { warehouseLocationService } from './warehouseLocationService';
 import {
@@ -21,6 +27,7 @@ import type {
   SuppliesReceiptOrderStatus,
   SuppliesReceiptProductGroup,
 } from '../types';
+import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'supplies_receipt_orders';
 const DELETABLE_STATUSES: SuppliesReceiptOrderStatus[] = ['draft', 'rejected', 'cancelled'];
@@ -133,9 +140,16 @@ function sanitizeGroup(group: SuppliesReceiptProductGroup): SuppliesReceiptProdu
 }
 
 export const suppliesReceiptService = {
-  async getAll(): Promise<SuppliesReceiptOrder[]> {
+  async getAll(warehouseId?: string): Promise<SuppliesReceiptOrder[]> {
     if (!isConfigured) return [];
-    const snap = await getDocs(tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc')));
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
+    const snap = await getDocs(tenantQuery(
+      db,
+      COLLECTION,
+      ...(scope.warehouseId ? [where('warehouseId', '==', scope.warehouseId)] : []),
+      orderBy('createdAt', 'desc'),
+    ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SuppliesReceiptOrder));
   },
 
@@ -302,7 +316,16 @@ export const suppliesReceiptService = {
     await updateDoc(doc(db, COLLECTION, id), { status: 'submitted', submittedAt: toIsoNow() });
   },
 
-  async approve(id: string, actor: string, actorUserId?: string): Promise<void> {
+  async approve(
+    id: string,
+    actor: string,
+    context: { path: InventoryDocumentPath },
+    actorUserId?: string,
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      INVENTORY_DOCUMENT_OPERATION_KEYS.suppliesReceiptApprove,
+      context.path,
+    );
     if (!isConfigured || !id) return;
     const order = await this.getById(id);
     if (!order?.id) throw new Error('مستند الاستلام غير موجود.');
@@ -315,7 +338,17 @@ export const suppliesReceiptService = {
     }));
   },
 
-  async reject(id: string, actor: string, reason: string, actorUserId?: string): Promise<void> {
+  async reject(
+    id: string,
+    actor: string,
+    context: { path: InventoryDocumentPath },
+    reason: string,
+    actorUserId?: string,
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      INVENTORY_DOCUMENT_OPERATION_KEYS.suppliesReceiptReject,
+      context.path,
+    );
     if (!isConfigured || !id) return;
     const order = await this.getById(id);
     if (!order?.id) throw new Error('مستند الاستلام غير موجود.');
@@ -331,7 +364,16 @@ export const suppliesReceiptService = {
     }));
   },
 
-  async execute(id: string, actor: string, actorUserId?: string): Promise<void> {
+  async execute(
+    id: string,
+    actor: string,
+    context: { path: InventoryDocumentPath },
+    actorUserId?: string,
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      INVENTORY_DOCUMENT_OPERATION_KEYS.suppliesReceiptExecute,
+      context.path,
+    );
     const order = await this.getById(id);
     if (!order?.id) throw new Error('مستند الاستلام غير موجود.');
     if (order.status !== 'approved') throw new Error('لا يمكن تنفيذ الاستلام قبل الاعتماد.');
@@ -385,7 +427,7 @@ export const suppliesReceiptService = {
         sourceId: order.referenceNo,
         note: noteParts.join(' — '),
         createdBy: actor,
-      });
+      }, { path: INVENTORY_STOCK_MOVE_PATHS.suppliesReceipt });
     }
 
     await updateDoc(doc(db, COLLECTION, order.id), stripUndefinedDeep({

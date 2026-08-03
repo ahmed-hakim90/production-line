@@ -4,6 +4,7 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
   runTransaction,
   updateDoc,
@@ -19,11 +20,27 @@ import { formatCategoryBreadcrumb } from '../../catalog/lib/categoryTree';
 import { normalizeLegacyUnit } from '../types';
 import {
   buildEntityCodeClaimId,
+  allocateNextSequentialSuffixInTransaction,
   DUPLICATE_ENTITY_CODE,
   ENTITY_CODE_CLAIMS_COLLECTION,
   isDuplicateEntityCodeError,
+  peekNextSequentialSuffixCode,
   throwDuplicateEntityCode,
 } from '../../shared/services/entityCodeSequenceService';
+import {
+  MATERIAL_CATEGORY_CODE_REQUIRED,
+  MATERIAL_CODE_PADDING,
+  isValidMaterialCategoryCode,
+  materialCategoryCounterKey,
+  maxMaterialCategorySequence,
+  normalizeMaterialCategoryCode,
+} from '../lib/materialCode';
+import {
+  MANUFACTURING_OPERATION_KEYS,
+  assertCurrentTenantOperationPathEnabled,
+  type MaterialCreatePath,
+  type MaterialUpdatePath,
+} from '../../system/lib/operationPathSettings';
 
 const MATERIAL_ENTITY_TYPE = 'material';
 
@@ -34,8 +51,30 @@ function normalizeMaterialCode(value: unknown): string {
   return String(value || '').trim().toUpperCase();
 }
 
+function normalizeMaterialProcurementFields<T extends Partial<Material>>(
+  payload: T,
+  isManufacturedInternally: boolean,
+): T {
+  if (!isManufacturedInternally) return payload;
+  return {
+    ...payload,
+    purchaseUnit: '',
+    conversionRate: 1,
+    purchaseCost: 0,
+    wastePercent: 0,
+  };
+}
+
 function materialClaimRef(tenantId: string, code: string) {
   return doc(db, ENTITY_CODE_CLAIMS_COLLECTION, buildEntityCodeClaimId(tenantId, MATERIAL_ENTITY_TYPE, code));
+}
+
+async function seedMaxCategoryMaterialCodes(categoryCode: string): Promise<number> {
+  const materials = await materialService.getAll();
+  return maxMaterialCategorySequence(
+    materials.map((material) => material.code),
+    categoryCode,
+  );
 }
 
 export function toBaseQty(
@@ -62,6 +101,7 @@ export const materialService = {
     if (!isConfigured || !id) return null;
     const snap = await getDoc(doc(db, MATERIALS_COLLECTION, id));
     if (!snap.exists()) return null;
+    if (String(snap.data()?.tenantId || '') !== getCurrentTenantId()) return null;
     return { id: snap.id, ...snap.data() } as Material;
   },
 
@@ -109,14 +149,21 @@ export const materialService = {
    */
   async createOrGetByCode(
     payload: Omit<Material, 'id' | 'createdAt' | 'tenantId'>,
+    context: { path: MaterialCreatePath } | { internal: true },
   ): Promise<{ id: string; created: boolean }> {
+    if ('path' in context) {
+      await assertCurrentTenantOperationPathEnabled(
+        MANUFACTURING_OPERATION_KEYS.materialCreate,
+        context.path,
+      );
+    }
     const code = normalizeMaterialCode(payload.code);
     if (code) {
       const existing = await materialService.getByCode(code);
       if (existing?.id) return { id: existing.id, created: false };
     }
     try {
-      const id = await materialService.create(payload);
+      const id = await materialService.create(payload, { internal: true });
       if (!id) throw new Error('تعذر إنشاء المادة.');
       return { id, created: true };
     } catch (error) {
@@ -141,22 +188,77 @@ export const materialService = {
     return { categoryId: id, categoryName: name };
   },
 
-  async create(payload: Omit<Material, 'id' | 'createdAt' | 'tenantId'>): Promise<string | null> {
+  async peekNextCode(categoryId: string): Promise<string> {
+    const category = await materialCategoryService.getById(categoryId);
+    const categoryCode = normalizeMaterialCategoryCode(category?.code);
+    if (!category?.id || !isValidMaterialCategoryCode(categoryCode)) return '';
+    return peekNextSequentialSuffixCode(
+      materialCategoryCounterKey(categoryCode),
+      categoryCode,
+      MATERIAL_CODE_PADDING,
+      () => seedMaxCategoryMaterialCodes(categoryCode),
+    );
+  },
+
+  async create(
+    payload: Omit<Material, 'id' | 'createdAt' | 'tenantId'>,
+    context: { path: MaterialCreatePath } | { internal: true },
+  ): Promise<string | null> {
+    if ('path' in context) {
+      await assertCurrentTenantOperationPathEnabled(
+        MANUFACTURING_OPERATION_KEYS.materialCreate,
+        context.path,
+      );
+    }
     if (!isConfigured) return null;
+    payload = normalizeMaterialProcurementFields(
+      payload,
+      payload.isManufacturedInternally === true,
+    );
     const tenantId = getCurrentTenantId();
     const categoryFields = await materialService.resolveCategoryFields(payload.categoryId);
     const code = normalizeMaterialCode(payload.code);
 
     if (!code) {
-      // Empty codes are rare; keep non-atomic path but still reject if duplicates of blank are unwanted.
-      const ref = doc(collection(db, MATERIALS_COLLECTION));
+      const categoryId = categoryFields.categoryId;
+      const category = categoryId ? await materialCategoryService.getById(categoryId) : null;
+      const categoryCode = normalizeMaterialCategoryCode(category?.code);
+      if (!category?.id || !isValidMaterialCategoryCode(categoryCode)) {
+        throw new Error(MATERIAL_CATEGORY_CODE_REQUIRED);
+      }
+
+      const materialRef = doc(collection(db, MATERIALS_COLLECTION));
+      // Firestore web transactions cannot query a collection. Seed before the
+      // transaction; concurrent first writers still serialize through the
+      // counter document read/write inside the transaction.
+      const initialMaxSequence = await seedMaxCategoryMaterialCodes(categoryCode);
       await runTransaction(db, async (tx) => {
+        const allocatedCode = await allocateNextSequentialSuffixInTransaction(
+          tx,
+          materialCategoryCounterKey(categoryCode),
+          categoryCode,
+          MATERIAL_CODE_PADDING,
+          async () => initialMaxSequence,
+          async (nextCode, transaction) => {
+            const claimRef = materialClaimRef(tenantId, nextCode);
+            const claim = await transaction.get(claimRef);
+            if (claim.exists()) throwDuplicateEntityCode();
+            transaction.set(claimRef, {
+              tenantId,
+              entityType: MATERIAL_ENTITY_TYPE,
+              code: nextCode,
+              ownerId: materialRef.id,
+              ownerCollection: MATERIALS_COLLECTION,
+              createdAt: new Date().toISOString(),
+            });
+          },
+        );
         tx.set(
-          ref,
+          materialRef,
           stripUndefined({
             ...payload,
             ...categoryFields,
-            code: '',
+            code: allocatedCode,
             baseUnit: payload.baseUnit || normalizeLegacyUnit(payload.baseUnit as string),
             conversionRate: Number(payload.conversionRate ?? 1) || 1,
             purchaseCost: Number(payload.purchaseCost ?? 0),
@@ -168,7 +270,7 @@ export const materialService = {
           }),
         );
       });
-      return ref.id;
+      return materialRef.id;
     }
 
     if (await materialService.isCodeTaken(code)) {
@@ -220,7 +322,17 @@ export const materialService = {
     return materialRef.id;
   },
 
-  async update(id: string, payload: Partial<Material>): Promise<void> {
+  async update(
+    id: string,
+    payload: Partial<Material>,
+    context: { path: MaterialUpdatePath } | { internal: true },
+  ): Promise<void> {
+    if ('path' in context) {
+      await assertCurrentTenantOperationPathEnabled(
+        MANUFACTURING_OPERATION_KEYS.materialUpdate,
+        context.path,
+      );
+    }
     if (!isConfigured || !id) return;
     let extra: Partial<Material> = {};
     if (payload.categoryId !== undefined) {
@@ -229,6 +341,10 @@ export const materialService = {
 
     const current = await materialService.getById(id);
     if (!current) throw new Error('المادة غير موجودة.');
+    payload = normalizeMaterialProcurementFields(
+      payload,
+      payload.isManufacturedInternally ?? current.isManufacturedInternally ?? false,
+    );
 
     const nextCode =
       payload.code !== undefined ? normalizeMaterialCode(payload.code) : normalizeMaterialCode(current.code);
@@ -308,6 +424,12 @@ export const materialService = {
 
   async delete(id: string): Promise<void> {
     if (!isConfigured || !id) return;
+    const linkedReports = await getDocs(
+      tenantQuery(db, 'production_reports', where('productId', '==', id), limit(1)),
+    );
+    if (!linkedReports.empty) {
+      throw new Error('المادة مرتبطة بتقارير حقن ولا يمكن حذفها. احتفظ بها أو ادمجها مع المادة الصحيحة.');
+    }
     const current = await materialService.getById(id);
     const code = normalizeMaterialCode(current?.code);
     const tenantId = getCurrentTenantId();

@@ -25,11 +25,14 @@ import { createReportDuplicateError } from '../utils/reportDuplicateError';
 import { normalizeInjectionShift } from '../utils/injectionReportShift';
 import { resolveReportType } from '../utils/reportTypes';
 import { productionAttendanceService } from './productionAttendanceService';
+import { REPORT_LIST_MAX_PAGES } from '../lib/reportListLimits';
 
 const COLLECTION = 'production_reports';
 const UNIQUE_COLLECTION = 'production_report_uniques';
 /** Max docs per query page; callers paginate until hasMore is false. */
 const MAX_PAGE_SIZE = 500;
+
+export { REPORT_LIST_MAX_PAGES };
 
 function isMissingIndexError(error: unknown): boolean {
   const code = String((error as { code?: string })?.code || '').toLowerCase();
@@ -239,8 +242,8 @@ export const reportService = {
     try {
       const reports: ProductionReport[] = [];
       let cursor: FirestoreCursor = null;
-      const maxPages = 10;
-      for (let page = 0; page < maxPages; page += 1) {
+      // Cap pages — same bound as getByDateRange (see REPORT_LIST_MAX_PAGES).
+      for (let page = 0; page < REPORT_LIST_MAX_PAGES; page += 1) {
         const res = await this.listByDateRangePaged({
           startDate: '1900-01-01',
           endDate: '2999-12-31',
@@ -275,17 +278,18 @@ export const reportService = {
     try {
       const all: ProductionReport[] = [];
       let cursor: FirestoreCursor = null;
-      do {
-        const page = await this.listByDateRangePaged({
+      // Bound pagination — avoid unbounded Firestore scans on wide date ranges.
+      for (let page = 0; page < REPORT_LIST_MAX_PAGES; page += 1) {
+        const res = await this.listByDateRangePaged({
           startDate,
           endDate,
           limit: MAX_PAGE_SIZE,
           cursor,
         });
-        all.push(...page.items);
-        if (!page.hasMore || !page.nextCursor) break;
-        cursor = page.nextCursor;
-      } while (true);
+        all.push(...res.items);
+        if (!res.hasMore || !res.nextCursor) break;
+        cursor = res.nextCursor;
+      }
       return all;
     } catch (error) {
       console.error('reportService.getByDateRange error:', error);
@@ -568,23 +572,21 @@ export const reportService = {
     }
   },
 
-  async updateByReportCode(reportCode: string, fields: Partial<ProductionReport>): Promise<boolean> {
-    if (!isConfigured || !reportCode) return false;
+  async getByReportCode(reportCode: string): Promise<ProductionReport | null> {
+    const normalizedCode = String(reportCode || '').trim();
+    if (!isConfigured || !normalizedCode) return null;
     try {
       const q = tenantQuery(
         db,
         COLLECTION,
-        where('reportCode', '==', reportCode),
+        where('reportCode', '==', normalizedCode),
         limit(1),
       );
       const snap = await getDocs(q);
-      if (snap.empty) return false;
-      const { id: _id, createdAt: _ts, reportCode: _code, ...updatable } = fields as any;
-      if (Object.keys(updatable).length === 0) return false;
-      await updateDoc(snap.docs[0].ref, updatable);
-      return true;
+      if (snap.empty) return null;
+      return { id: snap.docs[0].id, ...snap.docs[0].data() } as ProductionReport;
     } catch (error) {
-      console.error('reportService.updateByReportCode error:', error);
+      console.error('reportService.getByReportCode error:', error);
       throw error;
     }
   },

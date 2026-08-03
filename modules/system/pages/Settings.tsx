@@ -37,9 +37,11 @@ import { ProductionWorkerSettingsSection } from '@/modules/production/components
 import { GeneralSystemBehaviorSection } from '../components/settings/GeneralSystemBehaviorSection';
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionWorkerSettings } from '@/types';
 import { InventoryRoutingSettingsSection } from '../components/settings/InventoryRoutingSettingsSection';
+import { DepartmentConsumablesSettingsSection } from '../components/settings/DepartmentConsumablesSettingsSection';
 import { WarehouseLocationSettingsSection } from '../components/settings/WarehouseLocationSettingsSection';
 import { ProductionRequestRoutingSettingsSection } from '../components/settings/ProductionRequestRoutingSettingsSection';
 import { ProductionReportBehaviorSettingsSection } from '../components/settings/ProductionReportBehaviorSettingsSection';
+import { OperationPathSettingsSection } from '../components/settings/OperationPathSettingsSection';
 import { GeneralDashboardDisplaySection } from '../components/settings/GeneralDashboardDisplaySection';
 import { GeneralAlertsSection } from '../components/settings/GeneralAlertsSection';
 import { KPIThresholdsSection } from '../components/settings/KPIThresholdsSection';
@@ -350,6 +352,8 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     setLocalQuickActions,
     localExportImport,
     setLocalExportImport,
+    localOperationPaths,
+    setLocalOperationPaths,
     localMinimumClientVersion,
     setLocalMinimumClientVersion,
     localForceClientUpdate,
@@ -386,6 +390,7 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
     localAlertToggles,
     localQuickActions,
     localExportImport,
+    localOperationPaths,
     localMinimumClientVersion,
     localForceClientUpdate,
     localClientUpdateMessageAr,
@@ -864,11 +869,28 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             setLocalProductionWorkerSettings={setLocalProductionWorkerSettings}
           />
 
+          <OperationPathSettingsSection
+            isAdmin={isAdmin}
+            value={localOperationPaths}
+            onChange={setLocalOperationPaths}
+          />
+
           <InventoryRoutingSettingsSection
             isAdmin={isAdmin}
             localPlanSettings={localPlanSettings}
             setLocalPlanSettings={setLocalPlanSettings}
             inventoryWarehouses={inventoryWarehouses}
+          />
+
+          <SettingsGroupTitle
+            title="مستهلكات الأقسام"
+            description="سياسة اعتماد صرف المستهلكات للأقسام (مباشر أو بموافقة)."
+            icon="shopping_bag"
+          />
+          <DepartmentConsumablesSettingsSection
+            isAdmin={isAdmin}
+            localPlanSettings={localPlanSettings}
+            setLocalPlanSettings={setLocalPlanSettings}
           />
 
           <SettingsGroupTitle

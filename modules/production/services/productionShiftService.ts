@@ -1,10 +1,15 @@
-import type { ProductionReport, ProductionShiftWorkerSnapshot } from '@/types';
+import type { ProductionReport, ProductionShiftWorkerSnapshot, SystemSettings } from '@/types';
 import { reportService } from './reportService';
 import {
   buildShiftClosePayload,
   countPresentShiftWorkers,
   type ShiftStartContext,
 } from '../utils/productionShiftLifecycle';
+import {
+  assertOperationPathEnabled,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  PRODUCTION_REPORT_SHIFT_PATHS,
+} from '../../system/lib/operationPathSettings';
 
 export type StartProductionShiftInput = {
   employeeId: string;
@@ -15,6 +20,7 @@ export type StartProductionShiftInput = {
   planId?: string;
   userId?: string | null;
   workers: ProductionShiftWorkerSnapshot[];
+  systemSettings: Pick<SystemSettings, 'operationPaths'>;
 };
 
 export type CloseProductionShiftInput = {
@@ -27,6 +33,11 @@ export type CloseProductionShiftInput = {
 
 export const productionShiftService = {
   async startShift(input: StartProductionShiftInput): Promise<string | null> {
+    assertOperationPathEnabled(
+      input.systemSettings,
+      PRODUCTION_REPORT_OPERATION_KEYS.shift,
+      PRODUCTION_REPORT_SHIFT_PATHS.employeeDashboard,
+    );
     const startedAt = new Date().toISOString();
     const workerCounts = countPresentShiftWorkers(input.workers);
 
@@ -42,6 +53,8 @@ export const productionShiftService = {
       shiftStartContext: input.context,
       productionPlanId: input.planId || undefined,
       productionPlanLinkMode: input.planId ? 'manual' : undefined,
+      operationPathSnapshot: PRODUCTION_REPORT_SHIFT_PATHS.employeeDashboard,
+      lastOperationPathSnapshot: PRODUCTION_REPORT_SHIFT_PATHS.employeeDashboard,
       quantityProduced: 0,
       workHours: 0,
       notes: '',

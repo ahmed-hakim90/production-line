@@ -38,6 +38,13 @@ const seed = async () => {
       'payroll.accounts.disburse': true,
     },
   });
+  await set('roles', 'tenantA-users-manager-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'users.manage': true,
+      'inventory.view': true,
+    },
+  });
   await set('roles', 'tenantA-operator-role', {
     tenantId: 'tenantA',
     permissions: {
@@ -90,6 +97,28 @@ const seed = async () => {
       'approval.delegate': true,
     },
   });
+  await set('roles', 'tenantA-packaging-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'productionHandover.approve': true,
+      'inventory.view': true,
+    },
+  });
+  await set('roles', 'tenantA-inventory-viewer-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'inventory.view': true,
+    },
+  });
+  await set('roles', 'tenantA-inventory-writer-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'inventory.view': true,
+      'inventory.transactions.create': true,
+      'inventory.items.manage': true,
+      'inventory.transfers.approve': true,
+    },
+  });
   await set('roles', 'tenantB-admin-role', {
     tenantId: 'tenantB',
     permissions: {
@@ -104,6 +133,32 @@ const seed = async () => {
     roleId: 'tenantA-admin-role',
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
+  });
+  await set('users', 'userAPackaging', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-packaging-role',
+  });
+  await set('users', 'userAWarehouseBound', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-inventory-viewer-role',
+    inventoryWarehouseId: 'whA',
+  });
+  await set('users', 'userAInventoryWriter', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-inventory-writer-role',
+    inventoryWarehouseId: 'whA',
+  });
+  await set('users', 'userAUsersManager', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-users-manager-role',
   });
   await set('users', 'userAOperator', {
     tenantId: 'tenantA',
@@ -745,6 +800,253 @@ await seed();
     distributedByName: 'Admin',
     employeeCount: 1,
     status: 'distributed',
+  }));
+
+  // Production handover receipts: client read with permission; no client writes.
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adb = context.firestore();
+    await adb.collection('production_handover_receipts').doc('receipt-a').set({
+      tenantId: 'tenantA',
+      handoverRequestId: 'handover-a',
+      quantity: 5,
+      createdAt,
+    });
+    await adb.collection('production_handover_receipts').doc('receipt-b').set({
+      tenantId: 'tenantB',
+      handoverRequestId: 'handover-b',
+      quantity: 3,
+      createdAt,
+    });
+  });
+  const packagingDb = testEnv.authenticatedContext('userAPackaging').firestore();
+  const anonDbHandover = testEnv.unauthenticatedContext().firestore();
+  await assertSucceeds(packagingDb.collection('production_handover_receipts').doc('receipt-a').get());
+  await assertFails(packagingDb.collection('production_handover_receipts').doc('receipt-b').get());
+  await assertFails(operatorDb.collection('production_handover_receipts').doc('receipt-a').get());
+  await assertFails(anonDbHandover.collection('production_handover_receipts').doc('receipt-a').get());
+  await assertFails(packagingDb.collection('production_handover_receipts').doc('receipt-new').set({
+    tenantId: 'tenantA',
+    handoverRequestId: 'handover-a',
+    quantity: 1,
+    createdAt,
+  }));
+  await assertFails(packagingDb.collection('production_handover_receipts').doc('receipt-a').update({
+    quantity: 99,
+  }));
+  await assertFails(packagingDb.collection('production_handover_receipts').doc('receipt-a').delete());
+
+  // Inventory warehouse bind: users.inventoryWarehouseId scopes stock_* + warehouses.
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adb = context.firestore();
+    await adb.collection('warehouses').doc('whA').set({
+      tenantId: 'tenantA',
+      name: 'Warehouse A',
+      code: 'A',
+      isActive: true,
+    });
+    await adb.collection('warehouses').doc('whB').set({
+      tenantId: 'tenantA',
+      name: 'Warehouse B',
+      code: 'B',
+      isActive: true,
+    });
+    await adb.collection('stock_items').doc('whA__material__item1').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whA',
+      itemType: 'material',
+      itemId: 'item1',
+      itemName: 'Item 1',
+      itemCode: 'I1',
+      quantity: 10,
+      minStock: 0,
+      updatedAt: createdAt,
+    });
+    await adb.collection('stock_items').doc('whB__material__item1').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whB',
+      itemType: 'material',
+      itemId: 'item1',
+      itemName: 'Item 1',
+      itemCode: 'I1',
+      quantity: 5,
+      minStock: 0,
+      updatedAt: createdAt,
+    });
+    await adb.collection('stock_transactions').doc('txA').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whA',
+      itemType: 'material',
+      itemId: 'item1',
+      itemName: 'Item 1',
+      movementType: 'IN',
+      quantity: 10,
+      createdAt,
+    });
+    await adb.collection('stock_transactions').doc('txB').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whB',
+      itemType: 'material',
+      itemId: 'item1',
+      itemName: 'Item 1',
+      movementType: 'IN',
+      quantity: 5,
+      createdAt,
+    });
+    await adb.collection('inventory_transfer_requests').doc('transfer-source-a').set({
+      tenantId: 'tenantA',
+      fromWarehouseId: 'whA',
+      toWarehouseId: 'whB',
+      status: 'pending',
+      createdAt,
+    });
+    await adb.collection('inventory_transfer_requests').doc('transfer-destination-a').set({
+      tenantId: 'tenantA',
+      fromWarehouseId: 'whB',
+      toWarehouseId: 'whA',
+      status: 'pending',
+      createdAt,
+    });
+  });
+
+  const boundDb = testEnv.authenticatedContext('userAWarehouseBound').firestore();
+  const unboundAdminDb = testEnv.authenticatedContext('userAAdmin').firestore();
+  const usersManagerDb = testEnv.authenticatedContext('userAUsersManager').firestore();
+
+  await assertSucceeds(boundDb.collection('stock_items').doc('whA__material__item1').get());
+  await assertFails(boundDb.collection('stock_items').doc('whB__material__item1').get());
+  await assertSucceeds(boundDb.collection('warehouses').doc('whA').get());
+  await assertFails(boundDb.collection('warehouses').doc('whB').get());
+  await assertSucceeds(boundDb.collection('stock_transactions').doc('txA').get());
+  await assertFails(boundDb.collection('stock_transactions').doc('txB').get());
+  await assertSucceeds(boundDb.collection('inventory_transfer_requests').doc('transfer-source-a').get());
+  await assertSucceeds(boundDb.collection('inventory_transfer_requests').doc('transfer-destination-a').get());
+  await assertSucceeds(
+    boundDb.collection('inventory_transfer_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('fromWarehouseId', '==', 'whA')
+      .get(),
+  );
+  await assertSucceeds(
+    boundDb.collection('inventory_transfer_requests')
+      .where('tenantId', '==', 'tenantA')
+      .where('toWarehouseId', '==', 'whA')
+      .get(),
+  );
+  await assertFails(
+    boundDb.collection('inventory_transfer_requests')
+      .where('tenantId', '==', 'tenantA')
+      .get(),
+  );
+  await assertFails(boundDb.collection('inventory_transfer_requests').doc('transfer-source-a').update({
+    status: 'approved',
+  }));
+  await assertFails(boundDb.collection('stock_items').doc('whB__material__item2').set({
+    tenantId: 'tenantA',
+    warehouseId: 'whB',
+    itemType: 'material',
+    itemId: 'item2',
+    itemName: 'Item 2',
+    itemCode: 'I2',
+    quantity: 1,
+    minStock: 0,
+    updatedAt: createdAt,
+  }));
+  await assertSucceeds(unboundAdminDb.collection('stock_items').doc('whB__material__item1').get());
+
+  // Bound user cannot clear their own inventoryWarehouseId (needs users.manage).
+  await assertFails(boundDb.collection('users').doc('userAWarehouseBound').update({
+    inventoryWarehouseId: null,
+  }));
+  await assertSucceeds(usersManagerDb.collection('users').doc('userAWarehouseBound').update({
+    inventoryWarehouseId: 'whA',
+  }));
+
+  // P0: tenant users.manage cannot escalate isSuperAdmin.
+  await assertFails(usersManagerDb.collection('users').doc('userAUsersManager').update({
+    isSuperAdmin: true,
+  }));
+  await assertFails(usersManagerDb.collection('users').doc('userAOperator').update({
+    isSuperAdmin: true,
+  }));
+  await assertFails(usersManagerDb.collection('users').doc('userAOperator').update({
+    tenantId: 'tenantB',
+  }));
+
+  // P0: inventory.view alone cannot write stock ledger.
+  await assertFails(boundDb.collection('stock_items').doc('whA__material__item3').set({
+    tenantId: 'tenantA',
+    warehouseId: 'whA',
+    itemType: 'material',
+    itemId: 'item3',
+    itemName: 'Item 3',
+    itemCode: 'I3',
+    quantity: 1,
+    minStock: 0,
+    updatedAt: createdAt,
+  }));
+  await assertFails(boundDb.collection('stock_transactions').doc('txViewerDenied').set({
+    tenantId: 'tenantA',
+    warehouseId: 'whA',
+    itemType: 'material',
+    itemId: 'item1',
+    itemName: 'Item 1',
+    movementType: 'IN',
+    quantity: 1,
+    createdAt,
+  }));
+
+  // Inventory writer with warehouse bind can write own warehouse only.
+  const writerDb = testEnv.authenticatedContext('userAInventoryWriter').firestore();
+  await assertSucceeds(writerDb.collection('stock_transactions').doc('txWriterOk').set({
+    tenantId: 'tenantA',
+    warehouseId: 'whA',
+    itemType: 'material',
+    itemId: 'item1',
+    itemName: 'Item 1',
+    movementType: 'IN',
+    quantity: 1,
+    createdAt,
+  }));
+  await assertFails(writerDb.collection('stock_transactions').doc('txWriterOtherWh').set({
+    tenantId: 'tenantA',
+    warehouseId: 'whB',
+    itemType: 'material',
+    itemId: 'item1',
+    itemName: 'Item 1',
+    movementType: 'IN',
+    quantity: 1,
+    createdAt,
+  }));
+  await assertSucceeds(writerDb.collection('inventory_transfer_requests').doc('transfer-created-from-bound').set({
+    tenantId: 'tenantA',
+    fromWarehouseId: 'whA',
+    toWarehouseId: 'whB',
+    status: 'pending',
+    createdAt,
+  }));
+  await assertSucceeds(writerDb.collection('inventory_transfer_requests').doc('transfer-created-to-bound').set({
+    tenantId: 'tenantA',
+    fromWarehouseId: 'whB',
+    toWarehouseId: 'whA',
+    status: 'pending',
+    createdAt,
+  }));
+  await assertFails(writerDb.collection('inventory_transfer_requests').doc('transfer-outside-bound').set({
+    tenantId: 'tenantA',
+    fromWarehouseId: 'whB',
+    toWarehouseId: 'whC',
+    status: 'pending',
+    createdAt,
+  }));
+  await assertSucceeds(writerDb.collection('inventory_transfer_requests').doc('transfer-source-a').update({
+    status: 'approved',
+  }));
+  await assertSucceeds(writerDb.collection('inventory_transfer_requests').doc('transfer-destination-a').update({
+    status: 'rejected',
+  }));
+  await assertFails(writerDb.collection('inventory_transfer_requests').doc('transfer-source-a').update({
+    fromWarehouseId: 'whB',
+    toWarehouseId: 'whC',
   }));
 }
 

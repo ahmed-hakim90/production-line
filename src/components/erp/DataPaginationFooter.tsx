@@ -1,5 +1,4 @@
 import React from 'react';
-import { ChevronsLeft, ChevronsRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 
@@ -13,7 +12,7 @@ export type DataPaginationFooterProps = {
   className?: string;
 };
 
-/** RTL-friendly footer: page info + first/prev/numbered/next/last. */
+/** RTL-friendly footer: page info + prev/numbered/next (labeled controls only). */
 export const DataPaginationFooter: React.FC<DataPaginationFooterProps> = ({
   page,
   totalPages,
@@ -40,23 +39,11 @@ export const DataPaginationFooter: React.FC<DataPaginationFooterProps> = ({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 w-8 p-0"
-            disabled={page === 1}
-            onClick={() => onPageChange(1)}
-            aria-label="أول صفحة"
-          >
-            <ChevronsRight className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 w-8 p-0"
+            className="h-8 px-2.5"
             disabled={page === 1}
             onClick={() => onPageChange(page - 1)}
-            aria-label="الصفحة السابقة"
           >
-            <ChevronRight className="h-4 w-4" />
+            السابق
           </Button>
           {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
             const start = Math.max(1, Math.min(page - 2, totalPages - 4));
@@ -78,23 +65,11 @@ export const DataPaginationFooter: React.FC<DataPaginationFooterProps> = ({
             type="button"
             variant="outline"
             size="sm"
-            className="h-8 w-8 p-0"
+            className="h-8 px-2.5"
             disabled={page === totalPages}
             onClick={() => onPageChange(page + 1)}
-            aria-label="الصفحة التالية"
           >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="h-8 w-8 p-0"
-            disabled={page === totalPages}
-            onClick={() => onPageChange(totalPages)}
-            aria-label="آخر صفحة"
-          >
-            <ChevronsLeft className="h-4 w-4" />
+            التالي
           </Button>
         </div>
       )}

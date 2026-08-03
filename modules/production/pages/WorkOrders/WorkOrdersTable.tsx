@@ -14,9 +14,9 @@ interface WorkOrdersTableProps {
   loadingMore: boolean;
   hasMore: boolean;
   onRowClick: (order: WorkOrder) => void;
-  onStatusChange: (id: string, status: WorkOrderStatus) => void;
-  onEdit: (order: WorkOrder) => void;
-  onCloseOrder: (order: WorkOrder) => void;
+  onStatusChange?: (id: string, status: WorkOrderStatus) => void;
+  onEdit?: (order: WorkOrder) => void;
+  onCloseOrder?: (order: WorkOrder) => void;
   onDelete?: (order: WorkOrder) => void;
   onReopenCompleted?: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;

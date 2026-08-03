@@ -7,6 +7,8 @@ import {
   updateDoc,
   deleteDoc,
   runTransaction,
+  where,
+  limit,
   type Transaction,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
@@ -177,6 +179,12 @@ export const productService = {
   async delete(id: string): Promise<void> {
     if (!isConfigured) return;
     try {
+      const linkedReports = await getDocs(
+        tenantQuery(db, 'production_reports', where('productId', '==', id), limit(1)),
+      );
+      if (!linkedReports.empty) {
+        throw new Error('المنتج مرتبط بتقارير إنتاج ولا يمكن حذفه. احتفظ به أو ادمجه مع المنتج الصحيح.');
+      }
       await deleteDoc(doc(db, COLLECTION, id));
     } catch (error) {
       console.error('productService.delete error:', error);

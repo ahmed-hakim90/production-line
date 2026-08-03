@@ -2,7 +2,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
-import { TableIconAction } from '@/src/components/erp';
+import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { SuppliesReceiptPrint } from '../components/SuppliesReceiptPrint';
 import { suppliesReceiptService } from '../services/suppliesReceiptService';
@@ -26,7 +26,9 @@ import type {
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedPrint } from '../../../utils/printManager';
+import { INVENTORY_DOCUMENT_PATHS } from '../../system/lib/operationPathSettings';
 import { exportToPDF, waitForExportPaint } from '../../../utils/reportExport';
+import { toast } from '../../../components/Toast';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -35,6 +37,7 @@ import {
 
 const PAGE_SIZE = 20;
 const SUPPLIES_RECEIPT_CACHE_KEY = 'inventory:supplies-receipt';
+const CONSUMABLE_RECEIPT_CACHE_KEY = 'inventory:consumable-receipt';
 
 const STATUS_LABELS: Record<string, string> = {
   draft: 'مسودة',
@@ -43,6 +46,19 @@ const STATUS_LABELS: Record<string, string> = {
   executed: 'منفّذ',
   rejected: 'مرفوض',
   cancelled: 'ملغى',
+};
+
+const formatReceiptDate = (value?: string) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString('ar-EG', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 };
 
 type ComponentOption = {
@@ -79,6 +95,7 @@ export const SuppliesReceipt: React.FC = () => {
   const [searchParams] = useSearchParams();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const canPrint = can('inventory.transactions.print');
+  const consumableMode = searchParams.get('materialType') === 'consumable';
   const {
     scoped,
     warehouseIds,
@@ -87,7 +104,12 @@ export const SuppliesReceipt: React.FC = () => {
     routingConfigured,
     settingsPath,
   } = useMaterialsWarehouseScope();
-  const allowedWarehouseIds = useMemo(() => new Set(warehouseIds), [warehouseIds]);
+  // Consumable receive may target any active warehouse (not only supplies scope).
+  const effectiveScoped = consumableMode ? false : scoped;
+  const allowedWarehouseIds = useMemo(
+    () => (consumableMode ? new Set<string>() : new Set(warehouseIds)),
+    [consumableMode, warehouseIds],
+  );
   const { warehouseId: suppliesWarehouseId, warehouseName: suppliesWarehouseName } = useRawMaterialWarehouse();
 
   const products = useAppStore((s) => s.products);
@@ -98,9 +120,14 @@ export const SuppliesReceipt: React.FC = () => {
   const actor = userDisplayName || userEmail || 'Current User';
   const queryWarehouseId = searchParams.get('warehouseId') || '';
 
-  const initialListCache = peekPageDataCache<SuppliesReceiptListData>(SUPPLIES_RECEIPT_CACHE_KEY);
+  const cacheKey = consumableMode ? CONSUMABLE_RECEIPT_CACHE_KEY : SUPPLIES_RECEIPT_CACHE_KEY;
+  const effectiveWarehouseSelectLocked = consumableMode ? false : warehouseSelectLocked;
+
+  const initialListCache = peekPageDataCache<SuppliesReceiptListData>(cacheKey);
   const [warehouses, setWarehouses] = useState<Warehouse[]>(() =>
-    initialListCache ? filterWarehouses(initialListCache.warehouses) : [],
+    initialListCache
+      ? (consumableMode ? initialListCache.warehouses : filterWarehouses(initialListCache.warehouses))
+      : [],
   );
   const [locations, setLocations] = useState<WarehouseLocation[]>(() => initialListCache?.locations ?? []);
   const [racks, setRacks] = useState<WarehouseRack[]>(() => initialListCache?.racks ?? []);
@@ -109,7 +136,7 @@ export const SuppliesReceipt: React.FC = () => {
   );
   const [orders, setOrders] = useState<SuppliesReceiptOrder[]>(() => {
     if (!initialListCache) return [];
-    if (!scoped) return initialListCache.orders;
+    if (!effectiveScoped) return initialListCache.orders;
     if (allowedWarehouseIds.size === 0) return [];
     return initialListCache.orders.filter((row) => allowedWarehouseIds.has(row.warehouseId));
   });
@@ -118,10 +145,10 @@ export const SuppliesReceipt: React.FC = () => {
   const [note, setNote] = useState('');
   const [groups, setGroups] = useState<DraftGroup[]>([]);
   const [standaloneLines, setStandaloneLines] = useState<SuppliesReceiptLine[]>([]);
-  const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
   const [fillingKey, setFillingKey] = useState<string | null>(null);
   const [listPage, setListPage] = useState(1);
+  const [selectedOrderId, setSelectedOrderId] = useState('');
   const [printOrder, setPrintOrder] = useState<SuppliesReceiptOrder | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({
@@ -131,12 +158,12 @@ export const SuppliesReceipt: React.FC = () => {
   });
 
   const applyListData = useCallback((data: SuppliesReceiptListData) => {
-    const scopedWhs = filterWarehouses(data.warehouses);
+    const scopedWhs = consumableMode ? data.warehouses : filterWarehouses(data.warehouses);
     setWarehouses(scopedWhs);
     setLocations(data.locations);
     setRacks(data.racks);
     setComponentOptions(data.componentOptions);
-    const scopedOrders = !scoped
+    const scopedOrders = !effectiveScoped
       ? data.orders
       : allowedWarehouseIds.size === 0
         ? []
@@ -150,17 +177,18 @@ export const SuppliesReceipt: React.FC = () => {
     });
   }, [
     allowedWarehouseIds,
+    consumableMode,
+    effectiveScoped,
     filterWarehouses,
     queryWarehouseId,
-    scoped,
     suppliesWarehouseId,
   ]);
 
   const load = useCallback(async (opts?: { force?: boolean }) => {
-    const cached = peekPageDataCache<SuppliesReceiptListData>(SUPPLIES_RECEIPT_CACHE_KEY);
+    const cached = peekPageDataCache<SuppliesReceiptListData>(cacheKey);
     if (cached) applyListData(cached);
     const { data } = await fetchCachedPageData(
-      SUPPLIES_RECEIPT_CACHE_KEY,
+      cacheKey,
       async () => {
         const [whs, locs, rackRows, materials, raws, receiptRows] = await Promise.all([
           warehouseService.getActiveWarehouses(),
@@ -173,6 +201,7 @@ export const SuppliesReceipt: React.FC = () => {
 
         const materialOpts: ComponentOption[] = materials
           .filter((m) => m.id && m.isActive !== false)
+          .filter((m) => (consumableMode ? m.type === 'consumable' : true))
           .map((m) => ({
             id: m.id!,
             itemType: 'material' as const,
@@ -180,15 +209,17 @@ export const SuppliesReceipt: React.FC = () => {
             code: m.code,
             unit: m.baseUnit || 'unit',
           }));
-        const rawOpts: ComponentOption[] = raws
-          .filter((m) => m.id && m.isActive !== false)
-          .map((m) => ({
-            id: m.id!,
-            itemType: 'raw_material' as const,
-            name: m.name,
-            code: m.code,
-            unit: m.unit || 'unit',
-          }));
+        const rawOpts: ComponentOption[] = consumableMode
+          ? []
+          : raws
+            .filter((m) => m.id && m.isActive !== false)
+            .map((m) => ({
+              id: m.id!,
+              itemType: 'raw_material' as const,
+              name: m.name,
+              code: m.code,
+              unit: m.unit || 'unit',
+            }));
         // Prefer manufacturing materials; append raws not already covered by code.
         const codes = new Set(materialOpts.map((o) => o.code.trim().toLowerCase()).filter(Boolean));
         const merged = [
@@ -207,12 +238,12 @@ export const SuppliesReceipt: React.FC = () => {
       { force: opts?.force === true, maxAgeMs: 45_000 },
     );
     applyListData(data);
-  }, [applyListData]);
+  }, [applyListData, cacheKey, consumableMode]);
 
   const reloadList = useCallback(async () => {
-    invalidatePageDataCache(SUPPLIES_RECEIPT_CACHE_KEY);
+    invalidatePageDataCache(cacheKey);
     await load({ force: true });
-  }, [load]);
+  }, [cacheKey, load]);
 
   useEffect(() => {
     void load();
@@ -312,7 +343,6 @@ export const SuppliesReceipt: React.FC = () => {
     if (!group && !override) return;
     const productId = override?.productId ?? group?.productId ?? '';
     const quantity = override?.quantity ?? Number(group?.quantity || 0);
-    setMessage('');
     setFillingKey(key);
     try {
       if (!productId) throw new Error('اختر المنتج أولاً.');
@@ -330,9 +360,9 @@ export const SuppliesReceipt: React.FC = () => {
         quantity,
         lines: rows.map((row) => applyLocationDefaults(row)),
       });
-      setMessage(`تم تعبئة مكونات ${product?.name || 'المنتج'} من الـ BOM.`);
+      toast.success(`تم تعبئة مكونات ${product?.name || 'المنتج'} من الـ BOM.`);
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : 'تعذر تعبئة مكونات المنتج.');
+      toast.error(error instanceof Error ? error.message : 'تعذر تعبئة مكونات المنتج.');
     } finally {
       setFillingKey(null);
     }
@@ -418,7 +448,6 @@ export const SuppliesReceipt: React.FC = () => {
   };
 
   const createDraft = async () => {
-    setMessage('');
     setBusy(true);
     try {
       const payloadGroups: SuppliesReceiptProductGroup[] = groups.map(({ key: _key, ...rest }) => rest);
@@ -433,16 +462,18 @@ export const SuppliesReceipt: React.FC = () => {
         note: note || undefined,
       });
       const created = id ? await suppliesReceiptService.getById(id) : null;
-      setMessage(id
-        ? (canPrint ? 'تم حفظ إذن الاستلام كمسودة وطباعته.' : 'تم حفظ إذن الاستلام كمسودة.')
-        : 'تعذر الحفظ.');
+      if (!id) {
+        toast.error('تعذر الحفظ.');
+      } else {
+        toast.success(canPrint ? 'تم حفظ إذن الاستلام كمسودة وطباعته.' : 'تم حفظ إذن الاستلام كمسودة.');
+      }
       resetForm();
       await reloadList();
       if (canPrint && created) {
         await print(created);
       }
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : 'تعذر إنشاء إذن الاستلام.');
+      toast.error(error instanceof Error ? error.message : 'تعذر إنشاء إذن الاستلام.');
     } finally {
       setBusy(false);
     }
@@ -453,15 +484,30 @@ export const SuppliesReceipt: React.FC = () => {
     action: 'submit' | 'approve' | 'execute' | 'reject' | 'delete',
   ) => {
     if (!order.id) return;
-    setMessage('');
     setBusy(true);
     try {
       if (action === 'submit') await suppliesReceiptService.submit(order.id);
-      if (action === 'approve') await suppliesReceiptService.approve(order.id, actor, uid || undefined);
-      if (action === 'execute') await suppliesReceiptService.execute(order.id, actor, uid || undefined);
+      if (action === 'approve') await suppliesReceiptService.approve(
+        order.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.operationPage },
+        uid || undefined,
+      );
+      if (action === 'execute') await suppliesReceiptService.execute(
+        order.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.operationPage },
+        uid || undefined,
+      );
       if (action === 'reject') {
         const reason = window.prompt('سبب الرفض:', '') || '';
-        await suppliesReceiptService.reject(order.id, actor, reason, uid || undefined);
+        await suppliesReceiptService.reject(
+          order.id,
+          actor,
+          { path: INVENTORY_DOCUMENT_PATHS.operationPage },
+          reason,
+          uid || undefined,
+        );
       }
       if (action === 'delete') {
         const ok = window.confirm(`حذف إذن الاستلام ${order.referenceNo}؟ لا يمكن التراجع.`);
@@ -470,13 +516,13 @@ export const SuppliesReceipt: React.FC = () => {
           return;
         }
         await suppliesReceiptService.remove(order.id);
-        setMessage('تم حذف إذن الاستلام.');
+        toast.success('تم حذف إذن الاستلام.');
       } else {
-        setMessage('تم تحديث إذن الاستلام.');
+        toast.success('تم تحديث إذن الاستلام.');
       }
       await reloadList();
     } catch (error: unknown) {
-      setMessage(error instanceof Error ? error.message : 'تعذر تحديث إذن الاستلام.');
+      toast.error(error instanceof Error ? error.message : 'تعذر تحديث إذن الاستلام.');
     } finally {
       setBusy(false);
     }
@@ -488,6 +534,10 @@ export const SuppliesReceipt: React.FC = () => {
     () => orders.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
     [orders, safePage],
   );
+  const selectedOrder =
+    orders.find((row) => row.id === selectedOrderId)
+    || pagedOrders[0]
+    || null;
 
   if (!can('inventory.transactions.create')) {
     return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية تسجيل حركات المخزون.</p>;
@@ -558,47 +608,65 @@ export const SuppliesReceipt: React.FC = () => {
   return (
     <div className="erp-ds-clean space-y-5">
       <PageHeader
-        title="استلام مستلزمات"
-        subtitle="استلام بأمر توريد أو حاوية/شحنة: منتج مفكك بمكوناته من الـ BOM أو مكونات مستقلة — مع اعتماد قبل إدخال الرصيد."
+        title={consumableMode ? 'استلام مستهلكات' : 'استلام مستلزمات'}
+        subtitle={
+          consumableMode
+            ? 'إضافة مواد استهلاكية لأي مخزن نشط — مع اعتماد قبل إدخال الرصيد.'
+            : 'استلام بأمر توريد أو حاوية/شحنة: منتج مفكك بمكوناته من الـ BOM أو مكونات مستقلة — مع اعتماد قبل إدخال الرصيد.'
+        }
         icon="inventory_2"
       />
 
-      <MaterialsWarehouseScopeBanner
-        scoped={scoped}
-        routingConfigured={routingConfigured}
-        settingsPath={settingsPath}
-      />
+      {!consumableMode && (
+        <MaterialsWarehouseScopeBanner
+          scoped={scoped}
+          routingConfigured={routingConfigured}
+          settingsPath={settingsPath}
+        />
+      )}
 
-      <Card title="بيانات الاستلام">
-        <div className="grid grid-cols-1 gap-3 p-4 md:grid-cols-4">
-          <select
-            className="rounded-lg border px-3 py-2 text-sm disabled:bg-slate-50"
-            value={warehouseId}
-            onChange={(e) => setWarehouseId(e.target.value)}
-            disabled={warehouseSelectLocked}
-          >
-            <option value="">اختر المخزن</option>
-            {warehouses.map((w) => (
-              <option key={w.id} value={w.id}>{w.name}</option>
-            ))}
-          </select>
-          <input
-            className="rounded-lg border px-3 py-2 text-sm"
-            placeholder="رقم أمر التوريد / الحاوية / الشحنة (اختياري)"
-            value={containerRef}
-            onChange={(e) => setContainerRef(e.target.value)}
-          />
-          <input
-            className="rounded-lg border px-3 py-2 text-sm md:col-span-2"
-            placeholder="ملاحظة"
-            value={note}
-            onChange={(e) => setNote(e.target.value)}
-          />
+      <Card title={consumableMode ? 'إنشاء إذن استلام مستهلكات' : 'إنشاء إذن استلام مستلزمات'}>
+        <div className="grid grid-cols-1 items-end gap-3 p-4 lg:grid-cols-[minmax(180px,0.8fr)_minmax(250px,1fr)_minmax(280px,1.4fr)]">
+          <label className="space-y-1">
+            <span className="text-xs font-bold text-slate-500">مخزن الاستلام</span>
+            <select
+              className="w-full rounded-lg border px-3 py-2 text-sm disabled:bg-slate-50 disabled:text-slate-700"
+              value={warehouseId}
+              onChange={(e) => setWarehouseId(e.target.value)}
+              disabled={effectiveWarehouseSelectLocked}
+            >
+              <option value="">اختر المخزن</option>
+              {warehouses.map((w) => (
+                <option key={w.id} value={w.id}>{w.name}</option>
+              ))}
+            </select>
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-bold text-slate-500">رقم أمر التوريد / الحاوية / الشحنة</span>
+            <input
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              placeholder="اختياري"
+              value={containerRef}
+              onChange={(e) => setContainerRef(e.target.value)}
+            />
+          </label>
+          <label className="space-y-1">
+            <span className="text-xs font-bold text-slate-500">ملاحظة</span>
+            <input
+              className="w-full rounded-lg border px-3 py-2 text-sm"
+              placeholder="اختياري"
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+            />
+          </label>
         </div>
-        {message && <p className="px-4 pb-2 text-sm font-bold text-primary">{message}</p>}
         <div className="flex flex-wrap gap-2 px-4 pb-4">
-          <Button variant="secondary" disabled={busy} onClick={addProductGroup}>إضافة منتج مفكك</Button>
-          <Button variant="secondary" disabled={busy} onClick={addStandalone}>إضافة مكون فقط</Button>
+          {!consumableMode && (
+            <Button variant="secondary" disabled={busy} onClick={addProductGroup}>إضافة منتج مفكك</Button>
+          )}
+          <Button variant="secondary" disabled={busy} onClick={addStandalone}>
+            {consumableMode ? 'إضافة مستهلك' : 'إضافة مكون فقط'}
+          </Button>
           <Button
             variant="primary"
             disabled={busy || (!groups.length && !standaloneLines.length)}
@@ -718,101 +786,247 @@ export const SuppliesReceipt: React.FC = () => {
         </Card>
       )}
 
-      <Card className="!p-0 overflow-hidden" title="إذونات استلام المستلزمات">
-        <div className="overflow-x-auto">
-          <table className="erp-table w-full border-collapse text-right text-sm">
-            <thead className="erp-thead">
-              <tr>
-                <th className="erp-th">رقم الإذن</th>
-                <th className="erp-th">المخزن</th>
-                <th className="erp-th">أمر التوريد</th>
-                <th className="erp-th text-center">مجموعات</th>
-                <th className="erp-th text-center">مستقلة</th>
-                <th className="erp-th text-center">الحالة</th>
-                <th className="erp-th text-center">إجراء</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[var(--color-border)]">
-              {orders.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-4 py-10 text-center text-slate-400">لا توجد إذونات استلام.</td>
-                </tr>
-              ) : (
-                pagedOrders.map((row) => (
-                  <tr key={row.id} className="hover:bg-[#f8f9fa]/70/40">
-                    <td className="px-4 py-3 font-mono text-xs">{row.referenceNo}</td>
-                    <td className="px-4 py-3">{row.warehouseName || row.warehouseId}</td>
-                    <td className="px-4 py-3">{row.containerRef || '—'}</td>
-                    <td className="px-4 py-3 text-center tabular-nums">{row.groups?.length || 0}</td>
-                    <td className="px-4 py-3 text-center tabular-nums">{row.standaloneLines?.length || 0}</td>
-                    <td className="px-4 py-3 text-center">{STATUS_LABELS[row.status] || row.status}</td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center justify-center gap-1.5">
-                        {row.status === 'draft' && (
-                          <TableIconAction
-                            action="submit"
-                            disabled={busy}
-                            onClick={() => void actionOrder(row, 'submit')}
-                            aria-label={`تقديم إذن الاستلام ${row.referenceNo}`}
-                          />
-                        )}
-                        {row.status === 'submitted' && (
-                          <TableIconAction
-                            action="approve"
-                            disabled={busy}
-                            onClick={() => void actionOrder(row, 'approve')}
-                            aria-label={`اعتماد إذن الاستلام ${row.referenceNo}`}
-                          />
-                        )}
-                        {row.status === 'submitted' && (
-                          <TableIconAction
-                            action="reject"
-                            disabled={busy}
-                            onClick={() => void actionOrder(row, 'reject')}
-                            aria-label={`رفض إذن الاستلام ${row.referenceNo}`}
-                          />
-                        )}
-                        {row.status === 'approved' && (
-                          <TableIconAction
-                            action="execute"
-                            disabled={busy}
-                            onClick={() => void actionOrder(row, 'execute')}
-                            aria-label={`تنفيذ إذن الاستلام ${row.referenceNo}`}
-                          />
-                        )}
-                        {(row.status === 'draft' || row.status === 'rejected' || row.status === 'cancelled') && (
-                          <TableIconAction
-                            action="delete"
-                            disabled={busy}
-                            onClick={() => void actionOrder(row, 'delete')}
-                            aria-label={`حذف إذن الاستلام ${row.referenceNo}`}
-                          />
-                        )}
-                        {canPrint && (
-                          <TableIconAction
-                            action="print"
-                            disabled={busy}
-                            onClick={() => void print(row)}
-                            title="طباعة إذن الاستلام"
-                            aria-label={`طباعة إذن الاستلام ${row.referenceNo}`}
-                          />
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
+        <Card className="!p-0 overflow-hidden" title="إذونات الاستلام">
+          {orders.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-400">لا توجد إذونات استلام بعد.</p>
+          ) : (
+            <>
+              {pagedOrders.map((row) => {
+                const componentCount =
+                  (row.groups || []).reduce((sum, group) => sum + (group.lines || []).length, 0)
+                  + (row.standaloneLines?.length || 0);
+                return (
+                  <button
+                    key={row.id || row.referenceNo}
+                    type="button"
+                    className={`block w-full border-b px-4 py-3 text-start transition-colors ${
+                      selectedOrder?.id === row.id
+                        ? 'bg-primary/10'
+                        : 'hover:bg-slate-50 dark:hover:bg-slate-900/40'
+                    }`}
+                    onClick={() => setSelectedOrderId(row.id || '')}
+                  >
+                    <p className="font-bold">{row.referenceNo}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">
+                      {row.warehouseName || row.warehouseId} - {STATUS_LABELS[row.status] || row.status}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">
+                      {row.containerRef ? `أمر التوريد: ${row.containerRef} · ` : ''}
+                      {componentCount.toLocaleString('en-US')} مكون
+                    </p>
+                  </button>
+                );
+              })}
+              <DataPaginationFooter
+                page={safePage}
+                totalPages={totalPages}
+                totalItems={orders.length}
+                onPageChange={setListPage}
+                itemLabel="إذن"
+              />
+            </>
+          )}
+        </Card>
+
+        <Card
+          className="!p-0 overflow-hidden"
+          title={selectedOrder ? `تفاصيل ${selectedOrder.referenceNo}` : 'التفاصيل'}
+        >
+          {selectedOrder ? (
+            <>
+              <div className="flex flex-wrap gap-2 border-b p-4">
+                {selectedOrder.status === 'draft' && (
+                  <ToneActionButton
+                    action="submit"
+                    disabled={busy}
+                    onClick={() => void actionOrder(selectedOrder, 'submit')}
+                  >
+                    تقديم للاعتماد
+                  </ToneActionButton>
+                )}
+                {selectedOrder.status === 'submitted' && (
+                  <>
+                    <ToneActionButton
+                      action="approve"
+                      disabled={busy}
+                      onClick={() => void actionOrder(selectedOrder, 'approve')}
+                    >
+                      اعتماد الإذن
+                    </ToneActionButton>
+                    <ToneActionButton
+                      action="reject"
+                      disabled={busy}
+                      onClick={() => void actionOrder(selectedOrder, 'reject')}
+                    >
+                      رفض الإذن
+                    </ToneActionButton>
+                  </>
+                )}
+                {selectedOrder.status === 'approved' && (
+                  <ToneActionButton
+                    action="execute"
+                    solid
+                    disabled={busy}
+                    onClick={() => void actionOrder(selectedOrder, 'execute')}
+                  >
+                    تنفيذ الاستلام
+                  </ToneActionButton>
+                )}
+                {(selectedOrder.status === 'draft'
+                  || selectedOrder.status === 'rejected'
+                  || selectedOrder.status === 'cancelled') && (
+                  <ToneActionButton
+                    action="delete"
+                    disabled={busy}
+                    onClick={() => void actionOrder(selectedOrder, 'delete')}
+                  >
+                    حذف الإذن
+                  </ToneActionButton>
+                )}
+                {canPrint && (
+                  <ToneActionButton
+                    action="print"
+                    disabled={busy}
+                    onClick={() => void print(selectedOrder)}
+                  >
+                    طباعة PDF
+                  </ToneActionButton>
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 border-b bg-slate-50/60 p-4 md:grid-cols-4 dark:bg-slate-900/30">
+                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
+                  <p className="text-xs font-bold text-slate-500">مخزن الاستلام</p>
+                  <p className="mt-1 text-sm font-black">
+                    {selectedOrder.warehouseName || selectedOrder.warehouseId}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
+                  <p className="text-xs font-bold text-slate-500">أمر التوريد / الشحنة</p>
+                  <p className="mt-1 text-sm font-black">{selectedOrder.containerRef || '—'}</p>
+                </div>
+                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
+                  <p className="text-xs font-bold text-slate-500">الحالة</p>
+                  <p className="mt-1 text-sm font-black">
+                    {STATUS_LABELS[selectedOrder.status] || selectedOrder.status}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
+                  <p className="text-xs font-bold text-slate-500">تاريخ الإنشاء</p>
+                  <p className="mt-1 text-sm font-black tabular-nums">
+                    {formatReceiptDate(selectedOrder.createdAt)}
+                  </p>
+                </div>
+                <div className="rounded-lg border bg-white p-3 dark:bg-slate-950">
+                  <p className="text-xs font-bold text-slate-500">أنشئ بواسطة</p>
+                  <p className="mt-1 text-sm font-black">{selectedOrder.createdBy || '—'}</p>
+                </div>
+              </div>
+
+              {selectedOrder.note?.trim() && (
+                <div className="border-b px-4 py-3">
+                  <p className="text-xs font-bold text-slate-500">ملاحظات</p>
+                  <p className="mt-1 text-sm font-semibold">{selectedOrder.note}</p>
+                </div>
               )}
-            </tbody>
-          </table>
-        </div>
-        <DataPaginationFooter
-          page={safePage}
-          totalPages={totalPages}
-          totalItems={orders.length}
-          onPageChange={setListPage}
-          itemLabel="إذن"
-        />
-      </Card>
+
+              {(selectedOrder.groups || []).map((group, groupIndex) => (
+                <section key={`${group.productId}-${groupIndex}`} className="border-b last:border-b-0">
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-50 px-4 py-3 dark:bg-slate-900/30">
+                    <div>
+                      <p className="text-sm font-black">
+                        منتج مفكك #{groupIndex + 1} — {group.productName}
+                      </p>
+                      {group.productCode && (
+                        <p className="mt-0.5 font-mono text-xs text-slate-500">{group.productCode}</p>
+                      )}
+                    </div>
+                    <p className="text-xs font-bold text-slate-600">
+                      كمية المنتج: <span className="tabular-nums">{Number(group.quantity || 0).toLocaleString('en-US')}</span>
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50/60 dark:bg-slate-900/20">
+                          <th className="p-3 text-start">المكون</th>
+                          <th className="p-3 text-center">الكمية</th>
+                          <th className="p-3 text-center">الوحدة</th>
+                          <th className="p-3 text-start">اللوكيشن</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(group.lines || []).map((line, lineIndex) => (
+                          <tr key={`${line.itemType}-${line.itemId}-${lineIndex}`} className="border-b last:border-b-0">
+                            <td className="p-3">
+                              <p className="font-bold">{line.itemName}</p>
+                              <p className="mt-0.5 font-mono text-xs text-slate-500">{line.itemCode}</p>
+                            </td>
+                            <td className="p-3 text-center font-bold tabular-nums">
+                              {Number(line.quantity || 0).toLocaleString('en-US')}
+                            </td>
+                            <td className="p-3 text-center">{line.unit || '—'}</td>
+                            <td className="p-3">{line.locationCode || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              ))}
+
+              {(selectedOrder.standaloneLines || []).length > 0 && (
+                <section>
+                  <div className="border-b bg-slate-50 px-4 py-3 dark:bg-slate-900/30">
+                    <p className="text-sm font-black">
+                      {consumableMode ? 'المستهلكات المستلمة' : 'المكونات المستقلة'}
+                    </p>
+                  </div>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b bg-slate-50/60 dark:bg-slate-900/20">
+                          <th className="p-3 text-start">المكون</th>
+                          <th className="p-3 text-center">الكمية</th>
+                          <th className="p-3 text-center">الوحدة</th>
+                          <th className="p-3 text-start">اللوكيشن</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {selectedOrder.standaloneLines.map((line, lineIndex) => (
+                          <tr key={`${line.itemType}-${line.itemId}-${lineIndex}`} className="border-b last:border-b-0">
+                            <td className="p-3">
+                              <p className="font-bold">{line.itemName}</p>
+                              <p className="mt-0.5 font-mono text-xs text-slate-500">{line.itemCode}</p>
+                            </td>
+                            <td className="p-3 text-center font-bold tabular-nums">
+                              {Number(line.quantity || 0).toLocaleString('en-US')}
+                            </td>
+                            <td className="p-3 text-center">{line.unit || '—'}</td>
+                            <td className="p-3">{line.locationCode || '—'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </section>
+              )}
+
+              {(selectedOrder.groups || []).length === 0
+                && (selectedOrder.standaloneLines || []).length === 0 && (
+                  <p className="px-4 py-8 text-center text-sm text-slate-400">
+                    لا توجد مكونات في هذا الإذن.
+                  </p>
+                )}
+            </>
+          ) : (
+            <p className="px-4 py-8 text-center text-sm text-slate-400">
+              اختر إذناً لعرض تفاصيله.
+            </p>
+          )}
+        </Card>
+      </div>
 
       <div
         style={{

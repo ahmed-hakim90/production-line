@@ -22,6 +22,13 @@ import type {
 } from '../types';
 import { stockService } from './stockService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
+import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  assertCurrentTenantOperationPathEnabled,
+  type InventoryTransferCreatePath,
+  type InventoryTransferDecisionPath,
+} from '../../system/lib/operationPathSettings';
 import { opsNotificationService } from '../../../services/opsNotificationService';
 import { warehouseService } from './warehouseService';
 import {
@@ -29,6 +36,7 @@ import {
   formatInvReference,
   peekNextInvReferenceNo,
 } from './inventoryInvSequence';
+import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'inventory_transfer_requests';
 const toIsoNow = () => new Date().toISOString();
@@ -101,7 +109,7 @@ async function executeTransferLikeRequest(
       sourceId: request.sourceId ?? request.sourceReportId ?? request.id,
       createdBy: approvedBy,
       allowNegative: Boolean(options?.allowNegativeFromSource),
-    });
+    }, { path: INVENTORY_STOCK_MOVE_PATHS.transferApproval });
   }
 }
 
@@ -155,7 +163,7 @@ async function chainProductionEntryToFinishedStaging(
       lines: productionEntry.lines,
       createdBy: approvedBy,
       createdByUserId: options?.approverUserId,
-    });
+    }, { internal: true });
     if (createdId) {
       const created = await transferApprovalService.getById(createdId);
       if (created) pendingAutos = [created];
@@ -204,11 +212,44 @@ export const transferApprovalService = {
     if (params?.status) constraints.unshift(where('status', '==', params.status));
     if (params?.requestType) constraints.unshift(where('requestType', '==', params.requestType));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
-    const q = tenantQuery(db, COLLECTION, ...constraints);
-    const snap = await getDocs(q);
-    const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
-    const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
-    return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (!boundWarehouseId) {
+      const q = tenantQuery(db, COLLECTION, ...constraints);
+      const snap = await getDocs(q);
+      const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+      const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
+      return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+    }
+
+    // Firestore rules are not filters. Query each authorized side explicitly, then
+    // merge by document id so source/destination users see the same request once.
+    const [sourceSnap, destinationSnap] = await Promise.all([
+      getDocs(tenantQuery(
+        db,
+        COLLECTION,
+        where('fromWarehouseId', '==', boundWarehouseId),
+        ...constraints,
+      )),
+      getDocs(tenantQuery(
+        db,
+        COLLECTION,
+        where('toWarehouseId', '==', boundWarehouseId),
+        ...constraints,
+      )),
+    ]);
+    const docsById = new Map(
+      [...sourceSnap.docs, ...destinationSnap.docs].map((row) => [row.id, row]),
+    );
+    const docs = [...docsById.values()]
+      .sort((a, b) => String(b.data().createdAt || '').localeCompare(String(a.data().createdAt || '')))
+      .slice(0, pageSize);
+    const items = docs.map((d) => ({ id: d.id, ...d.data() } as InventoryTransferRequest));
+    const nextCursor = docs.length > 0 ? docs[docs.length - 1] : null;
+    return {
+      items,
+      nextCursor,
+      hasMore: sourceSnap.docs.length === pageSize || destinationSnap.docs.length === pageSize,
+    };
   },
 
   async getAll(): Promise<InventoryTransferRequest[]> {
@@ -248,11 +289,36 @@ export const transferApprovalService = {
 
   async getBySourceReportId(sourceReportId: string): Promise<InventoryTransferRequest[]> {
     if (!isConfigured || !sourceReportId.trim()) return [];
+    const sourceId = sourceReportId.trim();
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (boundWarehouseId) {
+      const loadSide = async (field: 'fromWarehouseId' | 'toWarehouseId') => {
+        const scoped = tenantQuery(
+          db,
+          COLLECTION,
+          where('sourceReportId', '==', sourceId),
+          where(field, '==', boundWarehouseId),
+          limit(500),
+        );
+        const snap = await getDocs(scoped);
+        return snap.docs;
+      };
+      const [sourceDocs, destinationDocs] = await Promise.all([
+        loadSide('fromWarehouseId'),
+        loadSide('toWarehouseId'),
+      ]);
+      return [...new Map(
+        [...sourceDocs, ...destinationDocs].map((row) => [
+          row.id,
+          { id: row.id, ...row.data() } as InventoryTransferRequest,
+        ]),
+      ).values()].sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    }
     try {
       const q = tenantQuery(
         db,
         COLLECTION,
-        where('sourceReportId', '==', sourceReportId.trim()),
+        where('sourceReportId', '==', sourceId),
         orderBy('createdAt', 'desc'),
       );
       const snap = await getDocs(q);
@@ -267,7 +333,7 @@ export const transferApprovalService = {
       const fallbackQ = tenantQuery(
         db,
         COLLECTION,
-        where('sourceReportId', '==', sourceReportId.trim()),
+        where('sourceReportId', '==', sourceId),
         limit(500),
       );
       const fallbackSnap = await getDocs(fallbackQ);
@@ -277,7 +343,16 @@ export const transferApprovalService = {
     }
   },
 
-  async createRequest(input: CreateTransferRequestInput): Promise<string | null> {
+  async createRequest(
+    input: CreateTransferRequestInput,
+    context: { path: InventoryTransferCreatePath } | { internal: true },
+  ): Promise<string | null> {
+    if ('path' in context) {
+      await assertCurrentTenantOperationPathEnabled(
+        INVENTORY_OPERATION_KEYS.transferCreate,
+        context.path,
+      );
+    }
     if (!isConfigured) return null;
     if (!input.toWarehouseId) {
       throw new Error('يجب تحديد المخزن المصدر والوجهة.');
@@ -324,6 +399,20 @@ export const transferApprovalService = {
         createdAt: now,
         submittedAt: now,
       };
+      if (requestType === 'production_handover') {
+        const reported = lines.reduce(
+          (sum, line) => sum + Number(line.reportedQuantity ?? line.quantity ?? 0),
+          0,
+        );
+        payload.reportedQuantity = reported;
+        payload.receivedQuantity = 0;
+        payload.remainingQuantity = reported;
+        payload.lines = lines.map((line) => ({
+          ...line,
+          reportedQuantity: Number(line.reportedQuantity ?? line.quantity ?? 0),
+          receivedQuantity: Number(line.receivedQuantity || 0),
+        }));
+      }
       if (resolvedFromName) payload.fromWarehouseName = resolvedFromName;
       if (resolvedToName) payload.toWarehouseName = resolvedToName;
       const note = String(input.note || '').trim();
@@ -362,7 +451,18 @@ export const transferApprovalService = {
     return createdId;
   },
 
-  async approveRequest(id: string, approvedBy: string, options?: ApproveRequestOptions): Promise<void> {
+  async approveRequest(
+    id: string,
+    approvedBy: string,
+    context: { path: InventoryTransferDecisionPath } | { internal: true },
+    options?: ApproveRequestOptions,
+  ): Promise<void> {
+    if ('path' in context) {
+      await assertCurrentTenantOperationPathEnabled(
+        INVENTORY_OPERATION_KEYS.transferApprove,
+        context.path,
+      );
+    }
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
     if (!request) throw new Error('طلب التحويل غير موجود.');
@@ -371,6 +471,11 @@ export const transferApprovalService = {
     }
 
     const requestType = normalizeRequestType(request.requestType);
+    if (requestType === 'production_handover') {
+      throw new Error(
+        'استلام التغليف يتم عبر تأكيد الكمية الفعلية من صفحة تحكم التغليف، وليس الاعتماد الكامل دفعة واحدة.',
+      );
+    }
     if (requestType === 'production_entry') {
       const sameUserById = Boolean(
         options?.approverUserId &&
@@ -403,7 +508,7 @@ export const transferApprovalService = {
           sourceId: request.sourceId ?? request.sourceReportId,
           createdBy: approvedBy,
           allowNegative: true,
-        });
+        }, { path: INVENTORY_STOCK_MOVE_PATHS.transferApproval });
       } else if (isTransferLikeType(requestType)) {
         await stockService.createMovement({
           warehouseId: request.fromWarehouseId,
@@ -425,7 +530,7 @@ export const transferApprovalService = {
           sourceId: request.sourceId ?? request.sourceReportId ?? id,
           createdBy: approvedBy,
           allowNegative: Boolean(options?.allowNegativeFromSource),
-        });
+        }, { path: INVENTORY_STOCK_MOVE_PATHS.transferApproval });
       }
     }
 
@@ -450,7 +555,19 @@ export const transferApprovalService = {
     }
   },
 
-  async rejectRequest(id: string, rejectedBy: string, rejectionReason?: string, rejectedByUserId?: string): Promise<void> {
+  async rejectRequest(
+    id: string,
+    rejectedBy: string,
+    context: { path: InventoryTransferDecisionPath } | { internal: true },
+    rejectionReason?: string,
+    rejectedByUserId?: string,
+  ): Promise<void> {
+    if ('path' in context) {
+      await assertCurrentTenantOperationPathEnabled(
+        INVENTORY_OPERATION_KEYS.transferReject,
+        context.path,
+      );
+    }
     if (!isConfigured || !id) return;
     const request = await this.getById(id);
     if (!request) throw new Error('طلب التحويل غير موجود.');

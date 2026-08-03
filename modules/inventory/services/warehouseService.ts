@@ -6,6 +6,7 @@ import {
   getDoc,
   getDocs,
   orderBy,
+  runTransaction,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -13,11 +14,16 @@ import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { InventoryRoutingSettings, PlanSettings, SystemSettings } from '../../../types';
+import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import type { Warehouse } from '../types';
+import { mapRoutingWarehouseIdsFromRoles } from '../lib/recommendedInventoryRouting';
+import { syncPlanSettingsWarehouseRouting } from '../lib/syncPlanSettingsWarehouseRouting';
 import { stockService } from './stockService';
+import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'warehouses';
+const SYSTEM_SETTINGS_COLLECTION = 'system_settings';
 
 export const normalizeWarehouseCode = (code: string) => code.trim().toUpperCase();
 
@@ -93,6 +99,11 @@ export const warehouseService = {
   /** Full list for this tenant (all warehouses, ordered by `name` ascending in Firestore). */
   async getAllWarehouses(): Promise<Warehouse[]> {
     if (!isConfigured) return [];
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (boundWarehouseId) {
+      const warehouse = await this.getById(boundWarehouseId);
+      return warehouse ? [warehouse] : [];
+    }
     const q = tenantQuery(db, COLLECTION, orderBy('name', 'asc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as Warehouse));
@@ -162,6 +173,42 @@ export const warehouseService = {
       Object.entries(data).filter(([, v]) => v !== undefined),
     );
     await updateDoc(doc(db, COLLECTION, id), pruned as any);
+  },
+
+  /**
+   * Fill only unassigned inventory-routing slots from active warehouse roles.
+   * Explicit settings remain authoritative and are never overwritten.
+   */
+  async syncEmptyRoutingFromRoles(): Promise<boolean> {
+    if (!isConfigured) return false;
+    const warehouses = await this.getActiveWarehouses();
+    const settingsRef = doc(db, SYSTEM_SETTINGS_COLLECTION, getCurrentTenantId());
+    return runTransaction(db, async (transaction) => {
+      const settingsSnap = await transaction.get(settingsRef);
+      const settings = settingsSnap.data() as SystemSettings | undefined;
+      const currentPlan = syncPlanSettingsWarehouseRouting({
+        ...DEFAULT_PLAN_SETTINGS,
+        ...(settings?.planSettings ?? {}),
+        inventoryRouting: {
+          ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
+          ...(settings?.planSettings?.inventoryRouting ?? {}),
+        },
+      });
+      const nextPlan = syncPlanSettingsWarehouseRouting(
+        mapRoutingWarehouseIdsFromRoles(currentPlan, warehouses, { overwrite: false }),
+      );
+      if (JSON.stringify(nextPlan) === JSON.stringify(currentPlan)) return false;
+
+      transaction.set(
+        settingsRef,
+        {
+          planSettings: nextPlan,
+          tenantId: getCurrentTenantId(),
+        },
+        { merge: true },
+      );
+      return true;
+    });
   },
 
   async delete(id: string): Promise<{ ok: boolean; error?: string }> {

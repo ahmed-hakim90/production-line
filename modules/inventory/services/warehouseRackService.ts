@@ -14,6 +14,7 @@ import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { WarehouseRack } from '../types';
+import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'warehouse_racks';
 const LOCATIONS_COLLECTION = 'warehouse_locations';
@@ -37,8 +38,10 @@ export const warehouseRackService = {
 
   async getAll(warehouseId?: string): Promise<WarehouseRack[]> {
     if (!isConfigured) return [];
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
     const constraints: any[] = [orderBy('sortOrder', 'asc'), orderBy('code', 'asc')];
-    if (warehouseId) constraints.unshift(where('warehouseId', '==', warehouseId));
+    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WarehouseRack));
   },

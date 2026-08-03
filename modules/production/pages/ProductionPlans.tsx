@@ -49,6 +49,16 @@ import {
 } from '@/components/ui/dialog';
 import { Search, Filter, SlidersHorizontal, Zap } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  PRODUCTION_PLAN_CREATE_PATHS,
+  PRODUCTION_PLAN_OPERATION_KEYS,
+  PRODUCTION_PLAN_UPDATE_PATHS,
+  WORK_ORDER_CREATE_PATHS,
+  WORK_ORDER_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '@/modules/system/lib/operationPathSettings';
 
 // â”€â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -133,12 +143,48 @@ export const ProductionPlans: React.FC = () => {
   const deleteProductionPlan = useAppStore((s) => s.deleteProductionPlan);
   const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
   const { can } = usePermission();
+  const planReportCreateEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    PRODUCTION_REPORT_CREATE_PATHS.productionPlan,
+  );
+  const planCreatePageEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_PLAN_OPERATION_KEYS.create,
+    PRODUCTION_PLAN_CREATE_PATHS.plansPage,
+  );
+  const planImportEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_PLAN_OPERATION_KEYS.create,
+    PRODUCTION_PLAN_CREATE_PATHS.globalImport,
+  );
+  const planEditEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_PLAN_OPERATION_KEYS.update,
+    PRODUCTION_PLAN_UPDATE_PATHS.plansPageEdit,
+  );
+  const planStatusEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_PLAN_OPERATION_KEYS.update,
+    PRODUCTION_PLAN_UPDATE_PATHS.plansPageStatus,
+  );
+  const planBulkDateShiftEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_PLAN_OPERATION_KEYS.update,
+    PRODUCTION_PLAN_UPDATE_PATHS.plansPageBulkDateShift,
+  );
+  const planWorkOrderCreateEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.create,
+    WORK_ORDER_CREATE_PATHS.productionPlan,
+  );
 
   const canManageComponentInjectionPlans = can('plans.componentInjection.manage');
-  const canCreate = can('plans.create') || canManageComponentInjectionPlans;
+  const canCreatePermission = can('plans.create') || canManageComponentInjectionPlans;
+  const canCreate = planCreatePageEnabled && canCreatePermission;
   const canEdit = can('plans.edit');
   const canDelete = canEdit;
-  const canAddFollowUp = canEdit || canCreate;
+  const canAddFollowUp = canEdit || canCreatePermission;
   const canViewCosts = can('costs.view');
   const canExport = can('export');
   const canImport = can('import');
@@ -618,7 +664,7 @@ export const ProductionPlans: React.FC = () => {
       acceptsProductionFromReports: formAcceptsProductionFromReports,
       status: 'planned',
       createdBy: uid,
-    });
+    }, { path: PRODUCTION_PLAN_CREATE_PATHS.plansPage });
     setFormProductId('');
     setFormLineId('');
     setFormQuantity(0);
@@ -648,7 +694,7 @@ export const ProductionPlans: React.FC = () => {
       lineId: editForm.lineId,
       priority: editForm.priority,
       acceptsProductionFromReports: editForm.acceptsProductionFromReports,
-    });
+    }, { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageEdit });
     setEditSaving(false);
     setEditPlan(null);
   };
@@ -661,11 +707,11 @@ export const ProductionPlans: React.FC = () => {
         selectedPlans.map((plan) => {
           if (!plan.id) return Promise.resolve();
           const durationDays = resolvePlanDurationDays(plan);
-          return productionPlanService.update(plan.id, {
+          return updateProductionPlan(plan.id, {
             startDate: bulkStartDate,
             plannedStartDate: bulkStartDate,
             plannedEndDate: durationDays > 0 ? addDaysToDate(bulkStartDate, durationDays) : plan.plannedEndDate,
-          });
+          }, { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageBulkDateShift });
         }),
       );
       await fetchProductionPlans();
@@ -678,7 +724,11 @@ export const ProductionPlans: React.FC = () => {
   const handleStatusChange = async () => {
     if (!statusPlan?.id) return;
     setStatusSaving(true);
-    await updateProductionPlan(statusPlan.id, { status: newStatus });
+    await updateProductionPlan(
+      statusPlan.id,
+      { status: newStatus },
+      { path: PRODUCTION_PLAN_UPDATE_PATHS.plansPageStatus },
+    );
     setStatusSaving(false);
     setStatusPlan(null);
   };
@@ -806,7 +856,7 @@ export const ProductionPlans: React.FC = () => {
             label: 'استيراد الخطط',
             icon: 'upload',
             group: 'استيراد',
-            hidden: !canImport || !canCreate,
+            hidden: !canImport || !canCreatePermission || !planImportEnabled,
             onClick: () => openModal(MODAL_KEYS.PRODUCTION_PLANS_IMPORT),
           },
         ]}
@@ -1035,6 +1085,7 @@ export const ProductionPlans: React.FC = () => {
       )}
 
       <SmartFilterBar
+      pageId="production-plans"
         searchPlaceholder="ابحث بالخط أو المنتج أو الكود..."
         searchValue={filterSearch}
         onSearchChange={setFilterSearch}
@@ -1309,22 +1360,22 @@ export const ProductionPlans: React.FC = () => {
               </div>
 
               <div className="px-5 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-2">
-                {canEdit && (
-                  <>
+                {canEdit && planEditEnabled && (
                     <Button variant="outline" onClick={() => { setEditPlan(activeDrawerPlan); setEditForm({ plannedQuantity: activeDrawerPlan.plannedQuantity, avgDailyTarget: activeDrawerPlan.avgDailyTarget || 0, startDate: activeDrawerPlan.plannedStartDate || activeDrawerPlan.startDate, lineId: activeDrawerPlan.lineId, priority: activeDrawerPlan.priority || 'medium', acceptsProductionFromReports: activeDrawerPlan.acceptsProductionFromReports !== false }); setActiveDrawerPlanId(null); }}>
                       تعديل
                     </Button>
+                )}
+                {canEdit && planStatusEnabled && (
                     <Button variant="outline" onClick={() => { setStatusPlan(activeDrawerPlan); setNewStatus(activeDrawerPlan.effectiveStatus); setActiveDrawerPlanId(null); }}>
                       تغيير الحالة
                     </Button>
-                  </>
                 )}
-                {(can('workOrders.create') || (activeDrawerPlan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
+                {planWorkOrderCreateEnabled && (can('workOrders.create') || (activeDrawerPlan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
                   <Button variant="outline" onClick={() => { navigate(`/work-orders?planId=${activeDrawerPlan.id}&productId=${activeDrawerPlan.productId}`); setActiveDrawerPlanId(null); }}>
                     أمر شغل مرتبط بالخطة
                   </Button>
                 )}
-                {canCreateReport && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
+                {planReportCreateEnabled && canCreateReport && (activeDrawerPlan.effectiveStatus === 'planned' || activeDrawerPlan.effectiveStatus === 'in_progress') && (
                   <Button variant="primary" onClick={() => { openCreateReportForPlan(activeDrawerPlan); setActiveDrawerPlanId(null); }}>
                     تقرير إنتاج
                   </Button>
@@ -1525,7 +1576,7 @@ export const ProductionPlans: React.FC = () => {
               <Button
                 variant="outline"
                 onClick={handleBulkDateShift}
-                disabled={bulkSaving || selectedPlanIds.length === 0 || !bulkStartDate}
+                disabled={!planBulkDateShiftEnabled || bulkSaving || selectedPlanIds.length === 0 || !bulkStartDate}
               >
                 {bulkSaving ? 'جاري الحفظ...' : 'ترحيل التاريخ للمحدد'}
               </Button>
@@ -1752,24 +1803,24 @@ export const ProductionPlans: React.FC = () => {
                             {hasActionColumn && (
                               <td className="px-4 py-3.5 text-center">
                                 <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
-                                  {canEdit && (
-                                    <>
+                                  {canEdit && planEditEnabled && (
                                       <button
                                         onClick={() => { setEditPlan(plan); setEditForm({ plannedQuantity: plan.plannedQuantity, avgDailyTarget: plan.avgDailyTarget || 0, startDate: plan.plannedStartDate || plan.startDate, lineId: plan.lineId, priority: plan.priority || 'medium', acceptsProductionFromReports: plan.acceptsProductionFromReports !== false }); }}
                                         className="p-1.5 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل">
                                         <span className="material-icons-round text-sm">edit</span>
                                       </button>
+                                  )}
+                                  {canEdit && planStatusEnabled && (
                                       <button onClick={() => { setStatusPlan(plan); setNewStatus(plan.effectiveStatus); }} className="p-1.5 text-[var(--color-text-muted)] hover:text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/10 rounded-[var(--border-radius-base)] transition-all" title="تغيير الحالة">
                                         <span className="material-icons-round text-sm">swap_horiz</span>
                                       </button>
-                                    </>
                                   )}
-                                  {(can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
+                                  {planWorkOrderCreateEnabled && (can('workOrders.create') || (plan.planType === 'component_injection' && can('workOrders.componentInjection.manage'))) && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
                                     <button onClick={() => navigate(`/work-orders?planId=${plan.id}&productId=${plan.productId}`)} className="p-1.5 text-[var(--color-text-muted)] hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء أمر شغل">
                                       <span className="material-icons-round text-sm">assignment</span>
                                     </button>
                                   )}
-                                  {canCreateReport && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
+                                  {planReportCreateEnabled && canCreateReport && (plan.effectiveStatus === 'planned' || plan.effectiveStatus === 'in_progress') && (
                                     <button onClick={() => openCreateReportForPlan(plan)} className="p-1.5 text-[var(--color-text-muted)] hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-900/10 rounded-[var(--border-radius-base)] transition-all" title="إنشاء تقرير من الخطة">
                                       <span className="material-icons-round text-sm">post_add</span>
                                     </button>

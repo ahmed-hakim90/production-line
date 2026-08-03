@@ -217,7 +217,8 @@ export const tenantService = {
     await batch.commit();
 
     setCurrentTenant(newTenantId);
-    await roleService.seedIfEmpty();
+    // Runs under the approving super-admin; normal user login never mutates roles.
+    await roleService.migrateDefaultRoles();
     const roles = await roleService.getAll();
     const adminRole = roles.find((r) => r.roleKey === 'admin') ?? roles[0];
     if (!adminRole?.id) throw new Error('فشل إنشاء الأدوار');

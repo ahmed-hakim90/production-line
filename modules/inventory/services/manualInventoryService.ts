@@ -1,6 +1,10 @@
 import type { CreateStockMovementInput, TransferRequestLine } from '../types';
 import { stockService } from './stockService';
 import { transferApprovalService } from './transferApprovalService';
+import {
+  INVENTORY_STOCK_MOVE_PATHS,
+  INVENTORY_TRANSFER_CREATE_PATHS,
+} from '../../system/lib/operationPathSettings';
 
 /** Thin facade for manual stock operations (adjustments + transfer requests). */
 export const manualInventoryService = {
@@ -11,7 +15,7 @@ export const manualInventoryService = {
       ...input,
       movementType: 'ADJUSTMENT',
       sourceModule: 'manual_movement',
-    });
+    }, { path: INVENTORY_STOCK_MOVE_PATHS.adjustmentModal });
   },
 
   async createManualTransferRequest(input: {
@@ -29,6 +33,6 @@ export const manualInventoryService = {
       ...input,
       requestType: 'manual_transfer',
       sourceModule: 'manual_movement',
-    });
+    }, { path: INVENTORY_TRANSFER_CREATE_PATHS.movementsForm });
   },
 };

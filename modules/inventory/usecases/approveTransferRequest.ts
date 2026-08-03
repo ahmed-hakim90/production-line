@@ -3,6 +3,8 @@ import { eventBus, SystemEvents } from '@/shared/events';
 import { runUseCase, type UseCaseResult } from '@/shared/usecases';
 import { transferApprovalService } from '../services/transferApprovalService';
 
+type TransferDecisionContext = Parameters<typeof transferApprovalService.approveRequest>[2];
+
 export type ApproveTransferInput = {
   requestId: string;
   approvedBy: string;
@@ -19,10 +21,11 @@ export type RejectTransferInput = {
 
 export async function approveTransferRequest(
   input: ApproveTransferInput,
+  context: TransferDecisionContext,
 ): Promise<UseCaseResult<{ requestId: string }>> {
   return runUseCase(async () => {
     const tenantId = requireTenantIdOrThrow();
-    await transferApprovalService.approveRequest(input.requestId, input.approvedBy, {
+    await transferApprovalService.approveRequest(input.requestId, input.approvedBy, context, {
       allowNegativeFromSource: input.allowNegativeFromSource,
       approverUserId: input.approverUserId,
     });
@@ -43,12 +46,14 @@ export async function approveTransferRequest(
 
 export async function rejectTransferRequest(
   input: RejectTransferInput,
+  context: TransferDecisionContext,
 ): Promise<UseCaseResult<{ requestId: string }>> {
   return runUseCase(async () => {
     const tenantId = requireTenantIdOrThrow();
     await transferApprovalService.rejectRequest(
       input.requestId,
       input.rejectedBy,
+      context,
       input.reason,
       input.rejectedByUserId,
     );

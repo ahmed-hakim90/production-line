@@ -34,6 +34,7 @@ import {
   lateRulesRef,
   allowanceTypesRef,
   hrSettingsDocRef,
+  hrSettingsLegacyDocRef,
 } from '../collections';
 import { getPayrollMonth, getPayrollRecords } from './payrollEngine';
 import { payrollAuditService } from './payrollAudit';
@@ -58,8 +59,9 @@ function generateSnapshotVersion(): string {
 
 /** Create a snapshot of current HR settings for preservation */
 async function createSnapshot(): Promise<PayrollSnapshot> {
-  const [settingsSnap, penaltySnap, lateSnap, allowanceSnap] = await Promise.all([
+  const [settingsSnap, legacySettingsSnap, penaltySnap, lateSnap, allowanceSnap] = await Promise.all([
     getDoc(hrSettingsDocRef()),
+    getDoc(hrSettingsLegacyDocRef()),
     getDocs(penaltyRulesRef()),
     getDocs(lateRulesRef()),
     getDocs(allowanceTypesRef()),
@@ -67,7 +69,9 @@ async function createSnapshot(): Promise<PayrollSnapshot> {
 
   const settings = settingsSnap.exists()
     ? (settingsSnap.data() as FirestoreHRSettings)
-    : null;
+    : legacySettingsSnap.exists()
+      ? (legacySettingsSnap.data() as FirestoreHRSettings)
+      : null;
 
   return {
     version: generateSnapshotVersion(),

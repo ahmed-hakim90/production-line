@@ -113,6 +113,7 @@ assert.deepEqual(
   },
 );
 
+// Team/plan products no longer collect or auto-split per-worker shares on close.
 const teamClose = buildShiftClosePayload(
   {
     shiftStartedAt: '2026-06-24T06:00:00.000Z',
@@ -125,47 +126,17 @@ const teamClose = buildShiftClosePayload(
     closedAtIso: '2026-06-24T14:30:00.000Z',
     reportDate: '2026-06-24',
     assemblyModeSnapshot: 'team',
-    workerTargetsApplied: true,
-    workerTargetSource: 'plan_daily',
+    workerTargetsApplied: false,
+    workerTargetSource: 'none',
     planDailyTarget: 90,
-    workerOutputs: [
-      {
-        workerId: 'emp-1',
-        workerName: 'Worker One',
-        productId: 'prod-1',
-        productName: 'Team Product',
-        lineId: 'line-1',
-        lineName: 'Line 1',
-        dailyTargetQty: 0,
-        outputQty: 0,
-        achievementPercent: 0,
-        isPresent: true,
-      },
-      {
-        workerId: 'emp-2',
-        workerName: 'Worker Two',
-        productId: 'prod-1',
-        productName: 'Team Product',
-        lineId: 'line-1',
-        lineName: 'Line 1',
-        dailyTargetQty: 0,
-        outputQty: 0,
-        achievementPercent: 0,
-        isPresent: false,
-      },
-    ],
   },
 );
 
-assert.equal(teamClose.workerTargetsApplied, true);
-assert.equal(teamClose.workerTargetSource, 'plan_daily');
+assert.equal(teamClose.workerTargetsApplied, false);
+assert.equal(teamClose.workerTargetSource, 'none');
 assert.equal(teamClose.assemblyModeSnapshot, 'team');
-assert.equal(teamClose.workerOutputs?.length, 2);
-assert.equal(teamClose.workerOutputs?.[0].outputQty, 90);
-assert.equal(teamClose.workerOutputs?.[0].dailyTargetQty, 90);
-assert.equal(teamClose.workerOutputs?.[0].achievementPercent, 100);
-assert.equal(teamClose.workerOutputs?.[1].outputQty, 0);
-assert.equal(teamClose.workerOutputs?.[1].isPresent, false);
+assert.equal(teamClose.workerOutputs?.length ?? 0, 0);
+assert.equal(teamClose.quantityProduced, 90);
 assert.equal(teamClose.presentAssignments, 1);
 assert.equal(teamClose.absentAssignments, 1);
 

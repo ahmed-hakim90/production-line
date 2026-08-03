@@ -5,10 +5,12 @@ import { getMessaging } from 'firebase-admin/messaging';
 import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
+import { createHash } from 'node:crypto';
 import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js';
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
 import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRestore.js';
+import { approveDepartmentConsumableIssueHandler, cancelDepartmentConsumableIssueHandler, createDepartmentConsumableIssueHandler, getDepartmentConsumableMonthlyReportHandler, issueDepartmentConsumableIssueHandler, rejectDepartmentConsumableIssueHandler, returnDepartmentConsumableIssueHandler, submitDepartmentConsumableIssueHandler, } from './departmentConsumableIssues.js';
 initializeApp();
 const db = getFirestore();
 const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
@@ -296,7 +298,7 @@ const hasRepairBranchManagePermission = async (uid) => {
     const user = userSnap.data();
     if (user?.isSuperAdmin === true)
         return true;
-    return hasAnyPermission(uid, ['repair.branches.manage', 'roles.manage']);
+    return hasAnyPermission(uid, ['repair.branches.manage']);
 };
 const deleteByBranchId = async (collectionName, branchId) => {
     let deleted = 0;
@@ -930,7 +932,6 @@ export const runAssetDepreciationJob = onCall({
     const permitted = await hasAnyPermission(requesterUid, [
         'assets.depreciation.run',
         'costs.manage',
-        'roles.manage',
     ]);
     if (!permitted) {
         throw new HttpsError('permission-denied', 'ليس لديك صلاحية تشغيل احتساب الإهلاك.');
@@ -1029,14 +1030,22 @@ export const runMonthlyOverheadAllocation = onCall({
     const requesterUid = String(request.auth?.uid || '').trim();
     if (!requesterUid)
         throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
-    const permitted = await hasAnyPermission(requesterUid, ['costs.manage', 'roles.manage']);
+    const permitted = await hasAnyPermission(requesterUid, ['costs.manage']);
     if (!permitted)
         throw new HttpsError('permission-denied', 'ليس لديك صلاحية إدارة التكاليف.');
+    const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const requesterTenantId = String(requesterSnap.data()?.tenantId || '').trim();
+    if (!requesterTenantId) {
+        throw new HttpsError('failed-precondition', 'لا يوجد مستأجر مرتبط بالحساب.');
+    }
     const month = String(request.data?.month || '').trim();
     if (!/^\d{4}-\d{2}$/.test(month)) {
         throw new HttpsError('invalid-argument', 'صيغة الشهر يجب أن تكون YYYY-MM.');
     }
-    const rows = await db.collection('monthly_production_costs').where('month', '==', month).get();
+    const rows = await db.collection('monthly_production_costs')
+        .where('tenantId', '==', requesterTenantId)
+        .where('month', '==', month)
+        .get();
     let totalDirect = 0;
     let totalIndirect = 0;
     let totalOrders = 0;
@@ -1047,7 +1056,8 @@ export const runMonthlyOverheadAllocation = onCall({
         totalOrders += 1;
     });
     const totalCost = totalDirect + totalIndirect;
-    await db.collection('monthly_costs').doc(month).set({
+    await db.collection('monthly_costs').doc(`${requesterTenantId}_${month}`).set({
+        tenantId: requesterTenantId,
         month,
         totalDirect,
         totalIndirect,
@@ -1057,7 +1067,15 @@ export const runMonthlyOverheadAllocation = onCall({
         updatedAt: FieldValue.serverTimestamp(),
         source: 'runMonthlyOverheadAllocation',
     }, { merge: true });
-    return { ok: true, month, totalDirect, totalIndirect, totalCost, orderCount: totalOrders };
+    return {
+        ok: true,
+        month,
+        tenantId: requesterTenantId,
+        totalDirect,
+        totalIndirect,
+        totalCost,
+        orderCount: totalOrders,
+    };
 });
 export const calculateMonthlyCostVariance = onCall({
     region: 'us-central1',
@@ -1066,14 +1084,22 @@ export const calculateMonthlyCostVariance = onCall({
     const requesterUid = String(request.auth?.uid || '').trim();
     if (!requesterUid)
         throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
-    const permitted = await hasAnyPermission(requesterUid, ['costs.manage', 'roles.manage']);
+    const permitted = await hasAnyPermission(requesterUid, ['costs.manage']);
     if (!permitted)
         throw new HttpsError('permission-denied', 'ليس لديك صلاحية إدارة التكاليف.');
+    const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const requesterTenantId = String(requesterSnap.data()?.tenantId || '').trim();
+    if (!requesterTenantId) {
+        throw new HttpsError('failed-precondition', 'لا يوجد مستأجر مرتبط بالحساب.');
+    }
     const month = String(request.data?.month || '').trim();
     if (!/^\d{4}-\d{2}$/.test(month)) {
         throw new HttpsError('invalid-argument', 'صيغة الشهر يجب أن تكون YYYY-MM.');
     }
-    const rows = await db.collection('monthly_production_costs').where('month', '==', month).get();
+    const rows = await db.collection('monthly_production_costs')
+        .where('tenantId', '==', requesterTenantId)
+        .where('month', '==', month)
+        .get();
     let flagged = 0;
     for (const rowDoc of rows.docs) {
         const row = rowDoc.data();
@@ -1083,7 +1109,8 @@ export const calculateMonthlyCostVariance = onCall({
         if (Math.abs(variance) <= 0.0001)
             continue;
         flagged += 1;
-        await db.collection('cost_variances').doc(`${month}_${rowDoc.id}`).set({
+        await db.collection('cost_variances').doc(`${requesterTenantId}_${month}_${rowDoc.id}`).set({
+            tenantId: requesterTenantId,
             month,
             productId: String(row.productId || ''),
             monthlyCostDocId: rowDoc.id,
@@ -1097,7 +1124,7 @@ export const calculateMonthlyCostVariance = onCall({
             updatedAt: FieldValue.serverTimestamp(),
         }, { merge: true });
     }
-    return { ok: true, month, flagged };
+    return { ok: true, month, tenantId: requesterTenantId, flagged };
 });
 const TENANT_FOOTPRINT_AVG_DOC_BYTES = 900;
 /** Super-admin: aggregate document counts per tenant (for platform insights). */
@@ -1294,22 +1321,27 @@ export const importTenantBackup = onCall({
     }
     const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
     const createdBy = String(requesterSnap.data()?.email || requesterUid);
+    const targetTenantId = String(data?.tenantId || data?.tenantIdForHistory || backup.metadata?.tenantId || '').trim();
     try {
-        const restored = await runAdminImportBackup(db, backup, mode);
-        const tenantIdForHistory = String(data?.tenantIdForHistory || '').trim();
+        const { restored, tenantId } = await runAdminImportBackup(db, backup, mode, targetTenantId || undefined);
         await saveAdminImportHistory(db, {
-            tenantId: tenantIdForHistory || undefined,
+            tenantId,
             mode,
             restored,
             collectionNames: Object.keys(backup.collections || {}),
             createdBy,
             fileMetadataType: String(backup.metadata?.type || ''),
         });
-        return { success: true, restored };
+        return { success: true, restored, tenantId };
     }
     catch (e) {
         const msg = e instanceof Error ? e.message : 'فشلت الاستعادة';
-        throw new HttpsError('internal', msg);
+        if (msg.includes('معرّف المستأجر')
+            || msg.includes('لا يطابق')
+            || msg.includes('مستأجراً آخر')) {
+            throw new HttpsError('invalid-argument', msg);
+        }
+        throw new HttpsError('internal', 'فشلت الاستعادة');
     }
 });
 /** Public: resolve tenant slug before login (client cannot read tenant_slugs without auth). */
@@ -1433,3 +1465,93 @@ export const trackRepairJobPublic = onCall({
         },
     };
 });
+/** Public: customer approval / rejection via signed link (token hashed in Firestore). */
+export const submitRepairApprovalPublic = onCall({
+    region: 'us-central1',
+    memory: '128MiB',
+    cors: true,
+    invoker: 'public',
+}, async (request) => {
+    const data = (request.data || {});
+    const tenantSlug = sanitizeTrackSlug(data.tenantSlug);
+    const jobId = String(data.jobId || '').trim();
+    const token = String(data.token || '').trim();
+    const decision = data.decision;
+    const note = String(data.note || '').trim().slice(0, 2000);
+    if (!tenantSlug || !jobId || !token || (decision !== 'approved' && decision !== 'rejected')) {
+        throw new HttpsError('invalid-argument', 'بيانات غير كافية.');
+    }
+    const slugSnap = await db.collection(TENANT_SLUGS_COLLECTION).doc(tenantSlug).get();
+    const tenantId = String(slugSnap.data()?.tenantId || '').trim();
+    if (!slugSnap.exists || !tenantId) {
+        throw new HttpsError('not-found', 'الشركة غير موجودة.');
+    }
+    const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+    if (!tenantSnap.exists || String(tenantSnap.data()?.status || '') !== 'active') {
+        throw new HttpsError('failed-precondition', 'الشركة غير متاحة.');
+    }
+    const jobRef = db.collection(REPAIR_JOBS_COLLECTION).doc(jobId);
+    const jobSnap = await jobRef.get();
+    if (!jobSnap.exists) {
+        throw new HttpsError('not-found', 'الطلب غير موجود.');
+    }
+    const job = jobSnap.data();
+    if (String(job.tenantId || '') !== tenantId) {
+        throw new HttpsError('permission-denied', 'لا يتطابق الطلب مع الشركة.');
+    }
+    const hash = createHash('sha256').update(token, 'utf8').digest('hex');
+    if (String(job.approvalTokenHash || '') !== hash) {
+        throw new HttpsError('permission-denied', 'رابط الموافقة غير صالح.');
+    }
+    if (String(job.approvalStatus || '') !== 'pending') {
+        throw new HttpsError('failed-precondition', 'لا يوجد طلب موافقة نشط.');
+    }
+    const expRaw = job.approvalTokenExpiresAt;
+    const expMs = expRaw && typeof expRaw === 'object' && typeof expRaw.toDate === 'function'
+        ? expRaw.toDate().getTime()
+        : expRaw
+            ? Date.parse(String(expRaw))
+            : 0;
+    if (expMs && Date.now() > expMs) {
+        throw new HttpsError('failed-precondition', 'انتهت صلاحية الرابط.');
+    }
+    const at = new Date().toISOString();
+    const prevStatus = String(job.status || '');
+    const patch = {
+        approvalResolvedAt: at,
+        approvalNote: note,
+        approvalStatus: decision === 'approved' ? 'approved' : 'rejected',
+        updatedAt: at,
+    };
+    if (decision === 'approved' && prevStatus === 'waiting_approval') {
+        patch.status = 'waiting_parts';
+    }
+    await jobRef.update(patch);
+    const afterStatus = String(patch.status || prevStatus);
+    await jobRef.collection('service_events').add({
+        tenantId: job.tenantId,
+        branchId: job.branchId,
+        jobId,
+        at,
+        actorUid: 'public_customer',
+        actorName: 'العميل — رابط عام',
+        action: 'approval_resolved',
+        domainEvent: decision === 'approved' ? 'customer.approved' : 'customer.rejected',
+        eventSchemaVersion: 1,
+        statusBefore: prevStatus,
+        statusAfter: afterStatus,
+        note: decision === 'approved' ? 'موافقة عبر الرابط العام' : `رفض عبر الرابط: ${note || '—'}`,
+    });
+    return { ok: true, status: afterStatus };
+});
+export const createDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '512MiB' }, createDepartmentConsumableIssueHandler);
+export const submitDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, submitDepartmentConsumableIssueHandler);
+export const approveDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, approveDepartmentConsumableIssueHandler);
+export const rejectDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, rejectDepartmentConsumableIssueHandler);
+export const issueDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '512MiB' }, issueDepartmentConsumableIssueHandler);
+export const cancelDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, cancelDepartmentConsumableIssueHandler);
+export const returnDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '512MiB' }, returnDepartmentConsumableIssueHandler);
+export const getDepartmentConsumableMonthlyReport = onCall({ region: 'us-central1', memory: '512MiB' }, getDepartmentConsumableMonthlyReportHandler);
+export { confirmProductionHandoverReceipt } from './productionHandover.js';
+export { issueProductionIssueStock } from './productionIssueStock.js';
+export { applyProductionReportInventory, reverseProductionReportInventory, } from './productionReportInventory.js';

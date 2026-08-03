@@ -15,6 +15,12 @@ import { totalEstimatedCost } from '../engines/productionPlanningEngine';
 import type { MaterialRequirementLine } from '../types';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '@/components/modal-manager/modalKeys';
+import { useAppStore } from '@/store/useAppStore';
+import {
+  BOM_UPSERT_PATHS,
+  MANUFACTURING_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 
 const arNum = (n: number, fd = 2) =>
   n.toLocaleString('ar-EG', { minimumFractionDigits: fd, maximumFractionDigits: fd });
@@ -27,12 +33,18 @@ export type ProductBomSectionProps = {
 
 export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
   productId,
-  canManage,
+  canManage: canManagePermission,
   userId,
 }) => {
   const { data: bomData, isLoading, refetch } = useProductBom(productId);
   const { data: materials = [] } = useMaterialsCatalog();
   const { addItem, deleteItem } = useBomItemMutations('product', productId);
+  const systemSettings = useAppStore((state) => state.systemSettings);
+  const canManage = canManagePermission && isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.bomUpsert,
+    BOM_UPSERT_PATHS.productBomSection,
+  );
 
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
@@ -51,7 +63,7 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
   const [reqLoading, setReqLoading] = useState(false);
 
   const materialOptions = useMemo(
-    () => materials.filter((m) => m.isActive !== false && m.id),
+    () => materials.filter((m) => m.isActive !== false && m.id && m.type !== 'consumable'),
     [materials],
   );
 

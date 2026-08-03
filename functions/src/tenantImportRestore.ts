@@ -1,8 +1,8 @@
 /**
  * Admin SDK import — bypasses client Firestore rules (super-admin only via Callable).
- * Mirrors client `backupService.importBackup` write/clear logic.
+ * Clears and writes are always scoped to a single tenantId.
  */
-import type { DocumentData, Firestore } from 'firebase-admin/firestore';
+import type { DocumentData, Firestore, Query } from 'firebase-admin/firestore';
 import { FieldValue } from 'firebase-admin/firestore';
 import {
   ALL_BACKUP_COLLECTIONS,
@@ -10,12 +10,16 @@ import {
   BACKUP_VERSION,
 } from './tenantBackupExport.js';
 
+const BACKUP_COLLECTION_ALLOWLIST = new Set<string>(ALL_BACKUP_COLLECTIONS);
+const BACKUP_GROUP_ALLOWLIST = new Set<string>(BACKUP_COLLECTION_GROUPS);
+
 export type AdminRestoreMode = 'merge' | 'replace' | 'full_reset';
 
 export interface AdminBackupFileInput {
   metadata: {
     version: string;
     type?: string;
+    tenantId?: string;
     [key: string]: unknown;
   };
   collections: Record<string, Record<string, unknown>[]>;
@@ -44,11 +48,38 @@ function validateBackupShape(data: unknown): { valid: true } | { valid: false; e
   return { valid: true };
 }
 
-async function adminClearCollection(db: Firestore, name: string): Promise<void> {
+function resolveTargetTenantId(
+  file: AdminBackupFileInput,
+  explicitTenantId?: string,
+): string {
+  const fromArg = String(explicitTenantId || '').trim();
+  const fromMeta = String(file.metadata?.tenantId || '').trim();
+  const tenantId = fromArg || fromMeta;
+  if (!tenantId) {
+    throw new Error('معرّف المستأجر مطلوب للاستعادة. مرّر tenantId أو ضعه في metadata.tenantId.');
+  }
+  if (fromArg && fromMeta && fromArg !== fromMeta) {
+    throw new Error('معرّف المستأجر في الطلب لا يطابق metadata.tenantId في ملف النسخة.');
+  }
+  return tenantId;
+}
+
+function stampTenantId(
+  fields: Record<string, unknown>,
+  tenantId: string,
+): Record<string, unknown> {
+  return { ...fields, tenantId };
+}
+
+async function adminClearTenantCollection(
+  db: Firestore,
+  name: string,
+  tenantId: string,
+): Promise<void> {
   const col = db.collection(name);
   // eslint-disable-next-line no-constant-condition
   while (true) {
-    const snap = await col.limit(500).get();
+    const snap = await col.where('tenantId', '==', tenantId).limit(500).get();
     if (snap.empty) break;
     const batch = db.batch();
     snap.docs.forEach((d) => batch.delete(d.ref));
@@ -56,8 +87,12 @@ async function adminClearCollection(db: Firestore, name: string): Promise<void> 
   }
 }
 
-async function adminClearCollectionGroup(db: Firestore, groupName: string): Promise<void> {
-  const q = db.collectionGroup(groupName);
+async function adminClearTenantCollectionGroup(
+  db: Firestore,
+  groupName: string,
+  tenantId: string,
+): Promise<void> {
+  const q: Query = db.collectionGroup(groupName).where('tenantId', '==', tenantId);
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const snap = await q.limit(500).get();
@@ -68,21 +103,35 @@ async function adminClearCollectionGroup(db: Firestore, groupName: string): Prom
   }
 }
 
+function assertDocTenantAllowed(
+  fields: Record<string, unknown>,
+  tenantId: string,
+  context: string,
+): void {
+  const docTenant = String(fields.tenantId || '').trim();
+  if (docTenant && docTenant !== tenantId) {
+    throw new Error(`مستند في ${context} يتبع مستأجراً آخر ولا يمكن استعادته.`);
+  }
+}
+
 async function adminWriteDocuments(
   db: Firestore,
   collectionName: string,
   documents: Record<string, unknown>[],
   mode: AdminRestoreMode,
+  tenantId: string,
 ): Promise<void> {
   if (mode === 'replace' || mode === 'full_reset') {
-    await adminClearCollection(db, collectionName);
+    await adminClearTenantCollection(db, collectionName, tenantId);
   }
   const batchSize = 500;
   for (let i = 0; i < documents.length; i += batchSize) {
     const batch = db.batch();
     const chunk = documents.slice(i, i + batchSize);
     chunk.forEach((docData) => {
-      const { _docId, ...fields } = docData;
+      const { _docId, ...rawFields } = docData;
+      assertDocTenantAllowed(rawFields, tenantId, collectionName);
+      const fields = stampTenantId(rawFields, tenantId);
       const ref = _docId
         ? db.collection(collectionName).doc(String(_docId))
         : db.collection(collectionName).doc();
@@ -97,19 +146,22 @@ async function adminWriteCollectionGroupDocuments(
   collectionGroupName: string,
   documents: Record<string, unknown>[],
   mode: AdminRestoreMode,
+  tenantId: string,
 ): Promise<void> {
   if (mode === 'replace' || mode === 'full_reset') {
-    await adminClearCollectionGroup(db, collectionGroupName);
+    await adminClearTenantCollectionGroup(db, collectionGroupName, tenantId);
   }
   const batchSize = 500;
   for (let i = 0; i < documents.length; i += batchSize) {
     const batch = db.batch();
     const chunk = documents.slice(i, i + batchSize);
     chunk.forEach((docData) => {
-      const { _path, ...fields } = docData;
+      const { _path, ...rawFields } = docData;
       if (typeof _path !== 'string' || !_path.trim()) {
         return;
       }
+      assertDocTenantAllowed(rawFields, tenantId, collectionGroupName);
+      const fields = stampTenantId(rawFields, tenantId);
       batch.set(db.doc(_path), fields as DocumentData, { merge: mode === 'merge' });
     });
     await batch.commit();
@@ -124,50 +176,60 @@ export async function runAdminImportBackup(
   db: Firestore,
   file: AdminBackupFileInput,
   mode: AdminRestoreMode,
-): Promise<number> {
+  explicitTenantId?: string,
+): Promise<{ restored: number; tenantId: string }> {
   const v = validateBackupShape(file);
   if (!v.valid) {
     throw new Error(v.error);
   }
 
+  const tenantId = resolveTargetTenantId(file, explicitTenantId);
   const collectionNames = Object.keys(file.collections);
   const collectionGroupNames = Object.keys(file.collectionGroups || {});
+  const unknownCollection = collectionNames.find((name) => !BACKUP_COLLECTION_ALLOWLIST.has(name));
+  if (unknownCollection) {
+    throw new Error(`المجموعة ${unknownCollection} غير مسجلة ضمن نطاق النسخ الاحتياطي.`);
+  }
+  const unknownGroup = collectionGroupNames.find((name) => !BACKUP_GROUP_ALLOWLIST.has(name));
+  if (unknownGroup) {
+    throw new Error(`المجموعة الفرعية ${unknownGroup} غير مسجلة ضمن نطاق النسخ الاحتياطي.`);
+  }
   let restored = 0;
 
   for (const name of collectionNames) {
     const docs = file.collections[name];
     if (docs && docs.length > 0) {
-      await adminWriteDocuments(db, name, docs, mode);
+      await adminWriteDocuments(db, name, docs, mode, tenantId);
       restored += docs.length;
     } else if (mode === 'full_reset' || mode === 'replace') {
-      await adminClearCollection(db, name);
+      await adminClearTenantCollection(db, name, tenantId);
     }
   }
 
   for (const groupName of collectionGroupNames) {
     const docs = file.collectionGroups?.[groupName];
     if (docs && docs.length > 0) {
-      await adminWriteCollectionGroupDocuments(db, groupName, docs, mode);
+      await adminWriteCollectionGroupDocuments(db, groupName, docs, mode, tenantId);
       restored += docs.length;
     } else if (mode === 'full_reset' || mode === 'replace') {
-      await adminClearCollectionGroup(db, groupName);
+      await adminClearTenantCollectionGroup(db, groupName, tenantId);
     }
   }
 
   if (mode === 'full_reset') {
     for (const name of ALL_BACKUP_COLLECTIONS) {
       if (!collectionNames.includes(name)) {
-        await adminClearCollection(db, name);
+        await adminClearTenantCollection(db, name, tenantId);
       }
     }
     for (const groupName of BACKUP_COLLECTION_GROUPS) {
       if (!collectionGroupNames.includes(groupName)) {
-        await adminClearCollectionGroup(db, groupName);
+        await adminClearTenantCollectionGroup(db, groupName, tenantId);
       }
     }
   }
 
-  return restored;
+  return { restored, tenantId };
 }
 
 export async function saveAdminImportHistory(

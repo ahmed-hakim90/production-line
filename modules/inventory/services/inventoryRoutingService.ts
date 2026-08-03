@@ -8,6 +8,7 @@ import {
 
 export {
   assertRoutingConfigured,
+  assertDistinctProductionRoutingWarehouses,
   pickConsumptionWarehouse,
   resolveInventoryRoutingV1,
 } from '../lib/inventoryRoutingResolver';

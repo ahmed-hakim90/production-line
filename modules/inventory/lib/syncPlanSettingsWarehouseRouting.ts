@@ -23,6 +23,7 @@ export function syncPlanSettingsWarehouseRouting(plan: PlanSettings): PlanSettin
 
   const raw = pick(nested.rawMaterialWarehouseId, plan.rawMaterialWarehouseId);
   const decomposed = pick(nested.decomposedWarehouseId, plan.decomposedSourceWarehouseId);
+  const floor = hasNested ? trimId(nested.productionFloorWarehouseId) : trimId(nested.productionFloorWarehouseId);
   const wip = pick(nested.productionWipWarehouseId, plan.defaultProductionWarehouseId);
   const stagingRaw = pick(nested.finishedStagingWarehouseId, plan.finishedReceiveWarehouseId);
   const staging = stagingRaw || wip;
@@ -31,22 +32,24 @@ export function syncPlanSettingsWarehouseRouting(plan: PlanSettings): PlanSettin
   const pkgSrc = pick(nested.packagingSourceWarehouseId, plan.packagingSourceWarehouseId);
   const pkgTgt = pick(nested.packagingTargetWarehouseId, plan.packagingTargetWarehouseId);
 
-  const requireApprovalForProductionEntry = nested.requireApprovalForProductionEntry !== false;
+  const requireApprovalForProductionEntry = nested.requireApprovalForProductionEntry === true;
 
   const inventoryRouting: InventoryRoutingSettings = {
     ...nested,
     rawMaterialWarehouseId: raw,
     decomposedWarehouseId: decomposed,
+    productionFloorWarehouseId: floor,
     productionWipWarehouseId: wip || staging,
     finishedStagingWarehouseId: staging || wip,
     finalProductWarehouseId: finalWh,
     packagingSourceWarehouseId: pkgSrc,
     packagingTargetWarehouseId: pkgTgt,
     wasteWarehouseId: waste,
-    autoTransferProductionToFinished: nested.autoTransferProductionToFinished !== false,
+    autoTransferProductionToFinished: nested.autoTransferProductionToFinished === true,
     autoTransferFinishedToFinal: Boolean(nested.autoTransferFinishedToFinal),
     requireApprovalForProductionEntry,
     requireApprovalForAutoTransfers: nested.requireApprovalForAutoTransfers === true,
+    requirePackagingHandoverReceipt: nested.requirePackagingHandoverReceipt !== false,
     autoConsumeBomOnProductionReport: Boolean(nested.autoConsumeBomOnProductionReport),
     requireIssuedProductionIssueOnReport: nested.requireIssuedProductionIssueOnReport !== false,
   };

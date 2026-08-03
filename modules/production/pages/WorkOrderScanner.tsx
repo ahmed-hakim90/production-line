@@ -7,6 +7,11 @@ import { scanEventService } from '../services/scanEventService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { formatNumber, getTodayDateString } from '../../../utils/calculations';
 import { qualitySettingsService } from '../../quality/services/qualitySettingsService';
+import {
+  WORK_ORDER_OPERATION_KEYS,
+  WORK_ORDER_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 
 const formatTs = (ts: any) => {
   if (!ts) return '—';
@@ -56,6 +61,7 @@ export const WorkOrderScanner: React.FC = () => {
     subscribeToWorkOrderScans,
     toggleBarcodeScan,
     updateWorkOrder,
+    systemSettings,
   } = useShallowStore((s) => ({
     workOrders: s.workOrders,
     _rawProducts: s._rawProducts,
@@ -68,7 +74,13 @@ export const WorkOrderScanner: React.FC = () => {
     subscribeToWorkOrderScans: s.subscribeToWorkOrderScans,
     toggleBarcodeScan: s.toggleBarcodeScan,
     updateWorkOrder: s.updateWorkOrder,
+    systemSettings: s.systemSettings,
   }));
+  const scannerPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.update,
+    WORK_ORDER_UPDATE_PATHS.scanner,
+  );
 
   const [serialInput, setSerialInput] = useState('');
   const [scanMsg, setScanMsg] = useState<string | null>(null);
@@ -262,13 +274,21 @@ export const WorkOrderScanner: React.FC = () => {
         if (idx < 0) return;
         const realIndex = windows.length - 1 - idx;
         windows[realIndex] = { ...windows[realIndex], endAt: nowIso };
-        await updateWorkOrder(workOrderId, { scanPauseWindows: windows });
+        await updateWorkOrder(
+          workOrderId,
+          { scanPauseWindows: windows },
+          { path: WORK_ORDER_UPDATE_PATHS.scanner },
+        );
         setScanMsg('تم استئناف التشغيل');
         playFeedbackTone('success');
         return;
       }
       windows.push({ reason: 'manual', startAt: nowIso });
-      await updateWorkOrder(workOrderId, { scanPauseWindows: windows });
+      await updateWorkOrder(
+        workOrderId,
+        { scanPauseWindows: windows },
+        { path: WORK_ORDER_UPDATE_PATHS.scanner },
+      );
       setScanMsg('تم إيقاف التشغيل مؤقتًا');
       playFeedbackTone('success');
     } catch (error: any) {
@@ -291,7 +311,7 @@ export const WorkOrderScanner: React.FC = () => {
         actualProducedFromScans: latest.summary.completedUnits || 0,
         actualWorkersCount: latest.summary.activeWorkers || 0,
         scanSummary: latest.summary,
-      });
+      }, { path: WORK_ORDER_UPDATE_PATHS.scanner });
       setScanMsg('تم حذف الجلسة بنجاح');
       playFeedbackTone('success');
     } catch (error: any) {
@@ -349,7 +369,7 @@ export const WorkOrderScanner: React.FC = () => {
         scanSessionClosedAt: new Date().toISOString(),
         actualWorkHours: Number(closeWorkHours) || 0,
         notes: mergedNote,
-      });
+      }, { path: WORK_ORDER_UPDATE_PATHS.scanner });
 
       setCloseModalOpen(false);
       setScanMsg('تم إنهاء أمر الشغل بنجاح');
@@ -403,6 +423,15 @@ export const WorkOrderScanner: React.FC = () => {
     if (closeModalOpen || workOrder?.status === 'completed') return;
     inputRef.current?.focus();
   }, [closeModalOpen, workOrder?.status]);
+
+  if (!scannerPathEnabled) {
+    return (
+      <div className="erp-empty-state">
+        <h2 className="text-lg font-bold">مسار ماسح أمر الشغل متوقف</h2>
+        <p className="text-sm text-muted-foreground">يمكن لمسؤول النظام تشغيله من إعدادات مسارات العمليات.</p>
+      </div>
+    );
+  }
 
   if (!workOrderId) {
     return (

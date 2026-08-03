@@ -12,6 +12,7 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { DefaultItemLocation, InventoryItemType } from '../types';
 import { warehouseLocationService } from './warehouseLocationService';
+import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'default_item_locations';
 
@@ -34,8 +35,10 @@ export const defaultItemLocationService = {
 
   async getAll(warehouseId?: string): Promise<DefaultItemLocation[]> {
     if (!isConfigured) return [];
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
     const constraints: any[] = [orderBy('itemName', 'asc')];
-    if (warehouseId) constraints.unshift(where('warehouseId', '==', warehouseId));
+    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DefaultItemLocation));
   },

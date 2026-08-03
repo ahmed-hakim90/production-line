@@ -113,6 +113,7 @@ export const AttendanceMonthlyReport: React.FC = () => {
 
       <div className="card overflow-x-auto p-0">
         <SmartFilterBar
+      pageId="attendance-monthly-report"
           searchPlaceholder="بحث باسم الموظف أو الكود"
           searchValue={search}
           onSearchChange={setSearch}

@@ -6,6 +6,8 @@ import { tenantQuery } from '../../../lib/tenantFirestore';
 import { stockService } from './stockService';
 import { productionIssueService } from './productionIssueService';
 import { warehouseLocationService } from './warehouseLocationService';
+import { INVENTORY_STOCK_MOVE_PATHS } from '../../system/lib/operationPathSettings';
+import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const ISSUE_COLLECTION = 'production_issue_orders';
 const RETURN_COLLECTION = 'component_return_records';
@@ -15,8 +17,10 @@ const returnRef = () => `RET-${new Date().toISOString().slice(0, 10).replace(/-/
 export const componentReturnService = {
   async getAll(issueOrderId?: string): Promise<ComponentReturnRecord[]> {
     if (!isConfigured) return [];
+    const scope = await resolveInventoryWarehouseReadScope();
     const constraints: any[] = [orderBy('createdAt', 'desc')];
     if (issueOrderId) constraints.unshift(where('issueOrderId', '==', issueOrderId));
+    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     const snap = await getDocs(tenantQuery(db, RETURN_COLLECTION, ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ComponentReturnRecord));
   },
@@ -53,7 +57,7 @@ export const componentReturnService = {
       sourcePlanId: order.productionPlanId,
       note: input.note || `Component return for ${order.referenceNo}`,
       createdBy: input.createdBy,
-    });
+    }, { path: INVENTORY_STOCK_MOVE_PATHS.componentReturn });
     await addDoc(collection(db, RETURN_COLLECTION), {
       tenantId: getCurrentTenantId(),
       issueOrderId: input.issueOrderId,

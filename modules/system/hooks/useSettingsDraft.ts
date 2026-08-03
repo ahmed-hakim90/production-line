@@ -8,11 +8,11 @@ import {
   DEFAULT_BRANDING,
   DEFAULT_DASHBOARD_DISPLAY,
   DEFAULT_KPI_THRESHOLDS,
-  DEFAULT_PLAN_SETTINGS,
   DEFAULT_PRINT_TEMPLATE,
   DEFAULT_THEME,
 } from '../../../utils/dashboardConfig';
 import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
+import { resolveSystemSettings } from '../lib/resolveSystemSettings';
 import type {
   AlertSettings,
   AlertToggleSettings,
@@ -22,6 +22,7 @@ import type {
   DashboardDisplaySettings,
   ExportImportSettings,
   KPIThreshold,
+  OperationPathSettings,
   PlanSettings,
   PrintTemplateSettings,
   QuickActionItem,
@@ -43,34 +44,31 @@ type WidgetFormState = {
 };
 
 export const useSettingsDraft = (systemSettings: SystemSettings) => {
-  const normalizedSource = useMemo(() => ({
-    dashboardWidgets: JSON.parse(JSON.stringify(systemSettings.dashboardWidgets)) as Record<string, WidgetConfig[]>,
-    customDashboardWidgets: JSON.parse(JSON.stringify(systemSettings.customDashboardWidgets ?? [])) as CustomWidgetConfig[],
-    alertSettings: { ...DEFAULT_ALERT_SETTINGS, ...systemSettings.alertSettings } as AlertSettings,
-    kpiThresholds: { ...DEFAULT_KPI_THRESHOLDS, ...systemSettings.kpiThresholds } as Record<string, KPIThreshold>,
-    printTemplate: { ...DEFAULT_PRINT_TEMPLATE, ...systemSettings.printTemplate } as PrintTemplateSettings,
-    planSettings: syncPlanSettingsWarehouseRouting({
-      ...DEFAULT_PLAN_SETTINGS,
-      ...systemSettings.planSettings,
-      inventoryRouting: {
-        ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
-        ...(systemSettings.planSettings?.inventoryRouting ?? {}),
-      },
-    }) as PlanSettings,
-    branding: { ...DEFAULT_BRANDING, ...systemSettings.branding } as BrandingSettings,
-    theme: { ...DEFAULT_THEME, ...systemSettings.theme } as ThemeSettings,
-    dashboardDisplay: { ...DEFAULT_DASHBOARD_DISPLAY, ...systemSettings.dashboardDisplay } as DashboardDisplaySettings,
-    alertToggles: { ...DEFAULT_ALERT_TOGGLES, ...systemSettings.alertToggles } as AlertToggleSettings,
-    quickActions: (systemSettings.quickActions ?? [])
-      .slice()
-      .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-      .map((item, index) => ({ ...item, order: item.order ?? index })),
-    exportImport: { pages: { ...(systemSettings.exportImport?.pages ?? {}) } } as ExportImportSettings,
-    minimumClientVersion: systemSettings.minimumClientVersion ?? '',
-    forceClientUpdate: systemSettings.forceClientUpdate === true,
-    clientUpdateMessageAr: systemSettings.clientUpdateMessageAr ?? '',
-    defaultHomeLogicalPath: systemSettings.defaultHomeLogicalPath ?? '',
-  }), [systemSettings]);
+  const normalizedSource = useMemo(() => {
+    const resolved = resolveSystemSettings(systemSettings);
+    return {
+      dashboardWidgets: JSON.parse(JSON.stringify(resolved.dashboardWidgets)) as Record<string, WidgetConfig[]>,
+      customDashboardWidgets: JSON.parse(JSON.stringify(resolved.customDashboardWidgets ?? [])) as CustomWidgetConfig[],
+      alertSettings: { ...DEFAULT_ALERT_SETTINGS, ...resolved.alertSettings } as AlertSettings,
+      kpiThresholds: { ...DEFAULT_KPI_THRESHOLDS, ...resolved.kpiThresholds } as Record<string, KPIThreshold>,
+      printTemplate: { ...DEFAULT_PRINT_TEMPLATE, ...resolved.printTemplate } as PrintTemplateSettings,
+      planSettings: syncPlanSettingsWarehouseRouting(resolved.planSettings) as PlanSettings,
+      branding: { ...DEFAULT_BRANDING, ...resolved.branding } as BrandingSettings,
+      theme: { ...DEFAULT_THEME, ...resolved.theme } as ThemeSettings,
+      dashboardDisplay: { ...DEFAULT_DASHBOARD_DISPLAY, ...resolved.dashboardDisplay } as DashboardDisplaySettings,
+      alertToggles: { ...DEFAULT_ALERT_TOGGLES, ...resolved.alertToggles } as AlertToggleSettings,
+      quickActions: (resolved.quickActions ?? [])
+        .slice()
+        .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+        .map((item, index) => ({ ...item, order: item.order ?? index })),
+      exportImport: { pages: { ...(resolved.exportImport?.pages ?? {}) } } as ExportImportSettings,
+      operationPaths: resolved.operationPaths as OperationPathSettings,
+      minimumClientVersion: resolved.minimumClientVersion ?? '',
+      forceClientUpdate: resolved.forceClientUpdate === true,
+      clientUpdateMessageAr: resolved.clientUpdateMessageAr ?? '',
+      defaultHomeLogicalPath: resolved.defaultHomeLogicalPath ?? '',
+    };
+  }, [systemSettings]);
   const sourceSignature = useMemo(() => JSON.stringify(normalizedSource), [normalizedSource]);
   const planSettingsSignature = useMemo(
     () => JSON.stringify(normalizedSource.planSettings),
@@ -129,6 +127,9 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
   const [localExportImport, setLocalExportImport] = useState<ExportImportSettings>(
     () => normalizedSource.exportImport
   );
+  const [localOperationPaths, setLocalOperationPaths] = useState<OperationPathSettings>(
+    () => normalizedSource.operationPaths,
+  );
   const [localMinimumClientVersion, setLocalMinimumClientVersion] = useState(
     () => normalizedSource.minimumClientVersion,
   );
@@ -157,6 +158,7 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     setLocalAlertToggles(normalizedSource.alertToggles);
     setLocalQuickActions(normalizedSource.quickActions);
     setLocalExportImport(normalizedSource.exportImport);
+    setLocalOperationPaths(normalizedSource.operationPaths);
     setLocalMinimumClientVersion(normalizedSource.minimumClientVersion);
     setLocalForceClientUpdate(normalizedSource.forceClientUpdate);
     setLocalClientUpdateMessageAr(normalizedSource.clientUpdateMessageAr);
@@ -259,6 +261,8 @@ export const useSettingsDraft = (systemSettings: SystemSettings) => {
     setLocalQuickActions,
     localExportImport,
     setLocalExportImport,
+    localOperationPaths,
+    setLocalOperationPaths,
     localMinimumClientVersion,
     setLocalMinimumClientVersion,
     localForceClientUpdate,

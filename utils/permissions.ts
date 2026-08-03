@@ -33,7 +33,9 @@ export type Permission =
   | 'catalog.categories.view' | 'catalog.categories.create' | 'catalog.categories.edit' | 'catalog.categories.delete'
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
   | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.locations.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove' | 'inventory.disassembly.manage'
+  | 'departmentConsumables.view' | 'departmentConsumables.create' | 'departmentConsumables.approve' | 'departmentConsumables.issue' | 'departmentConsumables.export'
   | 'productionIssue.create' | 'productionIssue.request' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
+  | 'productionHandover.approve'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
   | 'supervisors.view'
   | 'productionWorkers.view'
@@ -227,7 +229,13 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'productionIssue.print', label: 'طباعة إذن صرف إنتاج' },
       { key: 'productionIssue.return', label: 'تسجيل مرتجع مكونات' },
       { key: 'productionIssue.compensate', label: 'تسجيل تعويض مكونات' },
+      { key: 'productionHandover.approve', label: 'اعتماد استلام تغليف (الكمية الفعلية)' },
       { key: 'inventory.disassembly.manage', label: 'إدارة التفكيك العكسي' },
+      { key: 'departmentConsumables.view', label: 'عرض صرف مستهلكات الأقسام' },
+      { key: 'departmentConsumables.create', label: 'إنشاء صرف مستهلكات الأقسام' },
+      { key: 'departmentConsumables.approve', label: 'اعتماد صرف مستهلكات الأقسام' },
+      { key: 'departmentConsumables.issue', label: 'تنفيذ/مرتجع صرف مستهلكات الأقسام' },
+      { key: 'departmentConsumables.export', label: 'تصدير تقرير مستهلكات الأقسام' },
     ],
   },
   {
@@ -463,6 +471,21 @@ export function checkPermission(
   }
   if (permission === 'productionIssue.approve' || permission === 'productionIssue.compensate') {
     return permissions['inventory.transfers.approve'] === true || permissions['inventory.transactions.create'] === true;
+  }
+  if (permission === 'departmentConsumables.view') {
+    return permissions['inventory.view'] === true;
+  }
+  if (permission === 'departmentConsumables.create') {
+    return permissions['inventory.transactions.create'] === true;
+  }
+  if (permission === 'departmentConsumables.approve') {
+    return permissions['inventory.transfers.approve'] === true;
+  }
+  if (permission === 'departmentConsumables.issue') {
+    return permissions['inventory.transactions.create'] === true;
+  }
+  if (permission === 'departmentConsumables.export') {
+    return permissions['inventory.transactions.export'] === true || permissions['export'] === true;
   }
   // New permission — older role docs (including admin) may omit the key entirely.
   if (permission === 'productionIssue.request') {

@@ -252,6 +252,7 @@ export const QualityWorkers: React.FC = () => {
 
         <Card className="xl:col-span-2" title="تعيينات الجودة الحالية">
           <SmartFilterBar
+      pageId="quality-workers"
             searchPlaceholder="بحث بالاسم أو الكود أو الدور..."
             searchValue={search}
             onSearchChange={setSearch}

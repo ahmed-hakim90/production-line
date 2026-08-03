@@ -631,6 +631,7 @@ export const LeaveRequests: React.FC = () => {
       {/* Filters + Table in one card */}
       <Card className="p-0">
         <SmartFilterBar
+      pageId="hr-leave-requests"
           quickFilters={[
             {
               key: 'status',

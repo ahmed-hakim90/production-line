@@ -108,7 +108,7 @@ if (isConfigured) {
   console.warn('⚠ Firebase not configured. Add VITE_FIREBASE_* variables to .env.local');
 }
 
-export { db, auth, storage, isConfigured };
+export { db, auth, storage, functionsClient, isConfigured };
 
 const normalizeCallableError = (error: any): Error => {
   const code = String(error?.code || '').toLowerCase();

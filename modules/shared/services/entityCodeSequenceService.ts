@@ -129,6 +129,7 @@ export async function allocateNextSequentialSuffixInTransaction(
   literalPrefix: string,
   padding: number,
   seedMaxFromTransaction: (tx: Transaction) => Promise<number>,
+  beforeReserve?: (code: string, tx: Transaction) => Promise<void>,
 ): Promise<string> {
   const tenantId = getCurrentTenantId();
   const cref = counterDocRef(db, tenantId, entityKey);
@@ -144,6 +145,9 @@ export async function allocateNextSequentialSuffixInTransaction(
     nextSeq = Math.max(1, seeded + 1);
   }
 
+  const code = `${p}-${String(nextSeq).padStart(pad, '0')}`;
+  await beforeReserve?.(code, t);
+
   t.set(
     cref,
     {
@@ -155,7 +159,7 @@ export async function allocateNextSequentialSuffixInTransaction(
     { merge: true },
   );
 
-  return `${p}-${String(nextSeq).padStart(pad, '0')}`;
+  return code;
 }
 
 /** Peek next `{literalPrefix}-{seq}` without reserving. */

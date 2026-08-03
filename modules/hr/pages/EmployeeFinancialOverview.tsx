@@ -165,6 +165,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
       />
 
       <SmartFilterBar
+      pageId="hr-employee-financial-overview"
         searchPlaceholder="بحث باسم الموظف..."
         searchValue={search}
         onSearchChange={setSearch}

@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install root dependencies
+        run: npm ci
+
+      - name: Install functions dependencies
+        run: npm ci --prefix functions
+
+      - name: Typecheck app
+        run: npm run typecheck
+
+      - name: Typecheck functions
+        run: npm run typecheck:functions
+
+      - name: Architecture — legacy imports
+        run: npm run arch:check:legacy-imports
+
+      - name: Foundation tests
+        run: npm run test:foundation
+
+      - name: All discovered unit tests
+        run: npm run test:all
+
+      - name: Firestore rules (emulator)
+        run: npm run test:rules

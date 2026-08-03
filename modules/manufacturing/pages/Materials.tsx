@@ -4,6 +4,17 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { MaterialCategoryTreeSelect } from '../components/MaterialCategoryTreeSelect';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -13,14 +24,26 @@ import { useMaterials, useMaterialMutations } from '../hooks/useMaterials';
 import {
   MATERIAL_TYPE_LABELS,
   MATERIAL_UNIT_LABELS,
+  conversionRateFromWeightPerPiece,
+  isWeightMaterialUnit,
+  materialPurchaseCostPerBaseUnit,
   type Material,
   type MaterialType,
   type MaterialUnit,
+  weightPerPieceFromConversionRate,
 } from '../types';
 import { manufacturingMigrationService } from '../services/manufacturingMigrationService';
+import {
+  BOM_UPSERT_PATHS,
+  MANUFACTURING_OPERATION_KEYS,
+  MATERIAL_CREATE_PATHS,
+  MATERIAL_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 import { formatMigrationError } from '../lib/migrationErrors';
-import { isDuplicateEntityCodeError } from '../services/materialService';
+import { isDuplicateEntityCodeError, materialService } from '../services/materialService';
 import { materialCategoryService } from '../services/materialCategoryService';
+import { MATERIAL_CATEGORY_CODE_REQUIRED } from '../lib/materialCode';
 import { formatCategoryBreadcrumb } from '@/modules/catalog/lib/categoryTree';
 import { useAppStore } from '@/store/useAppStore';
 import { roleService } from '@/modules/system/services/roleService';
@@ -28,12 +51,14 @@ import { getExportImportPageControl } from '@/utils/exportImportControls';
 import { exportManufacturingMaterials } from '@/utils/exportExcel';
 import { downloadMaterialsTemplate } from '@/utils/downloadTemplates';
 import {
+  orderMaterialImportRowsForSave,
   parseMaterialsExcel,
   toMaterialCreateData,
   toMaterialUpdateData,
   type MaterialImportResult,
 } from '@/utils/importMaterials';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2, Pencil, Trash2, X } from 'lucide-react';
+import { toast } from 'sonner';
 
 const PAGE_SIZE = 20;
 
@@ -46,6 +71,7 @@ const arNum = (n: number) =>
 type SortKey = 'code' | 'name' | 'type' | 'purchaseCost' | 'wastePercent';
 type StatusFilter = 'all' | 'active' | 'inactive';
 type ManufacturedFilter = 'all' | 'internal' | 'external';
+type MaterialSource = 'internal' | 'external';
 
 const EMPTY_FORM = {
   code: '',
@@ -87,6 +113,7 @@ export const Materials: React.FC = () => {
   const applyRole = useAppStore((s) => s._applyRole);
   const fetchRoles = useAppStore((s) => s.fetchRoles);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const rawProducts = useAppStore((s) => s._rawProducts);
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'manufacturingMaterials'),
@@ -94,9 +121,43 @@ export const Materials: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
   const canImportFromPage = can('import') && pageControl.importEnabled && canManage;
+  const materialCreatePageEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.materialCreate,
+    MATERIAL_CREATE_PATHS.materialsPage,
+  );
+  const materialUpdatePageEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.materialUpdate,
+    MATERIAL_UPDATE_PATHS.materialsPage,
+  );
+  const materialImportCreateEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.materialCreate,
+    MATERIAL_CREATE_PATHS.materialsImport,
+  );
+  const materialImportUpdateEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.materialUpdate,
+    MATERIAL_UPDATE_PATHS.materialsImport,
+  );
+  const manufacturingMigrationEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.materialCreate,
+    MATERIAL_CREATE_PATHS.migration,
+  ) && isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.materialUpdate,
+    MATERIAL_UPDATE_PATHS.migration,
+  ) && isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.bomUpsert,
+    BOM_UPSERT_PATHS.migration,
+  );
   const { data: rows = [], isLoading, refetch } = useMaterials();
   const { create, update, remove } = useMaterialMutations();
   const importInputRef = useRef<HTMLInputElement>(null);
+  const categoryCodeRequestRef = useRef(0);
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState<MaterialType | 'all'>('all');
@@ -105,9 +166,12 @@ export const Materials: React.FC = () => {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState<Material | null>(null);
   const [form, setForm] = useState(EMPTY_FORM);
+  const [materialSource, setMaterialSource] = useState<MaterialSource | null>(null);
   const [saving, setSaving] = useState(false);
+  const [generatedCode, setGeneratedCode] = useState('');
+  const [codeLoading, setCodeLoading] = useState(false);
+  const [weightPerPiece, setWeightPerPiece] = useState(0);
   const [migrating, setMigrating] = useState(false);
-  const [feedback, setFeedback] = useState<string | null>(null);
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [sortKey, setSortKey] = useState<SortKey>('code');
@@ -117,6 +181,16 @@ export const Materials: React.FC = () => {
   const [importParsing, setImportParsing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importFileName, setImportFileName] = useState('');
+  const effectivePurchaseUnit = form.purchaseUnit || form.baseUnit;
+  const usesWeightPerPiece =
+    form.baseUnit === 'piece' && isWeightMaterialUnit(effectivePurchaseUnit);
+  const effectiveConversionRate = usesWeightPerPiece
+    ? conversionRateFromWeightPerPiece(weightPerPiece)
+    : Number(form.conversionRate);
+  const estimatedBaseUnitCost = materialPurchaseCostPerBaseUnit({
+    purchaseCost: form.purchaseCost,
+    conversionRate: effectiveConversionRate,
+  });
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -178,19 +252,25 @@ export const Materials: React.FC = () => {
   const openCreate = () => {
     setEditing(null);
     setForm(EMPTY_FORM);
+    setMaterialSource(null);
     setSelectedCategoryId(null);
+    setGeneratedCode('');
+    setCodeLoading(false);
+    setWeightPerPiece(0);
     setShowForm(true);
   };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
-    if (params.get('action') === 'create' && canManage) {
-      openCreate();
-    }
-  }, [location.search, canManage]);
+    if (params.get('action') !== 'create') return;
+    if (!canManage) return;
+    openCreate();
+    navigate('/manufacturing/materials', { replace: true });
+  }, [location.search, canManage, navigate]);
 
   const openEdit = (row: Material) => {
     setEditing(row);
+    setMaterialSource(row.isManufacturedInternally ? 'internal' : 'external');
     setSelectedCategoryId(row.categoryId ?? null);
     setForm({
       code: row.code,
@@ -205,34 +285,148 @@ export const Materials: React.FC = () => {
       isManufacturedInternally: Boolean(row.isManufacturedInternally),
       isActive: row.isActive !== false,
     });
+    setGeneratedCode(row.code);
+    setCodeLoading(false);
+    setWeightPerPiece(
+      row.baseUnit === 'piece' && isWeightMaterialUnit(row.purchaseUnit || row.baseUnit)
+        ? weightPerPieceFromConversionRate(row.conversionRate)
+        : 0,
+    );
     setShowForm(true);
   };
 
+  const handleMaterialSourceChange = (source: MaterialSource) => {
+    setMaterialSource(source);
+    setForm((current) => ({
+      ...current,
+      isManufacturedInternally: source === 'internal',
+      type: source === 'internal' && current.type === 'raw_material'
+        ? 'semi_finished'
+        : current.type,
+      purchaseUnit: source === 'internal' ? '' : (current.purchaseUnit || current.baseUnit),
+      conversionRate: source === 'internal' ? 1 : current.conversionRate,
+      purchaseCost: source === 'internal' ? 0 : current.purchaseCost,
+      wastePercent: source === 'internal' ? 0 : current.wastePercent,
+    }));
+    if (source === 'internal') setWeightPerPiece(0);
+  };
+
+  const handleFormCategoryChange = async (categoryId: string | null) => {
+    setSelectedCategoryId(categoryId);
+    setForm((current) => ({ ...current, categoryId }));
+    if (editing || !categoryId) {
+      setGeneratedCode(editing?.code || '');
+      setCodeLoading(false);
+      return;
+    }
+
+    const requestId = categoryCodeRequestRef.current + 1;
+    categoryCodeRequestRef.current = requestId;
+    setGeneratedCode('');
+    setCodeLoading(true);
+    try {
+      const nextCode = await materialService.peekNextCode(categoryId);
+      if (categoryCodeRequestRef.current !== requestId) return;
+      setGeneratedCode(nextCode);
+      if (!nextCode) {
+        toast.error('الفئة المختارة لا تحتوي كوداً. أضف كود الفئة أولاً.');
+      }
+    } catch {
+      if (categoryCodeRequestRef.current === requestId) {
+        toast.error('تعذر تجهيز كود المادة. حاول مرة أخرى.');
+      }
+    } finally {
+      if (categoryCodeRequestRef.current === requestId) setCodeLoading(false);
+    }
+  };
+
+  const handlePurchaseUnitChange = (nextUnit: MaterialUnit) => {
+    const previousUnit = effectivePurchaseUnit;
+    if (form.baseUnit === 'piece' && isWeightMaterialUnit(previousUnit)) {
+      if (previousUnit === 'kg' && nextUnit === 'gram') {
+        setWeightPerPiece((current) => current * 1000);
+      } else if (previousUnit === 'gram' && nextUnit === 'kg') {
+        setWeightPerPiece((current) => current / 1000);
+      }
+    }
+    setForm((current) => ({ ...current, purchaseUnit: nextUnit }));
+  };
+
   const handleSave = async () => {
+    if (editing ? !materialUpdatePageEnabled : !materialCreatePageEnabled) {
+      toast.error('هذا المسار متوقف من إعدادات النظام.');
+      return;
+    }
     if (!canManage) return;
+    if (!materialSource) {
+      toast.error('حدد أولاً هل المادة شراء خارجي أم تُصنع داخلياً.');
+      return;
+    }
+    const normalizedName = form.name.trim();
+    if (!normalizedName) {
+      toast.error('اسم المادة مطلوب.');
+      return;
+    }
+    if (!editing && !selectedCategoryId) {
+      toast.error('اختر فئة المادة لتوليد الكود تلقائياً.');
+      return;
+    }
+    if (!editing && !generatedCode) {
+      toast.error('تعذر توليد الكود من الفئة المختارة.');
+      return;
+    }
+    const isInternallyManufactured = materialSource === 'internal';
+    if (!isInternallyManufactured && usesWeightPerPiece && weightPerPiece <= 0) {
+      toast.error(`وزن القطعة بالـ${MATERIAL_UNIT_LABELS[effectivePurchaseUnit as MaterialUnit]} يجب أن يكون أكبر من صفر.`);
+      return;
+    }
+    if (!isInternallyManufactured && !usesWeightPerPiece && Number(form.conversionRate) <= 0) {
+      toast.error('معامل التحويل يجب أن يكون أكبر من صفر.');
+      return;
+    }
+    if (!isInternallyManufactured && (Number(form.purchaseCost) < 0 || Number(form.wastePercent) < 0)) {
+      toast.error('التكلفة ونسبة الهالك لا يمكن أن تكونا أقل من صفر.');
+      return;
+    }
     setSaving(true);
-    setFeedback(null);
     try {
       const payload = {
         ...form,
         categoryId: selectedCategoryId,
-        code: form.code.trim(),
-        name: form.name.trim(),
-        purchaseUnit: form.purchaseUnit || form.baseUnit,
-        conversionRate: Number(form.conversionRate) || 1,
+        code: editing ? form.code.trim() : '',
+        name: normalizedName,
+        isManufacturedInternally: isInternallyManufactured,
+        purchaseUnit: isInternallyManufactured ? undefined : effectivePurchaseUnit,
+        conversionRate: isInternallyManufactured ? 1 : effectiveConversionRate,
+        purchaseCost: isInternallyManufactured ? 0 : Number(form.purchaseCost),
+        wastePercent: isInternallyManufactured ? 0 : Number(form.wastePercent),
       };
       if (editing?.id) {
-        await update.mutateAsync({ id: editing.id, data: payload });
+        await update.mutateAsync({
+          id: editing.id,
+          data: payload,
+          path: MATERIAL_UPDATE_PATHS.materialsPage,
+        });
       } else {
-        await create.mutateAsync(payload);
+        await create.mutateAsync({
+          data: payload,
+          path: MATERIAL_CREATE_PATHS.materialsPage,
+        });
       }
       setShowForm(false);
+      toast.success(editing ? 'تم تحديث المادة.' : 'تمت إضافة المادة.');
       await refetch();
     } catch (e) {
+      console.error('[materials] save failed', {
+        type: e instanceof Error ? e.name : 'unknown',
+        code: String((e as { code?: unknown })?.code || ''),
+      });
       if (isDuplicateEntityCodeError(e)) {
-        setFeedback('كود المادة مستخدم بالفعل — اختر كودًا آخر.');
+        toast.error('الكود مستخدم بالفعل. أعد اختيار الفئة لتحديث الكود المقترح.');
+      } else if (e instanceof Error && e.message === MATERIAL_CATEGORY_CODE_REQUIRED) {
+        toast.error('الفئة المختارة لا تحتوي كوداً صالحاً.');
       } else {
-        setFeedback(e instanceof Error ? e.message : 'تعذر الحفظ');
+        toast.error('تعذر حفظ المادة. راجع البيانات وحاول مرة أخرى.');
       }
     } finally {
       setSaving(false);
@@ -244,17 +438,17 @@ export const Materials: React.FC = () => {
     if (!window.confirm(`حذف المادة "${row.name}"؟`)) return;
     try {
       await remove.mutateAsync(row.id);
+      toast.success('تم حذف المادة.');
       await refetch();
     } catch {
-      setFeedback('تعذر الحذف');
+      toast.error('تعذر حذف المادة.');
     }
   };
 
   const handleMigrate = async () => {
-    if (!canManage) return;
+    if (!canManage || !manufacturingMigrationEnabled) return;
     if (!window.confirm('ترحيل المواد الخام وربط المنتجات إلى النظام الجديد؟')) return;
     setMigrating(true);
-    setFeedback(null);
     try {
       const result = await manufacturingMigrationService.migrateTenant();
       await fetchRoles();
@@ -266,12 +460,12 @@ export const Materials: React.FC = () => {
         result.permissionsPatched > 0
           ? ' تم تحديث صلاحيات الأدوار — أعد تحميل الصفحة إن لم تظهر القوائم الجديدة.'
           : '';
-      setFeedback(
+      toast.success(
         `تم الترحيل: ${result.materialsCreated} مادة جديدة، ${result.materialsSkipped} موجودة مسبقاً، ${result.bomsCreated} BOM، ${result.bomItemsCreated} سطر BOM، ${result.stockItemsUpdated} رصيد مخزون.${permNote}`,
       );
       await refetch();
     } catch (e) {
-      setFeedback(formatMigrationError(e));
+      toast.error(formatMigrationError(e));
     } finally {
       setMigrating(false);
     }
@@ -353,13 +547,21 @@ export const Materials: React.FC = () => {
     if (!canImportFromPage || !importResult) return;
     const validRows = importResult.rows.filter((r) => r.errors.length === 0);
     if (!validRows.length) return;
+    if (validRows.some((row) => row.action === 'create') && !materialImportCreateEnabled) {
+      toast.error('مسار إنشاء المواد بالاستيراد متوقف من إعدادات النظام.');
+      return;
+    }
+    if (validRows.some((row) => row.action === 'update') && !materialImportUpdateEnabled) {
+      toast.error('مسار تحديث المواد بالاستيراد متوقف من إعدادات النظام.');
+      return;
+    }
     setImportSaving(true);
-    setFeedback(null);
     let created = 0;
     let updated = 0;
     let failed = 0;
     try {
-      for (const row of validRows) {
+      const orderedRows = orderMaterialImportRowsForSave(validRows, rows);
+      for (const row of orderedRows) {
         try {
           if (row.action === 'update' && row.matchedId) {
             const existing = rows.find((m) => m.id === row.matchedId);
@@ -370,10 +572,14 @@ export const Materials: React.FC = () => {
             await update.mutateAsync({
               id: row.matchedId,
               data: toMaterialUpdateData(row, existing),
+              path: MATERIAL_UPDATE_PATHS.materialsImport,
             });
             updated += 1;
           } else {
-            await create.mutateAsync(toMaterialCreateData(row));
+            await create.mutateAsync({
+              data: toMaterialCreateData(row),
+              path: MATERIAL_CREATE_PATHS.materialsImport,
+            });
             created += 1;
           }
         } catch {
@@ -382,10 +588,12 @@ export const Materials: React.FC = () => {
       }
       setShowImportModal(false);
       setImportResult(null);
-      setFeedback(
+      toast.success(
         `تم الاستيراد: ${created} جديد، ${updated} تحديث${failed ? `، ${failed} فشل` : ''}.`,
       );
       await refetch();
+    } catch {
+      toast.error('تعذر ترتيب تحديثات الأكواد. راجع أخطاء الملف وأعد المحاولة.');
     } finally {
       setImportSaving(false);
     }
@@ -450,12 +658,9 @@ export const Materials: React.FC = () => {
         }}
       />
 
-      {feedback && (
-        <p className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm">{feedback}</p>
-      )}
-
       <div className="overflow-hidden rounded-xl border border-border bg-card">
         <SmartFilterBar
+      pageId="materials-list"
           searchPlaceholder="بحث بالاسم أو الكود أو الفئة"
           searchValue={search}
           onSearchChange={setSearch}
@@ -636,106 +841,319 @@ export const Materials: React.FC = () => {
         )}
       </div>
 
-      {showForm && canManage && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
-          <div className="max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-lg bg-card p-6 shadow-lg">
-            <h3 className="mb-4 text-lg font-semibold">{editing ? 'تعديل مادة' : 'مادة جديدة'}</h3>
-            <div className="space-y-3">
-              <input
-                className="w-full rounded border px-3 py-2 text-sm"
-                placeholder="الكود"
-                value={form.code}
-                onChange={(e) => setForm((f) => ({ ...f, code: e.target.value }))}
-              />
-              <input
-                className="w-full rounded border px-3 py-2 text-sm"
-                placeholder="الاسم"
-                value={form.name}
-                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-              />
+      <Dialog
+        open={showForm && canManage}
+        onOpenChange={(open) => {
+          if (!open && !saving) {
+            categoryCodeRequestRef.current += 1;
+            setShowForm(false);
+          }
+        }}
+      >
+        <DialogContent dir="rtl" className="max-w-2xl p-0">
+          <DialogHeader className="border-b px-5 py-4 text-right sm:text-right">
+            <DialogTitle>{editing ? 'تعديل مادة' : 'إضافة مادة تصنيعية'}</DialogTitle>
+            <DialogDescription>
+              {editing
+                ? 'حدد مصدر المادة ثم حدّث البيانات المطلوبة لهذا المصدر فقط.'
+                : 'ابدأ بتحديد هل المادة شراء خارجي أم تُصنع داخلياً، ثم أكمل الحقول المطلوبة فقط.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-5 px-5 pb-1">
+            <section className="space-y-3" aria-labelledby="material-source-heading">
               <div>
-                <p className="mb-1 text-xs font-medium text-muted-foreground">فئة المادة (اختياري)</p>
+                <h4 id="material-source-heading" className="text-sm font-semibold">
+                  مصدر المادة *
+                </h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  يحدد اختيارك الحقول المطلوبة وطريقة احتساب التكلفة.
+                </p>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <button
+                  type="button"
+                  aria-pressed={materialSource === 'external'}
+                  onClick={() => handleMaterialSourceChange('external')}
+                  className={`rounded-lg border p-4 text-right transition-colors ${
+                    materialSource === 'external'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">شراء خارجي</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    تُشترى من مورد، لذلك تحتاج وحدة شراء ومعامل تحويل وتكلفة.
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={materialSource === 'internal'}
+                  onClick={() => handleMaterialSourceChange('internal')}
+                  className={`rounded-lg border p-4 text-right transition-colors ${
+                    materialSource === 'internal'
+                      ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                      : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <span className="block text-sm font-semibold">تُصنع داخلياً</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    تكلفتها تأتي من قائمة المواد BOM، ولن نطلب بيانات شراء.
+                  </span>
+                </button>
+              </div>
+            </section>
+
+            {materialSource ? (
+              <>
+            <section className="space-y-3" aria-labelledby="material-identity-heading">
+              <h4 id="material-identity-heading" className="text-sm font-semibold">
+                تعريف المادة
+              </h4>
+              <div className="space-y-1.5">
+                <Label>فئة المادة {!editing && '*'}</Label>
                 <MaterialCategoryTreeSelect
                   value={selectedCategoryId}
-                  onChange={(id) => {
-                    setSelectedCategoryId(id);
-                    setForm((f) => ({ ...f, categoryId: id }));
-                  }}
+                  onChange={(id) => void handleFormCategoryChange(id)}
                 />
+                <p className="text-xs text-muted-foreground">
+                  تحدد الفئة بادئة الكود وتسلسله، مثل INJ-0001.
+                </p>
               </div>
-              <select
-                className="w-full rounded border px-3 py-2 text-sm"
-                value={form.type}
-                onChange={(e) => setForm((f) => ({ ...f, type: e.target.value as MaterialType }))}
-              >
-                {(Object.keys(MATERIAL_TYPE_LABELS) as MaterialType[]).map((t) => (
-                  <option key={t} value={t}>
-                    {MATERIAL_TYPE_LABELS[t]}
-                  </option>
-                ))}
-              </select>
-              <select
-                className="w-full rounded border px-3 py-2 text-sm"
-                value={form.baseUnit}
-                onChange={(e) => setForm((f) => ({ ...f, baseUnit: e.target.value as MaterialUnit }))}
-              >
-                {(Object.keys(MATERIAL_UNIT_LABELS) as MaterialUnit[]).map((u) => (
-                  <option key={u} value={u}>
-                    {MATERIAL_UNIT_LABELS[u]}
-                  </option>
-                ))}
-              </select>
-              <div className="grid grid-cols-2 gap-2">
-                <input
-                  type="number"
-                  className="rounded border px-2 py-1 text-sm"
-                  placeholder="تكلفة الشراء"
-                  value={form.purchaseCost || ''}
-                  onChange={(e) => setForm((f) => ({ ...f, purchaseCost: Number(e.target.value) }))}
-                />
-                <input
-                  type="number"
-                  className="rounded border px-2 py-1 text-sm"
-                  placeholder="معامل التحويل"
-                  value={form.conversionRate || ''}
-                  onChange={(e) => setForm((f) => ({ ...f, conversionRate: Number(e.target.value) }))}
-                />
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-code">
+                    {editing ? 'كود المادة *' : 'كود المادة (تلقائي)'}
+                  </Label>
+                  <Input
+                    id="material-code"
+                    dir="ltr"
+                    value={editing ? form.code : generatedCode}
+                    readOnly={!editing}
+                    disabled={codeLoading}
+                    placeholder={codeLoading ? '...' : '—'}
+                    onChange={(e) => setForm((current) => ({ ...current, code: e.target.value }))}
+                    className={!editing ? 'font-mono bg-muted/60' : 'font-mono'}
+                  />
+                  {!editing && (
+                    <p className="text-xs text-muted-foreground">
+                      الكود الظاهر معاينة؛ يتم حجز الرقم النهائي بأمان عند الحفظ.
+                    </p>
+                  )}
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-name">اسم المادة *</Label>
+                  <Input
+                    id="material-name"
+                    autoFocus
+                    placeholder="مثال: فلانوس نيلون V7 سم حقن"
+                    value={form.name}
+                    onChange={(e) => setForm((current) => ({ ...current, name: e.target.value }))}
+                  />
+                </div>
               </div>
-              <input
-                type="number"
-                className="w-full rounded border px-3 py-2 text-sm"
-                placeholder="نسبة الهالك %"
-                value={form.wastePercent || ''}
-                onChange={(e) => setForm((f) => ({ ...f, wastePercent: Number(e.target.value) }))}
-              />
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={form.isManufacturedInternally}
-                  onChange={(e) => setForm((f) => ({ ...f, isManufacturedInternally: e.target.checked }))}
-                />
-                يُصنع داخلياً (يدعم BOM فرعي)
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
+            </section>
+
+            <section className="space-y-3 border-t pt-4" aria-labelledby="material-units-heading">
+              <h4 id="material-units-heading" className="text-sm font-semibold">
+                التصنيف والوحدات
+              </h4>
+              <div className={`grid gap-3 ${materialSource === 'external' ? 'sm:grid-cols-3' : 'sm:grid-cols-2'}`}>
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-type">نوع المادة *</Label>
+                  <select
+                    id="material-type"
+                    className="h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm"
+                    value={form.type}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        type: e.target.value as MaterialType,
+                      }))
+                    }
+                  >
+                    {(Object.keys(MATERIAL_TYPE_LABELS) as MaterialType[]).map((type) => (
+                      <option key={type} value={type}>
+                        {MATERIAL_TYPE_LABELS[type]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-base-unit">الوحدة الأساسية *</Label>
+                  <select
+                    id="material-base-unit"
+                    className="h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm"
+                    value={form.baseUnit}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        baseUnit: e.target.value as MaterialUnit,
+                      }))
+                    }
+                  >
+                    {(Object.keys(MATERIAL_UNIT_LABELS) as MaterialUnit[]).map((unit) => (
+                      <option key={unit} value={unit}>
+                        {MATERIAL_UNIT_LABELS[unit]}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                {materialSource === 'external' && (
+                  <div className="space-y-1.5">
+                    <Label htmlFor="material-purchase-unit">وحدة الشراء</Label>
+                    <select
+                      id="material-purchase-unit"
+                      className="h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm"
+                      value={form.purchaseUnit || form.baseUnit}
+                      onChange={(e) => handlePurchaseUnitChange(e.target.value as MaterialUnit)}
+                    >
+                      {(Object.keys(MATERIAL_UNIT_LABELS) as MaterialUnit[]).map((unit) => (
+                        <option key={unit} value={unit}>
+                          {MATERIAL_UNIT_LABELS[unit]}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+              {materialSource === 'internal' && (
+                <p className="rounded-md bg-muted/60 px-3 py-2 text-xs text-muted-foreground">
+                  بعد الحفظ، افتح «قائمة المواد (BOM)» لتعريف الخامات والكميات اللازمة لإنتاج وحدة واحدة.
+                </p>
+              )}
+            </section>
+
+            {materialSource === 'external' && (
+            <section className="space-y-3 border-t pt-4" aria-labelledby="material-cost-heading">
+              <h4 id="material-cost-heading" className="text-sm font-semibold">
+                الشراء والتكلفة
+              </h4>
+              <div className="grid gap-3 sm:grid-cols-3">
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-purchase-cost">تكلفة وحدة الشراء</Label>
+                  <Input
+                    id="material-purchase-cost"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0.00"
+                    value={form.purchaseCost}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        purchaseCost: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-conversion-rate">
+                    {usesWeightPerPiece
+                      ? `وزن القطعة (${MATERIAL_UNIT_LABELS[effectivePurchaseUnit as MaterialUnit]}) *`
+                      : 'معامل التحويل *'}
+                  </Label>
+                  <Input
+                    id="material-conversion-rate"
+                    type="number"
+                    inputMode="decimal"
+                    min="0.0001"
+                    step="any"
+                    showZero
+                    value={usesWeightPerPiece ? weightPerPiece : form.conversionRate}
+                    onChange={(e) => {
+                      const value = Number(e.target.value);
+                      if (usesWeightPerPiece) {
+                        setWeightPerPiece(value);
+                      } else {
+                        setForm((current) => ({ ...current, conversionRate: value }));
+                      }
+                    }}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    {usesWeightPerPiece
+                      ? `أدخل وزن القطعة مباشرة، مثال: 0.170 ${MATERIAL_UNIT_LABELS[effectivePurchaseUnit as MaterialUnit]}.`
+                      : 'عدد الوحدات الأساسية داخل وحدة الشراء.'}
+                  </p>
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="material-waste-percent">نسبة الهالك %</Label>
+                  <Input
+                    id="material-waste-percent"
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="0.01"
+                    placeholder="0"
+                    value={form.wastePercent}
+                    onChange={(e) =>
+                      setForm((current) => ({
+                        ...current,
+                        wastePercent: Number(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+              </div>
+              {usesWeightPerPiece && weightPerPiece > 0 && Number(form.purchaseCost) >= 0 && (
+                <p className="rounded-md bg-muted/60 px-3 py-2 text-sm">
+                  تكلفة القطعة التقديرية:{' '}
+                  <strong className="tabular-nums">{arNum(estimatedBaseUnitCost)}</strong>
+                </p>
+              )}
+            </section>
+            )}
+
+            <div className="border-t pt-4">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="material-active"
                   checked={form.isActive}
-                  onChange={(e) => setForm((f) => ({ ...f, isActive: e.target.checked }))}
+                  onCheckedChange={(checked) =>
+                    setForm((current) => ({ ...current, isActive: checked === true }))
+                  }
                 />
-                المادة نشطة
-              </label>
+                <div className="space-y-1">
+                  <Label htmlFor="material-active">المادة نشطة</Label>
+                  <p className="text-xs text-muted-foreground">المواد الموقوفة لا تظهر في الاختيارات التشغيلية.</p>
+                </div>
+              </div>
             </div>
-            <div className="mt-4 flex gap-2">
-              <Button type="button" disabled={saving} onClick={() => void handleSave()}>
-                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'حفظ'}
-              </Button>
-              <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>
-                إلغاء
-              </Button>
-            </div>
+              </>
+            ) : (
+              <div className="rounded-lg border border-dashed bg-muted/30 px-4 py-6 text-center text-sm text-muted-foreground">
+                اختر مصدر المادة أولاً لإظهار الحقول المناسبة فقط.
+              </div>
+            )}
           </div>
-        </div>
-      )}
+
+          <DialogFooter className="gap-2 border-t px-5 py-4 sm:space-x-0">
+            <Button
+              type="button"
+              disabled={saving || codeLoading || !materialSource}
+              onClick={() => void handleSave()}
+            >
+              {saving ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  جاري الحفظ...
+                </>
+              ) : (
+                'حفظ المادة'
+              )}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={saving}
+              onClick={() => setShowForm(false)}
+            >
+              إلغاء
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {showImportModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">

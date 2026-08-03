@@ -8,10 +8,13 @@ import type { Warehouse } from '../types';
 /**
  * Operational "مخزن المستلزمات" — prefers decomposed, falls back to raw.
  * When both routing slots are set and distinct, the operator can switch between them.
+ * User `inventoryWarehouseId` overrides to a single locked warehouse.
  */
 export function useRawMaterialWarehouse() {
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const inventoryWarehouseId = useAppStore((s) => s.userProfile?.inventoryWarehouseId);
   const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
+  const boundWarehouseId = String(inventoryWarehouseId || '').trim();
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [loadingWarehouse, setLoadingWarehouse] = useState(true);
@@ -37,12 +40,16 @@ export function useRawMaterialWarehouse() {
     return [...new Set(ids)];
   }, [routing.decomposedWarehouseId, routing.rawMaterialWarehouseId]);
 
-  const defaultWarehouseId = useMemo(
-    () => resolveSuppliesWarehouseId(routing, warehouses),
-    [routing, warehouses],
-  );
+  const defaultWarehouseId = useMemo(() => {
+    if (boundWarehouseId) return boundWarehouseId;
+    return resolveSuppliesWarehouseId(routing, warehouses);
+  }, [boundWarehouseId, routing, warehouses]);
 
   const allowedWarehouses = useMemo(() => {
+    if (boundWarehouseId) {
+      const wh = warehouses.find((w) => w.id === boundWarehouseId);
+      return wh ? [wh] : [];
+    }
     if (configuredIds.length === 0) {
       return defaultWarehouseId
         ? warehouses.filter((w) => w.id === defaultWarehouseId)
@@ -50,15 +57,15 @@ export function useRawMaterialWarehouse() {
     }
     const byId = new Map(warehouses.map((w) => [w.id || '', w]));
     return configuredIds.map((id) => byId.get(id)).filter((w): w is Warehouse => Boolean(w?.id));
-  }, [configuredIds, warehouses, defaultWarehouseId]);
+  }, [boundWarehouseId, configuredIds, warehouses, defaultWarehouseId]);
 
-  const canSwitchWarehouse = allowedWarehouses.length > 1;
+  const canSwitchWarehouse = !boundWarehouseId && allowedWarehouses.length > 1;
 
   useEffect(() => {
     if (!defaultWarehouseId && !selectedWarehouseId) return;
     const allowed = new Set(allowedWarehouses.map((w) => w.id || ''));
     if (selectedWarehouseId && allowed.has(selectedWarehouseId)) return;
-    if (defaultWarehouseId) {
+    if (defaultWarehouseId && (allowed.size === 0 || allowed.has(defaultWarehouseId))) {
       setSelectedWarehouseId(defaultWarehouseId);
       return;
     }
@@ -77,10 +84,11 @@ export function useRawMaterialWarehouse() {
     (nextId: string) => {
       const trimmed = String(nextId || '').trim();
       if (!trimmed) return;
+      if (boundWarehouseId) return;
       if (configuredIds.length > 0 && !configuredIds.includes(trimmed)) return;
       setSelectedWarehouseId(trimmed);
     },
-    [configuredIds],
+    [boundWarehouseId, configuredIds],
   );
 
   return {

@@ -30,9 +30,9 @@ export interface WorkOrderRowView {
 interface WorkOrderRowProps {
   row: WorkOrderRowView;
   onRowClick: (order: WorkOrder) => void;
-  onStatusChange: (id: string, status: WorkOrderStatus) => void;
-  onEdit: (order: WorkOrder) => void;
-  onCloseOrder: (order: WorkOrder) => void;
+  onStatusChange?: (id: string, status: WorkOrderStatus) => void;
+  onEdit?: (order: WorkOrder) => void;
+  onCloseOrder?: (order: WorkOrder) => void;
   onDelete?: (order: WorkOrder) => void;
   onReopenCompleted?: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;
@@ -68,11 +68,13 @@ function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onClos
           } as RowActionMenuEntry,
         ]
       : []),
-    {
-      label: 'تعديل',
-      icon: <Edit2 size={14} />,
-      onClick: () => onEdit(order),
-    },
+    ...(onEdit
+      ? [{
+          label: 'تعديل',
+          icon: <Edit2 size={14} />,
+          onClick: () => onEdit(order),
+        } as RowActionMenuEntry]
+      : []),
     ...(row.storedStatus === 'completed' && onReopenCompleted
       ? [
           {
@@ -93,18 +95,20 @@ function WorkOrderRowComponent({ row, onRowClick, onStatusChange, onEdit, onClos
           } as RowActionMenuEntry,
         ]
       : []),
-    {
-      label: 'إغلاق الأمر',
-      icon: <X size={14} />,
-      onClick: () => {
-        if (canClose && order.id) {
-          onCloseOrder(order);
-        } else if (order.status === 'pending' && order.id) {
-          onStatusChange(order.id, 'cancelled');
-        }
-      },
-      variant: 'danger',
-    },
+    ...(onCloseOrder || onStatusChange
+      ? [{
+          label: 'إغلاق الأمر',
+          icon: <X size={14} />,
+          onClick: () => {
+            if (canClose && order.id && onCloseOrder) {
+              onCloseOrder(order);
+            } else if (order.status === 'pending' && order.id && onStatusChange) {
+              onStatusChange(order.id, 'cancelled');
+            }
+          },
+          variant: 'danger',
+        } as RowActionMenuEntry]
+      : []),
   ];
 
   return (

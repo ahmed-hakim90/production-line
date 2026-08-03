@@ -813,7 +813,15 @@ export const EmployeeSelfService: React.FC = () => {
                         <td className="p-3 font-mono text-xs" dir="ltr">{loan.month || loan.startMonth}</td>
                         <td className="p-3">
                           <Badge variant={loan.status === 'active' ? 'success' : loan.status === 'pending' ? 'warning' : 'neutral'}>
-                            {loan.status === 'active' ? 'نشط' : loan.status === 'pending' ? 'قيد المراجعة' : 'مغلقة'}
+                            {loan.status === 'active'
+                              ? 'نشط'
+                              : loan.status === 'pending'
+                                ? 'قيد المراجعة'
+                                : loan.status === 'rejected'
+                                  ? 'مرفوض'
+                                  : loan.status === 'cancelled'
+                                    ? 'ملغي'
+                                    : 'مغلقة'}
                           </Badge>
                         </td>
                         <td className="p-3">

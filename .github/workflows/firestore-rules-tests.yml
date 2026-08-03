@@ -1,9 +1,9 @@
+# PR/push coverage moved to ci.yml (test:rules step).
+# Keep this workflow for manual emulator-only runs to avoid duplicate CI jobs.
 name: Firestore Rules Tests
 
 on:
-  pull_request:
-  push:
-    branches: [main]
+  workflow_dispatch:
 
 jobs:
   rules-tests:

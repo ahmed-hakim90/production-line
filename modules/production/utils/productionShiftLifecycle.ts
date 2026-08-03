@@ -7,7 +7,6 @@ import type {
 } from '@/types';
 import { resolveLineWorkerLaborRole } from './lineWorkerLaborRoles';
 import {
-  buildTeamPlanWorkerOutputs,
   computeAchievementPercent,
 } from '../selectors/workerTargetSelector';
 import { summarizeWorkerPresenceDays } from './workerPresence';
@@ -138,37 +137,21 @@ export function buildShiftClosePayload(
     : 0;
   const workers = shift.shiftWorkers || [];
   const quantityProduced = Number(input.quantityProduced || 0);
-  const planDailyTarget = Math.max(0, Number(input.planDailyTarget || 0));
-  const workerTargetSource = input.workerTargetSource
-    || (input.assemblyModeSnapshot === 'team' && planDailyTarget > 0 ? 'plan_daily' : 'line_product');
+  const workerTargetSource = input.workerTargetSource || 'line_product';
   const sourceRows = input.workerOutputs || [];
+  // Team/plan products do not collect per-worker shares in the report UI.
   const appliedWorkerOutputs = !input.workerTargetsApplied
     ? []
-    : workerTargetSource === 'plan_daily' && planDailyTarget > 0
-      ? buildTeamPlanWorkerOutputs({
-        quantityProduced,
-        planDailyTarget,
-        workers: sourceRows.map((row) => ({
-          workerId: row.workerId,
-          workerName: row.workerName,
-          isPresent: row.isPresent,
-          productId: row.productId,
-          productName: row.productName,
-          lineId: row.lineId,
-          lineName: row.lineName,
-          notes: row.notes,
-        })),
-      })
-      : sourceRows.map((row) => {
-        const isPresent = row.isPresent ?? true;
-        const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
-        return {
-          ...row,
-          isPresent,
-          outputQty,
-          achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
-        };
-      });
+    : sourceRows.map((row) => {
+      const isPresent = row.isPresent ?? true;
+      const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
+      return {
+        ...row,
+        isPresent,
+        outputQty,
+        achievementPercent: computeAchievementPercent(outputQty, row.dailyTargetQty),
+      };
+    });
 
   const basePayload: Partial<ProductionReport> = {
     lifecycleStatus: 'closed',
@@ -177,11 +160,21 @@ export function buildShiftClosePayload(
     quantityProduced,
     workHours: Number(input.workHours || 0) > 0 ? Number(input.workHours) : derivedHours,
     notes: String(input.notes || '').trim(),
+    ...(input.assemblyModeSnapshot ? { assemblyModeSnapshot: input.assemblyModeSnapshot } : {}),
     ...countPresentShiftWorkers(workers),
   };
 
   if (!input.workerTargetsApplied || appliedWorkerOutputs.length === 0) {
-    return basePayload;
+    const shouldStampEmptyWorkerTargets = input.assemblyModeSnapshot != null
+      || input.workerTargetSource != null
+      || input.workerTargetsApplied === false;
+    if (!shouldStampEmptyWorkerTargets) return basePayload;
+    return {
+      ...basePayload,
+      workerTargetsApplied: false,
+      workerTargetSource: input.workerTargetSource || 'none',
+      workerOutputs: [],
+    };
   }
 
   const workerOutputPresence = summarizeWorkerPresenceDays(appliedWorkerOutputs.map((row) => ({
@@ -192,7 +185,6 @@ export function buildShiftClosePayload(
 
   return {
     ...basePayload,
-    assemblyModeSnapshot: input.assemblyModeSnapshot,
     workerTargetsApplied: true,
     workerTargetSource,
     workerOutputs: appliedWorkerOutputs,

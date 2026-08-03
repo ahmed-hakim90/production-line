@@ -7,8 +7,14 @@ export {
 
 export {
   createDepartment,
+  updateDepartment,
   createJobPosition,
+  updateJobPosition,
   createShift,
+  updateShift,
+  savePenaltyRule,
+  saveLateRule,
+  saveAllowanceType,
   deleteOrganizationEntity,
 } from './manageOrganization';
 

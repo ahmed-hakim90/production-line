@@ -190,6 +190,7 @@ export const loanService = {
     id: string,
     approvalChain: ApprovalChainItem[],
     finalStatus: ApprovalStatus,
+    terminalStatus?: 'rejected' | 'cancelled',
   ): Promise<void> {
     if (!isConfigured) return;
     const updates: Record<string, any> = { approvalChain, finalStatus };
@@ -197,7 +198,7 @@ export const loanService = {
     if (finalStatus === 'approved') {
       updates.status = 'active';
     } else if (finalStatus === 'rejected') {
-      updates.status = 'pending';
+      updates.status = terminalStatus || 'rejected';
     }
 
     await updateDoc(doc(db, HR_COLLECTIONS.EMPLOYEE_LOANS, id), updates);

@@ -4,13 +4,15 @@ import { runUseCase, type UseCaseResult } from '@/shared/usecases';
 import { transferApprovalService } from '../services/transferApprovalService';
 
 type CreateTransferRequestArgs = Parameters<typeof transferApprovalService.createRequest>[0];
+type CreateTransferRequestContext = Parameters<typeof transferApprovalService.createRequest>[1];
 
 export async function createTransferRequest(
   input: CreateTransferRequestArgs,
+  context: CreateTransferRequestContext,
 ): Promise<UseCaseResult<{ requestId: string }>> {
   return runUseCase(async () => {
     const tenantId = requireTenantIdOrThrow();
-    const requestId = await transferApprovalService.createRequest(input);
+    const requestId = await transferApprovalService.createRequest(input, context);
     if (!requestId) throw new Error('تعذر إنشاء طلب التحويل');
 
     eventBus.emit(SystemEvents.TRANSFER_REQUESTED, {

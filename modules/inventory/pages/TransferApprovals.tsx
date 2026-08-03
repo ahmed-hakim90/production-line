@@ -30,6 +30,11 @@ import {
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_TRANSFER_DECISION_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 
 const PAGE_SIZE = 20;
 const TRANSFER_APPROVALS_CACHE_KEY = 'inventory:transfer-approvals';
@@ -68,6 +73,7 @@ export const TransferApprovals: React.FC = () => {
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
   const rawProducts = useAppStore((s) => s._rawProducts);
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const finishedReceiveWarehouseId = useAppStore(
     (s) => s.systemSettings.planSettings?.finishedReceiveWarehouseId || '',
   );
@@ -128,7 +134,18 @@ export const TransferApprovals: React.FC = () => {
     );
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
-  const canApprove = can(transferApprovalPermission as any);
+  const approvePathEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.transferApprove,
+    INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage,
+  );
+  const rejectPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.transferReject,
+    INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage,
+  );
+  const canApprovePermission = can(transferApprovalPermission as any);
+  const canApprove = canApprovePermission && (approvePathEnabled || rejectPathEnabled);
   const canApproveNegativeFinishedTransfer = can('inventory.finishedStock.allowNegativeApprove');
   const normalizeActor = (value?: string) => String(value || '').trim().toLowerCase();
 
@@ -219,6 +236,13 @@ export const TransferApprovals: React.FC = () => {
     const resolved = Number(line.unitsPerCarton || unitsPerCartonByProductId.get(line.itemId) || 0);
     return { ...line, unitsPerCarton: resolved };
   };
+  const formatTransferLinesSummary = (lines: InventoryTransferRequest['lines']): string => {
+    const summary = lines.slice(0, 2).map((line) => {
+      const display = getTransferDisplay(withResolvedUnitsPerCarton(line), transferDisplayUnit);
+      return `${line.itemName} (${display.quantity} ${display.unitLabel})`;
+    }).join('، ');
+    return lines.length > 2 ? `${summary} ...` : summary;
+  };
 
   const matchesTypeTab = (row: InventoryTransferRequest) => {
     const t = row.requestType || 'manual_transfer';
@@ -289,7 +313,7 @@ export const TransferApprovals: React.FC = () => {
   };
 
   const handleApprove = async (requestId?: string) => {
-    if (!requestId || !canApprove) return;
+    if (!requestId || !canApprovePermission || !approvePathEnabled) return;
     const request = requests.find((row) => row.id === requestId);
     if (isSelfProductionEntryRequest(request)) {
       toast.warning('لا يمكن لمنشئ التقرير اعتماد إدخال الإنتاج الخاص به. يجب اعتمادها من مستخدم آخر مخوّل.');
@@ -302,7 +326,7 @@ export const TransferApprovals: React.FC = () => {
         approvedBy: userDisplayName || userEmail || 'Current User',
         allowNegativeFromSource: allowNegativeFromSourceFor(request),
         approverUserId: uid || undefined,
-      }));
+      }, { path: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage }));
       await loadData({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'تعذر اعتماد التحويلة.');
@@ -312,7 +336,7 @@ export const TransferApprovals: React.FC = () => {
   };
 
   const handleReject = async (requestId?: string) => {
-    if (!requestId || !canApprove) return;
+    if (!requestId || !canApprovePermission || !rejectPathEnabled) return;
     const reason = window.prompt('سبب الرفض (اختياري):', '');
     if (reason === null) return;
     setProcessingId(requestId);
@@ -322,7 +346,7 @@ export const TransferApprovals: React.FC = () => {
         rejectedBy: userDisplayName || userEmail || 'Current User',
         reason: reason || '',
         rejectedByUserId: uid || undefined,
-      }));
+      }, { path: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage }));
       await loadData({ silent: true });
     } catch (error: any) {
       toast.error(error?.message || 'تعذر رفض التحويلة.');
@@ -380,7 +404,7 @@ export const TransferApprovals: React.FC = () => {
   };
 
   const handleApproveAll = async () => {
-    if (!canApprove || bulkApproving || loading) return;
+    if (!canApprovePermission || !approvePathEnabled || bulkApproving || loading) return;
     const targets = bulkApproveEligible;
     if (!targets.length) {
       toast.info('لا توجد طلبات معلقة يمكن اعتمادها دفعة واحدة.');
@@ -409,7 +433,7 @@ export const TransferApprovals: React.FC = () => {
             approvedBy: actor,
             allowNegativeFromSource: allowNegativeFromSourceFor(req),
             approverUserId: uid || undefined,
-          }));
+          }, { path: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage }));
           ok += 1;
         } catch (e: any) {
           errors.push(`${req.referenceNo || id}: ${e?.message || 'خطأ'}`);
@@ -441,6 +465,7 @@ export const TransferApprovals: React.FC = () => {
       </div>
 
       <SmartFilterBar
+      pageId="transfer-approvals"
         quickFilters={[
           {
             key: 'status',
@@ -470,7 +495,7 @@ export const TransferApprovals: React.FC = () => {
               <input type="checkbox" checked={slaOnly} onChange={(e) => setSlaOnly(e.target.checked)} />
               تجاوز SLA ({transferSlaDays}+ يوم)
             </label>
-            {canApprove && bulkApproveEligible.length > 0 && (
+            {canApprovePermission && approvePathEnabled && bulkApproveEligible.length > 0 && (
               <ToneActionButton
                 action="approve"
                 icon="done_all"
@@ -574,8 +599,14 @@ export const TransferApprovals: React.FC = () => {
                     <div className="text-xs text-[var(--color-text-muted)] space-y-1">
                       <p><span className="font-bold">من:</span> {fromName}</p>
                       <p><span className="font-bold">إلى:</span> {toName}</p>
+                      {row.lines.length === 1 ? (
+                        <p className="text-sm font-semibold text-[var(--color-text)]">
+                          {formatTransferLinesSummary(row.lines)}
+                        </p>
+                      ) : (
+                        <p><span className="font-bold">الأصناف:</span> {row.lines.length}</p>
+                      )}
                       <p><span className="font-bold">المنشئ:</span> {row.createdBy}</p>
-                      <p><span className="font-bold">الأصناف:</span> {row.lines.length}</p>
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       <TableIconAction
@@ -658,13 +689,11 @@ export const TransferApprovals: React.FC = () => {
                       <td className="px-4 py-3 text-sm">{toName}</td>
                       <td className="px-4 py-3 text-sm">
                         <div className="space-y-1">
-                          <p className="font-bold">{row.lines.length} صنف</p>
-                          <p className="text-xs text-slate-500">
-                            {row.lines.slice(0, 2).map((line) => {
-                              const display = getTransferDisplay(withResolvedUnitsPerCarton(line), transferDisplayUnit);
-                              return `${line.itemName} (${display.quantity} ${display.unitLabel})`;
-                            }).join('، ')}
-                            {row.lines.length > 2 ? ' ...' : ''}
+                          {row.lines.length > 1 && (
+                            <p className="font-bold">{row.lines.length} صنف</p>
+                          )}
+                          <p className={row.lines.length === 1 ? 'font-semibold text-[var(--color-text)]' : 'text-xs text-slate-500'}>
+                            {formatTransferLinesSummary(row.lines)}
                           </p>
                         </div>
                       </td>

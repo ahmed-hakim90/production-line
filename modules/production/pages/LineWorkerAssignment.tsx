@@ -29,6 +29,12 @@ import {
 } from '@/components/ui/select';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 import {
+  DAILY_WORKER_ASSIGNMENT_PATHS,
+  PERMANENT_WORKER_ASSIGNMENT_PATHS,
+  WORKER_ASSIGNMENT_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
+import {
   fetchCachedPageData,
   invalidatePageDataCache,
   peekPageDataCache,
@@ -99,6 +105,17 @@ export const LineWorkerAssignment: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const storeCurrentEmployee = useAppStore((s) => s.currentEmployee);
   const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const permanentAssignmentPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+    PERMANENT_WORKER_ASSIGNMENT_PATHS.lineWorkersPage,
+  );
+  const dailyAssignmentPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORKER_ASSIGNMENT_OPERATION_KEYS.daily,
+    DAILY_WORKER_ASSIGNMENT_PATHS.lineWorkersPage,
+  );
 
   const [selectedDate, setSelectedDate] = useState(getTodayDateString());
   const [selectedLineId, setSelectedLineId] = useState('');
@@ -313,16 +330,31 @@ export const LineWorkerAssignment: React.FC = () => {
   const getLineName = (id: string) => _rawLines.find((l) => l.id === id)?.name ?? id;
 
   const handleLaborRoleChange = async (assignment: DisplayLineWorkerAssignment, laborRole: LineWorkerLaborRole) => {
+    if (
+      (assignment.permanentAssignmentId && !permanentAssignmentPathEnabled)
+      || (assignment.id && !dailyAssignmentPathEnabled)
+    ) {
+      showFeedback('error', 'أحد مسارات تعيين العامل المطلوبة متوقف من إعدادات النظام');
+      return;
+    }
     const actionId = assignment.id || assignment.permanentAssignmentId;
     if (!actionId) return;
 
     setUpdatingLaborRoleId(actionId);
     try {
       if (assignment.permanentAssignmentId) {
-        await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, { laborRole });
+        await productionLineWorkerAssignmentService.update(
+          assignment.permanentAssignmentId,
+          { laborRole },
+          { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.lineWorkersPage },
+        );
       }
       if (assignment.id) {
-        await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
+        await lineAssignmentService.updateLaborRole(
+          assignment.id,
+          laborRole,
+          { path: DAILY_WORKER_ASSIGNMENT_PATHS.lineWorkersPage },
+        );
       }
       await reloadAssignments();
       showFeedback('success', 'تم تحديث نوع العامل');
@@ -370,7 +402,10 @@ export const LineWorkerAssignment: React.FC = () => {
       .map((row) => row.id)
       .filter((id): id is string => Boolean(id));
 
-    await Promise.all(idsToDelete.map((id) => lineAssignmentService.delete(id)));
+    await Promise.all(idsToDelete.map((id) => lineAssignmentService.delete(
+      id,
+      { path: DAILY_WORKER_ASSIGNMENT_PATHS.lineWorkersPage },
+    )));
   };
 
   const renderLaborRoleSelect = (
@@ -398,6 +433,10 @@ export const LineWorkerAssignment: React.FC = () => {
   );
 
   const handlePermanentAdd = useCallback(async (selectedEmployee?: typeof _rawEmployees[number]) => {
+    if (!permanentAssignmentPathEnabled) {
+      showFeedback('error', 'مسار الربط الدائم متوقف من إعدادات النظام');
+      return;
+    }
     if (!selectedLineId) {
       showFeedback('warning', 'اختر خط الإنتاج أولاً');
       return;
@@ -454,7 +493,7 @@ export const LineWorkerAssignment: React.FC = () => {
         startDate: linkStartDate,
         laborRole: resolveLineWorkerLaborRole(undefined),
         isActive: true,
-      });
+      }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.lineWorkersPage });
 
       const worker = await productionWorkerService.getById(workerId);
       if (worker) {
@@ -483,9 +522,14 @@ export const LineWorkerAssignment: React.FC = () => {
     _rawEmployees,
     getLineName,
     loadAssignments,
+    permanentAssignmentPathEnabled,
   ]);
 
   const handleEndPermanentAssignment = async (assignment: DisplayLineWorkerAssignment) => {
+    if (!permanentAssignmentPathEnabled || !dailyAssignmentPathEnabled) {
+      showFeedback('error', 'أحد مسارات تعيين العامل المطلوبة متوقف من إعدادات النظام');
+      return;
+    }
     if (!assignment.permanentAssignmentId) {
       showFeedback('warning', 'هذا سجل يومي قديم فقط. لا يوجد ربط دائم لإلغائه من هنا.');
       return;
@@ -502,7 +546,7 @@ export const LineWorkerAssignment: React.FC = () => {
       await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, {
         isActive: false,
         endDate: getPreviousDateString(cancellationDate),
-      });
+      }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.lineWorkersPage });
       await deleteCancellationDateDailyRows([assignment]);
       await syncWorkerLineSnapshot(assignment.permanentWorkerId);
       await reloadAssignments();
@@ -527,6 +571,10 @@ export const LineWorkerAssignment: React.FC = () => {
   }, [allDayAssignments, selectedLineId, visibleLineIds]);
 
   const handleClearPermanentAssignments = async () => {
+    if (!permanentAssignmentPathEnabled || !dailyAssignmentPathEnabled) {
+      showFeedback('error', 'أحد مسارات تعيين العامل المطلوبة متوقف من إعدادات النظام');
+      return;
+    }
     if (cancellablePermanentAssignments.length === 0) {
       showFeedback('warning', selectedLineId ? 'لا يوجد عمال مربوطون دائماً على هذا الخط' : 'لا يوجد عمال مربوطون دائماً على الخطوط المعروضة');
       return;
@@ -547,7 +595,7 @@ export const LineWorkerAssignment: React.FC = () => {
           productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId!, {
             isActive: false,
             endDate,
-          })
+          }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.lineWorkersPage })
         )),
       );
       await deleteCancellationDateDailyRows(cancellablePermanentAssignments);

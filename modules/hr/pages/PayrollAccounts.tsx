@@ -154,6 +154,7 @@ export const PayrollAccounts: React.FC = () => {
       {error && <div className="card p-3 text-sm font-bold text-rose-600">{error}</div>}
 
       <SmartFilterBar
+      pageId="hr-payroll-accounts"
         advancedFilters={[
           {
             key: 'month',

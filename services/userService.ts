@@ -87,6 +87,20 @@ export const userService = {
     }
   },
 
+  /** Bind user to one inventory warehouse (empty clears the binding). */
+  async updateInventoryWarehouseId(uid: string, warehouseId: string | null): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      const trimmed = String(warehouseId || '').trim();
+      await updateDoc(doc(db, COLLECTION, uid), {
+        inventoryWarehouseId: trimmed ? trimmed : deleteField(),
+      });
+    } catch (error) {
+      console.error('userService.updateInventoryWarehouseId error:', error);
+      throw error;
+    }
+  },
+
   /** Update any user fields */
   async update(uid: string, data: Partial<Omit<FirestoreUser, 'id'>>): Promise<void> {
     if (!isConfigured) return;

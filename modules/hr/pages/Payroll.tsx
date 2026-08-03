@@ -812,6 +812,7 @@ export const Payroll: React.FC = () => {
       {/* Filters */}
       {records.length > 0 && (
         <SmartFilterBar
+      pageId="hr-payroll"
           searchPlaceholder="بحث باسم الموظف..."
           searchValue={searchQuery}
           onSearchChange={(value) => { setSearchQuery(value); setVisibleCount(ROWS_PER_PAGE); }}

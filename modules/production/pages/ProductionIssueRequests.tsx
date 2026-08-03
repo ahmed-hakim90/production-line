@@ -43,6 +43,11 @@ import {
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import {
+  PRODUCTION_PLAN_CREATE_PATHS,
+  PRODUCTION_PLAN_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 
 const ISSUE_REQUESTS_CACHE_KEY = 'production:issue-requests';
 
@@ -112,12 +117,17 @@ export const ProductionIssueRequests: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const canRequest = can('productionIssue.request');
-  const canCreatePlan = can('plans.create');
+  const canCreatePlanPermission = can('plans.create');
   const plans = useAppStore((s) => s.productionPlans);
   const workOrders = useAppStore((s) => s.workOrders);
   const products = useAppStore((s) => s._rawProducts);
   const lines = useAppStore((s) => s.productionLines);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const canCreatePlan = canCreatePlanPermission && isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_PLAN_OPERATION_KEYS.create,
+    PRODUCTION_PLAN_CREATE_PATHS.productionIssueRequests,
+  );
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const uid = useAppStore((s) => s.uid);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
@@ -577,7 +587,7 @@ export const ProductionIssueRequests: React.FC = () => {
         acceptsProductionFromReports: true,
         status: 'planned',
         createdBy: uid,
-      });
+      }, { path: PRODUCTION_PLAN_CREATE_PATHS.productionIssueRequests });
       setPlanModalOpen(false);
       await fetchProductionPlans();
       if (planId) {

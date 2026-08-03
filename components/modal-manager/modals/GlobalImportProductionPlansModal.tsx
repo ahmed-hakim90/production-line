@@ -10,6 +10,11 @@ import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useTranslation } from 'react-i18next';
+import {
+  PRODUCTION_PLAN_CREATE_PATHS,
+  PRODUCTION_PLAN_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../../modules/system/lib/operationPathSettings';
 
 export const GlobalImportProductionPlansModal: React.FC = () => {
   const { t } = useTranslation();
@@ -20,6 +25,12 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   const products = useAppStore((s) => s._rawProducts);
   const lines = useAppStore((s) => s._rawLines);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings ?? DEFAULT_PLAN_SETTINGS);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const importPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_PLAN_OPERATION_KEYS.create,
+    PRODUCTION_PLAN_CREATE_PATHS.globalImport,
+  );
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [parsing, setParsing] = useState(false);
@@ -34,7 +45,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   );
 
   if (!isOpen) return null;
-  if (!can('import') || !can('plans.create')) return null;
+  if (!can('import') || !can('plans.create') || !importPathEnabled) return null;
 
   const handleClose = () => {
     if (saving) return;
@@ -113,7 +124,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
           actualCost: 0,
           status: 'planned',
           createdBy: uid,
-        });
+        }, { path: PRODUCTION_PLAN_CREATE_PATHS.globalImport });
       } catch {
         failed += 1;
       } finally {

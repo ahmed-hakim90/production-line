@@ -224,6 +224,7 @@ export const Vehicles: React.FC = () => {
 
       {/* Search & Filters */}
       <SmartFilterBar
+      pageId="hr-vehicles"
         searchPlaceholder="بحث بالاسم أو رقم اللوحة أو السائق..."
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}

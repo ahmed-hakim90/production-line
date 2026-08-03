@@ -3,6 +3,7 @@ import { eventBus, SystemEvents } from '@/shared/events';
 import { runUseCase, type UseCaseResult } from '@/shared/usecases';
 import type { CreateStockMovementInput } from '../types';
 import { stockService } from '../services/stockService';
+import type { InventoryStockMovePath } from '../../system/lib/operationPathSettings';
 
 export type CreateStockMovementOutput = {
   transactionId: string;
@@ -12,10 +13,11 @@ export type CreateStockMovementOutput = {
 /** Post a stock movement/transfer/adjustment and emit STOCK_MOVED. */
 export async function createStockMovement(
   input: CreateStockMovementInput,
+  context: { path: InventoryStockMovePath },
 ): Promise<UseCaseResult<CreateStockMovementOutput>> {
   return runUseCase(async () => {
     const tenantId = requireTenantIdOrThrow();
-    const transactionId = await stockService.createMovement(input);
+    const transactionId = await stockService.createMovement(input, context);
     if (!transactionId) {
       throw new Error('تعذر ترحيل حركة المخزون');
     }

@@ -37,6 +37,7 @@ export function WorkOrderFilters({
 
   return (
     <SmartFilterBar
+      pageId="work-orders"
       searchPlaceholder="بحث برقم الأمر أو المنتج..."
       searchValue={filters.search}
       onSearchChange={(value) => onSetFilter('search', value)}

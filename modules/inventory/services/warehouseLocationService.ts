@@ -13,6 +13,7 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type { WarehouseLocation, WarehouseRack } from '../types';
 import { warehouseRackService } from './warehouseRackService';
+import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'warehouse_locations';
 
@@ -61,8 +62,10 @@ export const warehouseLocationService = {
 
   async getAll(warehouseId?: string): Promise<WarehouseLocation[]> {
     if (!isConfigured) return [];
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
     const constraints: any[] = [orderBy('code', 'asc')];
-    if (warehouseId) constraints.unshift(where('warehouseId', '==', warehouseId));
+    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     const snap = await getDocs(tenantQuery(db, COLLECTION, ...constraints));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as WarehouseLocation));
   },

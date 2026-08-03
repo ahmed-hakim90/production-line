@@ -492,6 +492,7 @@ export const HRTransactions: React.FC = () => {
       {/* Filters + Table */}
       <Card className="mb-0 border-0 rounded-none">
         <SmartFilterBar
+      pageId="hr-transactions"
           className="mb-0 border-0 rounded-none"
           searchPlaceholder="بحث بالاسم / كود / وصف..."
           searchValue={search}

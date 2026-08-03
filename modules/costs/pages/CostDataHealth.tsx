@@ -527,6 +527,7 @@ export const CostDataHealth: React.FC = () => {
       </div>
 
       <SmartFilterBar
+      pageId="cost-data-health"
         searchPlaceholder="ابحث داخل عنوان المشكلة أو وصفها..."
         searchValue={search}
         onSearchChange={setSearch}

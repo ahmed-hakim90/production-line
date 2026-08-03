@@ -2,91 +2,18 @@ import { TENANT_SCOPED_COLLECTIONS } from './tenantFootprintCollections.js';
 export const BACKUP_VERSION = '2.1.0';
 /** Subcollection group names used in backup `collectionGroups` (aligned with client `backupService`). */
 export const BACKUP_COLLECTION_GROUPS = ['preferences', 'fcmTokens', 'daily'];
-/** Same order/names as client `ALL_COLLECTIONS` (backupService). */
+/**
+ * Root collections in a full backup. Tenant-field collections come from the
+ * footprint/delete registry; the remaining names use tenant-owned document paths.
+ * Keep the client `services/backupService.ts` registry in this exact order.
+ */
 export const ALL_BACKUP_COLLECTIONS = [
-    'products',
-    'production_lines',
-    'productionLines',
-    'employees',
-    'production_reports',
-    'line_status',
-    'line_product_config',
-    'production_plans',
-    'production_plan_followups',
-    'supervisors',
-    'supervisor_line_assignments',
-    'supervisorAssignmentLog',
-    'work_orders',
-    'notifications',
-    'scan_events',
-    'product_materials',
-    'monthly_production_costs',
-    'line_worker_assignments',
-    'warehouses',
-    'raw_materials',
-    'stock_items',
-    'stock_transactions',
-    'stock_counts',
-    'inventory_transfer_requests',
-    'cost_centers',
-    'cost_center_values',
-    'cost_allocations',
-    'labor_settings',
-    'assets',
-    'asset_depreciations',
-    'roles',
-    'users',
+    ...TENANT_SCOPED_COLLECTIONS,
     'system_settings',
-    'activity_logs',
-    'audit_logs',
-    'departments',
-    'job_positions',
-    'shifts',
-    'hr_settings',
-    'penalty_rules',
-    'late_rules',
-    'allowance_types',
-    'attendance_raw_logs',
-    'attendance_logs',
-    'attendance_records',
-    'attendance_monthly_summaries',
-    'attendance_import_history',
-    'leave_requests',
-    'leave_balances',
-    'employee_loans',
-    'employee_allowances',
-    'employee_deductions',
-    'vehicles',
-    'approval_requests',
-    'approval_settings',
-    'approval_delegations',
-    'approval_audit_logs',
-    'hr_notifications',
-    'employee_performance',
-    'employee_bonuses',
-    'payroll_months',
-    'payroll_records',
-    'payroll_audit_logs',
-    'payroll_cost_summary',
-    'payroll_distributions',
-    'hr_config_modules',
-    'hr_config_audit_logs',
-    'quality_settings',
-    'quality_reason_catalog',
-    'quality_workers_assignments',
-    'quality_inspections',
-    'quality_defects',
-    'quality_rework_orders',
-    'quality_capa',
-    'quality_print_logs',
-    'production_report_uniques',
-    'product_categories',
     'user_devices',
     'user_presence',
-    'automation_runs',
     'dashboardStats',
     'tenants',
-    'backups',
 ];
 const MAX_JSON_CHARS = 28 * 1024 * 1024;
 async function readCollectionTenantScoped(db, name, tenantId) {
@@ -102,6 +29,10 @@ async function readCollectionTenantScoped(db, name, tenantId) {
     }
     if (name === 'tenants') {
         const d = await db.collection('tenants').doc(tenantId).get();
+        return d.exists ? [{ _docId: d.id, ...d.data() }] : [];
+    }
+    if (name === 'system_settings') {
+        const d = await db.collection('system_settings').doc(tenantId).get();
         return d.exists ? [{ _docId: d.id, ...d.data() }] : [];
     }
     if (name === 'user_devices') {

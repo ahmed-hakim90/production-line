@@ -1,5 +1,5 @@
-import { useMemo, useState, type ReactNode } from 'react';
-import { Search, Plus, X, ChevronDown } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Search, X, ChevronDown, Pin, Trash2, Check } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import {
   Select,
@@ -12,6 +12,16 @@ import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { cn } from '@/lib/utils';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import {
+  createFavoriteId,
+  deleteFavorite,
+  getPinnedFavorite,
+  loadFavorites,
+  setFavoritePinned,
+  upsertFavorite,
+  type FilterFavorite,
+  type FilterFavoriteSnapshot,
+} from './filterFavoritesStorage';
 
 export interface FilterOption {
   value: string;
@@ -54,6 +64,8 @@ export interface PeriodOption {
 }
 
 interface SmartFilterBarProps {
+  /** Stable page key for local favorites (e.g. materials-list). */
+  pageId?: string;
   searchPlaceholder?: string;
   searchValue?: string;
   onSearchChange?: (value: string) => void;
@@ -125,6 +137,7 @@ function displayValueLabel(filter: FilterDef, value: string): string {
 }
 
 export function SmartFilterBar({
+  pageId,
   searchPlaceholder,
   searchValue = '',
   onSearchChange,
@@ -147,10 +160,16 @@ export function SmartFilterBar({
 }: SmartFilterBarProps) {
   const { t } = useTranslation();
   const { dir } = useAppDirection();
-  const [addOpen, setAddOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [editingKey, setEditingKey] = useState<string | null>(null);
+  const [menuEditingKey, setMenuEditingKey] = useState<string | null>(null);
   const [manuallyVisible, setManuallyVisible] = useState<Set<string>>(() => new Set());
-  const [addQuery, setAddQuery] = useState('');
+  const [menuQuery, setMenuQuery] = useState('');
+  const [favorites, setFavorites] = useState<FilterFavorite[]>([]);
+  const [saveName, setSaveName] = useState('');
+  const [savePinned, setSavePinned] = useState(false);
+  const [showSaveForm, setShowSaveForm] = useState(false);
+  const pinnedAppliedRef = useRef(false);
 
   const resolvedSearchPlaceholder = searchPlaceholder ?? t('erpComponents.smartFilterBar.searchPlaceholder');
   const resolvedApplyLabel = applyLabel ?? t('erpComponents.smartFilterBar.applyLabel');
@@ -181,31 +200,81 @@ export function SmartFilterBar({
       onAdvancedFilterChange?.(key, value);
       return;
     }
-    // Unified filters list without dedicated maps — try both handlers
     onQuickFilterChange?.(key, value);
     onAdvancedFilterChange?.(key, value);
   };
 
-  const visibleFilters = allFilters.filter((filter) => {
-    const value = getValue(filter.key);
-    if (isActiveValue(value, filter.type)) return true;
-    if (filter.defaultVisible) return true;
-    if (manuallyVisible.has(filter.key)) return true;
-    return false;
-  });
+  const buildSnapshot = (): FilterFavoriteSnapshot => {
+    const values: Record<string, string> = {};
+    allFilters.forEach((filter) => {
+      values[filter.key] = getValue(filter.key);
+    });
+    const visibleKeys = allFilters
+      .filter((filter) => {
+        const value = getValue(filter.key);
+        if (isActiveValue(value, filter.type)) return true;
+        if (filter.defaultVisible) return true;
+        if (manuallyVisible.has(filter.key)) return true;
+        return false;
+      })
+      .map((filter) => filter.key);
 
-  const availableToAdd = allFilters.filter((filter) => !visibleFilters.some((item) => item.key === filter.key));
+    return {
+      search: searchValue ?? '',
+      period: activePeriod,
+      values,
+      visibleKeys,
+    };
+  };
 
-  const filteredAvailable = addQuery.trim()
-    ? availableToAdd.filter((filter) =>
-        filter.label.toLowerCase().includes(addQuery.trim().toLowerCase())
-        || (filter.placeholder ?? '').toLowerCase().includes(addQuery.trim().toLowerCase()),
+  const applySnapshot = (snapshot: FilterFavoriteSnapshot) => {
+    onSearchChange?.(snapshot.search ?? '');
+    if (snapshot.period != null && periods && periods.length > 0) {
+      onPeriodChange?.(snapshot.period);
+    }
+    Object.entries(snapshot.values ?? {}).forEach(([key, value]) => {
+      setValue(key, value);
+    });
+    setManuallyVisible(new Set(snapshot.visibleKeys ?? []));
+    setEditingKey(null);
+    setMenuEditingKey(null);
+  };
+
+  useEffect(() => {
+    if (!pageId) {
+      setFavorites([]);
+      return;
+    }
+    setFavorites(loadFavorites(pageId));
+  }, [pageId]);
+
+  useEffect(() => {
+    pinnedAppliedRef.current = false;
+  }, [pageId]);
+
+  useEffect(() => {
+    if (!pageId || pinnedAppliedRef.current) return;
+    const pinned = getPinnedFavorite(pageId);
+    if (!pinned) {
+      pinnedAppliedRef.current = true;
+      return;
+    }
+    pinnedAppliedRef.current = true;
+    applySnapshot(pinned.snapshot);
+    // Intentionally run once per pageId mount for default favorite.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageId]);
+
+  const menuFilters = menuQuery.trim()
+    ? allFilters.filter((filter) =>
+        filter.label.toLowerCase().includes(menuQuery.trim().toLowerCase())
+        || (filter.placeholder ?? '').toLowerCase().includes(menuQuery.trim().toLowerCase()),
       )
-    : availableToAdd;
+    : allFilters;
 
-  const showAddSearch = allFilters.length > 8;
-
+  const showMenuSearch = allFilters.length > 8;
   const activeCount = allFilters.filter((filter) => isActiveValue(getValue(filter.key), filter.type)).length;
+  const showFilterMenu = allFilters.length > 0 || Boolean(pageId);
 
   const handleClearFilter = (key: string) => {
     const filter = allFilters.find((item) => item.key === key);
@@ -216,6 +285,7 @@ export function SmartFilterBar({
       return next;
     });
     if (editingKey === key) setEditingKey(null);
+    if (menuEditingKey === key) setMenuEditingKey(null);
   };
 
   const handleClearAll = () => {
@@ -226,18 +296,51 @@ export function SmartFilterBar({
     }
     setManuallyVisible(new Set());
     setEditingKey(null);
+    setMenuEditingKey(null);
   };
 
-  const handleAddFilter = (key: string) => {
+  const handleActivateFilter = (key: string) => {
     setManuallyVisible((prev) => new Set(prev).add(key));
+    setMenuEditingKey(key);
     setEditingKey(key);
-    setAddOpen(false);
-    setAddQuery('');
+  };
+
+  const handleSaveFavorite = () => {
+    if (!pageId) return;
+    const name = saveName.trim();
+    if (!name) return;
+    const favorite: FilterFavorite = {
+      id: createFavoriteId(),
+      name,
+      pinned: savePinned,
+      createdAt: Date.now(),
+      snapshot: buildSnapshot(),
+    };
+    const next = upsertFavorite(pageId, favorite);
+    setFavorites(next);
+    setSaveName('');
+    setSavePinned(false);
+    setShowSaveForm(false);
+  };
+
+  const handleApplyFavorite = (favorite: FilterFavorite) => {
+    applySnapshot(favorite.snapshot);
+    setMenuOpen(false);
+  };
+
+  const handleTogglePin = (favorite: FilterFavorite) => {
+    if (!pageId) return;
+    setFavorites(setFavoritePinned(pageId, favorite.id, !favorite.pinned));
+  };
+
+  const handleDeleteFavorite = (favoriteId: string) => {
+    if (!pageId) return;
+    setFavorites(deleteFavorite(pageId, favoriteId));
   };
 
   const renderEditor = (filter: FilterDef, compact = false) => {
     const value = getValue(filter.key);
-    const widthClass = filter.width ?? (compact ? 'w-[160px]' : 'w-[140px]');
+    const widthClass = filter.width ?? (compact ? 'w-[160px]' : 'w-full min-w-[140px]');
 
     if (filter.type === 'date' || filter.type === 'month') {
       return (
@@ -270,6 +373,391 @@ export function SmartFilterBar({
     );
   };
 
+  const renderMenuOptions = (filter: FilterDef) => {
+    if (filter.type === 'date' || filter.type === 'month') {
+      return (
+        <div className="px-2 pb-2 pt-1">
+          {renderEditor(filter, false)}
+        </div>
+      );
+    }
+
+    const value = getValue(filter.key);
+    const options: FilterOption[] = [
+      { value: 'all', label: filter.placeholder ?? filter.label },
+      ...(filter.options ?? []),
+    ];
+
+    return (
+      <ul className="ms-2 mb-1 max-h-44 overflow-y-auto border-s border-[var(--color-border)] ps-1">
+        {options.map((option) => {
+          const selected = (value || 'all') === option.value;
+          return (
+            <li key={option.value}>
+              <button
+                type="button"
+                onClick={() => {
+                  if (option.value === 'all') {
+                    handleClearFilter(filter.key);
+                  } else {
+                    setManuallyVisible((prev) => new Set(prev).add(filter.key));
+                    setValue(filter.key, option.value);
+                  }
+                  setMenuEditingKey(null);
+                  setMenuOpen(false);
+                }}
+                className={cn(
+                  'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-indigo-50 hover:text-indigo-700',
+                  selected && 'bg-indigo-50 font-medium text-indigo-700',
+                )}
+              >
+                <span className="truncate">{option.label}</span>
+                {selected ? <Check className="h-3.5 w-3.5 flex-shrink-0" /> : null}
+              </button>
+            </li>
+          );
+        })}
+      </ul>
+    );
+  };
+
+  const filterMenu = (
+    <Popover
+      open={menuOpen}
+      onOpenChange={(open) => {
+        setMenuOpen(open);
+        if (!open) {
+          setMenuQuery('');
+          setMenuEditingKey(null);
+          setShowSaveForm(false);
+        }
+      }}
+    >
+      <PopoverTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          className={cn(
+            'flex h-full min-h-[34px] flex-shrink-0 items-center gap-1 rounded-none border-0 px-2.5 text-sm shadow-none hover:bg-indigo-50',
+            activeCount > 0 ? 'text-indigo-700' : 'text-[var(--color-text-muted)]',
+          )}
+          aria-label={t('erpComponents.smartFilterBar.filters')}
+        >
+          <ChevronDown className={cn('h-4 w-4 transition-transform', menuOpen && 'rotate-180')} />
+          {activeCount > 0 && (
+            <span className="min-w-[16px] rounded-full bg-indigo-600 px-1.5 py-px text-center text-[10px] leading-none text-white">
+              {activeCount}
+            </span>
+          )}
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0" dir={dir}>
+        <div className="border-b border-[var(--color-border)] px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+          {t('erpComponents.smartFilterBar.filters')}
+        </div>
+
+        {allFilters.length > 0 && (
+          <div className="p-2">
+            {showMenuSearch && (
+              <div className="relative mb-2">
+                <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--color-text-muted)]" />
+                <input
+                  type="text"
+                  value={menuQuery}
+                  onChange={(event) => setMenuQuery(event.target.value)}
+                  placeholder={resolvedSearchPlaceholder}
+                  className="h-8 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-card)] ps-8 pe-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                />
+              </div>
+            )}
+            {menuFilters.length === 0 ? (
+              <p className="px-2 py-3 text-center text-xs text-[var(--color-text-muted)]">
+                {t('erpComponents.smartFilterBar.noMoreFilters')}
+              </p>
+            ) : (
+              <ul className="max-h-56 overflow-y-auto">
+                {menuFilters.map((filter) => {
+                  const value = getValue(filter.key);
+                  const active = isActiveValue(value, filter.type);
+                  const expanded = menuEditingKey === filter.key;
+                  return (
+                    <li key={filter.key} className="mb-0.5">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (expanded) {
+                            setMenuEditingKey(null);
+                            return;
+                          }
+                          handleActivateFilter(filter.key);
+                        }}
+                        className={cn(
+                          'flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-start text-sm hover:bg-indigo-50 hover:text-indigo-700',
+                          active && 'bg-indigo-50/70 text-indigo-700',
+                        )}
+                      >
+                        <span className="truncate">{filter.label}</span>
+                        <span className="flex items-center gap-1 text-[11px] text-[var(--color-text-muted)]">
+                          {active ? (
+                            <span className="max-w-[100px] truncate font-medium text-indigo-600">
+                              {displayValueLabel(filter, value)}
+                            </span>
+                          ) : null}
+                          {active ? <Check className="h-3.5 w-3.5 text-indigo-600" /> : null}
+                          <ChevronDown className={cn('h-3 w-3', expanded && 'rotate-180')} />
+                        </span>
+                      </button>
+                      {expanded && renderMenuOptions(filter)}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {activeCount > 0 && (
+              <button
+                type="button"
+                onClick={() => {
+                  handleClearAll();
+                  setMenuOpen(false);
+                }}
+                className="mt-1 w-full rounded-md px-2 py-1.5 text-start text-xs text-[var(--color-text-muted)] hover:bg-slate-50 hover:text-[var(--color-text)]"
+              >
+                {t('erpComponents.smartFilterBar.clearAll')}
+              </button>
+            )}
+          </div>
+        )}
+
+        {pageId && (
+          <div className="border-t border-[var(--color-border)]">
+            <div className="px-3 py-2 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)]">
+              {t('erpComponents.smartFilterBar.favorites')}
+            </div>
+            <div className="p-2 pt-0">
+              {favorites.length === 0 && !showSaveForm ? (
+                <p className="px-2 py-2 text-center text-xs text-[var(--color-text-muted)]">
+                  {t('erpComponents.smartFilterBar.noFavorites')}
+                </p>
+              ) : (
+                <ul className="mb-2 max-h-40 overflow-y-auto">
+                  {favorites.map((favorite) => (
+                    <li
+                      key={favorite.id}
+                      className="group flex items-center gap-1 rounded-md px-1 py-0.5 hover:bg-slate-50"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => handleApplyFavorite(favorite)}
+                        className="min-w-0 flex-1 truncate rounded px-1 py-1.5 text-start text-sm hover:text-indigo-700"
+                        title={t('erpComponents.smartFilterBar.applyFavorite')}
+                      >
+                        {favorite.pinned && (
+                          <Pin className="me-1 inline h-3 w-3 fill-indigo-600 text-indigo-600" />
+                        )}
+                        {favorite.name}
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleTogglePin(favorite)}
+                        className={cn(
+                          'rounded p-1 text-[var(--color-text-muted)] hover:bg-indigo-50 hover:text-indigo-700',
+                          favorite.pinned && 'text-indigo-600',
+                        )}
+                        title={t('erpComponents.smartFilterBar.pinDefault')}
+                      >
+                        <Pin className={cn('h-3.5 w-3.5', favorite.pinned && 'fill-current')} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleDeleteFavorite(favorite.id)}
+                        className="rounded p-1 text-[var(--color-text-muted)] hover:bg-rose-50 hover:text-rose-600"
+                        title={t('erpComponents.smartFilterBar.deleteFavorite')}
+                      >
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {showSaveForm ? (
+                <div className="space-y-2 rounded-md border border-[var(--color-border)] p-2">
+                  <input
+                    type="text"
+                    value={saveName}
+                    onChange={(event) => setSaveName(event.target.value)}
+                    placeholder={t('erpComponents.smartFilterBar.favoriteName')}
+                    className="h-8 w-full rounded-md border border-[var(--color-border)] px-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
+                    autoFocus
+                  />
+                  <label className="flex items-center gap-2 text-xs text-[var(--color-text)]">
+                    <input
+                      type="checkbox"
+                      checked={savePinned}
+                      onChange={(event) => setSavePinned(event.target.checked)}
+                      className="rounded border-[var(--color-border)]"
+                    />
+                    {t('erpComponents.smartFilterBar.pinDefault')}
+                  </label>
+                  <div className="flex gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="h-7 flex-1 text-xs"
+                      onClick={handleSaveFavorite}
+                      disabled={!saveName.trim()}
+                    >
+                      {t('erpComponents.smartFilterBar.saveCurrent')}
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      className="h-7 text-xs"
+                      onClick={() => {
+                        setShowSaveForm(false);
+                        setSaveName('');
+                        setSavePinned(false);
+                      }}
+                    >
+                      {t('erpComponents.smartFilterBar.cancel')}
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setShowSaveForm(true)}
+                  className="w-full rounded-md px-2 py-1.5 text-start text-xs font-medium text-indigo-700 hover:bg-indigo-50"
+                >
+                  {t('erpComponents.smartFilterBar.saveCurrent')}
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </PopoverContent>
+    </Popover>
+  );
+
+  const activeFacets = allFilters.filter((filter) => isActiveValue(getValue(filter.key), filter.type));
+
+  const renderFacetChip = (filter: FilterDef) => {
+    const value = getValue(filter.key);
+    const chipClass =
+      'inline-flex max-w-[200px] items-center gap-1 truncate rounded-none border-0 bg-transparent px-2 py-0.5 text-start text-[12px] text-[#714B67] shadow-none hover:bg-[#714B67]/10 focus:ring-0 dark:text-indigo-200 dark:hover:bg-indigo-500/30 h-auto';
+
+    const clearButton = (
+      <button
+        type="button"
+        onClick={(event) => {
+          event.preventDefault();
+          event.stopPropagation();
+          handleClearFilter(filter.key);
+        }}
+        className="flex h-full items-center border-s border-[#714B67]/20 px-1.5 py-0.5 text-[#714B67] hover:bg-[#714B67]/20 dark:border-indigo-400/30 dark:text-indigo-200 dark:hover:bg-indigo-500/40"
+        aria-label={t('erpComponents.smartFilterBar.clearFilter')}
+      >
+        <X className="h-3 w-3" />
+      </button>
+    );
+
+    const chipShellClass =
+      'inline-flex max-w-full items-center overflow-hidden rounded-md bg-[#714B67]/12 text-[12px] text-[#714B67] dark:bg-indigo-500/20 dark:text-indigo-200';
+
+    // Dates: open native picker directly from the chip (no intermediate box).
+    if (filter.type === 'date' || filter.type === 'month') {
+      return (
+        <div key={filter.key} className={chipShellClass}>
+          <label className={cn(chipClass, 'relative cursor-pointer')}>
+            <span className="truncate opacity-80">{filter.label}</span>
+            <span className="opacity-50">:</span>
+            <span className="truncate font-semibold">{displayValueLabel(filter, value)}</span>
+            <input
+              type={filter.type === 'month' ? 'month' : 'date'}
+              value={value}
+              onChange={(event) => setValue(filter.key, event.target.value)}
+              onClick={(event) => {
+                const input = event.currentTarget;
+                try {
+                  input.showPicker?.();
+                } catch {
+                  // Older browsers fall back to default date UI.
+                }
+              }}
+              className="absolute inset-0 cursor-pointer opacity-0"
+              aria-label={filter.label}
+            />
+          </label>
+          {clearButton}
+        </div>
+      );
+    }
+
+    // Selects: chip itself is the select trigger — list opens immediately.
+    return (
+      <div key={filter.key} className={chipShellClass}>
+        <Select
+          value={value || 'all'}
+          onValueChange={(next) => {
+            if (next === 'all') {
+              handleClearFilter(filter.key);
+              return;
+            }
+            setValue(filter.key, next);
+          }}
+          open={editingKey === filter.key}
+          onOpenChange={(open) => setEditingKey(open ? filter.key : null)}
+        >
+          <SelectTrigger
+            className={cn(chipClass, '[&>svg]:hidden')}
+            title={`${filter.label}: ${displayValueLabel(filter, value)}`}
+          >
+            <span className="truncate opacity-80">{filter.label}</span>
+            <span className="opacity-50">:</span>
+            <span className="truncate font-semibold">{displayValueLabel(filter, value)}</span>
+          </SelectTrigger>
+          <SelectContent dir={dir} align="start" className="min-w-[10rem]">
+            <SelectItem value="all">{filter.placeholder ?? filter.label}</SelectItem>
+            {(filter.options ?? []).map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {clearButton}
+      </div>
+    );
+  };
+
+  const searchFacetsBox = (
+    <div className="flex min-w-[220px] max-w-3xl flex-1 items-stretch overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] focus-within:border-indigo-300 focus-within:ring-1 focus-within:ring-indigo-300">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1 px-2 py-1">
+        <Search className="h-3.5 w-3.5 flex-shrink-0 text-[var(--color-text-muted)]" />
+        {activeFacets.map((filter) => renderFacetChip(filter))}
+        {onSearchChange != null ? (
+          <input
+            type="text"
+            value={searchValue}
+            onChange={(event) => onSearchChange(event.target.value)}
+            placeholder={activeFacets.length > 0 ? '' : resolvedSearchPlaceholder}
+            className="h-7 min-w-[120px] flex-1 border-0 bg-transparent px-1 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:outline-none"
+          />
+        ) : activeFacets.length === 0 ? (
+          <span className="px-1 text-sm text-[var(--color-text-muted)]">
+            {t('erpComponents.smartFilterBar.filters')}
+          </span>
+        ) : null}
+      </div>
+      {showFilterMenu && (
+        <div className="flex flex-shrink-0 items-stretch border-s border-[var(--color-border)] self-stretch">
+          {filterMenu}
+        </div>
+      )}
+    </div>
+  );
+
   return (
     <div
       dir={dir}
@@ -279,18 +767,7 @@ export function SmartFilterBar({
       )}
     >
       <div className="flex flex-wrap items-center gap-2 p-3">
-        {onSearchChange != null && (
-          <div className="relative min-w-[160px] max-w-sm flex-1">
-            <Search className="pointer-events-none absolute start-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-[var(--color-text-muted)]" />
-            <input
-              type="text"
-              value={searchValue}
-              onChange={(event) => onSearchChange(event.target.value)}
-              placeholder={resolvedSearchPlaceholder}
-              className="h-[34px] w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] ps-9 pe-3 text-sm text-[var(--color-text)] placeholder:text-[var(--color-text-muted)] focus:border-indigo-300 focus:outline-none focus:ring-1 focus:ring-indigo-300"
-            />
-          </div>
-        )}
+        {(onSearchChange != null || showFilterMenu || activeFacets.length > 0) && searchFacetsBox}
 
         {periods && periods.length > 0 && (
           <div className="flex flex-shrink-0 overflow-hidden rounded-lg border border-[var(--color-border)]">
@@ -312,82 +789,6 @@ export function SmartFilterBar({
           </div>
         )}
 
-        {allFilters.length > 0 && (
-          <Popover open={addOpen} onOpenChange={setAddOpen}>
-            <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="outline"
-                className={cn(
-                  'flex h-[34px] flex-shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm',
-                  availableToAdd.length === 0
-                    ? 'border-[var(--color-border)] text-[var(--color-text-muted)]'
-                    : 'border-indigo-200 bg-indigo-50 text-indigo-700 hover:bg-indigo-100',
-                )}
-              >
-                <Plus className="h-3.5 w-3.5" />
-                {t('erpComponents.smartFilterBar.addFilter')}
-                {activeCount > 0 && (
-                  <span className="min-w-[16px] rounded-full bg-indigo-600 px-1.5 py-px text-center text-[10px] leading-none text-white">
-                    {activeCount}
-                  </span>
-                )}
-                <ChevronDown className="h-3 w-3 opacity-60" />
-              </Button>
-            </PopoverTrigger>
-            <PopoverContent align="start" className="w-72 p-2" dir={dir}>
-              <div className="mb-2 px-1 text-[11px] font-medium text-[var(--color-text-muted)]">
-                {t('erpComponents.smartFilterBar.availableFilters')}
-              </div>
-              {showAddSearch && (
-                <div className="relative mb-2">
-                  <Search className="pointer-events-none absolute start-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-[var(--color-text-muted)]" />
-                  <input
-                    type="text"
-                    value={addQuery}
-                    onChange={(event) => setAddQuery(event.target.value)}
-                    placeholder={resolvedSearchPlaceholder}
-                    className="h-8 w-full rounded-md border border-[var(--color-border)] bg-[var(--color-card)] ps-8 pe-2 text-xs focus:outline-none focus:ring-1 focus:ring-indigo-300"
-                  />
-                </div>
-              )}
-              {filteredAvailable.length === 0 ? (
-                <p className="px-2 py-3 text-center text-xs text-[var(--color-text-muted)]">
-                  {t('erpComponents.smartFilterBar.noMoreFilters')}
-                </p>
-              ) : (
-                <ul className="max-h-64 overflow-y-auto">
-                  {filteredAvailable.map((filter) => (
-                    <li key={filter.key}>
-                      <button
-                        type="button"
-                        onClick={() => handleAddFilter(filter.key)}
-                        className="flex w-full items-center rounded-md px-2 py-1.5 text-start text-sm text-[var(--color-text)] hover:bg-indigo-50 hover:text-indigo-700"
-                      >
-                        {filter.label}
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {allFilters.some((filter) => isActiveValue(getValue(filter.key), filter.type)) && (
-                <div className="mt-2 border-t border-[var(--color-border)] pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      handleClearAll();
-                      setAddOpen(false);
-                    }}
-                    className="w-full rounded-md px-2 py-1.5 text-start text-xs text-[var(--color-text-muted)] hover:bg-slate-50 hover:text-[var(--color-text)]"
-                  >
-                    {t('erpComponents.smartFilterBar.clearAll')}
-                  </button>
-                </div>
-              )}
-            </PopoverContent>
-          </Popover>
-        )}
-
         {extra}
 
         {onApply != null && (
@@ -401,101 +802,6 @@ export function SmartFilterBar({
           </Button>
         )}
       </div>
-
-      {visibleFilters.length > 0 && (
-        <div className="flex flex-wrap items-center gap-1.5 border-t border-[var(--color-border)] px-3 py-2">
-          <span className="flex-shrink-0 text-[11px] text-[var(--color-text-muted)]">
-            {t('erpComponents.smartFilterBar.activeFilters')}
-          </span>
-          {visibleFilters.map((filter) => {
-            const value = getValue(filter.key);
-            const active = isActiveValue(value, filter.type);
-            const editing = editingKey === filter.key;
-
-            if (editing) {
-              return (
-                <div
-                  key={filter.key}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-200 bg-indigo-50/80 px-2 py-1"
-                >
-                  <span className="text-[11px] font-medium text-indigo-600">{filter.label}</span>
-                  {renderEditor(filter, true)}
-                  <button
-                    type="button"
-                    onClick={() => setEditingKey(null)}
-                    className="rounded p-0.5 text-indigo-400 hover:text-indigo-700"
-                    aria-label="done"
-                  >
-                    <ChevronDown className="h-3 w-3 rotate-180" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => handleClearFilter(filter.key)}
-                    className="rounded p-0.5 text-indigo-400 hover:text-indigo-700"
-                    aria-label="clear"
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
-                </div>
-              );
-            }
-
-            return (
-              <button
-                key={filter.key}
-                type="button"
-                onClick={() => setEditingKey(filter.key)}
-                className={cn(
-                  'inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] transition-colors',
-                  active
-                    ? 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100'
-                    : 'border border-dashed border-[var(--color-border)] text-[var(--color-text-muted)] hover:border-indigo-300 hover:text-indigo-600',
-                )}
-              >
-                <span className={active ? 'text-indigo-500' : undefined}>{filter.label}</span>
-                {active ? (
-                  <>
-                    <span>:</span>
-                    <span className="font-medium">{displayValueLabel(filter, value)}</span>
-                  </>
-                ) : (
-                  <span className="opacity-60">…</span>
-                )}
-                {active && (
-                  <span
-                    role="button"
-                    tabIndex={0}
-                    onClick={(event) => {
-                      event.stopPropagation();
-                      handleClearFilter(filter.key);
-                    }}
-                    onKeyDown={(event) => {
-                      if (event.key === 'Enter' || event.key === ' ') {
-                        event.preventDefault();
-                        event.stopPropagation();
-                        handleClearFilter(filter.key);
-                      }
-                    }}
-                    className="ms-0.5 leading-none text-indigo-400 hover:text-indigo-700"
-                  >
-                    <X className="h-3 w-3" />
-                  </span>
-                )}
-              </button>
-            );
-          })}
-          {activeCount > 0 && (
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={handleClearAll}
-              className="ms-auto h-auto p-0 text-[11px] text-[var(--color-text-muted)] hover:text-[var(--color-text)]"
-            >
-              {t('erpComponents.smartFilterBar.clearAll')}
-            </Button>
-          )}
-        </div>
-      )}
     </div>
   );
 }

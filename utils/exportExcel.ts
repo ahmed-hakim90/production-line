@@ -887,7 +887,11 @@ export interface ProductBomExportRow {
   productName?: string;
   materialCode: string;
   materialName: string;
+  materialType?: string;
+  materialCategory?: string;
+  unit?: string;
   qtyPerUnit: number;
+  wastePercent?: number;
   unitCost?: number;
   locationCode?: string;
   /** Filled on export with current location; change كود اللوكيشن and keep this to zero the old one. */
@@ -896,15 +900,22 @@ export interface ProductBomExportRow {
   balanceQty?: number | '';
 }
 
-/** تصدير BOM مسطّح: منتج × مكوّن × كمية (+ لوكيشن/رصيد اختياري للجرد) */
+/** تصدير BOM مسطّح: اسم المنتج → المكوّن وتفاصيله (+ لوكيشن/رصيد اختياري للجرد) */
 export function exportProductBomExcel(rows: ProductBomExportRow[]) {
   const date = new Date().toISOString().slice(0, 10);
   const data = rows.map((r) => ({
-    'كود المنتج': r.productCode,
     'اسم المنتج': r.productName || '',
-    'كود المادة': r.materialCode,
+    'كود المنتج': r.productCode,
     'اسم المادة': r.materialName,
+    'كود المادة': r.materialCode,
+    'نوع المادة': r.materialType || '',
+    'فئة المادة': r.materialCategory || '',
+    'الوحدة': r.unit || '',
     'الكمية المستخدمة': Number(r.qtyPerUnit) || 0,
+    'هالك %':
+      r.wastePercent === undefined || r.wastePercent === null || Number.isNaN(Number(r.wastePercent))
+        ? ''
+        : Number(r.wastePercent),
     'تكلفة الوحدة':
       r.unitCost === undefined || r.unitCost === null || Number.isNaN(Number(r.unitCost))
         ? ''
@@ -919,11 +930,15 @@ export function exportProductBomExcel(rows: ProductBomExportRow[]) {
       ? data
       : [
           {
-            'كود المنتج': '',
             'اسم المنتج': '',
-            'كود المادة': '',
+            'كود المنتج': '',
             'اسم المادة': '',
+            'كود المادة': '',
+            'نوع المادة': '',
+            'فئة المادة': '',
+            'الوحدة': '',
             'الكمية المستخدمة': '',
+            'هالك %': '',
             'تكلفة الوحدة': '',
             'كود اللوكيشن': '',
             'كود اللوكيشن السابق': '',
@@ -1003,22 +1018,25 @@ export const exportManufacturingMaterials = (
 ) => {
   if (!rows.length) return;
   const date = new Date().toISOString().slice(0, 10);
-  const excelRows = rows.map((r) => ({
-    'الكود الحالي': r.code,
-    // Pre-filled with current code so the user can edit this cell to rename on re-upload.
-    'الكود الجديد': r.code,
-    'اسم المادة': r.name,
-    'الفئة': r.categoryName || '',
-    'النوع': r.type,
-    'الوحدة الأساسية': r.baseUnit,
-    'وحدة الشراء': r.purchaseUnit || r.baseUnit,
-    'معامل التحويل': Number(r.conversionRate ?? 1) || 1,
-    'تكلفة الشراء': Number(r.purchaseCost ?? 0),
-    'هالك %': Number(r.wastePercent ?? 0),
-    'الحد الأدنى للمخزون': Number(r.minStock ?? 0),
-    'يُصنع داخلياً': r.isManufacturedInternally ? 'نعم' : 'لا',
-    'كود المنتج المرتبط': r.manufacturedProductCode || '',
-    'الحالة': r.isActive === false ? 'موقوف' : 'نشط',
-  }));
+  const excelRows = rows.map((r) => {
+    const isInternal = r.isManufacturedInternally === true;
+    return {
+      'مصدر المادة': isInternal ? 'تُصنع داخلياً' : 'شراء خارجي',
+      'الكود الحالي': r.code,
+      // Pre-filled with current code so the user can edit this cell to rename on re-upload.
+      'الكود الجديد': r.code,
+      'اسم المادة': r.name,
+      'الفئة': r.categoryName || '',
+      'النوع': r.type,
+      'الوحدة الأساسية': r.baseUnit,
+      'وحدة الشراء': isInternal ? '' : r.purchaseUnit || r.baseUnit,
+      'معامل التحويل': isInternal ? '' : Number(r.conversionRate ?? 1) || 1,
+      'تكلفة الشراء': isInternal ? '' : Number(r.purchaseCost ?? 0),
+      'هالك %': isInternal ? '' : Number(r.wastePercent ?? 0),
+      'الحد الأدنى للمخزون': Number(r.minStock ?? 0),
+      'كود المنتج المرتبط': r.manufacturedProductCode || '',
+      'الحالة': r.isActive === false ? 'موقوف' : 'نشط',
+    };
+  });
   downloadExcel(excelRows, 'المواد التصنيعية', fileName || `مواد-تصنيعية-${date}`);
 };

@@ -196,6 +196,7 @@ export const RepairAdminOrders: React.FC = () => {
 
       <Card>
         <SmartFilterBar
+      pageId="repair-admin-orders"
           searchPlaceholder="بحث: رقم الطلب، العميل، الهاتف، الجهاز، الفني"
           searchValue={search}
           onSearchChange={setSearch}

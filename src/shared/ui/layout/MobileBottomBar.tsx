@@ -8,6 +8,7 @@ import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { resolveMenuIcon } from './menuIconMap';
 import { useSidebarActiveRoute } from './useSidebar';
+import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
 
 interface MobileBottomBarProps {
   onMoreClick: () => void;
@@ -44,6 +45,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ onMoreClick })
   const { isActiveItem } = useSidebarActiveRoute();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
+  const operationPaths = useAppStore((s) => s.systemSettings.operationPaths);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
@@ -53,10 +55,14 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ onMoreClick })
     () =>
       BOTTOM_BAR_ITEMS.map((item) => {
         const menuItem = MENU_ITEMS_BY_KEY[item.menuItemKey];
-        if (!menuItem || !canAccessMenuItem(can, menuItem, roleKey)) return null;
+        if (
+          !menuItem
+          || !canAccessMenuItem(can, menuItem, roleKey)
+          || !isMenuItemOperationPathEnabled(operationPaths, menuItem.key)
+        ) return null;
         return { ...item, menuItem };
       }).filter(Boolean),
-    [can, roleKey],
+    [can, operationPaths, roleKey],
   );
 
   return (

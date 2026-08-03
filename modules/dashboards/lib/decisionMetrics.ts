@@ -196,6 +196,7 @@ export type TransferDecisionSummary = {
   pendingTotal: number;
   pendingProductionEntry: number;
   pendingPackaging: number;
+  pendingHandover: number;
   pendingOther: number;
   agingOver24h: number;
 };
@@ -206,6 +207,7 @@ export function summarizePendingTransfersForDecision(
 ): TransferDecisionSummary {
   let pendingProductionEntry = 0;
   let pendingPackaging = 0;
+  let pendingHandover = 0;
   let pendingOther = 0;
   let agingOver24h = 0;
 
@@ -214,6 +216,7 @@ export function summarizePendingTransfersForDecision(
     const type = row.requestType || 'transfer';
     if (type === 'production_entry') pendingProductionEntry += 1;
     else if (type === 'packaging_transfer') pendingPackaging += 1;
+    else if (type === 'production_handover') pendingHandover += 1;
     else pendingOther += 1;
 
     const hours = ageHours(row.createdAt, nowMs);
@@ -221,9 +224,10 @@ export function summarizePendingTransfersForDecision(
   }
 
   return {
-    pendingTotal: pendingProductionEntry + pendingPackaging + pendingOther,
+    pendingTotal: pendingProductionEntry + pendingPackaging + pendingHandover + pendingOther,
     pendingProductionEntry,
     pendingPackaging,
+    pendingHandover,
     pendingOther,
     agingOver24h,
   };
@@ -233,6 +237,8 @@ export type PackagingDecisionSummary = {
   awaitingUnits: number;
   skuCount: number;
   pendingTransfers: number;
+  pendingHandover: number;
+  handoverRemainingUnits: number;
   configured: boolean;
 };
 
@@ -240,6 +246,8 @@ export function summarizePackagingQueue(params: {
   awaitingUnits: number;
   skuCount: number;
   pendingPackagingTransfers: number;
+  pendingHandover?: number;
+  handoverRemainingUnits?: number;
   sourceWarehouseId?: string;
   targetWarehouseId?: string;
 }): PackagingDecisionSummary {
@@ -249,6 +257,8 @@ export function summarizePackagingQueue(params: {
     awaitingUnits: Math.max(0, Number(params.awaitingUnits || 0)),
     skuCount: Math.max(0, Number(params.skuCount || 0)),
     pendingTransfers: Math.max(0, Number(params.pendingPackagingTransfers || 0)),
+    pendingHandover: Math.max(0, Number(params.pendingHandover || 0)),
+    handoverRemainingUnits: Math.max(0, Number(params.handoverRemainingUnits || 0)),
     configured: Boolean(source && target && source !== target),
   };
 }
@@ -528,15 +538,26 @@ export type MaterialReadinessSummary = {
   readinessPercent: number;
   /** Remaining qty on plans that have open shortages */
   blockedRemainingQty: number;
+  /**
+   * Live stock assemblable coverage vs remaining plan qty (by product).
+   * Null when capacity data was not loaded.
+   */
+  assemblableCoveragePercent: number | null;
+  /** Active plans whose product remaining exceeds warehouse assemblable capacity. */
+  plansBelowAssemblable: number;
+  /** Σ max(0, remainingByProduct − assemblable) */
+  assemblableShortfallQty: number;
 };
 
 /**
  * Material readiness from production-plan component follow-ups (already tracked shortages).
  * readiness = plans without open shortages / active plans.
+ * Optional live assemblable map enriches coverage against raw-warehouse stock.
  */
 export function summarizeMaterialReadiness(params: {
   plans: Array<{
     id?: string;
+    productId?: string;
     plannedQuantity?: number;
     producedQuantity?: number;
     status?: string;
@@ -546,6 +567,7 @@ export function summarizeMaterialReadiness(params: {
     status?: string;
     shortageQty?: number;
   }>;
+  maxAssemblableByProductId?: Map<string, number> | Record<string, number>;
 }): MaterialReadinessSummary {
   const activePlans = params.plans.filter(
     (p) => p.status === 'in_progress' || p.status === 'planned',
@@ -568,21 +590,54 @@ export function summarizeMaterialReadiness(params: {
 
   let blockedRemainingQty = 0;
   let plansWithShortage = 0;
+  const remainingByProduct = new Map<string, number>();
+  const planCountByProduct = new Map<string, number>();
+
   for (const plan of activePlans) {
     const planId = String(plan.id || '').trim();
-    if (!planId || !shortageByPlan.has(planId)) continue;
-    plansWithShortage += 1;
     const remaining = Math.max(
       0,
       Number(plan.plannedQuantity || 0) - Number(plan.producedQuantity || 0),
     );
-    blockedRemainingQty += remaining;
+    if (planId && shortageByPlan.has(planId)) {
+      plansWithShortage += 1;
+      blockedRemainingQty += remaining;
+    }
+    const productId = String(plan.productId || '').trim();
+    if (!productId || !(remaining > 0)) continue;
+    remainingByProduct.set(productId, (remainingByProduct.get(productId) || 0) + remaining);
+    planCountByProduct.set(productId, (planCountByProduct.get(productId) || 0) + 1);
   }
 
   const activePlanCount = activePlans.length;
   const readyPlans = Math.max(0, activePlanCount - plansWithShortage);
   const readinessPercent =
     activePlanCount > 0 ? Number(((readyPlans / activePlanCount) * 100).toFixed(1)) : 100;
+
+  let assemblableCoverage: number | null = null;
+  let plansBelowAssemblable = 0;
+  let assemblableShortfallQty = 0;
+
+  const capacityMap = params.maxAssemblableByProductId;
+  if (capacityMap) {
+    const getCap = (productId: string): number => {
+      if (capacityMap instanceof Map) return Math.max(0, Number(capacityMap.get(productId) || 0));
+      return Math.max(0, Number((capacityMap as Record<string, number>)[productId] || 0));
+    };
+
+    const coverageRows: Array<{ remainingQty: number; maxAssemblable: number }> = [];
+    for (const [productId, remainingQty] of remainingByProduct.entries()) {
+      const maxAssemblable = getCap(productId);
+      coverageRows.push({ remainingQty, maxAssemblable });
+      const shortfall = Math.max(0, remainingQty - maxAssemblable);
+      assemblableShortfallQty += shortfall;
+      if (shortfall > 0) {
+        plansBelowAssemblable += planCountByProduct.get(productId) || 0;
+      }
+    }
+    assemblableCoverage =
+      coverageRows.length > 0 ? assemblableCoveragePercent(coverageRows) : 100;
+  }
 
   return {
     activePlanCount,
@@ -591,6 +646,9 @@ export function summarizeMaterialReadiness(params: {
     totalShortageQty: Number(totalShortageQty.toFixed(2)),
     readinessPercent,
     blockedRemainingQty: Number(blockedRemainingQty.toFixed(2)),
+    assemblableCoveragePercent: assemblableCoverage,
+    plansBelowAssemblable,
+    assemblableShortfallQty: Number(assemblableShortfallQty.toFixed(2)),
   };
 }
 

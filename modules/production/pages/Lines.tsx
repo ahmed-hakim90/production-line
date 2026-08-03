@@ -316,6 +316,7 @@ export const Lines: React.FC = () => {
       ) : (
         <div className="list-view-wrapper">
           <SmartFilterBar
+      pageId="production-lines"
             searchPlaceholder="ابحث باسم الخط أو الكود..."
             searchValue={searchTerm}
             onSearchChange={setSearchTerm}

@@ -83,7 +83,11 @@ export interface ReportPrintProps {
 export function buildPackagingPrintLinesFromReport(
   r: ProductionReport,
   lookups: {
-    getProductName: (id: string, reportType?: ProductionReport['reportType']) => string;
+    getProductName: (
+      id: string,
+      reportType?: ProductionReport['reportType'],
+      productNameSnapshot?: string,
+    ) => string;
     getUnitsPerCarton?: (productId: string) => number | undefined;
   },
 ): ReportPrintRow['packagingPrintLines'] | undefined {
@@ -117,7 +121,11 @@ export const mapReportsToPrintRows = (
   reports: ProductionReport[],
   lookups: {
     getLineName: (id: string) => string;
-    getProductName: (id: string, reportType?: ProductionReport['reportType']) => string;
+    getProductName: (
+      id: string,
+      reportType?: ProductionReport['reportType'],
+      productNameSnapshot?: string,
+    ) => string;
     getEmployeeName: (id: string) => string;
     getWorkOrder?: (id: string) => { workOrderNumber: string } | undefined;
     getUnitsPerCarton?: (productId: string) => number | undefined;
@@ -138,7 +146,7 @@ export const mapReportsToPrintRows = (
       sourceReportType: r.reportType,
       shift: r.shift,
       lineName: lookups.getLineName(r.lineId),
-      productName: lookups.getProductName(r.productId, r.reportType),
+      productName: lookups.getProductName(r.productId, r.reportType, r.productNameSnapshot),
       employeeName: lookups.getEmployeeName(r.employeeId),
       quantityProduced: r.quantityProduced || 0,
       wasteQuantity: getReportWaste(r),

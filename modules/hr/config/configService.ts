@@ -13,7 +13,7 @@ import {
 } from 'firebase/firestore';
 import { isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
-import { hrConfigModuleDocRef, hrConfigModulesRef } from './collections';
+import { hrConfigModuleDocRef, hrConfigModulesRef, hrConfigModuleLegacyDocRef } from './collections';
 import { HR_CONFIG_DEFAULTS, withLeaveReasonDefaults } from './defaults';
 import { hrConfigAuditService } from './configAudit';
 import {
@@ -87,7 +87,13 @@ export async function getConfigModule<K extends HRConfigModuleName>(
   }
 
   const snap = await getDoc(hrConfigModuleDocRef(moduleName));
-  if (!snap.exists()) {
+  if (snap.exists()) {
+    return applyModuleDefaults(moduleName, snap.data() as Partial<HRConfigMap[K]>);
+  }
+
+  // Dual-read legacy shared module doc (pre-tenant key).
+  const legacy = await getDoc(hrConfigModuleLegacyDocRef(moduleName));
+  if (!legacy.exists()) {
     return applyModuleDefaults(moduleName, {
       configVersion: 0,
       updatedAt: null,
@@ -95,7 +101,7 @@ export async function getConfigModule<K extends HRConfigModuleName>(
     } as Partial<HRConfigMap[K]>);
   }
 
-  return applyModuleDefaults(moduleName, snap.data() as Partial<HRConfigMap[K]>);
+  return applyModuleDefaults(moduleName, legacy.data() as Partial<HRConfigMap[K]>);
 }
 
 /**

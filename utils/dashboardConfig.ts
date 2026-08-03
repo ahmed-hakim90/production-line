@@ -261,18 +261,19 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   inventoryRouting: {
     rawMaterialWarehouseId: '',
     decomposedWarehouseId: '',
+    productionFloorWarehouseId: '',
     productionWipWarehouseId: '',
     finishedStagingWarehouseId: '',
     finalProductWarehouseId: '',
     packagingSourceWarehouseId: '',
     packagingTargetWarehouseId: '',
     wasteWarehouseId: '',
-    /** Factory path: after production_entry approval, move WIP → تم الإنتاج */
-    autoTransferProductionToFinished: true,
+    /** V2: packaging supervisor confirms receipt instead of auto WIP→staging */
+    autoTransferProductionToFinished: false,
     autoTransferFinishedToFinal: false,
-    requireApprovalForProductionEntry: true,
-    /** Defer WIP→staging via production_entry approval; other autos optional */
+    requireApprovalForProductionEntry: false,
     requireApprovalForAutoTransfers: false,
+    requirePackagingHandoverReceipt: true,
     autoConsumeBomOnProductionReport: false,
     requireIssuedProductionIssueOnReport: true,
   },
@@ -375,6 +376,7 @@ export const DEFAULT_SYSTEM_SETTINGS: SystemSettings = {
   alertToggles: DEFAULT_ALERT_TOGGLES,
   quickActions: [],
   exportImport: DEFAULT_EXPORT_IMPORT_SETTINGS,
+  operationPaths: { operations: {} },
   attendanceIntegration: DEFAULT_ATTENDANCE_INTEGRATION,
   productionWorkerSettings: DEFAULT_PRODUCTION_WORKER_SETTINGS,
   repairSettings: {

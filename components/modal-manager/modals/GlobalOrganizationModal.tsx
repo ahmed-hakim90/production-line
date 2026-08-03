@@ -1,19 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { addDoc, doc, serverTimestamp, updateDoc } from 'firebase/firestore';
 import { AlertCircle, CheckCircle2, Loader2, X } from 'lucide-react';
-import { db } from '../../../services/firebase';
 import { Button, Badge, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
-import {
-  departmentsRef,
-  jobPositionsRef,
-  shiftsRef,
-  penaltyRulesRef,
-  lateRulesRef,
-  allowanceTypesRef,
-  HR_COLLECTIONS,
-} from '../../../modules/hr/collections';
 import type {
   FirestoreDepartment,
   FirestoreJobPosition,
@@ -27,6 +16,18 @@ import type {
   CalculationType,
 } from '../../../modules/hr/types';
 import { JOB_LEVEL_LABELS } from '../../../modules/hr/types';
+import {
+  createDepartment,
+  createJobPosition,
+  createShift,
+  updateDepartment,
+  updateJobPosition,
+  updateShift,
+  savePenaltyRule,
+  saveLateRule,
+  saveAllowanceType,
+} from '../../../modules/hr/usecases/manageOrganization';
+import { unwrapOrThrow } from '../../../shared/usecases';
 import { useTranslation } from 'react-i18next';
 
 type OrgTab = 'departments' | 'positions' | 'shifts' | 'penalties' | 'lateRules' | 'allowances';
@@ -207,33 +208,41 @@ export const GlobalOrganizationModal: React.FC = () => {
     try {
       if (tab === 'departments') {
         if (!deptForm.name.trim()) return;
-        const data = { ...deptForm, name: deptForm.name.trim(), code: deptForm.code.trim() || deptForm.name.trim().substring(0, 3).toUpperCase() };
-        if (editId) await updateDoc(doc(db, HR_COLLECTIONS.DEPARTMENTS, editId), data);
-        else await addDoc(departmentsRef(), { ...data, createdAt: serverTimestamp() });
+        const data = {
+          name: deptForm.name.trim(),
+          code: deptForm.code.trim() || deptForm.name.trim().substring(0, 3).toUpperCase(),
+          managerId: deptForm.managerId,
+          isActive: deptForm.isActive,
+        };
+        if (editId) unwrapOrThrow(await updateDepartment(editId, data));
+        else unwrapOrThrow(await createDepartment(data));
       } else if (tab === 'positions') {
         if (!posForm.title.trim()) return;
-        const data = { ...posForm, title: posForm.title.trim() };
-        if (editId) await updateDoc(doc(db, HR_COLLECTIONS.JOB_POSITIONS, editId), data);
-        else await addDoc(jobPositionsRef(), { ...data, createdAt: serverTimestamp() });
+        const data = {
+          title: posForm.title.trim(),
+          departmentId: posForm.departmentId,
+          level: posForm.level,
+          hasSystemAccessDefault: posForm.hasSystemAccessDefault,
+          isActive: posForm.isActive,
+        };
+        if (editId) unwrapOrThrow(await updateJobPosition(editId, data));
+        else unwrapOrThrow(await createJobPosition(data));
       } else if (tab === 'shifts') {
         if (!shiftForm.name.trim()) return;
         const data = { ...shiftForm, name: shiftForm.name.trim() };
-        if (editId) await updateDoc(doc(db, HR_COLLECTIONS.SHIFTS, editId), data);
-        else await addDoc(shiftsRef(), data);
+        if (editId) unwrapOrThrow(await updateShift(editId, data));
+        else unwrapOrThrow(await createShift(data));
       } else if (tab === 'penalties') {
         if (!penaltyForm.name.trim()) return;
         const data = { ...penaltyForm, name: penaltyForm.name.trim() };
-        if (editId) await updateDoc(doc(db, HR_COLLECTIONS.PENALTY_RULES, editId), data);
-        else await addDoc(penaltyRulesRef(), data);
+        unwrapOrThrow(await savePenaltyRule(data, editId || undefined));
       } else if (tab === 'lateRules') {
         if (lateRuleForm.minutesFrom < 0 || lateRuleForm.minutesTo <= lateRuleForm.minutesFrom) return;
-        if (editId) await updateDoc(doc(db, HR_COLLECTIONS.LATE_RULES, editId), { ...lateRuleForm });
-        else await addDoc(lateRulesRef(), { ...lateRuleForm });
+        unwrapOrThrow(await saveLateRule({ ...lateRuleForm }, editId || undefined));
       } else if (tab === 'allowances') {
         if (!allowanceForm.name.trim()) return;
         const data = { ...allowanceForm, name: allowanceForm.name.trim() };
-        if (editId) await updateDoc(doc(db, HR_COLLECTIONS.ALLOWANCE_TYPES, editId), data);
-        else await addDoc(allowanceTypesRef(), data);
+        unwrapOrThrow(await saveAllowanceType(data, editId || undefined));
       }
       await modalPayload.onSaved?.();
       setSaveMsg({ type: 'success', text: editId ? t('modalManager.organization.saveEditSuccess') : t('modalManager.organization.saveCreateSuccess') });

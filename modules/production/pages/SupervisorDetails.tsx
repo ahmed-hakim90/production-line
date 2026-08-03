@@ -62,6 +62,11 @@ import {
   fetchCachedPageData,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import {
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 
 // â”€â”€â”€ Performance Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -563,7 +568,13 @@ export const SupervisorDetails: React.FC = () => {
     () => [...productionTargetWorkerRows].sort((a, b) => a.achievementPercent - b.achievementPercent).slice(0, 5),
     [productionTargetWorkerRows],
   );
-  const canCreateReport = can('reports.create') || can('reports.componentInjection.manage');
+  const canCreateReport = (
+    can('reports.create') || can('reports.componentInjection.manage')
+  ) && isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    PRODUCTION_REPORT_CREATE_PATHS.supervisorDetails,
+  );
 
   const periodWorkOrders = useMemo(() => (
     workOrders.filter((wo) => {

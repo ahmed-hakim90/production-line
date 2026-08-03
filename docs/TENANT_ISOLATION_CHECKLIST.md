@@ -34,6 +34,17 @@ Documents **without** `tenantId` may still be readable under `sameTenantOrLegacy
 
 ## Foundation helpers (automated)
 
-- [ ] `npx --yes tsx tests/foundation-harden.test.ts` — tenant stamp overwrites client `tenantId`; cross-tenant `assertSameTenant` rejects.
-- [ ] `npm run arch:check:legacy-imports` — no new page-level Firestore write APIs outside HR allowlist.
+- [ ] `npx --yes tsx tests/foundation-harden.test.ts` — tenant stamp overwrites client `tenantId`; cross-tenant `assertSameTenant` rejects; transfer/org usecases fail without tenant.
+- [ ] `npm run arch:check:legacy-imports` — no Firestore write APIs in module pages or `components/modal-manager/**`.
 - [ ] Role create/update/delete go through `modules/system/usecases` (emits audit events).
+- [ ] Organization modal + store transfer create/reject go through usecases (not direct Firestore / service mutate from UI).
+
+## Hardening P0 (2026-08-03)
+
+- [ ] Tenant admin with `users.manage` cannot set `isSuperAdmin: true` (rules test covers this).
+- [ ] Restore for tenant A does not delete/alter tenant B docs (`full_reset` tenant-scoped; client `full_reset` blocked).
+- [ ] User with only `inventory.view` cannot write `stock_transactions` / `stock_items`.
+- [ ] After backfill, `hr_settings/{tenantId}`, `labor_settings/{tenantId}`, `approval_settings/{tenantId}`, `hr_config_modules/{tenantId}__*` exist per company.
+- [ ] Storage uploads use `company/{tenantId}/{module}/...` for new files.
+- [ ] `npm run test:rules` passes including privilege-escalation and stock-permission cases.
+- [ ] `npm run test:all` + `npm run typecheck` + `npm run typecheck:functions` pass before deploy.

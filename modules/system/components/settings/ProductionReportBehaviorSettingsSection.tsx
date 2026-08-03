@@ -169,7 +169,17 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
           {toggle('عمالة التغليف اختيارية', 'عند التشغيل يسمح لتقرير التغليف أو خط التغليف بالحفظ بدون عمالة.', behavior.allowPackagingLaborOptional, () => patchBehavior({ allowPackagingLaborOptional: !behavior.allowPackagingLaborOptional }))}
           {toggle('ربط دورة التوريد تلقائيًا', 'عند التشغيل يحاول النظام ربط التقرير بدورة توريد مناسبة أثناء الحفظ.', behavior.autoLinkSupplyCycleOnReportSave, () => patchBehavior({ autoLinkSupplyCycleOnReportSave: !behavior.autoLinkSupplyCycleOnReportSave }))}
           {toggle('تنفيذ أثر المخزون عند الحفظ', 'عند التشغيل ينشئ النظام حركات/طلبات المخزون الآلية المرتبطة بالتقرير.', behavior.autoApplyInventoryOnReportSave, () => patchBehavior({ autoApplyInventoryOnReportSave: !behavior.autoApplyInventoryOnReportSave }))}
-          {toggle('ترحيل التقرير إلى الخطة وأمر الشغل', 'عند التشغيل يحدث إنتاج الخطة وأمر الشغل بعد حفظ التقرير.', behavior.autoPostReportToPlanAndWorkOrder, () => patchBehavior({ autoPostReportToPlanAndWorkOrder: !behavior.autoPostReportToPlanAndWorkOrder }))}
+          <div className="flex items-start gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-emerald-200 dark:border-emerald-900/50">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-[var(--color-text)]">ترحيل التقرير إلى الخطة وأمر الشغل</p>
+              <p className="text-xs text-[var(--color-text-muted)] mt-0.5 leading-5">
+                تلقائي دائمًا: يحدّث التقرير الخطة وأمر الشغل المطابقين، أو المتاح منهما.
+              </p>
+            </div>
+            <span className="rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-700 dark:bg-emerald-950/60 dark:text-emerald-300">
+              تلقائي
+            </span>
+          </div>
           {toggle('إلزام صرف إنتاج معتمد قبل تقرير الإنتاج', savingIssueRequirement ? 'جار حفظ التغيير...' : 'تشغيله يمنع حفظ تقرير المنتج التام قبل إصدار إذن صرف إنتاج. إقفاله يسمح بالحفظ بدون إذن صرف.', routing.requireIssuedProductionIssueOnReport !== false, () => void handleRequireIssuedProductionIssueToggle(), savingIssueRequirement)}
           {toggle('خصم BOM تلقائي عند حفظ التقرير', 'مطفأ افتراضياً. لا تستخدمه مع مسار صرف الإنتاج.', Boolean(routing.autoConsumeBomOnProductionReport), () => patchRouting({ autoConsumeBomOnProductionReport: !routing.autoConsumeBomOnProductionReport }))}
           {toggle('تأثير تقرير التغليف على المخزون', 'عند التفعيل، كل تقرير تغليف ينشئ حركة تحويل مباشرة من مخزن التغليف المصدر إلى الوجهة.', Boolean(localPlanSettings.enablePackagingStockTransfer), () => patchPlan({ enablePackagingStockTransfer: !localPlanSettings.enablePackagingStockTransfer }))}

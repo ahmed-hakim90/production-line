@@ -4,8 +4,9 @@ export const WAREHOUSE_ROLE_LABELS: Record<WarehouseRole, string> = {
   general: 'عام',
   raw_material: 'مواد خام',
   decomposed: 'مفكك / مستلزم إنتاج',
-  production_wip: 'إنتاج تحت التشغيل (WIP)',
-  finished_staging: 'تم الإنتاج',
+  production_floor: 'صالة الإنتاج',
+  production_wip: 'تم الإنتاج — تحت التسليم',
+  finished_staging: 'بانتظار التغليف',
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
@@ -23,6 +24,8 @@ export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {
   component_return: 'مرتجع مكون',
   disassembly: 'تفكيك',
   supplies_receipt: 'استلام مستلزمات',
+  department_consumable_issue: 'صرف مستهلكات قسم',
+  department_consumable_return: 'مرتجع مستهلكات قسم',
   legacy: 'قديم',
 };
 
@@ -50,6 +53,7 @@ export function transferRequestTypeLabel(value?: TransferRequestType | string): 
     manual_transfer: 'تحويل يدوي',
     production_entry: 'إدخال إنتاج',
     production_auto_transfer: 'ترحيل إلى تم الإنتاج',
+    production_handover: 'استلام تغليف (تحت التسليم)',
     finished_to_final: 'تم الإنتاج → منتج تام',
     packaging_transfer: 'تحويل تغليف',
   };

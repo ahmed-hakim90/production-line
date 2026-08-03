@@ -161,7 +161,16 @@ export const useBackupRestore = ({ activeTab, isAdmin }: UseBackupRestoreParams)
     startJob(jobId, 'Saving to database...');
     clearImportSelection();
 
-    const runServer = useServerImport && isSuperAdmin;
+    const runServer = (useServerImport || restoreMode === 'full_reset') && isSuperAdmin;
+    if (restoreMode === 'full_reset' && !isSuperAdmin) {
+      setBackupMessage({
+        type: 'error',
+        text: 'إعادة التعيين الكاملة متاحة فقط لمسؤول المنصة عبر مسار الخادم',
+      });
+      failJob(jobId, 'full_reset requires super-admin server path', 'Failed');
+      setBackupLoading(false);
+      return;
+    }
     let result: { success: boolean; error?: string; restored: number };
 
     if (runServer) {

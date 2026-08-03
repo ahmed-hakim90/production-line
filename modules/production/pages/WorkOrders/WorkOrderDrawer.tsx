@@ -12,8 +12,8 @@ interface WorkOrderDrawerProps {
   lineName: string;
   supervisorName: string;
   onClose: () => void;
-  onEdit: (order: WorkOrder) => void;
-  onCloseOrder: (order: WorkOrder) => void;
+  onEdit?: (order: WorkOrder) => void;
+  onCloseOrder?: (order: WorkOrder) => void;
   onPrint: (order: WorkOrder) => void;
   onOpenScanner?: (order: WorkOrder) => void;
   canReopenCompleted?: boolean;
@@ -106,12 +106,12 @@ export function WorkOrderDrawer({
       order={detailOrder}
       open={isOpen}
       onClose={onClose}
-      onEdit={() => onEdit(order)}
-      onClose_order={() => {
+      onEdit={onEdit ? () => onEdit(order) : undefined}
+      onClose_order={onCloseOrder ? () => {
         if (effectiveStatus !== 'completed' && effectiveStatus !== 'cancelled') {
           onCloseOrder(order);
         }
-      }}
+      } : undefined}
       onPrint={() => onPrint(order)}
       onOpenScanner={onOpenScanner && !scannerHidden ? () => onOpenScanner(order) : undefined}
       showReopenCompleted={showReopenCompleted}

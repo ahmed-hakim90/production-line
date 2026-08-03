@@ -6,14 +6,15 @@ import { resolveInventoryRoutingV1 } from '../modules/inventory/lib/inventoryRou
 import { DEFAULT_PLAN_SETTINGS } from '../utils/dashboardConfig.ts';
 import type { SystemSettings } from '../types.ts';
 
-/** Recommended operational path after production_entry approval → تم الإنتاج → packaging → منتج تام. */
+/** Recommended operational path: صرف → صالة → تقرير → استلام تغليف → بانتظار تغليف → منتج تام. */
 function testRecommendedRoutingDefaults() {
   const synced = syncPlanSettingsWarehouseRouting({
     ...DEFAULT_PLAN_SETTINGS,
     inventoryRouting: {
-      autoTransferProductionToFinished: true,
-      requireApprovalForProductionEntry: true,
+      autoTransferProductionToFinished: false,
+      requireApprovalForProductionEntry: false,
       requireApprovalForAutoTransfers: false,
+      requirePackagingHandoverReceipt: true,
       autoConsumeBomOnProductionReport: false,
       requireIssuedProductionIssueOnReport: true,
       packagingSourceWarehouseId: 'staging-1',
@@ -21,24 +22,29 @@ function testRecommendedRoutingDefaults() {
       finishedStagingWarehouseId: 'staging-1',
       finalProductWarehouseId: 'final-1',
       productionWipWarehouseId: 'wip-1',
+      productionFloorWarehouseId: 'floor-1',
     },
   });
   const routing = synced.inventoryRouting!;
-  assert.equal(routing.autoTransferProductionToFinished, true);
-  assert.equal(routing.requireApprovalForProductionEntry, true);
+  assert.equal(routing.autoTransferProductionToFinished, false);
+  assert.equal(routing.requireApprovalForProductionEntry, false);
   assert.equal(routing.requireApprovalForAutoTransfers, false);
+  assert.equal(routing.requirePackagingHandoverReceipt, true);
   assert.equal(routing.autoConsumeBomOnProductionReport, false);
   assert.equal(routing.requireIssuedProductionIssueOnReport, true);
   assert.equal(routing.packagingSourceWarehouseId, 'staging-1');
   assert.equal(routing.packagingTargetWarehouseId, 'final-1');
+  assert.equal(routing.productionFloorWarehouseId, 'floor-1');
 }
 
 function testArabicStageLabels() {
-  assert.equal(WAREHOUSE_ROLE_LABELS.finished_staging, 'تم الإنتاج');
+  assert.equal(WAREHOUSE_ROLE_LABELS.finished_staging, 'بانتظار التغليف');
   assert.equal(WAREHOUSE_ROLE_LABELS.final_product, 'منتج تام');
-  assert.equal(WAREHOUSE_ROLE_LABELS.production_wip, 'إنتاج تحت التشغيل (WIP)');
+  assert.equal(WAREHOUSE_ROLE_LABELS.production_wip, 'تم الإنتاج — تحت التسليم');
+  assert.equal(WAREHOUSE_ROLE_LABELS.production_floor, 'صالة الإنتاج');
   assert.equal(transferRequestTypeLabel('production_auto_transfer'), 'ترحيل إلى تم الإنتاج');
   assert.equal(transferRequestTypeLabel('packaging_transfer'), 'تحويل تغليف');
+  assert.equal(transferRequestTypeLabel('production_handover'), 'استلام تغليف (تحت التسليم)');
 }
 
 function testPackagingMenuAndMaterialsRoleFilter() {

@@ -7,6 +7,13 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import type { InventoryItemType, StockAdjustmentReason } from '../../../modules/inventory/types';
+import { usePermission } from '../../../utils/permissions';
+import { useAppStore } from '../../../store/useAppStore';
+import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  isOperationPathEnabled,
+} from '../../../modules/system/lib/operationPathSettings';
 
 type Payload = GlobalModalPayload & {
   warehouseId: string;
@@ -19,6 +26,13 @@ type Payload = GlobalModalPayload & {
 
 export const GlobalStockAdjustmentModal: React.FC = () => {
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.INVENTORY_STOCK_ADJUSTMENT);
+  const { can } = usePermission();
+  const systemSettings = useAppStore((state) => state.systemSettings);
+  const adjustmentPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.stockMove,
+    INVENTORY_STOCK_MOVE_PATHS.adjustmentModal,
+  );
   const data = (payload || {}) as Payload;
   const { available, load, loading } = useStockAvailabilityPreview();
   const [quantity, setQuantity] = useState(0);
@@ -34,7 +48,12 @@ export const GlobalStockAdjustmentModal: React.FC = () => {
     setError('');
   }, [isOpen, data.warehouseId, data.itemType, data.itemId, load]);
 
-  if (!isOpen || !data.warehouseId) return null;
+  if (
+    !isOpen
+    || !data.warehouseId
+    || !can('inventory.transactions.create')
+    || !adjustmentPathEnabled
+  ) return null;
 
   const handleSave = async () => {
     if (quantity === 0) {
@@ -61,7 +80,7 @@ export const GlobalStockAdjustmentModal: React.FC = () => {
         sourceModule: 'manual_movement',
         note: note.trim() || `Manual adjustment: ${reason}`,
         createdBy: data.createdBy,
-      });
+      }, { path: INVENTORY_STOCK_MOVE_PATHS.adjustmentModal });
       data.onSaved?.();
       close();
     } catch (err) {

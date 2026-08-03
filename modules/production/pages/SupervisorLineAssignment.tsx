@@ -425,6 +425,7 @@ export const SupervisorLineAssignment: React.FC = () => {
 
       <section className="rounded-xl border border-gray-200 bg-white p-0">
         <SmartFilterBar
+      pageId="supervisor-line-assignment"
           className="mb-0 border-0 rounded-xl"
           searchPlaceholder="ابحث بالخط أو المشرف الحالي..."
           searchValue={searchInput}

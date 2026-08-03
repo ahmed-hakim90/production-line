@@ -752,6 +752,17 @@ export const FactoryManagerDashboard: React.FC = () => {
       });
     }
 
+    if (
+      decisionSnapshot.materials.assemblableCoveragePercent != null &&
+      decisionSnapshot.materials.assemblableCoveragePercent < 90
+    ) {
+      result.push({
+        type: decisionSnapshot.materials.assemblableCoveragePercent < 70 ? 'danger' : 'warning',
+        icon: 'inventory_2',
+        message: `تغطية التجميع من المخزن ${decisionSnapshot.materials.assemblableCoveragePercent}% · عجز ${formatNumber(decisionSnapshot.materials.assemblableShortfallQty)} وحدة · ${decisionSnapshot.materials.plansBelowAssemblable} خطة تحت القدرة`,
+      });
+    }
+
     if (qualityKpis.pendingQuality > 0) {
       result.push({
         type: 'warning',
@@ -948,6 +959,7 @@ export const FactoryManagerDashboard: React.FC = () => {
 
       {/* â”€â”€ Period Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <SmartFilterBar
+      pageId="dashboard-factory-manager"
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
           label: PRESET_LABELS[key],

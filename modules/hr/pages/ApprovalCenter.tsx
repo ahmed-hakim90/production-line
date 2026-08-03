@@ -4,8 +4,6 @@ import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { TableIconAction, ToneActionButton } from '@/src/components/erp';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
-import { syncLeaveApprovalDecision } from '../leaveService';
-import { loanService } from '../loanService';
 import { employeeService } from '../employeeService';
 import {
   getAllRequests,
@@ -22,11 +20,11 @@ import {
 import { formatPenaltyRequestSummary, getPenaltyDurationLabel } from '../approval/penaltyApproval';
 import type {
   FirestoreApprovalRequest,
-  ApprovalRequestType,
   ApprovalRequestStatus,
+  ApprovalRequestType,
   ApprovalChainSnapshot,
 } from '../approval/types';
-import { LEAVE_TYPE_LABELS, type ApprovalChainItem, type ApprovalStatus } from '../types';
+import { LEAVE_TYPE_LABELS } from '../types';
 import { ApprovalEmployeeContext } from '../components/ApprovalEmployeeContext';
 import { HRNotificationBell } from '../components/HRNotificationBell';
 import { isApprovalRequestCreatedBySupervisor } from '@/modules/production/utils/supervisorApprovalVisibility';
@@ -77,22 +75,6 @@ function formatRequestDetail(req: FirestoreApprovalRequest): string {
     return `${durationLabel ? `المدة: ${durationLabel} — ` : ''}${data.productionLineName || '—'} — شهر ${data.startMonth || '—'} — ${data.reason || '—'}`;
   }
   return data.description || '';
-}
-
-function mapApprovalStatusToLegacy(status: ApprovalRequestStatus): ApprovalStatus {
-  if (status === 'approved') return 'approved';
-  if (status === 'rejected' || status === 'cancelled') return 'rejected';
-  return 'pending';
-}
-
-function mapSnapshotChainToLegacy(chain: ApprovalChainSnapshot[]): ApprovalChainItem[] {
-  return chain.map((step) => ({
-    approverEmployeeId: step.approverEmployeeId,
-    level: step.level,
-    status: step.status === 'approved' || step.status === 'skipped' ? 'approved' : step.status === 'rejected' ? 'rejected' : 'pending',
-    actionDate: step.actionDate,
-    notes: step.notes || '',
-  }));
 }
 
 const StepIndicator: React.FC<{ chain: ApprovalChainSnapshot[]; currentStep: number }> = ({ chain, currentStep }) => {
@@ -279,28 +261,6 @@ export const ApprovalCenter: React.FC = () => {
       );
       if (!result.success) { alert(result.error || 'حدث خطأ'); return; }
 
-      const updatedRequest = await getAllRequests().then((all) => all.find((r) => r.id === req.id));
-      if (updatedRequest?.sourceRequestId) {
-        const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
-        const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
-        if (updatedRequest.requestType === 'leave') {
-          const syncResult = await syncLeaveApprovalDecision({
-            leaveRequestId: updatedRequest.sourceRequestId,
-            approvalChain: mappedChain,
-            decisionStatus: mappedStatus,
-          });
-          if (!syncResult.success) {
-            console.warn('Leave sync warning (approve):', syncResult.error);
-          }
-        } else if (updatedRequest.requestType === 'loan') {
-          await loanService.updateApproval(
-            updatedRequest.sourceRequestId,
-            mappedChain,
-            mappedStatus,
-          );
-        }
-      }
-
       setActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
       await fetchData({ silent: true });
     } catch (err) {
@@ -319,27 +279,6 @@ export const ApprovalCenter: React.FC = () => {
         caller,
       );
       if (!result.success) { alert(result.error || 'حدث خطأ'); return; }
-      const updatedRequest = await getAllRequests().then((all) => all.find((r) => r.id === req.id));
-      if (updatedRequest?.sourceRequestId) {
-        const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
-        const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
-        if (updatedRequest.requestType === 'leave') {
-          const syncResult = await syncLeaveApprovalDecision({
-            leaveRequestId: updatedRequest.sourceRequestId,
-            approvalChain: mappedChain,
-            decisionStatus: mappedStatus,
-          });
-          if (!syncResult.success) {
-            console.warn('Leave sync warning (reject):', syncResult.error);
-          }
-        } else if (updatedRequest.requestType === 'loan') {
-          await loanService.updateApproval(
-            updatedRequest.sourceRequestId,
-            mappedChain,
-            mappedStatus,
-          );
-        }
-      }
       setActionNotes((prev) => ({ ...prev, [req.id!]: '' }));
       await fetchData({ silent: true });
     } catch (err) {
@@ -358,27 +297,6 @@ export const ApprovalCenter: React.FC = () => {
         caller,
       );
       if (!result.success) { alert(result.error || 'حدث خطأ'); return; }
-      const updatedRequest = await getAllRequests().then((all) => all.find((r) => r.id === req.id));
-      if (updatedRequest?.sourceRequestId) {
-        const mappedStatus = mapApprovalStatusToLegacy(updatedRequest.status);
-        const mappedChain = mapSnapshotChainToLegacy(updatedRequest.approvalChain);
-        if (updatedRequest.requestType === 'leave') {
-          const syncResult = await syncLeaveApprovalDecision({
-            leaveRequestId: updatedRequest.sourceRequestId,
-            approvalChain: mappedChain,
-            decisionStatus: mappedStatus,
-          });
-          if (!syncResult.success) {
-            console.warn('Leave sync warning (cancel):', syncResult.error);
-          }
-        } else if (updatedRequest.requestType === 'loan') {
-          await loanService.updateApproval(
-            updatedRequest.sourceRequestId,
-            mappedChain,
-            mappedStatus,
-          );
-        }
-      }
       await fetchData({ silent: true });
     } catch (err) {
       console.error('Cancel error:', err);
@@ -510,6 +428,7 @@ export const ApprovalCenter: React.FC = () => {
       </div>
 
       <SmartFilterBar
+      pageId="hr-approval-center"
         quickFilters={[
           {
             key: 'status',

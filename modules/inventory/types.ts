@@ -20,6 +20,8 @@ export type StockSourceModule =
   | 'component_return'
   | 'disassembly'
   | 'supplies_receipt'
+  | 'department_consumable_issue'
+  | 'department_consumable_return'
   | 'legacy';
 
 export type StockAdjustmentReason =
@@ -32,6 +34,7 @@ export type StockAdjustmentReason =
 export type WarehouseRole =
   | 'raw_material'
   | 'decomposed'
+  | 'production_floor'
   | 'production_wip'
   | 'finished_staging'
   | 'final_product'
@@ -204,9 +207,15 @@ export interface StockTransaction {
   sourceIssueOrderId?: string;
   sourceWorkOrderId?: string;
   sourcePlanId?: string;
+  /** HR department snapshot when movement is department consumable issue/return. */
+  departmentId?: string;
+  departmentName?: string;
+  unitCostSnapshot?: number;
+  totalCostSnapshot?: number;
   adjustmentReason?: StockAdjustmentReason;
   createdAt: string;
   createdBy: string;
+  tenantId?: string;
 }
 
 export interface StockCountLine {
@@ -268,6 +277,10 @@ export interface CreateStockMovementInput {
   sourceIssueOrderId?: string;
   sourceWorkOrderId?: string;
   sourcePlanId?: string;
+  departmentId?: string;
+  departmentName?: string;
+  unitCostSnapshot?: number;
+  totalCostSnapshot?: number;
   adjustmentReason?: StockAdjustmentReason;
   createdBy: string;
   allowNegative?: boolean;
@@ -280,6 +293,7 @@ export type TransferRequestType =
   | 'manual_transfer'
   | 'production_entry'
   | 'production_auto_transfer'
+  | 'production_handover'
   | 'finished_to_final'
   | 'packaging_transfer';
 
@@ -293,6 +307,10 @@ export interface TransferRequestLine {
   toLocationId?: string;
   toLocationCode?: string;
   quantity: number;
+  /** Reported / expected qty for partial handover receipts. */
+  reportedQuantity?: number;
+  /** Cumulative received qty across partial receipts. */
+  receivedQuantity?: number;
   unit?: string;
   requestQuantity?: number;
   requestUnit?: 'piece' | 'carton' | 'unit';
@@ -315,6 +333,12 @@ export interface InventoryTransferRequest {
   sourceId?: string;
   lines: TransferRequestLine[];
   status: TransferRequestStatus;
+  /** Reported FG qty awaiting packaging handover (production_handover). */
+  reportedQuantity?: number;
+  /** Cumulative received qty confirmed by packaging supervisor. */
+  receivedQuantity?: number;
+  /** Remaining qty still in WIP pending receipt. */
+  remainingQuantity?: number;
   createdBy: string;
   createdByUserId?: string;
   createdAt: string;
@@ -332,6 +356,26 @@ export interface InventoryTransferRequest {
   cancelledByUserId?: string;
   cancelledAt?: string;
   cancellationReason?: string;
+}
+
+/** One packaging-supervisor receipt batch against a production_handover request. */
+export interface ProductionHandoverReceipt {
+  id?: string;
+  handoverRequestId: string;
+  handoverReferenceNo?: string;
+  productionReportId?: string;
+  productId: string;
+  productName: string;
+  productCode?: string;
+  quantity: number;
+  fromWarehouseId: string;
+  toWarehouseId: string;
+  movementReferenceNo?: string;
+  note?: string;
+  receivedBy: string;
+  receivedByUserId?: string;
+  createdAt: string;
+  tenantId?: string;
 }
 
 export type ProductionIssueOrderStatus = 'requested' | 'draft' | 'submitted' | 'issued' | 'rejected' | 'cancelled';
@@ -386,6 +430,9 @@ export interface ProductionIssueOrder {
   requestedQuantity?: number;
   sourceWarehouseId: string;
   sourceWarehouseName?: string;
+  /** Destination warehouse for issued components (production floor). */
+  targetWarehouseId?: string;
+  targetWarehouseName?: string;
   status: ProductionIssueOrderStatus;
   origin?: ProductionIssueOrigin;
   lines: ProductionIssueOrderLine[];
@@ -559,6 +606,105 @@ export interface DisassemblyOrder {
   tenantId?: string;
 }
 
+export type DepartmentConsumableApprovalMode = 'direct' | 'required';
+
+export type DepartmentConsumableIssueStatus =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'issued'
+  | 'rejected'
+  | 'cancelled';
+
+export interface DepartmentConsumableIssueLine {
+  /** Stable identity within the issue; legacy rows fall back to itemId + locationId. */
+  lineId?: string;
+  /** Always stocked as material to keep a single balance key. */
+  itemType: 'material';
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  quantity: number;
+  locationId?: string;
+  locationCode?: string;
+  unitCostSnapshot?: number;
+  totalCostSnapshot?: number;
+  /** Cumulative returned qty against this line (cannot exceed quantity). */
+  returnedQty?: number;
+}
+
+export interface DepartmentConsumableIssue {
+  id?: string;
+  referenceNo: string;
+  status: DepartmentConsumableIssueStatus;
+  /** Snapshot of company approval mode at create time. */
+  approvalMode: DepartmentConsumableApprovalMode;
+  warehouseId: string;
+  warehouseName: string;
+  departmentId: string;
+  departmentName: string;
+  lines: DepartmentConsumableIssueLine[];
+  note?: string;
+  totalCostSnapshot?: number;
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submittedByUserId?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByUserId?: string;
+  issuedAt?: string;
+  issuedBy?: string;
+  issuedByUserId?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedByUserId?: string;
+  rejectionReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByUserId?: string;
+  tenantId?: string;
+}
+
+export interface DepartmentConsumableReturnLine {
+  lineId?: string;
+  itemId: string;
+  quantity: number;
+  locationId?: string;
+  locationCode?: string;
+  note?: string;
+}
+
+export interface DepartmentConsumableMonthlyRow {
+  departmentId: string;
+  departmentName: string;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  issuedQty: number;
+  returnedQty: number;
+  netQty: number;
+  issuedCost: number;
+  returnedCost: number;
+  netCost: number;
+}
+
+export interface DepartmentConsumableMonthlyReport {
+  month: string;
+  departmentId?: string;
+  warehouseId?: string;
+  issueCount: number;
+  totalIssuedCost: number;
+  totalReturnedCost: number;
+  totalNetCost: number;
+  rows: DepartmentConsumableMonthlyRow[];
+  truncated?: boolean;
+}
+
 export interface SuppliesReceiptLine {
   itemType: InventoryItemType;
   itemId: string;
@@ -620,7 +766,11 @@ export interface SuppliesReceiptOrder {
 export interface InventoryRoutingSettings {
   rawMaterialWarehouseId?: string;
   decomposedWarehouseId?: string;
+  /** BOM components issued for production (صالة الإنتاج). */
+  productionFloorWarehouseId?: string;
+  /** Finished goods awaiting packaging supervisor receipt (تحت التسليم). */
   productionWipWarehouseId?: string;
+  /** Accepted finished goods awaiting packaging (بانتظار التغليف). */
   finishedStagingWarehouseId?: string;
   finalProductWarehouseId?: string;
   packagingSourceWarehouseId?: string;
@@ -630,6 +780,8 @@ export interface InventoryRoutingSettings {
   autoTransferFinishedToFinal?: boolean;
   requireApprovalForProductionEntry?: boolean;
   requireApprovalForAutoTransfers?: boolean;
+  /** Require packaging supervisor to confirm actual received qty before staging. */
+  requirePackagingHandoverReceipt?: boolean;
   autoConsumeBomOnProductionReport?: boolean;
   requireIssuedProductionIssueOnReport?: boolean;
 }
@@ -637,6 +789,7 @@ export interface InventoryRoutingSettings {
 export interface ResolvedInventoryRouting {
   rawMaterialWarehouseId: string;
   decomposedWarehouseId: string;
+  productionFloorWarehouseId: string;
   productionWipWarehouseId: string;
   finishedStagingWarehouseId: string;
   finalProductWarehouseId: string;
@@ -647,6 +800,7 @@ export interface ResolvedInventoryRouting {
   autoTransferFinishedToFinal: boolean;
   requireApprovalForProductionEntry: boolean;
   requireApprovalForAutoTransfers: boolean;
+  requirePackagingHandoverReceipt: boolean;
   /** Direct BOM deduction on report save (off by default; use صرف إنتاج separately). */
   autoConsumeBomOnProductionReport: boolean;
   /** Finished report requires issued صرف إنتاج before create/post. On by default; does not auto-consume. */
@@ -654,4 +808,30 @@ export interface ResolvedInventoryRouting {
   allowNegativeDecomposedStock: boolean;
   allowNegativeFinishedTransferStock: boolean;
   enablePackagingStockTransfer: boolean;
+}
+
+/** Period balance row for warehouse inventory reports. */
+export interface PeriodBalanceRow {
+  warehouseId: string;
+  warehouseName?: string;
+  itemType: InventoryItemType;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit?: string;
+  openingQty: number;
+  inQty: number;
+  outQty: number;
+  transferInQty: number;
+  transferOutQty: number;
+  adjustmentQty: number;
+  closingQty: number;
+}
+
+export interface PeriodBalanceReport {
+  warehouseId?: string;
+  startDate: string;
+  endDate: string;
+  rows: PeriodBalanceRow[];
+  truncated?: boolean;
 }

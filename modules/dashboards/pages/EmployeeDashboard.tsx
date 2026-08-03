@@ -41,6 +41,11 @@ import {
   EMPLOYEE_PORTAL_PATHS,
   SUPERVISOR_PORTAL_PATHS,
 } from '../lib/portalHome';
+import {
+  WORK_ORDER_OPERATION_KEYS,
+  WORK_ORDER_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 
 type Period = 'daily' | 'yesterday' | 'weekly' | 'monthly';
 
@@ -126,6 +131,12 @@ export const EmployeeDashboard: React.FC = () => {
   const { can } = usePermission();
   const products = useAppStore((s) => s.products);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const employeeWorkOrderUpdateEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.update,
+    WORK_ORDER_UPDATE_PATHS.employeeDashboard,
+  );
   const transferApprovalPermission = useAppStore(
     (s) => s.systemSettings.planSettings?.transferApprovalPermission || 'inventory.transfers.approve',
   );
@@ -570,6 +581,7 @@ export const EmployeeDashboard: React.FC = () => {
       />
 
       <SmartFilterBar
+      pageId="dashboard-employee"
         periods={PERIOD_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
         activePeriod={period}
         onPeriodChange={(value) => setPeriod(value as Period)}
@@ -630,6 +642,17 @@ export const EmployeeDashboard: React.FC = () => {
             tone="share"
           >
             حركة المخزون
+          </GhostButton>
+        )}
+        {(can('departmentConsumables.view') || can('departmentConsumables.create')) && (
+          <GhostButton
+            type="button"
+            onClick={() => navigate('/inventory/department-consumables')}
+            className="shrink-0"
+            iconName="shopping_bag"
+            tone="edit"
+          >
+            مستهلكات الأقسام
           </GhostButton>
         )}
         {can('reports.componentWaste.create') && (
@@ -840,13 +863,16 @@ export const EmployeeDashboard: React.FC = () => {
         </Card>
       )}
 
-      {(can('productionIssue.request' as any) || can('inventory.view' as any) || can('productionIssue.approve' as any) || can('inventory.counts.manage' as any)) &&
+      {(can('productionIssue.request' as any) || can('inventory.view' as any) || can('productionIssue.approve' as any) || can('inventory.counts.manage' as any) || can('plans.view' as any)) &&
         (decisionSnapshot.issues.openCount > 0 ||
           decisionSnapshot.packaging.awaitingUnits > 0 ||
           decisionSnapshot.inventory.negativeCount > 0 ||
           decisionSnapshot.inventory.lowStockCount > 0 ||
           decisionSnapshot.stockCounts.openSessions > 0 ||
-          decisionSnapshot.stockCounts.awaitingApproval > 0) && (
+          decisionSnapshot.stockCounts.awaitingApproval > 0 ||
+          decisionSnapshot.materials.plansWithShortage > 0 ||
+          (decisionSnapshot.materials.assemblableCoveragePercent != null &&
+            decisionSnapshot.materials.assemblableCoveragePercent < 90)) && (
         <Card>
           <div className="flex flex-col gap-3">
             <div className="flex items-center gap-2">
@@ -926,6 +952,30 @@ export const EmployeeDashboard: React.FC = () => {
                   </p>
                   <p className="text-[11px] text-indigo-800/80 mt-1">
                     مفتوح {decisionSnapshot.stockCounts.openSessions} · اعتماد {decisionSnapshot.stockCounts.awaitingApproval}
+                  </p>
+                </button>
+              )}
+              {(can('productionIssue.request' as any) || can('plans.view' as any) || can('inventory.view' as any)) &&
+                (decisionSnapshot.materials.plansWithShortage > 0 ||
+                  (decisionSnapshot.materials.assemblableCoveragePercent != null &&
+                    decisionSnapshot.materials.assemblableCoveragePercent < 90)) && (
+                <button
+                  type="button"
+                  onClick={() => navigate('/production/issue-requests')}
+                  className="text-right rounded-[var(--border-radius-lg)] border border-orange-200 bg-orange-50/80 px-3.5 py-3 hover:shadow-sm"
+                >
+                  <p className="text-xs font-bold text-orange-800">جاهزية المواد / التجميع</p>
+                  <p className="text-xl font-black tabular-nums text-orange-900 mt-0.5">
+                    {decisionLoading
+                      ? '…'
+                      : decisionSnapshot.materials.assemblableCoveragePercent != null
+                        ? `${decisionSnapshot.materials.assemblableCoveragePercent}%`
+                        : `${decisionSnapshot.materials.readinessPercent}%`}
+                  </p>
+                  <p className="text-[11px] text-orange-800/80 mt-1">
+                    {decisionSnapshot.materials.assemblableCoveragePercent != null
+                      ? `تحت القدرة ${decisionSnapshot.materials.plansBelowAssemblable} · عجز ${formatNumber(decisionSnapshot.materials.assemblableShortfallQty)}`
+                      : `نواقص ${decisionSnapshot.materials.plansWithShortage} خطة · ${formatNumber(decisionSnapshot.materials.totalShortageQty)} مكوّن`}
                   </p>
                 </button>
               )}
@@ -1104,9 +1154,13 @@ export const EmployeeDashboard: React.FC = () => {
                                     <span className="material-icons-round text-base">print</span>
                                   </button>
                                 )}
-                                {isSupervisor && can('workOrders.edit') && wo.status === 'pending' && (
+                                {employeeWorkOrderUpdateEnabled && isSupervisor && can('workOrders.edit') && wo.status === 'pending' && (
                                   <GhostButton
-                                    onClick={() => updateWorkOrder(wo.id!, { status: 'in_progress' })}
+                                    onClick={() => updateWorkOrder(
+                                      wo.id!,
+                                      { status: 'in_progress' },
+                                      { path: WORK_ORDER_UPDATE_PATHS.employeeDashboard },
+                                    )}
                                     className="h-8 px-3 text-xs"
                                     iconName="play_arrow"
                                     tone="execute"
@@ -1114,9 +1168,17 @@ export const EmployeeDashboard: React.FC = () => {
                                     بدء
                                   </GhostButton>
                                 )}
-                                {isSupervisor && can('workOrders.edit') && wo.status === 'in_progress' && (
+                                {employeeWorkOrderUpdateEnabled && isSupervisor && can('workOrders.edit') && wo.status === 'in_progress' && (
                                   <GhostButton
-                                    onClick={() => updateWorkOrder(wo.id!, { status: 'completed', completedAt: new Date().toISOString() })}
+                                    onClick={() => updateWorkOrder(
+                                      wo.id!,
+                                      {
+                                        status: 'completed',
+                                        completedAt: new Date().toISOString(),
+                                        actualWorkHours: wo.actualWorkHours,
+                                      },
+                                      { path: WORK_ORDER_UPDATE_PATHS.employeeDashboard },
+                                    )}
                                     className="h-8 px-3 text-xs"
                                     iconName="check_circle"
                                     tone="approve"

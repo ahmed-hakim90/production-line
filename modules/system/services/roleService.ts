@@ -260,6 +260,11 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'productionIssue.print',
           'productionIssue.return',
           'productionIssue.compensate',
+          'departmentConsumables.view',
+          'departmentConsumables.create',
+          'departmentConsumables.approve',
+          'departmentConsumables.issue',
+          'departmentConsumables.export',
           'materials.view',
           'materials.manage',
           'bom.view',
@@ -278,6 +283,22 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
         ]),
         roleKey: 'materials_warehouse',
       },
+      {
+        name: 'عرض مخزون فقط',
+        color: 'bg-slate-100 text-slate-700 dark:bg-slate-800/60 dark:text-slate-300',
+        permissions: permsFrom([
+          'dashboard.view',
+          'inventory.view',
+          'inventory.analytics.view',
+          'inventory.exceptions.view',
+          'inventory.transactions.print',
+          'inventory.transactions.export',
+          'departmentConsumables.view',
+          'print',
+          'export',
+        ]),
+        roleKey: 'inventory_viewer',
+      },
     ];
   }
   return _defaultRoles;
@@ -287,33 +308,29 @@ function normalizeRoleName(value: unknown): string {
   return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
+function resolveDefaultRoleKey(role: FirestoreRole): string | undefined {
+  if (role.roleKey) return role.roleKey;
+  return getDefaultRoles().find(
+    (defaultRole) => normalizeRoleName(defaultRole.name) === normalizeRoleName(role.name),
+  )?.roleKey;
+}
+
 function defaultRoleDocId(tenantId: string, roleKey: string): string {
   return `${tenantId.replace(/\//g, '_')}__${roleKey}`;
 }
 
 function existingDefaultRoleKeys(roles: FirestoreRole[]): Set<string> {
-  const defaultsByName = new Map(
-    getDefaultRoles().map((role) => [normalizeRoleName(role.name), role.roleKey]),
-  );
   const keys = new Set<string>();
 
   roles.forEach((role) => {
-    if (role.roleKey) {
-      keys.add(role.roleKey);
-      return;
-    }
-
-    const roleKey = defaultsByName.get(normalizeRoleName(role.name));
+    const roleKey = resolveDefaultRoleKey(role);
     if (roleKey) keys.add(roleKey);
   });
 
   return keys;
 }
 
-let seedIfEmptyInFlight: Promise<FirestoreRole[]> | null = null;
-let productionWorkerPermsMigrationInFlight: Promise<number> | null = null;
-/** Session guard — migration is idempotent; skip re-runs after first successful pass. */
-let productionWorkerPermsMigrationDone = false;
+const roleMigrationInFlight = new Map<string, Promise<FirestoreRole[]>>();
 
 /** Production worker permissions to merge onto built-in roles (does not revoke custom perms). */
 const FACTORY_MANAGER_PRODUCTION_WORKER_PERMS: Permission[] = [
@@ -339,9 +356,16 @@ const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [
   'production.workerRatings.view',
 ];
 
-const PRODUCTION_WORKER_PERMS_BY_ROLE_KEY: Record<string, readonly Permission[]> = {
+const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permission[]> = {
   factory_manager: FACTORY_MANAGER_PRODUCTION_WORKER_PERMS,
   hall_supervisor: HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS,
+  materials_warehouse: [
+    'departmentConsumables.view',
+    'departmentConsumables.create',
+    'departmentConsumables.approve',
+    'departmentConsumables.issue',
+    'departmentConsumables.export',
+  ],
 };
 
 function rolesCollectionQuery() {
@@ -349,6 +373,10 @@ function rolesCollectionQuery() {
 }
 
 export const roleService = {
+  defaultRoleId(roleKey: string): string {
+    return defaultRoleDocId(getCurrentTenantId(), roleKey);
+  },
+
   async getAll(): Promise<FirestoreRole[]> {
     if (!isConfigured) return [];
     try {
@@ -430,78 +458,81 @@ export const roleService = {
     });
   },
 
-  async seedIfEmpty(): Promise<FirestoreRole[]> {
+  /**
+   * Explicit default-role migration. Firestore rules require super-admin or
+   * roles.manage, so normal sign-in/bootstrap code must only call getAll().
+   */
+  async migrateDefaultRoles(): Promise<FirestoreRole[]> {
     if (!isConfigured) return [];
-    if (seedIfEmptyInFlight) return seedIfEmptyInFlight;
+    const tid = getCurrentTenantId();
+    const existingMigration = roleMigrationInFlight.get(tid);
+    if (existingMigration) return existingMigration;
 
-    seedIfEmptyInFlight = (async () => {
-      const tid = getCurrentTenantId();
+    const migration = (async () => {
       const existing = await this.getAll();
       const defaults = getDefaultRoles();
       const existingKeys = existingDefaultRoleKeys(existing);
       const missingDefaults = defaults.filter((role) => role.roleKey && !existingKeys.has(role.roleKey));
 
-      if (missingDefaults.length === 0) return existing;
+      if (missingDefaults.length > 0) {
+        await Promise.all(
+          missingDefaults.map((role) =>
+            setDoc(doc(db, COLLECTION, defaultRoleDocId(tid, role.roleKey!)), {
+              ...role,
+              tenantId: tid,
+            }),
+          ),
+        );
+      }
 
-      await Promise.all(
-        missingDefaults.map((role) =>
-          setDoc(doc(db, COLLECTION, defaultRoleDocId(tid, role.roleKey!)), {
-            ...role,
-            tenantId: tid,
-          }),
-        ),
-      );
-
+      await this.ensureProductionWorkerPermissionsOnRoles();
       return this.getAll();
     })();
+    roleMigrationInFlight.set(tid, migration);
 
     try {
-      return await seedIfEmptyInFlight;
+      return await migration;
     } finally {
-      seedIfEmptyInFlight = null;
+      roleMigrationInFlight.delete(tid);
     }
   },
 
+  /** @deprecated Use migrateDefaultRoles only from an authorized admin workflow. */
+  async seedIfEmpty(): Promise<FirestoreRole[]> {
+    return this.migrateDefaultRoles();
+  },
+
   /**
-   * One-time idempotent merge: grant production worker permissions on built-in roles.
-   * Existing custom permissions are preserved; only missing keys are set to true.
+   * Idempotent, explicitly authorized permission migration for built-in roles.
+   * Existing custom permissions are preserved; only named grants are set to true.
    */
   async ensureProductionWorkerPermissionsOnRoles(): Promise<number> {
     if (!isConfigured) return 0;
-    if (productionWorkerPermsMigrationDone) return 0;
-    if (productionWorkerPermsMigrationInFlight) return productionWorkerPermsMigrationInFlight;
+    const roles = await this.getAll();
+    let patched = 0;
+    for (const role of roles) {
+      const roleKey = resolveDefaultRoleKey(role);
+      if (!role.id || !roleKey) continue;
+      const toGrant = REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY[roleKey];
+      if (!toGrant?.length) continue;
 
-    productionWorkerPermsMigrationInFlight = (async () => {
-      const roles = await this.getAll();
-      let patched = 0;
-      for (const role of roles) {
-        if (!role.id || !role.roleKey) continue;
-        const toGrant = PRODUCTION_WORKER_PERMS_BY_ROLE_KEY[role.roleKey];
-        if (!toGrant?.length) continue;
-
-        const current = role.permissions ?? {};
-        const next = { ...current };
-        let changed = false;
-        for (const perm of toGrant) {
-          if (!next[perm]) {
-            next[perm] = true;
-            changed = true;
-          }
-        }
-        if (changed) {
-          await this.update(role.id, { permissions: next });
-          patched += 1;
+      const current = role.permissions ?? {};
+      const next = { ...current };
+      let changed = false;
+      for (const perm of toGrant) {
+        if (!next[perm]) {
+          next[perm] = true;
+          changed = true;
         }
       }
-      return patched;
-    })();
-
-    try {
-      const patched = await productionWorkerPermsMigrationInFlight;
-      productionWorkerPermsMigrationDone = true;
-      return patched;
-    } finally {
-      productionWorkerPermsMigrationInFlight = null;
+      if (changed) {
+        await this.update(role.id, {
+          permissions: next,
+          ...(role.roleKey ? {} : { roleKey }),
+        });
+        patched += 1;
+      }
     }
+    return patched;
   },
 };

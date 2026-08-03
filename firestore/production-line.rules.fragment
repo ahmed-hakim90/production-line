@@ -179,6 +179,121 @@
         );
     }
 
+    /** Single-warehouse bind on users.inventoryWarehouseId (UI + rules). Empty = all warehouses. */
+    function pl_boundInventoryWarehouseId() {
+      return pl_currentUserDoc().data.get('inventoryWarehouseId', '');
+    }
+
+    function pl_isInventoryWarehouseBound() {
+      return pl_boundInventoryWarehouseId() is string
+        && pl_boundInventoryWarehouseId() != '';
+    }
+
+    function pl_canAccessInventoryWarehouse(warehouseId) {
+      return !pl_isInventoryWarehouseBound()
+        || (warehouseId is string && warehouseId != '' && warehouseId == pl_boundInventoryWarehouseId());
+    }
+
+    function pl_canReadWarehouseIdField() {
+      return pl_sameTenantOrLegacyRead()
+        && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
+    }
+
+    function pl_canWriteWarehouseIdField() {
+      return pl_sameTenantOrLegacyWrite()
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('warehouseId', ''));
+    }
+
+    function pl_canUpdateWarehouseIdField() {
+      return pl_sameTenantOrLegacyUpdate()
+        && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''))
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('warehouseId', ''));
+    }
+
+    function pl_canReadTransferWarehouses() {
+      return pl_sameTenantOrLegacyRead()
+        && (
+          pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('toWarehouseId', ''))
+        );
+    }
+
+    function pl_canWriteTransferWarehouses() {
+      return pl_sameTenantOrLegacyWrite()
+        && (
+          pl_canAccessInventoryWarehouse(request.resource.data.get('fromWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(request.resource.data.get('toWarehouseId', ''))
+        );
+    }
+
+    function pl_canUpdateTransferWarehouses() {
+      return pl_sameTenantOrLegacyUpdate()
+        && resource.data.get('fromWarehouseId', '')
+          == request.resource.data.get('fromWarehouseId', '')
+        && resource.data.get('toWarehouseId', '')
+          == request.resource.data.get('toWarehouseId', '')
+        && (
+          pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('toWarehouseId', ''))
+        );
+    }
+
+    function pl_canReadIssueWarehouses() {
+      return pl_sameTenantOrLegacyRead()
+        && (
+          pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('targetWarehouseId', ''))
+        );
+    }
+
+    function pl_canWriteIssueWarehouses() {
+      return pl_sameTenantOrLegacyWrite()
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('sourceWarehouseId', ''));
+    }
+
+    function pl_canUpdateIssueWarehouses() {
+      return pl_sameTenantOrLegacyUpdate()
+        && pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('sourceWarehouseId', ''));
+    }
+
+    function pl_canReadDisassemblyWarehouses() {
+      return pl_sameTenantOrLegacyRead()
+        && (
+          pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('targetWarehouseId', ''))
+        );
+    }
+
+    function pl_canWriteDisassemblyWarehouses() {
+      return pl_sameTenantOrLegacyWrite()
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('sourceWarehouseId', ''))
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('targetWarehouseId', ''));
+    }
+
+    function pl_canUpdateDisassemblyWarehouses() {
+      return pl_sameTenantOrLegacyUpdate()
+        && pl_canAccessInventoryWarehouse(resource.data.get('sourceWarehouseId', ''))
+        && pl_canAccessInventoryWarehouse(resource.data.get('targetWarehouseId', ''))
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('sourceWarehouseId', ''))
+        && pl_canAccessInventoryWarehouse(request.resource.data.get('targetWarehouseId', ''));
+    }
+
+    function pl_canReadWarehouseDoc(warehouseDocId) {
+      return pl_sameTenantOrLegacyRead()
+        && pl_canAccessInventoryWarehouse(warehouseDocId);
+    }
+
+    function pl_canWriteWarehouseDoc(warehouseDocId) {
+      return pl_sameTenantOrLegacyWrite()
+        && pl_canAccessInventoryWarehouse(warehouseDocId);
+    }
+
+    function pl_canUpdateWarehouseDoc(warehouseDocId) {
+      return pl_sameTenantOrLegacyUpdate()
+        && pl_canAccessInventoryWarehouse(warehouseDocId);
+    }
+
     function pl_canCreateRepairTreasuryEntryForOpenSession() {
       return (
         'sessionId' in request.resource.data
@@ -222,10 +337,9 @@
         'materials', 'boms', 'bom_items', 'material_requirement_runs',
         'production_plan_material_requirements', 'purchase_orders',
         'cost_deviation_analysis',
-        'line_worker_assignments', 'warehouses', 'warehouse_racks', 'warehouse_locations', 'warehouse_location_settings', 'default_item_locations', 'raw_materials',
-        'stock_items', 'stock_location_balances', 'stock_transactions',
-        'stock_counts', 'inventory_transfer_requests', 'production_issue_orders',
-        'component_compensation_requests', 'component_return_records', 'component_scrap_records', 'disassembly_orders', 'supplies_receipt_orders', 'cost_centers', 'cost_center_values',
+        'line_worker_assignments', 'raw_materials',
+        'component_scrap_records',
+        'cost_centers', 'cost_center_values',
         'cost_allocations', 'labor_settings', 'assets', 'asset_depreciations',
         'activity_logs', 'departments', 'job_positions', 'shifts', 'hr_settings',
         'penalty_rules', 'late_rules', 'allowance_types', 'attendance_raw_logs', 'attendance_logs',
@@ -463,13 +577,30 @@
       );
       allow create: if (pl_authSignedIn()
         && request.auth.uid == userId
-        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']))
+        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive'])
+        && (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false))
         || (pl_isSuperAdmin()
-        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive']));
-      allow update: if pl_authSignedIn() && (
-        (request.auth.uid == userId && resource.data.tenantId == pl_currentUserDoc().data.tenantId)
+        && request.resource.data.keys().hasAll(['email', 'displayName', 'roleId', 'tenantId', 'isActive'])
+        && (!('isSuperAdmin' in request.resource.data) || request.resource.data.isSuperAdmin == false));
+      // isSuperAdmin is never writable from clients (Admin SDK / trusted scripts only).
+      allow update: if pl_authSignedIn()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['isSuperAdmin'])
+        && (
+        (
+          request.auth.uid == userId
+          && resource.data.tenantId == pl_currentUserDoc().data.tenantId
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny([
+            'roleId',
+            'tenantId',
+            'isActive',
+            'inventoryWarehouseId',
+            'repairBranchId',
+            'repairBranchIds',
+          ])
+        )
         || (pl_isActiveUser() && resource.data.tenantId == pl_currentUserDoc().data.tenantId
-          && (pl_hasErpPermission('users.manage') || pl_hasErpPermission('roles.manage')))
+          && (pl_hasErpPermission('users.manage') || pl_hasErpPermission('roles.manage'))
+          && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['tenantId']))
         || pl_isSuperAdmin()
       );
       allow delete: if pl_isSuperAdmin()
@@ -519,9 +650,19 @@
 
     match /audit_logs/{docId} {
       allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
-      // auditQueue.service + audit.service create tenant-scoped logs from the client.
+      // Client audit creates must carry a fixed schema; free-form forgery is rejected.
       allow create: if pl_isActiveUser()
-        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId;
+        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
+        && request.resource.data.keys().hasAll(['tenantId', 'action', 'entityType', 'timestamp'])
+        && request.resource.data.action is string
+        && request.resource.data.action.size() > 0
+        && request.resource.data.action.size() <= 120
+        && request.resource.data.entityType is string
+        && request.resource.data.entityType.size() > 0
+        && request.resource.data.entityType.size() <= 80
+        && (!('performedBy' in request.resource.data)
+          || request.resource.data.performedBy == request.auth.uid
+          || request.resource.data.performedBy == 'system');
       allow update, delete: if false;
     }
 
@@ -907,6 +1048,187 @@
             && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk()))
         );
       allow delete: if false;
+    }
+
+    // Department consumable issues: client read only; mutations via Admin SDK callables.
+    match /department_consumable_issues/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
+        && (
+          pl_hasErpPermission('departmentConsumables.view')
+          || pl_hasErpPermission('inventory.view')
+          || pl_isSuperAdmin()
+        )
+        && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
+      allow create, update, delete: if false;
+    }
+
+    // Packaging handover receipts: client read only; confirm via confirmProductionHandoverReceipt callable.
+    match /production_handover_receipts/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
+        && (
+          pl_hasErpPermission('productionHandover.approve')
+          || pl_hasErpPermission('inventory.transfers.approve')
+          || pl_hasErpPermission('inventory.view')
+          || pl_isSuperAdmin()
+        )
+        && (
+          pl_canAccessInventoryWarehouse(resource.data.get('fromWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('toWarehouseId', ''))
+          || pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''))
+        );
+      allow create, update, delete: if false;
+    }
+
+    // Inventory warehouse-scoped collections (users.inventoryWarehouseId).
+    match /warehouses/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseDoc(docId) || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseDoc(docId) || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseDoc(docId) || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseDoc(docId) || pl_isSuperAdmin());
+    }
+
+    match /warehouse_racks/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /warehouse_locations/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /warehouse_location_settings/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /default_item_locations/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /stock_items/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.create')
+          || pl_hasErpPermission('inventory.items.manage')
+          || pl_hasErpPermission('inventory.counts.manage'))
+        && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.create')
+          || pl_hasErpPermission('inventory.items.manage')
+          || pl_hasErpPermission('inventory.counts.manage')
+          || pl_hasErpPermission('inventory.transactions.edit'))
+        && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.items.manage') || pl_hasErpPermission('inventory.transactions.delete'))
+        && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /stock_location_balances/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.create')
+          || pl_hasErpPermission('inventory.items.manage')
+          || pl_hasErpPermission('inventory.counts.manage'))
+        && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.create')
+          || pl_hasErpPermission('inventory.items.manage')
+          || pl_hasErpPermission('inventory.counts.manage')
+          || pl_hasErpPermission('inventory.transactions.edit'))
+        && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.items.manage') || pl_hasErpPermission('inventory.transactions.delete'))
+        && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /stock_transactions/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.create')
+          || pl_hasErpPermission('inventory.counts.manage')
+          || pl_hasErpPermission('productionIssue.create')
+          || pl_hasErpPermission('productionIssue.approve')
+          || pl_hasErpPermission('inventory.disassembly.manage'))
+        && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.edit')
+          || pl_hasErpPermission('inventory.transactions.create'))
+        && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser()
+        && pl_hasErpPermission('inventory.transactions.delete')
+        && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /stock_counts/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /inventory_transfer_requests/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.view')
+          || pl_hasErpPermission('inventory.transactions.create')
+          || pl_hasErpPermission('inventory.transfers.approve')
+          || pl_isSuperAdmin())
+        && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.create') || pl_isSuperAdmin())
+        && (pl_canWriteTransferWarehouses() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transfers.approve') || pl_isSuperAdmin())
+        && (pl_canUpdateTransferWarehouses() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser()
+        && (pl_hasErpPermission('inventory.transactions.delete') || pl_isSuperAdmin())
+        && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
+    }
+
+    match /production_issue_orders/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadIssueWarehouses() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteIssueWarehouses() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateIssueWarehouses() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadIssueWarehouses() || pl_isSuperAdmin());
+    }
+
+    match /component_compensation_requests/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /component_return_records/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+    }
+
+    match /disassembly_orders/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadDisassemblyWarehouses() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteDisassemblyWarehouses() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateDisassemblyWarehouses() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadDisassemblyWarehouses() || pl_isSuperAdmin());
+    }
+
+    match /supplies_receipt_orders/{docId} {
+      allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
+      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
     }
 
     match /{coll}/{docId} {

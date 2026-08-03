@@ -25,6 +25,11 @@ import {
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { useTranslation } from 'react-i18next';
+import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  isOperationPathEnabled,
+} from '../../../modules/system/lib/operationPathSettings';
 
 type ImportInByCodePayload = {
   warehouseId?: string;
@@ -44,6 +49,12 @@ const asImportPayload = (payload: Record<string, unknown> | undefined): ImportIn
 export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.INVENTORY_IMPORT_IN_BY_CODE);
+  const systemSettings = useAppStore((state) => state.systemSettings);
+  const importPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.stockMove,
+    INVENTORY_STOCK_MOVE_PATHS.importInByCode,
+  );
   const products = useAppStore((s) => s._rawProducts);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
@@ -128,7 +139,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
     ? t('modalManager.importInventoryInByCode.itemType.rawMaterial')
     : t('modalManager.importInventoryInByCode.itemType.finishedGood');
 
-  if (!isOpen) return null;
+  if (!isOpen || !importPathEnabled) return null;
 
   const handleClose = () => {
     if (importSaving) return;
@@ -250,7 +261,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
             ? `Imported from file: ${importFileName} (${row.count} rows merged)`
             : `Imported from file: ${importFileName}`,
           createdBy: actor,
-        });
+        }, { path: INVENTORY_STOCK_MOVE_PATHS.importInByCode });
       }
       parsedPayload.onSaved?.();
       setImportResult(null);

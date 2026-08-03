@@ -31,6 +31,7 @@ import {
   approvalRequestsRef,
   approvalRequestDocRef,
   approvalSettingsDocRef,
+  approvalSettingsLegacyDocRef,
 } from './collections';
 import { departmentsRef, jobPositionsRef } from '../collections';
 import { buildApprovalChain, buildConfiguredApprovalChain, tryAutoApprove } from './approvalBuilder';
@@ -43,14 +44,16 @@ import {
 } from './approvalValidation';
 import { approvalDelegationService } from './approvalDelegation';
 import { approvalAuditService } from './approvalAudit';
-import { buildPenaltyDeductionInput, formatPenaltyRequestSummary } from './penaltyApproval';
+import { formatPenaltyRequestSummary } from './penaltyApproval';
 import { hrNotificationService } from './notifications';
 import { employeeService } from '../employeeService';
-import { syncLeaveApprovalDecision } from '../leaveService';
-import { employeeDeductionService } from '../employeeFinancialsService';
 import { userService } from '@/services/userService';
 import { roleService } from '@/modules/system/services/roleService';
 import { systemSettingsService } from '@/modules/system/services/systemSettingsService';
+import {
+  buildApprovedPenaltySourcePatch,
+  syncApprovalSourceDecision,
+} from './approvalSourceSync';
 import type {
   FirestoreApprovalRequest,
   FirestoreApprovalSettings,
@@ -96,8 +99,12 @@ export async function getApprovalSettings(): Promise<FirestoreApprovalSettings> 
   if (!isConfigured) return normalizeApprovalSettings();
 
   const snap = await getDoc(approvalSettingsDocRef());
-  if (!snap.exists()) return normalizeApprovalSettings();
-  return normalizeApprovalSettings(snap.data() as Partial<FirestoreApprovalSettings>);
+  if (snap.exists()) {
+    return normalizeApprovalSettings(snap.data() as Partial<FirestoreApprovalSettings>);
+  }
+  const legacy = await getDoc(approvalSettingsLegacyDocRef());
+  if (!legacy.exists()) return normalizeApprovalSettings();
+  return normalizeApprovalSettings(legacy.data() as Partial<FirestoreApprovalSettings>);
 }
 
 export async function updateApprovalSettings(
@@ -105,7 +112,11 @@ export async function updateApprovalSettings(
 ): Promise<void> {
   if (!isConfigured) return;
   const { setDoc } = await import('firebase/firestore');
-  await setDoc(approvalSettingsDocRef(), settings, { merge: true });
+  await setDoc(
+    approvalSettingsDocRef(),
+    { ...settings, tenantId: getCurrentTenantId() },
+    { merge: true },
+  );
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -326,27 +337,9 @@ async function buildApprovalAccessFields(
 
 async function syncApprovedPenaltyDeduction(request: FirestoreApprovalRequest): Promise<void> {
   if (request.requestType !== 'penalty' || request.status !== 'approved' || !request.id) return;
-  const data = request.requestData || {};
-  const employee = await employeeService.getById(request.employeeId).catch(() => null);
-  const deductionInput = buildPenaltyDeductionInput(request, employee);
-  if (!deductionInput) return;
-
-  const deductionId = await employeeDeductionService.create(deductionInput);
-  const deductionMetadata = {
-    ...(deductionInput.amount > 0 ? { penaltyCalculatedAmount: deductionInput.amount } : {}),
-    ...(deductionInput.penaltyDailyRate ? { penaltyDailyRate: deductionInput.penaltyDailyRate } : {}),
-    ...(deductionInput.penaltyAmountSource ? { penaltyAmountSource: deductionInput.penaltyAmountSource } : {}),
-  };
-
-  await updateDoc(approvalRequestDocRef(request.id), {
-    requestData: {
-      ...data,
-      ...deductionMetadata,
-      deductionId,
-      deductionAppliedAt: serverTimestamp(),
-    },
-    updatedAt: serverTimestamp(),
-  });
+  const requestData = await buildApprovedPenaltySourcePatch(request);
+  if (!requestData) return;
+  await updateDoc(approvalRequestDocRef(request.id), { requestData, updatedAt: serverTimestamp() });
 }
 
 // ─── Create Request ─────────────────────────────────────────────────────────
@@ -427,12 +420,9 @@ export async function createRequest(
       { reason: 'ضمن حد الموافقة التلقائية', requestData: options.requestData },
     );
 
-    if (options.requestType === 'leave' && options.sourceRequestId) {
-      const syncResult = await syncLeaveApprovalDecision({
-        leaveRequestId: options.sourceRequestId,
-        approvalChain: [],
-        decisionStatus: 'approved',
-      });
+    const createdRequest = { id: ref.id, ...requestDoc };
+    if (options.sourceRequestId) {
+      const syncResult = await syncApprovalSourceDecision(createdRequest);
       if (!syncResult.success) {
         await approvalAuditService.log(
           ref.id,
@@ -442,13 +432,13 @@ export async function createRequest(
           'system',
           'النظام',
           null,
-          { warning: `leave-sync-failed:${syncResult.error || 'unknown'}` },
+          { warning: `source-sync-failed:${syncResult.error || 'unknown'}` },
         );
       }
     }
 
     if (options.requestType === 'penalty') {
-      await syncApprovedPenaltyDeduction({ id: ref.id, ...requestDoc });
+      await syncApprovedPenaltyDeduction(createdRequest);
     }
 
     return { success: true, requestId: ref.id };
@@ -632,6 +622,27 @@ export async function approveRequest(
   );
 
   const resultStatus = updatedRequest.status;
+  const decisionRequest: FirestoreApprovalRequest = {
+    ...request,
+    id: options.requestId,
+    approvalChain: updatedChain,
+    currentStep: nextStep,
+    status: resultStatus!,
+    history: updatedRequest.history || request.history,
+  };
+  const sourceSyncResult = await syncApprovalSourceDecision(decisionRequest);
+  if (!sourceSyncResult.success) {
+    await approvalAuditService.log(
+      options.requestId,
+      request.requestType,
+      request.employeeId,
+      'approved',
+      caller.employeeId,
+      options.approverName,
+      request.currentStep,
+      { warning: `source-sync-failed:${sourceSyncResult.error || 'unknown'}` },
+    );
+  }
   if (resultStatus === 'in_progress') {
     const nextApprover = updatedChain[nextStep];
     if (nextApprover?.approverEmployeeId) {
@@ -649,14 +660,7 @@ export async function approveRequest(
       }
     }
   } else if (resultStatus === 'approved') {
-    await syncApprovedPenaltyDeduction({
-      ...request,
-      id: options.requestId,
-      approvalChain: updatedChain,
-      currentStep: nextStep,
-      status: 'approved',
-      history: updatedRequest.history || request.history,
-    });
+    await syncApprovedPenaltyDeduction(decisionRequest);
 
     const employeeUserId = await employeeService.getUserIdByEmployeeId(request.employeeId);
     if (employeeUserId) {
@@ -736,6 +740,27 @@ export async function rejectRequest(
     { notes: options.notes, delegateOf },
   );
 
+  const rejectedRequest: FirestoreApprovalRequest = {
+    ...request,
+    id: options.requestId,
+    approvalChain: updatedChain,
+    status: 'rejected',
+    history: updatedRequest.history || request.history,
+  };
+  const sourceSyncResult = await syncApprovalSourceDecision(rejectedRequest);
+  if (!sourceSyncResult.success) {
+    await approvalAuditService.log(
+      options.requestId,
+      request.requestType,
+      request.employeeId,
+      'rejected',
+      caller.employeeId,
+      options.approverName,
+      request.currentStep,
+      { warning: `source-sync-failed:${sourceSyncResult.error || 'unknown'}` },
+    );
+  }
+
   const employeeUserId = await employeeService.getUserIdByEmployeeId(request.employeeId);
   if (employeeUserId) {
     await hrNotificationService.create({
@@ -797,6 +822,26 @@ export async function cancelRequest(
     'cancelled', options.cancelledBy, options.cancelledByName,
     request.currentStep, { reason: options.reason },
   );
+
+  const cancelledRequest: FirestoreApprovalRequest = {
+    ...request,
+    id: options.requestId,
+    status: 'cancelled',
+    history: updatedRequest.history || request.history,
+  };
+  const sourceSyncResult = await syncApprovalSourceDecision(cancelledRequest);
+  if (!sourceSyncResult.success) {
+    await approvalAuditService.log(
+      options.requestId,
+      request.requestType,
+      request.employeeId,
+      'cancelled',
+      options.cancelledBy,
+      options.cancelledByName,
+      request.currentStep,
+      { warning: `source-sync-failed:${sourceSyncResult.error || 'unknown'}` },
+    );
+  }
 
   return { success: true, requestId: options.requestId };
 }

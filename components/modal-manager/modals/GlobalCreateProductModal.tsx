@@ -1,7 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { deleteField } from 'firebase/firestore';
-import { AlertCircle, CheckCircle2, Loader2, Lock, Plus, Save, Unlock, X } from 'lucide-react';
-import { Button } from '../../../modules/production/components/UI';
+import { Loader2, Lock, Unlock } from 'lucide-react';
+import { toast } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useManagedModalController } from '../GlobalModalManager';
@@ -21,6 +33,12 @@ import {
 import { formatCost } from '../../../utils/costCalculations';
 import { productService } from '../../../modules/production/services/productService';
 import { useAutoEntityCode } from '../../../modules/shared/hooks/useAutoEntityCode';
+import {
+  PRODUCT_CREATE_PATHS,
+  PRODUCT_OPERATION_KEYS,
+  PRODUCT_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '../../../modules/system/lib/operationPathSettings';
 import { DUPLICATE_ENTITY_CODE } from '../../../modules/shared/services/entityCodeSequenceService';
 import { ProductModalMaterialsSection } from '../../../modules/production/components/ProductModalMaterialsSection';
 
@@ -56,11 +74,11 @@ export const GlobalCreateProductModal: React.FC = () => {
   const canViewCosts = can('costs.view');
   const createProduct = useAppStore((s) => s.createProduct);
   const updateProduct = useAppStore((s) => s.updateProduct);
-  const fetchProducts = useAppStore((s) => s.fetchProducts);
   const products = useAppStore((s) => s.products);
   const productsLoading = useAppStore((s) => s.productsLoading);
   const rawProducts = useAppStore((s) => s._rawProducts);
   const laborSettings = useAppStore((s) => s.laborSettings);
+  const systemSettings = useAppStore((s) => s.systemSettings);
 
   const modalPayload = payload as { mode?: string; productId?: string; source?: string } | undefined;
   const isEditFlow = modalPayload?.mode === 'edit' && typeof modalPayload?.productId === 'string';
@@ -80,9 +98,9 @@ export const GlobalCreateProductModal: React.FC = () => {
   const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
   const [categoryBreadcrumb, setCategoryBreadcrumb] = useState('');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  /** بعد حفظ منتج جديد — لربط المواد الخام داخل نفس المودال */
+  /** بعد حفظ منتج جديد — لاستكمال قائمة المواد داخل نفس المودال */
   const [justCreatedProductId, setJustCreatedProductId] = useState<string | null>(null);
+  const [justCreatedProductName, setJustCreatedProductName] = useState('');
 
   const peekProduct = useCallback(() => productService.peekNextCode(), []);
 
@@ -91,6 +109,7 @@ export const GlobalCreateProductModal: React.FC = () => {
     setCode: setProductCode,
     locked: codeLocked,
     toggleLock: toggleCodeLock,
+    refreshPreview: refreshProductCodePreview,
     isLoading: codePreviewLoading,
   } = useAutoEntityCode({
     enabled: isOpen,
@@ -111,7 +130,7 @@ export const GlobalCreateProductModal: React.FC = () => {
     setSelectedCategoryId(null);
     setCategoryBreadcrumb('');
     setJustCreatedProductId(null);
-    setMessage(null);
+    setJustCreatedProductName('');
     setChineseUnitPriceYuan('');
   }, [isOpen, isEditFlow]);
 
@@ -128,7 +147,9 @@ export const GlobalCreateProductModal: React.FC = () => {
       );
       return match?.id ?? null;
     };
-    void resolveCategoryId().then((resolved) => setSelectedCategoryId(resolved));
+    void resolveCategoryId()
+      .then((resolved) => setSelectedCategoryId(resolved))
+      .catch(() => setSelectedCategoryId(null));
     setForm({
       name: editingProduct.name,
       model: editingProduct.category,
@@ -155,23 +176,34 @@ export const GlobalCreateProductModal: React.FC = () => {
   useEffect(() => {
     if (!isOpen || !selectedCategoryId) return;
     let cancelled = false;
-    (async () => {
-      const cats = await categoryService.getAll();
-      if (cancelled) return;
-      setCategoryBreadcrumb(formatCategoryBreadcrumb(cats, selectedCategoryId));
-    })();
+    void categoryService
+      .getAll()
+      .then((cats) => {
+        if (!cancelled) setCategoryBreadcrumb(formatCategoryBreadcrumb(cats, selectedCategoryId));
+      })
+      .catch(() => {
+        if (!cancelled) setCategoryBreadcrumb('');
+      });
     return () => {
       cancelled = true;
     };
   }, [isOpen, selectedCategoryId]);
 
   useEffect(() => {
-    if (!isOpen) setJustCreatedProductId(null);
+    if (!isOpen) {
+      setJustCreatedProductId(null);
+      setJustCreatedProductName('');
+    }
   }, [isOpen]);
 
   const cnyToEgpRate = Number(laborSettings?.cnyToEgpRate ?? 0);
 
   if (!isOpen) return null;
+  if (!isOperationPathEnabled(
+    systemSettings,
+    isEditFlow ? PRODUCT_OPERATION_KEYS.update : PRODUCT_OPERATION_KEYS.create,
+    isEditFlow ? PRODUCT_UPDATE_PATHS.globalModal : PRODUCT_CREATE_PATHS.globalModal,
+  )) return null;
   if (isEditFlow) {
     if (!canEditPerm) return null;
   } else if (!canCreate) {
@@ -191,45 +223,91 @@ export const GlobalCreateProductModal: React.FC = () => {
 
   const handleClose = () => {
     if (saving) return;
-    setMessage(null);
     setJustCreatedProductId(null);
+    setJustCreatedProductName('');
     setForm(emptyForm);
     close();
   };
 
+  const startAnotherProduct = () => {
+    setJustCreatedProductId(null);
+    setJustCreatedProductName('');
+    setSelectedCategoryId(null);
+    setCategoryBreadcrumb('');
+    setForm(emptyForm);
+    setChineseUnitPriceYuan('');
+    void refreshProductCodePreview();
+  };
+
   const handleSave = async () => {
-    if (!form.name || !selectedCategoryId) return;
+    const normalizedName = form.name.trim();
+    if (!normalizedName) {
+      toast.error(t('modalManager.createProduct.nameRequiredError'));
+      return;
+    }
+    if (!selectedCategoryId) {
+      toast.error(t('modalManager.createProduct.categoryRequiredError'));
+      return;
+    }
+    const nonNegativeValues = [
+      form.sellingPrice,
+      form.chineseUnitCost,
+      form.innerBoxCost,
+      form.outerCartonCost,
+      form.unitsPerCarton,
+      canViewCosts && cnyToEgpRate > 0
+        ? Number(String(chineseUnitPriceYuan).replace(',', '.') || 0)
+        : 0,
+    ];
+    if (nonNegativeValues.some((value) => !Number.isFinite(Number(value ?? 0)) || Number(value ?? 0) < 0)) {
+      toast.error(t('modalManager.createProduct.nonNegativeValuesError'));
+      return;
+    }
+    if (!Number.isInteger(Number(form.unitsPerCarton ?? 0))) {
+      toast.error(t('modalManager.createProduct.unitsPerCartonIntegerError'));
+      return;
+    }
+    if (
+      form.routingTargetUnitSeconds !== undefined &&
+      (!Number.isFinite(form.routingTargetUnitSeconds) || form.routingTargetUnitSeconds <= 0)
+    ) {
+      toast.error(t('modalManager.createProduct.invalidRoutingTargetError'));
+      return;
+    }
     setSaving(true);
-    setMessage(null);
     try {
       if (isEditFlow && editProductId) {
         const codeForSave = productCode.trim().toUpperCase();
         if (!codeForSave) {
-          setMessage({ type: 'error', text: t('modalManager.createProduct.manualCodeRequired') });
-          setSaving(false);
+          toast.error(t('modalManager.createProduct.manualCodeRequired'));
           return;
         }
         const tSec = form.routingTargetUnitSeconds;
         const hasTarget = typeof tSec === 'number' && Number.isFinite(tSec) && tSec > 0;
         const payloadUpdate: Record<string, unknown> = {
           ...form,
+          name: normalizedName,
           categoryId: selectedCategoryId,
           categoryName: categoryBreadcrumb.split(' > ').pop() || form.categoryName,
           code: codeForSave,
           chineseUnitCost: resolveChineseUnitCost(),
         };
         payloadUpdate.routingTargetUnitSeconds = hasTarget ? Math.round(tSec) : deleteField();
-        await updateProduct(editProductId, payloadUpdate as Partial<FirestoreProduct>);
-        setMessage({ type: 'success', text: t('modalManager.createProduct.editSuccess') });
+        await updateProduct(
+          editProductId,
+          payloadUpdate as Partial<FirestoreProduct>,
+          { path: PRODUCT_UPDATE_PATHS.globalModal },
+        );
+        toast.success(t('modalManager.createProduct.editSuccess'));
       } else {
         const codeToSend = codeLocked ? '' : productCode.trim().toUpperCase();
         if (!codeLocked && !codeToSend) {
-          setMessage({ type: 'error', text: t('modalManager.createProduct.manualCodeRequired') });
-          setSaving(false);
+          toast.error(t('modalManager.createProduct.manualCodeRequired'));
           return;
         }
         const createData: Omit<FirestoreProduct, 'id'> = {
           ...form,
+          name: normalizedName,
           categoryId: selectedCategoryId,
           categoryName: categoryBreadcrumb.split(' > ').pop() || '',
           code: codeToSend,
@@ -249,21 +327,20 @@ export const GlobalCreateProductModal: React.FC = () => {
         } else {
           createData.routingTargetUnitSeconds = Math.round(createData.routingTargetUnitSeconds);
         }
-        const id = await createProduct(createData);
+        const id = await createProduct(
+          createData,
+          { path: PRODUCT_CREATE_PATHS.globalModal },
+        );
         if (!id) throw new Error('create failed');
         setJustCreatedProductId(id);
-        setMessage({
-          type: 'success',
-          text: `${t('modalManager.createProduct.createSuccess')} — يمكنك أدناه ربط المواد الخام والكمية وسعر الوحدة، أو تعريف مادة جديدة من نفس المودال.`,
-        });
-        setForm(emptyForm);
-        setChineseUnitPriceYuan('');
+        setJustCreatedProductName(normalizedName);
+        toast.success(t('modalManager.createProduct.createSuccess'));
       }
     } catch (e) {
       if (isDuplicateEntityCodeError(e)) {
-        setMessage({ type: 'error', text: t('entityCode.duplicateError') });
+        toast.error(t('entityCode.duplicateError'));
       } else {
-        setMessage({ type: 'error', text: t('modalManager.createProduct.saveError') });
+        toast.error(t('modalManager.createProduct.saveError'));
       }
     } finally {
       setSaving(false);
@@ -274,269 +351,482 @@ export const GlobalCreateProductModal: React.FC = () => {
     isEditFlow && editProductId && !productsLoading && (!editingProduct || !editingRaw);
 
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={handleClose}>
-      <div
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-2xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
-        onClick={(e) => e.stopPropagation()}
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) handleClose();
+      }}
+    >
+      <DialogContent
+        dir="rtl"
+        className="flex max-h-[calc(100dvh-1.5rem)] max-w-3xl flex-col gap-0 overflow-hidden p-0 sm:max-w-3xl"
       >
-        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">
-            {isEditFlow ? t('modalManager.createProduct.editTitle') : t('modalManager.createProduct.title')}
-          </h3>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
-            <X size={20} />
-          </button>
-        </div>
-        <div className="p-6 space-y-5 overflow-y-auto flex-1">
-          {message && (
-            <div
-              className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
-                message.type === 'success'
-                  ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                  : 'bg-rose-50 text-rose-700 border border-rose-200'
-              }`}
-            >
-              {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-              <p className="flex-1">{message.text}</p>
-            </div>
-          )}
+        <DialogHeader className="shrink-0 border-b px-5 py-4 text-right sm:text-right">
+          <DialogTitle>
+            {justCreatedProductId && !isEditFlow
+              ? t('modalManager.createProduct.bomTitle')
+              : isEditFlow
+                ? t('modalManager.createProduct.editTitle')
+                : t('modalManager.createProduct.title')}
+          </DialogTitle>
+          <DialogDescription>
+            {justCreatedProductId && !isEditFlow
+              ? t('modalManager.createProduct.bomAfterCreateDescription', {
+                  name: justCreatedProductName,
+                })
+              : isEditFlow
+                ? t('modalManager.createProduct.editDescription')
+                : t('modalManager.createProduct.createDescription')}
+          </DialogDescription>
+        </DialogHeader>
 
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-5">
           {editMissing && (
-            <div className="flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold bg-rose-50 text-rose-700 border border-rose-200">
-              <AlertCircle size={16} />
-              <p>{t('modalManager.createProduct.editNotFound')}</p>
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
+              {t('modalManager.createProduct.editNotFound')}
             </div>
           )}
 
           {isEditFlow && !editingProduct && productsLoading && !editMissing && (
-            <div className="flex flex-col items-center justify-center gap-2 py-10 text-[var(--color-text-muted)]">
-              <Loader2 className="w-8 h-8 animate-spin" />
-              <p className="text-sm font-bold">جاري التحميل...</p>
+            <div className="flex flex-col items-center justify-center gap-2 py-12 text-muted-foreground">
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <p className="text-sm font-medium">{t('modalManager.createProduct.loading')}</p>
             </div>
           )}
 
-          {!editMissing && !(isEditFlow && !editingProduct && productsLoading) && (
-            <>
-          <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.productNameRequired')}</label>
-            <input
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              placeholder={t('modalManager.createProduct.productNamePlaceholder')}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.codeLabel')}</label>
-              <div className="flex gap-2 items-start">
-                <div className="relative flex-1 min-w-0">
-                  <input
-                    readOnly={codeLocked}
-                    className={`w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium font-mono ${codeLocked ? 'opacity-90' : ''}`}
-                    value={productCode}
-                    onChange={(e) => setProductCode(e.target.value.toUpperCase())}
-                    placeholder="PRD-00001"
-                  />
-                  {codePreviewLoading && (
-                    <Loader2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 animate-spin text-[var(--color-text-muted)]" />
-                  )}
-                </div>
-                <button
-                  type="button"
-                  className="shrink-0 p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] hover:bg-[var(--color-bg)]"
-                  onClick={toggleCodeLock}
-                  title={codeLocked ? t('entityCode.unlockTitle') : t('entityCode.lockTitle')}
-                >
-                  {codeLocked ? <Lock size={18} /> : <Unlock size={18} />}
-                </button>
+          {justCreatedProductId && !isEditFlow ? (
+            <section className="space-y-4" aria-labelledby="product-bom-heading">
+              <div>
+                <h4 id="product-bom-heading" className="text-sm font-semibold">
+                  {t('modalManager.createProduct.bomSection')}
+                </h4>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {t('modalManager.createProduct.bomHelp')}
+                </p>
               </div>
-              <p className="text-xs text-[var(--color-text-muted)]">
-                {codeLocked ? t('entityCode.lockHint') : t('entityCode.unlockedHint')}
-              </p>
-            </div>
-            <div className="space-y-2 sm:col-span-2">
-              <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.categoryModelRequired')}</label>
-              <CategoryTreeSelect
-                value={selectedCategoryId}
-                required
-                onChange={(id, breadcrumb) => {
-                  setSelectedCategoryId(id);
-                  setCategoryBreadcrumb(breadcrumb);
-                  const leaf = breadcrumb.split(' > ').pop() || '';
-                  setForm({ ...form, categoryId: id, categoryName: leaf, model: leaf });
-                }}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.sellingPrice')}</label>
-            <input
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
-              type="number"
-              min={0}
-              step="any"
-              value={form.sellingPrice ?? ''}
-              placeholder="0"
-              onChange={(e) => setForm({ ...form, sellingPrice: Number(e.target.value) })}
-            />
-          </div>
-
-          <div className="space-y-2">
-            <label className="flex items-center gap-2 text-sm font-bold text-[var(--color-text-muted)] cursor-pointer">
-              <input
-                type="checkbox"
-                checked={form.autoDeductComponentScrapFromDecomposed === true}
-                onChange={(e) => setForm({ ...form, autoDeductComponentScrapFromDecomposed: e.target.checked })}
-              />
-              {t('modalManager.createProduct.autoDeductScrap')}
-            </label>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-              نمط التجميع
-            </label>
-            <select
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium bg-[var(--color-card)]"
-              value={form.assemblyMode ?? 'individual'}
-              onChange={(e) => setForm({
-                ...form,
-                assemblyMode: e.target.value === 'team' ? 'team' : 'individual',
-              })}
-            >
-              <option value="individual">فردي — متابعة إنتاج كل عامل</option>
-              <option value="team">جماعي — إنجاز الفريق/الخطة فقط</option>
-            </select>
-            <p className="text-xs text-[var(--color-text-muted)]">
-              المنتجات الجماعية تُخفي جدول أهداف وإنتاج العمال في التقارير مع استمرار تسجيل العمالة اليومية.
-            </p>
-          </div>
-
-          <div className="space-y-2">
-            <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-              تارجت المتوقع في التقارير (ثانية/وحدة)
-            </label>
-            <input
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
-              type="number"
-              min={1}
-              step={1}
-              value={form.routingTargetUnitSeconds ?? ''}
-              placeholder="اختياري — بدون مسار"
-              onChange={(e) => {
-                const v = e.target.value.trim();
-                if (v === '') setForm({ ...form, routingTargetUnitSeconds: undefined });
-                else setForm({ ...form, routingTargetUnitSeconds: Math.round(Number(v)) });
-              }}
-            />
-          </div>
-
-          {canViewCosts && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2 sm:col-span-2">
-                {cnyToEgpRate > 0 ? (
-                  <>
-                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">
-                      {t('modalManager.createProduct.chineseUnitPriceYuan')}
-                    </label>
-                    <input
-                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
-                      type="number"
-                      min={0}
-                      step="any"
-                      placeholder="0"
-                      value={chineseUnitPriceYuan}
-                      onChange={(e) => setChineseUnitPriceYuan(e.target.value)}
-                    />
-                    <p className="text-xs text-[var(--color-text-muted)]">
-                      {t('modalManager.createProduct.chineseUnitCostPreview', {
-                        rate: formatCost(cnyToEgpRate),
-                        egp: formatCost(
-                          chineseUnitCostEgpFromYuanUnitPrice(
-                            Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0,
-                            cnyToEgpRate,
-                          ),
-                        ),
-                      })}
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-3 py-2">
-                      {t('modalManager.createProduct.cnyRateMissingHint')}
-                    </p>
-                    <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.chineseUnitCostManualEgp')}</label>
-                    <input
-                      className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
-                      type="number"
-                      min={0}
-                      step="any"
-                      placeholder="0"
-                      value={form.chineseUnitCost ?? ''}
-                      onChange={(e) => setForm({ ...form, chineseUnitCost: Number(e.target.value) })}
-                    />
-                  </>
-                )}
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.innerBoxCost')}</label>
-                <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step="any" placeholder="0" value={form.innerBoxCost ?? ''} onChange={(e) => setForm({ ...form, innerBoxCost: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.outerCartonCost')}</label>
-                <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step="any" placeholder="0" value={form.outerCartonCost ?? ''} onChange={(e) => setForm({ ...form, outerCartonCost: Number(e.target.value) })} />
-              </div>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createProduct.unitsPerCarton')}</label>
-                <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={0} step={1} placeholder="0" value={form.unitsPerCarton ?? ''} onChange={(e) => setForm({ ...form, unitsPerCarton: Number(e.target.value) })} />
-              </div>
-            </div>
-          )}
-
-            {(!isEditFlow || (editingProduct && editingRaw)) && (
               <ProductModalMaterialsSection
                 productId={materialsProductId}
-                enabled={isOpen && !editMissing}
+                enabled={isOpen}
               />
-            )}
-            </>
+            </section>
+          ) : (
+            !editMissing &&
+            !(isEditFlow && !editingProduct && productsLoading) && (
+              <div className="space-y-5">
+                <section className="space-y-3" aria-labelledby="product-identity-heading">
+                  <div>
+                    <h4 id="product-identity-heading" className="text-sm font-semibold">
+                      {t('modalManager.createProduct.identitySection')}
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t('modalManager.createProduct.identityHelp')}
+                    </p>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="product-category">
+                      {t('modalManager.createProduct.categoryModelRequired')}
+                    </Label>
+                    <CategoryTreeSelect
+                      id="product-category"
+                      value={selectedCategoryId}
+                      required
+                      placeholder={t('modalManager.createProduct.categoryModelPlaceholder')}
+                      onChange={(id, breadcrumb) => {
+                        setSelectedCategoryId(id);
+                        setCategoryBreadcrumb(breadcrumb);
+                        const leaf = breadcrumb.split(' > ').pop() || '';
+                        setForm((current) => ({
+                          ...current,
+                          categoryId: id,
+                          categoryName: leaf,
+                          model: leaf,
+                        }));
+                      }}
+                    />
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="product-name">
+                        {t('modalManager.createProduct.productNameRequired')}
+                      </Label>
+                      <Input
+                        id="product-name"
+                        autoFocus={!isEditFlow}
+                        value={form.name}
+                        onChange={(e) =>
+                          setForm((current) => ({ ...current, name: e.target.value }))
+                        }
+                        placeholder={t('modalManager.createProduct.productNamePlaceholder')}
+                      />
+                    </div>
+
+                    <div className="space-y-1.5">
+                      <Label htmlFor="product-code">
+                        {t('modalManager.createProduct.codeLabel')}
+                      </Label>
+                      <div className="flex items-start gap-2">
+                        <div className="relative min-w-0 flex-1">
+                          <Input
+                            id="product-code"
+                            dir="ltr"
+                            readOnly={codeLocked}
+                            value={productCode}
+                            onChange={(e) => setProductCode(e.target.value.toUpperCase())}
+                            placeholder="PRD-00001"
+                            className={`font-mono ${codeLocked ? 'bg-muted/60' : ''}`}
+                          />
+                          {codePreviewLoading && (
+                            <Loader2 className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 animate-spin text-muted-foreground" />
+                          )}
+                        </div>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          bare
+                          onClick={toggleCodeLock}
+                          aria-label={
+                            codeLocked
+                              ? t('entityCode.unlockTitle')
+                              : t('entityCode.lockTitle')
+                          }
+                          title={
+                            codeLocked
+                              ? t('entityCode.unlockTitle')
+                              : t('entityCode.lockTitle')
+                          }
+                        >
+                          {codeLocked ? <Lock /> : <Unlock />}
+                        </Button>
+                      </div>
+                      <p className="text-xs text-muted-foreground">
+                        {codeLocked ? t('entityCode.lockHint') : t('entityCode.unlockedHint')}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-3 border-t pt-4" aria-labelledby="product-operation-heading">
+                  <div>
+                    <h4 id="product-operation-heading" className="text-sm font-semibold">
+                      {t('modalManager.createProduct.operationsSection')}
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t('modalManager.createProduct.operationsHelp')}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <button
+                      type="button"
+                      aria-pressed={(form.assemblyMode ?? 'individual') === 'individual'}
+                      onClick={() =>
+                        setForm((current) => ({ ...current, assemblyMode: 'individual' }))
+                      }
+                      className={`rounded-lg border p-4 text-right transition-colors ${
+                        (form.assemblyMode ?? 'individual') === 'individual'
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">
+                        {t('modalManager.createProduct.individualAssembly')}
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {t('modalManager.createProduct.individualAssemblyHelp')}
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={form.assemblyMode === 'team'}
+                      onClick={() =>
+                        setForm((current) => ({ ...current, assemblyMode: 'team' }))
+                      }
+                      className={`rounded-lg border p-4 text-right transition-colors ${
+                        form.assemblyMode === 'team'
+                          ? 'border-primary bg-primary/5 ring-1 ring-primary'
+                          : 'border-border hover:border-primary/50'
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold">
+                        {t('modalManager.createProduct.teamAssembly')}
+                      </span>
+                      <span className="mt-1 block text-xs text-muted-foreground">
+                        {t('modalManager.createProduct.teamAssemblyHelp')}
+                      </span>
+                    </button>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <Label htmlFor="product-routing-target">
+                      {t('modalManager.createProduct.routingTargetLabel')}
+                    </Label>
+                    <Input
+                      id="product-routing-target"
+                      type="number"
+                      inputMode="numeric"
+                      min={1}
+                      step={1}
+                      value={form.routingTargetUnitSeconds ?? ''}
+                      placeholder={t('modalManager.createProduct.routingTargetPlaceholder')}
+                      onChange={(e) => {
+                        const value = e.target.value.trim();
+                        setForm((current) => ({
+                          ...current,
+                          routingTargetUnitSeconds:
+                            value === '' ? undefined : Math.round(Number(value)),
+                        }));
+                      }}
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      {t('modalManager.createProduct.routingTargetHelp')}
+                    </p>
+                  </div>
+
+                  <div className="flex items-start gap-2 rounded-md bg-muted/50 px-3 py-3">
+                    <Checkbox
+                      id="product-auto-deduct-scrap"
+                      checked={form.autoDeductComponentScrapFromDecomposed === true}
+                      onCheckedChange={(checked) =>
+                        setForm((current) => ({
+                          ...current,
+                          autoDeductComponentScrapFromDecomposed: checked === true,
+                        }))
+                      }
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="product-auto-deduct-scrap">
+                        {t('modalManager.createProduct.autoDeductScrap')}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t('modalManager.createProduct.autoDeductScrapHelp')}
+                      </p>
+                    </div>
+                  </div>
+                </section>
+
+                <section className="space-y-3 border-t pt-4" aria-labelledby="product-pricing-heading">
+                  <div>
+                    <h4 id="product-pricing-heading" className="text-sm font-semibold">
+                      {t('modalManager.createProduct.pricingSection')}
+                    </h4>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      {t('modalManager.createProduct.pricingHelp')}
+                    </p>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1.5">
+                      <Label htmlFor="product-selling-price">
+                        {t('modalManager.createProduct.sellingPrice')}
+                      </Label>
+                      <Input
+                        id="product-selling-price"
+                        type="number"
+                        inputMode="decimal"
+                        min={0}
+                        step="any"
+                        value={form.sellingPrice ?? ''}
+                        placeholder="0"
+                        onChange={(e) =>
+                          setForm((current) => ({
+                            ...current,
+                            sellingPrice: Number(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+
+                    {canViewCosts && cnyToEgpRate > 0 && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="product-cny-price">
+                          {t('modalManager.createProduct.chineseUnitPriceYuan')}
+                        </Label>
+                        <Input
+                          id="product-cny-price"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          value={chineseUnitPriceYuan}
+                          placeholder="0"
+                          onChange={(e) => setChineseUnitPriceYuan(e.target.value)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                          {t('modalManager.createProduct.chineseUnitCostPreview', {
+                            rate: formatCost(cnyToEgpRate),
+                            egp: formatCost(
+                              chineseUnitCostEgpFromYuanUnitPrice(
+                                Number(String(chineseUnitPriceYuan).replace(',', '.')) || 0,
+                                cnyToEgpRate,
+                              ),
+                            ),
+                          })}
+                        </p>
+                      </div>
+                    )}
+
+                    {canViewCosts && cnyToEgpRate <= 0 && (
+                      <div className="space-y-1.5">
+                        <Label htmlFor="product-chinese-cost">
+                          {t('modalManager.createProduct.chineseUnitCostManualEgp')}
+                        </Label>
+                        <Input
+                          id="product-chinese-cost"
+                          type="number"
+                          inputMode="decimal"
+                          min={0}
+                          step="any"
+                          value={form.chineseUnitCost ?? ''}
+                          placeholder="0"
+                          onChange={(e) =>
+                            setForm((current) => ({
+                              ...current,
+                              chineseUnitCost: Number(e.target.value),
+                            }))
+                          }
+                        />
+                        <p className="text-xs text-amber-700">
+                          {t('modalManager.createProduct.cnyRateMissingHint')}
+                        </p>
+                      </div>
+                    )}
+
+                    {canViewCosts && (
+                      <>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="product-inner-box-cost">
+                            {t('modalManager.createProduct.innerBoxCost')}
+                          </Label>
+                          <Input
+                            id="product-inner-box-cost"
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step="any"
+                            value={form.innerBoxCost ?? ''}
+                            placeholder="0"
+                            onChange={(e) =>
+                              setForm((current) => ({
+                                ...current,
+                                innerBoxCost: Number(e.target.value),
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="product-outer-carton-cost">
+                            {t('modalManager.createProduct.outerCartonCost')}
+                          </Label>
+                          <Input
+                            id="product-outer-carton-cost"
+                            type="number"
+                            inputMode="decimal"
+                            min={0}
+                            step="any"
+                            value={form.outerCartonCost ?? ''}
+                            placeholder="0"
+                            onChange={(e) =>
+                              setForm((current) => ({
+                                ...current,
+                                outerCartonCost: Number(e.target.value),
+                              }))
+                            }
+                          />
+                        </div>
+                        <div className="space-y-1.5">
+                          <Label htmlFor="product-units-per-carton">
+                            {t('modalManager.createProduct.unitsPerCarton')}
+                          </Label>
+                          <Input
+                            id="product-units-per-carton"
+                            type="number"
+                            inputMode="numeric"
+                            min={0}
+                            step={1}
+                            value={form.unitsPerCarton ?? ''}
+                            placeholder="0"
+                            onChange={(e) =>
+                              setForm((current) => ({
+                                ...current,
+                                unitsPerCarton: Number(e.target.value),
+                              }))
+                            }
+                          />
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </section>
+
+                {(!isEditFlow || (editingProduct && editingRaw)) && (
+                  <section className="space-y-3 border-t pt-4" aria-labelledby="product-bom-form-heading">
+                    <div>
+                      <h4 id="product-bom-form-heading" className="text-sm font-semibold">
+                        {t('modalManager.createProduct.bomSection')}
+                      </h4>
+                      {isEditFlow && (
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {t('modalManager.createProduct.bomHelp')}
+                        </p>
+                      )}
+                    </div>
+                    {isEditFlow ? (
+                      <ProductModalMaterialsSection
+                        productId={materialsProductId}
+                        enabled={isOpen && !editMissing}
+                      />
+                    ) : (
+                      <p className="rounded-lg border border-dashed bg-muted/30 px-4 py-5 text-center text-sm text-muted-foreground">
+                        {t('modalManager.createProduct.bomBeforeSave')}
+                      </p>
+                    )}
+                  </section>
+                )}
+              </div>
+            )
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex flex-wrap items-center justify-end gap-3">
-          {justCreatedProductId && !isEditFlow && (
-            <Button type="button" variant="outline" className="ml-auto sm:ml-0" onClick={() => setJustCreatedProductId(null)}>
-              إخفاء قسم المواد
-            </Button>
+        <DialogFooter className="shrink-0 gap-2 border-t px-5 py-4 sm:space-x-0">
+          {justCreatedProductId && !isEditFlow ? (
+            <>
+              <Button type="button" variant="outline" onClick={startAnotherProduct}>
+                {t('modalManager.createProduct.addAnotherProduct')}
+              </Button>
+              <Button type="button" onClick={handleClose}>
+                {t('modalManager.createProduct.finish')}
+              </Button>
+            </>
+          ) : (
+            <>
+              <Button type="button" variant="outline" disabled={saving} onClick={handleClose}>
+                {t('ui.cancel')}
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleSave()}
+                disabled={
+                  saving ||
+                  editMissing ||
+                  (isEditFlow && (!editingProduct || !editingRaw)) ||
+                  !form.name.trim() ||
+                  !selectedCategoryId ||
+                  (!isEditFlow && !codeLocked && !productCode.trim())
+                }
+              >
+                {saving && <Loader2 className="animate-spin" />}
+                {isEditFlow
+                  ? t('modalManager.createProduct.saveEdits')
+                  : t('modalManager.createProduct.addProduct')}
+              </Button>
+            </>
           )}
-          <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
-          <Button
-            variant="primary"
-            onClick={handleSave}
-            disabled={
-              saving ||
-              editMissing ||
-              (isEditFlow && (!editingProduct || !editingRaw)) ||
-              !form.name ||
-              !form.model ||
-              (!isEditFlow && !codeLocked && !productCode.trim())
-            }
-          >
-            {saving ? (
-              <Loader2 size={14} className="animate-spin" />
-            ) : isEditFlow ? (
-              <Save size={14} />
-            ) : (
-              <Plus size={14} />
-            )}
-            {isEditFlow ? t('modalManager.createProduct.saveEdits') : t('modalManager.createProduct.addProduct')}
-          </Button>
-        </div>
-      </div>
-    </div>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 };
 

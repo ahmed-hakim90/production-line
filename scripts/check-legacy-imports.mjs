@@ -75,6 +75,15 @@ function isModulePageFile(relPath) {
   return /(?:^|\/)modules\/[^/]+\/pages\//.test(relPath);
 }
 
+/** Global modals must also go through usecases/services for writes. */
+function isModalManagerFile(relPath) {
+  return /(?:^|\/)components\/modal-manager\//.test(relPath);
+}
+
+function isUiWriteSurface(relPath) {
+  return isModulePageFile(relPath) || isModalManagerFile(relPath);
+}
+
 const files = [];
 walk(root, files);
 
@@ -99,7 +108,7 @@ for (const file of files) {
   }
 
   if (
-    isModulePageFile(rel)
+    isUiWriteSurface(rel)
     && PAGE_FIRESTORE_WRITE_APIS.test(content)
     && !PAGE_FIRESTORE_WRITE_ALLOWLIST.has(rel)
   ) {
@@ -119,7 +128,7 @@ if (offenders.length > 0) {
 
 if (pageWriteOffenders.length > 0) {
   failed = true;
-  console.error('\nForbidden Firestore write APIs in module pages (use usecases/services):\n');
+  console.error('\nForbidden Firestore write APIs in UI surfaces (pages/modals — use usecases/services):\n');
   for (const file of pageWriteOffenders) {
     console.error(`- ${file}`);
   }

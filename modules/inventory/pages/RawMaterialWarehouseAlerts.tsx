@@ -348,6 +348,7 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
       <Card>
         <CardContent className="pt-5 space-y-4">
           <SmartFilterBar
+      pageId="raw-material-warehouse-alerts"
             searchValue={search}
             onSearchChange={setSearch}
             searchPlaceholder="بحث في الصنف أو التفاصيل…"

@@ -20,6 +20,7 @@ const custom = resolveReportBehaviorSettings({
       operationalDayStartHour: 6,
       preventDuplicateReports: false,
       requireWorkHoursOnReports: false,
+      autoPostReportToPlanAndWorkOrder: false,
     },
   } as any,
 });
@@ -27,6 +28,7 @@ assert.equal(custom.operationalDayStartHour, 6);
 assert.equal(custom.preventDuplicateReports, false);
 assert.equal(custom.requireWorkHoursOnReports, false);
 assert.equal(custom.requirePositiveQuantityOnReports, true);
+assert.equal(custom.autoPostReportToPlanAndWorkOrder, true);
 
 assert.equal(
   getOperationalDateString(8, new Date('2026-07-29T05:30:00')),

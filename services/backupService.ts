@@ -28,35 +28,52 @@ const BACKUP_VERSION = '2.1.0';
 const BACKUPS_COLLECTION = 'backups';
 
 const ALL_COLLECTIONS = [
-  // Core production
+  // Production and manufacturing
   'products',
   'production_lines',
   'productionLines',
   'employees',
   'production_reports',
+  'production_approval_requests',
   'line_status',
   'line_product_config',
   'production_plans',
   'production_plan_followups',
-  // Supervisors distribution & assignments
   'supervisors',
   'supervisor_line_assignments',
   'supervisorAssignmentLog',
-  // Work orders & notifications
+  'production_workers',
+  'production_line_worker_assignments',
+  'production_worker_targets',
+  'worker_performance_summaries',
+  'worker_daily_performance_logs',
+  'production_attendance_records',
   'work_orders',
   'notifications',
   'scan_events',
-  // Product cost & materials
   'product_materials',
   'materials',
   'boms',
   'bom_items',
   'material_requirement_runs',
   'production_plan_material_requirements',
+  'purchase_orders',
   'monthly_production_costs',
-  // Line worker assignments
+  'monthly_costs',
+  'cost_variances',
+  'cost_deviation_analysis',
   'line_worker_assignments',
-  // Inventory collections
+  'production_report_uniques',
+  'product_categories',
+  'material_categories',
+  'production_routing_plans',
+  'production_routing_steps',
+  'production_routing_executions',
+  'production_routing_execution_steps',
+  'supply_cycles',
+  'supply_cycle_waste_lines',
+
+  // Inventory
   'warehouses',
   'warehouse_racks',
   'warehouse_locations',
@@ -68,12 +85,19 @@ const ALL_COLLECTIONS = [
   'stock_transactions',
   'stock_counts',
   'inventory_transfer_requests',
+  'inventory_counters',
   'production_issue_orders',
+  'production_handover_receipts',
   'component_compensation_requests',
   'component_return_records',
   'component_scrap_records',
   'disassembly_orders',
   'supplies_receipt_orders',
+  'department_consumable_issues',
+  'inventory_exceptions',
+  'stock_daily_summaries',
+  'stock_period_summaries',
+
   // Cost management
   'cost_centers',
   'cost_center_values',
@@ -81,13 +105,14 @@ const ALL_COLLECTIONS = [
   'labor_settings',
   'assets',
   'asset_depreciations',
-  // System
+
+  // System and audit
   'roles',
   'users',
-  'system_settings',
   'activity_logs',
   'audit_logs',
-  // HR collections
+
+  // HR and payroll
   'departments',
   'job_positions',
   'shifts',
@@ -119,10 +144,10 @@ const ALL_COLLECTIONS = [
   'payroll_audit_logs',
   'payroll_cost_summary',
   'payroll_distributions',
-  // HR Config collections
   'hr_config_modules',
   'hr_config_audit_logs',
-  // Quality module collections
+
+  // Quality
   'quality_settings',
   'quality_reason_catalog',
   'quality_workers_assignments',
@@ -131,16 +156,32 @@ const ALL_COLLECTIONS = [
   'quality_rework_orders',
   'quality_capa',
   'quality_print_logs',
-  // Additional collections used by app/runtime
-  'production_report_uniques',
-  'product_categories',
-  'material_categories',
+
+  // Repair
+  'repair_branches',
+  'repair_jobs',
+  'repair_part_reservations',
+  'repair_spare_parts',
+  'repair_spare_parts_stock',
+  'repair_parts_transactions',
+  'repair_treasury_sessions',
+  'repair_treasury_entries',
+  'repair_sales_invoices',
+  'repair_pm_plans',
+
+  // Shared registries carrying tenantId
+  'entity_code_counters',
+  'entity_code_claims',
+  '_counters',
+  'automation_runs',
+  'backups',
+
+  // Tenant-owned path collections
+  'system_settings',
   'user_devices',
   'user_presence',
-  'automation_runs',
   'dashboardStats',
   'tenants',
-  'backups',
 ] as const;
 
 const COLLECTION_GROUPS = [
@@ -151,6 +192,9 @@ const COLLECTION_GROUPS = [
   // dashboardStats/{tenantId}/daily/{date}
   'daily',
 ] as const;
+
+const ALL_COLLECTION_SET = new Set<string>(ALL_COLLECTIONS);
+const COLLECTION_GROUP_SET = new Set<string>(COLLECTION_GROUPS);
 
 const SETTINGS_COLLECTIONS = [
   'system_settings',
@@ -206,6 +250,8 @@ export interface BackupMetadata {
   createdAt: string;
   type: 'full' | 'monthly' | 'settings';
   month?: string;
+  /** Owning tenant — required for safe multi-tenant restore. */
+  tenantId?: string;
   collectionsIncluded: string[];
   documentCounts: Record<string, number>;
   totalDocuments: number;
@@ -261,6 +307,10 @@ async function readCollectionTenantScoped(
     }
     if (name === 'tenants') {
       const d = await getDoc(doc(db, 'tenants', tenantId));
+      return d.exists() ? [{ _docId: d.id, ...d.data() }] : [];
+    }
+    if (name === 'system_settings') {
+      const d = await getDoc(doc(db, 'system_settings', tenantId));
       return d.exists() ? [{ _docId: d.id, ...d.data() }] : [];
     }
     if (name === 'user_devices') {
@@ -327,8 +377,8 @@ async function readCollectionGroupTenantScoped(
   }
 }
 
-async function clearCollection(name: string): Promise<void> {
-  const snap = await getDocs(collection(db, name));
+async function clearTenantCollection(name: string, tenantId: string): Promise<void> {
+  const snap = await getDocs(query(collection(db, name), where('tenantId', '==', tenantId)));
   const batchSize = 500;
   const docs = snap.docs;
 
@@ -340,8 +390,10 @@ async function clearCollection(name: string): Promise<void> {
   }
 }
 
-async function clearCollectionGroup(name: string): Promise<void> {
-  const snap = await getDocs(collectionGroup(db, name));
+async function clearTenantCollectionGroup(name: string, tenantId: string): Promise<void> {
+  const snap = await getDocs(
+    query(collectionGroup(db, name), where('tenantId', '==', tenantId)),
+  );
   const batchSize = 500;
   const docs = snap.docs;
 
@@ -350,16 +402,35 @@ async function clearCollectionGroup(name: string): Promise<void> {
     const chunk = docs.slice(i, i + batchSize);
     chunk.forEach((d) => batch.delete(d.ref));
     await batch.commit();
+  }
+}
+
+function stampTenantId(
+  fields: Record<string, unknown>,
+  tenantId: string,
+): Record<string, unknown> {
+  return { ...fields, tenantId };
+}
+
+function assertSameTenant(
+  fields: Record<string, unknown>,
+  tenantId: string,
+  context: string,
+): void {
+  const docTenant = String(fields.tenantId || '').trim();
+  if (docTenant && docTenant !== tenantId) {
+    throw new Error(`مستند في ${context} يتبع مستأجراً آخر ولا يمكن استعادته.`);
   }
 }
 
 async function writeDocuments(
   collectionName: string,
   documents: Record<string, any>[],
-  mode: RestoreMode
+  mode: RestoreMode,
+  tenantId: string,
 ): Promise<void> {
   if (mode === 'replace' || mode === 'full_reset') {
-    await clearCollection(collectionName);
+    await clearTenantCollection(collectionName, tenantId);
   }
 
   const batchSize = 500;
@@ -367,7 +438,9 @@ async function writeDocuments(
     const batch = writeBatch(db);
     const chunk = documents.slice(i, i + batchSize);
     chunk.forEach((docData) => {
-      const { _docId, ...fields } = docData;
+      const { _docId, ...rawFields } = docData;
+      assertSameTenant(rawFields, tenantId, collectionName);
+      const fields = stampTenantId(rawFields, tenantId);
       const ref = _docId
         ? doc(db, collectionName, _docId)
         : doc(collection(db, collectionName));
@@ -380,10 +453,11 @@ async function writeDocuments(
 async function writeCollectionGroupDocuments(
   collectionGroupName: string,
   documents: Record<string, any>[],
-  mode: RestoreMode
+  mode: RestoreMode,
+  tenantId: string,
 ): Promise<void> {
   if (mode === 'replace' || mode === 'full_reset') {
-    await clearCollectionGroup(collectionGroupName);
+    await clearTenantCollectionGroup(collectionGroupName, tenantId);
   }
 
   const batchSize = 500;
@@ -391,10 +465,12 @@ async function writeCollectionGroupDocuments(
     const batch = writeBatch(db);
     const chunk = documents.slice(i, i + batchSize);
     chunk.forEach((docData) => {
-      const { _path, ...fields } = docData;
+      const { _path, ...rawFields } = docData;
       if (typeof _path !== 'string' || !_path.trim()) {
         return;
       }
+      assertSameTenant(rawFields, tenantId, collectionGroupName);
+      const fields = stampTenantId(rawFields, tenantId);
       batch.set(doc(db, _path), fields, { merge: mode === 'merge' });
     });
     await batch.commit();
@@ -421,7 +497,7 @@ function getTimestamp(): string {
 
 // ─── Validation ──────────────────────────────────────────────────────────────
 
-export function validateBackupFile(data: any): {
+export function validateBackupFile(data: any, expectedTenantId?: string | null): {
   valid: boolean;
   error?: string;
 } {
@@ -455,6 +531,40 @@ export function validateBackupFile(data: any): {
       valid: false,
       error: 'الملف يحتوي collectionGroups بصيغة غير صحيحة',
     };
+  }
+
+  const unknownCollection = Object.keys(data.collections)
+    .find((name) => !ALL_COLLECTION_SET.has(name));
+  if (unknownCollection) {
+    return {
+      valid: false,
+      error: `المجموعة ${unknownCollection} غير مسجلة ضمن نطاق النسخ الاحتياطي`,
+    };
+  }
+  const unknownGroup = Object.keys(data.collectionGroups || {})
+    .find((name) => !COLLECTION_GROUP_SET.has(name));
+  if (unknownGroup) {
+    return {
+      valid: false,
+      error: `المجموعة الفرعية ${unknownGroup} غير مسجلة ضمن نطاق النسخ الاحتياطي`,
+    };
+  }
+
+  const expected = String(expectedTenantId || '').trim();
+  const fileTenant = String(data.metadata?.tenantId || '').trim();
+  if (expected) {
+    if (!fileTenant) {
+      return {
+        valid: false,
+        error: 'ملف النسخة لا يحتوي metadata.tenantId — لا يمكن استعادته بأمان في وضع متعدد المستأجرين',
+      };
+    }
+    if (fileTenant !== expected) {
+      return {
+        valid: false,
+        error: 'ملف النسخة يتبع مستأجراً آخر ولا يمكن استعادته هنا',
+      };
+    }
   }
 
   return { valid: true };
@@ -494,6 +604,7 @@ export const backupService = {
         version: BACKUP_VERSION,
         createdAt: new Date().toISOString(),
         type: 'full',
+        tenantId,
         collectionsIncluded: [...ALL_COLLECTIONS],
         documentCounts,
         totalDocuments,
@@ -643,7 +754,21 @@ export const backupService = {
       return { success: false, error: 'Firebase not configured', restored: 0 };
     }
 
-    const validation = validateBackupFile(file);
+    const tenantId = getCurrentTenantIdOrNull();
+    if (!tenantId) {
+      return { success: false, error: 'لا يوجد مستأجر نشط للاستعادة', restored: 0 };
+    }
+
+    // Destructive full_reset is server/super-admin only (Admin SDK tenant-scoped).
+    if (mode === 'full_reset') {
+      return {
+        success: false,
+        error: 'الاستعادة الكاملة متاحة فقط عبر مسار الخادم لمسؤول المنصة',
+        restored: 0,
+      };
+    }
+
+    const validation = validateBackupFile(file, tenantId);
     if (!validation.valid) {
       return { success: false, error: validation.error, restored: 0 };
     }
@@ -672,10 +797,10 @@ export const backupService = {
 
         const docs = file.collections[name];
         if (docs && docs.length > 0) {
-          await writeDocuments(name, docs, mode);
+          await writeDocuments(name, docs, mode, tenantId);
           restored += docs.length;
-        } else if (mode === 'full_reset' || mode === 'replace') {
-          await clearCollection(name);
+        } else if (mode === 'replace') {
+          await clearTenantCollection(name, tenantId);
         }
       }
 
@@ -688,25 +813,10 @@ export const backupService = {
 
         const docs = file.collectionGroups?.[groupName];
         if (docs && docs.length > 0) {
-          await writeCollectionGroupDocuments(groupName, docs, mode);
+          await writeCollectionGroupDocuments(groupName, docs, mode, tenantId);
           restored += docs.length;
-        } else if (mode === 'full_reset' || mode === 'replace') {
-          await clearCollectionGroup(groupName);
-        }
-      }
-
-      // If full_reset, also clear collections not in the backup
-      if (mode === 'full_reset') {
-        onProgress?.('تنظيف المجموعات غير المشمولة...', 92);
-        for (const name of ALL_COLLECTIONS) {
-          if (!collectionNames.includes(name)) {
-            await clearCollection(name);
-          }
-        }
-        for (const groupName of COLLECTION_GROUPS) {
-          if (!collectionGroupNames.includes(groupName)) {
-            await clearCollectionGroup(groupName);
-          }
+        } else if (mode === 'replace') {
+          await clearTenantCollectionGroup(groupName, tenantId);
         }
       }
 

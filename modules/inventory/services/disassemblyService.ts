@@ -1,4 +1,4 @@
-import { addDoc, collection, doc, getDoc, getDocs, orderBy, updateDoc } from 'firebase/firestore';
+import { addDoc, collection, doc, getDoc, getDocs, orderBy, updateDoc, where } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
@@ -7,10 +7,17 @@ import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { rawMaterialService } from './rawMaterialService';
 import { stockService } from './stockService';
+import {
+  INVENTORY_DOCUMENT_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  assertCurrentTenantOperationPathEnabled,
+  type InventoryDocumentPath,
+} from '../../system/lib/operationPathSettings';
 import { defaultItemLocationService } from './defaultItemLocationService';
 import { warehouseLocationService } from './warehouseLocationService';
 import { warehouseLocationSettingsService } from './warehouseLocationSettingsService';
 import type { DisassemblyLine, DisassemblyOrder, InventoryItemType } from '../types';
+import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'disassembly_orders';
 const toIsoNow = () => new Date().toISOString();
@@ -48,8 +55,24 @@ async function resolveMaterial(itemId: string, itemName?: string): Promise<{
 export const disassemblyService = {
   async getAll(): Promise<DisassemblyOrder[]> {
     if (!isConfigured) return [];
-    const snap = await getDocs(tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc')));
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as DisassemblyOrder));
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    const load = async (field?: 'sourceWarehouseId' | 'targetWarehouseId') => {
+      const snap = await getDocs(tenantQuery(
+        db,
+        COLLECTION,
+        ...(field ? [where(field, '==', boundWarehouseId)] : []),
+        orderBy('createdAt', 'desc'),
+      ));
+      return snap.docs;
+    };
+    const docs = boundWarehouseId
+      ? [...await load('sourceWarehouseId'), ...await load('targetWarehouseId')]
+      : await load();
+    return [...new Map(docs.map((row) => [
+      row.id,
+      { id: row.id, ...row.data() } as DisassemblyOrder,
+    ])).values()]
+      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   },
 
   async getById(id: string): Promise<DisassemblyOrder | null> {
@@ -139,7 +162,16 @@ export const disassemblyService = {
     await updateDoc(doc(db, COLLECTION, id), { status: 'submitted', submittedAt: toIsoNow() });
   },
 
-  async approve(id: string, actor: string, actorUserId?: string): Promise<void> {
+  async approve(
+    id: string,
+    actor: string,
+    context: { path: InventoryDocumentPath },
+    actorUserId?: string,
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      INVENTORY_DOCUMENT_OPERATION_KEYS.disassemblyApprove,
+      context.path,
+    );
     if (!isConfigured || !id) return;
     const order = await this.getById(id);
     if (!order?.id) throw new Error('طلب التفكيك غير موجود.');
@@ -152,7 +184,17 @@ export const disassemblyService = {
     });
   },
 
-  async reject(id: string, actor: string, reason: string, actorUserId?: string): Promise<void> {
+  async reject(
+    id: string,
+    actor: string,
+    context: { path: InventoryDocumentPath },
+    reason: string,
+    actorUserId?: string,
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      INVENTORY_DOCUMENT_OPERATION_KEYS.disassemblyReject,
+      context.path,
+    );
     if (!isConfigured || !id) return;
     await updateDoc(doc(db, COLLECTION, id), {
       status: 'rejected',
@@ -163,7 +205,16 @@ export const disassemblyService = {
     });
   },
 
-  async execute(id: string, actor: string, actorUserId?: string): Promise<void> {
+  async execute(
+    id: string,
+    actor: string,
+    context: { path: InventoryDocumentPath },
+    actorUserId?: string,
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      INVENTORY_DOCUMENT_OPERATION_KEYS.disassemblyExecute,
+      context.path,
+    );
     const order = await this.getById(id);
     if (!order?.id) throw new Error('طلب التفكيك غير موجود.');
     if (order.status !== 'approved') throw new Error('لا يمكن تنفيذ التفكيك قبل الاعتماد.');
@@ -208,7 +259,7 @@ export const disassemblyService = {
       sourceId: order.referenceNo,
       note: `Disassembly ${order.referenceNo}`,
       createdBy: actor,
-    });
+    }, { path: INVENTORY_STOCK_MOVE_PATHS.disassembly });
     for (const line of order.lines) {
       if (Number(line.quantity || 0) <= 0) continue;
       await stockService.createMovement({
@@ -226,7 +277,7 @@ export const disassemblyService = {
         sourceId: order.referenceNo,
         note: `Disassembly ${order.referenceNo}`,
         createdBy: actor,
-      });
+      }, { path: INVENTORY_STOCK_MOVE_PATHS.disassembly });
     }
     await updateDoc(doc(db, COLLECTION, order.id), {
       status: 'executed',

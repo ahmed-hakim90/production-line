@@ -19,6 +19,7 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import { Skeleton } from '@/components/ui/skeleton';
+import { INVENTORY_DOCUMENT_PATHS } from '../../system/lib/operationPathSettings';
 
 const PAGE_SIZE = 20;
 const APPROVALS_CACHE_KEY = 'inventory:production-inventory-approvals';
@@ -193,9 +194,25 @@ export const ProductionInventoryApprovals: React.FC = () => {
     if (!row.id) return;
     setMessage('');
     try {
-      if (action === 'approve') await disassemblyService.approve(row.id, actor, uid || undefined);
-      if (action === 'reject') await disassemblyService.reject(row.id, actor, window.prompt('سبب الرفض:', '') || '', uid || undefined);
-      if (action === 'execute') await disassemblyService.execute(row.id, actor, uid || undefined);
+      if (action === 'approve') await disassemblyService.approve(
+        row.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.approvalsHub },
+        uid || undefined,
+      );
+      if (action === 'reject') await disassemblyService.reject(
+        row.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.approvalsHub },
+        window.prompt('سبب الرفض:', '') || '',
+        uid || undefined,
+      );
+      if (action === 'execute') await disassemblyService.execute(
+        row.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.approvalsHub },
+        uid || undefined,
+      );
       setMessage('تم تحديث طلب التفكيك.');
       await reload();
     } catch (error: any) {
@@ -207,9 +224,25 @@ export const ProductionInventoryApprovals: React.FC = () => {
     if (!row.id) return;
     setMessage('');
     try {
-      if (action === 'approve') await suppliesReceiptService.approve(row.id, actor, uid || undefined);
-      if (action === 'reject') await suppliesReceiptService.reject(row.id, actor, window.prompt('سبب الرفض:', '') || '', uid || undefined);
-      if (action === 'execute') await suppliesReceiptService.execute(row.id, actor, uid || undefined);
+      if (action === 'approve') await suppliesReceiptService.approve(
+        row.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.approvalsHub },
+        uid || undefined,
+      );
+      if (action === 'reject') await suppliesReceiptService.reject(
+        row.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.approvalsHub },
+        window.prompt('سبب الرفض:', '') || '',
+        uid || undefined,
+      );
+      if (action === 'execute') await suppliesReceiptService.execute(
+        row.id,
+        actor,
+        { path: INVENTORY_DOCUMENT_PATHS.approvalsHub },
+        uid || undefined,
+      );
       if (action === 'delete') {
         const ok = window.confirm(`حذف مستند الاستلام ${row.referenceNo}؟ لا يمكن التراجع.`);
         if (!ok) return;

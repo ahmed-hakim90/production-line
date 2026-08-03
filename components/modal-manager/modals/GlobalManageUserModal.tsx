@@ -7,6 +7,7 @@ import type { FirestoreRole } from '../../../types';
 import { useTranslation } from 'react-i18next';
 
 type EmployeeOption = { value: string; label: string };
+type WarehouseOption = { value: string; label: string };
 type ManageUserPayload = {
   row: {
     user: {
@@ -15,12 +16,15 @@ type ManageUserPayload = {
       displayName: string;
       roleId: string;
       isActive: boolean;
+      inventoryWarehouseId?: string | null;
     };
     employee: { id?: string } | null;
   };
   roles: FirestoreRole[];
   employeeOptions: EmployeeOption[];
+  warehouseOptions: WarehouseOption[];
   onUpdateRole: (roleId: string) => Promise<void>;
+  onUpdateInventoryWarehouse: (warehouseId: string) => Promise<void>;
   onLinkEmployee: (employeeId: string) => Promise<void>;
   onUnlinkEmployee: () => Promise<void>;
   onToggleActive: () => Promise<void>;
@@ -36,6 +40,7 @@ export const GlobalManageUserModal: React.FC = () => {
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.SYSTEM_USERS_MANAGE);
   const [roleTargetId, setRoleTargetId] = useState('');
   const [employeeTargetId, setEmployeeTargetId] = useState('');
+  const [warehouseTargetId, setWarehouseTargetId] = useState('');
   const [emailTarget, setEmailTarget] = useState('');
   const [passwordTarget, setPasswordTarget] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -45,11 +50,13 @@ export const GlobalManageUserModal: React.FC = () => {
   const row = modalPayload?.row;
   const roles = modalPayload?.roles ?? [];
   const employeeOptions = modalPayload?.employeeOptions ?? [];
+  const warehouseOptions = modalPayload?.warehouseOptions ?? [];
 
   useEffect(() => {
     if (!isOpen || !row) return;
     setRoleTargetId(String(row.user.roleId || ''));
     setEmployeeTargetId(String(row.employee?.id || ''));
+    setWarehouseTargetId(String(row.user.inventoryWarehouseId || ''));
     setEmailTarget(String(row.user.email || ''));
     setPasswordTarget('');
     setMessage(null);
@@ -131,6 +138,25 @@ export const GlobalManageUserModal: React.FC = () => {
             </div>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">
+              {t('modalManager.manageUser.inventoryWarehouse')}
+            </label>
+            <select
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]"
+              value={warehouseTargetId}
+              onChange={(e) => setWarehouseTargetId(e.target.value)}
+            >
+              <option value="">{t('modalManager.manageUser.allWarehouses')}</option>
+              {warehouseOptions.map((wh) => (
+                <option key={wh.value} value={wh.value}>{wh.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-[var(--color-text-muted)]">
+              {t('modalManager.manageUser.inventoryWarehouseHint')}
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2">
               <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.manageUser.email')}</label>
@@ -159,6 +185,17 @@ export const GlobalManageUserModal: React.FC = () => {
               disabled={submitting || !roleTargetId}
             >
               {t('modalManager.manageUser.saveRole')}
+            </Button>
+            <Button
+              onClick={() =>
+                void run(
+                  () => modalPayload.onUpdateInventoryWarehouse(warehouseTargetId),
+                  t('modalManager.manageUser.updateWarehouseSuccess'),
+                )
+              }
+              disabled={submitting}
+            >
+              {t('modalManager.manageUser.saveWarehouse')}
             </Button>
             <Button
               onClick={() => void run(() => modalPayload.onLinkEmployee(employeeTargetId), t('modalManager.manageUser.linkEmployeeSuccess'))}

@@ -28,6 +28,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { binaryFilterItems, buildBinarySearchIndex } from '@/utils/binarySearch';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { getPortalContainer } from '@/lib/portalRoot';
+import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
 
 interface PaletteItem {
   key: string;
@@ -101,6 +102,14 @@ const SUPPLIES_WAREHOUSE_SHORTCUTS: Array<{
     permission: 'inventory.counts.manage',
     keywords: ['مستلزم', 'جرد', 'مطابقة', 'فروقات'],
   },
+  {
+    key: 'department-consumables',
+    label: 'صرف مستهلكات الأقسام',
+    icon: 'shopping_bag',
+    path: '/inventory/department-consumables',
+    permission: 'departmentConsumables.view',
+    keywords: ['مستهلكات', 'أقسام', 'صرف', 'تقرير'],
+  },
 ];
 
 const PALETTE_ICON_MAP: Record<string, LucideIcon> = {
@@ -136,6 +145,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
   const { can }  = usePermission();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
+  const operationPaths = useAppStore((s) => s.systemSettings.operationPaths);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
@@ -145,7 +155,10 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
     const items: PaletteItem[] = [];
     MENU_CONFIG.forEach((group) => {
       group.children.forEach((item) => {
-        if (canAccessMenuItem(can, item, roleKey)) {
+        if (
+          canAccessMenuItem(can, item, roleKey)
+          && isMenuItemOperationPathEnabled(operationPaths, item.key)
+        ) {
           items.push({
             key: item.key,
             label: item.label,
@@ -175,7 +188,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
       });
     });
     return items;
-  }, [can, roleKey]);
+  }, [can, operationPaths, roleKey]);
 
   const searchIndex = useMemo(
     () =>

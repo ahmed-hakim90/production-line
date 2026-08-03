@@ -1,12 +1,14 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from './assertHarness';
 import {
   materialsToCatalogComponents,
   resolveCatalogComponents,
+  catalogComponentsToProductMaterials,
 } from '../modules/catalog/lib/productComponents';
 import {
   collectJobProductIds,
   sparePartMatchesCatalogComponents,
 } from '../modules/repair/utils/sparePartCatalogMatch';
+import { planSparePartCatalogLinks } from '../modules/repair/utils/sparePartCatalogBackfill';
 import type { Material } from '../modules/manufacturing/types';
 import type { RawMaterial } from '../modules/inventory/types';
 
@@ -88,10 +90,8 @@ describe('catalog productComponents', () => {
     ]);
     expect(rows.map((r) => r.materialId)).toEqual(['mat-1']);
   });
-  it('maps catalog components to ProductMaterial cost shape', async () => {
-    const { catalogComponentsToProductMaterials } = await import(
-      '../modules/catalog/lib/productComponents'
-    );
+
+  it('maps catalog components to ProductMaterial cost shape', () => {
     const rows = catalogComponentsToProductMaterials('prod-1', [
       {
         materialId: 'mat-1',
@@ -159,10 +159,7 @@ describe('sparePartCatalogMatch', () => {
 });
 
 describe('sparePartCatalogBackfill', () => {
-  it('plans unique name matches and skips already linked / ambiguous', async () => {
-    const { planSparePartCatalogLinks } = await import(
-      '../modules/repair/utils/sparePartCatalogBackfill'
-    );
+  it('plans unique name matches and skips already linked / ambiguous', () => {
     const plans = planSparePartCatalogLinks(
       [
         { id: 'sp-1', name: 'محرك' },
@@ -206,3 +203,5 @@ describe('sparePartCatalogBackfill', () => {
     ]);
   });
 });
+
+console.log('catalog-product-components.test.ts: ok');

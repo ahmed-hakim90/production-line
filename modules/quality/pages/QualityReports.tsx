@@ -276,6 +276,7 @@ export const QualityReports: React.FC = () => {
 
         <Card title="جدول تقارير الجودة">
           <SmartFilterBar
+      pageId="quality-reports"
             searchPlaceholder="بحث برقم أمر الشغل / كود التقرير / المنتج / الخط"
             searchValue={tableQuery}
             onSearchChange={setTableQuery}

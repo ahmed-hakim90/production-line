@@ -22,7 +22,7 @@ function testApplyRecommendedPreservesWarehouses() {
     },
   });
 
-  assert.equal(applied.requireFinishedStockApprovalForReports, true);
+  assert.equal(applied.requireFinishedStockApprovalForReports, false);
   assert.equal(applied.inventoryRouting?.productionWipWarehouseId, 'wip-1');
   assert.equal(applied.inventoryRouting?.finishedStagingWarehouseId, 'stage-1');
   assert.equal(applied.inventoryRouting?.finalProductWarehouseId, 'final-1');
@@ -35,6 +35,10 @@ function testApplyRecommendedPreservesWarehouses() {
   assert.equal(
     applied.inventoryRouting?.requireApprovalForProductionEntry,
     RECOMMENDED_INVENTORY_ROUTING_POLICY.requireApprovalForProductionEntry,
+  );
+  assert.equal(
+    applied.inventoryRouting?.requirePackagingHandoverReceipt,
+    RECOMMENDED_INVENTORY_ROUTING_POLICY.requirePackagingHandoverReceipt,
   );
   assert.equal(
     applied.inventoryRouting?.requireIssuedProductionIssueOnReport,
@@ -59,6 +63,7 @@ function testMapRoutingFromCustomNamedWarehouses() {
     [
       { id: 'a1', name: 'خامات المغربي', warehouseRole: 'raw_material', isActive: true },
       { id: 'b1', name: 'مستلزم الخط', warehouseRole: 'decomposed', isActive: true },
+      { id: 'floor1', name: 'صالة التجميع', warehouseRole: 'production_floor', isActive: true },
       { id: 'c1', name: 'تشغيل داخلي', warehouseRole: 'production_wip', isActive: true },
       { id: 'd1', name: 'بانتظار التغليف', warehouseRole: 'finished_staging', isActive: true },
       { id: 'e1', name: 'الجاهز للبيع', warehouseRole: 'final_product', isActive: true },
@@ -68,6 +73,7 @@ function testMapRoutingFromCustomNamedWarehouses() {
 
   assert.equal(mapped.inventoryRouting?.rawMaterialWarehouseId, 'a1');
   assert.equal(mapped.inventoryRouting?.decomposedWarehouseId, 'b1');
+  assert.equal(mapped.inventoryRouting?.productionFloorWarehouseId, 'floor1');
   assert.equal(mapped.inventoryRouting?.productionWipWarehouseId, 'c1');
   assert.equal(mapped.inventoryRouting?.finishedStagingWarehouseId, 'd1');
   assert.equal(mapped.inventoryRouting?.finalProductWarehouseId, 'e1');
@@ -130,7 +136,8 @@ function testApplyRecommendedFillsEmptyFromRoles() {
   );
   assert.equal(applied.inventoryRouting?.productionWipWarehouseId, 'c1');
   assert.equal(applied.inventoryRouting?.finishedStagingWarehouseId, 'd1');
-  assert.equal(applied.inventoryRouting?.requireApprovalForProductionEntry, true);
+  assert.equal(applied.inventoryRouting?.requireApprovalForProductionEntry, false);
+  assert.equal(applied.inventoryRouting?.requirePackagingHandoverReceipt, true);
 }
 
 testApplyRecommendedPreservesWarehouses();

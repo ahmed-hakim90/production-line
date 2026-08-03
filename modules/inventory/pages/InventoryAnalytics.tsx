@@ -12,6 +12,7 @@ import { classifyAbcInventory, estimateTurnover } from '../engines/inventoryAnal
 import { exportGenericRows } from '../../../utils/exportExcel';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
 
 const ANALYTICS_CACHE_KEY = 'inventory:analytics';
 
@@ -22,19 +23,26 @@ type InventoryAnalyticsPageData = {
 
 export const InventoryAnalytics: React.FC = () => {
   const rawProducts = useAppStore((s) => s._rawProducts);
+  const { scoped, warehouseIds } = useMaterialsWarehouseScope();
+  const scopeKey = scoped ? warehouseIds.slice().sort().join(',') : 'all';
 
   const {
     data,
     loading,
     reload: reloadCached,
   } = useCachedPageLoad<InventoryAnalyticsPageData>(
-    `${ANALYTICS_CACHE_KEY}:p${rawProducts.length}`,
+    `${ANALYTICS_CACHE_KEY}:p${rawProducts.length}:${scopeKey}`,
     async () => {
-      const [balances, transactions, materials] = await Promise.all([
-        stockService.getBalances(),
-        stockService.getTransactions(),
+      const warehouseFetches = !scoped
+        ? [undefined as string | undefined]
+        : warehouseIds;
+      const [balanceChunks, txChunks, materials] = await Promise.all([
+        Promise.all(warehouseFetches.map((warehouseId) => stockService.getBalances(warehouseId))),
+        Promise.all(warehouseFetches.map((warehouseId) => stockService.getTransactions(warehouseId))),
         materialService.getAll(),
       ]);
+      const balances = balanceChunks.flat();
+      const transactions = txChunks.flat();
       const unitCostByItem = new Map<string, number>();
       rawProducts.forEach((p) => {
         if (!p.id) return;

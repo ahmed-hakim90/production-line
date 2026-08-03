@@ -87,6 +87,14 @@ import {
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
 } from '@/modules/production/selectors/workerTargetSelector';
+import {
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  PRODUCTION_REPORT_SHIFT_PATHS,
+  PRODUCTION_REPORT_UPDATE_PATHS,
+  assertOperationPathEnabled,
+  isOperationPathEnabled,
+  type ProductionReportUpdatePath,
+} from '@/modules/system/lib/operationPathSettings';
 
 // ─── Period Filter ───────────────────────────────────────────────────────────
 
@@ -206,7 +214,11 @@ type ShiftLifecyclePanelProps = {
   reports: ProductionReport[];
   onStarted: () => Promise<void>;
   onClosed: () => Promise<void>;
-  updateReport: (id: string, data: Partial<ProductionReport>) => Promise<void>;
+  updateReport: (
+    id: string,
+    data: Partial<ProductionReport>,
+    context: { path: ProductionReportUpdatePath },
+  ) => Promise<void>;
 };
 
 export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
@@ -226,6 +238,17 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
 }) => {
   const fixedPlan = context.type === 'plan' ? context.plan : null;
   const isGeneralContext = context.type === 'general';
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const shiftStartEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.shift,
+    PRODUCTION_REPORT_SHIFT_PATHS.employeeDashboard,
+  );
+  const shiftCloseEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.update,
+    PRODUCTION_REPORT_UPDATE_PATHS.shiftClose,
+  );
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
   const productionPlans = useAppStore((s) => s.productionPlans);
@@ -319,27 +342,11 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
     [closeProductId, products],
   );
   const closeAssemblyMode = getProductAssemblyMode(closeSelectedProduct);
-  const closeLinkedPlan = useMemo(() => {
-    if (fixedPlan?.id) return fixedPlan;
-    const planId = String(closeFlowReport?.productionPlanId || '').trim();
-    if (planId) {
-      return productionPlans.find((plan) => plan.id === planId) ?? null;
-    }
-    if (!closeLineId || !closeProductId) return null;
-    return productionPlans.find(
-      (plan) => plan.lineId === closeLineId
-        && plan.productId === closeProductId
-        && (plan.status === 'in_progress' || plan.status === 'planned'),
-    ) ?? null;
-  }, [fixedPlan, closeFlowReport?.productionPlanId, productionPlans, closeLineId, closeProductId]);
-  const closePlanDailyTarget = Math.max(0, Number(closeLinkedPlan?.avgDailyTarget || 0));
-  const closeTeamSharedEnabled = Boolean(closeLineId && closeProductId)
-    && closeAssemblyMode === 'team'
-    && closePlanDailyTarget > 0;
+  // Team products: no per-worker share table on shift close.
   const closeIndividualWorkerOutputsEnabled = Boolean(closeLineId && closeProductId)
     && closeAssemblyMode === 'individual'
     && hasLineSpecificWorkerTarget(lineProductConfigs, closeLineId, closeProductId);
-  const closeWorkerOutputsEnabled = closeIndividualWorkerOutputsEnabled || closeTeamSharedEnabled;
+  const closeWorkerOutputsEnabled = closeIndividualWorkerOutputsEnabled;
   const closeWorkerOutputEntryEnabled = closeWorkerOutputsEnabled
     && workerSettings.performance.productionWorkerOutputEnabled;
   const closeWorkerOutputTotal = useMemo(
@@ -424,6 +431,16 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   };
 
   const handleStart = async () => {
+    try {
+      assertOperationPathEnabled(
+        systemSettings,
+        PRODUCTION_REPORT_OPERATION_KEYS.shift,
+        PRODUCTION_REPORT_SHIFT_PATHS.employeeDashboard,
+      );
+    } catch (error) {
+      showAppToast('error', error instanceof Error ? error.message : 'مسار بدء الوردية متوقف.');
+      return;
+    }
     if (!workerLineId || !startProductSelectionId) {
       showAppToast('error', 'اختر الخط والمنتج قبل بدء الوردية.');
       return;
@@ -448,6 +465,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
         planId: fixedPlan?.id,
         userId: uid,
         workers,
+        systemSettings,
       });
       if (!id) {
         showAppToast('error', 'تعذر بدء الوردية الآن.');
@@ -503,15 +521,13 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
         reportDate: activeCloseShift.date || today,
         assemblyModeSnapshot: closeAssemblyMode,
         workerTargetsApplied: hasWorkerOutputRows,
-        workerTargetSource: closeTeamSharedEnabled
-          ? 'plan_daily'
-          : closeIndividualWorkerOutputsEnabled
-            ? 'line_product'
-            : 'none',
-        planDailyTarget: closeTeamSharedEnabled ? closePlanDailyTarget : undefined,
+        workerTargetSource: closeIndividualWorkerOutputsEnabled ? 'line_product' : 'none',
+        planDailyTarget: undefined,
         workerOutputs: hasWorkerOutputRows ? scopedWorkerOutputs : undefined,
       });
-      await updateReport(activeCloseShift.id, closePayload);
+      await updateReport(activeCloseShift.id, closePayload, {
+        path: PRODUCTION_REPORT_UPDATE_PATHS.shiftClose,
+      });
       setClosedReport({ ...activeCloseShift, ...closePayload, id: activeCloseShift.id });
       showAppToast('success', 'تم إغلاق الوردية وحفظ الإنتاج الفعلي.');
       setCloseQuantity('');
@@ -567,6 +583,10 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
   };
 
   const openCloseDialog = (shift: ProductionReport) => {
+    if (!shiftCloseEnabled) {
+      showAppToast('info', 'مسار إغلاق الوردية متوقف من إعدادات النظام.');
+      return;
+    }
     if (!shift.id) return;
     setActiveCloseShiftId(shift.id);
     setClosedReport(null);
@@ -809,9 +829,13 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
           </div>
           <div className="flex flex-col sm:flex-row sm:items-center gap-2">
             <Badge variant="success">مستمرة</Badge>
-            <Button type="button" variant="secondary" onClick={() => openCloseDialog(shift)}>
-              متابعة / إغلاق
-            </Button>
+            {shiftCloseEnabled ? (
+              <Button type="button" variant="secondary" onClick={() => openCloseDialog(shift)}>
+                متابعة / إغلاق
+              </Button>
+            ) : (
+              <Badge variant="neutral">الإغلاق متوقف</Badge>
+            )}
           </div>
         </div>
       </div>
@@ -912,7 +936,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
                   productName={closeProductName}
                   products={products}
                   reportQty={Number(closeQuantity || 0)}
-                  planDailyTarget={closeTeamSharedEnabled ? closePlanDailyTarget : 0}
+                  planDailyTarget={0}
                   settings={workerSettings}
                   value={workerOutputs}
                   onChange={setWorkerOutputs}
@@ -947,7 +971,7 @@ export const ShiftLifecyclePanel: React.FC<ShiftLifecyclePanelProps> = ({
       {isGeneralContext && openGeneralShifts.map(renderOpenShiftCard)}
       {!isGeneralContext && planOpenShift && renderOpenShiftCard(planOpenShift)}
 
-      {showStartSection && (
+      {showStartSection && shiftStartEnabled && (
         <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa] p-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>

@@ -16,6 +16,11 @@ import { productMaterialService } from '../../production/services/productMateria
 import { BOMS_COLLECTION, BOM_ITEMS_COLLECTION } from '../collections';
 import type { Bom, BomItem, BomOwnerType, BomStatus } from '../types';
 import type { ProductMaterial } from '../../../types';
+import {
+  MANUFACTURING_OPERATION_KEYS,
+  assertCurrentTenantOperationPathEnabled,
+  type BomUpsertPath,
+} from '../../system/lib/operationPathSettings';
 
 const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
@@ -176,7 +181,15 @@ export const bomService = {
     await batch.commit();
   },
 
-  async ensureActiveBom(ownerType: BomOwnerType, ownerId: string): Promise<string> {
+  async ensureActiveBom(
+    ownerType: BomOwnerType,
+    ownerId: string,
+    context: { path: BomUpsertPath },
+  ): Promise<string> {
+    await assertCurrentTenantOperationPathEnabled(
+      MANUFACTURING_OPERATION_KEYS.bomUpsert,
+      context.path,
+    );
     const active = await bomService.getActiveBom(ownerType, ownerId);
     if (active?.id) return active.id;
     const draftId = await bomService.createDraft(ownerType, ownerId);
@@ -185,7 +198,15 @@ export const bomService = {
     return draftId;
   },
 
-  async addItem(bomId: string, item: Omit<BomItem, 'id' | 'tenantId' | 'bomId'>): Promise<string | null> {
+  async addItem(
+    bomId: string,
+    item: Omit<BomItem, 'id' | 'tenantId' | 'bomId'>,
+    context: { path: BomUpsertPath },
+  ): Promise<string | null> {
+    await assertCurrentTenantOperationPathEnabled(
+      MANUFACTURING_OPERATION_KEYS.bomUpsert,
+      context.path,
+    );
     if (!isConfigured) return null;
     const tenantId = getCurrentTenantId();
     const ref = await addDoc(
@@ -199,13 +220,28 @@ export const bomService = {
     return ref.id;
   },
 
-  async updateItem(itemId: string, data: Partial<BomItem>): Promise<void> {
+  async updateItem(
+    itemId: string,
+    data: Partial<BomItem>,
+    context: { path: BomUpsertPath },
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      MANUFACTURING_OPERATION_KEYS.bomUpsert,
+      context.path,
+    );
     if (!isConfigured || !itemId) return;
     const { id: _id, tenantId: _t, bomId: _b, ...rest } = data;
     await updateDoc(doc(db, BOM_ITEMS_COLLECTION, itemId), stripUndefined(rest as Record<string, unknown>));
   },
 
-  async deleteItem(itemId: string): Promise<void> {
+  async deleteItem(
+    itemId: string,
+    context: { path: BomUpsertPath },
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      MANUFACTURING_OPERATION_KEYS.bomUpsert,
+      context.path,
+    );
     if (!isConfigured || !itemId) return;
     await deleteDoc(doc(db, BOM_ITEMS_COLLECTION, itemId));
   },

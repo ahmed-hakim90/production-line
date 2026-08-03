@@ -12,6 +12,11 @@ import { isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
 import type { ProductionLineWorkerAssignment } from '@/types';
 import { productionLineWorkerAssignmentsRef } from '../collections';
+import {
+  WORKER_ASSIGNMENT_OPERATION_KEYS,
+  assertCurrentTenantOperationPathEnabled,
+  type PermanentWorkerAssignmentPath,
+} from '../../system/lib/operationPathSettings';
 
 const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
@@ -52,7 +57,12 @@ export const productionLineWorkerAssignmentService = {
 
   async create(
     data: Omit<ProductionLineWorkerAssignment, 'id' | 'createdAt' | 'updatedAt' | 'tenantId'>,
+    context: { path: PermanentWorkerAssignmentPath },
   ): Promise<string> {
+    await assertCurrentTenantOperationPathEnabled(
+      WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+      context.path,
+    );
     if (!isConfigured) return '';
     const ref = await addDoc(productionLineWorkerAssignmentsRef(), {
       ...stripUndefined(data as Record<string, unknown>),
@@ -63,7 +73,15 @@ export const productionLineWorkerAssignmentService = {
     return ref.id;
   },
 
-  async update(id: string, data: Partial<ProductionLineWorkerAssignment>): Promise<void> {
+  async update(
+    id: string,
+    data: Partial<ProductionLineWorkerAssignment>,
+    context: { path: PermanentWorkerAssignmentPath },
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+      context.path,
+    );
     if (!isConfigured || !id) return;
     const { id: _id, createdAt: _c, tenantId: _t, ...rest } = data;
     await updateDoc(doc(productionLineWorkerAssignmentsRef(), id), {
@@ -72,7 +90,14 @@ export const productionLineWorkerAssignmentService = {
     });
   },
 
-  async remove(id: string): Promise<void> {
+  async remove(
+    id: string,
+    context: { path: PermanentWorkerAssignmentPath },
+  ): Promise<void> {
+    await assertCurrentTenantOperationPathEnabled(
+      WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+      context.path,
+    );
     if (!isConfigured || !id) return;
     await deleteDoc(doc(productionLineWorkerAssignmentsRef(), id));
   },

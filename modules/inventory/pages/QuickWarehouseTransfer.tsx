@@ -34,6 +34,11 @@ import type { TransferDisplayUnitMode } from '../utils/transferUnits';
 import { PageHeader } from '../../../components/PageHeader';
 import { getOperationalDateString } from '../../../utils/calculations';
 import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_TRANSFER_CREATE_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -80,6 +85,12 @@ export const QuickWarehouseTransfer: React.FC = () => {
     (s) => (s.systemSettings.planSettings?.transferDisplayUnit || 'piece') as TransferDisplayUnitMode,
   );
   const companyName = useAppStore((s) => s.systemSettings.branding?.factoryName ?? 'الشركة');
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const quickTransferEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.transferCreate,
+    INVENTORY_TRANSFER_CREATE_PATHS.quickTransfer,
+  );
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [rawMaterials, setRawMaterials] = useState<RawMaterial[]>([]);
@@ -381,7 +392,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
         note: '',
         createdBy: userDisplayName || userEmail || 'Current User',
         createdByUserId: uid || undefined,
-      })).requestId;
+      }, { path: INVENTORY_TRANSFER_CREATE_PATHS.quickTransfer })).requestId;
 
       if (!txId) {
         setSaveError('تعذر حفظ الطلب — تحقق من إعدادات الاتصال.');
@@ -467,6 +478,14 @@ export const QuickWarehouseTransfer: React.FC = () => {
     savedPrintData?.items?.reduce((sum, row) => sum + Number(row.quantityPieces || 0), 0) ?? 0;
 
   const canSubmit = can('inventory.transactions.create');
+
+  if (!quickTransferEnabled) {
+    return (
+      <Card>
+        <p className="text-sm text-muted-foreground">مسار التحويل السريع متوقف من إعدادات النظام.</p>
+      </Card>
+    );
+  }
 
   return (
     <div className="erp-ds-clean space-y-6">

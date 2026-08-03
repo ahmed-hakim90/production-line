@@ -1287,6 +1287,7 @@ export const Supervisors: React.FC = () => {
       {/* Filters + table */}
       <Card className="!p-0 overflow-hidden">
         <SmartFilterBar
+      pageId="production-supervisors"
           searchPlaceholder="ابحث باسم المشرف أو الكود..."
           searchValue={search}
           onSearchChange={setSearch}

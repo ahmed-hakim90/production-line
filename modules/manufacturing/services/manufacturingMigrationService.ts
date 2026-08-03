@@ -19,6 +19,11 @@ import { normalizeLegacyUnit } from '../types';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
 import { roleService } from '../../system/services/roleService';
+import {
+  BOM_UPSERT_PATHS,
+  MATERIAL_CREATE_PATHS,
+  MATERIAL_UPDATE_PATHS,
+} from '../../system/lib/operationPathSettings';
 
 const PRODUCT_MATERIALS_COLLECTION = 'product_materials';
 const STOCK_COLLECTION = 'stock_items';
@@ -148,7 +153,7 @@ export const manufacturingMigrationService = {
           categoryName: raw.categoryName,
           minStock: Number(raw.minStock ?? 0),
           isActive: raw.isActive !== false,
-        });
+        }, { path: MATERIAL_CREATE_PATHS.migration });
         legacyIdToMaterialId.set(raw.id, materialId);
         if (created) result.materialsCreated += 1;
         else result.materialsSkipped += 1;
@@ -172,7 +177,8 @@ export const manufacturingMigrationService = {
         if (items.length > 0) continue;
       }
 
-      const bomId = await bomService.ensureActiveBom('product', productId);
+      const bomContext = { path: BOM_UPSERT_PATHS.migration } as const;
+      const bomId = await bomService.ensureActiveBom('product', productId, bomContext);
       result.bomsCreated += 1;
 
       let sortOrder = 0;
@@ -195,7 +201,7 @@ export const manufacturingMigrationService = {
               purchaseCost: Number(row.unitCost || 0),
               isActive: true,
               isManufacturedInternally: false,
-            });
+            }, { path: MATERIAL_CREATE_PATHS.migration });
             materialId = created;
             if (materialId && row.materialId) {
               legacyIdToMaterialId.set(row.materialId, materialId);
@@ -208,7 +214,7 @@ export const manufacturingMigrationService = {
         } else if (materialId && row.unitCost) {
           await materialService.update(materialId, {
             purchaseCost: Number(row.unitCost || 0),
-          });
+          }, { path: MATERIAL_UPDATE_PATHS.migration });
         }
 
         if (!materialId) continue;
@@ -224,7 +230,7 @@ export const manufacturingMigrationService = {
           directCostPerUnit: 0,
           indirectCostPerUnit: 0,
           sortOrder: sortOrder++,
-        });
+        }, bomContext);
         result.bomItemsCreated += 1;
       }
     }

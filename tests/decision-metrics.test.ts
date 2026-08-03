@@ -151,6 +151,7 @@ const transfers = summarizePendingTransfersForDecision(
 assert.equal(transfers.pendingTotal, 2);
 assert.equal(transfers.pendingProductionEntry, 1);
 assert.equal(transfers.pendingPackaging, 1);
+assert.equal(transfers.pendingHandover, 0);
 assert.equal(transfers.agingOver24h, 1);
 
 assert.equal(costToComplete(10, 2.5), 25);
@@ -238,15 +239,19 @@ assert.equal(performanceProxyPercent({ actualUnits: 80, runHours: 10, idealUnits
 
 const materials = summarizeMaterialReadiness({
   plans: [
-    { id: 'p1', status: 'in_progress', plannedQuantity: 100, producedQuantity: 40 },
-    { id: 'p2', status: 'planned', plannedQuantity: 50, producedQuantity: 0 },
-    { id: 'p3', status: 'completed', plannedQuantity: 10, producedQuantity: 10 },
+    { id: 'p1', productId: 'prod-a', status: 'in_progress', plannedQuantity: 100, producedQuantity: 40 },
+    { id: 'p2', productId: 'prod-b', status: 'planned', plannedQuantity: 50, producedQuantity: 0 },
+    { id: 'p3', productId: 'prod-a', status: 'completed', plannedQuantity: 10, producedQuantity: 10 },
   ],
   followUps: [
     { planId: 'p1', status: 'open', shortageQty: 12 },
     { planId: 'p1', status: 'in_progress', shortageQty: 3 },
     { planId: 'p2', status: 'resolved', shortageQty: 99 },
   ],
+  maxAssemblableByProductId: {
+    'prod-a': 30,
+    'prod-b': 50,
+  },
 });
 assert.equal(materials.activePlanCount, 2);
 assert.equal(materials.plansWithShortage, 1);
@@ -254,6 +259,9 @@ assert.equal(materials.openShortageRows, 2);
 assert.equal(materials.totalShortageQty, 15);
 assert.equal(materials.readinessPercent, 50);
 assert.equal(materials.blockedRemainingQty, 60);
+assert.equal(materials.assemblableCoveragePercent, 72.7);
+assert.equal(materials.plansBelowAssemblable, 1);
+assert.equal(materials.assemblableShortfallQty, 30);
 
 assert.equal(
   assemblableCoveragePercent([

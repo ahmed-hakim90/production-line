@@ -15,6 +15,16 @@ import {
   type AdminBackupFileInput,
   type AdminRestoreMode,
 } from './tenantImportRestore.js';
+import {
+  approveDepartmentConsumableIssueHandler,
+  cancelDepartmentConsumableIssueHandler,
+  createDepartmentConsumableIssueHandler,
+  getDepartmentConsumableMonthlyReportHandler,
+  issueDepartmentConsumableIssueHandler,
+  rejectDepartmentConsumableIssueHandler,
+  returnDepartmentConsumableIssueHandler,
+  submitDepartmentConsumableIssueHandler,
+} from './departmentConsumableIssues.js';
 
 initializeApp();
 
@@ -367,7 +377,7 @@ const hasRepairBranchManagePermission = async (uid: string): Promise<boolean> =>
   if (!userSnap.exists) return false;
   const user = userSnap.data() as { isSuperAdmin?: boolean };
   if (user?.isSuperAdmin === true) return true;
-  return hasAnyPermission(uid, ['repair.branches.manage', 'roles.manage']);
+  return hasAnyPermission(uid, ['repair.branches.manage']);
 };
 
 const deleteByBranchId = async (collectionName: string, branchId: string): Promise<number> => {
@@ -1122,7 +1132,6 @@ export const runAssetDepreciationJob = onCall(
     const permitted = await hasAnyPermission(requesterUid, [
       'assets.depreciation.run',
       'costs.manage',
-      'roles.manage',
     ]);
     if (!permitted) {
       throw new HttpsError('permission-denied', 'ليس لديك صلاحية تشغيل احتساب الإهلاك.');
@@ -1237,15 +1246,26 @@ export const runMonthlyOverheadAllocation = onCall(
   async (request) => {
     const requesterUid = String(request.auth?.uid || '').trim();
     if (!requesterUid) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
-    const permitted = await hasAnyPermission(requesterUid, ['costs.manage', 'roles.manage']);
+    const permitted = await hasAnyPermission(requesterUid, ['costs.manage']);
     if (!permitted) throw new HttpsError('permission-denied', 'ليس لديك صلاحية إدارة التكاليف.');
+
+    const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const requesterTenantId = String(
+      (requesterSnap.data() as { tenantId?: string } | undefined)?.tenantId || '',
+    ).trim();
+    if (!requesterTenantId) {
+      throw new HttpsError('failed-precondition', 'لا يوجد مستأجر مرتبط بالحساب.');
+    }
 
     const month = String((request.data as { month?: string })?.month || '').trim();
     if (!/^\d{4}-\d{2}$/.test(month)) {
       throw new HttpsError('invalid-argument', 'صيغة الشهر يجب أن تكون YYYY-MM.');
     }
 
-    const rows = await db.collection('monthly_production_costs').where('month', '==', month).get();
+    const rows = await db.collection('monthly_production_costs')
+      .where('tenantId', '==', requesterTenantId)
+      .where('month', '==', month)
+      .get();
     let totalDirect = 0;
     let totalIndirect = 0;
     let totalOrders = 0;
@@ -1256,7 +1276,8 @@ export const runMonthlyOverheadAllocation = onCall(
       totalOrders += 1;
     });
     const totalCost = totalDirect + totalIndirect;
-    await db.collection('monthly_costs').doc(month).set({
+    await db.collection('monthly_costs').doc(`${requesterTenantId}_${month}`).set({
+      tenantId: requesterTenantId,
       month,
       totalDirect,
       totalIndirect,
@@ -1266,7 +1287,15 @@ export const runMonthlyOverheadAllocation = onCall(
       updatedAt: FieldValue.serverTimestamp(),
       source: 'runMonthlyOverheadAllocation',
     }, { merge: true });
-    return { ok: true, month, totalDirect, totalIndirect, totalCost, orderCount: totalOrders };
+    return {
+      ok: true,
+      month,
+      tenantId: requesterTenantId,
+      totalDirect,
+      totalIndirect,
+      totalCost,
+      orderCount: totalOrders,
+    };
   },
 );
 
@@ -1278,13 +1307,23 @@ export const calculateMonthlyCostVariance = onCall(
   async (request) => {
     const requesterUid = String(request.auth?.uid || '').trim();
     if (!requesterUid) throw new HttpsError('unauthenticated', 'يجب تسجيل الدخول.');
-    const permitted = await hasAnyPermission(requesterUid, ['costs.manage', 'roles.manage']);
+    const permitted = await hasAnyPermission(requesterUid, ['costs.manage']);
     if (!permitted) throw new HttpsError('permission-denied', 'ليس لديك صلاحية إدارة التكاليف.');
+    const requesterSnap = await db.collection(USERS_COLLECTION).doc(requesterUid).get();
+    const requesterTenantId = String(
+      (requesterSnap.data() as { tenantId?: string } | undefined)?.tenantId || '',
+    ).trim();
+    if (!requesterTenantId) {
+      throw new HttpsError('failed-precondition', 'لا يوجد مستأجر مرتبط بالحساب.');
+    }
     const month = String((request.data as { month?: string })?.month || '').trim();
     if (!/^\d{4}-\d{2}$/.test(month)) {
       throw new HttpsError('invalid-argument', 'صيغة الشهر يجب أن تكون YYYY-MM.');
     }
-    const rows = await db.collection('monthly_production_costs').where('month', '==', month).get();
+    const rows = await db.collection('monthly_production_costs')
+      .where('tenantId', '==', requesterTenantId)
+      .where('month', '==', month)
+      .get();
     let flagged = 0;
     for (const rowDoc of rows.docs) {
       const row = rowDoc.data() as {
@@ -1297,7 +1336,8 @@ export const calculateMonthlyCostVariance = onCall(
       const variance = actual - standard;
       if (Math.abs(variance) <= 0.0001) continue;
       flagged += 1;
-      await db.collection('cost_variances').doc(`${month}_${rowDoc.id}`).set({
+      await db.collection('cost_variances').doc(`${requesterTenantId}_${month}_${rowDoc.id}`).set({
+        tenantId: requesterTenantId,
         month,
         productId: String(row.productId || ''),
         monthlyCostDocId: rowDoc.id,
@@ -1311,7 +1351,7 @@ export const calculateMonthlyCostVariance = onCall(
         updatedAt: FieldValue.serverTimestamp(),
       }, { merge: true });
     }
-    return { ok: true, month, flagged };
+    return { ok: true, month, tenantId: requesterTenantId, flagged };
   },
 );
 
@@ -1536,6 +1576,7 @@ export const importTenantBackup = onCall(
       backup?: AdminBackupFileInput;
       mode?: AdminRestoreMode;
       tenantIdForHistory?: string;
+      tenantId?: string;
     };
     const mode = String(data?.mode || 'merge').trim() as AdminRestoreMode;
     if (!['merge', 'replace', 'full_reset'].includes(mode)) {
@@ -1558,22 +1599,36 @@ export const importTenantBackup = onCall(
     const createdBy = String(
       (requesterSnap.data() as { email?: string } | undefined)?.email || requesterUid,
     );
+    const targetTenantId = String(
+      data?.tenantId || data?.tenantIdForHistory || backup.metadata?.tenantId || '',
+    ).trim();
 
     try {
-      const restored = await runAdminImportBackup(db, backup, mode);
-      const tenantIdForHistory = String(data?.tenantIdForHistory || '').trim();
+      const { restored, tenantId } = await runAdminImportBackup(
+        db,
+        backup,
+        mode,
+        targetTenantId || undefined,
+      );
       await saveAdminImportHistory(db, {
-        tenantId: tenantIdForHistory || undefined,
+        tenantId,
         mode,
         restored,
         collectionNames: Object.keys(backup.collections || {}),
         createdBy,
         fileMetadataType: String(backup.metadata?.type || ''),
       });
-      return { success: true as const, restored };
+      return { success: true as const, restored, tenantId };
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : 'فشلت الاستعادة';
-      throw new HttpsError('internal', msg);
+      if (
+        msg.includes('معرّف المستأجر')
+        || msg.includes('لا يطابق')
+        || msg.includes('مستأجراً آخر')
+      ) {
+        throw new HttpsError('invalid-argument', msg);
+      }
+      throw new HttpsError('internal', 'فشلت الاستعادة');
     }
   },
 );
@@ -1824,3 +1879,49 @@ export const submitRepairApprovalPublic = onCall(
   },
 );
 
+export const createDepartmentConsumableIssue = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  createDepartmentConsumableIssueHandler,
+);
+
+export const submitDepartmentConsumableIssue = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  submitDepartmentConsumableIssueHandler,
+);
+
+export const approveDepartmentConsumableIssue = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  approveDepartmentConsumableIssueHandler,
+);
+
+export const rejectDepartmentConsumableIssue = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  rejectDepartmentConsumableIssueHandler,
+);
+
+export const issueDepartmentConsumableIssue = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  issueDepartmentConsumableIssueHandler,
+);
+
+export const cancelDepartmentConsumableIssue = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  cancelDepartmentConsumableIssueHandler,
+);
+
+export const returnDepartmentConsumableIssue = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  returnDepartmentConsumableIssueHandler,
+);
+
+export const getDepartmentConsumableMonthlyReport = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  getDepartmentConsumableMonthlyReportHandler,
+);
+
+export { confirmProductionHandoverReceipt } from './productionHandover.js';
+export { issueProductionIssueStock } from './productionIssueStock.js';
+export {
+  applyProductionReportInventory,
+  reverseProductionReportInventory,
+} from './productionReportInventory.js';

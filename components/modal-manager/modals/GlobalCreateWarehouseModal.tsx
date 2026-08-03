@@ -8,13 +8,15 @@ import { MODAL_KEYS } from '../modalKeys';
 import type { GlobalModalPayload } from '../modalOpenPayload';
 import { useTranslation } from 'react-i18next';
 import type { WarehouseRole } from '../../../modules/inventory/types';
+import { useAppStore } from '../../../store/useAppStore';
 
 const WAREHOUSE_ROLES: { value: WarehouseRole; label: string }[] = [
   { value: 'general', label: 'عام' },
   { value: 'raw_material', label: 'مواد خام' },
   { value: 'decomposed', label: 'مفكك' },
-  { value: 'production_wip', label: 'إنتاج WIP' },
-  { value: 'finished_staging', label: 'تم الإنتاج' },
+  { value: 'production_floor', label: 'صالة الإنتاج' },
+  { value: 'production_wip', label: 'تحت التسليم' },
+  { value: 'finished_staging', label: 'بانتظار التغليف' },
   { value: 'final_product', label: 'منتج تام' },
   { value: 'packaging', label: 'تغليف' },
   { value: 'waste', label: 'هالك' },
@@ -27,6 +29,7 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
   const { isOpen, close, payload } = useManagedModalController(MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE);
   const whPayload = (payload || {}) as GlobalModalPayload;
   const { can } = usePermission();
+  const fetchSystemSettings = useAppStore((s) => s.fetchSystemSettings);
   const [name, setName] = useState('');
   const [code, setCode] = useState('');
   const [warehouseRole, setWarehouseRole] = useState<WarehouseRole>('general');
@@ -59,7 +62,24 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
         warehouseRole,
       });
       if (!id) throw new Error('create failed');
-      setMessage({ type: 'success', text: t('modalManager.createWarehouse.createSuccess') });
+      let routingSyncFailed = false;
+      let routingUpdated = false;
+      if (warehouseRole !== 'general' && (can('settings.edit') || can('roles.manage'))) {
+        try {
+          routingUpdated = await warehouseService.syncEmptyRoutingFromRoles();
+          await fetchSystemSettings();
+        } catch {
+          routingSyncFailed = true;
+        }
+      }
+      setMessage({
+        type: routingSyncFailed ? 'error' : 'success',
+        text: routingSyncFailed
+          ? 'تم إنشاء المخزن، لكن تعذر ربط دوره تلقائيًا. اربطه من إعدادات الإنتاج والمخازن.'
+          : routingUpdated
+            ? 'تم إنشاء المخزن وربطه تلقائيًا بتوجيه المخزون.'
+            : t('modalManager.createWarehouse.createSuccess'),
+      });
       setName('');
       setCode('');
       whPayload.onSaved?.();

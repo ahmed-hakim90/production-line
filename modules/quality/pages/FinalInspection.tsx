@@ -15,11 +15,22 @@ import { SingleFinalInspectionPrint } from '../components/QualityReportPrint';
 import { storageService } from '@/services/storageService';
 import { eventBus, SystemEvents } from '@/shared/events';
 import { actionTrackerService } from '@/modules/system/audit';
+import {
+  WORK_ORDER_OPERATION_KEYS,
+  WORK_ORDER_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '@/modules/system/lib/operationPathSettings';
 
 export const FinalInspection: React.FC = () => {
   const { can } = usePermission();
-  const canInspect = can('quality.finalInspection.inspect');
+  const canInspectPermission = can('quality.finalInspection.inspect');
   const canPrint = can('quality.print');
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const canInspect = canInspectPermission && isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.update,
+    WORK_ORDER_UPDATE_PATHS.qualityFinalInspection,
+  );
   const workOrders = useAppStore((s) => s.workOrders);
   const _rawLines = useAppStore((s) => s._rawLines);
   const _rawProducts = useAppStore((s) => s._rawProducts);
@@ -181,7 +192,7 @@ export const FinalInspection: React.FC = () => {
         ...(status === 'approved' || status === 'passed'
           ? { qualityApprovedBy: currentEmployee.id, qualityApprovedAt: new Date().toISOString() }
           : {}),
-      });
+      }, { path: WORK_ORDER_UPDATE_PATHS.qualityFinalInspection });
 
       eventBus.emit(
         status === 'approved' || status === 'passed'

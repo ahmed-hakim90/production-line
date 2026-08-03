@@ -37,6 +37,12 @@ import {
   sumWorkersCountPatch,
 } from '@/modules/production/utils/lineAssignmentWorkersCount';
 import { showAppToast } from '@/src/shared/ui/feedback/appToast';
+import {
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  isOperationPathEnabled,
+  type ProductionReportCreatePath,
+} from '@/modules/system/lib/operationPathSettings';
 
 type ReportFormState = {
   reportType: 'finished_product' | 'component_injection' | 'packaging';
@@ -102,6 +108,7 @@ export const GlobalCreateReportModal: React.FC = () => {
     date?: string;
     shift?: ProductionReportShift;
     workOrderId?: string;
+    source?: string;
   } | undefined;
   const { can, isPackagingOnly } = usePermission();
   const createReport = useAppStore((s) => s.createReport);
@@ -140,6 +147,12 @@ export const GlobalCreateReportModal: React.FC = () => {
   const forceInjectionOnly = can('reports.componentInjection.only') && !canCreateFinishedReportsBase;
   const canCreateFinishedReports = canCreateFinishedReportsBase && !forceInjectionOnly;
   const canManageComponentInjectionReports = can('reports.componentInjection.manage') || forceInjectionOnly;
+  const operationPath: ProductionReportCreatePath =
+    modalPayload?.source === 'productionPlans'
+      ? PRODUCTION_REPORT_CREATE_PATHS.productionPlan
+      : modalPayload?.source === 'supervisorDetails'
+        ? PRODUCTION_REPORT_CREATE_PATHS.supervisorDetails
+        : PRODUCTION_REPORT_CREATE_PATHS.globalModal;
   const isComponentEntryLocked = modalPayload?.reportType === 'component_injection';
   const availableReportTypes = useMemo<Array<ReportFormState['reportType']>>(() => {
     if (isComponentEntryLocked) return ['component_injection'];
@@ -441,6 +454,11 @@ export const GlobalCreateReportModal: React.FC = () => {
 
   if (!isOpen) return null;
   if (!canCreateFinishedReports && !can('reports.edit') && !canManageComponentInjectionReports && !can('reports.packaging.create')) return null;
+  if (!isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    operationPath,
+  )) return null;
 
   const closeModal = () => {
     close();
@@ -528,7 +546,7 @@ export const GlobalCreateReportModal: React.FC = () => {
           ? form.shift
           : undefined,
       } as Omit<ProductionReport, 'id' | 'createdAt'>;
-      const created = await createReport(reportPayload);
+      const created = await createReport(reportPayload, { path: operationPath });
       if (!created) {
         const storeError = useAppStore.getState().error;
         openErrorOverlay(getReportDuplicateMessage(storeError, t('modalManager.createReport.saveError')));

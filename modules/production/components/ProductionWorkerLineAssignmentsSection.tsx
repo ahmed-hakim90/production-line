@@ -3,6 +3,12 @@ import type { ProductionLineWorkerAssignment } from '@/types';
 import { getTodayDateString } from '@/utils/calculations';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
 import { Badge, Button, Card } from './UI';
+import { useAppStore } from '@/store/useAppStore';
+import {
+  PERMANENT_WORKER_ASSIGNMENT_PATHS,
+  WORKER_ASSIGNMENT_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 
 type AssignmentForm = {
   lineId: string;
@@ -30,9 +36,15 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
   workerId,
   assignments,
   productionLines,
-  canManage,
+  canManage: canManagePermission,
   onAssignmentsChange,
 }) => {
+  const systemSettings = useAppStore((state) => state.systemSettings);
+  const canManage = canManagePermission && isOperationPathEnabled(
+    systemSettings,
+    WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+    PERMANENT_WORKER_ASSIGNMENT_PATHS.workerProfileSection,
+  );
   const [showModal, setShowModal] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<AssignmentForm>(emptyForm);
@@ -83,9 +95,16 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
         isActive: form.isActive,
       };
       if (editingId) {
-        await productionLineWorkerAssignmentService.update(editingId, payload);
+        await productionLineWorkerAssignmentService.update(
+          editingId,
+          payload,
+          { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.workerProfileSection },
+        );
       } else {
-        await productionLineWorkerAssignmentService.create(payload);
+        await productionLineWorkerAssignmentService.create(
+          payload,
+          { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.workerProfileSection },
+        );
       }
       await refreshAssignments();
       closeModal();
@@ -96,14 +115,21 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
 
   const handleToggleActive = async (row: ProductionLineWorkerAssignment) => {
     if (!row.id || !canManage) return;
-    await productionLineWorkerAssignmentService.update(row.id, { isActive: !row.isActive });
+    await productionLineWorkerAssignmentService.update(
+      row.id,
+      { isActive: !row.isActive },
+      { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.workerProfileSection },
+    );
     await refreshAssignments();
   };
 
   const handleRemove = async (row: ProductionLineWorkerAssignment) => {
     if (!row.id || !canManage) return;
     if (!window.confirm(`إلغاء تعيين الخط "${getLineName(row.lineId)}"؟`)) return;
-    await productionLineWorkerAssignmentService.remove(row.id);
+    await productionLineWorkerAssignmentService.remove(
+      row.id,
+      { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.workerProfileSection },
+    );
     await refreshAssignments();
   };
 

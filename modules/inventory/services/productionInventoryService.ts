@@ -16,9 +16,11 @@ import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
 import type { Material } from '../../manufacturing/types';
 import { resolveReportType } from '../../production/utils/reportTypes';
+import { httpsCallable } from 'firebase/functions';
+import { functionsClient, isConfigured } from '../../auth/services/firebase';
 import { rawMaterialService } from './rawMaterialService';
-import { stockService } from './stockService';
-import { transferApprovalService } from './transferApprovalService';
+import { stockService as baseStockService } from './stockService';
+import { transferApprovalService as baseTransferApprovalService } from './transferApprovalService';
 import { productionIssueService } from './productionIssueService';
 import type {
   CreateStockMovementInput,
@@ -32,6 +34,29 @@ import {
   resolveInventoryRoutingV1Async,
 } from './inventoryRoutingService';
 import { aggregatePackagingQuantities } from '../lib/productionInventoryLib';
+
+const stockService = {
+  ...baseStockService,
+  createMovement: (input: CreateStockMovementInput) =>
+    baseStockService.createMovement(input, { internal: true }),
+};
+const transferApprovalService = {
+  ...baseTransferApprovalService,
+  createRequest: (input: Parameters<typeof baseTransferApprovalService.createRequest>[0]) =>
+    baseTransferApprovalService.createRequest(input, { internal: true }),
+};
+
+function callableUserError(error: unknown, fallback: string): Error {
+  const message = String((error as { message?: string })?.message || '').trim();
+  if (message.includes('permission-denied') || message.includes('Permission')) {
+    return new Error('لا تملك صلاحية تنفيذ هذه العملية.');
+  }
+  if (message.includes('unauthenticated')) {
+    return new Error('يجب تسجيل الدخول أولاً.');
+  }
+  const cleaned = message.replace(/^Firebase:\s*/i, '').replace(/\s*\(.*\)$/, '').trim();
+  return new Error(cleaned || fallback);
+}
 
 export type ProductionInventoryActor = {
   name: string;
@@ -117,7 +142,14 @@ async function consumeMaterialsForProduction(params: {
   actor: ProductionInventoryActor;
 }): Promise<void> {
   const { productId, quantity, reportId, routing, settings, actor } = params;
-  if (quantity <= 0 || !routing.decomposedWarehouseId && !routing.rawMaterialWarehouseId) return;
+  if (quantity <= 0) return;
+  if (
+    !routing.productionFloorWarehouseId
+    && !routing.decomposedWarehouseId
+    && !routing.rawMaterialWarehouseId
+  ) {
+    return;
+  }
 
   const bundle = await loadManufacturingBundle();
   await preloadOwnersForExplosion([{ ownerType: 'product', ownerId: productId }], bundle);
@@ -152,7 +184,10 @@ async function consumeMaterialsForProduction(params: {
         ?? rawByName.get(normalizeText(item.itemName || ''));
       if (!raw?.id) continue;
       await stockService.createMovement({
-        warehouseId: routing.decomposedWarehouseId || routing.rawMaterialWarehouseId,
+        warehouseId:
+          routing.productionFloorWarehouseId
+          || routing.decomposedWarehouseId
+          || routing.rawMaterialWarehouseId,
         itemType: 'raw_material',
         itemId: raw.id,
         itemName: raw.name,
@@ -207,8 +242,10 @@ async function postProducedToWip(params: {
   reportId: string;
   actor: ProductionInventoryActor;
   note: string;
+  /** When true, always post IN immediately (V2 handover path). */
+  forceImmediate?: boolean;
 }): Promise<void> {
-  const { routing, line, quantity, reportId, actor, note } = params;
+  const { routing, line, quantity, reportId, actor, note, forceImmediate } = params;
   if (!routing.productionWipWarehouseId || quantity <= 0) return;
 
   const requestLine: TransferRequestLine = {
@@ -217,11 +254,13 @@ async function postProducedToWip(params: {
     itemName: line.itemName,
     itemCode: line.itemCode,
     quantity,
+    reportedQuantity: quantity,
+    receivedQuantity: 0,
     unit: line.unit,
     minStock: line.minStock,
   };
 
-  if (routing.requireApprovalForProductionEntry) {
+  if (!forceImmediate && routing.requireApprovalForProductionEntry) {
     await transferApprovalService.createRequest({
       requestType: 'production_entry',
       fromWarehouseId: '__production_report__',
@@ -252,6 +291,45 @@ async function postProducedToWip(params: {
     sourceId: reportId,
     note,
     createdBy: actor.name,
+  });
+}
+
+async function postProductionHandoverRequest(params: {
+  routing: ResolvedInventoryRouting;
+  line: StockLineIdentity;
+  quantity: number;
+  reportId: string;
+  actor: ProductionInventoryActor;
+}): Promise<void> {
+  const { routing, line, quantity, reportId, actor } = params;
+  if (!routing.productionWipWarehouseId || !routing.finishedStagingWarehouseId || quantity <= 0) {
+    return;
+  }
+  if (routing.productionWipWarehouseId === routing.finishedStagingWarehouseId) {
+    throw new Error('مخزن تحت التسليم وبانتظار التغليف يجب أن يكونا مختلفين.');
+  }
+
+  await transferApprovalService.createRequest({
+    requestType: 'production_handover',
+    fromWarehouseId: routing.productionWipWarehouseId,
+    toWarehouseId: routing.finishedStagingWarehouseId,
+    note: `استلام تغليف لتقرير الإنتاج ${reportId}`,
+    sourceModule: 'production_report',
+    sourceId: reportId,
+    sourceReportId: reportId,
+    lines: [{
+      itemType: line.itemType,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      itemCode: line.itemCode,
+      quantity,
+      reportedQuantity: quantity,
+      receivedQuantity: 0,
+      unit: line.unit,
+      minStock: line.minStock,
+    }],
+    createdBy: actor.name,
+    createdByUserId: actor.userId,
   });
 }
 
@@ -452,6 +530,24 @@ async function postComponentScrapMovements(params: {
 export const productionInventoryService = {
   async applyProductionReportInventory(input: ApplyProductionReportInventoryInput): Promise<void> {
     const reportType = resolveReportType(input.report.reportType);
+
+    // V2 finished-product posting is server-authoritative.
+    if (reportType === 'finished_product') {
+      if (!isConfigured || !functionsClient) {
+        throw new Error('النظام غير مهيأ أو لم تُنشر دوال الخادم.');
+      }
+      const callable = httpsCallable<{ reportId: string }, { ok: boolean; idempotent?: boolean }>(
+        functionsClient,
+        'applyProductionReportInventory',
+      );
+      try {
+        await callable({ reportId: input.reportId });
+      } catch (error: unknown) {
+        throw callableUserError(error, 'تعذر ترحيل مخزون تقرير الإنتاج.');
+      }
+      return;
+    }
+
     const routing = await resolveInventoryRoutingV1Async(input.systemSettings);
     const { reportId, report, actor, products, componentScrapItems = [] } = input;
     const producedQty = Number(report.quantityProduced || 0);
@@ -535,7 +631,18 @@ export const productionInventoryService = {
           'لا يمكن ترحيل مخزون تقرير الإنتاج قبل اعتماد وإصدار إذن صرف إنتاج لأمر الشغل/الخطة. التقرير لا ينفّذ صرفاً تلقائياً — استخدم صفحة «صرف إنتاج» ثم أعد الترحيل.',
         );
       }
-      if (
+      // V2: always consume BOM from production floor when an issued issue exists.
+      if (hasIssuedProductionComponents && routing.productionFloorWarehouseId) {
+        assertRoutingConfigured(routing, ['floor']);
+        await consumeMaterialsForProduction({
+          productId: report.productId,
+          quantity: producedQty,
+          reportId,
+          routing,
+          settings: input.systemSettings,
+          actor,
+        });
+      } else if (
         !hasIssuedProductionComponents
         && !routing.requireIssuedProductionIssueOnReport
         && routing.autoConsumeBomOnProductionReport
@@ -553,18 +660,31 @@ export const productionInventoryService = {
 
     if (producedLine && producedQty > 0) {
       assertRoutingConfigured(routing, ['wip']);
+      const useHandover = routing.requirePackagingHandoverReceipt !== false
+        && Boolean(routing.finishedStagingWarehouseId)
+        && routing.finishedStagingWarehouseId !== routing.productionWipWarehouseId;
+
       await postProducedToWip({
         routing,
         line: producedLine,
         quantity: producedQty,
         reportId,
         actor,
+        forceImmediate: useHandover,
         note: isComponentInjection
           ? `Production WIP entry (component) from report ${reportId}`
           : `Production WIP entry from report ${reportId}`,
       });
 
-      if (routing.autoTransferProductionToFinished && routing.finishedStagingWarehouseId) {
+      if (useHandover && !isComponentInjection) {
+        await postProductionHandoverRequest({
+          routing,
+          line: producedLine,
+          quantity: producedQty,
+          reportId,
+          actor,
+        });
+      } else if (routing.autoTransferProductionToFinished && routing.finishedStagingWarehouseId) {
         const transferLine: TransferRequestLine = { ...producedLine, quantity: producedQty };
         await postAutoTransfer({
           requestType: 'production_auto_transfer',
@@ -584,6 +704,7 @@ export const productionInventoryService = {
         routing.autoTransferFinishedToFinal
         && routing.finalProductWarehouseId
         && routing.finishedStagingWarehouseId
+        && !useHandover
       ) {
         const stagingId = routing.autoTransferProductionToFinished
           ? routing.finishedStagingWarehouseId
@@ -723,50 +844,17 @@ export const productionInventoryService = {
 
   async reverseProductionReportInventory(reportId: string): Promise<void> {
     if (!reportId.trim()) return;
-
-    const bySource = await stockService.getTransactionsBySource({
-      sourceModule: 'production_report',
-      sourceId: reportId,
-    });
-    const packagingTx = await stockService.getTransactionsBySource({
-      sourceModule: 'packaging',
-      sourceId: reportId,
-    });
-    const all = [...bySource, ...packagingTx];
-
-    const legacyNotes = [
-      `Auto from production report ${reportId}`,
-      `Auto component production entry from report ${reportId}`,
-      `Auto raw consumption from production report ${reportId}`,
-      `BOM consumption from production report ${reportId}`,
-      `Material consumption from production report ${reportId}`,
-      `Component scrap OUT from production report ${reportId}`,
-      `Component scrap IN from production report ${reportId}`,
-      `Production waste from report ${reportId}`,
-      `Production WIP entry from report ${reportId}`,
-      `Packaging stock transfer from report ${reportId}`,
-    ];
-    for (const prefix of legacyNotes) {
-      const legacy = await stockService.getTransactionsByNote(prefix);
-      all.push(...legacy);
+    if (!isConfigured || !functionsClient) {
+      throw new Error('النظام غير مهيأ أو لم تُنشر دوال الخادم.');
     }
-
-    const pending = await transferApprovalService.getBySourceReportId(reportId);
-    for (const req of pending) {
-      if (req.status === 'pending' && req.id) {
-        await transferApprovalService.rejectRequest(req.id, 'System', 'Report deleted');
-      }
-    }
-
-    const seen = new Set<string>();
-    for (const tx of all) {
-      if (!tx.id || seen.has(tx.id)) continue;
-      seen.add(tx.id);
-      if (tx.movementType === 'TRANSFER' && tx.referenceNo) {
-        await stockService.deleteTransferByReference(tx.referenceNo);
-        continue;
-      }
-      await stockService.deleteMovement(tx);
+    const callable = httpsCallable<{ reportId: string }, { ok: boolean }>(
+      functionsClient,
+      'reverseProductionReportInventory',
+    );
+    try {
+      await callable({ reportId: reportId.trim() });
+    } catch (error: unknown) {
+      throw callableUserError(error, 'تعذر عكس مخزون تقرير الإنتاج.');
     }
   },
 };

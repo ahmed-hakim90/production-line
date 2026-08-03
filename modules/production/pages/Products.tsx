@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useMemo, useRef } from 'react';
+import React, { useCallback, useEffect, useState, useMemo, useRef } from 'react';
 import {
   AlertCircle,
   AlertTriangle,
@@ -36,6 +36,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
 import { type ProductBomCountCard } from '../components/ProductBomCountCardPrint';
@@ -45,6 +46,17 @@ import { formatNumber } from '../../../utils/calculations';
 import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
 import type { Product, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
+import {
+  BOM_UPSERT_PATHS,
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_STOCK_MOVE_PATHS,
+  MANUFACTURING_OPERATION_KEYS,
+  MATERIAL_CREATE_PATHS,
+  PRODUCT_CREATE_PATHS,
+  PRODUCT_OPERATION_KEYS,
+  PRODUCT_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 import {
   parseProductsExcel,
   toProductData,
@@ -68,7 +80,13 @@ import type { ProductMaterial } from '../../../types';
 import { loadProductMaterials, loadProductMaterialsByProductIds } from '../../catalog/lib/productComponents';
 import { bomService } from '../../manufacturing/services/bomService';
 import { materialService } from '../../manufacturing/services/materialService';
-import type { BomItem } from '../../manufacturing/types';
+import {
+  MATERIAL_TYPE_LABELS,
+  MATERIAL_UNIT_LABELS,
+  type BomItem,
+  type MaterialType,
+  type MaterialUnit,
+} from '../../manufacturing/types';
 import { useJobsStore, isBackgroundJobCancelled } from '../../../components/background-jobs/useJobsStore';
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import { stockService } from '../../inventory/services/stockService';
@@ -84,6 +102,7 @@ import { TableIconAction, ToneActionButton } from '@/src/components/erp/TableIco
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { Warehouse as InventoryWarehouse } from '../../inventory/types';
 import { useRawMaterialWarehouse } from '../../inventory/hooks/useRawMaterialWarehouse';
+import { CategoryTreeSelect } from '../../catalog/components/CategoryTreeSelect';
 import { categoryService, isProductCategoryRow } from '../../catalog/services/categoryService';
 import { flattenCategoryTree, formatCategoryBreadcrumb } from '../../catalog/lib/categoryTree';
 import { monthlyProductionCostService } from '../../costs/services/monthlyProductionCostService';
@@ -262,6 +281,7 @@ export const Products: React.FC = () => {
   const costCenterValues = useAppStore((s) => s.costCenterValues);
   const costAllocations = useAppStore((s) => s.costAllocations);
   const laborSettings = useAppStore((s) => s.laborSettings);
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const planSettings = useAppStore((s) => s.systemSettings.planSettings);
   const stockItemTypeForMaterials = Boolean(planSettings?.manufacturingMigratedAt?.trim())
@@ -278,6 +298,57 @@ export const Products: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
   const canImportFromPage = can('import') && pageControl.importEnabled;
+  const canCreateProductModal = can('products.create') && isOperationPathEnabled(
+    systemSettings,
+    PRODUCT_OPERATION_KEYS.create,
+    PRODUCT_CREATE_PATHS.globalModal,
+  );
+  const canUpdateProductModal = can('products.edit') && isOperationPathEnabled(
+    systemSettings,
+    PRODUCT_OPERATION_KEYS.update,
+    PRODUCT_UPDATE_PATHS.globalModal,
+  );
+  const canImportProducts = canImportFromPage
+    && isOperationPathEnabled(
+      systemSettings,
+      PRODUCT_OPERATION_KEYS.create,
+      PRODUCT_CREATE_PATHS.productsImport,
+    )
+    && isOperationPathEnabled(
+      systemSettings,
+      PRODUCT_OPERATION_KEYS.update,
+      PRODUCT_UPDATE_PATHS.productsImport,
+    );
+  const canBulkUpdateProducts = can('products.edit') && isOperationPathEnabled(
+    systemSettings,
+    PRODUCT_OPERATION_KEYS.update,
+    PRODUCT_UPDATE_PATHS.productsPageBulk,
+  );
+  const canToggleProductSettings = can('products.edit') && isOperationPathEnabled(
+    systemSettings,
+    PRODUCT_OPERATION_KEYS.update,
+    PRODUCT_UPDATE_PATHS.productsPageToggle,
+  );
+  const componentStockImportEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.stockMove,
+    INVENTORY_STOCK_MOVE_PATHS.productsComponentImport,
+  );
+  const productsImportBomEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.bomUpsert,
+    BOM_UPSERT_PATHS.productsImportBom,
+  );
+  const componentMaterialImportEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.materialCreate,
+    MATERIAL_CREATE_PATHS.productsComponentsImport,
+  );
+  const componentBomImportEnabled = isOperationPathEnabled(
+    systemSettings,
+    MANUFACTURING_OPERATION_KEYS.bomUpsert,
+    BOM_UPSERT_PATHS.productsComponentsImport,
+  );
   const navigate = useTenantNavigate();
 
   const [saveMsg, setSaveMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -363,6 +434,11 @@ export const Products: React.FC = () => {
   const [exportMonthLoading, setExportMonthLoading] = useState(false);
   const [exportingProducts, setExportingProducts] = useState(false);
   const [exportingBom, setExportingBom] = useState(false);
+  const [showBomExportModal, setShowBomExportModal] = useState(false);
+  const [bomExportCategoryFilter, setBomExportCategoryFilter] = useState('');
+  const [showBulkCategoryModal, setShowBulkCategoryModal] = useState(false);
+  const [bulkCategoryId, setBulkCategoryId] = useState<string | null>(null);
+  const [bulkCategoryLabel, setBulkCategoryLabel] = useState('');
 
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const {
@@ -721,10 +797,14 @@ export const Products: React.FC = () => {
     setSelectedIds((prev) => { const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next; });
 
   const handleBulkAssemblyModeChange = async (assemblyMode: 'individual' | 'team') => {
-    if (bulkToggleSaving || selectedIds.size === 0) return;
+    if (!canBulkUpdateProducts || bulkToggleSaving || selectedIds.size === 0) return;
     setBulkToggleSaving(true);
     try {
-      await Promise.all([...selectedIds].map((id) => updateProduct(id, { assemblyMode })));
+      await Promise.all([...selectedIds].map((id) => updateProduct(
+        id,
+        { assemblyMode },
+        { path: PRODUCT_UPDATE_PATHS.productsPageBulk },
+      )));
       setSaveMsg({
         type: 'success',
         text:
@@ -735,6 +815,34 @@ export const Products: React.FC = () => {
       setSelectedIds(new Set());
     } catch {
       setSaveMsg({ type: 'error', text: 'تعذر تغيير نمط التجميع للمنتجات المحددة حالياً' });
+    } finally {
+      setBulkToggleSaving(false);
+    }
+  };
+
+  const handleBulkCategoryAssign = async () => {
+    if (!canBulkUpdateProducts || bulkToggleSaving || selectedIds.size === 0 || !bulkCategoryId) return;
+    setBulkToggleSaving(true);
+    try {
+      const count = selectedIds.size;
+      const label = bulkCategoryLabel || bulkCategoryId;
+      await Promise.all(
+        [...selectedIds].map((id) => updateProduct(
+          id,
+          { categoryId: bulkCategoryId },
+          { path: PRODUCT_UPDATE_PATHS.productsPageBulk },
+        )),
+      );
+      setShowBulkCategoryModal(false);
+      setBulkCategoryId(null);
+      setBulkCategoryLabel('');
+      setSelectedIds(new Set());
+      setSaveMsg({
+        type: 'success',
+        text: `تم تحويل ${count} منتج إلى فئة «${label}»`,
+      });
+    } catch {
+      setSaveMsg({ type: 'error', text: 'تعذر تحويل المنتجات المحددة إلى الفئة حالياً' });
     } finally {
       setBulkToggleSaving(false);
     }
@@ -850,33 +958,39 @@ export const Products: React.FC = () => {
   }, [productsForTable, exportMonthQtyByProductId, exportMonthSavedActiveProductIds]);
 
   const openCreate = () => {
+    if (!canCreateProductModal) return;
     openModal(MODAL_KEYS.PRODUCTS_CREATE, { source: 'products.page' });
   };
 
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     if (params.get('action') !== 'create') return;
-    if (!can('products.create')) return;
+    if (!canCreateProductModal) return;
     openCreate();
     navigate('/products', { replace: true });
-  }, [location.search, can, navigate]);
+  }, [location.search, canCreateProductModal, navigate]);
 
   useEffect(() => {
     const editProductId = (location.state as { editProductId?: string } | null)?.editProductId;
     if (!editProductId) return;
-    if (!can('products.edit')) return;
+    if (!canUpdateProductModal) return;
     openModal(MODAL_KEYS.PRODUCTS_CREATE, { mode: 'edit', productId: editProductId });
     navigate('/products', { replace: true, state: null });
-  }, [location.state, navigate, can, openModal]);
+  }, [location.state, navigate, canUpdateProductModal, openModal]);
 
   const openEdit = (id: string) => {
-    if (!can('products.edit')) return;
+    if (!canUpdateProductModal) return;
     openModal(MODAL_KEYS.PRODUCTS_CREATE, { mode: 'edit', productId: id });
   };
 
   const handleDelete = async (id: string) => {
-    await deleteProduct(id);
-    setDeleteConfirmId(null);
+    try {
+      await deleteProduct(id);
+      setDeleteConfirmId(null);
+      toast.success('تم حذف المنتج.');
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'تعذر حذف المنتج.');
+    }
   };
 
   // â”€â”€ Import from Excel â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -898,6 +1012,33 @@ export const Products: React.FC = () => {
     }
     return [...byId.values()].sort((a, b) => a.label.localeCompare(b.label, 'ar'));
   }, [categoryFilterOptions, fallbackCategoryOptions]);
+
+  const productMatchesCategoryFilter = useCallback(
+    (
+      product: {
+        categoryId?: string | null;
+        category?: string;
+        categoryName?: string;
+        model?: string;
+      },
+      filter: string,
+    ) => {
+      if (!filter) return true;
+      const categoryLabel = String(
+        product.category || product.categoryName || product.model || '',
+      ).trim();
+      if (filter.startsWith('name:')) {
+        return categoryLabel === filter.slice(5);
+      }
+      if (product.categoryId && product.categoryId === filter) return true;
+      const opt = mergedCategoryFilterOptions.find((o) => o.value === filter);
+      if (opt) {
+        return categoryLabel === opt.leafName || categoryLabel === opt.label;
+      }
+      return categoryLabel === filter;
+    },
+    [mergedCategoryFilterOptions],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -963,7 +1104,8 @@ export const Products: React.FC = () => {
   const saveImportedBomItems = async (productId: string, row: ProductImportResult['rows'][number]) => {
     if (row.materials.length === 0) return { added: 0, updated: 0 };
 
-    const bomId = await bomService.ensureActiveBom('product', productId);
+    const operationContext = { path: BOM_UPSERT_PATHS.productsImportBom } as const;
+    const bomId = await bomService.ensureActiveBom('product', productId, operationContext);
     const existingItems = await bomService.getItemsByBomId(bomId);
     let nextSortOrder = existingItems.reduce((max, item) => Math.max(max, Number(item.sortOrder ?? -1)), -1) + 1;
     let added = 0;
@@ -991,11 +1133,11 @@ export const Products: React.FC = () => {
       );
 
       if (existing?.id) {
-        await bomService.updateItem(existing.id, payload);
+        await bomService.updateItem(existing.id, payload, operationContext);
         updated++;
       } else {
         const sortOrder = nextSortOrder++;
-        const addedItemId = await bomService.addItem(bomId, { ...payload, sortOrder });
+        const addedItemId = await bomService.addItem(bomId, { ...payload, sortOrder }, operationContext);
         if (addedItemId) {
           existingItems.push({ ...payload, id: addedItemId, bomId, sortOrder });
         }
@@ -1010,6 +1152,10 @@ export const Products: React.FC = () => {
     if (!importResult) return;
     const validRows = importResult.rows.filter((r) => r.errors.length === 0);
     if (validRows.length === 0) return;
+    if (validRows.some((row) => row.materials.length > 0) && !productsImportBomEnabled) {
+      toast.error('مسار تحديث BOM باستيراد المنتجات متوقف من إعدادات النظام.');
+      return;
+    }
     const jobId = addJob({
       fileName: importFileName || 'products.xlsx',
       jobType: 'Products Import',
@@ -1035,10 +1181,17 @@ export const Products: React.FC = () => {
           if (!existingProduct) {
             throw new Error('Existing product not found for update');
           }
-          await updateProduct(row.matchedId, toProductDataWithExisting(row, existingProduct));
+          await updateProduct(
+            row.matchedId,
+            toProductDataWithExisting(row, existingProduct),
+            { path: PRODUCT_UPDATE_PATHS.productsImport },
+          );
           productId = row.matchedId;
         } else {
-          productId = await createProduct(toProductData(row));
+          productId = await createProduct(
+            toProductData(row),
+            { path: PRODUCT_CREATE_PATHS.productsImport },
+          );
         }
         if (productId) {
           await saveImportedBomItems(productId, row);
@@ -1216,7 +1369,8 @@ export const Products: React.FC = () => {
     }>,
   ) => {
     if (items.length === 0) return;
-    const bomId = await bomService.ensureActiveBom('product', productId);
+    const operationContext = { path: BOM_UPSERT_PATHS.productsComponentsImport } as const;
+    const bomId = await bomService.ensureActiveBom('product', productId, operationContext);
     const existingItems = await bomService.getItemsByBomId(bomId);
     let nextSortOrder = existingItems.reduce((max, item) => Math.max(max, Number(item.sortOrder ?? -1)), -1) + 1;
 
@@ -1236,10 +1390,10 @@ export const Products: React.FC = () => {
         (item) => item.itemType === 'material' && item.itemId === material.materialId,
       );
       if (existing?.id) {
-        await bomService.updateItem(existing.id, payload);
+        await bomService.updateItem(existing.id, payload, operationContext);
       } else {
         const sortOrder = nextSortOrder++;
-        const addedItemId = await bomService.addItem(bomId, { ...payload, sortOrder });
+        const addedItemId = await bomService.addItem(bomId, { ...payload, sortOrder }, operationContext);
         if (addedItemId) {
           existingItems.push({ ...payload, id: addedItemId, bomId, sortOrder });
         }
@@ -1275,6 +1429,18 @@ export const Products: React.FC = () => {
       items: g.items.map((item) => ({ ...item })),
     }));
     const stockMovements = componentsImportResult.stockMovements.map((m) => ({ ...m }));
+    if (materialsToCreate.length > 0 && !componentMaterialImportEnabled) {
+      toast.error('مسار إنشاء المواد من استيراد المكونات متوقف من إعدادات النظام.');
+      return;
+    }
+    if (bomGroups.length > 0 && !componentBomImportEnabled) {
+      toast.error('مسار تحديث BOM من استيراد المكونات متوقف من إعدادات النظام.');
+      return;
+    }
+    if (stockMovements.length > 0 && !componentStockImportEnabled) {
+      toast.error('مسار تسوية أرصدة المكونات بالاستيراد متوقف من إعدادات النظام.');
+      return;
+    }
     const bomGroupCount = componentsImportResult.bomGroupCount;
     const stockMovementCount = componentsImportResult.stockMovementCount;
     const newMaterialCount = materialsToCreate.length;
@@ -1321,7 +1487,7 @@ export const Products: React.FC = () => {
           conversionRate: 1,
           isActive: true,
           linkedCostCenterIds: [],
-        });
+        }, { path: MATERIAL_CREATE_PATHS.productsComponentsImport });
         createdMaterialIds.set(material.code.toUpperCase(), id);
       } catch (error) {
         failed++;
@@ -1476,7 +1642,7 @@ export const Products: React.FC = () => {
             adjustmentReason: 'count_correction',
             sourceModule: 'manual_movement',
             createdBy: userDisplayName || 'Current User',
-          }),
+          }, { path: INVENTORY_STOCK_MOVE_PATHS.productsComponentImport }),
           movement.materialCode || `row ${movementIndex + 1}`,
         );
         if (!movementId) {
@@ -1566,7 +1732,13 @@ export const Products: React.FC = () => {
     });
   };
 
-  const handleExportProductBom = async () => {
+  const openBomExportModal = () => {
+    if (!canExportFromPage || _rawProducts.length === 0 || exportingBom) return;
+    setBomExportCategoryFilter(categoryFilter || '');
+    setShowBomExportModal(true);
+  };
+
+  const handleExportProductBom = async (categoryFilterValue = bomExportCategoryFilter) => {
     if (!canExportFromPage || _rawProducts.length === 0) return;
     setExportingBom(true);
     setSaveMsg(null);
@@ -1610,9 +1782,25 @@ export const Products: React.FC = () => {
         );
       }
 
-      const productsSorted = [..._rawProducts].sort((a, b) =>
-        String(a.code || '').localeCompare(String(b.code || ''), 'ar'),
-      );
+      const productsSorted = _rawProducts
+        .filter((product) => productMatchesCategoryFilter({
+          categoryId: product.categoryId,
+          categoryName: product.categoryName,
+          model: product.model,
+        }, categoryFilterValue))
+        .sort((a, b) =>
+          String(a.code || '').localeCompare(String(b.code || ''), 'ar'),
+        );
+
+      if (productsSorted.length === 0) {
+        setSaveMsg({
+          type: 'error',
+          text: categoryFilterValue
+            ? 'لا توجد منتجات في الفئة المختارة للتصدير.'
+            : 'لا توجد منتجات للتصدير.',
+        });
+        return;
+      }
 
       const exportRows: ProductBomExportRow[] = [];
       await Promise.all(
@@ -1629,12 +1817,25 @@ export const Products: React.FC = () => {
             const materialCode = mat?.code || '';
             const materialName = mat?.name || item.itemName || '';
             if (!materialCode && !materialName) continue;
+            const unitKey = String(item.unit || mat?.baseUnit || '').trim() as MaterialUnit;
+            const typeKey = (mat?.type || '') as MaterialType;
+            const waste = item.wastePercent != null
+              ? Number(item.wastePercent)
+              : mat?.wastePercent != null
+                ? Number(mat.wastePercent)
+                : undefined;
             const base = {
               productCode: product.code || '',
               productName: product.name || '',
               materialCode: materialCode || materialName,
               materialName: materialName || materialCode,
+              materialType: typeKey && MATERIAL_TYPE_LABELS[typeKey]
+                ? MATERIAL_TYPE_LABELS[typeKey]
+                : '',
+              materialCategory: mat?.categoryName || '',
+              unit: MATERIAL_UNIT_LABELS[unitKey] || unitKey || '',
               qtyPerUnit: Number(item.qtyPerUnit || 0),
+              wastePercent: waste != null && Number.isFinite(waste) ? waste : undefined,
               unitCost:
                 item.directCostPerUnit != null && Number(item.directCostPerUnit) > 0
                   ? Number(item.directCostPerUnit)
@@ -1676,13 +1877,25 @@ export const Products: React.FC = () => {
       });
 
       if (exportRows.length === 0) {
-        setSaveMsg({ type: 'error', text: 'لا توجد مكونات BOM للتصدير.' });
+        setSaveMsg({
+          type: 'error',
+          text: categoryFilterValue
+            ? 'لا توجد مكونات BOM لمنتجات الفئة المختارة.'
+            : 'لا توجد مكونات BOM للتصدير.',
+        });
         return;
       }
       exportProductBomExcel(exportRows);
+      const categoryLabel = categoryFilterValue
+        ? (mergedCategoryFilterOptions.find((o) => o.value === categoryFilterValue)?.label
+          || categoryFilterValue.replace(/^name:/, ''))
+        : '';
+      setShowBomExportModal(false);
       setSaveMsg({
         type: 'success',
-        text: `تم تصدير ${exportRows.length} صف مكونات. عدّل الشيت ثم ارفعه من «رفع/تحديث مكونات المنتجات».`,
+        text: `تم تصدير ${exportRows.length} صف مكونات`
+          + (categoryLabel ? ` (فئة: ${categoryLabel})` : '')
+          + '. عدّل الشيت ثم ارفعه من «رفع/تحديث مكونات المنتجات».',
       });
     } catch (error) {
       console.error('[products] BOM export failed', error);
@@ -1966,7 +2179,7 @@ export const Products: React.FC = () => {
         title="إدارة المنتجات"
         subtitle="قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج"
         icon="inventory_2"
-        primaryAction={can('products.create') ? {
+        primaryAction={canCreateProductModal ? {
           label: 'منتج جديد',
           icon: 'add',
           onClick: openCreate,
@@ -1998,14 +2211,11 @@ export const Products: React.FC = () => {
             },
           },
           {
-            label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير مكونات المنتجات (BOM)',
+            label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير المنتجات بالمكونات (BOM)',
             icon: 'table_chart',
             group: 'تصدير',
             hidden: !canExportFromPage || _rawProducts.length === 0,
-            onClick: () => {
-              if (exportingBom) return;
-              void handleExportProductBom();
-            },
+            onClick: openBomExportModal,
           },
           {
             label: 'إدارة الأعمدة الظاهرة',
@@ -2025,7 +2235,7 @@ export const Products: React.FC = () => {
             label: 'رفع المنتجات (Excel)',
             icon: 'upload_file',
             group: 'استيراد',
-            hidden: !canImportFromPage,
+            hidden: !canImportProducts,
             onClick: () => fileInputRef.current?.click(),
           },
           {
@@ -2063,6 +2273,7 @@ export const Products: React.FC = () => {
 
       {/* â”€â”€ Search & Filters â”€â”€ */}
       <SmartFilterBar
+      pageId="production-products"
         searchPlaceholder="ابحث بالاسم أو الكود..."
         searchValue={search}
         onSearchChange={setSearch}
@@ -2147,13 +2358,20 @@ export const Products: React.FC = () => {
                 size="sm"
                 onClick={() => {
                   if (!window.confirm(`هل تريد حذف ${selectedIds.size} منتج؟`)) return;
-                  Promise.all([...selectedIds].map((id) => deleteProduct(id))).then(() => setSelectedIds(new Set()));
+                  Promise.all([...selectedIds].map((id) => deleteProduct(id)))
+                    .then(() => {
+                      setSelectedIds(new Set());
+                      toast.success('تم حذف المنتجات المحددة.');
+                    })
+                    .catch((error) => {
+                      toast.error(error instanceof Error ? error.message : 'تعذر حذف المنتجات المحددة.');
+                    });
                 }}
               >
                 حذف المحدد
               </Button>
             )}
-            {can('products.edit') && (
+            {canBulkUpdateProducts && (
               <>
                 <Button
                   variant="secondary"
@@ -2175,13 +2393,33 @@ export const Products: React.FC = () => {
                   variant="secondary"
                   size="sm"
                   disabled={bulkToggleSaving}
+                  onClick={() => {
+                    setBulkCategoryId(null);
+                    setBulkCategoryLabel('');
+                    setShowBulkCategoryModal(true);
+                  }}
+                >
+                  تحويل لفئة
+                </Button>
+              </>
+            )}
+            {canToggleProductSettings && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={bulkToggleSaving}
                   onClick={async () => {
                     if (bulkToggleSaving) return;
                     setBulkToggleSaving(true);
                     try {
                       await Promise.all(
                         [...selectedIds].map((id) =>
-                          updateProduct(id, { autoDeductComponentScrapFromDecomposed: true }),
+                          updateProduct(
+                            id,
+                            { autoDeductComponentScrapFromDecomposed: true },
+                            { path: PRODUCT_UPDATE_PATHS.productsPageToggle },
+                          ),
                         ),
                       );
                       setSaveMsg({ type: 'success', text: 'تم تفعيل خصم هالك المكونات تلقائياً للمنتجات المحددة' });
@@ -2204,7 +2442,11 @@ export const Products: React.FC = () => {
                     try {
                       await Promise.all(
                         [...selectedIds].map((id) =>
-                          updateProduct(id, { autoDeductComponentScrapFromDecomposed: false }),
+                          updateProduct(
+                            id,
+                            { autoDeductComponentScrapFromDecomposed: false },
+                            { path: PRODUCT_UPDATE_PATHS.productsPageToggle },
+                          ),
                         ),
                       );
                       setSaveMsg({ type: 'success', text: 'تم تعطيل خصم هالك المكونات للمنتجات المحددة' });
@@ -2315,7 +2557,7 @@ export const Products: React.FC = () => {
                     <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30" />
                     <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter ? ' مطابقة للبحث' : ' بعد'}</p>
                     <p className="text-sm mt-1">
-                      {can("products.create")
+                      {canCreateProductModal
                         ? 'اضغط "إضافة منتج جديد" لإضافة أول منتج'
                         : 'لا توجد منتجات لعرضها حالياً'}
                     </p>
@@ -2486,7 +2728,7 @@ export const Products: React.FC = () => {
                         action="view"
                         onClick={() => setDetailDrawerProductId(product.id)}
                       />
-                      {can("products.edit") && (
+                      {canUpdateProductModal && (
                         <TableIconAction
                           action="edit"
                           onClick={() => openEdit(product.id)}
@@ -2512,7 +2754,7 @@ export const Products: React.FC = () => {
               <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30 mx-auto" />
               <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter ? ' مطابقة للبحث' : ' بعد'}</p>
               <p className="text-sm mt-1">
-                {can('products.create')
+                {canCreateProductModal
                   ? 'اضغط "إضافة منتج جديد" لإضافة أول منتج'
                   : 'لا توجد منتجات لعرضها حالياً'}
               </p>
@@ -2624,7 +2866,7 @@ export const Products: React.FC = () => {
                         >
                           عرض
                         </ToneActionButton>
-                        {can('products.edit') && (
+                        {canUpdateProductModal && (
                           <ToneActionButton
                             action="edit"
                             onClick={() => openEdit(product.id)}
@@ -2858,7 +3100,7 @@ export const Products: React.FC = () => {
                   >
                     عرض كامل
                   </ToneActionButton>
-                  {can('products.edit') && (
+                  {canUpdateProductModal && (
                     <ToneActionButton
                       action="edit"
                       className="w-full"
@@ -3357,6 +3599,138 @@ export const Products: React.FC = () => {
                   لا تحديثات BOM ولا تسويات رصيد للحفظ (رصيد فاضي أو مطابق).
                 </p>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBulkCategoryModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => !bulkToggleSaving && setShowBulkCategoryModal(false)}
+        >
+          <div
+            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold">تحويل لفئة</h3>
+                <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+                  {selectedIds.size} منتج محدد
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={bulkToggleSaving}
+                onClick={() => setShowBulkCategoryModal(false)}
+                className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
+              >
+                <ProductIcon name="close" />
+              </button>
+            </div>
+            <div className="p-6 space-y-3">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">
+                الفئة الجديدة
+              </label>
+              <CategoryTreeSelect
+                value={bulkCategoryId}
+                onChange={(id, breadcrumb) => {
+                  setBulkCategoryId(id);
+                  setBulkCategoryLabel(breadcrumb);
+                }}
+                disabled={bulkToggleSaving}
+                required
+                placeholder="اختر الفئة"
+              />
+              <p className="text-xs text-[var(--color-text-muted)]">
+                سيتم نقل كل المنتجات المحددة إلى هذه الفئة.
+              </p>
+            </div>
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={bulkToggleSaving}
+                onClick={() => setShowBulkCategoryModal(false)}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="button"
+                disabled={bulkToggleSaving || !bulkCategoryId}
+                onClick={() => void handleBulkCategoryAssign()}
+              >
+                {bulkToggleSaving ? 'جاري التحويل...' : 'تحويل المحدد'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showBomExportModal && (
+        <div
+          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => !exportingBom && setShowBomExportModal(false)}
+        >
+          <div
+            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <ProductIcon name="call_split" className="text-primary" />
+                <h3 className="text-lg font-bold">تصدير المنتجات بالمكونات</h3>
+              </div>
+              <button
+                type="button"
+                disabled={exportingBom}
+                onClick={() => setShowBomExportModal(false)}
+                className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors"
+              >
+                <ProductIcon name="close" />
+              </button>
+            </div>
+            <div className="p-6 space-y-4">
+              <div className="space-y-2">
+                <label className="block text-sm font-bold text-[var(--color-text-muted)]">فئة المنتجات</label>
+                <Select
+                  value={bomExportCategoryFilter || 'all'}
+                  onValueChange={(value) => setBomExportCategoryFilter(value === 'all' ? '' : value)}
+                >
+                  <SelectTrigger className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 font-medium">
+                    <SelectValue placeholder="كل الفئات" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">كل الفئات</SelectItem>
+                    {mergedCategoryFilterOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-[var(--color-text-muted)]">
+                  اختر فئة معيّنة لتصدير منتجاتها ومكوناتها فقط، أو اترك «كل الفئات».
+                </p>
+              </div>
+            </div>
+            <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                disabled={exportingBom}
+                onClick={() => setShowBomExportModal(false)}
+              >
+                إلغاء
+              </Button>
+              <Button
+                type="button"
+                disabled={exportingBom}
+                onClick={() => void handleExportProductBom(bomExportCategoryFilter)}
+              >
+                {exportingBom ? 'جاري التصدير...' : 'تصدير Excel'}
+              </Button>
             </div>
           </div>
         </div>

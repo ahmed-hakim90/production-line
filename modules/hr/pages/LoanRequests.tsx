@@ -32,12 +32,16 @@ const LOAN_STATUS_LABELS: Record<LoanStatus, string> = {
   pending: 'بانتظار الموافقة',
   active: 'نشط',
   closed: 'مُغلق',
+  rejected: 'مرفوض',
+  cancelled: 'ملغي',
 };
 
 const LOAN_STATUS_VARIANT: Record<LoanStatus, 'warning' | 'success' | 'neutral'> = {
   pending: 'warning',
   active: 'success',
   closed: 'neutral',
+  rejected: 'neutral',
+  cancelled: 'neutral',
 };
 
 function formatCurrency(val: number): string {
@@ -461,14 +465,18 @@ export const LoanRequests: React.FC = () => {
       {/* Filters + Table */}
       <Card className="mb-0 border-0 rounded-none">
         <SmartFilterBar
+      pageId="hr-loan-requests"
           className="mb-0 border-0 rounded-none"
           quickFilters={[
             {
               key: 'status',
               placeholder: 'جميع الحالات',
               options: [
+                { value: 'pending', label: 'بانتظار الموافقة' },
                 { value: 'active', label: 'نشط' },
                 { value: 'closed', label: 'مُغلق' },
+                { value: 'rejected', label: 'مرفوض' },
+                { value: 'cancelled', label: 'ملغي' },
               ],
             },
           ]}

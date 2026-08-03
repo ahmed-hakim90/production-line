@@ -91,18 +91,18 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
     },
     {
       id: 'packaging',
-      label: 'بانتظار التغليف',
-      value: packaging.configured ? formatNumber(packaging.awaitingUnits) : '—',
+      label: 'بانتظار التغليف / استلام',
+      value: packaging.configured ? formatNumber(packaging.awaitingUnits + packaging.handoverRemainingUnits) : '—',
       detail: packaging.configured
-        ? `${packaging.skuCount} صنف · تحويلات تغليف معلّقة: ${packaging.pendingTransfers}`
+        ? `تحت التسليم: ${formatNumber(packaging.handoverRemainingUnits)} · بانتظار تغليف: ${formatNumber(packaging.awaitingUnits)} · استلام معلّق: ${packaging.pendingHandover}`
         : 'حدّد مخازن التغليف في توجيه المخازن',
       tone: !packaging.configured
         ? 'info'
-        : packaging.pendingTransfers > 0 || packaging.awaitingUnits > 0
+        : packaging.pendingHandover > 0 || packaging.pendingTransfers > 0 || packaging.awaitingUnits > 0
           ? 'warning'
           : 'ok',
       path: '/production/packaging/control',
-      anyOf: ['reports.view', 'reports.packaging.create', 'inventory.view'],
+      anyOf: ['reports.view', 'reports.packaging.create', 'inventory.view', 'productionHandover.approve'],
     },
     {
       id: 'fg-entry',
@@ -176,19 +176,31 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
     {
       id: 'materials',
       label: 'جاهزية المواد للخطط',
-      value: `${materials.readinessPercent}%`,
+      value:
+        materials.assemblableCoveragePercent != null
+          ? `${materials.assemblableCoveragePercent}%`
+          : `${materials.readinessPercent}%`,
       detail:
-        materials.plansWithShortage > 0
-          ? `${materials.plansWithShortage} خطة بنواقص · ${formatNumber(materials.totalShortageQty)} وحدة مكوّن · متبقي معرّض ${formatNumber(materials.blockedRemainingQty)}`
-          : 'لا نواقص مكونات مفتوحة على الخطط النشطة',
+        materials.assemblableCoveragePercent != null
+          ? `تغطية تجميع حية · خطط بنواقص مسجّلة ${materials.plansWithShortage} · تحت القدرة ${materials.plansBelowAssemblable} · عجز ${formatNumber(materials.assemblableShortfallQty)}`
+          : materials.plansWithShortage > 0
+            ? `${materials.plansWithShortage} خطة بنواقص · ${formatNumber(materials.totalShortageQty)} وحدة مكوّن · متبقي معرّض ${formatNumber(materials.blockedRemainingQty)}`
+            : 'لا نواقص مكونات مفتوحة على الخطط النشطة',
       tone:
-        materials.plansWithShortage > 0
-          ? materials.readinessPercent < 70
-            ? 'danger'
-            : 'warning'
-          : 'ok',
-      path: '/production-plans',
-      anyOf: ['plans.view', 'factoryDashboard.view', 'adminDashboard.view', 'inventory.view'],
+        (materials.assemblableCoveragePercent != null && materials.assemblableCoveragePercent < 70) ||
+        materials.readinessPercent < 70
+          ? 'danger'
+          : materials.plansWithShortage > 0 || materials.plansBelowAssemblable > 0
+            ? 'warning'
+            : 'ok',
+      path: '/production/issue-requests',
+      anyOf: [
+        'plans.view',
+        'productionIssue.request',
+        'factoryDashboard.view',
+        'adminDashboard.view',
+        'inventory.view',
+      ],
     },
   ];
 
@@ -333,11 +345,13 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
                           ? ` · أداء ${performanceProxyPercent}%`
                           : ''
                       } (ليس OEE)`
-                    : `جاهزية مواد ${materials.readinessPercent}% · نواقص ${materials.openShortageRows}`
+                    : materials.assemblableCoveragePercent != null
+                      ? `تغطية تجميع ${materials.assemblableCoveragePercent}% · نواقص ${materials.openShortageRows}`
+                      : `جاهزية مواد ${materials.readinessPercent}% · نواقص ${materials.openShortageRows}`
                 }
                 trendUp={
                   stockCounts.accuracyPercent == null
-                    ? materials.readinessPercent >= 90
+                    ? (materials.assemblableCoveragePercent ?? materials.readinessPercent) >= 90
                     : stockCounts.accuracyPercent >= 90
                 }
               />

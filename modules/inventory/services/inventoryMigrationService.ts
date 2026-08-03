@@ -19,6 +19,7 @@ function roleForWarehouseId(
   if (!warehouseId) return undefined;
   if (warehouseId === routing.rawMaterialWarehouseId) return 'raw_material';
   if (warehouseId === routing.decomposedWarehouseId) return 'decomposed';
+  if (warehouseId === routing.productionFloorWarehouseId) return 'production_floor';
   if (warehouseId === routing.productionWipWarehouseId) return 'production_wip';
   if (warehouseId === routing.finishedStagingWarehouseId) return 'finished_staging';
   if (warehouseId === routing.finalProductWarehouseId) return 'final_product';

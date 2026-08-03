@@ -85,6 +85,11 @@ import {
 } from '../../../utils/costCalculations';
 import { monthlyProductionCostService, type MonthlyDashboardCostSummary } from '@/modules/costs/services/monthlyProductionCostService';
 import {
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -1461,6 +1466,15 @@ export const AdminDashboard: React.FC = () => {
       .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     return configured.filter((item) => {
       if (item.actionType === 'export_excel' && !canExportFromPage) return false;
+      if (
+        item.actionType === 'navigate'
+        && item.target === '/quick-action'
+        && !isOperationPathEnabled(
+          systemSettings,
+          PRODUCTION_REPORT_OPERATION_KEYS.create,
+          PRODUCTION_REPORT_CREATE_PATHS.quickAction,
+        )
+      ) return false;
       return !item.permission || can(item.permission as any);
     });
   }, [systemSettings, can, canExportFromPage]);
@@ -1603,6 +1617,17 @@ export const AdminDashboard: React.FC = () => {
         type: decisionSnapshot.materials.readinessPercent < 70 ? 'danger' : 'warning',
         icon: 'report_problem',
         message: `جاهزية المواد ${decisionSnapshot.materials.readinessPercent}% · ${decisionSnapshot.materials.plansWithShortage} خطة بنواقص مكونات`,
+      });
+    }
+
+    if (
+      decisionSnapshot.materials.assemblableCoveragePercent != null &&
+      decisionSnapshot.materials.assemblableCoveragePercent < 90
+    ) {
+      result.push({
+        type: decisionSnapshot.materials.assemblableCoveragePercent < 70 ? 'danger' : 'warning',
+        icon: 'inventory_2',
+        message: `تغطية التجميع من المخزن ${decisionSnapshot.materials.assemblableCoveragePercent}% · عجز ${formatNumber(decisionSnapshot.materials.assemblableShortfallQty)} وحدة · ${decisionSnapshot.materials.plansBelowAssemblable} خطة تحت القدرة`,
       });
     }
 
@@ -1877,6 +1902,7 @@ export const AdminDashboard: React.FC = () => {
 
       {/* â”€â”€ Period Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <SmartFilterBar
+      pageId="dashboard-admin-main"
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
           label: PRESET_LABELS[key],
@@ -2305,6 +2331,7 @@ export const AdminDashboard: React.FC = () => {
                 <Badge variant="info">{productSummary.length} منتج</Badge>
               </div>
               <SmartFilterBar
+      pageId="dashboard-admin-products"
                 searchPlaceholder="بحث بالكود أو الاسم..."
                 searchValue={productSearch}
                 onSearchChange={setProductSearch}

@@ -26,6 +26,10 @@ import type {
   FirestoreApprovalRequest,
 } from '@/modules/hr/approval';
 import { normalizeApprovalSettings } from '@/modules/hr/approval/types';
+import {
+  buildApprovedPenaltySourcePatch,
+  syncApprovalSourceDecision,
+} from '@/modules/hr/approval/approvalSourceSync';
 
 const ACTIONABLE_STATUSES: ApprovalRequestStatus[] = ['pending', 'in_progress', 'escalated'];
 
@@ -210,6 +214,19 @@ async function buildProductionApprovalChain(
   return { chain: chainResult.chain, observerEmployeeIds, observerUserIds };
 }
 
+async function syncProductionApprovalSideEffects(
+  request: FirestoreApprovalRequest,
+): Promise<void> {
+  const sourceResult = await syncApprovalSourceDecision(request);
+  const requestData = await buildApprovedPenaltySourcePatch(request);
+  await updateDoc(productionApprovalRequestDocRef(request.id!), {
+    sourceSyncStatus: sourceResult.success ? 'synced' : 'failed',
+    ...(sourceResult.success ? {} : { sourceSyncError: sourceResult.error || 'unknown' }),
+    ...(requestData ? { requestData } : {}),
+    updatedAt: serverTimestamp(),
+  });
+}
+
 export const productionApprovalRequestService = {
   async create(input: CreateProductionApprovalRequestInput): Promise<{ success: boolean; requestId?: string; error?: string }> {
     if (!isConfigured) return { success: false, error: 'Firebase not configured' };
@@ -338,6 +355,14 @@ export const productionApprovalRequestService = {
       ...(await buildProductionApprovalAccessFields({ ...request, approvalChain: updatedChain, currentStep: nextStep, status: newStatus, history })),
       updatedAt: serverTimestamp(),
     });
+    await syncProductionApprovalSideEffects({
+      ...request,
+      id: input.requestId,
+      approvalChain: updatedChain,
+      currentStep: nextStep,
+      status: newStatus,
+      history,
+    });
 
     return { success: true };
   },
@@ -373,6 +398,13 @@ export const productionApprovalRequestService = {
       ...(await buildProductionApprovalAccessFields({ ...request, approvalChain: updatedChain, status: 'rejected', history })),
       updatedAt: serverTimestamp(),
     });
+    await syncProductionApprovalSideEffects({
+      ...request,
+      id: input.requestId,
+      approvalChain: updatedChain,
+      status: 'rejected',
+      history,
+    });
 
     return { success: true };
   },
@@ -398,6 +430,12 @@ export const productionApprovalRequestService = {
       history,
       ...(await buildProductionApprovalAccessFields({ ...request, status: 'cancelled', history })),
       updatedAt: serverTimestamp(),
+    });
+    await syncProductionApprovalSideEffects({
+      ...request,
+      id: input.requestId,
+      status: 'cancelled',
+      history,
     });
 
     return { success: true };

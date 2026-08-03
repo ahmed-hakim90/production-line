@@ -82,6 +82,13 @@ export const InventoryDashboard: React.FC = () => {
                 صرف إنتاج
               </GhostButton>
             </Link>
+            {(can('departmentConsumables.view') || can('inventory.view')) && (
+              <Link to={tenantPath('/inventory/department-consumables')}>
+                <GhostButton iconName="shopping_bag" tone="edit">
+                  مستهلكات الأقسام
+                </GhostButton>
+              </Link>
+            )}
             {canCounts && (
               <Link to={tenantPath('/inventory/counts')}>
                 <GhostButton iconName="checklist" tone="save">

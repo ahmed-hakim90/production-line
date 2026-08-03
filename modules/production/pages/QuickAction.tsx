@@ -46,7 +46,14 @@ import {
 import { ProductionReportShareCard } from '../components/ProductionReportShareCard';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import {
-  buildTeamPlanWorkerOutputs,
+  DAILY_WORKER_ASSIGNMENT_PATHS,
+  PERMANENT_WORKER_ASSIGNMENT_PATHS,
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  WORKER_ASSIGNMENT_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
+import {
   computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
@@ -229,10 +236,24 @@ export const QuickAction: React.FC = () => {
   const saveErrorFromStore = useAppStore((s) => s.error);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const reportBehavior = useMemo(() => resolveReportBehaviorSettings(systemSettings), [systemSettings]);
+  const quickActionCreateEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    PRODUCTION_REPORT_CREATE_PATHS.quickAction,
+  );
+  const permanentWorkerAssignmentEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+    PERMANENT_WORKER_ASSIGNMENT_PATHS.quickAction,
+  );
+  const dailyWorkerAssignmentEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORKER_ASSIGNMENT_OPERATION_KEYS.daily,
+    DAILY_WORKER_ASSIGNMENT_PATHS.quickAction,
+  );
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const injectionCategoryKeywords = useAppStore((s) => s.systemSettings.planSettings.injectionRawMaterialCategoryKeywords);
   const lineProductConfigs = useAppStore((s) => s.lineProductConfigs);
-  const productionPlans = useAppStore((s) => s.productionPlans);
   const routingVarianceBasisSecondsByProduct = useAppStore((s) => s.routingVarianceBasisSecondsByProduct);
   const routingPlanTargetUnitSecondsByProduct = useAppStore((s) => s.routingTargetUnitSecondsByProduct);
   const routingProductTargetUnitSecondsByProduct = useAppStore((s) => s.routingProductTargetUnitSecondsByProduct);
@@ -289,22 +310,11 @@ export const QuickAction: React.FC = () => {
     [_rawProducts, productId],
   );
   const selectedAssemblyMode = getProductAssemblyMode(selectedProduct);
-  const linkedPlan = useMemo(
-    () => productionPlans.find(
-      (p) => p.lineId === lineId
-        && p.productId === productId
-        && (p.status === 'in_progress' || p.status === 'planned'),
-    ) ?? null,
-    [productionPlans, lineId, productId],
-  );
-  const planDailyTarget = Math.max(0, Number(linkedPlan?.avgDailyTarget || 0));
-  const teamSharedEligible = reportType === 'finished_product'
-    && selectedAssemblyMode === 'team'
-    && planDailyTarget > 0;
+  // Team products: hide per-worker share table — only individual products ask for worker outputs.
   const individualWorkerOutputTargetsEligible = reportType === 'finished_product'
     && selectedAssemblyMode === 'individual'
     && hasLineSpecificWorkerTarget(lineProductConfigs, lineId, productId);
-  const workerOutputTargetsEligible = individualWorkerOutputTargetsEligible || teamSharedEligible;
+  const workerOutputTargetsEligible = individualWorkerOutputTargetsEligible;
   const workerOutputEntryEnabled = workerOutputTargetsEligible
     && productionWorkerSettings.performance.productionWorkerOutputEnabled;
   const workerOutputTotal = useMemo(
@@ -895,6 +905,10 @@ export const QuickAction: React.FC = () => {
   }, [lineId, allowedLinesForUser, _rawLines.length, isSupervisorReporter, supervisorLinesLoaded]);
 
   const handleQuickAddLineWorker = useCallback(async () => {
+    if (!permanentWorkerAssignmentEnabled) {
+      setWorkerActionError('مسار ربط العامل الدائم متوقف من إعدادات النظام.');
+      return;
+    }
     if (!lineId) {
       setWorkerActionError('اختر خط الإنتاج أولاً.');
       return;
@@ -946,7 +960,7 @@ export const QuickAction: React.FC = () => {
         startDate: today,
         laborRole: DEFAULT_LINE_WORKER_LABOR_ROLE,
         isActive: true,
-      });
+      }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.quickAction });
 
       const worker = await productionWorkerService.getById(workerId);
       if (worker) {
@@ -973,9 +987,14 @@ export const QuickAction: React.FC = () => {
     today,
     getLineName,
     fetchWorkersFromLineAssignments,
+    permanentWorkerAssignmentEnabled,
   ]);
 
   const handleQuickEndLineWorkerAssignment = useCallback(async (assignment: LineWorkerAssignment) => {
+    if (!permanentWorkerAssignmentEnabled || (assignment.id && !dailyWorkerAssignmentEnabled)) {
+      setWorkerActionError('أحد مسارات تعيين العامل المطلوبة متوقف من إعدادات النظام.');
+      return;
+    }
     if (!assignment.permanentAssignmentId) {
       setWorkerActionError('هذا العامل من سجل يومي قديم فقط ولا يوجد ربط دائم لإلغائه من هنا.');
       return;
@@ -992,9 +1011,12 @@ export const QuickAction: React.FC = () => {
       await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, {
         isActive: false,
         endDate: today,
-      });
+      }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.quickAction });
       if (assignment.id) {
-        await lineAssignmentService.delete(assignment.id);
+        await lineAssignmentService.delete(
+          assignment.id,
+          { path: DAILY_WORKER_ASSIGNMENT_PATHS.quickAction },
+        );
       }
       if (assignment.permanentWorkerId) {
         const worker = await productionWorkerService.getById(assignment.permanentWorkerId);
@@ -1012,12 +1034,25 @@ export const QuickAction: React.FC = () => {
     } finally {
       setEndingLineWorkerAssignmentId(null);
     }
-  }, [fetchWorkersFromLineAssignments, getLineName, today]);
+  }, [
+    dailyWorkerAssignmentEnabled,
+    fetchWorkersFromLineAssignments,
+    getLineName,
+    permanentWorkerAssignmentEnabled,
+    today,
+  ]);
 
   const handleQuickWorkerRoleChange = useCallback(async (
     assignment: LineWorkerAssignment,
     laborRole: LineWorkerLaborRole,
   ) => {
+    if (
+      (assignment.permanentAssignmentId && !permanentWorkerAssignmentEnabled)
+      || (assignment.id && !dailyWorkerAssignmentEnabled)
+    ) {
+      setWorkerActionError('أحد مسارات تعيين العامل المطلوبة متوقف من إعدادات النظام.');
+      return;
+    }
     if (!assignment.id && !assignment.permanentAssignmentId) {
       setWorkerActionError('هذا العامل من سجل يومي قديم فقط ولا يمكن تعديل وظيفته من هنا.');
       return;
@@ -1037,10 +1072,18 @@ export const QuickAction: React.FC = () => {
 
     try {
       if (assignment.permanentAssignmentId) {
-        await productionLineWorkerAssignmentService.update(assignment.permanentAssignmentId, { laborRole });
+        await productionLineWorkerAssignmentService.update(
+          assignment.permanentAssignmentId,
+          { laborRole },
+          { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.quickAction },
+        );
       }
       if (assignment.id) {
-        await lineAssignmentService.updateLaborRole(assignment.id, laborRole);
+        await lineAssignmentService.updateLaborRole(
+          assignment.id,
+          laborRole,
+          { path: DAILY_WORKER_ASSIGNMENT_PATHS.quickAction },
+        );
       }
       await fetchWorkersFromLineAssignments();
     } catch {
@@ -1053,12 +1096,20 @@ export const QuickAction: React.FC = () => {
     } finally {
       setUpdatingWorkerRoleId(null);
     }
-  }, [fetchWorkersFromLineAssignments]);
+  }, [
+    dailyWorkerAssignmentEnabled,
+    fetchWorkersFromLineAssignments,
+    permanentWorkerAssignmentEnabled,
+  ]);
 
   const handleQuickWorkerPresenceChange = useCallback(async (
     assignment: LineWorkerAssignment,
     isPresent: boolean,
   ) => {
+    if (!dailyWorkerAssignmentEnabled) {
+      setWorkerActionError('مسار تعيين العامل اليومي متوقف من إعدادات النظام.');
+      return;
+    }
     if (!assignment.id && !assignment.permanentAssignmentId) {
       setWorkerActionError('هذا العامل من سجل قديم فقط ولا يمكن تعديل حضوره من هنا.');
       return;
@@ -1078,7 +1129,11 @@ export const QuickAction: React.FC = () => {
 
     try {
       if (assignment.id) {
-        await lineAssignmentService.updatePresence(assignment.id, isPresent);
+        await lineAssignmentService.updatePresence(
+          assignment.id,
+          isPresent,
+          { path: DAILY_WORKER_ASSIGNMENT_PATHS.quickAction },
+        );
       } else {
         await lineAssignmentService.create({
           lineId: assignment.lineId,
@@ -1089,7 +1144,7 @@ export const QuickAction: React.FC = () => {
           laborRole: resolveLineWorkerLaborRole(assignment.laborRole),
           isPresent,
           assignedBy: uid || '',
-        });
+        }, { path: DAILY_WORKER_ASSIGNMENT_PATHS.quickAction });
       }
       const workerId = assignment.permanentWorkerId || await lineAssignmentWorkerBridge.syncFromLineAssignment(assignment);
       if (workerId) {
@@ -1115,7 +1170,7 @@ export const QuickAction: React.FC = () => {
     } finally {
       setUpdatingWorkerPresenceId(null);
     }
-  }, [fetchWorkersFromLineAssignments, today, uid]);
+  }, [dailyWorkerAssignmentEnabled, fetchWorkersFromLineAssignments, today, uid]);
 
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
@@ -1172,24 +1227,9 @@ export const QuickAction: React.FC = () => {
     }
     setSaving(true);
 
-    const reportWorkerOutputsBase = workerOutputs
-      .filter((row) => row.productId === productId && row.lineId === lineId);
-    const reportWorkerOutputs = teamSharedEligible
-      ? buildTeamPlanWorkerOutputs({
-        quantityProduced: effectiveQuantityProduced,
-        planDailyTarget,
-        workers: reportWorkerOutputsBase.map((row) => ({
-          workerId: row.workerId,
-          workerName: row.workerName,
-          isPresent: row.isPresent,
-          productId: row.productId,
-          productName: row.productName,
-          lineId: row.lineId,
-          lineName: row.lineName,
-          notes: row.notes,
-        })),
-      })
-      : reportWorkerOutputsBase.map((row) => {
+    const reportWorkerOutputs = workerOutputs
+      .filter((row) => row.productId === productId && row.lineId === lineId)
+      .map((row) => {
         const isPresent = row.isPresent ?? true;
         const outputQty = isPresent ? Number(row.outputQty || 0) : 0;
         return {
@@ -1237,7 +1277,7 @@ export const QuickAction: React.FC = () => {
     let id: string | null = null;
     let saveError: unknown = null;
     try {
-      id = await createReport(data);
+      id = await createReport(data, { path: PRODUCTION_REPORT_CREATE_PATHS.quickAction });
     } catch (error) {
       saveError = error;
     }
@@ -1501,6 +1541,19 @@ export const QuickAction: React.FC = () => {
     () => componentScrapItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0),
     [componentScrapItems],
   );
+
+  if (!quickActionCreateEnabled) {
+    return (
+      <div className="erp-ds-clean space-y-6">
+        <PageHeader title="الإدخال السريع" subtitle="هذا المسار متوقف من إعدادات النظام" />
+        <Card>
+          <div className="p-6 text-center text-sm font-medium text-[var(--color-text-muted)]">
+            استخدم مسارًا آخر مفعّلًا لإنشاء تقرير الإنتاج أو راجع مسؤول النظام.
+          </div>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="erp-ds-clean space-y-6">
@@ -2040,7 +2093,7 @@ export const QuickAction: React.FC = () => {
                   productName={getProductName(productId)}
                   products={_rawProducts}
                   reportQty={effectiveQuantityProduced}
-                  planDailyTarget={teamSharedEligible ? planDailyTarget : 0}
+                  planDailyTarget={0}
                   settings={productionWorkerSettings}
                   value={workerOutputs}
                   onChange={setWorkerOutputs}

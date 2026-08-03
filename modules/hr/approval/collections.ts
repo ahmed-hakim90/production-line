@@ -1,8 +1,8 @@
 /**
  * Approval Engine — Firestore Collection References
  *
- * Extends the base HR collections with approval-specific refs.
- * Settings are stored as a single document (approval_settings/global).
+ * Settings: approval_settings/{tenantId} (preferred)
+ * Legacy dual-read: approval_settings/global
  */
 import {
   collection,
@@ -11,6 +11,7 @@ import {
   DocumentReference,
 } from 'firebase/firestore';
 import { db } from '@/services/firebase';
+import { getCurrentTenantId } from '@/lib/currentTenant';
 
 export const APPROVAL_COLLECTIONS = {
   APPROVAL_REQUESTS: 'approval_requests',
@@ -19,7 +20,8 @@ export const APPROVAL_COLLECTIONS = {
   APPROVAL_AUDIT_LOGS: 'approval_audit_logs',
 } as const;
 
-const APPROVAL_SETTINGS_DOC_ID = 'global';
+/** @deprecated Legacy shared doc — dual-read during migration only. */
+export const APPROVAL_SETTINGS_LEGACY_DOC_ID = 'global';
 
 export function approvalRequestsRef(): CollectionReference {
   return collection(db, APPROVAL_COLLECTIONS.APPROVAL_REQUESTS);
@@ -30,7 +32,11 @@ export function approvalRequestDocRef(id: string): DocumentReference {
 }
 
 export function approvalSettingsDocRef(): DocumentReference {
-  return doc(db, APPROVAL_COLLECTIONS.APPROVAL_SETTINGS, APPROVAL_SETTINGS_DOC_ID);
+  return doc(db, APPROVAL_COLLECTIONS.APPROVAL_SETTINGS, getCurrentTenantId());
+}
+
+export function approvalSettingsLegacyDocRef(): DocumentReference {
+  return doc(db, APPROVAL_COLLECTIONS.APPROVAL_SETTINGS, APPROVAL_SETTINGS_LEGACY_DOC_ID);
 }
 
 export function approvalDelegationsRef(): CollectionReference {

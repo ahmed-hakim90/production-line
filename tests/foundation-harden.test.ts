@@ -146,6 +146,23 @@ async function main() {
   assert.equal(withTenant.ok, true);
   if (withTenant.ok) assert.equal(withTenant.data, 'ok');
 
+  section('domain usecase sources gate tenant before IO');
+  const { readFileSync } = await import('node:fs');
+  const { resolve } = await import('node:path');
+  const gatedUseCases = [
+    'modules/inventory/usecases/createTransferRequest.ts',
+    'modules/inventory/usecases/approveTransferRequest.ts',
+    'modules/hr/usecases/manageOrganization.ts',
+  ];
+  for (const rel of gatedUseCases) {
+    const src = readFileSync(resolve(process.cwd(), rel), 'utf8');
+    assert.match(
+      src,
+      /requireTenantIdOrThrow/,
+      `${rel} must call requireTenantIdOrThrow before service IO`,
+    );
+  }
+
   setCurrentTenant(null);
   console.log('\nAll foundation-harden tests passed.\n');
 }

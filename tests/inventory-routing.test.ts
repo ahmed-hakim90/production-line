@@ -84,8 +84,9 @@ function testRequireIssuedProductionIssueDefaultOn() {
   } as SystemSettings);
   assert.equal(defaults.requireIssuedProductionIssueOnReport, true);
   assert.equal(defaults.autoConsumeBomOnProductionReport, false);
-  assert.equal(defaults.autoTransferProductionToFinished, true);
-  assert.equal(defaults.requireApprovalForProductionEntry, true);
+  assert.equal(defaults.autoTransferProductionToFinished, false);
+  assert.equal(defaults.requireApprovalForProductionEntry, false);
+  assert.equal(defaults.requirePackagingHandoverReceipt, true);
   assert.equal(defaults.requireApprovalForAutoTransfers, false);
 
   const off = resolveInventoryRoutingV1({

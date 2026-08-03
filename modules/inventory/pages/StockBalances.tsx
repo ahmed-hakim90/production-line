@@ -315,6 +315,7 @@ export const StockBalances: React.FC = () => {
 
       <Card className="!p-0 overflow-hidden">
         <SmartFilterBar
+      pageId="stock-balances"
           searchPlaceholder="ابحث بالاسم أو الكود..."
           searchValue={search}
           onSearchChange={setSearch}

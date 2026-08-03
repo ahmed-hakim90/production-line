@@ -13,6 +13,7 @@ import {
   orderBy,
   serverTimestamp,
   Timestamp,
+  runTransaction,
 } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
 import { getCurrentTenantId } from '@/lib/currentTenant';
@@ -235,25 +236,86 @@ export async function syncLeaveApprovalDecision(params: {
     return { success: false, error: 'سجل الإجازة المرتبط غير موجود' };
   }
 
-  if ((leaveReq as any).balanceImpactApplied) {
-    return { success: true };
-  }
+  const existingBalance = await leaveBalanceService.getByEmployee(leaveReq.employeeId);
+  const tenantId = getCurrentTenantId();
+  const balanceId = existingBalance?.id
+    || `${tenantId.replace(/\//g, '_')}__${leaveReq.employeeId.replace(/\//g, '_')}`;
+  const requestRef = doc(db, HR_COLLECTIONS.LEAVE_REQUESTS, leaveRequestId);
+  const balanceRef = doc(db, HR_COLLECTIONS.LEAVE_BALANCES, balanceId);
 
-  const deductionResult = await leaveBalanceService.deductBalance(
-    leaveReq.employeeId,
-    leaveReq.leaveType,
-    leaveReq.totalDays,
-    { allowOutsideBalance: true },
-  );
+  const deductionResult = await runTransaction(db, async (transaction) => {
+    const requestSnap = await transaction.get(requestRef);
+    if (!requestSnap.exists()) {
+      return { success: false, error: 'سجل الإجازة المرتبط غير موجود' };
+    }
+    const currentRequest = requestSnap.data() as FirestoreLeaveRequest & {
+      balanceImpactApplied?: boolean;
+      outsideBalanceDaysApplied?: number;
+    };
+    if (currentRequest.balanceImpactApplied) {
+      return {
+        success: true,
+        outsideBalanceDays: Number(currentRequest.outsideBalanceDaysApplied || 0),
+      };
+    }
+    if (currentRequest.finalStatus !== 'approved') {
+      return { success: true, outsideBalanceDays: 0 };
+    }
+
+    const balanceSnap = await transaction.get(balanceRef);
+    const balance = {
+      employeeId: currentRequest.employeeId,
+      tenantId,
+      ...DEFAULT_LEAVE_BALANCE,
+      ...(balanceSnap.exists() ? balanceSnap.data() : {}),
+    } as FirestoreLeaveBalance & {
+      outsideBalanceTaken?: number;
+      outsideBalanceByType?: Record<string, number>;
+    };
+    const days = Math.max(0, Number(currentRequest.totalDays || 0));
+    let outsideBalanceDays = 0;
+    const balancePatch: Record<string, unknown> = {
+      employeeId: currentRequest.employeeId,
+      tenantId,
+      lastUpdated: serverTimestamp(),
+    };
+
+    if (currentRequest.leaveType === 'unpaid') {
+      balancePatch.unpaidTaken = Number(balance.unpaidTaken || 0) + days;
+    } else if (
+      currentRequest.leaveType === 'annual'
+      || currentRequest.leaveType === 'sick'
+      || currentRequest.leaveType === 'emergency'
+    ) {
+      const field = `${currentRequest.leaveType}Balance` as
+        'annualBalance' | 'sickBalance' | 'emergencyBalance';
+      const available = Number(balance[field] || 0);
+      if (available >= days) {
+        balancePatch[field] = available - days;
+      } else {
+        outsideBalanceDays = days;
+        balancePatch.outsideBalanceTaken =
+          Number(balance.outsideBalanceTaken || 0) + outsideBalanceDays;
+        balancePatch.outsideBalanceByType = {
+          ...(balance.outsideBalanceByType || {}),
+          [currentRequest.leaveType]:
+            Number(balance.outsideBalanceByType?.[currentRequest.leaveType] || 0)
+            + outsideBalanceDays,
+        };
+      }
+    }
+
+    transaction.set(balanceRef, balancePatch, { merge: true });
+    transaction.update(requestRef, {
+      balanceImpactApplied: true,
+      outsideBalanceDaysApplied: outsideBalanceDays,
+    });
+    return { success: true, outsideBalanceDays };
+  });
 
   if (!deductionResult.success) {
-    return { success: false, error: deductionResult.error };
+    return deductionResult;
   }
-
-  await leaveRequestService.update(leaveRequestId, {
-    balanceImpactApplied: true,
-    outsideBalanceDaysApplied: Number(deductionResult.outsideBalanceDays || 0),
-  } as any);
 
   return {
     success: true,

@@ -10,7 +10,9 @@ import { roleService } from '../services/roleService';
 import { employeeService } from '../../hr/employeeService';
 import { userManagementService, type UserManagementRow } from '../services/userManagementService';
 import { activityLogService } from '../services/activityLogService';
+import { warehouseService } from '../../inventory/services/warehouseService';
 import type { FirestoreEmployee, FirestoreRole } from '../../../types';
+import type { Warehouse } from '../../inventory/types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { exportHRData } from '../../../utils/exportExcel';
@@ -26,6 +28,7 @@ type UsersManagementPageData = {
   rows: UserManagementRow[];
   roles: FirestoreRole[];
   employees: FirestoreEmployee[];
+  warehouses: Warehouse[];
 };
 
 function sortByName<T extends { name?: string }>(items: T[]): T[] {
@@ -62,6 +65,7 @@ export const UsersManagement: React.FC = () => {
   const [rows, setRows] = useState<UserManagementRow[]>(initialUsersCache?.rows ?? []);
   const [roles, setRoles] = useState<FirestoreRole[]>(initialUsersCache?.roles ?? []);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>(initialUsersCache?.employees ?? []);
+  const [warehouses, setWarehouses] = useState<Warehouse[]>(initialUsersCache?.warehouses ?? []);
   const [loading, setLoading] = useState(() => initialUsersCache == null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -79,6 +83,7 @@ export const UsersManagement: React.FC = () => {
     setRows(data.rows);
     setRoles(data.roles);
     setEmployees(data.employees);
+    setWarehouses(data.warehouses);
   }, []);
 
   const loadPage = useCallback(async (opts?: { force?: boolean }) => {
@@ -93,15 +98,17 @@ export const UsersManagement: React.FC = () => {
       const { data } = await fetchCachedPageData(
         USERS_CACHE_KEY,
         async () => {
-          const [rolesRows, nextRows, allEmployees] = await Promise.all([
+          const [rolesRows, nextRows, allEmployees, allWarehouses] = await Promise.all([
             roleService.getAll(),
             userManagementService.getRows(),
             employeeService.getAll(),
+            warehouseService.getAllWarehouses(),
           ]);
           return {
             roles: rolesRows,
             rows: nextRows,
             employees: sortByName(allEmployees.filter((employee) => employee.isActive !== false)),
+            warehouses: sortByName(allWarehouses.filter((wh) => wh.isActive !== false)),
           };
         },
         { force: opts?.force === true, maxAgeMs: 45_000 },
@@ -241,6 +248,36 @@ export const UsersManagement: React.FC = () => {
     });
   };
 
+  const handleUpdateInventoryWarehouse = async (row: UserManagementRow, warehouseId: string) => {
+    if (!row?.user.id) return;
+    const nextId = String(warehouseId || '').trim() || null;
+    const prevId = String(row.user.inventoryWarehouseId || '').trim() || null;
+    if (nextId === prevId) {
+      setSuccess('ربط المخزن مطابق — لا يوجد تغيير.');
+      return;
+    }
+    await withBusy(async () => {
+      await userManagementService.updateInventoryWarehouseId(row.user.id!, nextId);
+      if (currentUid && currentUid === row.user.id) {
+        const profile = useAppStore.getState().userProfile;
+        if (profile) {
+          useAppStore.setState({
+            userProfile: {
+              ...profile,
+              inventoryWarehouseId: nextId,
+            },
+          });
+        }
+      }
+      await activityLogService.logCurrentUser(
+        'UPDATE_USER_ROLE',
+        `تحديث مخزن مستخدم: ${row.user.email}`,
+        { userId: row.user.id, inventoryWarehouseId: nextId },
+      );
+      setSuccess(nextId ? 'تم ربط المستخدم بالمخزن بنجاح.' : 'تم إلغاء ربط المخزن — يرى كل المخازن.');
+    });
+  };
+
   const handleToggleActive = async (row: UserManagementRow) => {
     if (!row?.user.id) return;
     const nextActive = !row.user.isActive;
@@ -361,7 +398,12 @@ export const UsersManagement: React.FC = () => {
       row,
       roles,
       employeeOptions: allowedEmployeeOptions,
+      warehouseOptions: warehouses.map((wh) => ({
+        value: String(wh.id || ''),
+        label: String(wh.name || wh.id || ''),
+      })).filter((opt) => opt.value),
       onUpdateRole: (roleId: string) => handleUpdateRole(row, roleId),
+      onUpdateInventoryWarehouse: (warehouseId: string) => handleUpdateInventoryWarehouse(row, warehouseId),
       onLinkEmployee: (employeeId: string) => handleLinkEmployee(row, employeeId),
       onUnlinkEmployee: () => handleUnlinkEmployee(row),
       onToggleActive: () => handleToggleActive(row),
@@ -489,6 +531,7 @@ export const UsersManagement: React.FC = () => {
 
       <Card title="قائمة المستخدمين">
         <SmartFilterBar
+      pageId="users-management"
           searchPlaceholder="بحث بالبريد أو الاسم أو كود الموظف"
           searchValue={query}
           onSearchChange={setQuery}

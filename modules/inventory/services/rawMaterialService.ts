@@ -4,6 +4,7 @@ import {
   deleteDoc,
   doc,
   getDocs,
+  limit,
   query,
   where,
   updateDoc,
@@ -247,6 +248,12 @@ export const rawMaterialService = {
   async delete(id: string): Promise<void> {
     assertManufacturingWriteAllowed();
     if (!isConfigured || !id) return;
+    const linkedReports = await getDocs(
+      tenantQuery(db, 'production_reports', where('productId', '==', id), limit(1)),
+    );
+    if (!linkedReports.empty) {
+      throw new Error('الخامة مرتبطة بتقارير حقن ولا يمكن حذفها. احتفظ بها أو ادمجها مع الخامة الصحيحة.');
+    }
     await deleteDoc(doc(db, COLLECTION, id));
   },
 

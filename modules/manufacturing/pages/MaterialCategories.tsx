@@ -1,7 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '@/modules/production/components/UI';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
 import { usePermission } from '@/utils/permissions';
 import {
   materialCategoryService,
@@ -14,6 +17,12 @@ import {
 } from '../../catalog/lib/categoryTree';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
+import { isDuplicateEntityCodeError } from '../../shared/lib/entityCodeClaim';
+import {
+  INVALID_MATERIAL_CATEGORY_CODE,
+  isValidMaterialCategoryCode,
+  normalizeMaterialCategoryCode,
+} from '../lib/materialCode';
 
 const CATEGORIES_CACHE_KEY = 'manufacturing:material-categories';
 
@@ -23,12 +32,14 @@ type MaterialCategoriesPageData = {
 };
 
 type FormState = {
+  code: string;
   name: string;
   parentId: string | null;
   isActive: boolean;
 };
 
 const emptyForm = (parentId: string | null = null): FormState => ({
+  code: '',
   name: '',
   parentId,
   isActive: true,
@@ -43,8 +54,8 @@ export const MaterialCategories: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [migrating, setMigrating] = useState(false);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   const {
     data,
@@ -59,10 +70,7 @@ export const MaterialCategories: React.FC = () => {
         usageById = await materialCategoryService.getBulkCategoryUsageCounts(list);
       } catch (usageError) {
         console.error('[material-categories] usage counts failed', usageError);
-        setMessage({
-          type: 'error',
-          text: 'تم تحميل الفئات لكن تعذر حساب عدد المواد المرتبطة.',
-        });
+        toast.error('تم تحميل الفئات لكن تعذر حساب عدد المواد المرتبطة.');
       }
       return { items: list, usageById };
     },
@@ -95,28 +103,65 @@ export const MaterialCategories: React.FC = () => {
   );
 
   const handleSubmit = async () => {
-    if (!form.name.trim() || !canManage) return;
+    if (!form.name.trim() || !isValidMaterialCategoryCode(form.code) || !canManage) return;
     setSaving(true);
-    setMessage(null);
     try {
       if (editId) {
         await materialCategoryService.updateCategory(editId, form);
-        setMessage({ type: 'success', text: 'تم التحديث.' });
+        toast.success('تم تحديث الفئة.');
       } else {
         await materialCategoryService.createCategory(form);
-        setMessage({ type: 'success', text: 'تمت الإضافة.' });
+        toast.success('تمت إضافة الفئة.');
       }
       setEditId(null);
       setForm(emptyForm());
       await loadData();
     } catch (e) {
-      const text =
-        e instanceof Error && e.message === 'CATEGORY_PARENT_CYCLE'
-          ? 'تعذر الحفظ: حلقة في شجرة الفئات.'
-          : 'تعذر الحفظ.';
-      setMessage({ type: 'error', text });
+      let text = 'تعذر الحفظ.';
+      if (isDuplicateEntityCodeError(e)) {
+        text = 'كود الفئة مستخدم بالفعل.';
+      } else if (e instanceof Error && e.message === 'CATEGORY_PARENT_CYCLE') {
+        text = 'تعذر الحفظ: حلقة في شجرة الفئات.';
+      } else if (e instanceof Error && e.message === INVALID_MATERIAL_CATEGORY_CODE) {
+        text = 'كود الفئة يجب أن يكون من 2 إلى 8 حروف إنجليزية أو أرقام.';
+      }
+      toast.error(text);
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDelete = async (category: MaterialCategory) => {
+    if (!canManage || !category.id || deletingId) return;
+    const usage = usageById[category.id];
+    if (!usage || usage.materialCount > 0 || usage.childrenCount > 0) {
+      toast.error('لا يمكن حذف فئة مرتبطة بمواد أو تحتوي فئات فرعية.');
+      return;
+    }
+    if (!window.confirm(`حذف فئة "${category.name}" نهائياً؟ لا يمكن التراجع عن الحذف.`)) {
+      return;
+    }
+
+    setDeletingId(category.id);
+    try {
+      await materialCategoryService.deleteCategory(category.id);
+      if (editId === category.id) {
+        setEditId(null);
+        setForm(emptyForm());
+      }
+      toast.success('تم حذف الفئة.');
+      await loadData();
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : '';
+      const text =
+        reason === 'CATEGORY_HAS_CHILDREN'
+          ? 'لا يمكن حذف الفئة لأنها تحتوي فئات فرعية.'
+          : reason === 'CATEGORY_HAS_MATERIALS'
+            ? 'لا يمكن حذف الفئة لأنها مرتبطة بمواد.'
+            : 'تعذر حذف الفئة. حاول مرة أخرى.';
+      toast.error(text);
+    } finally {
+      setDeletingId(null);
     }
   };
 
@@ -147,13 +192,10 @@ export const MaterialCategories: React.FC = () => {
                         '../../catalog/services/categoryMigration'
                       );
                       const r = await migrateMaterialCategoriesV1();
-                      setMessage({
-                        type: 'success',
-                        text: `تم: ${r.categoriesCreated} فئة، ${r.materialsUpdated} مادة.`,
-                      });
+                      toast.success(`تم ترحيل ${r.categoriesCreated} فئة وربط ${r.materialsUpdated} مادة.`);
                       await loadData();
                     } catch {
-                      setMessage({ type: 'error', text: 'فشل الترحيل.' });
+                      toast.error('فشل ترحيل الفئات.');
                     } finally {
                       setMigrating(false);
                     }
@@ -165,41 +207,65 @@ export const MaterialCategories: React.FC = () => {
         }
       />
 
-      {message && (
-        <p
-          className={`rounded px-3 py-2 text-sm ${
-            message.type === 'success' ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
-          }`}
-        >
-          {message.text}
-        </p>
-      )}
-
       {canManage && (
-        <Card className="grid gap-3 sm:grid-cols-4 p-4">
-          <input
-            className="rounded border px-3 py-2 text-sm sm:col-span-2"
-            placeholder="اسم الفئة"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-          />
-          <select
-            className="rounded border px-3 py-2 text-sm"
-            value={form.parentId ?? ''}
-            onChange={(e) =>
-              setForm((f) => ({ ...f, parentId: e.target.value || null }))
-            }
-          >
-            <option value="">رئيسية</option>
-            {parentOptions.map((p) => (
-              <option key={p.id} value={p.id}>
-                {formatCategoryBreadcrumb(items, p.id)} — {p.name}
-              </option>
-            ))}
-          </select>
-          <Button variant="primary" onClick={() => void handleSubmit()} disabled={saving || !form.name.trim()}>
-            {editId ? 'حفظ' : 'إضافة'}
-          </Button>
+        <Card>
+          <div className="grid items-start gap-3 md:grid-cols-[minmax(160px,0.7fr)_minmax(240px,1.3fr)_minmax(200px,1fr)_auto]">
+            <div className="space-y-1.5">
+            <Label htmlFor="material-category-code">كود الفئة *</Label>
+            <Input
+              id="material-category-code"
+              dir="ltr"
+              maxLength={8}
+              placeholder="مثال: INJ"
+              value={form.code}
+              onChange={(e) =>
+                setForm((current) => ({
+                  ...current,
+                  code: normalizeMaterialCategoryCode(e.target.value).replace(/[^A-Z0-9]/g, ''),
+                }))
+              }
+              aria-describedby="material-category-code-help"
+            />
+            <p id="material-category-code-help" className="text-xs text-muted-foreground">
+              يُستخدم كبادئة لكود المادة، مثل INJ-0001.
+            </p>
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="material-category-name">اسم الفئة *</Label>
+              <Input
+                id="material-category-name"
+                placeholder="مثال: حقن"
+                value={form.name}
+                onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="material-category-parent">الفئة الأب</Label>
+              <select
+                id="material-category-parent"
+                className="h-10 w-full rounded-md border border-input bg-muted px-3 py-2 text-sm"
+                value={form.parentId ?? ''}
+                onChange={(e) =>
+                  setForm((f) => ({ ...f, parentId: e.target.value || null }))
+                }
+              >
+                <option value="">فئة رئيسية</option>
+                {parentOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {formatCategoryBreadcrumb(items, p.id)} — {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <Button
+              variant="primary"
+              className="md:mt-6"
+              onClick={() => void handleSubmit()}
+              disabled={saving || !form.name.trim() || !isValidMaterialCategoryCode(form.code)}
+            >
+              {editId ? 'حفظ' : 'إضافة'}
+            </Button>
+          </div>
         </Card>
       )}
 
@@ -207,6 +273,7 @@ export const MaterialCategories: React.FC = () => {
         <table className="erp-table w-full text-right">
           <thead className="erp-thead">
             <tr>
+              <th className="erp-th">الكود</th>
               <th className="erp-th">الاسم</th>
               <th className="erp-th text-center">مواد</th>
               <th className="erp-th text-center">فروع</th>
@@ -217,7 +284,7 @@ export const MaterialCategories: React.FC = () => {
           <tbody>
             {loading && items.length === 0 ? (
               <tr>
-                <td colSpan={5} className="py-8 text-center text-muted-foreground">
+                <td colSpan={6} className="py-8 text-center text-muted-foreground">
                   جاري التحميل...
                 </td>
               </tr>
@@ -227,8 +294,23 @@ export const MaterialCategories: React.FC = () => {
                 const id = category.id;
                 const usage = usageById[id];
                 const hasKids = items.some((c) => c.parentId === id);
+                const canDelete =
+                  usage !== undefined &&
+                  usage.materialCount === 0 &&
+                  usage.childrenCount === 0;
+                const deleteDisabledReason =
+                  usage?.materialCount
+                    ? 'الفئة مرتبطة بمواد'
+                    : usage?.childrenCount
+                      ? 'الفئة تحتوي فئات فرعية'
+                      : usage
+                        ? 'حذف الفئة'
+                        : 'جاري التحقق من الارتباطات';
                 return (
                   <tr key={id} className="border-b">
+                    <td className="px-4 py-3 font-mono text-sm" dir="ltr">
+                      {category.code || '—'}
+                    </td>
                     <td className="px-4 py-3 font-medium" style={{ paddingRight: `${12 + depth * 16}px` }}>
                       <div className="flex items-center gap-1">
                         {hasKids && (
@@ -256,6 +338,7 @@ export const MaterialCategories: React.FC = () => {
                           onClick={() => {
                             setEditId(id);
                             setForm({
+                              code: category.code || '',
                               name: category.name,
                               parentId: category.parentId ?? null,
                               isActive: category.isActive !== false,
@@ -271,6 +354,16 @@ export const MaterialCategories: React.FC = () => {
                           onClick={() => void materialCategoryService.deactivateCategory(id).then(loadData)}
                         >
                           إيقاف
+                        </Button>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="danger"
+                          disabled={!canDelete || deletingId !== null}
+                          title={deleteDisabledReason}
+                          onClick={() => void handleDelete(category)}
+                        >
+                          {deletingId === id ? 'جاري الحذف...' : 'حذف'}
                         </Button>
                       </td>
                     )}

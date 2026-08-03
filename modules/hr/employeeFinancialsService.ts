@@ -8,6 +8,7 @@ import {
   getDocs,
   getDoc,
   addDoc,
+  runTransaction,
   updateDoc,
   deleteDoc,
   doc,
@@ -191,6 +192,39 @@ export const employeeDeductionService = {
       updatedAt: serverTimestamp(),
     });
     return ref.id;
+  },
+
+  async createIdempotent(
+    idempotencyKey: string,
+    data: Omit<FirestoreEmployeeDeduction, 'id' | 'createdAt' | 'updatedAt'>,
+  ): Promise<string> {
+    if (!isConfigured) return '';
+    const normalizedKey = String(idempotencyKey || '').replace(/[^A-Za-z0-9_-]/g, '_');
+    if (!normalizedKey) throw new Error('معرّف طلب الجزاء غير صالح.');
+    const tenantId = getCurrentTenantId();
+    const safeId = `approval_penalty_${tenantId.replace(/[^A-Za-z0-9_-]/g, '_')}_${normalizedKey}`;
+    const ref = doc(db, HR_COLLECTIONS.EMPLOYEE_DEDUCTIONS, safeId);
+    const deterministicExisting = await getDoc(ref);
+    if (deterministicExisting.exists()) return safeId;
+
+    const existing = await this.getByEmployeeAndMonth(data.employeeId, data.startMonth)
+      .catch(() => [] as FirestoreEmployeeDeduction[]);
+    const prior = existing.find(
+      (row) => row.deductionTypeId === data.deductionTypeId && row.category === data.category,
+    );
+    if (prior?.id) return prior.id;
+
+    await runTransaction(db, async (transaction) => {
+      const current = await transaction.get(ref);
+      if (current.exists()) return;
+      transaction.set(ref, {
+        ...data,
+        tenantId,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      });
+    });
+    return safeId;
   },
 
   async getByEmployee(employeeId: string): Promise<FirestoreEmployeeDeduction[]> {

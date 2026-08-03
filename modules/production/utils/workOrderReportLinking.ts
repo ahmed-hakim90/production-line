@@ -78,6 +78,7 @@ export function pickBestAutoLinkedWorkOrder(
   const filtered = workOrders.filter((wo) => (
     Boolean(wo?.id)
     && allowedStatuses.has(wo.status)
+    && wo.lineId === criteria.lineId
     && wo.productId === criteria.productId
     && workOrderMatchesReportType(wo, criteria.reportType)
     && (

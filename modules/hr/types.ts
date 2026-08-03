@@ -335,7 +335,7 @@ export const DEFAULT_LEAVE_BALANCE: Omit<FirestoreLeaveBalance, 'id' | 'employee
 
 // ─── Loan Management Types ──────────────────────────────────────────────────
 
-export type LoanStatus = 'pending' | 'active' | 'closed';
+export type LoanStatus = 'pending' | 'active' | 'closed' | 'rejected' | 'cancelled';
 export type LoanType = 'monthly_advance' | 'installment';
 
 export const LOAN_TYPE_LABELS: Record<LoanType, string> = {

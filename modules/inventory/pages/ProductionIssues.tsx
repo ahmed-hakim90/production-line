@@ -1159,8 +1159,12 @@ export const ProductionIssues: React.FC = () => {
                   <p className="mt-1 text-sm font-black tabular-nums">{formatQty(selectedOrder.quantity, 3)}</p>
                 </div>
                 <div className="rounded-lg border bg-white p-3">
-                  <p className="text-xs font-bold text-slate-500">مخزن الصرف</p>
+                  <p className="text-xs font-bold text-slate-500">مخزن الصرف (من)</p>
                   <p className="mt-1 text-sm font-black">{selectedOrder.sourceWarehouseName || selectedOrder.sourceWarehouseId}</p>
+                </div>
+                <div className="rounded-lg border bg-white p-3">
+                  <p className="text-xs font-bold text-slate-500">صالة الإنتاج (إلى)</p>
+                  <p className="mt-1 text-sm font-black">{selectedOrder.targetWarehouseName || selectedOrder.targetWarehouseId || '—'}</p>
                 </div>
                 <div className="rounded-lg border bg-white p-3">
                   <p className="text-xs font-bold text-slate-500">الحالة</p>

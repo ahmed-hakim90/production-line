@@ -67,7 +67,6 @@ import {
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS } from '../../../types';
 import { ReportWorkerOutputsSection } from '../components/ReportWorkerOutputsSection';
 import {
-  buildTeamPlanWorkerOutputs,
   computeAchievementPercent,
   getProductAssemblyMode,
   hasLineSpecificWorkerTarget,
@@ -98,6 +97,15 @@ import {
 import { getPresenceLabel, summarizeWorkerPresenceDays, summarizeWorkerPresenceRows } from '../utils/workerPresence';
 import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
+import {
+  DAILY_WORKER_ASSIGNMENT_PATHS,
+  PRODUCTION_REPORT_CREATE_PATHS,
+  PRODUCTION_REPORT_DELETE_PATHS,
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  PRODUCTION_REPORT_RECONCILE_PATHS,
+  PRODUCTION_REPORT_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '@/modules/system/lib/operationPathSettings';
 import { Link, useLocation, useParams } from 'react-router-dom';
 import { transferApprovalService } from '@/modules/inventory/services/transferApprovalService';
 import type { InventoryTransferRequest } from '@/modules/inventory/types';
@@ -573,6 +581,41 @@ export const Reports: React.FC = () => {
   const laborSettings = useAppStore((s) => s.laborSettings);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const reportBehavior = useMemo(() => resolveReportBehaviorSettings(systemSettings), [systemSettings]);
+  const reportsPageCreateEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    PRODUCTION_REPORT_CREATE_PATHS.reportsPage,
+  );
+  const reportsModalCreateEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    PRODUCTION_REPORT_CREATE_PATHS.globalModal,
+  );
+  const reportsImportEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.create,
+    PRODUCTION_REPORT_CREATE_PATHS.reportsImport,
+  );
+  const reportsReconcileEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.reconcile,
+    PRODUCTION_REPORT_RECONCILE_PATHS.reportsPage,
+  );
+  const reportsUpdateEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.update,
+    PRODUCTION_REPORT_UPDATE_PATHS.reportsPage,
+  );
+  const reportsDeleteEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.delete,
+    PRODUCTION_REPORT_DELETE_PATHS.reportsPage,
+  );
+  const reportsBulkDeleteEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.delete,
+    PRODUCTION_REPORT_DELETE_PATHS.bulkDelete,
+  );
   const printTemplate = systemSettings.printTemplate;
   const exportImportSettings = systemSettings.exportImport;
   const productionPlans = useAppStore((s) => s.productionPlans);
@@ -642,22 +685,11 @@ export const Reports: React.FC = () => {
     [_rawProducts, form.productId],
   );
   const formAssemblyMode = getProductAssemblyMode(selectedFormProduct);
-  const formLinkedPlan = useMemo(
-    () => productionPlans.find(
-      (p) => p.lineId === form.lineId
-        && p.productId === form.productId
-        && (p.status === 'in_progress' || p.status === 'planned'),
-    ) ?? null,
-    [productionPlans, form.lineId, form.productId],
-  );
-  const formPlanDailyTarget = Math.max(0, Number(formLinkedPlan?.avgDailyTarget || 0));
-  const formTeamSharedEnabled = form.reportType === 'finished_product'
-    && formAssemblyMode === 'team'
-    && formPlanDailyTarget > 0;
+  // Team products: no per-worker output/share table (plan achievement only + daily labor counts).
   const formIndividualWorkerOutputsEnabled = form.reportType === 'finished_product'
     && formAssemblyMode === 'individual'
     && hasLineSpecificWorkerTarget(lineProductConfigs, form.lineId, form.productId);
-  const formWorkerOutputsEnabled = formIndividualWorkerOutputsEnabled || formTeamSharedEnabled;
+  const formWorkerOutputsEnabled = formIndividualWorkerOutputsEnabled;
   const formWorkerOutputEntryEnabled = formWorkerOutputsEnabled
     && productionWorkerSettings.performance.productionWorkerOutputEnabled;
   const formWorkerOutputTotal = useMemo(
@@ -1440,11 +1472,19 @@ export const Reports: React.FC = () => {
   // â”€â”€ Lookups â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const getProductName = useCallback(
-    (pid: string, reportType?: ProductionReport['reportType']) => {
+    (
+      pid: string,
+      reportType?: ProductionReport['reportType'],
+      productNameSnapshot?: string,
+    ) => {
       if (reportType === 'component_injection') {
-        return rawMaterialOptions.find((m) => m.id === pid)?.name ?? '—';
+        return rawMaterialOptions.find((m) => m.id === pid)?.name
+          || String(productNameSnapshot || '').trim()
+          || '—';
       }
-      return _rawProducts.find((p) => p.id === pid)?.name ?? '—';
+      return _rawProducts.find((p) => p.id === pid)?.name
+        || String(productNameSnapshot || '').trim()
+        || '—';
     },
     [_rawProducts, rawMaterialOptions],
   );
@@ -1485,7 +1525,7 @@ export const Reports: React.FC = () => {
       if (normalizeSearchText(String(r.reportCode || '')).includes(nq)) return true;
       if (normalizeSearchText(getLineName(r.lineId)).includes(nq)) return true;
       if (normalizeSearchText(getEmployeeName(r.employeeId)).includes(nq)) return true;
-      if (normalizeSearchText(getProductName(r.productId, r.reportType)).includes(nq)) return true;
+      if (normalizeSearchText(getProductName(r.productId, r.reportType, r.productNameSnapshot)).includes(nq)) return true;
       if (r.reportType === 'component_injection') {
         const m = rawMaterialOptions.find((x) => x.id === r.productId);
         if (m) {
@@ -1541,9 +1581,13 @@ export const Reports: React.FC = () => {
         const productId = String(report.productId || '');
         key = productId || 'product_unknown';
         if (report.reportType === 'component_injection') {
-          label = rawMaterialOptions.find((m) => m.id === productId)?.name ?? '—';
+          label = rawMaterialOptions.find((m) => m.id === productId)?.name
+            || String(report.productNameSnapshot || '').trim()
+            || '—';
         } else {
-          label = _rawProducts.find((p) => p.id === productId)?.name ?? '—';
+          label = _rawProducts.find((p) => p.id === productId)?.name
+            || String(report.productNameSnapshot || '').trim()
+            || '—';
         }
       }
 
@@ -1569,6 +1613,7 @@ export const Reports: React.FC = () => {
       lineId: string;
       supervisorId: string;
       productId: string;
+      productNameSnapshot?: string;
       reportType: ProductionReport['reportType'];
       totalProducedQty: number;
       totalProductionWorkers: number;
@@ -1588,6 +1633,7 @@ export const Reports: React.FC = () => {
         lineId,
         supervisorId,
         productId,
+        productNameSnapshot: report.productNameSnapshot,
         reportType,
         totalProducedQty: 0,
         totalProductionWorkers: 0,
@@ -1626,7 +1672,7 @@ export const Reports: React.FC = () => {
         reportType: row.reportType,
         lineName: getLineName(row.lineId),
         supervisorName: getEmployeeName(row.supervisorId),
-        productName: getProductName(row.productId, row.reportType),
+        productName: getProductName(row.productId, row.reportType, row.productNameSnapshot),
         totalProducedQty: row.totalProducedQty,
         productionWorkers: row.totalProductionWorkers,
         avgWorkersPerReport: row.reportsCount > 0 ? row.totalWorkersCount / row.reportsCount : 0,
@@ -1758,7 +1804,7 @@ export const Reports: React.FC = () => {
         shift: asSaved.shift,
         date: report.date,
         lineName: getLineName(report.lineId),
-        productName: getProductName(report.productId, report.reportType),
+        productName: getProductName(report.productId, report.reportType, asSaved.productNameSnapshot),
         employeeName: getEmployeeName(report.employeeId),
         quantityProduced: report.quantityProduced || 0,
         wasteQuantity: deriveReportWaste(asSaved),
@@ -2012,6 +2058,7 @@ export const Reports: React.FC = () => {
 
   const reportsFilterBar = (
     <SmartFilterBar
+      pageId="production-reports"
       searchPlaceholder="ابحث: كود التقرير، كود/اسم المنتج، الخط، المشرف، الكمية، الساعات…"
       searchValue={factorySearch}
       onSearchChange={setFactorySearch}
@@ -2122,7 +2169,9 @@ export const Reports: React.FC = () => {
 
   const openEdit = (report: ProductionReport) => {
     const rt = resolveReportType(report.reportType);
-    const canOpenEdit = can('reports.edit') || (rt === 'packaging' && can('reports.packaging.create'));
+    const canOpenEdit = reportsUpdateEnabled && (
+      can('reports.edit') || (rt === 'packaging' && can('reports.packaging.create'))
+    );
     if (!canOpenEdit) {
       setSaveToastType('error');
       setSaveToast('غير مصرح لك بتعديل التقارير');
@@ -2407,26 +2456,7 @@ export const Reports: React.FC = () => {
       form.lineId,
       form.productId,
     );
-    const appliedWorkerOutputs = !formWorkerOutputsEnabled
-      ? []
-      : formTeamSharedEnabled
-        ? buildTeamPlanWorkerOutputs({
-          quantityProduced: formQuantityDerivedFromWorkerOutputs
-            ? effectiveFormQuantityProduced
-            : Number(form.quantityProduced || 0),
-          planDailyTarget: formPlanDailyTarget,
-          workers: reportWorkerOutputs.map((row) => ({
-            workerId: row.workerId,
-            workerName: row.workerName,
-            isPresent: row.isPresent,
-            productId: row.productId,
-            productName: row.productName,
-            lineId: row.lineId,
-            lineName: row.lineName,
-            notes: row.notes,
-          })),
-        })
-        : reportWorkerOutputs;
+    const appliedWorkerOutputs = formWorkerOutputsEnabled ? reportWorkerOutputs : [];
     const workerOutputPresence = summarizeWorkerPresenceDays(appliedWorkerOutputs.map((row) => ({
       workerId: row.workerId,
       date: form.date,
@@ -2462,11 +2492,7 @@ export const Reports: React.FC = () => {
         : form.absentAssignments || 0,
       assemblyModeSnapshot: formAssemblyMode,
       workerTargetsApplied: formWorkerOutputsEnabled,
-      workerTargetSource: formTeamSharedEnabled
-        ? 'plan_daily'
-        : formIndividualWorkerOutputsEnabled
-          ? 'line_product'
-          : 'none',
+      workerTargetSource: formIndividualWorkerOutputsEnabled ? 'line_product' : 'none',
       laborAssignmentSource: effectiveFormWorkersCount > 0 || hasAppliedWorkerOutputRows
         ? 'line_worker_assignments'
         : 'none',
@@ -2517,7 +2543,7 @@ export const Reports: React.FC = () => {
     setSaveToast(null);
 
     if (editId) {
-      await updateReport(editId, payload);
+      await updateReport(editId, payload, { path: PRODUCTION_REPORT_UPDATE_PATHS.reportsPage });
       setSaving(false);
       setSaveToastType('success');
       setSaveToast('تم حفظ التعديلات بنجاح');
@@ -2526,7 +2552,7 @@ export const Reports: React.FC = () => {
         await triggerSinglePrint({ ...payload, id: editId });
       }
     } else {
-      const createdId = await createReport(payload);
+      const createdId = await createReport(payload, { path: PRODUCTION_REPORT_CREATE_PATHS.reportsPage });
       if (!createdId) {
         setSaving(false);
         setSaveToastType('error');
@@ -2558,7 +2584,7 @@ export const Reports: React.FC = () => {
     setDeleteBusy(true);
     setDeleteError(null);
     try {
-      await deleteReport(id);
+      await deleteReport(id, { path: PRODUCTION_REPORT_DELETE_PATHS.reportsPage });
       setSaveToastType('success');
       setSaveToast('تم حذف التقرير بنجاح');
       setTimeout(() => setSaveToast(null), 3500);
@@ -2636,7 +2662,7 @@ export const Reports: React.FC = () => {
         productId || '',
         {
           lineName: getLineName(lineId),
-          productName: getProductName(productId, report.reportType),
+          productName: getProductName(productId, report.reportType, report.productNameSnapshot),
         },
       ),
       workers: [],
@@ -2709,7 +2735,7 @@ export const Reports: React.FC = () => {
         employeeName: selected.name,
         date: viewWorkersData.date,
         assignedBy: uid || '',
-      });
+      }, { path: DAILY_WORKER_ASSIGNMENT_PATHS.reportsWorkersModal });
       setViewWorkersPickerId('');
       await refreshWorkersForLineDate(viewWorkersData.lineId, viewWorkersData.date);
     } catch {
@@ -2724,7 +2750,10 @@ export const Reports: React.FC = () => {
     setViewWorkersBusy(true);
     setViewWorkersError(null);
     try {
-      await lineAssignmentService.delete(assignmentId);
+      await lineAssignmentService.delete(
+        assignmentId,
+        { path: DAILY_WORKER_ASSIGNMENT_PATHS.reportsWorkersModal },
+      );
       await refreshWorkersForLineDate(viewWorkersData.lineId, viewWorkersData.date);
     } catch {
       setViewWorkersError('تعذر حذف العامل الآن. حاول مرة أخرى.');
@@ -3085,13 +3114,18 @@ export const Reports: React.FC = () => {
       let failed = 0;
       for (const row of validRows) {
         try {
-          const updated = await reportService.updateByReportCode(row.reportCode, {
+          const existingReport = await reportService.getByReportCode(row.reportCode);
+          if (!existingReport?.id) {
+            throw new Error('تعذر العثور على التقرير بواسطة الكود.');
+          }
+          await updateReport(existingReport.id, {
             ...(row.date ? { date: row.date } : {}),
             ...(row.quantityProduced !== undefined ? { quantityProduced: row.quantityProduced } : {}),
             ...(row.workersCount !== undefined ? { workersCount: row.workersCount } : {}),
             ...(row.workHours !== undefined ? { workHours: row.workHours } : {}),
+          }, {
+            path: PRODUCTION_REPORT_UPDATE_PATHS.importUpdate,
           });
-          if (!updated) failed++;
         } catch {
           failed++;
         }
@@ -3142,7 +3176,9 @@ export const Reports: React.FC = () => {
     let failed = 0;
     for (const row of validRows) {
       try {
-        const created = await createReport(toReportData(row));
+        const created = await createReport(toReportData(row), {
+          path: PRODUCTION_REPORT_CREATE_PATHS.reportsImport,
+        });
         if (!created) failed++;
       } catch {
         failed++;
@@ -3233,7 +3269,7 @@ export const Reports: React.FC = () => {
       {
         header: 'المنتج',
         render: (r) => {
-          const productName = getProductName(r.productId, r.reportType);
+          const productName = getProductName(r.productId, r.reportType, r.productNameSnapshot);
           return (
             <span className="block max-w-[210px] truncate font-medium" title={productName}>
               {productName}
@@ -3545,7 +3581,7 @@ export const Reports: React.FC = () => {
     for (const item of bulkDeleteItems) {
       if (!item.id) continue;
       try {
-        await deleteReport(item.id);
+        await deleteReport(item.id, { path: PRODUCTION_REPORT_DELETE_PATHS.bulkDelete });
         deletedCount += 1;
       } catch (error: any) {
         const code = item.reportCode || item.id;
@@ -3580,11 +3616,19 @@ export const Reports: React.FC = () => {
         permission: 'print',
       },
       { label: 'طباعة منفصلة PDF', icon: 'picture_as_pdf', action: handleBulkPrintSelectedAsSinglePagesPdf, permission: 'print' },
-      { label: 'حذف المحدد', icon: 'delete', action: (items) => setBulkDeleteItems(items), permission: 'reports.delete', variant: 'danger' },
     ];
+    if (reportsBulkDeleteEnabled) {
+      actions.push({
+        label: 'حذف المحدد',
+        icon: 'delete',
+        action: (items) => setBulkDeleteItems(items),
+        permission: 'reports.delete',
+        variant: 'danger',
+      });
+    }
     if (canExportFromPage) {
       actions.splice(1, 0, {
-        label: 'تصدير المحدد',
+        label: 'تصدير التقارير المحددة (Excel)',
         icon: 'download',
         action: (items) => {
           void (async () => {
@@ -3600,6 +3644,7 @@ export const Reports: React.FC = () => {
     handleBulkPrintSelected,
     handleBulkShareWhatsAppSelected,
     handleBulkPrintSelectedAsSinglePagesPdf,
+    reportsBulkDeleteEnabled,
     canExportFromPage,
     startDate,
     endDate,
@@ -3627,12 +3672,12 @@ export const Reports: React.FC = () => {
           </button> */}
         </>
       )}
-      {can("reports.edit") && (
+      {reportsUpdateEnabled && can("reports.edit") && (
         <button onClick={() => openEdit(report)} className="p-2 text-[var(--color-text-muted)] hover:text-primary hover:bg-primary/5 rounded-[var(--border-radius-base)] transition-all" title="تعديل التقرير">
           <ReportIcon name="edit" className="text-lg" />
         </button>
       )}
-      {can("reports.delete") && (
+      {reportsDeleteEnabled && can("reports.delete") && (
         <button type="button" onClick={() => requestDeleteReport(report)} className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all" title="حذف التقرير">
           <ReportIcon name="delete" className="text-lg" />
         </button>
@@ -3795,7 +3840,7 @@ export const Reports: React.FC = () => {
           onClick: () => { openGeneralMonthlyDialog(); },
           disabled: rangeLoading,
         } : undefined}
-        primaryAction={(canCreateFinishedReports || can('reports.packaging.create')) ? {
+        primaryAction={reportsPageCreateEnabled && (canCreateFinishedReports || can('reports.packaging.create')) ? {
           label: 'إنشاء تقرير',
           icon: 'add',
           onClick: openCreate,
@@ -3806,11 +3851,11 @@ export const Reports: React.FC = () => {
             label: 'إنشاء تقرير مكون حقن',
             icon: 'add_circle',
             group: 'التقارير',
-            hidden: !canManageComponentInjectionReports,
+            hidden: !canManageComponentInjectionReports || !reportsModalCreateEnabled,
             onClick: openCreateComponent,
           },
           {
-            label: 'تقرير المصنع العام Excel',
+            label: 'تصدير ملخص المصنع العام (Excel)',
             icon: 'analytics',
             group: 'تصدير',
             hidden: !canExportFromPage || factoryGeneralRows.length === 0,
@@ -3820,14 +3865,14 @@ export const Reports: React.FC = () => {
               ),
           },
           {
-            label: 'تقارير Excel',
+            label: 'تصدير تقارير الإنتاج التفصيلية (Excel)',
             icon: 'table_chart',
             group: 'تصدير',
             hidden: !canExportFromPage || displayedReports.length === 0,
             onClick: () => { void handleExportFilteredReports(); },
           },
           {
-            label: 'أوامر الشغل Excel',
+            label: 'تصدير أوامر الشغل (Excel)',
             icon: 'assignment',
             group: 'تصدير',
             hidden: !canExportFromPage || !can('workOrders.view') || workOrders.length === 0,
@@ -3837,7 +3882,7 @@ export const Reports: React.FC = () => {
               ),
           },
           {
-            label: 'طباعة',
+            label: 'طباعة تقارير الإنتاج',
             icon: 'print',
             group: 'تصدير',
             hidden: !canExportFromPage || displayedReports.length === 0,
@@ -3845,7 +3890,7 @@ export const Reports: React.FC = () => {
             onClick: triggerBulkPrint,
           },
           {
-            label: exporting ? 'جاري التصدير...' : 'تصدير PDF',
+            label: exporting ? 'جاري التصدير...' : 'تصدير تقارير الإنتاج (PDF)',
             icon: 'picture_as_pdf',
             group: 'تصدير',
             hidden: !canExportFromPage || displayedReports.length === 0,
@@ -3853,7 +3898,7 @@ export const Reports: React.FC = () => {
             onClick: handlePDF,
           },
           {
-            label: 'مشاركة واتساب',
+            label: 'مشاركة تقارير الإنتاج عبر واتساب',
             icon: 'share',
             group: 'تصدير',
             hidden: !canExportFromPage || displayedReports.length === 0,
@@ -3861,20 +3906,20 @@ export const Reports: React.FC = () => {
             onClick: handleWhatsApp,
           },
           {
-            label: 'تحميل القالب',
+            label: 'تحميل قالب استيراد التقارير (Excel)',
             icon: 'file_download',
             group: 'استيراد',
-            hidden: !canImportFromPage,
+            hidden: !canImportFromPage || !reportsImportEnabled,
             onClick: () =>
               void import('../../../utils/downloadTemplates').then(({ downloadReportsTemplate }) =>
                 downloadReportsTemplate(templateLookups),
               ),
           },
           {
-            label: 'رفع Excel',
+            label: 'استيراد تقارير من Excel',
             icon: 'upload_file',
             group: 'استيراد',
-            hidden: !canImportFromPage,
+            hidden: !canImportFromPage || !reportsImportEnabled,
             onClick: () => fileInputRef.current?.click(),
           },
           {
@@ -3887,7 +3932,7 @@ export const Reports: React.FC = () => {
             label: syncingMissingTransfers ? 'جاري المزامنة...' : 'مزامنة تحويلات ناقصة',
             icon: 'sync',
             group: 'أدوات',
-            hidden: !can('reports.edit'),
+            hidden: !can('reports.edit') || !reportsReconcileEnabled,
             disabled: syncingMissingTransfers,
             onClick: handleSyncMissingTransfers,
           },
@@ -3895,7 +3940,7 @@ export const Reports: React.FC = () => {
             label: backfillingUnlinkedReports ? 'جاري الربط...' : 'ربط التقارير القديمة',
             icon: 'auto_fix_high',
             group: 'أدوات',
-            hidden: !can('reports.edit'),
+            hidden: !can('reports.edit') || !reportsReconcileEnabled,
             disabled: backfillingUnlinkedReports,
             onClick: handleBackfillUnlinkedReports,
           },
@@ -3903,7 +3948,7 @@ export const Reports: React.FC = () => {
             label: unlinkingReportWorkOrders ? 'جاري فك الربط...' : 'فك ربط أوامر الشغل',
             icon: 'link_off',
             group: 'أدوات',
-            hidden: !can('reports.edit'),
+            hidden: !can('reports.edit') || !reportsReconcileEnabled,
             disabled: unlinkingReportWorkOrders,
             onClick: handleUnlinkReportWorkOrders,
           },
@@ -4106,7 +4151,7 @@ export const Reports: React.FC = () => {
                     }}
                     emptyIcon="bar_chart"
                     emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-                    emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+                    emptySubtitle={reportsPageCreateEnabled && can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
                   />
                 </Card>
               ))}
@@ -4130,7 +4175,7 @@ export const Reports: React.FC = () => {
               }}
               emptyIcon="bar_chart"
               emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
-              emptySubtitle={can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
+              emptySubtitle={reportsPageCreateEnabled && can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
               footer={reportTableFooter}
             />
           )}
@@ -4209,7 +4254,11 @@ export const Reports: React.FC = () => {
                   <span className="font-sans font-bold">| {costDetailReport.date}</span>
                 </p>
                 <p className="text-sm font-bold mt-2 text-[var(--color-text)]">
-                  {getProductName(costDetailReport.productId, costDetailReport.reportType)}
+                  {getProductName(
+                    costDetailReport.productId,
+                    costDetailReport.reportType,
+                    costDetailReport.productNameSnapshot,
+                  )}
                 </p>
                 <p className="text-xs text-[var(--color-text-muted)]">{getLineName(costDetailReport.lineId)}</p>
               </div>
@@ -4320,7 +4369,9 @@ export const Reports: React.FC = () => {
                 ) : (
                   <div className="mt-3">
                     <span className="text-xs text-[var(--color-text-muted)] block mb-1">المنتج</span>
-                    <span className="font-bold text-sm">{getProductName(row.productId, row.reportType)}</span>
+                    <span className="font-bold text-sm">
+                      {getProductName(row.productId, row.reportType, row.productNameSnapshot)}
+                    </span>
                   </div>
                 )}
               </div>
@@ -4456,7 +4507,9 @@ export const Reports: React.FC = () => {
                   type="button"
                   onClick={() => {
                     const rt = resolveReportType(row.reportType);
-                    const canEditHere = can('reports.edit') || (rt === 'packaging' && can('reports.packaging.create'));
+                    const canEditHere = reportsUpdateEnabled && (
+                      can('reports.edit') || (rt === 'packaging' && can('reports.packaging.create'))
+                    );
                     if (!canEditHere) {
                       setSaveToastType('error');
                       setSaveToast('غير مصرح لك بتعديل التقارير');
@@ -4466,7 +4519,10 @@ export const Reports: React.FC = () => {
                     openEdit(row);
                     setSelectedReportDrawer(null);
                   }}
-                  disabled={!can('reports.edit') && !(resolveReportType(row.reportType) === 'packaging' && can('reports.packaging.create'))}
+                  disabled={!reportsUpdateEnabled || (
+                    !can('reports.edit')
+                    && !(resolveReportType(row.reportType) === 'packaging' && can('reports.packaging.create'))
+                  )}
                   className="h-9 rounded-[var(--border-radius-base)] border border-[var(--color-border)] text-xs font-bold"
                 >
                   تعديل
@@ -5134,7 +5190,7 @@ export const Reports: React.FC = () => {
                   productName={_rawProducts.find((p) => p.id === form.productId)?.name ?? form.productId}
                   products={_rawProducts}
                   reportQty={effectiveFormQuantityProduced}
-                  planDailyTarget={formTeamSharedEnabled ? formPlanDailyTarget : 0}
+                  planDailyTarget={0}
                   settings={productionWorkerSettings}
                   value={form.workerOutputs || []}
                   onChange={(workerOutputs) => setForm((prev) => ({ ...prev, workerOutputs }))}

@@ -13,6 +13,8 @@ import {
 } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { PageRouteFallback } from './components/PageRouteFallback';
+import { RouteErrorBoundary } from './components/RouteErrorBoundary';
+import { DynamicImportRecoveryScreen } from './components/DynamicImportRecoveryScreen';
 import { RouterRealtimeSubscriptions } from './components/RouterRealtimeSubscriptions';
 import { ProtectedRoute } from './components/ProtectedRoute';
 import { lazyNamed } from './modules/shared/routes/lazyNamed';
@@ -50,6 +52,10 @@ import { EnglishDigitsInputGuard } from './components/EnglishDigitsInputGuard';
 import { setCurrentTenant } from './lib/currentTenant';
 import { defaultTenantSlug, resolveTenantNavigationTarget, tenantHomePath, tenantSlugFromPathname, withTenantPath } from './lib/tenantPaths';
 import {
+  isDynamicImportLoadFailure,
+  resolvePreferredTenantHomePath,
+} from './lib/navigationRecovery';
+import {
   clearLastVisitedTenantSlugIfMatches,
   setLastVisitedTenantSlug,
 } from './lib/lastTenantSlugStorage';
@@ -67,9 +73,9 @@ import { clearCachedAppSession } from './lib/appSessionCache';
 
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
 
-/** Temporary: force root visits to Sokany tenant instead of the public landing page. */
+/** Root `/` → last visited tenant home when known, otherwise env/default tenant. */
 const RootEntryOrLanding: React.FC = () => {
-  return <Navigate to={tenantHomePath('sokany-eg')} replace />;
+  return <Navigate to={resolvePreferredTenantHomePath()} replace />;
 };
 const TenantLoginGateway = lazyNamed(
   () => import('./modules/auth/pages/TenantLoginGateway'),
@@ -183,22 +189,6 @@ const tenantSlugForInitialBootPath = (pathname: string): string | undefined => {
     : undefined;
 };
 
-const isDynamicImportLoadFailure = (reason: unknown): boolean => {
-  const msg =
-    typeof reason === 'string'
-      ? reason
-      : (reason as { message?: string })?.message || '';
-  const lower = msg.toLowerCase();
-  return (
-    msg.includes('Failed to fetch dynamically imported module') ||
-    msg.includes('error loading dynamically imported module') ||
-    lower.includes('importing a module script failed') ||
-    lower.includes('failed to load module script') ||
-    (lower.includes('mime type') && lower.includes('module')) ||
-    (lower.includes('loading chunk') && lower.includes('failed'))
-  );
-};
-
 const buildCurrentPath = (location: { pathname: string; search: string }) =>
   `${location.pathname}${location.search}`;
 
@@ -283,11 +273,17 @@ const LoginRedirect: React.FC = () => {
 const DefaultHomeEntry = lazyNamed(() => import('./modules/dashboards/pages/DefaultHomeEntry'), 'DefaultHomeEntry');
 
 /** Unified home: optional default path from settings, else dashboards by role */
-const HomeRedirect: React.FC = () => (
-  <Suspense fallback={<PageRouteFallback />}>
-    <DefaultHomeEntry />
-  </Suspense>
-);
+const HomeRedirect: React.FC = () => {
+  const location = useLocation();
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  return (
+    <RouteErrorBoundary key={location.pathname} homeHref={tenantHomePath(tenantSlug)}>
+      <Suspense fallback={<PageRouteFallback />}>
+        <DefaultHomeEntry />
+      </Suspense>
+    </RouteErrorBoundary>
+  );
+};
 
 const PROTECTED_ROUTES: AppRouteDef[] = [
   {
@@ -328,6 +324,7 @@ const TenantPathRedirect: React.FC<{ redirectTo: string }> = ({ redirectTo }) =>
 const WrongCompanyLinkScreen: React.FC<{ forceLogout?: boolean }> = ({ forceLogout = false }) => {
   const navigate = useNavigate();
   const logout = useAppStore((s) => s.logout);
+  const homeTarget = resolvePreferredTenantHomePath();
 
   useEffect(() => {
     if (forceLogout) {
@@ -337,10 +334,10 @@ const WrongCompanyLinkScreen: React.FC<{ forceLogout?: boolean }> = ({ forceLogo
 
   useEffect(() => {
     const timer = window.setTimeout(() => {
-      navigate('/', { replace: true });
+      navigate(homeTarget, { replace: true });
     }, 2800);
     return () => window.clearTimeout(timer);
-  }, [navigate]);
+  }, [navigate, homeTarget]);
 
   return (
     <div className="erp-auth-page">
@@ -352,7 +349,7 @@ const WrongCompanyLinkScreen: React.FC<{ forceLogout?: boolean }> = ({ forceLogo
         </p>
         <button
           type="button"
-          onClick={() => navigate('/', { replace: true })}
+          onClick={() => navigate(homeTarget, { replace: true })}
           className="inline-flex items-center justify-center rounded-md bg-[var(--color-primary)] px-4 py-2 text-sm font-semibold text-white hover:opacity-90"
         >
           العودة للصفحة الرئيسية
@@ -392,9 +389,23 @@ const ProtectedTenantShell: React.FC<{ isAuthenticated: boolean; isPendingApprov
   }
 
   return (
-    <Layout>
-      <Outlet />
-    </Layout>
+    <RouteErrorBoundary homeHref={tenantHomePath(tenantSlug)}>
+      <Layout>
+        <Outlet />
+      </Layout>
+    </RouteErrorBoundary>
+  );
+};
+
+const TenantLazyRoute: React.FC<{ component: React.ComponentType }> = ({ component: Component }) => {
+  const location = useLocation();
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  return (
+    <RouteErrorBoundary key={location.pathname} homeHref={tenantHomePath(tenantSlug)}>
+      <Suspense fallback={<PageRouteFallback />}>
+        <Component />
+      </Suspense>
+    </RouteErrorBoundary>
   );
 };
 
@@ -786,11 +797,11 @@ const TenantLayout: React.FC = () => {
               setForbiddenRedirectPath(`/t/${encodeURIComponent(ownSlug)}/`);
             } else {
               setForbiddenRequiresLogout(true);
-              setForbiddenRedirectPath('/');
+              setForbiddenRedirectPath(resolvePreferredTenantHomePath());
             }
           } catch {
             setForbiddenRequiresLogout(true);
-            setForbiddenRedirectPath('/');
+            setForbiddenRedirectPath(resolvePreferredTenantHomePath());
           }
           setGate('forbidden_slug');
           return;
@@ -825,10 +836,13 @@ const TenantLayout: React.FC = () => {
     if (loading) {
       return <PageRouteFallback />;
     }
-    if (!isAuthenticated && location.pathname !== tenantLoginPath) {
+    if (isAuthenticated) {
+      return <Navigate to={forbiddenRedirectPath || resolvePreferredTenantHomePath()} replace />;
+    }
+    if (location.pathname !== tenantLoginPath) {
       return <Navigate to={tenantLoginPath} replace />;
     }
-    return <Navigate to="/" replace />;
+    return <Navigate to={resolvePreferredTenantHomePath()} replace />;
   }
 
   if (gate === 'forbidden_slug') {
@@ -865,14 +879,14 @@ const TenantLayout: React.FC = () => {
 };
 
 const RootFallbackRedirect: React.FC = () => {
-  return <Navigate to="/" replace />;
+  return <Navigate to={resolvePreferredTenantHomePath()} replace />;
 };
 
 const TrackLegacyRedirect: React.FC = () => {
   const location = useLocation();
   const params = new URLSearchParams(location.search);
   const slug = String(params.get('slug') || '').trim();
-  if (!slug) return <Navigate to="/" replace />;
+  if (!slug) return <Navigate to={resolvePreferredTenantHomePath()} replace />;
   params.delete('slug');
   const rest = params.toString();
   return <Navigate to={`/track/${encodeURIComponent(slug)}${rest ? `?${rest}` : ''}`} replace />;
@@ -925,6 +939,7 @@ const App: React.FC = () => {
   const cleanupSubsRef = useRef<(() => void) | null>(null);
   const [bootPhase, setBootPhase] = useState<BootPhase>('auth');
   const [bootError, setBootError] = useState<string | undefined>();
+  const [dynamicImportRecoveryNeeded, setDynamicImportRecoveryNeeded] = useState(false);
   const bootDecision = useMemo(
     () => buildBootDecision(bootPhase, bootError),
     [bootPhase, bootError],
@@ -1085,7 +1100,11 @@ const App: React.FC = () => {
     };
 
     const recoverFromStaleChunk = (event: Event) => {
-      if (sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY)) return false;
+      if (sessionStorage.getItem(DYNAMIC_IMPORT_RELOAD_KEY)) {
+        event.preventDefault();
+        setDynamicImportRecoveryNeeded(true);
+        return true;
+      }
       sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, '1');
       event.preventDefault();
       toast.error('تعذّر تحميل جزء من التطبيق (غالباً نسخة مخزّنة قديمة). جارٍ التحديث…');
@@ -1121,6 +1140,10 @@ const App: React.FC = () => {
       window.removeEventListener('unhandledrejection', onUnhandledRejection);
     };
   }, []);
+
+  if (dynamicImportRecoveryNeeded) {
+    return <DynamicImportRecoveryScreen />;
+  }
 
   if (bootDecision.showSplash || !bootDecision.allowRoutes) {
     return <AppSplashScreen subtitle={bootDecision.subtitle} />;
@@ -1245,9 +1268,7 @@ const App: React.FC = () => {
                     path={childPath}
                     element={
                       <ProtectedRoute permission={r.permission} permissionsAny={r.permissionsAny}>
-                        <Suspense fallback={<PageRouteFallback />}>
-                          <Component />
-                        </Suspense>
+                        <TenantLazyRoute component={Component} />
                       </ProtectedRoute>
                     }
                   />

@@ -37,6 +37,8 @@ export function resolveReportBehaviorSettings(
     allowPackagingLaborOptional: raw.allowPackagingLaborOptional !== false,
     autoLinkSupplyCycleOnReportSave: raw.autoLinkSupplyCycleOnReportSave !== false,
     autoApplyInventoryOnReportSave: raw.autoApplyInventoryOnReportSave !== false,
-    autoPostReportToPlanAndWorkOrder: raw.autoPostReportToPlanAndWorkOrder !== false,
+    // Execution progress is a business invariant: every production report must
+    // reconcile the matching plan/work order when either one exists.
+    autoPostReportToPlanAndWorkOrder: true,
   };
 }

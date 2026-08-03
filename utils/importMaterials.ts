@@ -112,6 +112,8 @@ const HEADER_MAP: Record<string, string> = {
   'الهالك': 'wastePercent',
   'الحد الأدنى للمخزون': 'minStock',
   'حد أدنى': 'minStock',
+  'مصدر المادة': 'isManufacturedInternally',
+  'المصدر': 'isManufacturedInternally',
   'يُصنع داخلياً': 'isManufacturedInternally',
   'يصنع داخليا': 'isManufacturedInternally',
   'التصنيع': 'isManufacturedInternally',
@@ -153,10 +155,25 @@ function parseNumber(v: unknown): number | null {
 function parseBool(v: unknown): boolean | null {
   const s = normalizeCategoryName(cellStr(v));
   if (!s) return null;
-  if (['1', 'true', 'yes', 'y', 'نعم', 'ايوه', 'أيوه', 'داخلي', 'داخليًا', 'يصنع داخليا', 'يصنع داخليًا'].includes(s)) {
+  if ([
+    '1',
+    'true',
+    'yes',
+    'y',
+    'نعم',
+    'ايوه',
+    'أيوه',
+    'داخلي',
+    'داخليًا',
+    'تصنيع داخلي',
+    'تصنع داخليا',
+    'تُصنع داخلياً',
+    'يصنع داخليا',
+    'يصنع داخليًا',
+  ].includes(s)) {
     return true;
   }
-  if (['0', 'false', 'no', 'n', 'لا', 'شراء', 'خارجي', 'موقوف'].includes(s)) {
+  if (['0', 'false', 'no', 'n', 'لا', 'شراء', 'شراء خارجي', 'خارجي', 'موقوف'].includes(s)) {
     return false;
   }
   return null;
@@ -376,11 +393,7 @@ export function parseMaterialsFromBuffer(
 
     if (targetCode) {
       const owner = lookup.byCode.get(targetCode);
-      if (matched?.id) {
-        if (owner && owner.id !== matched.id) {
-          errors.push(`الكود الجديد "${targetCode}" مستخدم بواسطة مادة أخرى`);
-        }
-      } else if (owner) {
+      if (!matched?.id && owner) {
         // Plain code match without currentCode column → update existing
         matched = owner;
       }
@@ -448,7 +461,7 @@ export function parseMaterialsFromBuffer(
     let isManufacturedInternally = false;
     if (providedFields.isManufacturedInternally) {
       const b = parseBool(get(raw, 'isManufacturedInternally'));
-      if (b == null) errors.push('قيمة التصنيع الداخلي غير صالحة (نعم/لا أو داخلي/شراء)');
+      if (b == null) errors.push('مصدر المادة غير صالح (استخدم: شراء خارجي أو تُصنع داخلياً)');
       else isManufacturedInternally = b;
     }
 
@@ -471,6 +484,12 @@ export function parseMaterialsFromBuffer(
     }
 
     const action: MaterialImportAction = matched?.id ? 'update' : 'create';
+    if (action === 'create' && !providedFields.isManufacturedInternally) {
+      errors.push('مصدر المادة مطلوب للإنشاء (شراء خارجي أو تُصنع داخلياً)');
+    }
+    const effectiveInternalSource = providedFields.isManufacturedInternally
+      ? isManufacturedInternally
+      : Boolean(matched?.isManufacturedInternally);
     const row: ParsedMaterialRow = {
       rowIndex: idx + 2,
       action,
@@ -484,22 +503,28 @@ export function parseMaterialsFromBuffer(
       categoryName,
       type: providedFields.type ? type : matched?.type || type,
       baseUnit: providedFields.baseUnit ? baseUnit : matched?.baseUnit || baseUnit,
-      purchaseUnit: providedFields.purchaseUnit
+      purchaseUnit: effectiveInternalSource
+        ? ''
+        : providedFields.purchaseUnit
         ? purchaseUnit
         : matched?.purchaseUnit || purchaseUnit,
-      conversionRate: providedFields.conversionRate
+      conversionRate: effectiveInternalSource
+        ? 1
+        : providedFields.conversionRate
         ? conversionRate
         : Number(matched?.conversionRate ?? 1) || 1,
-      purchaseCost: providedFields.purchaseCost
+      purchaseCost: effectiveInternalSource
+        ? 0
+        : providedFields.purchaseCost
         ? purchaseCost
         : Number(matched?.purchaseCost ?? 0),
-      wastePercent: providedFields.wastePercent
+      wastePercent: effectiveInternalSource
+        ? 0
+        : providedFields.wastePercent
         ? wastePercent
         : Number(matched?.wastePercent ?? 0),
       minStock: providedFields.minStock ? minStock : Number(matched?.minStock ?? 0),
-      isManufacturedInternally: providedFields.isManufacturedInternally
-        ? isManufacturedInternally
-        : Boolean(matched?.isManufacturedInternally),
+      isManufacturedInternally: effectiveInternalSource,
       manufacturedProductId: providedFields.manufacturedProductCode
         ? manufacturedProductId
         : matched?.manufacturedProductId ?? null,
@@ -516,6 +541,57 @@ export function parseMaterialsFromBuffer(
     rows.push(row);
   });
 
+  const importRowByMaterialId = new Map(
+    rows
+      .filter((row) => row.matchedId)
+      .map((row) => [row.matchedId!, row] as const),
+  );
+
+  // A target code may currently belong to another imported material when that
+  // owner is being renamed in the same file. Validate the final state rather
+  // than rejecting safe sequential renumbering against the pre-import state.
+  let addedDependencyError = true;
+  while (addedDependencyError) {
+    addedDependencyError = false;
+    for (const row of rows) {
+      if (!row.code || !row.matchedId || row.errors.length > 0) continue;
+      const owner = lookup.byCode.get(normalizeCode(row.code));
+      if (!owner?.id || owner.id === row.matchedId) continue;
+      const ownerImportRow = importRowByMaterialId.get(owner.id);
+      const ownerVacatesCode =
+        ownerImportRow
+        && ownerImportRow.errors.length === 0
+        && normalizeCode(ownerImportRow.code) !== normalizeCode(row.code);
+      if (!ownerVacatesCode) {
+        row.errors.push(`الكود الجديد "${row.code}" مستخدم بواسطة مادة أخرى`);
+        addedDependencyError = true;
+      }
+    }
+  }
+
+  const pendingCodeMoves = new Map(
+    rows
+      .filter((row) =>
+        row.errors.length === 0
+        && row.matchedId
+        && normalizeCode(row.currentCode) !== normalizeCode(row.code))
+      .map((row) => [row.matchedId!, row] as const),
+  );
+  let foundMovableRow = true;
+  while (pendingCodeMoves.size > 0 && foundMovableRow) {
+    foundMovableRow = false;
+    for (const [materialId, row] of pendingCodeMoves) {
+      const targetOwner = lookup.byCode.get(normalizeCode(row.code));
+      if (!targetOwner?.id || targetOwner.id === materialId || !pendingCodeMoves.has(targetOwner.id)) {
+        pendingCodeMoves.delete(materialId);
+        foundMovableRow = true;
+      }
+    }
+  }
+  for (const row of pendingCodeMoves.values()) {
+    row.errors.push('تبادل الأكواد بشكل دائري غير مدعوم؛ استخدم كوداً وسيطاً ثم أعد الرفع');
+  }
+
   const validRows = rows.filter((r) => r.errors.length === 0);
   return {
     rows,
@@ -526,6 +602,34 @@ export function parseMaterialsFromBuffer(
     updateCount: validRows.filter((r) => r.action === 'update').length,
     fileErrors: fileErrors.length ? fileErrors : undefined,
   };
+}
+
+export function orderMaterialImportRowsForSave(
+  importRows: ParsedMaterialRow[],
+  existingMaterials: Material[],
+): ParsedMaterialRow[] {
+  const ownerByCode = buildMaterialLookup(existingMaterials).byCode;
+  const pending = [...importRows];
+  const ordered: ParsedMaterialRow[] = [];
+
+  while (pending.length > 0) {
+    const pendingMaterialIds = new Set(
+      pending.map((row) => row.matchedId).filter((id): id is string => Boolean(id)),
+    );
+    const readyIndex = pending.findIndex((row) => {
+      const targetOwner = ownerByCode.get(normalizeCode(row.code));
+      return !targetOwner?.id
+        || targetOwner.id === row.matchedId
+        || !pendingMaterialIds.has(targetOwner.id);
+    });
+
+    if (readyIndex < 0) {
+      throw new Error('تعذر ترتيب تحديثات الأكواد؛ يوجد تبادل دائري بين المواد');
+    }
+    ordered.push(pending.splice(readyIndex, 1)[0]);
+  }
+
+  return ordered;
 }
 
 export function parseMaterialsExcel(
@@ -558,10 +662,10 @@ export function toMaterialCreateData(
     categoryId: row.categoryId,
     categoryName: row.categoryName,
     baseUnit: row.baseUnit,
-    purchaseUnit: row.purchaseUnit || row.baseUnit,
-    conversionRate: row.conversionRate || 1,
-    purchaseCost: row.purchaseCost,
-    wastePercent: row.wastePercent,
+    purchaseUnit: row.isManufacturedInternally ? undefined : row.purchaseUnit || row.baseUnit,
+    conversionRate: row.isManufacturedInternally ? 1 : row.conversionRate || 1,
+    purchaseCost: row.isManufacturedInternally ? 0 : row.purchaseCost,
+    wastePercent: row.isManufacturedInternally ? 0 : row.wastePercent,
     minStock: row.minStock,
     isManufacturedInternally: row.isManufacturedInternally,
     manufacturedProductId: row.manufacturedProductId || undefined,

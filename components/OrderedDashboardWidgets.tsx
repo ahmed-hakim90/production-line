@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import type { SystemSettings } from '@/types';
 import { getCustomWidgets, getWidgetOrder } from '@/utils/dashboardConfig';
 import { usePermission } from '@/utils/permissions';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { CustomDashboardWidgetItem, canRenderCustomWidget } from './CustomDashboardWidgets';
 
 export type DashboardBuiltinRenderer = (widgetId: string) => React.ReactNode;
@@ -18,7 +18,7 @@ export const OrderedDashboardWidgets: React.FC<OrderedDashboardWidgetsProps> = (
   systemSettings,
   renderBuiltin,
 }) => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const order = useMemo(

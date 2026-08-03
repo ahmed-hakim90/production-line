@@ -21,6 +21,12 @@ import { ProductionWorkerReports } from './ProductionWorkerReports';
 import { ProductionWorkerRatingsReview } from './ProductionWorkerRatingsReview';
 import { SupervisorWorkerEvaluation } from './SupervisorWorkerEvaluation';
 import {
+  DAILY_WORKER_ASSIGNMENT_PATHS,
+  PERMANENT_WORKER_ASSIGNMENT_PATHS,
+  WORKER_ASSIGNMENT_OPERATION_KEYS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
+import {
   matchesProductionWorkerLineFilter,
   normalizeWorkerLineIds,
   shouldShowProductionWorkerForSupervisor,
@@ -65,6 +71,17 @@ export const ProductionWorkers: React.FC = () => {
   const uid = useAppStore((s) => s.uid);
   const storeCurrentEmployee = useAppStore((s) => s.currentEmployee);
   const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const permanentAssignmentPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORKER_ASSIGNMENT_OPERATION_KEYS.permanent,
+    PERMANENT_WORKER_ASSIGNMENT_PATHS.productionWorkersPage,
+  );
+  const dailyAssignmentPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    WORKER_ASSIGNMENT_OPERATION_KEYS.daily,
+    DAILY_WORKER_ASSIGNMENT_PATHS.productionWorkersPage,
+  );
   const rawWorkerSettings = useAppStore((s) => s.systemSettings.productionWorkerSettings);
   const workerSettings = useMemo(() => ({
     performance: {
@@ -252,6 +269,7 @@ export const ProductionWorkers: React.FC = () => {
   };
 
   const handleSaveLineTransfer = async () => {
+    if (!permanentAssignmentPathEnabled) return;
     if (!lineTransfer || lineTransferSaving) return;
     const workersToTransfer = getLineTransferEligibleWorkers(lineTransfer);
     const validationError = getLineTransferValidationError(lineTransfer, workersToTransfer);
@@ -274,7 +292,7 @@ export const ProductionWorkers: React.FC = () => {
           .map((row) => productionLineWorkerAssignmentService.update(row.id!, {
             isActive: false,
             endDate: plan.closeEndDate,
-          }))
+          }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.productionWorkersPage }))
       )));
       await Promise.all(workerPlans.map(async ({ worker, plan }) => {
         if (plan.shouldCreateTargetAssignment) {
@@ -284,7 +302,7 @@ export const ProductionWorkers: React.FC = () => {
             startDate: lineTransfer.transferDate,
             laborRole: DEFAULT_LINE_WORKER_LABOR_ROLE,
             isActive: true,
-          });
+          }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.productionWorkersPage });
         }
 
         await productionWorkerService.update(worker.id!, {
@@ -362,10 +380,17 @@ export const ProductionWorkers: React.FC = () => {
       .map((row) => row.id)
       .filter((id): id is string => Boolean(id));
 
-    await Promise.all(idsToDelete.map((id) => lineAssignmentService.delete(id)));
+    await Promise.all(idsToDelete.map((id) => lineAssignmentService.delete(
+      id,
+      { path: DAILY_WORKER_ASSIGNMENT_PATHS.productionWorkersPage },
+    )));
   };
 
   const handleBulkUnlinkWorkers = async (selectedWorkers: WorkerRow[]) => {
+    if (!permanentAssignmentPathEnabled || !dailyAssignmentPathEnabled) {
+      window.alert('أحد مسارات تعيين العامل المطلوبة متوقف من إعدادات النظام.');
+      return;
+    }
     const workersToUnlink = selectedWorkers.filter((worker) => worker.id && worker.assignedLineIds.length > 0);
     if (workersToUnlink.length === 0 || unlinkingWorkers) return;
 
@@ -390,7 +415,7 @@ export const ProductionWorkers: React.FC = () => {
           .map((assignment) => productionLineWorkerAssignmentService.update(assignment.id!, {
             isActive: false,
             endDate,
-          })),
+          }, { path: PERMANENT_WORKER_ASSIGNMENT_PATHS.productionWorkersPage })),
       );
       await deleteTodayDailyRowsForWorkers(workersToUnlink);
       await Promise.all(Array.from(workerIds).map((workerId) => syncWorkerLineSnapshot(workerId)));
@@ -655,6 +680,7 @@ export const ProductionWorkers: React.FC = () => {
 
       <Card className="!p-0 overflow-hidden">
       <SmartFilterBar
+      pageId="production-workers"
         searchValue={search}
         onSearchChange={setSearch}
         searchPlaceholder="بحث بالاسم أو الكود..."

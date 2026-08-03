@@ -6,6 +6,7 @@ import {
   getDocs,
   orderBy,
   updateDoc,
+  where,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -22,6 +23,8 @@ import { stockService } from './stockService';
 import { productionIssueService } from './productionIssueService';
 import { warehouseLocationService } from './warehouseLocationService';
 import { assertCanRequestCompensation } from '../lib/componentCompensationRequest';
+import { INVENTORY_STOCK_MOVE_PATHS } from '../../system/lib/operationPathSettings';
+import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'component_compensation_requests';
 const ISSUE_COLLECTION = 'production_issue_orders';
@@ -32,9 +35,16 @@ const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
 
 export const componentCompensationService = {
-  async getAll(): Promise<ComponentCompensationRequest[]> {
+  async getAll(warehouseId?: string): Promise<ComponentCompensationRequest[]> {
     if (!isConfigured) return [];
-    const snap = await getDocs(tenantQuery(db, COLLECTION, orderBy('createdAt', 'desc')));
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
+    const snap = await getDocs(tenantQuery(
+      db,
+      COLLECTION,
+      ...(scope.warehouseId ? [where('warehouseId', '==', scope.warehouseId)] : []),
+      orderBy('createdAt', 'desc'),
+    ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ComponentCompensationRequest));
   },
 
@@ -166,7 +176,7 @@ export const componentCompensationService = {
       sourcePlanId: order.productionPlanId,
       note: `Component compensation ${request.referenceNo}`,
       createdBy: actor,
-    });
+    }, { path: INVENTORY_STOCK_MOVE_PATHS.componentCompensation });
     const lines: ProductionIssueOrder['lines'] = order.lines.map((line) => (
       line.itemType === request.line.itemType && line.itemId === request.line.itemId
         ? { ...line, compensatedQty: Number(line.compensatedQty || 0) + request.quantity }

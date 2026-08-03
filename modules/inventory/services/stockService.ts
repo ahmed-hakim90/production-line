@@ -32,6 +32,12 @@ import {
   readNextInvSeqInTransaction,
   writeInvSeqInTransaction,
 } from './inventoryInvSequence';
+import {
+  INVENTORY_OPERATION_KEYS,
+  assertCurrentTenantOperationPathEnabled,
+  type InventoryStockMovePath,
+} from '../../system/lib/operationPathSettings';
+import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const BALANCES_COLLECTION = 'stock_items';
 const LOCATION_BALANCES_COLLECTION = 'stock_location_balances';
@@ -143,9 +149,11 @@ export const stockService = {
     cursor?: FirestoreCursor;
   }): Promise<StockPageResult<StockItemBalance>> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const scope = await resolveInventoryWarehouseReadScope(params?.warehouseId);
+    if (scope.denied) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), MAX_PAGE_SIZE));
     const constraints: any[] = [orderBy('updatedAt', 'desc'), limit(pageSize)];
-    if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
+    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     if (params?.cursor) constraints.push(startAfter(params.cursor));
     const q = tenantQuery(db, BALANCES_COLLECTION, ...constraints);
     const snap = await getDocs(q);
@@ -156,6 +164,8 @@ export const stockService = {
 
   async getTransactionsPaged(params?: {
     warehouseId?: string;
+    itemId?: string;
+    itemType?: StockTransaction['itemType'];
     limit?: number;
     cursor?: FirestoreCursor;
     movementType?: StockTransaction['movementType'];
@@ -164,9 +174,13 @@ export const stockService = {
     endDate?: string;
   }): Promise<StockPageResult<StockTransaction>> {
     if (!isConfigured) return { items: [], nextCursor: null, hasMore: false };
+    const scope = await resolveInventoryWarehouseReadScope(params?.warehouseId);
+    if (scope.denied) return { items: [], nextCursor: null, hasMore: false };
     const pageSize = Math.max(1, Math.min(Number(params?.limit || 50), MAX_PAGE_SIZE));
     const constraints: any[] = [orderBy('createdAt', 'desc'), limit(pageSize)];
-    if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
+    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
+    if (params?.itemId) constraints.unshift(where('itemId', '==', params.itemId));
+    if (params?.itemType) constraints.unshift(where('itemType', '==', params.itemType));
     if (params?.movementType) constraints.unshift(where('movementType', '==', params.movementType));
     if (params?.sourceModule) constraints.unshift(where('sourceModule', '==', params.sourceModule));
     if (params?.startDate) constraints.unshift(where('createdAt', '>=', params.startDate));
@@ -243,8 +257,10 @@ export const stockService = {
     itemId?: string;
   }): Promise<StockLocationBalance[]> {
     if (!isConfigured) return [];
+    const scope = await resolveInventoryWarehouseReadScope(params?.warehouseId);
+    if (scope.denied) return [];
     const constraints: any[] = [orderBy('updatedAt', 'desc'), limit(1000)];
-    if (params?.warehouseId) constraints.unshift(where('warehouseId', '==', params.warehouseId));
+    if (scope.warehouseId) constraints.unshift(where('warehouseId', '==', scope.warehouseId));
     if (params?.locationId) constraints.unshift(where('locationId', '==', params.locationId));
     if (params?.itemType) constraints.unshift(where('itemType', '==', params.itemType));
     if (params?.itemId) constraints.unshift(where('itemId', '==', params.itemId));
@@ -255,11 +271,13 @@ export const stockService = {
 
   async getTransactions(warehouseId?: string): Promise<StockTransaction[]> {
     if (!isConfigured) return [];
-    const q = warehouseId
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
+    const q = scope.warehouseId
       ? tenantQuery(
         db,
         TRANSACTIONS_COLLECTION,
-        where('warehouseId', '==', warehouseId),
+        where('warehouseId', '==', scope.warehouseId),
         orderBy('createdAt', 'desc'),
         limit(500),
       )
@@ -299,10 +317,12 @@ export const stockService = {
 
   async getTransactionsByReferenceNo(referenceNo: string): Promise<StockTransaction[]> {
     if (!isConfigured || !referenceNo.trim()) return [];
+    const scope = await resolveInventoryWarehouseReadScope();
     const q = tenantQuery(
       db,
       TRANSACTIONS_COLLECTION,
       where('referenceNo', '==', referenceNo.trim()),
+      ...(scope.warehouseId ? [where('warehouseId', '==', scope.warehouseId)] : []),
     );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
@@ -310,10 +330,12 @@ export const stockService = {
 
   async getTransactionsByNote(note: string): Promise<StockTransaction[]> {
     if (!isConfigured || !note.trim()) return [];
+    const scope = await resolveInventoryWarehouseReadScope();
     const q = tenantQuery(
       db,
       TRANSACTIONS_COLLECTION,
       where('note', '==', note.trim()),
+      ...(scope.warehouseId ? [where('warehouseId', '==', scope.warehouseId)] : []),
     );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockTransaction));
@@ -324,12 +346,17 @@ export const stockService = {
     sourceId: string;
   }): Promise<StockTransaction[]> {
     if (!isConfigured || !params.sourceId.trim() || !params.sourceModule) return [];
+    const scope = await resolveInventoryWarehouseReadScope();
+    const warehouseConstraint = scope.warehouseId
+      ? [where('warehouseId', '==', scope.warehouseId)]
+      : [];
     try {
       const q = tenantQuery(
         db,
         TRANSACTIONS_COLLECTION,
         where('sourceModule', '==', params.sourceModule),
         where('sourceId', '==', params.sourceId.trim()),
+        ...warehouseConstraint,
         orderBy('createdAt', 'desc'),
         limit(500),
       );
@@ -340,6 +367,7 @@ export const stockService = {
         db,
         TRANSACTIONS_COLLECTION,
         where('sourceId', '==', params.sourceId.trim()),
+        ...warehouseConstraint,
         limit(500),
       );
       const snap = await getDocs(q);
@@ -355,12 +383,23 @@ export const stockService = {
     itemId: string,
   ): Promise<number> {
     if (!isConfigured) return 0;
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return 0;
     const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(warehouseId, itemType, itemId));
     const direct = await getDoc(balRef);
     return direct.exists() ? Number(direct.data().quantity || 0) : 0;
   },
 
-  async createMovement(input: CreateStockMovementInput): Promise<string | null> {
+  async createMovement(
+    input: CreateStockMovementInput,
+    context: { path: InventoryStockMovePath } | { internal: true },
+  ): Promise<string | null> {
+    if ('path' in context) {
+      await assertCurrentTenantOperationPathEnabled(
+        INVENTORY_OPERATION_KEYS.stockMove,
+        context.path,
+      );
+    }
     if (!isConfigured) return null;
     if (input.movementType === 'ADJUSTMENT') {
       if (input.quantity === 0) throw new Error('قيمة التسوية يجب ألا تساوي صفر.');
@@ -1158,9 +1197,17 @@ export const stockService = {
     return ref.id;
   },
 
-  async getCountSessions(): Promise<StockCountSession[]> {
+  async getCountSessions(warehouseId?: string): Promise<StockCountSession[]> {
     if (!isConfigured) return [];
-    const q = tenantQuery(db, COUNTS_COLLECTION, orderBy('createdAt', 'desc'), limit(200));
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return [];
+    const q = tenantQuery(
+      db,
+      COUNTS_COLLECTION,
+      ...(scope.warehouseId ? [where('warehouseId', '==', scope.warehouseId)] : []),
+      orderBy('createdAt', 'desc'),
+      limit(200),
+    );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockCountSession));
   },

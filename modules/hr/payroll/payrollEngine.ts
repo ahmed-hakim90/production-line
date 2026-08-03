@@ -38,6 +38,7 @@ import {
   lateRulesRef,
   allowanceTypesRef,
   hrSettingsDocRef,
+  hrSettingsLegacyDocRef,
 } from '../collections';
 import {
   getApprovedLeaves,
@@ -96,7 +97,9 @@ function chunk<T>(arr: T[], size: number): T[][] {
 async function fetchHRSettings(): Promise<FirestoreHRSettings | null> {
   if (!isConfigured) return null;
   const snap = await getDoc(hrSettingsDocRef());
-  return snap.exists() ? (snap.data() as FirestoreHRSettings) : null;
+  if (snap.exists()) return snap.data() as FirestoreHRSettings;
+  const legacy = await getDoc(hrSettingsLegacyDocRef());
+  return legacy.exists() ? (legacy.data() as FirestoreHRSettings) : null;
 }
 
 async function fetchPenaltyRules(): Promise<FirestorePenaltyRule[]> {

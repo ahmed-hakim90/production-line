@@ -5,7 +5,7 @@ import type { Warehouse, WarehouseRole } from '../types';
  * Factory-recommended inventory routing policy (booleans only).
  * Warehouse IDs stay tenant-specific unless role-mapping fills empty slots.
  *
- * Flow: صرف إنتاج → تقرير → اعتماد إدخال → تم الإنتاج → تغليف → منتج تام
+ * Flow V2: صرف إنتاج → صالة الإنتاج → تقرير → تحت التسليم → استلام تغليف → بانتظار التغليف → منتج تام
  */
 export const RECOMMENDED_INVENTORY_ROUTING_POLICY: Pick<
   InventoryRoutingSettings,
@@ -13,13 +13,16 @@ export const RECOMMENDED_INVENTORY_ROUTING_POLICY: Pick<
   | 'autoTransferFinishedToFinal'
   | 'requireApprovalForProductionEntry'
   | 'requireApprovalForAutoTransfers'
+  | 'requirePackagingHandoverReceipt'
   | 'autoConsumeBomOnProductionReport'
   | 'requireIssuedProductionIssueOnReport'
 > = {
-  autoTransferProductionToFinished: true,
+  // V2: do not auto-push WIP→staging; packaging supervisor confirms receipt.
+  autoTransferProductionToFinished: false,
   autoTransferFinishedToFinal: false,
-  requireApprovalForProductionEntry: true,
+  requireApprovalForProductionEntry: false,
   requireApprovalForAutoTransfers: false,
+  requirePackagingHandoverReceipt: true,
   autoConsumeBomOnProductionReport: false,
   requireIssuedProductionIssueOnReport: true,
 };
@@ -29,6 +32,7 @@ export function createEmptyInventoryRouting(): InventoryRoutingSettings {
   return {
     rawMaterialWarehouseId: '',
     decomposedWarehouseId: '',
+    productionFloorWarehouseId: '',
     productionWipWarehouseId: '',
     finishedStagingWarehouseId: '',
     finalProductWarehouseId: '',
@@ -94,6 +98,7 @@ export function mapRoutingWarehouseIdsFromRoles(
     take('decomposed'),
     overwrite,
   );
+  const floor = fillOrKeep(prev.productionFloorWarehouseId, take('production_floor'), overwrite);
   const wip = fillOrKeep(
     prev.productionWipWarehouseId ?? plan.defaultProductionWarehouseId,
     take('production_wip'),
@@ -135,6 +140,7 @@ export function mapRoutingWarehouseIdsFromRoles(
       ...prev,
       rawMaterialWarehouseId: raw,
       decomposedWarehouseId: decomposed,
+      productionFloorWarehouseId: floor,
       productionWipWarehouseId: wip || staging,
       finishedStagingWarehouseId: staging || wip,
       finalProductWarehouseId: finalWh,
@@ -160,7 +166,7 @@ export function applyRecommendedInventoryRoutingPolicy(
 
     return {
       ...plan,
-      requireFinishedStockApprovalForReports: true,
+      requireFinishedStockApprovalForReports: false,
       inventoryRouting: {
         ...createEmptyInventoryRouting(),
         ...prev,

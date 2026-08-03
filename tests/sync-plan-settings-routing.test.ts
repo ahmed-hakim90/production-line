@@ -57,6 +57,7 @@ function testApprovalFlagsStayInSync() {
     inventoryRouting: {
       ...DEFAULT_PLAN_SETTINGS.inventoryRouting,
       requireApprovalForProductionEntry: true,
+      autoTransferProductionToFinished: true,
     },
   });
   assert.equal(synced.requireFinishedStockApprovalForReports, true);

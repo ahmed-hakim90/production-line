@@ -36,6 +36,11 @@ import {
 } from '@/components/ui/select';
 import { Filter } from 'lucide-react';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import {
+  INVENTORY_OPERATION_KEYS,
+  INVENTORY_TRANSFER_DECISION_PATHS,
+  isOperationPathEnabled,
+} from '../../system/lib/operationPathSettings';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import type { StockSourceModule } from '../types';
 import { sourceModuleLabel } from '../lib/stockLabels';
@@ -75,6 +80,17 @@ export const StockTransactions: React.FC = () => {
   const { can } = usePermission();
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const companyName = useAppStore((s) => s.systemSettings.branding?.factoryName ?? 'الشركة');
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const pendingApprovalPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.transferApprove,
+    INVENTORY_TRANSFER_DECISION_PATHS.stockTransactionsPage,
+  );
+  const pendingRejectionPathEnabled = isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.transferReject,
+    INVENTORY_TRANSFER_DECISION_PATHS.stockTransactionsPage,
+  );
   const uid = useAppStore((s) => s.uid);
   const userEmail = useAppStore((s) => s.userEmail);
   const userDisplayName = useAppStore((s) => s.userDisplayName);
@@ -697,6 +713,7 @@ export const StockTransactions: React.FC = () => {
 
       <Card className="!p-4">
         <SmartFilterBar
+      pageId="stock-transactions"
           searchPlaceholder="ابحث بالاسم أو الكود..."
           searchValue={search}
           onSearchChange={setSearch}
@@ -737,6 +754,8 @@ export const StockTransactions: React.FC = () => {
                 'production_issue',
                 'disassembly',
                 'supplies_receipt',
+                'department_consumable_issue',
+                'department_consumable_return',
                 'legacy',
               ] as StockSourceModule[]).map((value) => ({
                 value,
@@ -821,7 +840,8 @@ export const StockTransactions: React.FC = () => {
           onOpenPending={(row) => openModal(MODAL_KEYS.INVENTORY_APPROVE_TRANSFER, {
             request: row,
             warehouseMap,
-            canApprove: can('inventory.transfers.approve'),
+            canApprove: can('inventory.transfers.approve')
+              && (pendingApprovalPathEnabled || pendingRejectionPathEnabled),
             onApprove: async () => {
               if (!row.id) return;
               setProcessing(true);
@@ -830,7 +850,7 @@ export const StockTransactions: React.FC = () => {
                   requestId: row.id,
                   approvedBy: actorName,
                   approverUserId: uid || undefined,
-                }));
+                }, { path: INVENTORY_TRANSFER_DECISION_PATHS.stockTransactionsPage }));
                 await loadData();
               } catch (error: unknown) {
                 toast.error(error instanceof Error ? error.message : 'تعذر الاعتماد.');
@@ -847,7 +867,7 @@ export const StockTransactions: React.FC = () => {
                   rejectedBy: actorName,
                   reason: '',
                   rejectedByUserId: uid || undefined,
-                }));
+                }, { path: INVENTORY_TRANSFER_DECISION_PATHS.stockTransactionsPage }));
                 await loadData();
               } catch (error: unknown) {
                 toast.error(error instanceof Error ? error.message : 'تعذر الرفض.');

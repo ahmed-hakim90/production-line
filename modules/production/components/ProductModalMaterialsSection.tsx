@@ -21,8 +21,8 @@ export const ProductModalMaterialsSection: React.FC<ProductModalMaterialsSection
 
   if (!enabled || !productId) {
     return (
-      <p className="text-sm text-muted-foreground py-4">
-        احفظ المنتج أولاً ثم أضف مواد الـ BOM من تبويب BOM والمواد.
+      <p className="rounded-lg border border-dashed bg-muted/30 px-4 py-5 text-center text-sm text-muted-foreground">
+        احفظ بيانات المنتج أولاً، ثم سينتقل المودال مباشرة إلى تعريف مواد الـ BOM والكميات.
       </p>
     );
   }

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { ChevronDown, ChevronRight, Lock, Loader2, Unlock } from 'lucide-react';
+import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
@@ -73,7 +74,6 @@ export const Categories: React.FC = () => {
   const [editId, setEditId] = useState<string | null>(null);
   const [form, setForm] = useState<CategoryForm>(buildEmptyForm());
   const [expanded, setExpanded] = useState<Set<string>>(new Set());
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [usageById, setUsageById] = useState<
     Record<string, { productCount: number; childrenCount: number }>
   >(() => initialCategoriesCache?.usageById ?? {});
@@ -120,10 +120,7 @@ export const Categories: React.FC = () => {
             usage = await categoryService.getBulkCategoryUsageCounts(productOnly);
           } catch (usageError) {
             console.error('[categories] usage counts failed', usageError);
-            setMessage({
-              type: 'error',
-              text: 'تم تحميل الفئات لكن تعذر حساب عدد المنتجات المرتبطة.',
-            });
+            toast.error('تم تحميل الفئات لكن تعذر حساب عدد المنتجات المرتبطة.');
           }
           return { items: list, usageById: usage };
         },
@@ -133,7 +130,7 @@ export const Categories: React.FC = () => {
       setUsageById(data.usageById);
     } catch (error) {
       console.error('[categories] load failed', error);
-      setMessage({ type: 'error', text: 'تعذر تحميل الفئات حالياً.' });
+      toast.error('تعذر تحميل الفئات حالياً.');
     } finally {
       setLoading(false);
     }
@@ -192,7 +189,7 @@ export const Categories: React.FC = () => {
     if (editId) {
       codePayload = categoryCode.trim().toUpperCase();
       if (!codePayload) {
-        setMessage({ type: 'error', text: t('modalManager.categories.codeRequired') });
+        toast.error(t('modalManager.categories.codeRequired'));
         return;
       }
     } else if (categoryCodeLocked) {
@@ -200,12 +197,11 @@ export const Categories: React.FC = () => {
     } else {
       codePayload = categoryCode.trim().toUpperCase();
       if (!codePayload) {
-        setMessage({ type: 'error', text: t('modalManager.categories.manualCodeRequired') });
+        toast.error(t('modalManager.categories.manualCodeRequired'));
         return;
       }
     }
     setSaving(true);
-    setMessage(null);
     try {
       if (editId) {
         await categoryService.updateCategory(editId, {
@@ -215,7 +211,7 @@ export const Categories: React.FC = () => {
           isActive: form.isActive,
           sortOrder: form.sortOrder,
         });
-        setMessage({ type: 'success', text: 'تم تحديث الفئة بنجاح.' });
+        toast.success('تم تحديث الفئة بنجاح.');
       } else {
         await categoryService.createCategory({
           name: nameTrim,
@@ -224,17 +220,17 @@ export const Categories: React.FC = () => {
           isActive: form.isActive,
           sortOrder: form.sortOrder,
         });
-        setMessage({ type: 'success', text: 'تمت إضافة الفئة بنجاح.' });
+        toast.success('تمت إضافة الفئة بنجاح.');
       }
       resetForm();
       await reload();
     } catch (e) {
       if (isDuplicateEntityCodeError(e)) {
-        setMessage({ type: 'error', text: t('entityCode.duplicateError') });
+        toast.error(t('entityCode.duplicateError'));
       } else if (e instanceof Error && e.message === 'CATEGORY_PARENT_CYCLE') {
-        setMessage({ type: 'error', text: 'لا يمكن اختيار فئة فرعية كأب — يوجد حلقة.' });
+        toast.error('لا يمكن اختيار فئة فرعية كأب — يوجد حلقة.');
       } else {
-        setMessage({ type: 'error', text: 'تعذر حفظ الفئة. حاول مرة أخرى.' });
+        toast.error('تعذر حفظ الفئة. حاول مرة أخرى.');
       }
     } finally {
       setSaving(false);
@@ -255,10 +251,10 @@ export const Categories: React.FC = () => {
     if (!window.confirm('إيقاف هذه الفئة؟')) return;
     try {
       await categoryService.deactivateCategory(id);
-      setMessage({ type: 'success', text: 'تم إيقاف الفئة.' });
+      toast.success('تم إيقاف الفئة.');
       await reload();
     } catch {
-      setMessage({ type: 'error', text: 'تعذر إيقاف الفئة.' });
+      toast.error('تعذر إيقاف الفئة.');
     }
   };
 
@@ -266,7 +262,7 @@ export const Categories: React.FC = () => {
     if (!window.confirm('حذف هذه الفئة نهائياً؟')) return;
     try {
       await categoryService.deleteCategory(id);
-      setMessage({ type: 'success', text: 'تم حذف الفئة.' });
+      toast.success('تم حذف الفئة.');
       await reload();
     } catch (e) {
       const msg =
@@ -275,25 +271,23 @@ export const Categories: React.FC = () => {
           : e instanceof Error && e.message === 'CATEGORY_HAS_PRODUCTS'
             ? 'لا يمكن الحذف: مرتبطة بمنتجات.'
             : 'تعذر حذف الفئة.';
-      setMessage({ type: 'error', text: msg });
+      toast.error(msg);
     }
   };
 
   const handleMigrate = async () => {
     if (!window.confirm('تشغيل ترحيل ربط المنتجات بالفئات (v1)؟')) return;
     setMigrating(true);
-    setMessage(null);
     try {
       const { migrateProductCategoriesV1 } = await import('../services/categoryMigration');
       const result = await migrateProductCategoriesV1();
-      setMessage({
-        type: 'success',
-        text: `تم الترحيل: ${result.productsUpdated} منتج، ${result.categoriesHierarchyUpdated} فئة هيكلية.`,
-      });
+      toast.success(
+        `تم ترحيل ${result.productsUpdated} منتج وتحديث ${result.categoriesHierarchyUpdated} فئة هيكلية.`,
+      );
       await reload();
       await useAppStore.getState().fetchProducts();
     } catch {
-      setMessage({ type: 'error', text: 'فشل الترحيل.' });
+      toast.error('فشل ترحيل الفئات.');
     } finally {
       setMigrating(false);
     }
@@ -359,18 +353,6 @@ export const Categories: React.FC = () => {
             )}
           </div>
         </div>
-
-        {message && (
-          <div
-            className={`px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold border ${
-              message.type === 'success'
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                : 'bg-rose-50 text-rose-700 border-rose-200'
-            }`}
-          >
-            {message.text}
-          </div>
-        )}
 
         {(canCreate || canEdit) && (
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">

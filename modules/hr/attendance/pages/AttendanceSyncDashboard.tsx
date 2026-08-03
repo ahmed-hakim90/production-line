@@ -700,6 +700,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
       {tab === 'history' && (
         <div className="card p-0 overflow-hidden space-y-0">
           <SmartFilterBar
+      pageId="attendance-sync-history"
             periods={[
               { label: 'اليوم', value: 'today' },
               { label: 'هذا الشهر', value: 'month' },
@@ -897,6 +898,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
           )}
 
           <SmartFilterBar
+      pageId="attendance-sync-preview"
             quickFilters={[
               {
                 key: 'previewFilter',

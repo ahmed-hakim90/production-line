@@ -16,12 +16,14 @@ const ProductionConsumptionAnalysis = lazyNamed(() => import('../pages/Productio
 const ProductionComponentRecords = lazyNamed(() => import('../pages/ProductionComponentRecords'), 'ProductionComponentRecords');
 const Disassembly = lazyNamed(() => import('../pages/Disassembly'), 'Disassembly');
 const SuppliesReceipt = lazyNamed(() => import('../pages/SuppliesReceipt'), 'SuppliesReceipt');
+const DepartmentConsumables = lazyNamed(() => import('../pages/DepartmentConsumables'), 'DepartmentConsumables');
 const InventoryAnalytics = lazyNamed(() => import('../pages/InventoryAnalytics'), 'InventoryAnalytics');
 const InventoryExceptions = lazyNamed(() => import('../pages/InventoryExceptions'), 'InventoryExceptions');
 const RawMaterialWarehouseControl = lazyNamed(
   () => import('../pages/RawMaterialWarehouseControl'),
   'RawMaterialWarehouseControl',
 );
+const ProductionFloorStock = lazyNamed(() => import('../pages/ProductionFloorStock'), 'ProductionFloorStock');
 const RawMaterialWarehouseAlerts = lazyNamed(
   () => import('../pages/RawMaterialWarehouseAlerts'),
   'RawMaterialWarehouseAlerts',
@@ -55,11 +57,18 @@ export const INVENTORY_ROUTES: AppRouteDef[] = [
     component: SuppliesReceipt,
     skeleton: 'form',
   },
+  {
+    path: '/inventory/department-consumables',
+    permission: 'departmentConsumables.view',
+    component: DepartmentConsumables,
+    skeleton: 'dashboard',
+  },
   { path: '/inventory/warehouses', permission: 'inventory.view', component: Warehouses },
   { path: '/inventory/locations', permission: 'inventory.view', component: WarehouseLocations },
   { path: '/inventory/balances', permission: 'inventory.view', component: StockBalances },
   { path: '/inventory/transactions', permission: 'inventory.view', component: StockTransactions },
   { path: '/inventory/production-issues', permission: 'inventory.view', component: ProductionIssues, skeleton: 'dashboard' },
+  { path: '/inventory/production-floor', permission: 'inventory.view', component: ProductionFloorStock, skeleton: 'dashboard' },
   { path: '/inventory/production-approvals', permission: 'inventory.view', component: ProductionInventoryApprovals, skeleton: 'dashboard' },
   { path: '/inventory/production-consumption-analysis', permission: 'inventory.view', component: ProductionConsumptionAnalysis, skeleton: 'dashboard' },
   { path: '/inventory/production-component-records', permission: 'inventory.view', component: ProductionComponentRecords, skeleton: 'dashboard' },

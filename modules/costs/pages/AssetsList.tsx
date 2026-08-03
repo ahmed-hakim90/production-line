@@ -409,6 +409,7 @@ export const AssetsList: React.FC = () => {
 
       <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
         <SmartFilterBar
+      pageId="assets-list"
           searchPlaceholder="بحث بالاسم أو الكود"
           searchValue={search}
           onSearchChange={setSearch}

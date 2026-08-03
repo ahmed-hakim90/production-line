@@ -1012,6 +1012,7 @@ export const Employees: React.FC = () => {
       {/* 4. SmartFilterBar + Table in one card */}
       <Card className="p-0">
         <SmartFilterBar
+      pageId="hr-employees"
           searchPlaceholder="بحث باسم / رمز / خط إنتاج / مدير"
           searchValue={search}
           onSearchChange={setSearch}

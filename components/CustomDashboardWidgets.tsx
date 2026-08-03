@@ -1,16 +1,18 @@
 import React, { useMemo } from 'react';
-import type { NavigateFunction } from 'react-router-dom';
-import { useNavigate } from 'react-router-dom';
+import type { NavigateOptions } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Card, Badge } from './UI';
 import { usePermission } from '@/utils/permissions';
 import type { SystemSettings, CustomWidgetConfig } from '@/types';
 import { getCustomWidgets, getWidgetOrder } from '@/utils/dashboardConfig';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
 
 interface CustomDashboardWidgetsProps {
   dashboardKey: string;
   systemSettings: SystemSettings | null;
 }
+
+type WidgetNavigate = (to: string, options?: NavigateOptions) => void;
 
 export function canRenderCustomWidget(
   widget: CustomWidgetConfig,
@@ -22,7 +24,7 @@ export function canRenderCustomWidget(
 
 export const CustomDashboardWidgetItem: React.FC<{
   widget: CustomWidgetConfig;
-  navigate: NavigateFunction;
+  navigate: WidgetNavigate;
 }> = ({ widget, navigate }) => {
   const { t } = useTranslation();
   if (widget.type === 'quick_link') {
@@ -90,7 +92,7 @@ export const CustomDashboardWidgets: React.FC<CustomDashboardWidgetsProps> = ({
   dashboardKey,
   systemSettings,
 }) => {
-  const navigate = useNavigate();
+  const navigate = useTenantNavigate();
   const { can } = usePermission();
 
   const orderedWidgets = useMemo(() => {
@@ -117,4 +119,3 @@ export const CustomDashboardWidgets: React.FC<CustomDashboardWidgetsProps> = ({
     </div>
   );
 };
-

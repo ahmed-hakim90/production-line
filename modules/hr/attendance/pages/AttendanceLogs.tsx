@@ -184,6 +184,7 @@ export const AttendanceLogs: React.FC = () => {
 
       <div className="card p-0">
         <SmartFilterBar
+      pageId="attendance-logs"
           periods={[
             { label: 'اليوم', value: 'today' },
             { label: 'آخر 7 أيام', value: 'week' },

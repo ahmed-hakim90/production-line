@@ -12,8 +12,6 @@ import {
   ArrowRight,
   ArrowUp,
   Check,
-  ChevronsLeft,
-  ChevronsRight,
   ChevronsUpDown,
   CheckSquare,
   Download,
@@ -515,17 +513,6 @@ export function DataTable<T>({
           <div className="flex flex-wrap items-center gap-1.5">
             <Button
               type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setCurrentPage(1)}
-              disabled={currentPage === 1}
-              className="h-7 w-7 p-1 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] disabled:opacity-30"
-              title="الأولى"
-            >
-              <ChevronsRight size={14} />
-            </Button>
-            <Button
-              type="button"
               variant="outline"
               size="sm"
               onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
@@ -569,17 +556,6 @@ export function DataTable<T>({
               className="h-7 px-2.5 text-[12px] font-medium hover:bg-[#f0f2f5] disabled:opacity-30"
             >
               التالي
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              onClick={() => setCurrentPage(totalPages)}
-              disabled={currentPage === totalPages}
-              className="h-7 w-7 p-1 text-[var(--color-text-muted)] hover:bg-[#f0f2f5] disabled:opacity-30"
-              title="الأخيرة"
-            >
-              <ChevronsLeft size={14} />
             </Button>
           </div>
         </div>

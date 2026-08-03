@@ -496,6 +496,14 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         path: `/inventory/movements?action=import-in-by-code&itemType=raw_material&warehouseId=${wh}`,
         permission: 'inventory.transactions.create',
       },
+      {
+        key: 'department-consumables',
+        label: 'مستهلكات الأقسام',
+        description: 'صرف نهائي للأقسام وتقرير شهري',
+        icon: 'shopping_bag',
+        path: '/inventory/department-consumables',
+        permission: 'departmentConsumables.view',
+      },
     ];
   }, [warehouseId]);
 
@@ -728,6 +736,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             )}
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 pb-3">
               <SmartFilterBar
+      pageId="raw-material-warehouse-control"
                 searchValue={assemblableSearch}
                 onSearchChange={setAssemblableSearch}
                 searchPlaceholder="بحث بالمنتج أو كود المكوّن…"

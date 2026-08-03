@@ -13,6 +13,8 @@ export type CostBehavior = 'direct' | 'indirect';
 export interface MaterialCategory {
   id?: string;
   tenantId?: string;
+  /** Short stable prefix used for category-scoped material codes, e.g. INJ. */
+  code?: string;
   name: string;
   parentId?: string | null;
   path?: string[];
@@ -166,4 +168,20 @@ export function materialPurchaseCostPerBaseUnit(material: Pick<Material, 'purcha
   const rate = Number(material.conversionRate ?? 0);
   if (rate > 0) return cost / rate;
   return cost;
+}
+
+export function isWeightMaterialUnit(unit?: string): unit is 'kg' | 'gram' {
+  return unit === 'kg' || unit === 'gram';
+}
+
+/** Converts operator-friendly weight-per-piece into base pieces per purchase unit. */
+export function conversionRateFromWeightPerPiece(weightPerPiece: number): number {
+  const weight = Number(weightPerPiece);
+  return weight > 0 ? 1 / weight : 0;
+}
+
+/** Converts stored base pieces per purchase unit into operator-friendly weight-per-piece. */
+export function weightPerPieceFromConversionRate(conversionRate?: number): number {
+  const rate = Number(conversionRate ?? 0);
+  return rate > 0 ? 1 / rate : 0;
 }

@@ -4,6 +4,7 @@ import { materialService } from '../services/materialService';
 import { calculateBomItemUnitCost } from '../engines/materialCostEngine';
 import type { BomItem, BomOwnerType } from '../types';
 import { manufacturingQueryKeys } from './useMaterials';
+import { BOM_UPSERT_PATHS } from '../../system/lib/operationPathSettings';
 
 export type BomDisplayRow = BomItem & {
   directCost: number;
@@ -62,24 +63,25 @@ export function useBomItemMutations(ownerType: BomOwnerType, ownerId: string) {
     }
   };
 
-  const ensureBom = async () => bomService.ensureActiveBom(ownerType, ownerId);
+  const operationContext = { path: BOM_UPSERT_PATHS.productBomSection } as const;
+  const ensureBom = async () => bomService.ensureActiveBom(ownerType, ownerId, operationContext);
 
   const addItem = useMutation({
     mutationFn: async (item: Omit<BomItem, 'id' | 'tenantId' | 'bomId'>) => {
       const bomId = await ensureBom();
-      return bomService.addItem(bomId, item);
+      return bomService.addItem(bomId, item, operationContext);
     },
     onSuccess: invalidate,
   });
 
   const updateItem = useMutation({
     mutationFn: ({ itemId, data }: { itemId: string; data: Partial<BomItem> }) =>
-      bomService.updateItem(itemId, data),
+      bomService.updateItem(itemId, data, operationContext),
     onSuccess: invalidate,
   });
 
   const deleteItem = useMutation({
-    mutationFn: (itemId: string) => bomService.deleteItem(itemId),
+    mutationFn: (itemId: string) => bomService.deleteItem(itemId, operationContext),
     onSuccess: invalidate,
   });
 

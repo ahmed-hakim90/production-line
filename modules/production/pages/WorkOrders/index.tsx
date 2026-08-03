@@ -17,7 +17,6 @@ import { usePermission } from '../../../../utils/permissions';
 import { reportService } from '../../services/reportService';
 import {
   reopenCompletedWorkOrder,
-  updateWorkOrderStatus,
 } from '../../usecases/updateWorkOrderStatus';
 import { unwrapOrThrow } from '@/shared/usecases';
 import { sumQuantityProducedForWorkOrderExcludingPackaging } from '../../utils/packagingLine';
@@ -32,6 +31,14 @@ import { useWorkOrderStore } from './store/workOrderStore';
 import type { WorkOrderRowView } from './WorkOrderRow';
 import styles from './WorkOrders.module.css';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import {
+  PRODUCTION_REPORT_OPERATION_KEYS,
+  PRODUCTION_REPORT_RECONCILE_PATHS,
+  WORK_ORDER_CREATE_PATHS,
+  WORK_ORDER_OPERATION_KEYS,
+  WORK_ORDER_UPDATE_PATHS,
+  isOperationPathEnabled,
+} from '@/modules/system/lib/operationPathSettings';
 
 const dayDiff = (value: string): number => {
   const target = new Date(value);
@@ -84,9 +91,16 @@ export const WorkOrders: React.FC = () => {
     costCenterValues: s.costCenterValues,
     costAllocations: s.costAllocations,
   }));
+  const systemSettings = useAppStore((s) => s.systemSettings);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const deleteWorkOrder = useAppStore((s) => s.deleteWorkOrder);
+  const updateWorkOrder = useAppStore((s) => s.updateWorkOrder);
   const reconcileWorkOrderFromReports = useAppStore((s) => s.reconcileWorkOrderFromReports);
+  const workOrderReconcileEnabled = isOperationPathEnabled(
+    systemSettings,
+    PRODUCTION_REPORT_OPERATION_KEYS.reconcile,
+    PRODUCTION_REPORT_RECONCILE_PATHS.workOrdersPage,
+  );
 
   const loggedInSupervisor = useMemo(() => {
     if (currentEmployee?.id) return currentEmployee;
@@ -121,12 +135,37 @@ export const WorkOrders: React.FC = () => {
   const [printData, setPrintData] = useState<WorkOrderPrintData | null>(null);
   const woPrintRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: woPrintRef, printSettings: printTemplate });
-  const canCreateWorkOrder = can('workOrders.create') || can('workOrders.componentInjection.manage');
+  const canCreateWorkOrderPermission = can('workOrders.create') || can('workOrders.componentInjection.manage');
+  const canCreateWorkOrder = canCreateWorkOrderPermission && isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.create,
+    WORK_ORDER_CREATE_PATHS.workOrdersPage,
+  );
+  const canCreateWorkOrderFromPlan = canCreateWorkOrderPermission && isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.create,
+    WORK_ORDER_CREATE_PATHS.productionPlan,
+  );
+  const canUpdateWorkOrderStatus = can('workOrders.edit') && isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.update,
+    WORK_ORDER_UPDATE_PATHS.workOrdersPageStatus,
+  );
+  const canEditWorkOrderInModal = can('workOrders.edit') && isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.update,
+    WORK_ORDER_UPDATE_PATHS.workOrderModal,
+  );
+  const canUseWorkOrderScanner = can('workOrders.edit') && isOperationPathEnabled(
+    systemSettings,
+    WORK_ORDER_OPERATION_KEYS.update,
+    WORK_ORDER_UPDATE_PATHS.scanner,
+  );
   const canDeleteWorkOrder = can('workOrders.delete');
   const openedCreateFromParamsRef = useRef(false);
 
   useEffect(() => {
-    if (!canCreateWorkOrder || openedCreateFromParamsRef.current) return;
+    if (!canCreateWorkOrderFromPlan || openedCreateFromParamsRef.current) return;
     const planId = searchParams.get('planId')?.trim() || '';
     const productId = searchParams.get('productId')?.trim() || '';
     if (!planId && !productId) return;
@@ -142,7 +181,7 @@ export const WorkOrders: React.FC = () => {
       next.delete('productId');
       return next;
     }, { replace: true });
-  }, [canCreateWorkOrder, openModal, searchParams, setSearchParams]);
+  }, [canCreateWorkOrderFromPlan, openModal, searchParams, setSearchParams]);
 
   useEffect(() => {
     setOrders(liveOrders);
@@ -410,11 +449,19 @@ export const WorkOrders: React.FC = () => {
     setSyncingStatus(id);
 
     try {
-      unwrapOrThrow(await updateWorkOrderStatus({
-        workOrderId: id,
-        toStatus: status,
-        fromStatus: previous,
-      }));
+      await updateWorkOrder(
+        id,
+        {
+          status,
+          ...(status === 'completed'
+            ? {
+                completedAt: new Date().toISOString(),
+                actualWorkHours: orderMap[id]?.actualWorkHours,
+              }
+            : {}),
+        },
+        { path: WORK_ORDER_UPDATE_PATHS.workOrdersPageStatus },
+      );
       toast.success('تم تحديث الحالة');
     } catch (updateError) {
       updateOrder(id, { status: previous });
@@ -453,7 +500,9 @@ export const WorkOrders: React.FC = () => {
 
     setReconcilingOrderId(order.id);
     try {
-      const result = await reconcileWorkOrderFromReports(order.id);
+      const result = await reconcileWorkOrderFromReports(order.id, {
+        path: PRODUCTION_REPORT_RECONCILE_PATHS.workOrdersPage,
+      });
       setReportMetaByOrderId((prev) => ({
         ...prev,
         [order.id!]: {
@@ -704,12 +753,12 @@ export const WorkOrders: React.FC = () => {
         loadingMore={loadingMore}
         hasMore={hasMore}
         onRowClick={(order) => setSelectedOrder(order.id || null)}
-        onStatusChange={handleStatusChange}
-        onEdit={handleEditOrder}
-        onCloseOrder={(order) => void handleCloseOrder(order)}
+        onStatusChange={canUpdateWorkOrderStatus ? handleStatusChange : undefined}
+        onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
+        onCloseOrder={canUpdateWorkOrderStatus ? (order) => void handleCloseOrder(order) : undefined}
         onDelete={canDeleteWorkOrder ? (order) => void handleDeleteOrder(order) : undefined}
         onReopenCompleted={can('workOrders.edit') ? handleReopenCompletedOrder : undefined}
-        onOpenScanner={handleOpenScanner}
+        onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
         onLoadMore={() => void loadMore()}
       />
 
@@ -721,14 +770,14 @@ export const WorkOrders: React.FC = () => {
         lineName={selectedLineName}
         supervisorName={selectedSupervisorName}
         onClose={() => setSelectedOrder(null)}
-        onEdit={handleEditOrder}
-        onCloseOrder={handleCloseOrder}
+        onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
+        onCloseOrder={canUpdateWorkOrderStatus ? handleCloseOrder : undefined}
         onPrint={handlePrintOrder}
-        onOpenScanner={handleOpenScanner}
+        onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
         canReopenCompleted={can('workOrders.edit')}
         onReopenCompleted={handleReopenCompletedOrder}
         onViewReports={can('reports.view') || can('reports.create') ? handleViewLinkedReports : undefined}
-        onReconcileReports={can('workOrders.edit') || can('reports.edit') ? handleReconcileLinkedReports : undefined}
+        onReconcileReports={workOrderReconcileEnabled && (can('workOrders.edit') || can('reports.edit')) ? handleReconcileLinkedReports : undefined}
         reconcilingReports={Boolean(selectedOrder?.id && reconcilingOrderId === selectedOrder.id)}
       />
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
