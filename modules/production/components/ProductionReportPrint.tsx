@@ -44,6 +44,8 @@ export interface ReportPrintRow {
   notes?: string;
   costPerUnit?: number;
   workOrderNumber?: string;
+  /** Finished/injection: pieces per carton from product card (for share cartons KPI). */
+  unitsPerCarton?: number;
   /** Filled only for WhatsApp/image share — omitted for print/PDF. */
   shareStandardVariance?: {
     headline: string;
@@ -162,6 +164,9 @@ export const mapReportsToPrintRows = (
       notes: r.notes,
       costPerUnit: r.id && costMap ? costMap.get(r.id) : undefined,
       workOrderNumber: wo?.workOrderNumber,
+      unitsPerCarton: r.productId && lookups.getUnitsPerCarton
+        ? lookups.getUnitsPerCarton(r.productId)
+        : undefined,
       packagingPrintLines: buildPackagingPrintLinesFromReport(r, lookups),
     };
   });
@@ -231,6 +236,39 @@ export function formatPackagingLineDisplay(quantityPieces: number, unitsPerCarto
   if (rem > 0) parts.push(`${rem.toLocaleString('ar-EG')} قطعة متبقية`);
   if (parts.length === 0) return `${q.toLocaleString('ar-EG')} قطعة`;
   return parts.join(' و ');
+}
+
+/**
+ * Carton equivalent for share caption/KPI when units/carton is known.
+ * Packaging multi-line: sum of (pieces ÷ upc) for lines that have upc.
+ */
+export function resolveReportCartonsCount(report: ReportPrintRow): number | null {
+  if (report.sourceReportType === 'packaging' && report.packagingPrintLines && report.packagingPrintLines.length > 0) {
+    let sum = 0;
+    let hasUpc = false;
+    for (const line of report.packagingPrintLines) {
+      const u = Number(line.unitsPerCarton || 0);
+      if (u <= 0) continue;
+      hasUpc = true;
+      sum += Number(line.quantityPieces || 0) / u;
+    }
+    if (!hasUpc) return null;
+    return Number(sum.toFixed(2));
+  }
+  const u = Number(report.unitsPerCarton || 0);
+  if (u <= 0) return null;
+  const pieces = Number(report.quantityProduced || 0);
+  if (!Number.isFinite(pieces)) return null;
+  return Number((pieces / u).toFixed(2));
+}
+
+export function formatReportCartonsCount(cartons: number): string {
+  const n = Number(cartons);
+  if (!Number.isFinite(n)) return '—';
+  return n.toLocaleString('ar-EG', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: Number.isInteger(n) ? 0 : 2,
+  });
 }
 
 function formatReportNumber(reportId?: string): string {

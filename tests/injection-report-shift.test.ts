@@ -93,4 +93,35 @@ assert.match(
   /الوردية: مسائي/,
 );
 
+assert.match(
+  formatProductionReportShareCaption({
+    sourceReportType: 'finished_product',
+    date: '2026-06-15',
+    lineName: 'خط 1',
+    productName: 'منتج تام',
+    employeeName: 'مشرف',
+    quantityProduced: 1200,
+    unitsPerCarton: 24,
+    wasteQuantity: 0,
+    workersCount: 4,
+    workHours: 8,
+  } satisfies ReportPrintRow),
+  /الكراتين: ٥٠/,
+);
+
+assert.doesNotMatch(
+  formatProductionReportShareCaption({
+    sourceReportType: 'finished_product',
+    date: '2026-06-15',
+    lineName: 'خط 1',
+    productName: 'منتج تام',
+    employeeName: 'مشرف',
+    quantityProduced: 1200,
+    wasteQuantity: 0,
+    workersCount: 4,
+    workHours: 8,
+  } satisfies ReportPrintRow),
+  /الكراتين:/,
+);
+
 console.log('injection-report-shift.test.ts: ok');

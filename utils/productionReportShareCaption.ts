@@ -1,9 +1,13 @@
 /**
  * Plain-text captions for Web Share (WhatsApp image caption).
- * Minimal lines: product, quantity, date (single report); short summary for bulk.
+ * Minimal lines: product, quantity, cartons (when known), date (single report); short summary for bulk.
  */
 import type { PrintTemplateSettings } from '../types';
-import type { ReportPrintRow } from '../modules/production/components/ProductionReportPrint';
+import {
+  formatReportCartonsCount,
+  resolveReportCartonsCount,
+  type ReportPrintRow,
+} from '../modules/production/components/ProductionReportPrint';
 import { getInjectionShiftLabel } from '../modules/production/utils/injectionReportShift';
 
 function packagingQuantityAndLabel(report: ReportPrintRow): { qty: number; unit: string } {
@@ -34,7 +38,7 @@ function productLabelForCaption(report: ReportPrintRow): string {
 }
 
 /**
- * Three lines: product name, quantity, date.
+ * Lines: product, quantity, cartons (when upc known), optional shift, date.
  */
 export function formatProductionReportShareCaption(
   report: ReportPrintRow,
@@ -43,12 +47,17 @@ export function formatProductionReportShareCaption(
   const { qty, unit } = packagingQuantityAndLabel(report);
   const qtyText = Number.isFinite(qty) ? qty.toLocaleString('ar-EG') : String(qty);
   const date = report.date?.trim() || '—';
+  const cartons = resolveReportCartonsCount(report);
+  const cartonsLine = cartons != null
+    ? [`الكراتين: ${formatReportCartonsCount(cartons)}`]
+    : [];
   const shiftLine = report.sourceReportType === 'component_injection'
     ? [`الوردية: ${getInjectionShiftLabel(report.shift)}`]
     : [];
   return [
     `المنتج: ${productLabelForCaption(report)}`,
     `الكمية: ${qtyText} ${unit}`,
+    ...cartonsLine,
     ...shiftLine,
     `التاريخ: ${date}`,
   ].join('\n');

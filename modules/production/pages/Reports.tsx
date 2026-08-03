@@ -1878,6 +1878,7 @@ export const Reports: React.FC = () => {
         notes: report.notes,
         costPerUnit: rid && canViewCosts ? reportCosts.get(rid) : undefined,
         workOrderNumber: wo?.workOrderNumber,
+        unitsPerCarton: report.productId ? getUnitsPerCarton(report.productId) : undefined,
         packagingPrintLines: buildPackagingPrintLinesFromReport(asSaved, { getProductName, getUnitsPerCarton }),
       };
     },

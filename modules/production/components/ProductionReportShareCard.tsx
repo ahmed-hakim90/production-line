@@ -2,6 +2,8 @@ import type { CSSProperties } from 'react';
 import type { PrintTemplateSettings } from '../../../types';
 import {
   formatPackagingLineDisplay,
+  formatReportCartonsCount,
+  resolveReportCartonsCount,
   totalWorkersForPrintRow,
   type ReportPrintRow,
 } from './ProductionReportPrint';
@@ -96,6 +98,7 @@ export function ProductionReportShareCard({
   const companyName = 'Sokany-eg';
   const reportNumber = reportNumberOf(report);
   const produced = producedQuantity(report);
+  const cartons = resolveReportCartonsCount(report);
   const workerCount = totalWorkersForPrintRow(report);
   const costValue =
     report.costPerUnit != null && report.costPerUnit > 0
@@ -108,6 +111,14 @@ export function ProductionReportShareCard({
     report.sourceReportType === 'packaging' && packagingLines.length > 1
       ? 'المنتجات وأمر الشغل'
       : 'المنتج وأمر الشغل';
+  const kpiItems: Array<[string, string, string]> = [
+    [quantityLabel(report), `${formatNumber(produced)} وحدة`, accent],
+    ...(cartons != null
+      ? [['عدد الكراتين', formatReportCartonsCount(cartons), '#4f46e5'] as [string, string, string]]
+      : []),
+    ['العمال', formatNumber(workerCount), '#0ea5e9'],
+    ['تكلفة الوحدة', costValue, '#059669'],
+  ];
 
   return (
     <div
@@ -215,12 +226,16 @@ export function ProductionReportShareCard({
         ))}
       </section>
 
-      <section style={{ ...baseText, display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 18, marginTop: 24 }}>
-        {[
-          [quantityLabel(report), `${formatNumber(produced)} وحدة`, accent],
-          ['العمال', formatNumber(workerCount), '#0ea5e9'],
-          ['تكلفة الوحدة', costValue, '#059669'],
-        ].map(([label, value, color]) => (
+      <section
+        style={{
+          ...baseText,
+          display: 'grid',
+          gridTemplateColumns: `repeat(${kpiItems.length}, 1fr)`,
+          gap: 18,
+          marginTop: 24,
+        }}
+      >
+        {kpiItems.map(([label, value, color]) => (
           <div
             key={String(label)}
             style={{

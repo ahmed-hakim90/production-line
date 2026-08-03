@@ -68,8 +68,11 @@ const applyRtlFontClone = (clonedDoc: Document) => {
     .print-report .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
     .print-report .grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)) !important; }
     .print-report .grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)) !important; }
+    .print-report .grid-cols-\\[1fr_auto_1fr\\] { grid-template-columns: 1fr auto 1fr !important; }
     .print-report .gap-2 { gap: 0.5rem !important; }
+    .print-report .gap-4 { gap: 1rem !important; }
     .print-report .flex { display: flex !important; }
+    .print-report .min-h-\\[72px\\] { min-height: 72px !important; }
     .print-report .rounded-lg { border-radius: 0.5rem !important; }
     .print-report .rounded-md { border-radius: 0.375rem !important; }
     .print-report .border { border-width: 1px !important; border-style: solid !important; }
@@ -162,55 +165,86 @@ const measureExportElement = (node: HTMLElement) => {
 
 const stablePixelWidth = (value: number) => `${Math.ceil(Math.max(1, value))}px`;
 
-const prepareStableCaptureTarget = async (
+const LIVE_CAPTURE_PROPS = [
+  'position',
+  'left',
+  'top',
+  'width',
+  'min-width',
+  'max-width',
+  'z-index',
+  'visibility',
+  'opacity',
+  'margin',
+  'transform',
+  'box-sizing',
+  'pointer-events',
+] as const;
+
+type StyleSnapshot = Map<string, string>;
+
+const snapshotInlineStyles = (node: HTMLElement, props: readonly string[]): StyleSnapshot => {
+  const saved: StyleSnapshot = new Map();
+  for (const prop of props) {
+    saved.set(prop, node.style.getPropertyValue(prop));
+  }
+  return saved;
+};
+
+const restoreInlineStyles = (node: HTMLElement, saved: StyleSnapshot) => {
+  for (const [prop, prev] of saved) {
+    if (prev) node.style.setProperty(prop, prev);
+    else node.style.removeProperty(prop);
+  }
+};
+
+/**
+ * Pins the live DOM node at the capture width so html2canvas keeps Tailwind
+ * computed layout. cloneNode() drops that layout and Arabic text collapses/overlaps.
+ */
+const prepareLiveCaptureViewport = async (
   source: HTMLElement,
   targetWidth: number,
-): Promise<{ target: HTMLElement; heightTarget: HTMLElement; cleanup: () => void }> => {
-  const clone = source.cloneNode(true) as HTMLElement;
-  const host = document.createElement('div');
+): Promise<{ cleanup: () => void }> => {
+  const sourceSaved = snapshotInlineStyles(source, LIVE_CAPTURE_PROPS);
 
-  host.setAttribute('aria-hidden', 'true');
-  host.style.position = 'absolute';
-  host.style.left = '0';
-  host.style.top = '0';
-  host.style.zIndex = '0';
-  host.style.pointerEvents = 'none';
-  host.style.overflow = 'visible';
-  host.style.width = stablePixelWidth(targetWidth);
-  host.style.maxWidth = 'none';
-  host.style.minWidth = stablePixelWidth(targetWidth);
-  host.style.background = '#fff';
-  host.style.direction = 'ltr';
-  host.style.display = 'block';
-  host.style.boxSizing = 'border-box';
-  host.style.visibility = 'visible';
-  host.style.opacity = '1';
+  /** Hidden off-screen parents (opacity:0 / visibility) would still hide a fixed child. */
+  const ancestorFixes: Array<{ node: HTMLElement; saved: StyleSnapshot }> = [];
+  let ancestor: HTMLElement | null = source.parentElement;
+  while (ancestor && ancestor !== document.body && ancestor !== document.documentElement) {
+    const cs = getComputedStyle(ancestor);
+    if (cs.opacity !== '1' || cs.visibility === 'hidden') {
+      const saved = snapshotInlineStyles(ancestor, ['opacity', 'visibility']);
+      ancestor.style.setProperty('opacity', '1');
+      ancestor.style.setProperty('visibility', 'visible');
+      ancestorFixes.push({ node: ancestor, saved });
+    }
+    ancestor = ancestor.parentElement;
+  }
 
-  clone.style.display = 'block';
-  clone.style.margin = '0';
-  clone.style.width = stablePixelWidth(targetWidth);
-  clone.style.minWidth = stablePixelWidth(targetWidth);
-  clone.style.maxWidth = stablePixelWidth(targetWidth);
-  clone.style.boxSizing = 'border-box';
-  clone.style.overflow = 'visible';
-  clone.style.transform = 'none';
-  clone.style.direction = 'rtl';
-  clone.style.visibility = 'visible';
-  clone.style.opacity = '1';
-  clone.setAttribute('dir', 'rtl');
-  clone.setAttribute('lang', 'ar');
+  source.style.setProperty('position', 'fixed');
+  source.style.setProperty('left', '0');
+  source.style.setProperty('top', '0');
+  source.style.setProperty('z-index', '2147483647');
+  source.style.setProperty('width', stablePixelWidth(targetWidth));
+  source.style.setProperty('min-width', stablePixelWidth(targetWidth));
+  source.style.setProperty('max-width', stablePixelWidth(targetWidth));
+  source.style.setProperty('margin', '0');
+  source.style.setProperty('transform', 'none');
+  source.style.setProperty('visibility', 'visible');
+  source.style.setProperty('opacity', '1');
+  source.style.setProperty('box-sizing', 'border-box');
+  source.style.setProperty('pointer-events', 'none');
 
-  host.appendChild(clone);
-  document.body.appendChild(host);
-
-  await waitForImagesInElement(clone);
-  await waitForExportPaint();
+  await waitForImagesInElement(source);
+  await waitForExportPaint(50);
 
   return {
-    target: clone,
-    heightTarget: clone,
     cleanup: () => {
-      host.remove();
+      restoreInlineStyles(source, sourceSaved);
+      for (const { node, saved } of ancestorFixes) {
+        restoreInlineStyles(node, saved);
+      }
     },
   };
 };
@@ -301,21 +335,24 @@ const capture = async (el: HTMLElement, options?: CaptureOptions) => {
       : {}),
   };
 
-  const stableCapture = await prepareStableCaptureTarget(captureRoot, captureW);
-  const { height: stableH } = measureExportElement(stableCapture.heightTarget);
-  const winH = windowHeight ?? Math.max(measuredH, stableH);
+  /**
+   * Prefer live-node capture for Factory report cards. cloneNode() loses Tailwind
+   * grid/flex computed layout and html2canvas then paints overlapping Arabic text
+   * (looks like “two images” / بيانات داخلة في بعض).
+   */
+  const live = await prepareLiveCaptureViewport(captureRoot, captureW);
+  const { height: liveH } = measureExportElement(captureRoot);
+  const winH = windowHeight ?? Math.max(measuredH, liveH);
 
   try {
-    return await html2canvas(stableCapture.target, {
+    return await html2canvas(captureRoot, {
       ...canvasOptions,
-      x: 0,
-      y: 0,
       width: captureW,
-      height: stableH,
+      height: liveH,
       windowHeight: winH,
     });
   } finally {
-    stableCapture.cleanup();
+    live.cleanup();
   }
 };
 

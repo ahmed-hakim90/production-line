@@ -1320,6 +1320,9 @@ export const QuickAction: React.FC = () => {
         absentAssignments: data.absentAssignments,
         workHours: data.workHours,
         notes: data.notes,
+        unitsPerCarton: reportType === 'packaging'
+          ? getUnitsPerCarton(validPackagingLines[0].productId)
+          : getUnitsPerCarton(productId),
         packagingPrintLines,
       };
       setPrintReport(row);
@@ -1431,6 +1434,7 @@ export const QuickAction: React.FC = () => {
     });
     const rowForShare: ReportPrintRow = {
       ...printReport,
+      unitsPerCarton: printReport.unitsPerCarton ?? getUnitsPerCarton(productId),
       ...(printReport.sourceReportType === 'packaging' ? { packagingShareImage: true } : {}),
       ...(!packagingShareMulti
         ? { shareStandardVariance: buildShareStandardVarianceBanner(variance) }
