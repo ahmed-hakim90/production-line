@@ -95,7 +95,7 @@ import {
   sumWorkersCountPatch,
 } from '../utils/lineAssignmentWorkersCount';
 import { getPresenceLabel, summarizeWorkerPresenceDays, summarizeWorkerPresenceRows } from '../utils/workerPresence';
-import { reportService, type FirestoreCursor } from '@/modules/production/services/reportService';
+import { reportService, type FirestoreCursor, REPORT_LIST_MAX_PAGES } from '@/modules/production/services/reportService';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
 import {
   DAILY_WORKER_ASSIGNMENT_PATHS,
@@ -145,6 +145,10 @@ import { resolveReportBehaviorSettings } from '../lib/reportBehaviorSettings';
 import { countsTowardFinishedGoodsProduction, effectivePackagingPieces, isPackagingLineId, isPackagingThroughputReport } from '../utils/packagingLine';
 import { effectivePlanReportType, resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
 import {
+  getDateRangeForCalendarMonth,
+  getMonthInputValueFromDate,
+} from '../utils/factoryGeneralMonthlyRange';
+import {
   buildProductionReportShareRow,
   getProductionReportShareKey,
   shareProductionReportCardToWhatsApp,
@@ -174,6 +178,13 @@ import { showAppToast } from '@/src/shared/ui/feedback/appToast';
 
 type ReportKindFilter = 'production' | 'packaging' | 'injection' | 'all';
 
+const REPORT_KIND_FILTER_OPTIONS: { value: ReportKindFilter; label: string }[] = [
+  { value: 'all', label: 'الكل' },
+  { value: 'production', label: 'إنتاج' },
+  { value: 'packaging', label: 'تغليف' },
+  { value: 'injection', label: 'حقن' },
+];
+
 function matchesReportKindFilter(
   report: ProductionReport,
   kind: ReportKindFilter,
@@ -183,6 +194,10 @@ function matchesReportKindFilter(
   if (kind === 'packaging') return isPackagingThroughputReport(report, lines);
   if (kind === 'injection') return resolveReportType(report.reportType) === 'component_injection';
   return countsTowardFinishedGoodsProduction(report, lines);
+}
+
+function reportKindFilterLabel(kind: ReportKindFilter): string {
+  return REPORT_KIND_FILTER_OPTIONS.find((option) => option.value === kind)?.label ?? 'الكل';
 }
 
 const newEmptyPackagingLine = (): PackagingReportLine => ({
@@ -519,30 +534,6 @@ const addDaysToDateInputValue = (dateValue: string, days: number): string => {
 
 const getPreviousOperationalDateString = (startHour = 8): string =>
   addDaysToDateInputValue(getOperationalDateString(startHour), -1);
-
-const getMonthInputValueFromDate = (d: Date): string => {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  return `${y}-${m}`;
-};
-
-/** First/last day in range for a calendar month (YYYY-MM); null if invalid or month is entirely in the future. */
-const getDateRangeForCalendarMonth = (ym: string): { startStr: string; endStr: string } | null => {
-  const m = /^(\d{4})-(\d{2})$/.exec(String(ym || '').trim());
-  if (!m) return null;
-  const year = Number(m[1]);
-  const monthNum = Number(m[2]);
-  if (monthNum < 1 || monthNum > 12) return null;
-  const monthIndex = monthNum - 1;
-  const start = new Date(year, monthIndex, 1);
-  const startStr = toDateInputValue(start);
-  const todayStr = toDateInputValue(new Date());
-  if (startStr > todayStr) return null;
-  const lastDayOfMonth = new Date(year, monthIndex + 1, 0);
-  const lastStr = toDateInputValue(lastDayOfMonth);
-  const endStr = lastStr < todayStr ? lastStr : todayStr;
-  return { startStr, endStr };
-};
 
 export const Reports: React.FC = () => {
   const { dir } = useAppDirection();
@@ -902,6 +893,7 @@ export const Reports: React.FC = () => {
   const [generalMonthlyPickerValue, setGeneralMonthlyPickerValue] = useState(() =>
     getMonthInputValueFromDate(new Date()),
   );
+  const [generalMonthlyReportKind, setGeneralMonthlyReportKind] = useState<ReportKindFilter>('all');
   const [factorySearch, setFactorySearch] = useState('');
   const [factorySortKey, setFactorySortKey] = useState<FactoryGeneralSortKey>('totalProducedQty');
   const [factorySortDirection, setFactorySortDirection] = useState<'asc' | 'desc'>('desc');
@@ -1152,6 +1144,59 @@ export const Reports: React.FC = () => {
     [rangeCursor, filterLineId, filterEmployeeId, myEmployeeId],
   );
 
+  /** Load every page for a date range so general/monthly summaries are complete. */
+  const loadFullRangeReports = useCallback(
+    async (
+      from: string,
+      to: string,
+      options?: { lineId?: string; employeeId?: string },
+    ) => {
+      setRangeLoading(true);
+      setRangeError(null);
+      try {
+        const lineIdForQuery = options?.lineId !== undefined
+          ? (options.lineId.trim() || undefined)
+          : (filterLineId.trim() || undefined);
+        const employeeIdForQuery = myEmployeeId ?? (
+          options?.employeeId !== undefined
+            ? (options.employeeId.trim() || undefined)
+            : (filterEmployeeId.trim() || undefined)
+        );
+
+        const all: ProductionReport[] = [];
+        let cursor: FirestoreCursor = null;
+        let hasMore = true;
+        for (let page = 0; page < REPORT_LIST_MAX_PAGES && hasMore; page += 1) {
+          const result = await reportService.listByDateRangePaged({
+            startDate: from,
+            endDate: to,
+            limit: 500,
+            cursor,
+            lineId: lineIdForQuery,
+            employeeId: employeeIdForQuery,
+          });
+          all.push(...result.items);
+          hasMore = Boolean(result.hasMore && result.nextCursor);
+          cursor = result.nextCursor;
+          if (!hasMore) break;
+        }
+
+        useAppStore.setState({ productionReports: all });
+        setRangeCursor(hasMore ? cursor : null);
+        setRangeHasMore(hasMore);
+        if (hasMore) {
+          setRangeError('تم تحميل جزء من التقارير فقط. استخدم «تحميل المزيد» لإكمال الباقي.');
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
+        setRangeError(message);
+      } finally {
+        setRangeLoading(false);
+      }
+    },
+    [filterLineId, filterEmployeeId, myEmployeeId],
+  );
+
   const fetchReports = useCallback(
     async (from: string, to: string) => {
       await loadRangeReports(from, to, false);
@@ -1160,15 +1205,28 @@ export const Reports: React.FC = () => {
   );
 
   const reportsFilterEffectPrimed = useRef(false);
+  const skipNextRangeFilterEffectRef = useRef(false);
   const loadRangeReportsRef = useRef(loadRangeReports);
   loadRangeReportsRef.current = loadRangeReports;
+  const loadFullRangeReportsRef = useRef(loadFullRangeReports);
+  loadFullRangeReportsRef.current = loadFullRangeReports;
   useEffect(() => {
     if (viewMode !== 'range' && viewMode !== 'general') {
       reportsFilterEffectPrimed.current = false;
       return;
     }
+    if (skipNextRangeFilterEffectRef.current) {
+      skipNextRangeFilterEffectRef.current = false;
+      reportsFilterEffectPrimed.current = true;
+      return;
+    }
     if (!reportsFilterEffectPrimed.current) {
       reportsFilterEffectPrimed.current = true;
+      return;
+    }
+    // General monthly preview needs the full period, not the first page only.
+    if (viewMode === 'general') {
+      void loadFullRangeReportsRef.current(startDate, endDate);
       return;
     }
     void loadRangeReportsRef.current(startDate, endDate, false);
@@ -2000,29 +2058,44 @@ export const Reports: React.FC = () => {
         ? startDate.slice(0, 7)
         : getMonthInputValueFromDate(new Date());
     setGeneralMonthlyPickerValue(defaultYm);
+    setGeneralMonthlyReportKind(viewMode === 'general' ? filterReportKind : 'all');
     setGeneralMonthlyDialogOpen(true);
-  }, [viewMode, startDate]);
+  }, [viewMode, startDate, filterReportKind]);
 
   const applyGeneralMonthlyForMonth = useCallback(
-    async (ym: string) => {
+    async (ym: string, reportKind: ReportKindFilter = generalMonthlyReportKind) => {
       const range = getDateRangeForCalendarMonth(ym);
       if (!range) {
         toast.error('لا يمكن اختيار شهر مستقبلي.');
         return;
       }
+      // Batch view/filter updates before await so the filter effect consumes the skip once.
+      skipNextRangeFilterEffectRef.current = true;
       setFilterLineId('');
-      setFilterReportKind('all');
+      setFilterReportKind(reportKind);
       setFilterProductCategory('');
       setFilterEmployeeId('');
       setStartDate(range.startStr);
       setEndDate(range.endStr);
-      await fetchReports(range.startStr, range.endStr);
       setViewMode('general');
       setGeneralMonthlyPickerValue(ym);
+      setGeneralMonthlyReportKind(reportKind);
       setGeneralMonthlyDialogOpen(false);
+      // Pass empty line/employee filters explicitly — setState above is not yet visible here.
+      await loadFullRangeReports(range.startStr, range.endStr, { lineId: '', employeeId: '' });
     },
-    [fetchReports],
+    [loadFullRangeReports, generalMonthlyReportKind],
   );
+
+  const handleExportFactoryGeneral = useCallback(() => {
+    if (!canExportFromPage || factoryGeneralExportRows.length === 0) {
+      toast.error('لا توجد بيانات للتصدير.');
+      return;
+    }
+    void import('../../../utils/exportExcel').then(({ exportFactoryGeneralReport }) =>
+      exportFactoryGeneralReport(factoryGeneralExportRows, startDate, endDate),
+    );
+  }, [canExportFromPage, factoryGeneralExportRows, startDate, endDate]);
 
   const prevViewModeRef = useRef(viewMode);
   useEffect(() => {
@@ -2030,7 +2103,8 @@ export const Reports: React.FC = () => {
     prevViewModeRef.current = viewMode;
     if (!enteredGeneral || startDate.length < 7) return;
     setGeneralMonthlyPickerValue(startDate.slice(0, 7));
-  }, [viewMode, startDate]);
+    setGeneralMonthlyReportKind(filterReportKind);
+  }, [viewMode, startDate, filterReportKind]);
 
   const handleBackToReports = () => {
     setViewMode('range');
@@ -2075,7 +2149,7 @@ export const Reports: React.FC = () => {
         if (value === 'yesterday') void handleShowYesterday();
         if (value === 'week') void handleShowWeekly();
         if (value === 'month') void handleShowMonthly();
-        if (value === 'all') setViewMode('general');
+        if (value === 'all') openGeneralMonthlyDialog();
       }}
       quickFilters={[
         {
@@ -3859,10 +3933,7 @@ export const Reports: React.FC = () => {
             icon: 'analytics',
             group: 'تصدير',
             hidden: !canExportFromPage || factoryGeneralRows.length === 0,
-            onClick: () =>
-              void import('../../../utils/exportExcel').then(({ exportFactoryGeneralReport }) =>
-                exportFactoryGeneralReport(factoryGeneralExportRows, startDate, endDate),
-              ),
+            onClick: handleExportFactoryGeneral,
           },
           {
             label: 'تصدير تقارير الإنتاج التفصيلية (Excel)',
@@ -3960,26 +4031,43 @@ export const Reports: React.FC = () => {
           <DialogHeader>
             <DialogTitle>التقرير العام الشهري</DialogTitle>
             <DialogDescription>
-              اختر الشهر لعرض إجمالي إنتاج المصنع في تلك الفترة.
+              اختر نوع التقرير والشهر لعرض إجمالي المصنع كاملاً في تلك الفترة.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2 py-1">
-            <label htmlFor="general-monthly-picker" className="text-sm font-medium text-[var(--color-text)]">
-              الشهر
-            </label>
-            <input
-              id="general-monthly-picker"
-              type="month"
-              className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)] text-[var(--color-text)]"
-              value={generalMonthlyPickerValue}
-              max={getMonthInputValueFromDate(new Date())}
-              onChange={(e) => setGeneralMonthlyPickerValue(e.target.value)}
-            />
+          <div className="flex flex-col gap-3 py-1">
+            <div className="flex flex-col gap-2">
+              <label htmlFor="general-monthly-report-kind" className="text-sm font-medium text-[var(--color-text)]">
+                نوع التقرير
+              </label>
+              <select
+                id="general-monthly-report-kind"
+                className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)] text-[var(--color-text)]"
+                value={generalMonthlyReportKind}
+                onChange={(e) => setGeneralMonthlyReportKind(e.target.value as ReportKindFilter)}
+              >
+                {REPORT_KIND_FILTER_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>{option.label}</option>
+                ))}
+              </select>
+            </div>
+            <div className="flex flex-col gap-2">
+              <label htmlFor="general-monthly-picker" className="text-sm font-medium text-[var(--color-text)]">
+                الشهر
+              </label>
+              <input
+                id="general-monthly-picker"
+                type="month"
+                className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)] text-[var(--color-text)]"
+                value={generalMonthlyPickerValue}
+                max={getMonthInputValueFromDate(new Date())}
+                onChange={(e) => setGeneralMonthlyPickerValue(e.target.value)}
+              />
+            </div>
           </div>
           <DialogFooter className="flex flex-row-reverse gap-2 sm:space-x-0">
             <Button
               type="button"
-              onClick={() => void applyGeneralMonthlyForMonth(generalMonthlyPickerValue)}
+              onClick={() => void applyGeneralMonthlyForMonth(generalMonthlyPickerValue, generalMonthlyReportKind)}
               disabled={rangeLoading}
             >
               {rangeLoading ? 'جاري التحميل...' : 'عرض'}
@@ -4015,44 +4103,80 @@ export const Reports: React.FC = () => {
       )}
       {viewMode === 'general' ? (
         <Card className="!p-0 overflow-hidden">
-          <div className="p-4 border-b border-[var(--color-border)] bg-[#f8f9fa]/40 flex flex-col md:flex-row md:items-center gap-3">
-            <Button variant="secondary" onClick={handleBackToReports}>
-              <ReportIcon name="arrow_forward" className="text-sm" />
-              رجوع إلى التقارير
-            </Button>
-            <div className="flex flex-wrap items-center gap-2 shrink-0">
-              <label htmlFor="general-month-inline-month" className="text-xs font-bold text-[var(--color-text-muted)] whitespace-nowrap">
-                الشهر
-              </label>
-              <input
-                id="general-month-inline-month"
-                type="month"
-                className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 text-sm bg-[var(--color-card)] min-w-[10rem]"
-                value={generalMonthlyPickerValue}
-                max={getMonthInputValueFromDate(new Date())}
-                onChange={(e) => setGeneralMonthlyPickerValue(e.target.value)}
-              />
-              <Button
-                type="button"
-                variant="secondary"
-                className="h-9 text-xs"
-                onClick={() => void applyGeneralMonthlyForMonth(generalMonthlyPickerValue)}
-                disabled={rangeLoading}
-              >
-                {rangeLoading ? 'جاري التحميل...' : 'تطبيق'}
+          <div className="p-4 border-b border-[var(--color-border)] bg-[#f8f9fa]/40 flex flex-col gap-3">
+            <div className="flex flex-col md:flex-row md:items-center gap-3">
+              <Button variant="secondary" onClick={handleBackToReports}>
+                <ReportIcon name="arrow_forward" className="text-sm" />
+                رجوع إلى التقارير
               </Button>
-            </div>
-            <input
-              className="w-full md:max-w-md rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)]"
-              value={factorySearch}
-              onChange={(e) => setFactorySearch(e.target.value)}
-              placeholder="بحث بالخط أو المشرف أو الصنف"
-            />
-            <div className="text-xs md:mr-auto font-bold text-[var(--color-text-muted)]">
-              إجمالي {factoryGeneralRows.length} صف | إنتاج {formatNumber(factoryGeneralSummary.produced)} | تقارير {formatNumber(factoryGeneralSummary.reports)}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <label htmlFor="general-month-inline-kind" className="text-xs font-bold text-[var(--color-text-muted)] whitespace-nowrap">
+                  نوع التقرير
+                </label>
+                <select
+                  id="general-month-inline-kind"
+                  className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 text-sm bg-[var(--color-card)] min-w-[8rem]"
+                  value={generalMonthlyReportKind}
+                  onChange={(e) => {
+                    const nextKind = e.target.value as ReportKindFilter;
+                    setGeneralMonthlyReportKind(nextKind);
+                    setFilterReportKind(nextKind);
+                  }}
+                >
+                  {REPORT_KIND_FILTER_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>{option.label}</option>
+                  ))}
+                </select>
+                <label htmlFor="general-month-inline-month" className="text-xs font-bold text-[var(--color-text-muted)] whitespace-nowrap">
+                  الشهر
+                </label>
+                <input
+                  id="general-month-inline-month"
+                  type="month"
+                  className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2 text-sm bg-[var(--color-card)] min-w-[10rem]"
+                  value={generalMonthlyPickerValue}
+                  max={getMonthInputValueFromDate(new Date())}
+                  onChange={(e) => setGeneralMonthlyPickerValue(e.target.value)}
+                />
+                <Button
+                  type="button"
+                  variant="secondary"
+                  className="h-9 text-xs"
+                  onClick={() => void applyGeneralMonthlyForMonth(generalMonthlyPickerValue, generalMonthlyReportKind)}
+                  disabled={rangeLoading}
+                >
+                  {rangeLoading ? 'جاري التحميل...' : 'تطبيق'}
+                </Button>
+                {canExportFromPage && (
+                  <Button
+                    type="button"
+                    className="h-9 text-xs"
+                    onClick={handleExportFactoryGeneral}
+                    disabled={rangeLoading || factoryGeneralExportRows.length === 0}
+                    title="تصدير ملخص المصنع العام Excel"
+                  >
+                    <ReportIcon name="download" className="text-sm" />
+                    تصدير Excel
+                  </Button>
+                )}
+              </div>
+              <input
+                className="w-full md:max-w-md rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-card)]"
+                value={factorySearch}
+                onChange={(e) => setFactorySearch(e.target.value)}
+                placeholder="بحث بالخط أو المشرف أو الصنف"
+              />
+              <div className="text-xs md:mr-auto font-bold text-[var(--color-text-muted)]">
+                {reportKindFilterLabel(filterReportKind)} | إجمالي {factoryGeneralRows.length} صف | إنتاج {formatNumber(factoryGeneralSummary.produced)} | تقارير {formatNumber(factoryGeneralSummary.reports)}
+                {rangeHasMore ? ' | (غير مكتمل — حمّل المزيد)' : ''}
+              </div>
             </div>
           </div>
-          {factoryGeneralSortedRows.length === 0 ? (
+          {rangeLoading ? (
+            <div className="py-16 text-center text-[var(--color-text-muted)]">
+              جاري تحميل التقرير العام بالكامل...
+            </div>
+          ) : factoryGeneralSortedRows.length === 0 ? (
             <div className="py-16 text-center text-[var(--color-text-muted)]">
               لا توجد بيانات كافية للتقرير العام في هذه الفترة.
             </div>
