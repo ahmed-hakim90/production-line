@@ -907,6 +907,7 @@
       "manualCodeRequired": "Enter a product code or lock the field again for automatic generation.",
       "nameRequiredError": "Product name is required.",
       "categoryRequiredError": "Select a product category first.",
+      "categoryInvalidError": "Product category is invalid or inactive. Choose an active product category.",
       "nonNegativeValuesError": "Prices, costs, and unit counts cannot be negative.",
       "unitsPerCartonIntegerError": "Units per carton must be a whole number.",
       "invalidRoutingTargetError": "The report target must be a number greater than zero.",

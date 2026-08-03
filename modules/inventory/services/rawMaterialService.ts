@@ -9,7 +9,6 @@ import {
   where,
   updateDoc,
   runTransaction,
-  type Transaction,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -26,8 +25,6 @@ import {
   peekNextCode as peekNextEntityCode,
   peekNextSequentialSuffixCode,
   seedMaxRawMaterialCodes,
-  txGetTenantDocs,
-  maxSeqFromCodes,
   maxSeqFromCategoryPrefixedCodes,
   clampPadding,
 } from '../../shared/services/entityCodeSequenceService';
@@ -68,33 +65,19 @@ async function mergedPlanForCodes() {
   return { prefix, padding };
 }
 
-async function seedMaxRawMaterialCodesInTx(tx: Transaction, prefix: string): Promise<number> {
-  const snap = await txGetTenantDocs(tx, db, COLLECTION);
-  const codes = snap.docs.map((d) => String(d.data()?.code ?? '').trim());
-  return maxSeqFromCodes(codes, prefix);
-}
-
-async function seedMaxCategoryRawMaterialCodesInTx(
-  tx: Transaction,
-  categoryCode: string,
-  categoryName: string,
-): Promise<number> {
-  const snap = await txGetTenantDocs(tx, db, COLLECTION);
-  const want = String(categoryName || '').trim();
-  const cc = String(categoryCode || '').trim().toUpperCase();
-  const codes = snap.docs
-    .filter((d) => String(d.data()?.categoryName ?? '').trim() === want)
-    .map((d) => String(d.data()?.code ?? '').trim());
-  return maxSeqFromCategoryPrefixedCodes(codes, cc);
-}
-
 async function seedMaxCategoryRawMaterialCodesAsync(categoryCode: string, categoryName: string): Promise<number> {
   const snap = await getDocs(tenantQuery(db, COLLECTION));
   const want = String(categoryName || '').trim();
   const cc = String(categoryCode || '').trim().toUpperCase();
   const codes = snap.docs
-    .filter((d) => String(d.data()?.categoryName ?? '').trim() === want)
-    .map((d) => String(d.data()?.code ?? '').trim());
+    .filter((d) => {
+      const data = d.data() as { categoryName?: unknown };
+      return String(data.categoryName ?? '').trim() === want;
+    })
+    .map((d) => {
+      const data = d.data() as { code?: unknown };
+      return String(data.code ?? '').trim();
+    });
   return maxSeqFromCategoryPrefixedCodes(codes, cc);
 }
 
@@ -182,13 +165,15 @@ export const rawMaterialService = {
       const cc = autoCat.categoryCode.trim().toUpperCase();
       const catName = autoCat.categoryName.trim();
       const entityKey = rawMaterialCategoryCounterEntityKey(cc);
+      // Firestore web transactions cannot query a collection — seed outside.
+      const initialMaxSequence = await seedMaxCategoryRawMaterialCodesAsync(cc, catName);
       const id = await runTransaction(db, async (transaction) => {
         const code = await allocateNextSequentialSuffixInTransaction(
           transaction,
           entityKey,
           cc,
           padding,
-          (tx) => seedMaxCategoryRawMaterialCodesInTx(tx, cc, catName),
+          async () => initialMaxSequence,
         );
         const newRef = doc(collection(db, COLLECTION));
         transaction.set(
@@ -206,13 +191,14 @@ export const rawMaterialService = {
       return id;
     }
 
+    const initialMaxSequence = await seedMaxRawMaterialCodes(prefix);
     const id = await runTransaction(db, async (transaction) => {
       const code = await allocateNextCodeInTransaction(
         transaction,
         ENTITY_CODE_COUNTER_KEYS.rawMaterial,
         prefix,
         padding,
-        (tx) => seedMaxRawMaterialCodesInTx(tx, prefix),
+        async () => initialMaxSequence,
       );
       const newRef = doc(collection(db, COLLECTION));
       transaction.set(

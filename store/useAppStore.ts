@@ -1231,7 +1231,7 @@ interface AppState {
   createProduct: (
     data: Omit<FirestoreProduct, 'id'>,
     context: { path: ProductCreatePath },
-  ) => Promise<string | null>;
+  ) => Promise<string>;
   updateProduct: (
     id: string,
     data: Partial<FirestoreProduct>,
@@ -3440,12 +3440,13 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const normalized = await normalizeProductCategoryOnSave(data);
       const id = await productService.create(normalized as Omit<FirestoreProduct, 'id'>);
-      if (id) await get().fetchProducts({ force: true });
+      if (!id) throw new Error('تعذر حفظ المنتج. حاول مرة أخرى.');
+      await get().fetchProducts({ force: true });
       return id;
     } catch (error) {
-      if (isDuplicateEntityCodeError(error)) throw error;
-      set({ error: (error as Error).message });
-      return null;
+      const message = error instanceof Error ? error.message : 'تعذر حفظ المنتج. حاول مرة أخرى.';
+      set({ error: message });
+      throw error instanceof Error ? error : new Error(message);
     }
   },
 

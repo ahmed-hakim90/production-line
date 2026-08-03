@@ -907,6 +907,7 @@
       "manualCodeRequired": "أدخل كود المنتج أو أعد قفل الحقل للتوليد التلقائي.",
       "nameRequiredError": "اسم المنتج مطلوب.",
       "categoryRequiredError": "اختر فئة المنتج أولاً.",
+      "categoryInvalidError": "فئة المنتج غير صالحة أو غير مفعّلة. اختر فئة منتجات نشطة.",
       "nonNegativeValuesError": "الأسعار والتكاليف وعدد الوحدات لا يمكن أن تكون أقل من صفر.",
       "unitsPerCartonIntegerError": "عدد الوحدات في الكرتونة يجب أن يكون عدداً صحيحاً.",
       "invalidRoutingTargetError": "تارجت التقارير يجب أن يكون عدداً أكبر من صفر.",

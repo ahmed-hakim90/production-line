@@ -22,7 +22,6 @@ import {
   normalizeEntityCodePrefix,
   peekNextCode as peekNextEntityCode,
   seedMaxCategoryCodes,
-  seedMaxCategoryCodesInTransaction,
   clampPadding,
 } from '../../shared/services/entityCodeSequenceService';
 import {
@@ -269,13 +268,15 @@ export const categoryService = {
     }
 
     const seedType = effType === 'raw_material' ? ('raw_material' as const) : ('product' as const);
+    // Firestore web transactions cannot query a collection — seed outside.
+    const initialMaxSequence = await seedMaxCategoryCodes(prefix, seedType);
     const id = await runTransaction(db, async (transaction) => {
       const code = await allocateNextCodeInTransaction(
         transaction,
         entityKey,
         prefix,
         padding,
-        (tx) => seedMaxCategoryCodesInTransaction(tx, prefix, seedType),
+        async () => initialMaxSequence,
       );
       const newRef = doc(collection(db, COLLECTION));
       transaction.set(newRef, { ...baseDoc, code });

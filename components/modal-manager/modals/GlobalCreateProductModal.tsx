@@ -34,6 +34,7 @@ import { formatCost } from '../../../utils/costCalculations';
 import { productService } from '../../../modules/production/services/productService';
 import { useAutoEntityCode } from '../../../modules/shared/hooks/useAutoEntityCode';
 import {
+  OperationPathDisabledError,
   PRODUCT_CREATE_PATHS,
   PRODUCT_OPERATION_KEYS,
   PRODUCT_UPDATE_PATHS,
@@ -47,6 +48,20 @@ function isDuplicateEntityCodeError(e: unknown): boolean {
     e instanceof Error &&
     (e.message === DUPLICATE_ENTITY_CODE || (e as Error & { code?: string }).code === DUPLICATE_ENTITY_CODE)
   );
+}
+
+function productSaveErrorMessage(e: unknown, t: (key: string) => string): string {
+  if (e instanceof OperationPathDisabledError) return e.message;
+  if (!(e instanceof Error)) return t('modalManager.createProduct.saveError');
+  if (e.message === 'PRODUCT_CATEGORY_REQUIRED') {
+    return t('modalManager.createProduct.categoryRequiredError');
+  }
+  if (e.message === 'PRODUCT_CATEGORY_INVALID') {
+    return t('modalManager.createProduct.categoryInvalidError');
+  }
+  if (e.message.includes('غير مصرح')) return e.message;
+  if (e.message.startsWith('تعذر') || e.message.startsWith('هذا المسار')) return e.message;
+  return t('modalManager.createProduct.saveError');
 }
 
 const emptyForm: Omit<FirestoreProduct, 'id'> = {
@@ -331,7 +346,6 @@ export const GlobalCreateProductModal: React.FC = () => {
           createData,
           { path: PRODUCT_CREATE_PATHS.globalModal },
         );
-        if (!id) throw new Error('create failed');
         setJustCreatedProductId(id);
         setJustCreatedProductName(normalizedName);
         toast.success(t('modalManager.createProduct.createSuccess'));
@@ -340,7 +354,7 @@ export const GlobalCreateProductModal: React.FC = () => {
       if (isDuplicateEntityCodeError(e)) {
         toast.error(t('entityCode.duplicateError'));
       } else {
-        toast.error(t('modalManager.createProduct.saveError'));
+        toast.error(productSaveErrorMessage(e, t));
       }
     } finally {
       setSaving(false);

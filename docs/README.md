@@ -54,6 +54,13 @@ Bilingual short index. Technical detail lives in the linked English docs unless 
 | [ONBOARDING.md](./ONBOARDING.md) | Day-1 setup (Node 20, env, smoke) | إعداد اليوم الأول ومسارات الدخان |
 | Root [README.md](../README.md) | Product overview + local run | نظرة المنتج والتشغيل المحلي |
 
+## Audits & readiness (AR) / تدقيقات جاهزية
+
+| Doc | AR |
+|-----|----|
+| [INVENTORY_CONTROL_AND_RBAC_AUDIT_AR.md](./INVENTORY_CONTROL_AND_RBAC_AUDIT_AR.md) | صفحات المخازن، التحكم، تنظيف الصلاحيات/الأدوار، DB كمصدر وحيد للمنح |
+| [FIREBASE_SCALE_READINESS_REPORT_AR.md](./FIREBASE_SCALE_READINESS_REPORT_AR.md) | جاهزية Firebase للحجم التشغيلي والفجوات الوظيفية |
+
 ## Other existing docs / وثائق أخرى
 
 - [BASELINE_HARDENING_REPORT.md](./BASELINE_HARDENING_REPORT.md) — hardening baseline (2026-08-03)

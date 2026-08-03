@@ -9,7 +9,6 @@ import {
   runTransaction,
   where,
   limit,
-  type Transaction,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { FirestoreProduct } from '../../../types';
@@ -23,8 +22,6 @@ import {
   normalizeEntityCodePrefix,
   peekNextCode as peekNextEntityCode,
   seedMaxProductCodes,
-  txGetTenantDocs,
-  maxSeqFromCodes,
   clampPadding,
 } from '../../shared/services/entityCodeSequenceService';
 
@@ -39,10 +36,8 @@ async function mergedPlanForCodes() {
   return { prefix, padding };
 }
 
-async function seedMaxProductCodesInTx(tx: Transaction, prefix: string): Promise<number> {
-  const snap = await txGetTenantDocs(tx, db, COLLECTION);
-  const codes = snap.docs.map((d) => String(d.data()?.code ?? '').trim());
-  return maxSeqFromCodes(codes, prefix);
+function stripUndefined<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 }
 
 export const productService = {
@@ -117,6 +112,11 @@ export const productService = {
     try {
       const { prefix, padding } = await mergedPlanForCodes();
       const trimmed = String(data.code ?? '').trim();
+      const tenantId = getCurrentTenantId();
+      const basePayload = stripUndefined({
+        ...(data as Record<string, unknown>),
+        tenantId,
+      });
 
       if (trimmed) {
         const upper = trimmed.toUpperCase();
@@ -126,26 +126,27 @@ export const productService = {
           throw err;
         }
         const ref = await addDoc(collection(db, COLLECTION), {
-          ...(data as Record<string, unknown>),
+          ...basePayload,
           code: upper,
-          tenantId: getCurrentTenantId(),
         });
         return ref.id;
       }
 
+      // Firestore web transactions cannot query a collection. Seed before the
+      // transaction; concurrent first writers still serialize through the counter doc.
+      const initialMaxSequence = await seedMaxProductCodes(prefix);
       const id = await runTransaction(db, async (transaction) => {
         const code = await allocateNextCodeInTransaction(
           transaction,
           ENTITY_CODE_COUNTER_KEYS.product,
           prefix,
           padding,
-          (tx) => seedMaxProductCodesInTx(tx, prefix),
+          async () => initialMaxSequence,
         );
         const newRef = doc(collection(db, COLLECTION));
         transaction.set(newRef, {
-          ...(data as Record<string, unknown>),
+          ...basePayload,
           code,
-          tenantId: getCurrentTenantId(),
         });
         return newRef.id;
       });
@@ -169,7 +170,7 @@ export const productService = {
         if (upper) (data as Partial<FirestoreProduct>).code = upper as any;
       }
       const { id: _id, ...fields } = data as any;
-      await updateDoc(doc(db, COLLECTION, id), fields);
+      await updateDoc(doc(db, COLLECTION, id), stripUndefined(fields as Record<string, unknown>));
     } catch (error) {
       console.error('productService.update error:', error);
       throw error;
