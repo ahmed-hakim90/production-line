@@ -542,6 +542,12 @@ export const StockTransactions: React.FC = () => {
     fromWarehouseName: warehouseMap.get(row.fromWarehouseId) ?? row.fromWarehouseId,
     toWarehouseName: warehouseMap.get(row.toWarehouseId) ?? row.toWarehouseId,
     createdBy: row.createdBy,
+    statusLabel:
+      row.status === 'pending' ? 'للاعتماد'
+        : row.status === 'approved' ? 'معتمد'
+          : row.status === 'rejected' ? 'مرفوض'
+            : row.status === 'cancelled' ? 'ملغي'
+              : undefined,
     items: row.lines.map((line) => {
       const display = getTransferDisplay(withResolvedUnitsPerCarton(line), transferDisplayUnit);
       return {
@@ -550,6 +556,7 @@ export const StockTransactions: React.FC = () => {
         unitLabel: display.unitLabel,
         quantity: display.quantity,
         quantityPieces: Number(line.quantity || 0),
+        unitsPerCarton: line.unitsPerCarton,
       };
     }),
   });

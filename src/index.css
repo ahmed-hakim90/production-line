@@ -177,6 +177,18 @@
   text-align: right;
 }
 
+/* Arabic PNG/WhatsApp export roots: prevent letter-spacing from splitting ألـ words (الوحدة → ال وحدة). */
+.arabic-export-root,
+.arabic-export-root * {
+  letter-spacing: normal !important;
+  word-spacing: normal !important;
+}
+.arabic-export-root th,
+.arabic-export-root thead,
+.arabic-export-root .uppercase {
+  text-transform: none !important;
+}
+
 @media print {
   /* Keep global print rules non-destructive.
      react-to-print already renders only target content in its iframe. */

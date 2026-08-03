@@ -293,6 +293,12 @@ export const TransferApprovals: React.FC = () => {
     fromWarehouseName: warehouseMap.get(row.fromWarehouseId) || row.fromWarehouseName || row.fromWarehouseId,
     toWarehouseName: warehouseMap.get(row.toWarehouseId) || row.toWarehouseName || row.toWarehouseId,
     createdBy: row.createdBy,
+    statusLabel:
+      row.status === 'pending' ? 'للاعتماد'
+        : row.status === 'approved' ? 'معتمد'
+          : row.status === 'rejected' ? 'مرفوض'
+            : row.status === 'cancelled' ? 'ملغي'
+              : undefined,
     items: row.lines.map((line) => {
       const display = getTransferDisplay(withResolvedUnitsPerCarton(line), transferDisplayUnit);
       return {
@@ -301,6 +307,7 @@ export const TransferApprovals: React.FC = () => {
         unitLabel: display.unitLabel,
         quantity: display.quantity,
         quantityPieces: Number(line.quantity || 0),
+        unitsPerCarton: line.unitsPerCarton,
       };
     }),
   });

@@ -271,78 +271,68 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
               </p>
             </div>
 
-            <table className="erp-table w-full border-collapse">
-              <tbody>
-                {section.rows.map((row, ri) => (
-                  row.fullWidth ? (
-                    <tr key={ri} className="border-b border-slate-100 last:border-0">
-                      <td colSpan={2} className="!py-2 !px-2.5">
-                        {row.label ? (
-                          <p className="mb-1 text-[9px] font-bold text-slate-400" style={{ letterSpacing: "normal" }}>
-                            {row.label}
-                          </p>
-                        ) : null}
-                        {row.value}
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={ri} className="border-b border-slate-100 last:border-0">
-                      <td
-                        className="!py-1.5 !px-2.5 !text-xs text-slate-500 w-[40%]"
-                        style={{ letterSpacing: "normal" }}
-                      >
+            <div className="rounded-lg border border-slate-200 overflow-hidden bg-white">
+              {section.rows.map((row, ri) => (
+                row.fullWidth ? (
+                  <div
+                    key={ri}
+                    className={cn("px-3 py-2.5", ri < section.rows.length - 1 && "border-b border-slate-100")}
+                  >
+                    {row.label ? (
+                      <p className="mb-1.5 text-[10px] font-bold text-slate-500">
                         {row.label}
-                      </td>
-                      <td
-                        className={cn(
-                          "!py-1.5 !px-2.5 !text-sm text-right",
-                          row.highlight ? "font-bold text-[13px]" : "font-medium text-slate-800",
-                        )}
-                        style={{
-                          letterSpacing: "normal",
-                          ...(row.highlight ? { color: accent } : {}),
-                        }}
-                      >
-                        {row.value}
-                      </td>
-                    </tr>
-                  )
-                ))}
-
-                {section.progress && (
-                  <tr>
-                    <td
-                      className="!py-1.5 !px-2.5 !text-xs text-slate-500"
-                      style={{ letterSpacing: "normal" }}
+                      </p>
+                    ) : null}
+                    <div className="min-w-0">{row.value}</div>
+                  </div>
+                ) : (
+                  <div
+                    key={ri}
+                    className={cn(
+                      "grid grid-cols-[38%_1fr] gap-3 px-3 py-2.5 items-start",
+                      ri < section.rows.length - 1 && "border-b border-slate-100",
+                    )}
+                  >
+                    <p className="text-[11px] font-semibold text-slate-500 pt-0.5">{row.label}</p>
+                    <div
+                      className={cn(
+                        "text-[13px] text-right min-w-0",
+                        row.highlight ? "font-bold" : "font-semibold text-slate-800",
+                      )}
+                      style={row.highlight ? { color: accent } : undefined}
                     >
-                      {section.progress.label}
-                    </td>
-                    <td className="!py-1.5 !px-2.5">
-                      <div className="flex items-center gap-2">
-                        <div
-                          className="flex-1 h-1.5 rounded-full overflow-hidden"
-                          style={{ background: Factory_IMAGE_PROGRESS_TRACK }}
-                        >
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.max(0, Math.min(100, section.progress.value))}%`,
-                              backgroundColor: accent,
-                            }}
-                          />
-                        </div>
-                        <span
-                          className="text-xs font-bold tabular-nums min-w-[32px] text-right"
-                          style={{ color: accent, letterSpacing: "normal" }}
-                        >
-                          {Math.max(0, Math.min(100, section.progress.value))}%
-                        </span>
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                      {row.value}
+                    </div>
+                  </div>
+                )
+              ))}
+
+              {section.progress && (
+                <div className="grid grid-cols-[38%_1fr] gap-3 px-3 py-2.5 border-t border-slate-100 items-center">
+                  <p className="text-[11px] font-semibold text-slate-500">{section.progress.label}</p>
+                  <div className="flex items-center gap-2">
+                    <div
+                      className="flex-1 h-1.5 rounded-full overflow-hidden"
+                      style={{ background: Factory_IMAGE_PROGRESS_TRACK }}
+                    >
+                      <div
+                        className="h-full rounded-full"
+                        style={{
+                          width: `${Math.max(0, Math.min(100, section.progress.value))}%`,
+                          backgroundColor: accent,
+                        }}
+                      />
+                    </div>
+                    <span
+                      className="text-xs font-bold tabular-nums min-w-[32px] text-right"
+                      style={{ color: accent }}
+                    >
+                      {Math.max(0, Math.min(100, section.progress.value))}%
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
 
             {si < sections.length - 1 && <div className="h-px bg-slate-100 mt-3" />}
           </div>

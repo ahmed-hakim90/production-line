@@ -45,6 +45,7 @@ const DEMO_TRANSFER: StockTransferPrintData = {
   fromWarehouseName: 'مخزن خامات',
   toWarehouseName: 'مخزن تجميع',
   createdBy: 'أحمد محمود',
+  statusLabel: 'للاعتماد',
   items: [
     {
       itemName: 'وحدة تحكم RX-606',
