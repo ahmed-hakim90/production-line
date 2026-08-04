@@ -28,7 +28,17 @@ assert.equal(custom.operationalDayStartHour, 6);
 assert.equal(custom.preventDuplicateReports, false);
 assert.equal(custom.requireWorkHoursOnReports, false);
 assert.equal(custom.requirePositiveQuantityOnReports, true);
+assert.equal(custom.requireWorkOrderOnQuickAction, false);
 assert.equal(custom.autoPostReportToPlanAndWorkOrder, true);
+
+const requireWo = resolveReportBehaviorSettings({
+  planSettings: {
+    reportBehavior: {
+      requireWorkOrderOnQuickAction: true,
+    },
+  } as any,
+});
+assert.equal(requireWo.requireWorkOrderOnQuickAction, true);
 
 assert.equal(
   getOperationalDateString(8, new Date('2026-07-29T05:30:00')),

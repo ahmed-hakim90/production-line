@@ -1339,6 +1339,11 @@ export interface ReportBehaviorSettings {
   allowPackagingLaborOptional?: boolean;
   autoLinkSupplyCycleOnReportSave?: boolean;
   autoApplyInventoryOnReportSave?: boolean;
+  /**
+   * When true, Quick Action requires selecting an active work order directed
+   * to the report supervisor before save.
+   */
+  requireWorkOrderOnQuickAction?: boolean;
   /** @deprecated Report progress is always reconciled with matching plans/work orders. */
   autoPostReportToPlanAndWorkOrder?: boolean;
 }
@@ -1644,8 +1649,13 @@ export interface FirestoreUser {
   /**
    * When set, inventory module pages are limited to this warehouse
    * (balances, movements, transfers, approvals involving this warehouse).
+   * If the warehouse belongs to a repair service center, repairBranchId is synced too.
    */
   inventoryWarehouseId?: string | null;
+  /** Primary repair / service-center branch for this user (ADR-004). */
+  repairBranchId?: string;
+  /** Optional multi-branch repair scope. */
+  repairBranchIds?: string[];
   notifications?: {
     productionReports?: boolean;
     workOrderAlerts?: boolean;

@@ -54,6 +54,19 @@ Path flags are operational controls. Firestore authorization remains the securit
 
 Changing a warehouse role or routing id without updating both client resolvers and Functions posting logic will desync floor/WIP/finished stock.
 
+## Report behavior — Quick Action work order
+
+- Field: `planSettings.reportBehavior.requireWorkOrderOnQuickAction` (default **false**, opt-in)
+- Resolver: `modules/production/lib/reportBehaviorSettings.ts`
+- UI toggle: Settings → production report behavior (`ProductionReportBehaviorSettingsSection`)
+- When **enabled**, Quick Action (`modules/production/pages/QuickAction.tsx`):
+  - Requires selecting an active work order directed to the report supervisor
+  - Passes `workOrderId` into `createReport` so the report links to that order
+  - Blocks save with an Arabic toast if missing or mismatched line/product
+- When **disabled**, work order selection stays optional
+
+Tests: `tests/report-behavior-settings.test.ts`
+
 ## Related
 
 - Settings draft hook: `modules/system/hooks/useSettingsDraft.ts` (uses `resolveSystemSettings`)

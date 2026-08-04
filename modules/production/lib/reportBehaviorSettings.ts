@@ -11,6 +11,7 @@ export const DEFAULT_REPORT_BEHAVIOR_SETTINGS: Required<ReportBehaviorSettings> 
   allowPackagingLaborOptional: true,
   autoLinkSupplyCycleOnReportSave: true,
   autoApplyInventoryOnReportSave: true,
+  requireWorkOrderOnQuickAction: false,
   autoPostReportToPlanAndWorkOrder: true,
 };
 
@@ -37,6 +38,8 @@ export function resolveReportBehaviorSettings(
     allowPackagingLaborOptional: raw.allowPackagingLaborOptional !== false,
     autoLinkSupplyCycleOnReportSave: raw.autoLinkSupplyCycleOnReportSave !== false,
     autoApplyInventoryOnReportSave: raw.autoApplyInventoryOnReportSave !== false,
+    // Opt-in: existing tenants stay optional until an admin enables the rule.
+    requireWorkOrderOnQuickAction: raw.requireWorkOrderOnQuickAction === true,
     // Execution progress is a business invariant: every production report must
     // reconcile the matching plan/work order when either one exists.
     autoPostReportToPlanAndWorkOrder: true,

@@ -1172,6 +1172,32 @@ export const QuickAction: React.FC = () => {
     }
   }, [dailyWorkerAssignmentEnabled, fetchWorkersFromLineAssignments, today, uid]);
 
+  const workOrders = useAppStore((s) => s.workOrders);
+  const activeEmployees = employees.filter((s) => s.isActive && s.level === 2);
+  const activeWOs = useMemo(
+    () => {
+      const activeOnly = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
+      if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return activeOnly;
+
+      const currentName = (currentEmployee.name || '').trim().toLowerCase();
+      return activeOnly.filter((w) => {
+        if (w.supervisorId === currentEmployee.id) return true;
+        return (w.supervisorId || '').trim().toLowerCase() === currentName;
+      });
+    },
+    [workOrders, shouldLockEmployeeToCurrent, currentEmployee?.id, currentEmployee?.name],
+  );
+
+  const scopedActiveWOs = useMemo(() => {
+    const selectedSupervisorId = shouldLockEmployeeToCurrent ? currentEmployee?.id : employeeId;
+    const bySupervisor = !selectedSupervisorId
+      ? activeWOs
+      : activeWOs.filter(
+        (wo) => String(wo.supervisorId || '').trim().toLowerCase() === String(selectedSupervisorId).trim().toLowerCase(),
+      );
+    return bySupervisor.filter((wo) => workOrderMatchesReportType(wo, resolveReportType(reportType)));
+  }, [activeWOs, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId, reportType]);
+
   const handleSave = async () => {
     const requiresWorkers = reportType !== 'component_injection';
     const canSaveCurrentType = reportType === 'component_injection'
@@ -1196,6 +1222,23 @@ export const QuickAction: React.FC = () => {
     } else if (!productId) {
       showAppToast('error', 'أكمل بيانات الخط والمنتج والمشرف أولاً.');
       return;
+    }
+    const requireWorkOrder = reportBehavior.requireWorkOrderOnQuickAction;
+    const selectedWorkOrder = selectedWorkOrderId
+      ? scopedActiveWOs.find((wo) => wo.id === selectedWorkOrderId) ?? null
+      : null;
+    const reportProductId = reportType === 'packaging'
+      ? validPackagingLines[0].productId
+      : productId;
+    if (requireWorkOrder) {
+      if (!selectedWorkOrderId || !selectedWorkOrder) {
+        showAppToast('error', 'اختر أمر شغل موجّه للمشرف قبل حفظ التقرير.');
+        return;
+      }
+      if (selectedWorkOrder.lineId !== lineId || selectedWorkOrder.productId !== reportProductId) {
+        showAppToast('error', 'أمر الشغل المختار لا يطابق الخط والمنتج في التقرير.');
+        return;
+      }
     }
     if (reportType === 'component_injection' && reportBehavior.requireInjectionShift && !isInjectionShiftSelected(injectionShift)) {
       showAppToast('error', 'اختر الوردية (صباحي أو مسائي) قبل الحفظ');
@@ -1246,6 +1289,7 @@ export const QuickAction: React.FC = () => {
       productId: reportType === 'packaging' ? validPackagingLines[0].productId : productId,
       reportType,
       date: today,
+      ...(selectedWorkOrderId ? { workOrderId: selectedWorkOrderId } : {}),
       quantityProduced: reportType === 'packaging'
         ? validPackagingLines.reduce((s, l) => s + l.quantityPieces, 0)
         : effectiveQuantityProduced,
@@ -1484,32 +1528,6 @@ export const QuickAction: React.FC = () => {
     }
   };
 
-  const workOrders = useAppStore((s) => s.workOrders);
-  const activeEmployees = employees.filter((s) => s.isActive && s.level === 2);
-  const activeWOs = useMemo(
-    () => {
-      const activeOnly = workOrders.filter((w) => w.status === 'pending' || w.status === 'in_progress');
-      if (!shouldLockEmployeeToCurrent || !currentEmployee?.id) return activeOnly;
-
-      const currentName = (currentEmployee.name || '').trim().toLowerCase();
-      return activeOnly.filter((w) => {
-        if (w.supervisorId === currentEmployee.id) return true;
-        return (w.supervisorId || '').trim().toLowerCase() === currentName;
-      });
-    },
-    [workOrders, shouldLockEmployeeToCurrent, currentEmployee?.id, currentEmployee?.name],
-  );
-
-  const scopedActiveWOs = useMemo(() => {
-    const selectedSupervisorId = shouldLockEmployeeToCurrent ? currentEmployee?.id : employeeId;
-    const bySupervisor = !selectedSupervisorId
-      ? activeWOs
-      : activeWOs.filter(
-        (wo) => String(wo.supervisorId || '').trim().toLowerCase() === String(selectedSupervisorId).trim().toLowerCase(),
-      );
-    return bySupervisor.filter((wo) => workOrderMatchesReportType(wo, resolveReportType(reportType)));
-  }, [activeWOs, shouldLockEmployeeToCurrent, currentEmployee?.id, employeeId, reportType]);
-
   const handleSelectWO = useCallback((woId: string) => {
     const wo = scopedActiveWOs.find((w) => w.id === woId);
     if (!wo) return;
@@ -1586,17 +1604,23 @@ export const QuickAction: React.FC = () => {
 
       {!saved ? (
         <Card title="بيانات التقرير">
-          {/* Work Order Selector */}
-          {can('workOrders.view') && activeWOs.length > 0 && (
+          {/* Work Order Selector — list is scoped to the report supervisor */}
+          {(reportBehavior.requireWorkOrderOnQuickAction || can('workOrders.view')) && (
             <div className="mb-5">
               <label className="text-sm font-bold text-[var(--color-text-muted)] mb-2 flex items-center gap-1">
                 <span className="material-icons-round text-sm text-primary">assignment</span>
-                أمر شغل (اختياري)
+                {reportBehavior.requireWorkOrderOnQuickAction
+                  ? 'أمر شغل موجّه للمشرف (إلزامي)'
+                  : 'أمر شغل (اختياري)'}
+                {reportBehavior.requireWorkOrderOnQuickAction && (
+                  <span className="text-rose-600" aria-hidden>*</span>
+                )}
               </label>
               <Select
-                value={selectedWorkOrderId || 'none'}
+                value={selectedWorkOrderId || (reportBehavior.requireWorkOrderOnQuickAction ? undefined : 'none')}
                 onValueChange={(value) => {
                   if (value === 'none') {
+                    if (reportBehavior.requireWorkOrderOnQuickAction) return;
                     setSelectedWorkOrderId('');
                     return;
                   }
@@ -1605,10 +1629,18 @@ export const QuickAction: React.FC = () => {
                 }}
               >
                 <SelectTrigger className="w-full px-4 py-2.5 bg-[#f8f9fa] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm">
-                  <SelectValue placeholder="اختر أمر شغل لتعبئة البيانات تلقائياً" />
+                  <SelectValue
+                    placeholder={
+                      reportBehavior.requireWorkOrderOnQuickAction
+                        ? 'اختر أمر شغل موجّه للمشرف'
+                        : 'اختر أمر شغل لتعبئة البيانات تلقائياً'
+                    }
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">اختر أمر شغل لتعبئة البيانات تلقائياً</SelectItem>
+                  {!reportBehavior.requireWorkOrderOnQuickAction && (
+                    <SelectItem value="none">بدون أمر شغل</SelectItem>
+                  )}
                   {scopedActiveWOs.map((wo) => {
                     const pName = _rawProducts.find((p) => p.id === wo.productId)?.name ?? '';
                     const lName = _rawLines.find((l) => l.id === wo.lineId)?.name ?? '';
@@ -1622,8 +1654,10 @@ export const QuickAction: React.FC = () => {
                 </SelectContent>
               </Select>
               {scopedActiveWOs.length === 0 && (
-                <p className="mt-1.5 text-[11px] text-slate-400">
-                  لا توجد أوامر شغل مرتبطة بالمشرف المختار.
+                <p className="mt-1.5 text-[11px] text-rose-600 font-medium">
+                  {reportBehavior.requireWorkOrderOnQuickAction
+                    ? 'لا توجد أوامر شغل نشطة موجّهة لهذا المشرف — أنشئ أمر شغل أو راجع التوجيه قبل الحفظ.'
+                    : 'لا توجد أوامر شغل مرتبطة بالمشرف المختار.'}
                 </p>
               )}
             </div>
