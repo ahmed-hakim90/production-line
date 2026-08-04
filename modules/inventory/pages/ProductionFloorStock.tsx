@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
@@ -15,6 +15,7 @@ import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { sourceModuleLabel } from '../lib/stockLabels';
+import { resolveWarehouseOperatorHomePath } from '../lib/warehouseOperatorHome';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
 import { stockReportService } from '../services/stockReportService';
@@ -46,8 +47,16 @@ export const ProductionFloorStock: React.FC = () => {
   const routing = useMemo(() => resolveInventoryRoutingV1(systemSettings), [systemSettings]);
   const floorId = String(routing.productionFloorWarehouseId || '').trim();
   const decomposedId = String(routing.decomposedWarehouseId || '').trim();
-  const { scoped, isWarehouseAllowed } = useMaterialsWarehouseScope();
+  const { scoped, isWarehouseAllowed, warehouseId: scopedWarehouseId, isMaterialsWarehouseRole } =
+    useMaterialsWarehouseScope();
   const canAccessFloor = Boolean(floorId) && (!scoped || isWarehouseAllowed(floorId));
+  const blockedHomePath = withTenantPath(
+    tenantSlug,
+    resolveWarehouseOperatorHomePath({
+      boundWarehouseId: scopedWarehouseId,
+      isMaterialsWarehouseRole,
+    }),
+  );
 
   const [period, setPeriod] = useState<'today' | '7d' | '30d'>('7d');
   const [page, setPage] = useState(1);
@@ -140,14 +149,8 @@ export const ProductionFloorStock: React.FC = () => {
     return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
   }
 
-  if (scoped && floorId && !canAccessFloor) {
-    return (
-      <div className="erp-ds-clean p-6">
-        <p className="text-sm text-[var(--color-text-muted)]">
-          هذه الصفحة لمخزن صالة الإنتاج فقط. حسابك مرتبط بمخزن آخر.
-        </p>
-      </div>
-    );
+  if (scoped && !canAccessFloor) {
+    return <Navigate to={blockedHomePath} replace />;
   }
 
   if (loading && !data) {

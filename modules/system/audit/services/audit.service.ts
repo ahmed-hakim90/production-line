@@ -10,13 +10,35 @@ import {
   writeBatch,
   where,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../../auth/services/firebase';
+import { auth, db, isConfigured } from '../../../auth/services/firebase';
 import { getCurrentTenantIdOrNull } from '../../../../lib/currentTenant';
 import { tenantQuery } from '../../../../lib/tenantFirestore';
 import type { AuditRecord, CreateAuditLogInput } from '../types/audit.types';
 import { SystemEvents } from '../../../../shared/events';
 
 const AUDIT_COLLECTION = 'audit_logs';
+
+/** Rules only allow performedBy = auth.uid or "system". Keep claimed actors in metadata. */
+const resolveWritablePerformedBy = (input: CreateAuditLogInput): {
+  performedBy: string;
+  metadata: Record<string, unknown>;
+} => {
+  const authUid = typeof auth?.currentUser?.uid === 'string' ? auth.currentUser.uid.trim() : '';
+  const claimed = typeof input.performedBy === 'string' ? input.performedBy.trim() : '';
+  const metadata: Record<string, unknown> = { ...(input.metadata ?? {}) };
+  if (authUid) {
+    if (claimed && claimed !== authUid && claimed !== 'system') {
+      metadata.claimedPerformedBy = claimed;
+    }
+    return { performedBy: authUid, metadata };
+  }
+  return {
+    performedBy: claimed === 'system' || !claimed ? 'system' : 'system',
+    metadata: claimed && claimed !== 'system'
+      ? { ...metadata, claimedPerformedBy: claimed }
+      : metadata,
+  };
+};
 
 export interface OperationEventsFilters {
   module?: string;
@@ -41,28 +63,31 @@ const sanitizeLimit = (input?: number): number => {
 const auditPayload = (
   input: CreateAuditLogInput,
   tenantId: string,
-): Omit<AuditRecord, 'id' | 'timestamp'> & { timestamp: ReturnType<typeof serverTimestamp> } => ({
-  tenantId,
-  event: input.event,
-  entityType: input.entityType,
-  entityId: input.entityId,
-  action: input.action,
-  description: input.description,
-  module: input.module,
-  performedBy: input.performedBy,
-  userName: input.userName,
-  metadata: input.metadata ?? {},
-  batchId: input.batchId ?? null,
-  correlationId: input.correlationId ?? null,
-  operation: input.operation ?? null,
-  status: input.status ?? null,
-  startedAt: input.startedAt ?? null,
-  endedAt: input.endedAt ?? null,
-  durationMs: input.durationMs ?? null,
-  errorCode: input.errorCode ?? null,
-  errorMessage: input.errorMessage ?? null,
-  timestamp: serverTimestamp(),
-});
+): Omit<AuditRecord, 'id' | 'timestamp'> & { timestamp: ReturnType<typeof serverTimestamp> } => {
+  const { performedBy, metadata } = resolveWritablePerformedBy(input);
+  return {
+    tenantId,
+    event: input.event,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    action: input.action,
+    description: input.description,
+    module: input.module,
+    performedBy,
+    userName: input.userName,
+    metadata,
+    batchId: input.batchId ?? null,
+    correlationId: input.correlationId ?? null,
+    operation: input.operation ?? null,
+    status: input.status ?? null,
+    startedAt: input.startedAt ?? null,
+    endedAt: input.endedAt ?? null,
+    durationMs: input.durationMs ?? null,
+    errorCode: input.errorCode ?? null,
+    errorMessage: input.errorMessage ?? null,
+    timestamp: serverTimestamp(),
+  };
+};
 
 export const auditService = {
   async createAuditLog(input: CreateAuditLogInput): Promise<void> {

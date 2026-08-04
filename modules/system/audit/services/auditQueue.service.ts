@@ -75,9 +75,16 @@ const chunk = <T,>(items: T[], size: number): T[][] => {
   return result;
 };
 
+const isPermissionDeniedError = (error: unknown): boolean => {
+  if (!error || typeof error !== 'object') return false;
+  const code = String((error as { code?: unknown }).code || '');
+  return code === 'permission-denied' || code === 'firestore/permission-denied';
+};
+
 let isFlushing = false;
 let flushTimerId: ReturnType<typeof setInterval> | null = null;
 let stopAutoFlush: (() => void) | null = null;
+let lastPermissionDeniedLogAt = 0;
 
 const flushInternal = async (): Promise<number> => {
   const currentQueue = pruneQueue(readQueue());
@@ -99,6 +106,17 @@ const flushInternal = async (): Promise<number> => {
       writeQueue(queue);
     } catch (error) {
       const failedIds = new Set(batch.map((item) => item.id));
+      if (isPermissionDeniedError(error)) {
+        // Permanent for this client session until rules/auth change — do not retry-spam.
+        queue = queue.filter((item) => !failedIds.has(item.id));
+        writeQueue(queue);
+        const now = Date.now();
+        if (now - lastPermissionDeniedLogAt > 60_000) {
+          lastPermissionDeniedLogAt = now;
+          console.warn('[auditQueue] dropped audit batch (permission denied)');
+        }
+        break;
+      }
       queue = queue.map((item) =>
         failedIds.has(item.id) ? { ...item, attemptCount: item.attemptCount + 1 } : item,
       );

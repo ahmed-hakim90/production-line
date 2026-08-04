@@ -26,13 +26,18 @@ const COLLECTION = 'production_routing_plans';
 export const routingPlanService = {
   async getActivePlans(): Promise<ProductionRoutingPlan[]> {
     if (!isConfigured) return [];
-    const q = query(
-      tenantQuery(db, COLLECTION),
-      where('isActive', '==', true),
-      where('isDeleted', '==', false),
-    );
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionRoutingPlan));
+    try {
+      const q = query(
+        tenantQuery(db, COLLECTION),
+        where('isActive', '==', true),
+        where('isDeleted', '==', false),
+      );
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductionRoutingPlan));
+    } catch (error) {
+      console.warn('routingPlanService.getActivePlans failed', error);
+      return [];
+    }
   },
 
   async getById(id: string): Promise<ProductionRoutingPlan | null> {

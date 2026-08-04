@@ -334,48 +334,58 @@ export const ProductionIssues: React.FC = () => {
   const actor = userDisplayName || userEmail || 'Current User';
 
   const load = async (force = false) => {
-    const cached = peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY);
-    if (cached) {
-      setOrders(cached.orders);
-      setWarehouses(filterWarehouses(cached.warehouses));
-      setLocations(cached.locations);
-      setRacks(cached.racks);
+    try {
+      const cached = peekPageDataCache<ProductionIssuesLocalData>(PRODUCTION_ISSUES_CACHE_KEY);
+      if (cached) {
+        setOrders(cached.orders);
+        setWarehouses(filterWarehouses(cached.warehouses));
+        setLocations(cached.locations);
+        setRacks(cached.racks);
+      }
+
+      const [{ data },] = await Promise.all([
+        fetchCachedPageData(
+          PRODUCTION_ISSUES_CACHE_KEY,
+          async () => {
+            const [issueRows, whs, locs, rackRows] = await Promise.all([
+              productionIssueService.getAll(),
+              warehouseService.getActiveWarehouses(),
+              warehouseLocationService.getAll(),
+              warehouseRackService.getAll(),
+            ]);
+            return {
+              orders: issueRows,
+              warehouses: whs,
+              locations: locs,
+              racks: rackRows,
+            } satisfies ProductionIssuesLocalData;
+          },
+          { force, maxAgeMs: 45_000 },
+        ),
+        fetchWorkOrders(),
+        fetchProductionPlans(),
+        fetchProducts(),
+        fetchLines(),
+      ]);
+
+      const visibleWarehouses = filterWarehouses(data.warehouses);
+      setOrders(data.orders);
+      setWarehouses(visibleWarehouses);
+      setLocations(data.locations);
+      setRacks(data.racks);
+      const suppliesId = resolveSuppliesWarehouseId(inventoryRouting, data.warehouses);
+      setWarehouseId((prev) =>
+        resolveScopedWarehouseId(prev, [queryWarehouseId, suppliesId, scopedWarehouseId, visibleWarehouses[0]?.id || '']),
+      );
+    } catch (error) {
+      const code = String((error as { code?: unknown })?.code || '');
+      const text = error instanceof Error ? error.message : String(error || '');
+      if (code === 'failed-precondition' || /requires an index|index is currently building/i.test(text)) {
+        setMessage('جاري تجهيز فهرس أوامر الصرف في قاعدة البيانات. أعد المحاولة بعد دقيقة.');
+        return;
+      }
+      setMessage(error instanceof Error ? error.message : 'تعذر تحميل أوامر الصرف.');
     }
-
-    const [{ data },] = await Promise.all([
-      fetchCachedPageData(
-        PRODUCTION_ISSUES_CACHE_KEY,
-        async () => {
-          const [issueRows, whs, locs, rackRows] = await Promise.all([
-            productionIssueService.getAll(),
-            warehouseService.getActiveWarehouses(),
-            warehouseLocationService.getAll(),
-            warehouseRackService.getAll(),
-          ]);
-          return {
-            orders: issueRows,
-            warehouses: whs,
-            locations: locs,
-            racks: rackRows,
-          } satisfies ProductionIssuesLocalData;
-        },
-        { force, maxAgeMs: 45_000 },
-      ),
-      fetchWorkOrders(),
-      fetchProductionPlans(),
-      fetchProducts(),
-      fetchLines(),
-    ]);
-
-    const visibleWarehouses = filterWarehouses(data.warehouses);
-    setOrders(data.orders);
-    setWarehouses(visibleWarehouses);
-    setLocations(data.locations);
-    setRacks(data.racks);
-    const suppliesId = resolveSuppliesWarehouseId(inventoryRouting, data.warehouses);
-    setWarehouseId((prev) =>
-      resolveScopedWarehouseId(prev, [queryWarehouseId, suppliesId, scopedWarehouseId, visibleWarehouses[0]?.id || '']),
-    );
   };
 
   const reload = async () => {

@@ -23,6 +23,11 @@ import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPa
 import { warehouseService } from '@/modules/inventory/services/warehouseService';
 import { WAREHOUSE_ROLE_LABELS } from '@/modules/inventory/lib/stockLabels';
 import { useMaterialsWarehouseScope } from '@/modules/inventory/hooks/useMaterialsWarehouseScope';
+import {
+  isInventoryMenuItemVisibleForWarehouseScope,
+  resolveAccessibleWarehouseRoles,
+} from '@/modules/inventory/lib/inventoryMenuVisibility';
+import type { WarehouseRole } from '@/modules/inventory/types';
 
 const MAX_SIDEBAR_WAREHOUSES = 24;
 
@@ -103,7 +108,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const [profileOpen, setProfileOpen] = useState(false);
   const [warehouseNavItems, setWarehouseNavItems] = useState<MenuItem[]>([]);
   const profileRef = useRef<HTMLDivElement>(null);
-  const { filterWarehouses } = useMaterialsWarehouseScope();
+  const {
+    filterWarehouses,
+    scoped: warehouseScoped,
+    isMaterialsWarehouseRole,
+  } = useMaterialsWarehouseScope();
+  const [loadedWarehouseRoles, setLoadedWarehouseRoles] = useState<WarehouseRole[] | null>(null);
+  const accessibleWarehouseRoles = useMemo(
+    () => resolveAccessibleWarehouseRoles({
+      warehouseRoles: loadedWarehouseRoles || [],
+      isMaterialsWarehouseRole,
+    }),
+    [isMaterialsWarehouseRole, loadedWarehouseRoles],
+  );
 
   const { collapsed, toggleCollapse } = useSidebar();
   const badgeCounts   = useSidebarBadges();
@@ -118,17 +135,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   useEffect(() => {
     if (!can('inventory.view')) {
       setWarehouseNavItems([]);
+      setLoadedWarehouseRoles([]);
       return;
     }
     let cancelled = false;
     void warehouseService.getActiveWarehouses()
       .then((rows) => {
         if (cancelled) return;
-        const scoped = filterWarehouses(rows)
+        const scopedRows = filterWarehouses(rows)
           .filter((w) => Boolean(w.id))
           .slice(0, MAX_SIDEBAR_WAREHOUSES);
+        setLoadedWarehouseRoles(scopedRows.map((w) => (w.warehouseRole || 'general') as WarehouseRole));
         setWarehouseNavItems(
-          scoped.map((w) => {
+          scopedRows.map((w) => {
             const role = w.warehouseRole || 'general';
             const roleLabel = WAREHOUSE_ROLE_LABELS[role] || role;
             return {
@@ -143,11 +162,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
         );
       })
       .catch(() => {
-        if (!cancelled) setWarehouseNavItems([]);
+        if (!cancelled) {
+          setWarehouseNavItems([]);
+          setLoadedWarehouseRoles([]);
+        }
       });
     return () => {
       cancelled = true;
     };
+    // filterWarehouses already changes when materials/bound scope changes.
   }, [can, filterWarehouses]);
 
   /**
@@ -164,13 +187,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             canAccessMenuItem(can, i, roleKey)
             && isMenuItemOperationPathEnabled(operationPaths, i.key)
             && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
+            && (
+              g.key !== 'inventory'
+              || isInventoryMenuItemVisibleForWarehouseScope({
+                menuKey: i.key,
+                scoped: warehouseScoped,
+                accessibleWarehouseRoles,
+              })
+            )
           ));
           if (g.key !== 'inventory' || warehouseNavItems.length === 0) {
             return { ...g, children };
           }
+          // Prefer inserting after warehouses list; if hidden when scoped, after dashboard.
+          const insertAfterKey = children.some((item) => item.key === 'inv-warehouses')
+            ? 'inv-warehouses'
+            : 'inv-dashboard';
           const insertAt = Math.max(
             0,
-            children.findIndex((item) => item.key === 'inv-warehouses') + 1,
+            children.findIndex((item) => item.key === insertAfterKey) + 1,
           );
           const nextChildren = [
             ...children.slice(0, insertAt),
@@ -180,7 +215,15 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
           return { ...g, children: nextChildren };
         })
         .filter((g) => g.children.length > 0),
-    [can, currentEmployee?.level, operationPaths, roleKey, warehouseNavItems],
+    [
+      accessibleWarehouseRoles,
+      can,
+      currentEmployee?.level,
+      operationPaths,
+      roleKey,
+      warehouseNavItems,
+      warehouseScoped,
+    ],
   );
 
   const activeGroupKey = useMemo(() => {

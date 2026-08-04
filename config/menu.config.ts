@@ -242,6 +242,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       },
       // استعلام عبر كل المخازن
       { key: 'inv-balances', label: 'أرصدة كل المخازن', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
+      { key: 'inv-item-card', label: 'كارت الصنف', icon: 'badge', path: '/inventory/item-card', permission: 'inventory.view' },
       { key: 'inv-transactions', label: 'حركات كل المخازن', icon: 'sync_alt', path: '/inventory/transactions', permission: 'inventory.view' },
       { key: 'inv-locations', label: 'مواقع الأرفف', icon: 'grid_view', path: '/inventory/locations', permission: 'inventory.view' },
       // عمليات مشتركة

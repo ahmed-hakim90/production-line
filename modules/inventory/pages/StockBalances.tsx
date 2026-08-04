@@ -401,13 +401,13 @@ export const StockBalances: React.FC = () => {
                 <th className="erp-th text-center">الحد الأدنى</th>
                 <th className="erp-th">آخر حركة</th>
                 <th className="erp-th text-center">الحالة</th>
-                {can('inventory.transactions.create') && <th className="erp-th text-center">إجراء</th>}
+                <th className="erp-th text-center">إجراء</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[var(--color-border)]">
               {loading && Array.from({ length: 8 }).map((_, i) => (
                 <tr key={`balance-skeleton-${i}`}>
-                  <td className="px-4 py-3" colSpan={can('inventory.transactions.create') ? 12 : 11}>
+                  <td className="px-4 py-3" colSpan={12}>
                     <Skeleton className="h-5 w-full rounded-md" />
                   </td>
                 </tr>
@@ -416,7 +416,7 @@ export const StockBalances: React.FC = () => {
                 <tr>
                   <td
                     className="px-4 py-12 text-center text-slate-400"
-                    colSpan={can('inventory.transactions.create') ? 12 : 11}
+                    colSpan={12}
                   >
                     لا توجد بيانات مطابقة.
                   </td>
@@ -461,25 +461,38 @@ export const StockBalances: React.FC = () => {
                           : isLow ? <Badge variant="warning">منخفض</Badge>
                             : <Badge variant="success">متوفر</Badge>}
                     </td>
-                    {can('inventory.transactions.create') && (
-                      <td className="px-4 py-3 text-center">
+                    <td className="px-4 py-3 text-center">
+                      <div className="inline-flex flex-wrap items-center justify-center gap-1">
                         <Button
                           variant="outline"
                           className="!py-1 !px-2 text-xs"
-                          onClick={() => openModal(MODAL_KEYS.INVENTORY_STOCK_ADJUSTMENT, {
-                            warehouseId: row.warehouseId,
-                            itemType: row.itemType,
-                            itemId: row.itemId,
-                            itemName: row.itemName,
-                            itemCode: row.itemCode,
-                            createdBy: userDisplayName || userEmail || 'User',
-                            onSaved: () => void reload(),
-                          })}
+                          onClick={() => navigate(
+                            `/inventory/item-card?itemType=${encodeURIComponent(
+                              row.itemType === 'raw_material' ? 'material' : row.itemType,
+                            )}&itemId=${encodeURIComponent(row.itemId)}&warehouseId=${encodeURIComponent(row.warehouseId)}`,
+                          )}
                         >
-                          تسوية
+                          كارت
                         </Button>
-                      </td>
-                    )}
+                        {can('inventory.transactions.create') ? (
+                          <Button
+                            variant="outline"
+                            className="!py-1 !px-2 text-xs"
+                            onClick={() => openModal(MODAL_KEYS.INVENTORY_STOCK_ADJUSTMENT, {
+                              warehouseId: row.warehouseId,
+                              itemType: row.itemType,
+                              itemId: row.itemId,
+                              itemName: row.itemName,
+                              itemCode: row.itemCode,
+                              createdBy: userDisplayName || userEmail || 'User',
+                              onSaved: () => void reload(),
+                            })}
+                          >
+                            تسوية
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 );
               })}

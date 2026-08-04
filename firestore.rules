@@ -731,11 +731,16 @@ service cloud.firestore {
     }
 
     match /audit_logs/{docId} {
-      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead();
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
       // Client audit creates must carry a fixed schema; free-form forgery is rejected.
+      // Super-admins working under /t/{otherSlug} may stamp the active company tenantId.
       allow create: if pl_isActiveUser()
-        && request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
-        && request.resource.data.keys().hasAll(['tenantId', 'action', 'entityType', 'timestamp'])
+        && (
+          request.resource.data.tenantId == pl_currentUserDoc().data.tenantId
+          || pl_superAdminTenantScopedCreateOk()
+        )
+        && request.resource.data.keys().hasAll(['tenantId', 'action', 'entityType'])
         && request.resource.data.action is string
         && request.resource.data.action.size() > 0
         && request.resource.data.action.size() <= 120

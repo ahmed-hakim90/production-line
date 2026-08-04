@@ -31,7 +31,7 @@ export const productMaterialService = {
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductMaterial));
     } catch (error) {
       console.error('productMaterialService.getAll error:', error);
-      throw error;
+      return [];
     }
   },
 
@@ -53,7 +53,7 @@ export const productMaterialService = {
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ProductMaterial));
     } catch (error) {
       console.error('productMaterialService.getByProduct error:', error);
-      throw error;
+      return [];
     }
   },
 

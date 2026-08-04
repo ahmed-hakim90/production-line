@@ -143,6 +143,11 @@ function roleActions(
     default:
       return [
         {
+          label: 'كارت الصنف',
+          path: `/inventory/item-card?warehouseId=${encodeURIComponent(warehouseId)}`,
+          description: 'عرض مكونات وحركات صنف مع الطباعة',
+        },
+        {
           label: 'الأرصدة',
           path: `/inventory/balances?warehouseId=${encodeURIComponent(warehouseId)}`,
           description: 'أرصدة هذا المخزن',
