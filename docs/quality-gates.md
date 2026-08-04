@@ -14,12 +14,12 @@ Automated checks that protect refactors and releases. Prefer the discovery runne
 | `npm run test:all` | Discovers and runs all `tests/*.test.ts` (and non-emulator `.mjs`) | Before merge; catches orphan suites |
 | `npm run test:smoke-navigation` | Tenant path / chunk-recovery helpers | After navigation or white-screen fixes |
 | `npm run compose:firestore-rules` | Rebuilds `firestore.rules` from fragments | After editing rules fragments; part of local `ci` |
-| `npm run test:rules` | Compose rules + Firestore emulator unit tests | After rules/security changes; **required in GitHub CI** |
+| `npm run test:rules` | Compose rules + Firestore emulator unit tests | After rules/security changes |
 | `npm run ci` | typecheck → functions typecheck → arch:verify → test:all → compose rules | Full local gate **without** emulator |
 
 ### Emulator note
 
-`npm run ci` does **not** run `test:rules` (Firestore emulator is heavy/slow locally). Run `npm run test:rules` separately when touching security rules, or rely on GitHub Actions CI which always runs it.
+`npm run ci` does **not** run `test:rules` (Firestore emulator is heavy/slow). Run `npm run test:rules` separately when touching security rules.
 
 `scripts/run-all-tests.mjs` **skips** `tests/firestore.rules.test.mjs` for the same reason. List discovery with:
 
@@ -27,26 +27,11 @@ Automated checks that protect refactors and releases. Prefer the discovery runne
 node scripts/run-all-tests.mjs --list
 ```
 
-## GitHub Actions
-
-Workflow: [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)
-
-Triggers: `pull_request`, `push` to `main`.
-
-Steps (in order):
-
-1. `npm ci` (root) + `npm ci --prefix functions`
-2. `typecheck` / `typecheck:functions`
-3. `arch:check:legacy-imports`
-4. `test:foundation`
-5. `test:all` (discovery runner — all orphan and package suites)
-6. `test:rules` (Firebase Firestore emulator)
-
-Manual emulator-only re-run: [`.github/workflows/firestore-rules-tests.yml`](../.github/workflows/firestore-rules-tests.yml) (`workflow_dispatch` only — no PR duplicate).
+GitHub Actions workflows are **not** used for this repo. Run `npm run ci` (and `npm run test:rules` when needed) locally before merge.
 
 ## Failure triage
 
-1. **Typecheck** — fix TS errors in app or `functions/`; do not weaken `tsconfig` to green CI.
+1. **Typecheck** — fix TS errors in app or `functions/`; do not weaken `tsconfig` to green the gate.
 2. **Legacy imports** — move writes/imports to module services/usecases; see `scripts/check-legacy-imports.mjs`.
 3. **Foundation / unit fail** — reproduce with the single file (`npx tsx tests/<name>.test.ts`) or `npm run test:all`.
 4. **Rules fail** — ensure emulator host is set via `npm run test:rules`; check tenant isolation assertions in `tests/firestore.rules.test.mjs`.

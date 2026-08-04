@@ -63,6 +63,7 @@ Bilingual short index. Technical detail lives in the linked English docs unless 
 
 ## Other existing docs / وثائق أخرى
 
+- [FIREBASE_SCALE_READINESS_REPORT_AR.md](./FIREBASE_SCALE_READINESS_REPORT_AR.md) — تقييم جاهزية Firebase لحجم 7k صنف / 8k عميل / 100 يوزر + فواتير وHR وبصمة
 - [BASELINE_HARDENING_REPORT.md](./BASELINE_HARDENING_REPORT.md) — hardening baseline (2026-08-03)
 - [PROJECT_DOC.md](./PROJECT_DOC.md) — older project overview
 - [handover/](./handover/) — ops handover routines

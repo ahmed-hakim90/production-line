@@ -53,8 +53,8 @@ match /monthly_costs/{docId} {
   - Tenant isolation
   - Role restrictions
   - Repair branch restrictions
-- CI workflow: `.github/workflows/firestore-rules-tests.yml`
-  - Runs rules test through Firestore emulator before merge/deploy path.
+- Local gate: `npm run test:rules`
+  - Runs rules test through Firestore emulator (no GitHub Actions workflow).
 
 ## Local Execution Notes
 
