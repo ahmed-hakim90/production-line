@@ -3,7 +3,6 @@ import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../../../components/UI';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
-import { materialService } from '../../manufacturing/services/materialService';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
 import { CreateRepairSpareIssueModal } from '../components/CreateRepairSpareIssueModal';
@@ -16,10 +15,27 @@ import {
   canSubmitRepairSpareIssue,
 } from '../lib/repairSpareIssue';
 import type { RepairBranch, RepairSpareIssue, RepairSpareIssueStatus } from '../types';
-import type { Material } from '../../manufacturing/types';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 const PAGE_SIZE = 20;
+
+const toUserSafeError = (error: unknown, fallback: string): string => {
+  const message = String((error as { message?: unknown })?.message || '').trim();
+  const code = String((error as { code?: unknown })?.code || '').toLowerCase();
+  if (
+    code.includes('permission-denied')
+    || /missing or insufficient permissions/i.test(message)
+  ) {
+    return 'ليس لديك صلاحية كافية لعرض أو تحميل هذه البيانات.';
+  }
+  if (code.includes('unauthenticated')) {
+    return 'يجب تسجيل الدخول أولًا ثم إعادة المحاولة.';
+  }
+  if (message && !/firebase|firestore|https?:\/\//i.test(message)) {
+    return message;
+  }
+  return fallback;
+};
 
 export const RepairSpareIssues: React.FC = () => {
   const { can } = usePermission();
@@ -32,7 +48,6 @@ export const RepairSpareIssues: React.FC = () => {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
-  const [materials, setMaterials] = useState<Material[]>([]);
   const [rows, setRows] = useState<RepairSpareIssue[]>([]);
   const [statusFilter, setStatusFilter] = useState<RepairSpareIssueStatus | ''>('');
   const [page, setPage] = useState(1);
@@ -41,16 +56,14 @@ export const RepairSpareIssues: React.FC = () => {
     if (!canView) return;
     setLoading(true);
     try {
-      const [branchRows, issues, materialRows] = await Promise.all([
+      const [branchRows, issues] = await Promise.all([
         repairBranchService.list(),
         repairSpareIssueService.listRecent(200),
-        materialService.getAll(),
       ]);
       setBranches(branchRows);
       setRows(issues);
-      setMaterials(materialRows);
-    } catch (e: any) {
-      toast.error(e?.message || 'تعذر تحميل سندات صرف قطع الغيار.');
+    } catch (e: unknown) {
+      toast.error(toUserSafeError(e, 'تعذر تحميل سندات صرف قطع الغيار.'));
     } finally {
       setLoading(false);
     }
@@ -83,8 +96,8 @@ export const RepairSpareIssues: React.FC = () => {
       await action();
       toast.success(success);
       await load();
-    } catch (e: any) {
-      toast.error(e?.message || 'تعذر تنفيذ العملية.');
+    } catch (e: unknown) {
+      toast.error(toUserSafeError(e, 'تعذر تنفيذ العملية.'));
     } finally {
       setBusyId(null);
     }
@@ -248,7 +261,6 @@ export const RepairSpareIssues: React.FC = () => {
         onClose={() => setShowCreate(false)}
         onCreated={() => void load()}
         branches={branches}
-        materials={materials}
       />
     </div>
   );

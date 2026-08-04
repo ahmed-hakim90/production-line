@@ -14,6 +14,36 @@ import {
   validateRepairSpareReturnLines,
 } from '../modules/repair/lib/repairSpareIssue';
 import type { RepairSpareIssue } from '../modules/repair/types';
+import {
+  effectiveSparePartUnitCost,
+  repairSparePartSalePrice,
+} from '../modules/repair/utils/sparePartPricing';
+
+/** Mirrors repairSpareIssues aliases in utils/permissions.ts (no inventory fallbacks). */
+function repairSpareIssuePermissionAlias(
+  permissions: Record<string, boolean>,
+  permission:
+    | 'repairSpareIssues.view'
+    | 'repairSpareIssues.create'
+    | 'repairSpareIssues.approve'
+    | 'repairSpareIssues.issue',
+): boolean {
+  const explicit = permissions[permission];
+  if (explicit !== undefined) return explicit === true;
+  if (permission === 'repairSpareIssues.view') {
+    return permissions['repair.parts.view'] === true || permissions['repair.view'] === true;
+  }
+  if (permission === 'repairSpareIssues.create') {
+    return permissions['repair.parts.manage'] === true;
+  }
+  if (permission === 'repairSpareIssues.approve') {
+    return permissions['repair.parts.manage'] === true;
+  }
+  if (permission === 'repairSpareIssues.issue') {
+    return permissions['repair.parts.manage'] === true;
+  }
+  return false;
+}
 
 assert.equal(normalizeRepairSpareApprovalMode('required'), 'required');
 assert.equal(normalizeRepairSpareApprovalMode('direct'), 'direct');
@@ -78,5 +108,59 @@ validateRepairSpareReturnLines(issue, [{ itemId: 'm1', quantity: 3 }]);
 assert.throws(() => validateRepairSpareReturnLines(issue, [{ itemId: 'm1', quantity: 9 }]), /تتجاوز/);
 const afterReturn = applyRepairSpareReturnQuantities(issue.lines, [{ itemId: 'm1', quantity: 3 }]);
 assert.equal(afterReturn[0].returnedQty, 5);
+
+// Permission aliases: repair spare issues map from repair.parts / repair.view only — not inventory keys.
+assert.equal(
+  repairSpareIssuePermissionAlias({ 'repairSpareIssues.view': true }, 'repairSpareIssues.view'),
+  true,
+);
+assert.equal(
+  repairSpareIssuePermissionAlias({ 'repair.parts.view': true }, 'repairSpareIssues.view'),
+  true,
+);
+assert.equal(
+  repairSpareIssuePermissionAlias({ 'repair.parts.manage': true }, 'repairSpareIssues.create'),
+  true,
+);
+assert.equal(
+  repairSpareIssuePermissionAlias({ 'inventory.transactions.create': true }, 'repairSpareIssues.create'),
+  false,
+);
+assert.equal(
+  repairSpareIssuePermissionAlias({ 'inventory.transfers.approve': true }, 'repairSpareIssues.approve'),
+  false,
+);
+assert.equal(
+  repairSpareIssuePermissionAlias({ 'inventory.transactions.create': true }, 'repairSpareIssues.issue'),
+  false,
+);
+
+// Repair UI sale/usage price: catalog option must not surface purchase cost fields.
+{
+  const part = {
+    id: 'p1',
+    name: 'محرك',
+    code: 'MOT',
+    materialId: 'm1',
+    unit: 'piece',
+    defaultSalePrice: 120,
+    purchaseUnitCost: 40,
+  };
+  const option = {
+    value: String(part.materialId),
+    label: part.name,
+    salePrice: Number(part.defaultSalePrice || 0),
+  };
+  assert.equal(option.salePrice, 120);
+  assert.equal('unitCost' in option, false);
+  assert.equal('purchaseCost' in option, false);
+}
+
+{
+  const part = { defaultSalePrice: 90, purchaseUnitCost: 40, warehouseDiscountPercent: 10 };
+  assert.equal(repairSparePartSalePrice(part), 90);
+  assert.equal(effectiveSparePartUnitCost(part as any), 36);
+  assert.notEqual(repairSparePartSalePrice(part), effectiveSparePartUnitCost(part as any));
+}
 
 console.log('repair-spare-issue.test.ts: ok');

@@ -216,6 +216,32 @@ const loadWarehouse = async (
   };
 };
 
+/** Prefer explicit fromWarehouseId; otherwise pick the tenant's active spare_parts_central warehouse. */
+const resolveCentralWarehouseId = async (
+  tenantId: string,
+  requestedFromWarehouseId: string,
+): Promise<string> => {
+  const requested = String(requestedFromWarehouseId || '').trim();
+  if (requested) return requested;
+  const snap = await db
+    .collection(WAREHOUSES)
+    .where('tenantId', '==', tenantId)
+    .where('warehouseRole', '==', CENTRAL_ROLE)
+    .limit(5)
+    .get();
+  const active = snap.docs.find((doc) => {
+    const data = doc.data() as { isActive?: boolean };
+    return data.isActive !== false;
+  });
+  if (!active) {
+    throw new HttpsError(
+      'failed-precondition',
+      'لا يوجد مخزن قطع غيار مركزي نشط لهذه الشركة.',
+    );
+  }
+  return active.id;
+};
+
 const validateDraftLines = (lines: DraftLineInput[]): Array<{ itemId: string; quantity: number }> => {
   if (!Array.isArray(lines) || lines.length === 0) {
     throw new HttpsError('invalid-argument', 'أضف بند مكوّن واحد على الأقل.');
@@ -336,11 +362,14 @@ export const createSparePartsReplenishmentHandler = async (request: CallableRequ
     note?: string;
     lines?: DraftLineInput[];
   };
-  const fromWarehouseId = String(payload.fromWarehouseId || '').trim();
   const toWarehouseId = String(payload.toWarehouseId || '').trim();
-  if (!fromWarehouseId || !toWarehouseId) {
-    throw new HttpsError('invalid-argument', 'حدد مخزن قطع الغيار المركزي ومخزن المركز.');
+  if (!toWarehouseId) {
+    throw new HttpsError('invalid-argument', 'حدد مخزن المركز المستلم.');
   }
+  const fromWarehouseId = await resolveCentralWarehouseId(
+    actor.tenantId,
+    String(payload.fromWarehouseId || ''),
+  );
   if (fromWarehouseId === toWarehouseId) {
     throw new HttpsError('invalid-argument', 'مخزن المصدر والوجهة يجب أن يكونا مختلفين.');
   }

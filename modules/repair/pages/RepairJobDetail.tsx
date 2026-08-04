@@ -52,7 +52,7 @@ import {
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
-import { effectiveSparePartUnitCost } from '../utils/sparePartPricing';
+import { repairSparePartSalePrice } from '../utils/sparePartPricing';
 import { resolveRepairSettings, sumServiceCatalogPrices, accessoryLabelsFromIds } from '../config/repairSettings';
 import { listAllowedRepairStatusTargets } from '../utils/repairStatusTransitions';
 import { computeRepairJobCost } from '../utils/repairBusinessLogic';
@@ -531,7 +531,7 @@ export const RepairJobDetail: React.FC = () => {
         partId: part.id || '',
         partName: part.name,
         quantity: qty,
-        unitCost: effectiveSparePartUnitCost(part),
+        unitCost: repairSparePartSalePrice(part),
         scope: partScope,
         productItemId: partScope === 'product' ? partProductItemId : undefined,
         productName: partScope === 'product'
@@ -1070,7 +1070,12 @@ export const RepairJobDetail: React.FC = () => {
                   {job.partsUsed.map((part, idx) => (
                     <div key={`${part.partId}-${idx}`} className="flex justify-between gap-2 rounded border px-2 py-1">
                       <span>{part.partName}</span>
-                      <span className="tabular-nums text-muted-foreground">×{part.quantity}</span>
+                      <span className="tabular-nums text-muted-foreground">
+                        ×{part.quantity}
+                        {Number(part.unitCost || 0) > 0
+                          ? ` · ${Number(part.unitCost).toLocaleString('ar-EG')} ج.م`
+                          : ''}
+                      </span>
                     </div>
                   ))}
                 </div>

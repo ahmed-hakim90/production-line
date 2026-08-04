@@ -10,6 +10,7 @@ const JOBS_COLLECTION = 'repair_jobs';
 const WAREHOUSES_COLLECTION = 'warehouses';
 const WAREHOUSE_LOCATIONS_COLLECTION = 'warehouse_locations';
 const MATERIALS_COLLECTION = 'materials';
+const SPARE_PARTS_COLLECTION = 'repair_spare_parts';
 const ISSUES_COLLECTION = 'repair_spare_issues';
 const STOCK_ITEMS_COLLECTION = 'stock_items';
 const STOCK_LOCATION_BALANCES_COLLECTION = 'stock_location_balances';
@@ -271,6 +272,20 @@ async function transitionIssueStatus(params) {
     });
 }
 const canIssueNow = (status, approvalMode) => approvalMode === 'direct' ? status === 'draft' : status === 'approved';
+/** Job-facing usage price only — never fall back to purchase cost. */
+const resolveSparePartSalePrice = async (t, tenantId, partId) => {
+    const id = String(partId || '').trim();
+    if (!id)
+        return 0;
+    const snap = await t.get(db.collection(SPARE_PARTS_COLLECTION).doc(id));
+    if (!snap.exists)
+        return 0;
+    const data = snap.data();
+    if (String(data.tenantId || '').trim() !== tenantId)
+        return 0;
+    const sale = toNumber(data.defaultSalePrice);
+    return sale > 0 ? roundMoney(sale) : 0;
+};
 async function postIssueMovements(params) {
     const { actor, issueId } = params;
     return db.runTransaction(async (t) => {
@@ -338,6 +353,12 @@ async function postIssueMovements(params) {
                 throw new HttpsError('failed-precondition', `رصيد الرف غير كافٍ للصنف ${row.line.itemName}.`);
             }
         }
+        // All reads must complete before writes in this transaction.
+        const jobId = String(current.jobId || '').trim();
+        const jobRef = jobId ? db.collection(JOBS_COLLECTION).doc(jobId) : null;
+        const jobSnap = jobRef ? await t.get(jobRef) : null;
+        const meta = current.jobPartUsage;
+        const salePrice = await resolveSparePartSalePrice(t, actor.tenantId, meta?.partId);
         for (const row of stockRows) {
             const balSnap = balanceSnapByPath.get(row.balRef.path);
             const balQty = balSnap?.exists ? toNumber(balSnap.data()?.quantity) : 0;
@@ -419,36 +440,31 @@ async function postIssueMovements(params) {
             issuedByUserId: actor.uid,
             totalCostSnapshot: roundMoney(lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0)),
         });
-        const jobId = String(current.jobId || '').trim();
-        if (jobId) {
-            const jobRef = db.collection(JOBS_COLLECTION).doc(jobId);
-            const jobSnap = await t.get(jobRef);
-            if (jobSnap.exists) {
-                const jobData = jobSnap.data();
-                assertSameTenant(jobData.tenantId, actor.tenantId);
-                const prev = Array.isArray(jobData.partsUsed) ? [...jobData.partsUsed] : [];
-                const meta = current.jobPartUsage;
-                for (const line of lines) {
-                    const scope = meta?.scope === 'product' ? 'product' : 'job';
-                    prev.push(stripUndefined({
-                        partId: String(meta?.partId || line.itemId).trim(),
-                        partName: String(meta?.partName || line.itemName).trim(),
-                        quantity: line.quantity,
-                        unitCost: line.unitCostSnapshot,
-                        materialId: line.itemId,
-                        scope,
-                        ...(scope === 'product' && meta?.productItemId
-                            ? {
-                                productItemId: String(meta.productItemId).trim(),
-                                productName: String(meta.productName || '').trim() || undefined,
-                            }
-                            : {}),
-                        issueId,
-                        issueReferenceNo: current.referenceNo,
-                    }));
-                }
-                t.update(jobRef, { partsUsed: prev, updatedAt: now });
+        if (jobRef && jobSnap?.exists) {
+            const jobData = jobSnap.data();
+            assertSameTenant(jobData.tenantId, actor.tenantId);
+            const prev = Array.isArray(jobData.partsUsed) ? [...jobData.partsUsed] : [];
+            for (const line of lines) {
+                const scope = meta?.scope === 'product' ? 'product' : 'job';
+                prev.push(stripUndefined({
+                    partId: String(meta?.partId || line.itemId).trim(),
+                    partName: String(meta?.partName || line.itemName).trim(),
+                    quantity: line.quantity,
+                    // Job totals use sale/usage price; inventory movements keep purchase snapshots.
+                    unitCost: salePrice,
+                    materialId: line.itemId,
+                    scope,
+                    ...(scope === 'product' && meta?.productItemId
+                        ? {
+                            productItemId: String(meta.productItemId).trim(),
+                            productName: String(meta.productName || '').trim() || undefined,
+                        }
+                        : {}),
+                    issueId,
+                    issueReferenceNo: current.referenceNo,
+                }));
             }
+            t.update(jobRef, { partsUsed: prev, updatedAt: now });
         }
         return { referenceNo: current.referenceNo, issue: current, changed: true };
     });
@@ -457,7 +473,7 @@ export async function createRepairSpareIssueHandler(request) {
     try {
         const uid = requireAuth(request);
         const actor = await loadActor(uid);
-        requirePermission(actor, ['repairSpareIssues.create', 'repair.parts.manage', 'inventory.transactions.create'], 'لا تملك صلاحية إنشاء سند صرف قطع الغيار.');
+        requirePermission(actor, ['repairSpareIssues.create', 'repair.parts.manage'], 'لا تملك صلاحية إنشاء سند صرف قطع الغيار.');
         if (!actor.tenantId)
             throw new HttpsError('permission-denied', 'لا يمكن تحديد الشركة.');
         const data = (request.data || {});
@@ -550,7 +566,7 @@ export async function submitRepairSpareIssueHandler(request) {
     try {
         const uid = requireAuth(request);
         const actor = await loadActor(uid);
-        requirePermission(actor, ['repairSpareIssues.create', 'repair.parts.manage', 'inventory.transactions.create'], 'لا تملك صلاحية تقديم سند الصرف.');
+        requirePermission(actor, ['repairSpareIssues.create', 'repair.parts.manage'], 'لا تملك صلاحية تقديم سند الصرف.');
         const issueId = String(request.data?.issueId || '').trim();
         const { id } = await loadIssue(issueId, actor);
         const { data } = await transitionIssueStatus({
@@ -587,7 +603,7 @@ export async function approveRepairSpareIssueHandler(request) {
     try {
         const uid = requireAuth(request);
         const actor = await loadActor(uid);
-        requirePermission(actor, ['repairSpareIssues.approve', 'repair.parts.manage', 'inventory.transfers.approve'], 'لا تملك صلاحية اعتماد سند الصرف.');
+        requirePermission(actor, ['repairSpareIssues.approve', 'repair.parts.manage'], 'لا تملك صلاحية اعتماد سند الصرف.');
         const issueId = String(request.data?.issueId || '').trim();
         const { id } = await loadIssue(issueId, actor);
         const { data } = await transitionIssueStatus({
@@ -621,7 +637,7 @@ export async function rejectRepairSpareIssueHandler(request) {
     try {
         const uid = requireAuth(request);
         const actor = await loadActor(uid);
-        requirePermission(actor, ['repairSpareIssues.approve', 'repair.parts.manage', 'inventory.transfers.approve'], 'لا تملك صلاحية رفض سند الصرف.');
+        requirePermission(actor, ['repairSpareIssues.approve', 'repair.parts.manage'], 'لا تملك صلاحية رفض سند الصرف.');
         const payload = (request.data || {});
         const { id } = await loadIssue(String(payload.issueId || ''), actor);
         const { data } = await transitionIssueStatus({
@@ -657,7 +673,7 @@ export async function issueRepairSpareIssueHandler(request) {
     try {
         const uid = requireAuth(request);
         const actor = await loadActor(uid);
-        requirePermission(actor, ['repairSpareIssues.issue', 'repair.parts.manage', 'inventory.transactions.create'], 'لا تملك صلاحية تنفيذ صرف قطع الغيار.');
+        requirePermission(actor, ['repairSpareIssues.issue', 'repair.parts.manage'], 'لا تملك صلاحية تنفيذ صرف قطع الغيار.');
         const issueId = String(request.data?.issueId || '').trim();
         const { id } = await loadIssue(issueId, actor);
         const result = await postIssueMovements({ actor, issueId: id });
@@ -683,7 +699,7 @@ export async function cancelRepairSpareIssueHandler(request) {
     try {
         const uid = requireAuth(request);
         const actor = await loadActor(uid);
-        requirePermission(actor, ['repairSpareIssues.create', 'repair.parts.manage', 'inventory.transactions.create'], 'لا تملك صلاحية إلغاء سند الصرف.');
+        requirePermission(actor, ['repairSpareIssues.create', 'repair.parts.manage'], 'لا تملك صلاحية إلغاء سند الصرف.');
         const issueId = String(request.data?.issueId || '').trim();
         const { id } = await loadIssue(issueId, actor);
         const { data, changed } = await transitionIssueStatus({
@@ -723,7 +739,7 @@ export async function returnRepairSpareIssueHandler(request) {
     try {
         const uid = requireAuth(request);
         const actor = await loadActor(uid);
-        requirePermission(actor, ['repairSpareIssues.issue', 'repair.parts.manage', 'inventory.transactions.create'], 'لا تملك صلاحية تسجيل مرتجع قطع الغيار.');
+        requirePermission(actor, ['repairSpareIssues.issue', 'repair.parts.manage'], 'لا تملك صلاحية تسجيل مرتجع قطع الغيار.');
         const payload = (request.data || {});
         const { id, data } = await loadIssue(String(payload.issueId || ''), actor);
         const returns = Array.isArray(payload.lines) ? payload.lines : [];

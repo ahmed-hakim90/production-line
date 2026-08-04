@@ -26,10 +26,19 @@ import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
-import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairSparePart, type RepairSparePartStock } from '../types';
+import {
+  REPAIR_JOB_STATUS_LABELS,
+  resolveUserRepairBranchIds,
+  type FirestoreUserWithRepair,
+  type RepairBranch,
+  type RepairJob,
+  type RepairSparePart,
+  type RepairSparePartStock,
+} from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairBranchService } from '../services/repairBranchService';
+import { repairJobService } from '../services/repairJobService';
 import { useLowStockAlert } from '../hooks/useLowStockAlert';
 import { LowStockAlert } from '../components/LowStockAlert';
 import { RepairReplenishmentRequestsPanel } from '../components/RepairReplenishmentRequestsPanel';
@@ -41,12 +50,13 @@ import {
 import { planSparePartCatalogLinks } from '../utils/sparePartCatalogBackfill';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairSettings } from '../config/repairSettings';
-import { sparePartMarginPreview, effectiveSparePartUnitCost } from '../utils/sparePartPricing';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+
+const CLOSED_JOB_STATUSES = new Set(['delivered', 'cancelled', 'unrepairable']);
 
 export const SparePartsInventory: React.FC = () => {
   const { dir } = useAppDirection();
@@ -70,12 +80,18 @@ export const SparePartsInventory: React.FC = () => {
   );
   const canManageAllBranches = repairCtx.canViewAllBranches;
   const canManageParts = can('repair.parts.manage');
-  const canManagePricing = can('repair.pricing.manage') || can('repair.settings.manage');
+  const canManagePricing = can('repair.pricing.manage');
   const canViewReplenishment =
-    can('sparePartsReplenishment.view') || can('sparePartsReplenishment.create');
+    can('sparePartsReplenishment.view')
+    || can('sparePartsReplenishment.create')
+    || can('sparePartsReplenishment.receive');
+  const canCreateReplenishment = can('sparePartsReplenishment.create');
+  const canViewJobs = can('repair.view');
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
+  const [branchJobs, setBranchJobs] = useState<RepairJob[]>([]);
+  const [jobsLoading, setJobsLoading] = useState(false);
   const userBranchIds = useMemo(
     () => Array.from(new Set([...resolveUserRepairBranchIds(user), ...assignedBranchIds])),
     [user, assignedBranchIds],
@@ -111,9 +127,7 @@ export const SparePartsInventory: React.FC = () => {
     materialId: '',
     unit: 'قطعة',
     minStock: String(repairSettings.defaults.defaultMinStock),
-    purchaseUnitCost: '',
     defaultSalePrice: '',
-    warehouseDiscountPercent: '',
   });
   useEffect(() => {
     setForm((prev) => ({ ...prev, minStock: String(repairSettings.defaults.defaultMinStock) }));
@@ -121,13 +135,7 @@ export const SparePartsInventory: React.FC = () => {
 
   const [isCreatePartModalOpen, setIsCreatePartModalOpen] = useState(false);
   const [linkingCatalog, setLinkingCatalog] = useState(false);
-  const [partPendingDelete, setPartPendingDelete] = useState<RepairSparePart | null>(null);
-  const [partPricingEdit, setPartPricingEdit] = useState<RepairSparePart | null>(null);
-  const [pricingForm, setPricingForm] = useState({
-    purchaseUnitCost: '',
-    defaultSalePrice: '',
-    warehouseDiscountPercent: '',
-  });
+  const [replenishModalOpen, setReplenishModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [increaseQty, setIncreaseQty] = useState('1');
   const [viewMode, setViewMode] = useState<'simple' | 'dense'>('dense');
@@ -174,6 +182,35 @@ export const SparePartsInventory: React.FC = () => {
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [branchId, activeWarehouseId]);
+
+  useEffect(() => {
+    if (!canViewJobs || !branchId) {
+      setBranchJobs([]);
+      return;
+    }
+    let cancelled = false;
+    setJobsLoading(true);
+    void repairJobService
+      .listByBranch(branchId)
+      .then((rows) => {
+        if (cancelled) return;
+        setBranchJobs(
+          rows
+            .filter((job) => !CLOSED_JOB_STATUSES.has(String(job.status || '')))
+            .slice(0, 25),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setBranchJobs([]);
+      })
+      .finally(() => {
+        if (!cancelled) setJobsLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, canViewJobs]);
+
   useEffect(() => {
     void loadAllCatalogMaterials()
       .then(setCatalogComponents)
@@ -258,10 +295,6 @@ export const SparePartsInventory: React.FC = () => {
       ...prev,
       materialId,
       unit: selected?.unitLabel || prev.unit || 'قطعة',
-      purchaseUnitCost:
-        selected?.purchaseCost && selected.purchaseCost > 0
-          ? String(selected.purchaseCost)
-          : prev.purchaseUnitCost,
     }));
   };
 
@@ -287,9 +320,7 @@ export const SparePartsInventory: React.FC = () => {
       return;
     }
     try {
-      const purchase = Number(form.purchaseUnitCost || 0);
       const sale = Number(form.defaultSalePrice || 0);
-      const disc = Number(form.warehouseDiscountPercent || 0);
       await sparePartsService.createPart({
         branchId,
         name: partName,
@@ -302,11 +333,7 @@ export const SparePartsInventory: React.FC = () => {
           ? { sourceProductId: form.productId }
           : {}),
         ...(selectedMaterial.itemType === 'legacy_raw' ? { rawMaterialId: materialId } : {}),
-        ...(Number.isFinite(purchase) && purchase > 0 ? { purchaseUnitCost: purchase } : {}),
         ...(canManagePricing && Number.isFinite(sale) && sale > 0 ? { defaultSalePrice: sale } : {}),
-        ...(canManagePricing && Number.isFinite(disc) && disc > 0
-          ? { warehouseDiscountPercent: Math.min(100, disc) }
-          : {}),
       });
       toast.success('تمت إضافة القطعة.');
       setForm((prev) => ({
@@ -314,9 +341,7 @@ export const SparePartsInventory: React.FC = () => {
         materialId: '',
         unit: 'قطعة',
         minStock: String(repairSettings.defaults.defaultMinStock),
-        purchaseUnitCost: '',
         defaultSalePrice: '',
-        warehouseDiscountPercent: '',
       }));
       setIsCreatePartModalOpen(false);
       await load({ force: true });
@@ -342,10 +367,10 @@ export const SparePartsInventory: React.FC = () => {
         quantity: qty,
         type: 'IN',
         createdBy: user?.displayName || user?.email || 'system',
-        notes: 'إضافة يدوية',
+        notes: 'جرد يدوي',
       });
       await load({ force: true });
-      toast.success('تمت إضافة الكمية بنجاح.');
+      toast.success('تم تسجيل زيادة الجرد.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إضافة الكمية.');
     }
@@ -367,31 +392,12 @@ export const SparePartsInventory: React.FC = () => {
         quantity: qty,
         type: 'OUT',
         createdBy: user?.displayName || user?.email || 'system',
-        notes: 'سحب يدوي',
+        notes: 'جرد يدوي',
       });
       await load({ force: true });
-      toast.success('تم سحب الكمية بنجاح.');
+      toast.success('تم تسجيل نقص الجرد.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر سحب الكمية.');
-    }
-  };
-  const savePartPricing = async () => {
-    if (!partPricingEdit?.id) return;
-    if (!canManagePricing) {
-      toast.error('ليس لديك صلاحية تعديل التسعير.');
-      return;
-    }
-    try {
-      // Purchase cost is priced centrally on materials — centers only set sale price / discount.
-      await sparePartsService.updatePartCatalog(partPricingEdit.id, {
-        defaultSalePrice: Number(pricingForm.defaultSalePrice || 0),
-        warehouseDiscountPercent: Number(pricingForm.warehouseDiscountPercent || 0),
-      });
-      toast.success('تم حفظ تسعير البيع.');
-      setPartPricingEdit(null);
-      await load({ force: true });
-    } catch (e: any) {
-      toast.error(e?.message || 'تعذر حفظ التسعير.');
     }
   };
 
@@ -436,18 +442,6 @@ export const SparePartsInventory: React.FC = () => {
     }
   };
 
-  const removePart = async () => {
-    if (!partPendingDelete?.id || !branchId) return;
-    try {
-      await sparePartsService.removePart(partPendingDelete.id, branchId);
-      toast.success('تم حذف قطعة الغيار.');
-      await load({ force: true });
-      setPartPendingDelete(null);
-    } catch (e: any) {
-      toast.error(e?.message || 'تعذر حذف قطعة الغيار.');
-    }
-  };
-
   return (
     <div className="space-y-4" dir={dir}>
       <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
@@ -480,12 +474,28 @@ export const SparePartsInventory: React.FC = () => {
                 <Link to={withTenantPath(tenantSlug, '/repair')}>
                   <Button variant="outline">لوحة الصيانة</Button>
                 </Link>
-                <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
-                  <Button variant="outline">طلبات الصيانة</Button>
-                </Link>
+                {can('repairSpareIssues.view') && (
+                  <Link to={withTenantPath(tenantSlug, '/repair/spare-issues')}>
+                    <Button variant="outline">سندات الصرف</Button>
+                  </Link>
+                )}
                 {canViewReplenishment && (
-                  <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-replenishment')}>
-                    <Button variant="outline">طلبات التموين من المخزن الرئيسي</Button>
+                  <Link to={withTenantPath(tenantSlug, '/repair/parts-replenishment')}>
+                    <Button variant="outline">متابعة التموين</Button>
+                  </Link>
+                )}
+                {canCreateReplenishment && (
+                  <Button
+                    type="button"
+                    onClick={() => setReplenishModalOpen(true)}
+                    disabled={!activeWarehouseId}
+                  >
+                    طلب تموين
+                  </Button>
+                )}
+                {canManagePricing && (
+                  <Link to={withTenantPath(tenantSlug, '/repair/parts-pricing')}>
+                    <Button variant="secondary">تسعير القطع</Button>
                   </Link>
                 )}
               </div>
@@ -542,11 +552,7 @@ export const SparePartsInventory: React.FC = () => {
               <DialogHeader>
                 <DialogTitle>إضافة صنف جديد</DialogTitle>
                 <DialogDescription>
-                  القطع تُختار من ماستر داتا المكونات المشتركة (المواد التصنيعية / BOM المنتج) — نفس الكتالوج المستخدم في الإنتاج والمخزون.
-                  {' '}
-                  <Link className="underline text-primary" to={withTenantPath(tenantSlug, '/manufacturing/materials')}>
-                    إدارة المواد
-                  </Link>
+                  القطع تُختار من كتالوج المكونات المشتركة للمشروع. إدارة الماستر داتا تتم من موديول التصنيع بواسطة المسؤولين فقط.
                 </DialogDescription>
               </DialogHeader>
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
@@ -618,12 +624,18 @@ export const SparePartsInventory: React.FC = () => {
                 </div>
                 <div><Label>الوحدة</Label><Input value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} /></div>
                 <div><Label>الحد الأدنى</Label><Input type="number" value={form.minStock} onChange={(e) => setForm((p) => ({ ...p, minStock: e.target.value }))} /></div>
-                <div><Label>تكلفة الشراء / وحدة (من المادة — مركزية)</Label><Input type="number" min={0} step="0.01" value={form.purchaseUnitCost} readOnly disabled className="bg-muted" placeholder="تُؤخذ من المادة عند الربط" /></div>
                 {canManagePricing && (
-                  <>
-                    <div><Label>سعر البيع الافتراضي</Label><Input type="number" min={0} step="0.01" value={form.defaultSalePrice} onChange={(e) => setForm((p) => ({ ...p, defaultSalePrice: e.target.value }))} placeholder="اختياري" /></div>
-                    <div><Label>خصم مخزن %</Label><Input type="number" min={0} max={100} value={form.warehouseDiscountPercent} onChange={(e) => setForm((p) => ({ ...p, warehouseDiscountPercent: e.target.value }))} placeholder="0" /></div>
-                  </>
+                  <div>
+                    <Label>سعر الاستخدام / البيع</Label>
+                    <Input
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      value={form.defaultSalePrice}
+                      onChange={(e) => setForm((p) => ({ ...p, defaultSalePrice: e.target.value }))}
+                      placeholder="اختياري"
+                    />
+                  </div>
                 )}
                 <div className="xl:col-span-6 flex justify-end">
                   <Button onClick={createPart}>إضافة الصنف</Button>
@@ -671,10 +683,7 @@ export const SparePartsInventory: React.FC = () => {
                   {viewMode === 'dense' && <th className="p-2 text-right">الكتالوج</th>}
                   <th className="p-2 text-right">الرصيد</th>
                   <th className="p-2 text-right">الحد الأدنى</th>
-                  {viewMode === 'dense' && <th className="p-2 text-right">تكلفة بعد خصم</th>}
-                  {viewMode === 'dense' && <th className="p-2 text-right">سعر بيع</th>}
-                  {viewMode === 'dense' && <th className="p-2 text-right">هامش تقريبي</th>}
-                  {viewMode === 'dense' && <th className="p-2 text-right">خصم مخزن %</th>}
+                  {viewMode === 'dense' && <th className="p-2 text-right">سعر الاستخدام</th>}
                   <th className="p-2 text-right">الحالة</th>
                   <th className="p-2 text-right">الإجراءات</th>
                 </tr>
@@ -683,8 +692,6 @@ export const SparePartsInventory: React.FC = () => {
                 {visibleParts.map((part) => {
                   const qty = stockMap.get(part.id || '') || 0;
                   const isLow = qty <= Number(part.minStock || 0);
-                  const eff = effectiveSparePartUnitCost(part);
-                  const margin = sparePartMarginPreview(part);
                   const isLinked = Boolean(
                     String(part.materialId || '').trim() || String(part.rawMaterialId || '').trim(),
                   );
@@ -704,19 +711,8 @@ export const SparePartsInventory: React.FC = () => {
                       <td className="p-2 font-mono">{qty}</td>
                       <td className="p-2 font-mono">{part.minStock}</td>
                       {viewMode === 'dense' && (
-                        <td className="p-2 font-mono">{eff > 0 ? eff.toFixed(2) : '—'}</td>
-                      )}
-                      {viewMode === 'dense' && (
                         <td className="p-2 font-mono">
                           {Number(part.defaultSalePrice) > 0 ? Number(part.defaultSalePrice).toFixed(2) : '—'}
-                        </td>
-                      )}
-                      {viewMode === 'dense' && (
-                        <td className="p-2 font-mono">{margin != null ? margin.toFixed(2) : '—'}</td>
-                      )}
-                      {viewMode === 'dense' && (
-                        <td className="p-2 font-mono">
-                          {Number(part.warehouseDiscountPercent) > 0 ? String(part.warehouseDiscountPercent) : '—'}
                         </td>
                       )}
                       <td className="p-2">
@@ -731,13 +727,11 @@ export const SparePartsInventory: React.FC = () => {
                               onClick={() => {
                                 setPartPricingEdit(part);
                                 setPricingForm({
-                                  purchaseUnitCost: String(part.purchaseUnitCost ?? ''),
                                   defaultSalePrice: String(part.defaultSalePrice ?? ''),
-                                  warehouseDiscountPercent: String(part.warehouseDiscountPercent ?? ''),
                                 });
                               }}
                             >
-                              تعديل التسعير
+                              تعديل السعر
                             </Button>
                           )}
                           <Button
@@ -770,7 +764,7 @@ export const SparePartsInventory: React.FC = () => {
                 })}
                 {visibleParts.length === 0 && (
                   <tr>
-                    <td className="p-3 text-center text-muted-foreground" colSpan={viewMode === 'dense' ? 13 : 6}>
+                    <td className="p-3 text-center text-muted-foreground" colSpan={viewMode === 'dense' ? 9 : 6}>
                       لا توجد قطع مطابقة.
                     </td>
                   </tr>
@@ -783,48 +777,23 @@ export const SparePartsInventory: React.FC = () => {
       <Dialog open={Boolean(partPricingEdit)} onOpenChange={(open) => !open && setPartPricingEdit(null)}>
         <DialogContent dir={dir} className="max-w-md">
           <DialogHeader>
-            <DialogTitle>تسعير القطعة</DialogTitle>
+            <DialogTitle>سعر الاستخدام / البيع</DialogTitle>
             <DialogDescription>
-              تكلفة المكوّن تُسعَّر مركزياً من المواد التصنيعية. المركز لا يعدّل تكلفة الشراء هنا —
-              يمكن ضبط سعر البيع للعميل فقط.
+              سعر واحد للقطعة في مركز الصيانة. تكلفة الشراء لا تظهر ولا تُعدَّل من هنا.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
-            <div>
-              <Label>تكلفة الشراء / وحدة (مركزية — للعرض)</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={pricingForm.purchaseUnitCost}
-                readOnly
-                disabled
-                className="bg-muted"
-              />
-            </div>
             {canManagePricing && (
-              <>
-                <div>
-                  <Label>سعر البيع الافتراضي</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    value={pricingForm.defaultSalePrice}
-                    onChange={(e) => setPricingForm((p) => ({ ...p, defaultSalePrice: e.target.value }))}
-                  />
-                </div>
-                <div>
-                  <Label>خصم مخزن % (من تكلفة الشراء)</Label>
-                  <Input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={pricingForm.warehouseDiscountPercent}
-                    onChange={(e) => setPricingForm((p) => ({ ...p, warehouseDiscountPercent: e.target.value }))}
-                  />
-                </div>
-              </>
+              <div>
+                <Label>سعر الاستخدام / البيع</Label>
+                <Input
+                  type="number"
+                  min={0}
+                  step="0.01"
+                  value={pricingForm.defaultSalePrice}
+                  onChange={(e) => setPricingForm({ defaultSalePrice: e.target.value })}
+                />
+              </div>
             )}
           </div>
           <DialogFooter>
@@ -847,7 +816,72 @@ export const SparePartsInventory: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-      <RepairReplenishmentRequestsPanel toWarehouseId={activeBranch?.warehouseId} />
+      {canViewJobs && (
+        <Card>
+          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
+            <div>
+              <CardTitle className="text-base">طلبات الصيانة للفرع</CardTitle>
+              <CardDescription>
+                الأوامر المفتوحة على فرع المخزن الحالي — افتح الأمر للصرف من داخل الصيانة.
+              </CardDescription>
+            </div>
+            <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
+              <Button variant="outline" size="sm">كل الطلبات</Button>
+            </Link>
+          </CardHeader>
+          <CardContent>
+            {!branchId ? (
+              <p className="text-sm text-muted-foreground">اختر فرعًا لعرض الطلبات.</p>
+            ) : jobsLoading ? (
+              <p className="text-sm text-muted-foreground">جاري التحميل…</p>
+            ) : branchJobs.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد طلبات صيانة مفتوحة لهذا الفرع.</p>
+            ) : (
+              <div className="rounded border overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted">
+                    <tr>
+                      <th className="p-2 text-right">الطلب</th>
+                      <th className="p-2 text-right">الحالة</th>
+                      <th className="p-2 text-right">العميل</th>
+                      <th className="p-2 text-right">الجهاز</th>
+                      <th className="p-2 text-right">إجراء</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {branchJobs.map((job) => (
+                      <tr key={job.id} className="border-t">
+                        <td className="p-2 font-medium">
+                          {job.receiptNo || job.id}
+                        </td>
+                        <td className="p-2">
+                          {REPAIR_JOB_STATUS_LABELS[job.status] || job.status}
+                        </td>
+                        <td className="p-2">{job.customerName || '—'}</td>
+                        <td className="p-2">
+                          {[job.productName || job.deviceType, job.deviceBrand, job.deviceModel]
+                            .filter(Boolean)
+                            .join(' — ') || '—'}
+                        </td>
+                        <td className="p-2">
+                          <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}>
+                            <Button variant="outline" size="sm">فتح</Button>
+                          </Link>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      <RepairReplenishmentRequestsPanel
+        toWarehouseId={activeBranch?.warehouseId}
+        parts={parts}
+      />
       <LowStockAlert open={lowStock.isOpen} onOpenChange={(open) => { if (!open) lowStock.dismiss(); }} entries={lowStock.lowStockEntries} />
     </div>
   );

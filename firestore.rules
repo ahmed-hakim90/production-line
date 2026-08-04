@@ -883,6 +883,8 @@ service cloud.firestore {
         || pl_hasErpPermission('repair.dashboard.view')
         || pl_hasErpPermission('repair.parts.view')
         || pl_hasErpPermission('repair.parts.manage')
+        || pl_hasErpPermission('repairSpareIssues.view')
+        || pl_hasErpPermission('repairSpareIssues.create')
         || pl_hasErpPermission('repair.treasury.view')
         || pl_hasErpPermission('repair.treasury.manage')
         || pl_hasErpPermission('repair.salesInvoice.create')
@@ -1218,6 +1220,8 @@ service cloud.firestore {
         && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
         && (
           pl_hasErpPermission('sparePartsReplenishment.view')
+          || pl_hasErpPermission('sparePartsReplenishment.create')
+          || pl_hasErpPermission('sparePartsReplenishment.receive')
           || pl_hasErpPermission('inventory.view')
           || pl_isSuperAdmin()
         )

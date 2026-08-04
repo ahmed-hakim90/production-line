@@ -3,7 +3,7 @@ import { Button, SearchableSelect } from '../../../components/UI';
 import { toast } from '../../../components/Toast';
 import { stockService } from '../../inventory/services/stockService';
 import { warehouseLocationService } from '../../inventory/services/warehouseLocationService';
-import { MATERIAL_UNIT_LABELS, type Material, type MaterialUnit } from '../../manufacturing/types';
+import { MATERIAL_UNIT_LABELS, type MaterialUnit } from '../../manufacturing/types';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
 import { sparePartsService } from '../services/sparePartsService';
 import type { RepairBranch, RepairSparePart } from '../types';
@@ -30,13 +30,14 @@ const emptyDraftLine = (): DraftLine => ({
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 
-type MaterialOption = {
+type PartOption = {
   value: string;
   label: string;
   partId?: string;
   partName?: string;
   unit?: string;
-  unitCost?: number;
+  /** Sale/usage price only — never purchase cost. */
+  salePrice?: number;
 };
 
 type Props = {
@@ -44,7 +45,6 @@ type Props = {
   onClose: () => void;
   onCreated: () => void;
   branches: RepairBranch[];
-  materials: Material[];
 };
 
 export const CreateRepairSpareIssueModal: React.FC<Props> = ({
@@ -52,7 +52,6 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
   onClose,
   onCreated,
   branches,
-  materials,
 }) => {
   const usableBranches = useMemo(
     () => branches.filter((b) => String(b.warehouseId || '').trim() && String(b.id || '').trim()),
@@ -112,11 +111,17 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
             .filter((loc) => loc.id)
             .map((loc) => ({ id: String(loc.id), code: String(loc.code || loc.id) })),
         );
-      } catch {
+      } catch (error: unknown) {
         if (!cancelled) {
           setParts([]);
           setBalances(new Map());
           setLocations([]);
+          const message = String((error as { message?: unknown })?.message || '');
+          if (/missing or insufficient permissions/i.test(message)) {
+            toast.error('ليس لديك صلاحية كافية لتحميل قطع الغيار أو أرصدة المخزن.');
+          } else {
+            toast.error(message || 'تعذر تحميل قطع الغيار لهذا الفرع.');
+          }
         }
       } finally {
         if (!cancelled) setLoadingMeta(false);
@@ -128,43 +133,24 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
     };
   }, [open, branchId, warehouseId]);
 
-  const materialById = useMemo(() => {
-    const map = new Map<string, Material>();
-    materials.forEach((m) => {
-      if (m.id) map.set(m.id, m);
-    });
-    return map;
-  }, [materials]);
-
-  const itemOptions = useMemo((): MaterialOption[] => {
-    const linked: MaterialOption[] = [];
+  const itemOptions = useMemo((): PartOption[] => {
+    const linked: PartOption[] = [];
     const seen = new Set<string>();
     for (const part of parts) {
       const materialId = String(part.materialId || part.rawMaterialId || '').trim();
       if (!materialId || seen.has(materialId)) continue;
-      const material = materialById.get(materialId);
-      if (material && material.isActive === false) continue;
       seen.add(materialId);
       linked.push({
         value: materialId,
         label: `${part.name}${part.code ? ` (${part.code})` : ''}`,
         partId: part.id,
         partName: part.name,
-        unit: material?.baseUnit || part.unit,
-        unitCost: Number(part.purchaseUnitCost ?? material?.purchaseCost ?? 0),
+        unit: part.unit,
+        salePrice: Number(part.defaultSalePrice || 0),
       });
     }
-    if (linked.length > 0) return linked;
-
-    return materials
-      .filter((m) => m.id && m.isActive !== false)
-      .map((m) => ({
-        value: String(m.id),
-        label: `${m.name}${m.code ? ` (${m.code})` : ''}`,
-        unit: m.baseUnit,
-        unitCost: Number(m.purchaseCost || 0),
-      }));
-  }, [parts, materials, materialById]);
+    return linked;
+  }, [parts]);
 
   const locationsRequired = locations.length > 0;
 
@@ -298,9 +284,9 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
         </label>
       </div>
 
-      {itemOptions.length === 0 && (
+      {itemOptions.length === 0 && !loadingMeta && (
         <p className="text-sm text-[var(--color-text-muted)] rounded-lg border border-dashed p-3">
-          لا توجد قطع مربوطة بمكوّن لهذا الفرع. اربط القطع من شاشة قطع غيار الفروع، أو تأكد من وجود مواد نشطة.
+          لا توجد قطع مربوطة بماستر داتا لهذا الفرع. اربط القطع من شاشة قطع غيار فروع الصيانة أولًا.
         </p>
       )}
 
@@ -310,6 +296,7 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
         const unitLabel = option?.unit
           ? (MATERIAL_UNIT_LABELS[option.unit as MaterialUnit] || option.unit)
           : '';
+        const salePrice = Number(option?.salePrice || 0);
         return (
           <div
             key={line.key}
@@ -332,10 +319,12 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
                       : row
                   )));
                 }}
-                placeholder="اختر قطعة / مكوّن"
+                placeholder="اختر قطعة غيار"
               />
               <p className="text-[11px] text-[var(--color-text-muted)] h-4">
-                {line.itemId ? `سعر الوحدة: ${fmt(Number(option?.unitCost || 0))}` : '\u00a0'}
+                {line.itemId
+                  ? (salePrice > 0 ? `سعر الاستخدام: ${fmt(salePrice)}` : 'سعر الاستخدام: غير محدد')
+                  : '\u00a0'}
               </p>
             </div>
             <div className="w-[7.5rem] shrink-0 space-y-1">

@@ -238,7 +238,8 @@ export const MENU_CONFIG: MenuGroup[] = [
         icon: 'construction',
         path: '/inventory/spare-parts-replenishment',
         permission: 'sparePartsReplenishment.view',
-        anyOfPermissions: ['sparePartsReplenishment.view', 'inventory.view'],
+        // Central warehouse operators only — center create/receive lives under /repair/parts.
+        anyOfPermissions: ['sparePartsReplenishment.prepare', 'sparePartsReplenishment.approve', 'inventory.view'],
       },
       // استعلام عبر كل المخازن
       { key: 'inv-balances', label: 'أرصدة كل المخازن', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
@@ -338,7 +339,9 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'groups',
     children: [
       { key: 'customers-list', label: 'سجل العملاء', icon: 'badge', path: '/customers', permission: 'customers.view' },
+      { key: 'customers-kpi', label: 'مؤشرات العملاء', icon: 'monitoring', path: '/customers/kpi', permission: 'customers.view' },
       { key: 'customers-import', label: 'استيراد العملاء', icon: 'upload_file', path: '/customers/import', permission: 'customers.import' },
+      { key: 'customers-repair-link', label: 'ربط طلبات الصيانة', icon: 'link', path: '/customers/repair-link', permission: 'customers.edit' },
     ],
   },
   {

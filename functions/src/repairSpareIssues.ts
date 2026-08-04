@@ -6,6 +6,7 @@ import {
   type DocumentReference,
   type DocumentSnapshot,
   type Query,
+  type Transaction,
 } from 'firebase-admin/firestore';
 import { HttpsError, type CallableRequest } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
@@ -24,6 +25,7 @@ const JOBS_COLLECTION = 'repair_jobs';
 const WAREHOUSES_COLLECTION = 'warehouses';
 const WAREHOUSE_LOCATIONS_COLLECTION = 'warehouse_locations';
 const MATERIALS_COLLECTION = 'materials';
+const SPARE_PARTS_COLLECTION = 'repair_spare_parts';
 const ISSUES_COLLECTION = 'repair_spare_issues';
 const STOCK_ITEMS_COLLECTION = 'stock_items';
 const STOCK_LOCATION_BALANCES_COLLECTION = 'stock_location_balances';
@@ -434,6 +436,22 @@ async function transitionIssueStatus(params: {
 const canIssueNow = (status: IssueStatus, approvalMode: ApprovalMode) =>
   approvalMode === 'direct' ? status === 'draft' : status === 'approved';
 
+/** Job-facing usage price only — never fall back to purchase cost. */
+const resolveSparePartSalePrice = async (
+  t: Transaction,
+  tenantId: string,
+  partId: string | undefined,
+): Promise<number> => {
+  const id = String(partId || '').trim();
+  if (!id) return 0;
+  const snap = await t.get(db.collection(SPARE_PARTS_COLLECTION).doc(id));
+  if (!snap.exists) return 0;
+  const data = snap.data() as { tenantId?: string; defaultSalePrice?: number };
+  if (String(data.tenantId || '').trim() !== tenantId) return 0;
+  const sale = toNumber(data.defaultSalePrice);
+  return sale > 0 ? roundMoney(sale) : 0;
+};
+
 async function postIssueMovements(params: {
   actor: ActorContext;
   issueId: string;
@@ -525,6 +543,13 @@ async function postIssueMovements(params: {
         );
       }
     }
+
+    // All reads must complete before writes in this transaction.
+    const jobId = String(current.jobId || '').trim();
+    const jobRef = jobId ? db.collection(JOBS_COLLECTION).doc(jobId) : null;
+    const jobSnap = jobRef ? await t.get(jobRef) : null;
+    const meta = current.jobPartUsage;
+    const salePrice = await resolveSparePartSalePrice(t, actor.tenantId, meta?.partId);
 
     for (const row of stockRows) {
       const balSnap = balanceSnapByPath.get(row.balRef.path);
@@ -629,36 +654,31 @@ async function postIssueMovements(params: {
       ),
     });
 
-    const jobId = String(current.jobId || '').trim();
-    if (jobId) {
-      const jobRef = db.collection(JOBS_COLLECTION).doc(jobId);
-      const jobSnap = await t.get(jobRef);
-      if (jobSnap.exists) {
-        const jobData = jobSnap.data() as { partsUsed?: Array<Record<string, unknown>>; tenantId?: string };
-        assertSameTenant(jobData.tenantId, actor.tenantId);
-        const prev = Array.isArray(jobData.partsUsed) ? [...jobData.partsUsed] : [];
-        const meta = current.jobPartUsage;
-        for (const line of lines) {
-          const scope = meta?.scope === 'product' ? 'product' : 'job';
-          prev.push(stripUndefined({
-            partId: String(meta?.partId || line.itemId).trim(),
-            partName: String(meta?.partName || line.itemName).trim(),
-            quantity: line.quantity,
-            unitCost: line.unitCostSnapshot,
-            materialId: line.itemId,
-            scope,
-            ...(scope === 'product' && meta?.productItemId
-              ? {
-                  productItemId: String(meta.productItemId).trim(),
-                  productName: String(meta.productName || '').trim() || undefined,
-                }
-              : {}),
-            issueId,
-            issueReferenceNo: current.referenceNo,
-          }));
-        }
-        t.update(jobRef, { partsUsed: prev, updatedAt: now });
+    if (jobRef && jobSnap?.exists) {
+      const jobData = jobSnap.data() as { partsUsed?: Array<Record<string, unknown>>; tenantId?: string };
+      assertSameTenant(jobData.tenantId, actor.tenantId);
+      const prev = Array.isArray(jobData.partsUsed) ? [...jobData.partsUsed] : [];
+      for (const line of lines) {
+        const scope = meta?.scope === 'product' ? 'product' : 'job';
+        prev.push(stripUndefined({
+          partId: String(meta?.partId || line.itemId).trim(),
+          partName: String(meta?.partName || line.itemName).trim(),
+          quantity: line.quantity,
+          // Job totals use sale/usage price; inventory movements keep purchase snapshots.
+          unitCost: salePrice,
+          materialId: line.itemId,
+          scope,
+          ...(scope === 'product' && meta?.productItemId
+            ? {
+                productItemId: String(meta.productItemId).trim(),
+                productName: String(meta.productName || '').trim() || undefined,
+              }
+            : {}),
+          issueId,
+          issueReferenceNo: current.referenceNo,
+        }));
       }
+      t.update(jobRef, { partsUsed: prev, updatedAt: now });
     }
 
     return { referenceNo: current.referenceNo, issue: current, changed: true };

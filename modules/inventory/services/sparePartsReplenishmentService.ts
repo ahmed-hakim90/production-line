@@ -22,7 +22,8 @@ const MAX_PAGE = 50;
 type FirestoreCursor = QueryDocumentSnapshot | null;
 
 type CreateInput = {
-  fromWarehouseId: string;
+  /** Optional — Cloud Function resolves tenant spare_parts_central when empty. */
+  fromWarehouseId?: string;
   toWarehouseId: string;
   note?: string;
   lines: Array<{ itemId: string; quantity: number }>;
@@ -131,7 +132,10 @@ export const sparePartsReplenishmentService = {
         CreateInput,
         { id: string; referenceNo: string; status: string }
       >(requireFunctions(), 'createSparePartsReplenishment');
-      const result = await callable(input);
+      const result = await callable({
+        ...input,
+        fromWarehouseId: String(input.fromWarehouseId || '').trim() || undefined,
+      });
       return result.data;
     });
   },
