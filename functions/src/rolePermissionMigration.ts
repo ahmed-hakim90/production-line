@@ -38,6 +38,9 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'production.workerBonus.manage',
     'lineWorkers.view',
     'approval.view',
+    'sparePartsReplenishment.view',
+    'sparePartsReplenishment.approve',
+    'sparePartsReplenishment.responsibleApprove',
   ],
   hall_supervisor: [
     'reports.create',
@@ -52,6 +55,15 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'departmentConsumables.approve',
     'departmentConsumables.issue',
     'departmentConsumables.export',
+    'sparePartsReplenishment.view',
+    'sparePartsReplenishment.create',
+    'sparePartsReplenishment.approve',
+    'sparePartsReplenishment.prepare',
+    'sparePartsReplenishment.responsibleApprove',
+    'sparePartsReplenishment.receive',
+  ],
+  inventory_viewer: [
+    'sparePartsReplenishment.view',
   ],
 };
 
@@ -65,6 +77,7 @@ const NAME_TO_ROLE_KEY: Record<string, string> = {
   [normalizeRoleName('مدير المصنع')]: 'factory_manager',
   [normalizeRoleName('مشرف الصالة')]: 'hall_supervisor',
   [normalizeRoleName('مسؤول مخزن المستلزمات')]: 'materials_warehouse',
+  [normalizeRoleName('عرض مخزون فقط')]: 'inventory_viewer',
 };
 
 const resolveRoleKey = (role: RoleDoc): string => {

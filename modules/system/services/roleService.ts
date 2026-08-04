@@ -102,6 +102,9 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'production.workerBonus.manage',
           'lineWorkers.view',
           'approval.view',
+          'sparePartsReplenishment.view',
+          'sparePartsReplenishment.approve',
+          'sparePartsReplenishment.responsibleApprove',
           'print',
           'export',
         ]),
@@ -268,6 +271,12 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'departmentConsumables.approve',
           'departmentConsumables.issue',
           'departmentConsumables.export',
+          'sparePartsReplenishment.view',
+          'sparePartsReplenishment.create',
+          'sparePartsReplenishment.approve',
+          'sparePartsReplenishment.prepare',
+          'sparePartsReplenishment.responsibleApprove',
+          'sparePartsReplenishment.receive',
           'materials.view',
           'materials.manage',
           'bom.view',
@@ -297,6 +306,7 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'inventory.transactions.print',
           'inventory.transactions.export',
           'departmentConsumables.view',
+          'sparePartsReplenishment.view',
           'print',
           'export',
         ]),
@@ -364,7 +374,12 @@ const HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS: Permission[] = [
 ];
 
 const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permission[]> = {
-  factory_manager: FACTORY_MANAGER_PRODUCTION_WORKER_PERMS,
+  factory_manager: [
+    ...FACTORY_MANAGER_PRODUCTION_WORKER_PERMS,
+    'sparePartsReplenishment.view',
+    'sparePartsReplenishment.approve',
+    'sparePartsReplenishment.responsibleApprove',
+  ],
   hall_supervisor: HALL_SUPERVISOR_PRODUCTION_WORKER_PERMS,
   materials_warehouse: [
     'departmentConsumables.view',
@@ -372,6 +387,15 @@ const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permis
     'departmentConsumables.approve',
     'departmentConsumables.issue',
     'departmentConsumables.export',
+    'sparePartsReplenishment.view',
+    'sparePartsReplenishment.create',
+    'sparePartsReplenishment.approve',
+    'sparePartsReplenishment.prepare',
+    'sparePartsReplenishment.responsibleApprove',
+    'sparePartsReplenishment.receive',
+  ],
+  inventory_viewer: [
+    'sparePartsReplenishment.view',
   ],
 };
 

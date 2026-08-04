@@ -10,6 +10,8 @@ export const WAREHOUSE_ROLE_LABELS: Record<WarehouseRole, string> = {
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
+  spare_parts_central: 'قطع غيار (مركزي)',
+  maintenance_center: 'مخزن مركز صيانة',
 };
 
 export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {
@@ -26,6 +28,7 @@ export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {
   supplies_receipt: 'استلام مستلزمات',
   department_consumable_issue: 'صرف مستهلكات قسم',
   department_consumable_return: 'مرتجع مستهلكات قسم',
+  spare_parts_replenishment: 'تموين قطع غيار للمراكز',
   legacy: 'قديم',
 };
 

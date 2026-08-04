@@ -3,16 +3,34 @@
  * Matches HomeDashboardRouter permission priority.
  */
 
-export type PortalKind = 'admin' | 'factory_manager' | 'employee' | 'generic';
+export type PortalKind =
+  | 'admin'
+  | 'factory_manager'
+  | 'employee'
+  | 'warehouse_manager'
+  | 'generic';
 
 export type PortalPermissionChecker = {
   can: (permission: string) => boolean;
+  roleKey?: string | null;
+  inventoryWarehouseId?: string | null;
 };
 
 export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind {
   if (checker.can('adminDashboard.view')) return 'admin';
   if (checker.can('factoryDashboard.view')) return 'factory_manager';
   if (checker.can('employeeDashboard.view')) return 'employee';
+
+  const boundWarehouse = Boolean(String(checker.inventoryWarehouseId || '').trim());
+  const warehouseRoleKey = checker.roleKey === 'materials_warehouse'
+    || checker.roleKey === 'inventory_viewer';
+  if (
+    checker.can('inventory.view')
+    && (warehouseRoleKey || boundWarehouse || hasPrivilegedInventoryAccess(checker))
+  ) {
+    return 'warehouse_manager';
+  }
+
   return 'generic';
 }
 

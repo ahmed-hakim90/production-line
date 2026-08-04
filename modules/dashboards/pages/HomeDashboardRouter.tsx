@@ -1,6 +1,7 @@
-import React, { Suspense } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
+import { useAppStore } from '@/store/useAppStore';
 import { lazyNamed } from '../../shared/routes/lazyNamed';
 import { resolvePortalKind } from '../lib/portalHome';
 
@@ -11,19 +12,36 @@ const FactoryManagerDashboard = lazyNamed(
   () => import('./FactoryManagerDashboard'),
   'FactoryManagerDashboard',
 );
+const WarehouseManagerHome = lazyNamed(
+  () => import('./WarehouseManagerHome'),
+  'WarehouseManagerHome',
+);
 
 /**
- * Single `/` home: role-based portal shell (admin / factory / employee / generic).
- * Each portal dashboard is code-split so unused shells are not in the initial chunk.
+ * Single `/` home: role-based portal shell
+ * (admin / factory / employee / warehouse manager / generic).
  */
 export const HomeDashboardRouter: React.FC = () => {
   const { can } = usePermission();
-  const portal = resolvePortalKind({ can });
+  const roles = useAppStore((s) => s.roles);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const userProfile = useAppStore((s) => s.userProfile);
+  const roleKey = useMemo(
+    () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
+    [roles, userRoleId],
+  );
+
+  const portal = resolvePortalKind({
+    can,
+    roleKey,
+    inventoryWarehouseId: userProfile?.inventoryWarehouseId,
+  });
 
   let body: React.ReactNode = <Dashboard />;
   if (portal === 'admin') body = <AdminDashboard />;
   else if (portal === 'factory_manager') body = <FactoryManagerDashboard />;
   else if (portal === 'employee') body = <EmployeeDashboard />;
+  else if (portal === 'warehouse_manager') body = <WarehouseManagerHome />;
 
   return (
     <Suspense fallback={<PageContentSkeleton variant="dashboard" kpiCount={4} />}>

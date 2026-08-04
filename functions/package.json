@@ -10,7 +10,7 @@
     "build": "tsc -p tsconfig.json",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "serve": "npm run build && firebase emulators:start --only functions",
-    "deploy": "firebase deploy --only functions",
+    "deploy": "npm run build && firebase deploy --only functions",
     "lint": "echo \"No function lint configured\"",
     "backfill:dashboardStats:dry": "npm run build && node lib/scripts/backfillDashboardStats.js --dry-run",
     "backfill:dashboardStats:apply": "npm run build && node lib/scripts/backfillDashboardStats.js --apply",

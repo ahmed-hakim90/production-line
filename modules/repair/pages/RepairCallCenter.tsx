@@ -217,6 +217,7 @@ export const RepairCallCenter: React.FC = () => {
             type="button"
             onClick={() =>
               openNewTicket({
+                customerId: latestCustomer?.customerId,
                 customerPhone: phoneInput.trim() || latestCustomer?.customerPhone,
                 customerName: latestCustomer?.customerName,
                 customerAddress: latestCustomer?.customerAddress,
@@ -307,6 +308,7 @@ export const RepairCallCenter: React.FC = () => {
                       disabled={!can('repair.jobs.create')}
                       onClick={() =>
                         openNewTicket({
+                          customerId: latestCustomer?.customerId,
                           customerName: latestCustomer?.customerName,
                           customerPhone: latestCustomer?.customerPhone || phoneInput.trim(),
                           customerAddress: latestCustomer?.customerAddress,

@@ -349,6 +349,7 @@
         'employee_performance', 'employee_bonuses',
         'quality_settings', 'quality_reason_catalog', 'quality_workers_assignments',
         'quality_inspections', 'quality_defects', 'quality_rework_orders', 'quality_capa', 'quality_print_logs',
+        'customers', 'customer_activities',
         'production_report_uniques', 'product_categories', 'material_categories', 'automation_runs', 'backups',
         'production_routing_plans', 'production_routing_steps',
         'supply_cycles', 'supply_cycle_waste_lines',
@@ -1070,6 +1071,19 @@
           || pl_isSuperAdmin()
         )
         && pl_canAccessInventoryWarehouse(resource.data.get('warehouseId', ''));
+      allow create, update, delete: if false;
+    }
+
+    // Spare-parts replenishment: client read only; mutations via Admin SDK callables.
+    match /spare_parts_replenishment_requests/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
+        && (
+          pl_hasErpPermission('sparePartsReplenishment.view')
+          || pl_hasErpPermission('inventory.view')
+          || pl_isSuperAdmin()
+        )
+        && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
       allow create, update, delete: if false;
     }
 

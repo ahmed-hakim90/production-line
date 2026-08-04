@@ -11,6 +11,7 @@ import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
 import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRestore.js';
 import { approveDepartmentConsumableIssueHandler, cancelDepartmentConsumableIssueHandler, createDepartmentConsumableIssueHandler, getDepartmentConsumableMonthlyReportHandler, issueDepartmentConsumableIssueHandler, rejectDepartmentConsumableIssueHandler, returnDepartmentConsumableIssueHandler, submitDepartmentConsumableIssueHandler, } from './departmentConsumableIssues.js';
+import { approveSparePartsReplenishmentHandler, cancelSparePartsReplenishmentHandler, createSparePartsReplenishmentHandler, prepareSparePartsReplenishmentHandler, receiveSparePartsReplenishmentHandler, rejectSparePartsReplenishmentHandler, responsibleApproveSparePartsReplenishmentHandler, } from './sparePartsReplenishment.js';
 initializeApp();
 const db = getFirestore();
 const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
@@ -1552,6 +1553,13 @@ export const issueDepartmentConsumableIssue = onCall({ region: 'us-central1', me
 export const cancelDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, cancelDepartmentConsumableIssueHandler);
 export const returnDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '512MiB' }, returnDepartmentConsumableIssueHandler);
 export const getDepartmentConsumableMonthlyReport = onCall({ region: 'us-central1', memory: '512MiB' }, getDepartmentConsumableMonthlyReportHandler);
+export const createSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, createSparePartsReplenishmentHandler);
+export const approveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, approveSparePartsReplenishmentHandler);
+export const prepareSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, prepareSparePartsReplenishmentHandler);
+export const responsibleApproveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, responsibleApproveSparePartsReplenishmentHandler);
+export const receiveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, receiveSparePartsReplenishmentHandler);
+export const rejectSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, rejectSparePartsReplenishmentHandler);
+export const cancelSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, cancelSparePartsReplenishmentHandler);
 export { confirmProductionHandoverReceipt } from './productionHandover.js';
 export { issueProductionIssueStock } from './productionIssueStock.js';
 export { applyProductionReportInventory, reverseProductionReportInventory, } from './productionReportInventory.js';

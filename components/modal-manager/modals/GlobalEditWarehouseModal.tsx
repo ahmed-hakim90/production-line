@@ -19,6 +19,8 @@ const WAREHOUSE_ROLES: { value: WarehouseRole; label: string }[] = [
   { value: 'final_product', label: 'منتج تام' },
   { value: 'packaging', label: 'تغليف' },
   { value: 'waste', label: 'هالك' },
+  { value: 'spare_parts_central', label: 'قطع غيار (مركزي)' },
+  { value: 'maintenance_center', label: 'مخزن مركز صيانة' },
 ];
 
 type Payload = GlobalModalPayload & { warehouse?: Warehouse };

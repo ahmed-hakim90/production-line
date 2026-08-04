@@ -1,6 +1,7 @@
 import { requireTenantIdOrThrow } from '@/core/auth/tenantContext';
 import { eventBus, SystemEvents } from '@/shared/events';
 import { runUseCase, type UseCaseResult } from '@/shared/usecases';
+import { customerActivityService } from '@/modules/customers/services/customerActivityService';
 import { repairJobService } from '../services/repairJobService';
 
 type CreateRepairJobInput = Parameters<typeof repairJobService.create>[0];
@@ -26,8 +27,25 @@ export async function createRepairJob(
       metadata: {
         usedFallbackReceipt: result.usedFallbackReceipt,
         branchId: input.branchId,
+        customerId: input.customerId,
       },
     });
+
+    if (input.customerId) {
+      await customerActivityService.record({
+        customerId: input.customerId,
+        module: 'repair',
+        action: 'repair.job_created',
+        title: 'طلب صيانة جديد',
+        summary: `${input.customerName || ''} · ${input.deviceBrand || ''} ${input.deviceModel || ''}`.trim(),
+        referenceType: 'repair_job',
+        referenceId: result.id,
+        referenceLabel: input.receiptNo || result.id,
+        actorUid: actor?.userId,
+        actorName: actor?.userName,
+        metadata: { branchId: input.branchId },
+      });
+    }
 
     return { jobId: result.id, usedFallbackReceipt: result.usedFallbackReceipt };
   });

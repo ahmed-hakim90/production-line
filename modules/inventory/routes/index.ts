@@ -17,6 +17,8 @@ const ProductionComponentRecords = lazyNamed(() => import('../pages/ProductionCo
 const Disassembly = lazyNamed(() => import('../pages/Disassembly'), 'Disassembly');
 const SuppliesReceipt = lazyNamed(() => import('../pages/SuppliesReceipt'), 'SuppliesReceipt');
 const DepartmentConsumables = lazyNamed(() => import('../pages/DepartmentConsumables'), 'DepartmentConsumables');
+const SparePartsReplenishment = lazyNamed(() => import('../pages/SparePartsReplenishment'), 'SparePartsReplenishment');
+const WarehouseWorkspace = lazyNamed(() => import('../pages/WarehouseWorkspace'), 'WarehouseWorkspace');
 const InventoryAnalytics = lazyNamed(() => import('../pages/InventoryAnalytics'), 'InventoryAnalytics');
 const InventoryExceptions = lazyNamed(() => import('../pages/InventoryExceptions'), 'InventoryExceptions');
 const RawMaterialWarehouseControl = lazyNamed(
@@ -63,7 +65,19 @@ export const INVENTORY_ROUTES: AppRouteDef[] = [
     component: DepartmentConsumables,
     skeleton: 'dashboard',
   },
+  {
+    path: '/inventory/spare-parts-replenishment',
+    permission: 'sparePartsReplenishment.view',
+    component: SparePartsReplenishment,
+    skeleton: 'dashboard',
+  },
   { path: '/inventory/warehouses', permission: 'inventory.view', component: Warehouses },
+  {
+    path: '/inventory/warehouses/:warehouseId',
+    permission: 'inventory.view',
+    component: WarehouseWorkspace,
+    skeleton: 'dashboard',
+  },
   { path: '/inventory/locations', permission: 'inventory.view', component: WarehouseLocations },
   { path: '/inventory/balances', permission: 'inventory.view', component: StockBalances },
   { path: '/inventory/transactions', permission: 'inventory.view', component: StockTransactions },

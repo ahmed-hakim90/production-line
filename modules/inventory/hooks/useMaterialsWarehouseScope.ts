@@ -109,6 +109,7 @@ export function useMaterialsWarehouseScope() {
     warehouseIds,
     routingConfigured,
     warehouseSelectLocked,
+    isMaterialsWarehouseRole,
     roleKey: (role?.roleKey || null) as FirestoreRoleKey | null,
     filterWarehouses,
     isWarehouseAllowed,

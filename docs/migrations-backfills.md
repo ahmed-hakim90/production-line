@@ -55,6 +55,16 @@ When migrating report mutation ownership or replaying history, preserve audit fi
 
 Do not strip these in imports/backfills. Path snapshots are informational; authorization remains rules + Functions + operation-path checks on the live mutation pipeline (Decision 008).
 
+## Customers master (CRM)
+
+No automated Firestore backfill. Import existing customer codes via UI:
+
+1. Menu → العملاء → استيراد العملاء
+2. Download Excel template
+3. Upsert by business code (`CST-…` / `TRD-…` or your existing codes)
+
+Collections: `customers`, `customer_activities`. See [adr/ADR-004-customers-master-data.md](./adr/ADR-004-customers-master-data.md).
+
 ## Other Functions backfills
 
 Compile then run (from `functions/package.json`):

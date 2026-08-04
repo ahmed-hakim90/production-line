@@ -157,6 +157,10 @@ const ALL_COLLECTIONS = [
   'quality_capa',
   'quality_print_logs',
 
+  // Customers (CRM master)
+  'customers',
+  'customer_activities',
+
   // Repair
   'repair_branches',
   'repair_jobs',

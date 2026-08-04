@@ -25,6 +25,15 @@ import {
   returnDepartmentConsumableIssueHandler,
   submitDepartmentConsumableIssueHandler,
 } from './departmentConsumableIssues.js';
+import {
+  approveSparePartsReplenishmentHandler,
+  cancelSparePartsReplenishmentHandler,
+  createSparePartsReplenishmentHandler,
+  prepareSparePartsReplenishmentHandler,
+  receiveSparePartsReplenishmentHandler,
+  rejectSparePartsReplenishmentHandler,
+  responsibleApproveSparePartsReplenishmentHandler,
+} from './sparePartsReplenishment.js';
 
 initializeApp();
 
@@ -1917,6 +1926,41 @@ export const returnDepartmentConsumableIssue = onCall(
 export const getDepartmentConsumableMonthlyReport = onCall(
   { region: 'us-central1', memory: '512MiB' },
   getDepartmentConsumableMonthlyReportHandler,
+);
+
+export const createSparePartsReplenishment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  createSparePartsReplenishmentHandler,
+);
+
+export const approveSparePartsReplenishment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  approveSparePartsReplenishmentHandler,
+);
+
+export const prepareSparePartsReplenishment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  prepareSparePartsReplenishmentHandler,
+);
+
+export const responsibleApproveSparePartsReplenishment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  responsibleApproveSparePartsReplenishmentHandler,
+);
+
+export const receiveSparePartsReplenishment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  receiveSparePartsReplenishmentHandler,
+);
+
+export const rejectSparePartsReplenishment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  rejectSparePartsReplenishmentHandler,
+);
+
+export const cancelSparePartsReplenishment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  cancelSparePartsReplenishmentHandler,
 );
 
 export { confirmProductionHandoverReceipt } from './productionHandover.js';

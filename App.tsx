@@ -30,6 +30,7 @@ import { SYSTEM_ROUTES } from './modules/system/routes';
 import { REPORTS_ROUTES } from './modules/reports/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import { REPAIR_ROUTES } from './modules/repair/routes';
+import { CUSTOMER_ROUTES } from './modules/customers/routes';
 import type { AppRouteDef } from './modules/shared/routes';
 import type { PublicRouteDef } from './modules/shared/routes/types';
 import { useAppStore } from './store/useAppStore';
@@ -300,6 +301,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...SYSTEM_ROUTES,
   ...REPORTS_ROUTES,
   ...INVENTORY_ROUTES,
+  ...CUSTOMER_ROUTES,
   ...REPAIR_ROUTES,
 ];
 

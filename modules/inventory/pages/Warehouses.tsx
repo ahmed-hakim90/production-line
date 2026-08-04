@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { Link, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
 import type { Warehouse, WarehouseRole } from '../types';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { withTenantPath } from '@/lib/tenantPaths';
 
 const ROLE_LABELS: Record<WarehouseRole, string> = {
   general: 'عام',
@@ -15,6 +17,8 @@ const ROLE_LABELS: Record<WarehouseRole, string> = {
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
+  spare_parts_central: 'قطع غيار (مركزي)',
+  maintenance_center: 'مخزن مركز صيانة',
 };
 import { usePermission } from '../../../utils/permissions';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
@@ -35,6 +39,7 @@ const DELETE_CONFIRM = (name: string) =>
 const WAREHOUSES_CACHE_KEY = 'inventory:warehouses';
 
 export const Warehouses: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
   const fetchSystemSettings = useAppStore((s) => s.fetchSystemSettings);
@@ -206,42 +211,60 @@ export const Warehouses: React.FC = () => {
                   <th className="text-start py-2 px-3 font-semibold">الدور</th>
                   <th className="text-start py-2 px-3 font-semibold">توجيه الإنتاج</th>
                   <th className="text-start py-2 px-3 font-semibold">الحالة</th>
-                  {canManage && <th className="text-end py-2 px-3 font-semibold w-[140px]">إجراءات</th>}
+                  <th className="text-end py-2 px-3 font-semibold w-[200px]">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
                 {displayRows.map((w) => (
                   <tr key={w.id || w.code} className="border-b border-[var(--color-border)]/60 hover:bg-[var(--color-surface-hover)]">
-                    <td className="py-2.5 px-3 font-medium text-[var(--color-text)]">{w.name}</td>
+                    <td className="py-2.5 px-3 font-medium text-[var(--color-text)]">
+                      {w.id ? (
+                        <Link
+                          className="text-primary underline-offset-2 hover:underline"
+                          to={withTenantPath(tenantSlug, `/inventory/warehouses/${w.id}`)}
+                        >
+                          {w.name}
+                        </Link>
+                      ) : w.name}
+                    </td>
                     <td className="py-2.5 px-3 font-mono text-xs">{w.code}</td>
                     <td className="py-2.5 px-3 text-xs">{ROLE_LABELS[w.warehouseRole || 'general']}</td>
                     <td className="py-2.5 px-3 text-xs text-slate-600">
                       {(w.id && routingUsageByWarehouseId.get(w.id)?.join('، ')) || '—'}
                     </td>
                     <td className="py-2.5 px-3">{w.isActive === false ? 'غير نشط' : 'نشط'}</td>
-                    {canManage && (
-                      <td className="py-2.5 px-3 text-end">
-                        <div className="flex justify-end gap-1">
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => startEdit(w)}
-                          >
-                            تعديل
-                          </Button>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() => void handleDelete(w)}
-                            disabled={deletingId === w.id}
-                          >
-                            {deletingId === w.id ? 'جاري الحذف...' : 'حذف'}
-                          </Button>
-                        </div>
-                      </td>
-                    )}
+                    <td className="py-2.5 px-3 text-end">
+                      <div className="flex justify-end gap-1">
+                        {w.id ? (
+                          <Link to={withTenantPath(tenantSlug, `/inventory/warehouses/${w.id}`)}>
+                            <Button type="button" size="sm" variant="ghost">
+                              مساحة المخزن
+                            </Button>
+                          </Link>
+                        ) : null}
+                        {canManage ? (
+                          <>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => startEdit(w)}
+                            >
+                              تعديل
+                            </Button>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => void handleDelete(w)}
+                              disabled={deletingId === w.id}
+                            >
+                              {deletingId === w.id ? 'جاري الحذف...' : 'حذف'}
+                            </Button>
+                          </>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

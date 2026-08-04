@@ -22,6 +22,7 @@ export type StockSourceModule =
   | 'supplies_receipt'
   | 'department_consumable_issue'
   | 'department_consumable_return'
+  | 'spare_parts_replenishment'
   | 'legacy';
 
 export type StockAdjustmentReason =
@@ -40,6 +41,8 @@ export type WarehouseRole =
   | 'final_product'
   | 'packaging'
   | 'waste'
+  | 'spare_parts_central'
+  | 'maintenance_center'
   | 'general';
 
 export interface Warehouse {
@@ -843,3 +846,70 @@ export interface PeriodBalanceReport {
   rows: PeriodBalanceRow[];
   truncated?: boolean;
 }
+
+/** مركز يطلب تموين قطع غيار من المخزن المركزي للصيانة. */
+export type SparePartsReplenishmentStatus =
+  | 'submitted'
+  | 'approved'
+  | 'prepared'
+  | 'responsible_approved'
+  | 'received'
+  | 'rejected'
+  | 'cancelled';
+
+export interface SparePartsReplenishmentLine {
+  lineId: string;
+  itemType: 'material';
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  /** الكمية المطلوبة من المركز */
+  requestedQty: number;
+  /** الكمية التي جهّزها المخزن المركزي */
+  preparedQty?: number;
+  /** الكمية التي استلمها المركز فعلياً */
+  receivedQty?: number;
+  /** تكلفة الوحدة من ماستر المكونات (مركزي) — لا يُسعّر من المركز */
+  unitCostSnapshot: number;
+  totalCostSnapshot: number;
+}
+
+export interface SparePartsReplenishmentRequest {
+  id?: string;
+  referenceNo: string;
+  status: SparePartsReplenishmentStatus;
+  /** مخزن قطع الغيار المركزي */
+  fromWarehouseId: string;
+  fromWarehouseName: string;
+  /** مخزن المركز */
+  toWarehouseId: string;
+  toWarehouseName: string;
+  lines: SparePartsReplenishmentLine[];
+  note?: string;
+  totalCostSnapshot?: number;
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByUserId?: string;
+  preparedAt?: string;
+  preparedBy?: string;
+  preparedByUserId?: string;
+  responsibleApprovedAt?: string;
+  responsibleApprovedBy?: string;
+  responsibleApprovedByUserId?: string;
+  receivedAt?: string;
+  receivedBy?: string;
+  receivedByUserId?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedByUserId?: string;
+  rejectionReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByUserId?: string;
+  tenantId?: string;
+}
+

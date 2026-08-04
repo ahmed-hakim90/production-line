@@ -34,6 +34,7 @@ export type Permission =
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
   | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.locations.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove' | 'inventory.disassembly.manage'
   | 'departmentConsumables.view' | 'departmentConsumables.create' | 'departmentConsumables.approve' | 'departmentConsumables.issue' | 'departmentConsumables.export'
+  | 'sparePartsReplenishment.view' | 'sparePartsReplenishment.create' | 'sparePartsReplenishment.approve' | 'sparePartsReplenishment.prepare' | 'sparePartsReplenishment.responsibleApprove' | 'sparePartsReplenishment.receive'
   | 'productionIssue.create' | 'productionIssue.request' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
   | 'productionHandover.approve'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
@@ -95,6 +96,7 @@ export type Permission =
   | 'repair.treasury.view' | 'repair.treasury.manage'
   | 'repair.settings.manage'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
+  | 'customers.view' | 'customers.create' | 'customers.edit' | 'customers.import'
   | 'print' | 'export' | 'import';
 
 // ─── Permission Groups (for admin UI) ────────────────────────────────────────
@@ -236,6 +238,12 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'departmentConsumables.approve', label: 'اعتماد صرف مستهلكات الأقسام' },
       { key: 'departmentConsumables.issue', label: 'تنفيذ/مرتجع صرف مستهلكات الأقسام' },
       { key: 'departmentConsumables.export', label: 'تصدير تقرير مستهلكات الأقسام' },
+      { key: 'sparePartsReplenishment.view', label: 'عرض تموين قطع الغيار للمراكز' },
+      { key: 'sparePartsReplenishment.create', label: 'إنشاء طلب تموين قطع غيار (مركز)' },
+      { key: 'sparePartsReplenishment.approve', label: 'اعتماد طلب تموين قطع الغيار' },
+      { key: 'sparePartsReplenishment.prepare', label: 'تجهيز طلب تموين قطع الغيار' },
+      { key: 'sparePartsReplenishment.responsibleApprove', label: 'موافقة المسؤول على تموين قطع الغيار' },
+      { key: 'sparePartsReplenishment.receive', label: 'تأكيد استلام تموين قطع الغيار بالمركز' },
     ],
   },
   {
@@ -299,6 +307,16 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'hrSettings.view', label: 'عرض إعدادات HR' },
       { key: 'hrSettings.edit', label: 'تعديل إعدادات HR' },
       { key: 'selfService.view', label: 'الخدمة الذاتية للموظف' },
+    ],
+  },
+  {
+    key: 'customers',
+    label: 'العملاء',
+    permissions: [
+      { key: 'customers.view', label: 'عرض العملاء' },
+      { key: 'customers.create', label: 'إنشاء عميل' },
+      { key: 'customers.edit', label: 'تعديل عميل' },
+      { key: 'customers.import', label: 'استيراد العملاء' },
     ],
   },
   {
@@ -486,6 +504,30 @@ export function checkPermission(
   }
   if (permission === 'departmentConsumables.export') {
     return permissions['inventory.transactions.export'] === true || permissions['export'] === true;
+  }
+  if (permission === 'sparePartsReplenishment.view') {
+    return permissions['inventory.view'] === true;
+  }
+  if (permission === 'sparePartsReplenishment.create') {
+    return permissions['inventory.transactions.create'] === true;
+  }
+  if (permission === 'sparePartsReplenishment.approve') {
+    return permissions['inventory.transfers.approve'] === true;
+  }
+  if (permission === 'sparePartsReplenishment.prepare') {
+    return (
+      permissions['inventory.transfers.approve'] === true
+      || permissions['inventory.transactions.create'] === true
+    );
+  }
+  if (permission === 'sparePartsReplenishment.responsibleApprove') {
+    return permissions['inventory.transfers.approve'] === true;
+  }
+  if (permission === 'sparePartsReplenishment.receive') {
+    return (
+      permissions['inventory.transactions.create'] === true
+      || permissions['inventory.transfers.approve'] === true
+    );
   }
   // New permission — older role docs (including admin) may omit the key entirely.
   if (permission === 'productionIssue.request') {

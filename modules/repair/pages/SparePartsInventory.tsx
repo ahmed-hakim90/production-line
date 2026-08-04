@@ -372,12 +372,12 @@ export const SparePartsInventory: React.FC = () => {
   const savePartPricing = async () => {
     if (!partPricingEdit?.id || !canManageParts) return;
     try {
+      // Purchase cost is priced centrally on materials — centers only set sale price / discount.
       await sparePartsService.updatePartCatalog(partPricingEdit.id, {
-        purchaseUnitCost: Number(pricingForm.purchaseUnitCost || 0),
         defaultSalePrice: Number(pricingForm.defaultSalePrice || 0),
         warehouseDiscountPercent: Number(pricingForm.warehouseDiscountPercent || 0),
       });
-      toast.success('تم حفظ التسعير.');
+      toast.success('تم حفظ تسعير البيع.');
       setPartPricingEdit(null);
       await load({ force: true });
     } catch (e: any) {
@@ -603,7 +603,7 @@ export const SparePartsInventory: React.FC = () => {
                 </div>
                 <div><Label>الوحدة</Label><Input value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} /></div>
                 <div><Label>الحد الأدنى</Label><Input type="number" value={form.minStock} onChange={(e) => setForm((p) => ({ ...p, minStock: e.target.value }))} /></div>
-                <div><Label>تكلفة الشراء / وحدة</Label><Input type="number" min={0} step="0.01" value={form.purchaseUnitCost} onChange={(e) => setForm((p) => ({ ...p, purchaseUnitCost: e.target.value }))} placeholder="اختياري" /></div>
+                <div><Label>تكلفة الشراء / وحدة (من المادة — مركزية)</Label><Input type="number" min={0} step="0.01" value={form.purchaseUnitCost} readOnly disabled className="bg-muted" placeholder="تُؤخذ من المادة عند الربط" /></div>
                 <div><Label>سعر البيع الافتراضي</Label><Input type="number" min={0} step="0.01" value={form.defaultSalePrice} onChange={(e) => setForm((p) => ({ ...p, defaultSalePrice: e.target.value }))} placeholder="اختياري" /></div>
                 <div><Label>خصم مخزن %</Label><Input type="number" min={0} max={100} value={form.warehouseDiscountPercent} onChange={(e) => setForm((p) => ({ ...p, warehouseDiscountPercent: e.target.value }))} placeholder="0" /></div>
                 <div className="xl:col-span-6 flex justify-end">
@@ -765,18 +765,21 @@ export const SparePartsInventory: React.FC = () => {
           <DialogHeader>
             <DialogTitle>تسعير القطعة</DialogTitle>
             <DialogDescription>
-              {partPricingEdit?.name} — تُستخدم التكلفة الفعّالة تلقائيًا عند صرف القطعة على طلب صيانة.
+              تكلفة المكوّن تُسعَّر مركزياً من المواد التصنيعية. المركز لا يعدّل تكلفة الشراء هنا —
+              يمكن ضبط سعر البيع للعميل فقط.
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3">
             <div>
-              <Label>تكلفة الشراء / وحدة</Label>
+              <Label>تكلفة الشراء / وحدة (مركزية — للعرض)</Label>
               <Input
                 type="number"
                 min={0}
                 step="0.01"
                 value={pricingForm.purchaseUnitCost}
-                onChange={(e) => setPricingForm((p) => ({ ...p, purchaseUnitCost: e.target.value }))}
+                readOnly
+                disabled
+                className="bg-muted"
               />
             </div>
             <div>

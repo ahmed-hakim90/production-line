@@ -19,11 +19,6 @@ import { toast } from '../../../components/Toast';
 import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
 import { sparePartsService } from '../services/sparePartsService';
-import { loadProductComponentsForProducts } from '../../catalog/lib/productComponents';
-import {
-  collectJobProductIds,
-  filterSparePartsByCatalogComponents,
-} from '../utils/sparePartCatalogMatch';
 import { appendRepairServiceEvent, repairServiceEventService } from '../services/repairServiceEventService';
 import { REPAIR_DOMAIN_EVENT_VERSION } from '../utils/repairDomainEvents';
 import { StatusBadge } from '../components/StatusBadge';
@@ -93,20 +88,10 @@ export const RepairJobWorkspace: React.FC = () => {
 
   useEffect(() => {
     if (!job?.branchId) return;
-    const productIds = collectJobProductIds({
-      productId: job.productId,
-      jobProducts: job.jobProducts,
-    });
-    void Promise.all([
-      sparePartsService.listParts(job.branchId),
-      productIds.length > 0 ? loadProductComponentsForProducts(productIds) : Promise.resolve([]),
-    ]).then(([partsRows, components]) => {
-      setHasProductComponents(components.length > 0);
-      setCatalogFilteredParts(
-        components.length > 0
-          ? filterSparePartsByCatalogComponents(partsRows, components)
-          : [],
-      );
+    void sparePartsService.listParts(job.branchId).then((partsRows) => {
+      // Technician may select any branch part — not restricted to job product BOM.
+      setHasProductComponents(true);
+      setCatalogFilteredParts(partsRows);
     });
   }, [job?.branchId, job?.productId, job?.jobProducts]);
 
@@ -200,16 +185,12 @@ export const RepairJobWorkspace: React.FC = () => {
       toast.error('أكمل إعداد مخزن الفرع أو الصلاحيات.');
       return;
     }
-    if (!hasProductComponents) {
-      toast.error('لا يمكن حجز قطع غيار لأن المنتج لا يحتوي مكونات معرفة في الماستر داتا.');
-      return;
-    }
     const part = catalogFilteredParts.find((p) => p.id === resPartId);
     const qty = Number(resQty || 0);
     if (!part || qty <= 0) {
       toast.error(
         catalogFilteredParts.length === 0
-          ? 'لا توجد قطع غيار مرتبطة بمكونات هذا المنتج في مخزون الفرع.'
+          ? 'لا توجد قطع غيار في مخزون الفرع.'
           : 'اختر قطعة وكمية صحيحة.',
       );
       return;
@@ -418,11 +399,11 @@ export const RepairJobWorkspace: React.FC = () => {
                 </SelectContent>
               </Select>
               {!hasProductComponents && (
-                <p className="text-xs text-amber-700">المنتج لا يحتوي مكونات معرفة في الكتالوج/BOM.</p>
+                <p className="text-xs text-amber-700">تعذر تحميل قطع غيار الفرع.</p>
               )}
               {hasProductComponents && catalogFilteredParts.length === 0 && (
                 <p className="text-xs text-amber-700">
-                  لا توجد قطع غيار في الفرع مربوطة بمكونات هذا المنتج. أضفها من مخزون قطع الغيار.
+                  لا توجد قطع غيار في مخزون الفرع. أضفها من شاشة قطع الغيار.
                 </p>
               )}
               <Input className="min-h-12" inputMode="numeric" value={resQty} onChange={(e) => setResQty(e.target.value)} />

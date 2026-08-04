@@ -23,6 +23,11 @@ export interface MenuItem {
    * starts with one of these (e.g. exclude `/production/routing/analytics` from the list item).
    */
   activePathExcludePrefixes?: string[];
+  /**
+   * When true, only the exact path (and optional query) marks the item active —
+   * no `/path/...` prefix matching. Used for list pages that have nested detail routes.
+   */
+  exact?: boolean;
   badgeSource?: () => Promise<number>;
 }
 
@@ -201,46 +206,60 @@ export const MENU_CONFIG: MenuGroup[] = [
     label: 'المخازن',
     icon: 'warehouse',
     children: [
-      // نظرة عامة
-      { key: 'inv-dashboard', label: 'لوحة تحكم المخزون', icon: 'inventory', path: '/inventory', permission: 'inventory.view' },
+      // نظرة عامة ومساحات
+      { key: 'inv-dashboard', label: 'لوحة المخازن', icon: 'inventory', path: '/inventory', permission: 'inventory.view' },
+      {
+        key: 'inv-warehouses',
+        label: 'كل المخازن ومساحاتها',
+        icon: 'warehouse',
+        path: '/inventory/warehouses',
+        permission: 'inventory.view',
+        exact: true,
+      },
       {
         key: 'inv-raw-control',
-        label: 'تحكم مخزن المستلزمات',
+        label: 'مساحة مستلزمات الإنتاج',
         icon: 'inventory_2',
         path: '/inventory/raw-materials/control',
         permission: 'inventory.view',
       },
       {
         key: 'inv-raw-alerts',
-        label: 'تنبيهات مخزن المستلزمات',
+        label: 'تنبيهات المستلزمات',
         icon: 'notifications_active',
         path: '/inventory/raw-materials/alerts',
         permission: 'inventory.view',
         badgeSource: badgeSources.rawMaterialWarehouseAlerts,
       },
-      // إعداد المخازن
-      { key: 'inv-warehouses', label: 'إدارة المخازن', icon: 'warehouse', path: '/inventory/warehouses', permission: 'inventory.view' },
-      { key: 'inv-locations', label: 'لوكيشنات المخازن', icon: 'grid_view', path: '/inventory/locations', permission: 'inventory.view' },
-      // استعلام
-      { key: 'inv-balances', label: 'الأرصدة', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
-      { key: 'inv-transactions', label: 'الحركات', icon: 'sync_alt', path: '/inventory/transactions', permission: 'inventory.view' },
+      { key: 'inv-production-floor', label: 'مساحة صالة الإنتاج', icon: 'precision_manufacturing', path: '/inventory/production-floor', permission: 'inventory.view' },
+      {
+        key: 'inv-spare-parts-replenishment',
+        label: 'تموين قطع الغيار (مركزي → مراكز)',
+        icon: 'construction',
+        path: '/inventory/spare-parts-replenishment',
+        permission: 'sparePartsReplenishment.view',
+        anyOfPermissions: ['sparePartsReplenishment.view', 'inventory.view'],
+      },
+      // استعلام عبر كل المخازن
+      { key: 'inv-balances', label: 'أرصدة كل المخازن', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
+      { key: 'inv-transactions', label: 'حركات كل المخازن', icon: 'sync_alt', path: '/inventory/transactions', permission: 'inventory.view' },
+      { key: 'inv-locations', label: 'مواقع الأرفف', icon: 'grid_view', path: '/inventory/locations', permission: 'inventory.view' },
+      // عمليات مشتركة
       {
         key: 'inv-department-consumables',
-        label: 'مستهلكات الأقسام',
+        label: 'صرف مستهلكات الأقسام',
         icon: 'shopping_bag',
         path: '/inventory/department-consumables',
         permission: 'departmentConsumables.view',
         anyOfPermissions: ['departmentConsumables.view', 'inventory.view'],
       },
-      // عمليات ومتابعة
-      { key: 'inv-transfer-approvals', label: 'اعتماد التحويلات', icon: 'verified_user', path: '/inventory/transfer-approvals', permission: 'inventory.view' },
-      { key: 'inv-counts', label: 'الجرد والمطابقة', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
-      // مخزون الإنتاج
-      { key: 'inv-production-issues', label: 'صرف إنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view', badgeSource: badgeSources.pendingProductionIssueRequests },
-      { key: 'inv-production-floor', label: 'مخزون صالة الإنتاج', icon: 'precision_manufacturing', path: '/inventory/production-floor', permission: 'inventory.view' },
+      { key: 'inv-transfer-approvals', label: 'اعتماد تحويلات المخازن', icon: 'verified_user', path: '/inventory/transfer-approvals', permission: 'inventory.view' },
+      { key: 'inv-counts', label: 'جرد المخازن', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
+      // إنتاج ↔ مخازن
+      { key: 'inv-production-issues', label: 'صرف للإنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view', badgeSource: badgeSources.pendingProductionIssueRequests },
       {
         key: 'inv-production-approvals',
-        label: 'اعتمادات الإنتاج المخزنية',
+        label: 'اعتمادات وارد الإنتاج',
         icon: 'approval',
         path: '/inventory/production-approvals',
         permission: 'inventory.view',
@@ -256,9 +275,9 @@ export const MENU_CONFIG: MenuGroup[] = [
         excludeRoleKeys: ['materials_warehouse'],
       },
       { key: 'inv-disassembly', label: 'تفكيك عكسي', icon: 'sync_alt', path: '/inventory/disassembly', permission: 'inventory.disassembly.manage' },
-      // تحليل ومتابعة
-      { key: 'inv-analytics', label: 'تحليلات المخزون', icon: 'analytics', path: '/inventory/analytics', permission: 'inventory.analytics.view' },
-      { key: 'inv-exceptions', label: 'استثناءات المخزون', icon: 'warning', path: '/inventory/exceptions', permission: 'inventory.exceptions.view' },
+      // تحليل
+      { key: 'inv-analytics', label: 'تحليلات المخازن', icon: 'analytics', path: '/inventory/analytics', permission: 'inventory.analytics.view' },
+      { key: 'inv-exceptions', label: 'استثناءات المخازن', icon: 'warning', path: '/inventory/exceptions', permission: 'inventory.exceptions.view' },
     ],
   },
   {
@@ -313,6 +332,15 @@ export const MENU_CONFIG: MenuGroup[] = [
     ],
   },
   {
+    key: 'customers',
+    label: 'العملاء',
+    icon: 'groups',
+    children: [
+      { key: 'customers-list', label: 'سجل العملاء', icon: 'badge', path: '/customers', permission: 'customers.view' },
+      { key: 'customers-import', label: 'استيراد العملاء', icon: 'upload_file', path: '/customers/import', permission: 'customers.import' },
+    ],
+  },
+  {
     key: 'repair',
     label: 'الصيانة',
     icon: 'build_circle',
@@ -320,7 +348,7 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'repair-dashboard', label: 'لوحة الصيانة', icon: 'dashboard', path: '/repair', permission: 'repair.dashboard.view' },
       { key: 'repair-call-center', label: 'مركز الاتصال', icon: 'call', path: '/repair/call-center', permission: 'repair.view' },
       { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
-      { key: 'repair-parts', label: 'قطع الغيار', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
+      { key: 'repair-parts', label: 'قطع غيار فروع الصيانة', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
       { key: 'repair-treasury', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/treasury', permission: 'repair.treasury.view' },
       { key: 'repair-sales-invoice', label: 'فاتورة بيع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },
       { key: 'repair-branches', label: 'الفروع', icon: 'store', path: '/repair/branches', permission: 'repair.branches.manage' },

@@ -109,6 +109,7 @@ export function useSidebarActiveRoute() {
         return Array.from(targetParams.entries()).every(([k, v]) => currentParams.get(k) === v);
       }
       if (logicalPath === item.path) return true;
+      if (item.exact) return false;
       if (item.activePatterns?.some((p) => logicalPath.startsWith(p))) {
         if (item.activePathExcludePrefixes?.some((ex) => logicalPath.startsWith(ex))) return false;
         return true;

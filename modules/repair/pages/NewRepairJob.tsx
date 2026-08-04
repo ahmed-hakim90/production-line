@@ -33,8 +33,9 @@ import {
 import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairSettings } from '../config/repairSettings';
-
-const isRequiredMissing = (value: string) => !value.trim();
+import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
+import { customerService } from '@/modules/customers/services/customerService';
+import type { Customer } from '@/modules/customers/types';
 
 export const NewRepairJob: React.FC = () => {
   const { dir } = useAppDirection();
@@ -49,6 +50,8 @@ export const NewRepairJob: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [loading, setLoading] = useState(false);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  const [customers, setCustomers] = useState<Customer[]>([]);
+  const [customerId, setCustomerId] = useState('');
   const [jobProducts, setJobProducts] = useState<Array<{
     itemId: string;
     productId: string;
@@ -86,6 +89,24 @@ export const NewRepairJob: React.FC = () => {
       setBranches(rows);
     });
   }, []);
+
+  useEffect(() => {
+    void customerService.listAll({ includeInactive: false }).then(setCustomers).catch(() => setCustomers([]));
+  }, []);
+
+  const applyMasterCustomer = (customer: Customer | null) => {
+    if (!customer) {
+      setCustomerId('');
+      return;
+    }
+    setCustomerId(String(customer.id || ''));
+    setForm((prev) => ({
+      ...prev,
+      customerName: customer.name,
+      customerPhone: customer.phone,
+      customerAddress: customer.address || prev.customerAddress,
+    }));
+  };
 
   const allowedBranches = useMemo(() => {
     if (can('repair.branches.manage')) return branches;
@@ -126,6 +147,14 @@ export const NewRepairJob: React.FC = () => {
       customerPhone: prefill.customerPhone ?? prev.customerPhone,
       customerAddress: prefill.customerAddress ?? prev.customerAddress,
     }));
+    if (prefill.customerId) {
+      setCustomerId(prefill.customerId);
+    } else if (prefill.customerPhone) {
+      void customerService.findByPhoneDigits(prefill.customerPhone).then((matches) => {
+        const hit = matches[0];
+        if (hit?.id) applyMasterCustomer(hit);
+      });
+    }
     if (prefill.productId) {
       setJobProducts((prev) =>
         prev.map((row, idx) => (idx === 0 ? { ...row, productId: prefill.productId || '', diagnosis: prefill.diagnosis || row.diagnosis } : row)),
@@ -155,8 +184,12 @@ export const NewRepairJob: React.FC = () => {
       toast.error('لا يوجد فرع صيانة مرتبط بالمستخدم.');
       return;
     }
+    if (!customerId) {
+      toast.error('اختر عميلًا من الماستر أو أنشئ عميلًا جديدًا.');
+      return;
+    }
     if (!form.customerName || !form.customerPhone) {
-      toast.error('أكمل البيانات الأساسية.');
+      toast.error('أكمل بيانات العميل من الماستر.');
       return;
     }
     const validRows = jobProducts.filter((row) => row.productId);
@@ -204,6 +237,7 @@ export const NewRepairJob: React.FC = () => {
         productId: leadProduct?.productId,
         productName: leadProduct?.productName || 'منتج',
         jobProducts: normalizedProducts,
+        customerId,
         customerName: form.customerName,
         customerPhone: form.customerPhone,
         customerAddress: form.customerAddress || '',
@@ -261,31 +295,39 @@ export const NewRepairJob: React.FC = () => {
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div className="md:col-span-2 xl:col-span-3 pt-1">
-                  <div className="text-sm font-semibold">1) بيانات العميل</div>
-                  <p className="text-xs text-muted-foreground mt-1">سجّل معلومات العميل الأساسية للتواصل.</p>
+                  <div className="text-sm font-semibold">1) العميل (ماستر)</div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    ابحث بالكود أو الاسم أو الموبايل، أو أنشئ عميلًا جديدًا في الماستر.
+                  </p>
                 </div>
-                <div className="space-y-1.5">
-                  <Label>اسم العميل <span className="text-rose-600">*</span></Label>
-                  <Input
-                    value={form.customerName}
-                    onChange={(e) => setForm((p) => ({ ...p, customerName: e.target.value }))}
-                    className={isRequiredMissing(form.customerName) ? 'border-rose-300' : ''}
-                    placeholder="مثال: أحمد محمد"
+                <div className="md:col-span-2 xl:col-span-3">
+                  <CustomerPicker
+                    customers={customers}
+                    valueId={customerId}
+                    disabled={loading}
+                    canCreate={can('customers.create') || can('repair.jobs.create')}
+                    actor={{
+                      userId: String(user?.id || ''),
+                      userName: String(user?.displayName || user?.email || 'مستخدم'),
+                    }}
+                    onSelect={applyMasterCustomer}
+                    onCreated={(created) => {
+                      setCustomers((prev) => {
+                        if (prev.some((c) => c.id === created.id)) return prev;
+                        return [...prev, created];
+                      });
+                    }}
                   />
                 </div>
-                <div className="space-y-1.5">
-                  <Label>الهاتف <span className="text-rose-600">*</span></Label>
-                  <Input
-                    value={form.customerPhone}
-                    onChange={(e) => setForm((p) => ({ ...p, customerPhone: e.target.value }))}
-                    className={isRequiredMissing(form.customerPhone) ? 'border-rose-300' : ''}
-                    placeholder="01xxxxxxxxx"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label>العنوان</Label>
-                  <Input value={form.customerAddress} onChange={(e) => setForm((p) => ({ ...p, customerAddress: e.target.value }))} />
-                </div>
+                {customerId ? (
+                  <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
+                    <Label>العنوان (اختياري على الطلب)</Label>
+                    <Input
+                      value={form.customerAddress}
+                      onChange={(e) => setForm((p) => ({ ...p, customerAddress: e.target.value }))}
+                    />
+                  </div>
+                ) : null}
                 <div className="md:col-span-2 xl:col-span-3 border-t pt-3 mt-1">
                   <div className="text-sm font-semibold">2) المنتجات والتشخيص</div>
                   <p className="text-xs text-muted-foreground mt-1 mb-2">أضف منتجًا أو أكثر، وحدد التشخيص وتكلفة كل منتج.</p>

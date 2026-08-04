@@ -8,6 +8,7 @@ import { withTenantPath } from '@/lib/tenantPaths';
 import { formatNumber } from '../../../utils/calculations';
 import { usePermission } from '../../../utils/permissions';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { resolveWarehouseOperatorHomePath } from '../lib/warehouseOperatorHome';
 import { useInventoryControlData } from './inventoryDashboard/useInventoryControlData';
 import { InventoryActionQueue } from './inventoryDashboard/InventoryActionQueue';
 import { InventoryReviewTabs } from './inventoryDashboard/InventoryReviewTabs';
@@ -16,7 +17,11 @@ import { InventoryExceptionsPreview } from './inventoryDashboard/InventoryExcept
 
 export const InventoryDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
-  const { scoped, controlPath } = useMaterialsWarehouseScope();
+  const {
+    scoped,
+    warehouseId,
+    isMaterialsWarehouseRole,
+  } = useMaterialsWarehouseScope();
   const { can } = usePermission();
   const data = useInventoryControlData();
 
@@ -26,7 +31,11 @@ export const InventoryDashboard: React.FC = () => {
   );
 
   if (scoped) {
-    return <Navigate to={withTenantPath(tenantSlug, controlPath)} replace />;
+    const home = resolveWarehouseOperatorHomePath({
+      boundWarehouseId: warehouseId || null,
+      isMaterialsWarehouseRole,
+    });
+    return <Navigate to={withTenantPath(tenantSlug, home)} replace />;
   }
 
   if (data.loading && data.warehousesCount === 0) {

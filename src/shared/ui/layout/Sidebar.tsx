@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { NavLink, useLocation, useParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import {
@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission, useCurrentRole } from '@/utils/permissions';
-import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
+import { MENU_CONFIG, canAccessMenuItem, type MenuItem } from '@/config/menu.config';
 import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSidebar';
 import type { SidebarIconStyle } from '@/types';
 import { resolveMenuIcon } from './menuIconMap';
@@ -20,6 +20,11 @@ import { withTenantPath } from '@/lib/tenantPaths';
 import { Button } from '@/components/ui/button';
 import { useAppDirection } from './useAppDirection';
 import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
+import { warehouseService } from '@/modules/inventory/services/warehouseService';
+import { WAREHOUSE_ROLE_LABELS } from '@/modules/inventory/lib/stockLabels';
+import { useMaterialsWarehouseScope } from '@/modules/inventory/hooks/useMaterialsWarehouseScope';
+
+const MAX_SIDEBAR_WAREHOUSES = 24;
 
 export interface SidebarProps {
   open: boolean;
@@ -96,17 +101,54 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
   const [openGroup,   setOpenGroup]   = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [warehouseNavItems, setWarehouseNavItems] = useState<MenuItem[]>([]);
   const profileRef = useRef<HTMLDivElement>(null);
+  const { filterWarehouses } = useMaterialsWarehouseScope();
 
   const { collapsed, toggleCollapse } = useSidebar();
   const badgeCounts   = useSidebarBadges();
-  const { isActiveItem, isActiveGroup, activeGroupKey } = useSidebarActiveRoute();
+  const { isActiveItem, isActiveGroup: isActiveGroupFromConfig, activeGroupKey: configActiveGroupKey } = useSidebarActiveRoute();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
   );
+
+  useEffect(() => {
+    if (!can('inventory.view')) {
+      setWarehouseNavItems([]);
+      return;
+    }
+    let cancelled = false;
+    void warehouseService.getActiveWarehouses()
+      .then((rows) => {
+        if (cancelled) return;
+        const scoped = filterWarehouses(rows)
+          .filter((w) => Boolean(w.id))
+          .slice(0, MAX_SIDEBAR_WAREHOUSES);
+        setWarehouseNavItems(
+          scoped.map((w) => {
+            const role = w.warehouseRole || 'general';
+            const roleLabel = WAREHOUSE_ROLE_LABELS[role] || role;
+            return {
+              key: `inv-wh-space-${w.id}`,
+              label: `${w.name} · ${roleLabel}`,
+              icon: 'warehouse',
+              path: `/inventory/warehouses/${w.id}`,
+              permission: 'inventory.view' as const,
+              activePatterns: [`/inventory/warehouses/${w.id}`],
+            };
+          }),
+        );
+      })
+      .catch(() => {
+        if (!cancelled) setWarehouseNavItems([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [can, filterWarehouses]);
 
   /**
    * وضع الاختصار (أيقونات فقط) مخصص لسطح المكتب (lg+). على الموبايل، درج القائمة المفتوح
@@ -117,16 +159,41 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const visibleGroups = useMemo(
     () =>
       MENU_CONFIG
-        .map((g) => ({
-          ...g,
-          children: g.children.filter((i) => (
+        .map((g) => {
+          const children = g.children.filter((i) => (
             canAccessMenuItem(can, i, roleKey)
             && isMenuItemOperationPathEnabled(operationPaths, i.key)
             && (!i.selfSupervisorOnly || currentEmployee?.level === 2)
-          )),
-        }))
+          ));
+          if (g.key !== 'inventory' || warehouseNavItems.length === 0) {
+            return { ...g, children };
+          }
+          const insertAt = Math.max(
+            0,
+            children.findIndex((item) => item.key === 'inv-warehouses') + 1,
+          );
+          const nextChildren = [
+            ...children.slice(0, insertAt),
+            ...warehouseNavItems.filter((item) => canAccessMenuItem(can, item, roleKey)),
+            ...children.slice(insertAt),
+          ];
+          return { ...g, children: nextChildren };
+        })
         .filter((g) => g.children.length > 0),
-    [can, currentEmployee?.level, operationPaths, roleKey],
+    [can, currentEmployee?.level, operationPaths, roleKey, warehouseNavItems],
+  );
+
+  const activeGroupKey = useMemo(() => {
+    const fromVisible = visibleGroups.find((g) => g.children.some((i) => isActiveItem(i)))?.key;
+    return fromVisible || configActiveGroupKey;
+  }, [visibleGroups, isActiveItem, configActiveGroupKey]);
+
+  const isActiveGroup = useCallback(
+    (groupKey: string) => (
+      visibleGroups.some((g) => g.key === groupKey && g.children.some((i) => isActiveItem(i)))
+      || isActiveGroupFromConfig(groupKey)
+    ),
+    [visibleGroups, isActiveItem, isActiveGroupFromConfig],
   );
 
   /** مجموعات الأكورديون فقط (غير flat). لو 1 أو 2 يبقوا مفتوحين دائماً في الشريط الموسّع */

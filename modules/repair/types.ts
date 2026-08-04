@@ -461,6 +461,7 @@ export interface RepairJobFilters {
 
 /** حالة التنقل من شاشة مركز الاتصال إلى «جهاز جديد» */
 export type RepairCallCenterPrefill = {
+  customerId?: string;
   customerName?: string;
   customerPhone?: string;
   customerAddress?: string;

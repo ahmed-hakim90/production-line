@@ -23,11 +23,6 @@ import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import { sparePartsService } from '../services/sparePartsService';
-import { loadProductComponentsForProducts } from '../../catalog/lib/productComponents';
-import {
-  collectJobProductIds,
-  sparePartMatchesCatalogComponents,
-} from '../utils/sparePartCatalogMatch';
 import { userService } from '../../../services/userService';
 import { employeeService } from '../../hr/employeeService';
 import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
@@ -107,8 +102,6 @@ export const RepairJobDetail: React.FC = () => {
   const [job, setJob] = useState<RepairJob | null>(null);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [parts, setParts] = useState<RepairSparePart[]>([]);
-  const [allowedPartIds, setAllowedPartIds] = useState<Set<string>>(new Set());
-  const [hasProductComponents, setHasProductComponents] = useState(false);
   const [status, setStatus] = useState<RepairJob['status']>(repairSettings.workflow.initialStatusId);
   const [finalCost, setFinalCost] = useState('');
   const [manualFinalOverride, setManualFinalOverride] = useState(false);
@@ -146,41 +139,13 @@ export const RepairJobDetail: React.FC = () => {
     void repairBranchService.list().then(setBranches);
   }, [jobId, repairSettings.workflow.initialStatusId, repairSettings.defaults.defaultWarranty]);
 
-  const catalogProductIdsKey = useMemo(
-    () =>
-      collectJobProductIds({
-        productId: job?.productId,
-        jobProducts: jobProducts.length > 0 ? jobProducts : job?.jobProducts,
-      }).join('|'),
-    [job?.productId, job?.jobProducts, jobProducts],
-  );
-
   useEffect(() => {
     if (!job?.branchId) return;
-    const productIds = catalogProductIdsKey ? catalogProductIdsKey.split('|') : [];
-    void Promise.all([
-      sparePartsService.listParts(job.branchId),
-      productIds.length > 0 ? loadProductComponentsForProducts(productIds) : Promise.resolve([]),
-    ]).then(([partsRows, components]) => {
-      const allowedIds = new Set<string>();
-      if (components.length > 0) {
-        partsRows.forEach((part) => {
-          const partId = String(part.id || '').trim();
-          if (partId && sparePartMatchesCatalogComponents(part, components)) {
-            allowedIds.add(partId);
-          }
-        });
-      }
-      setAllowedPartIds(allowedIds);
-      setHasProductComponents(components.length > 0);
-      setParts(partsRows);
-    });
-  }, [job?.branchId, catalogProductIdsKey]);
+    // Technician may select any branch part — not restricted to job product BOM.
+    void sparePartsService.listParts(job.branchId).then(setParts);
+  }, [job?.branchId]);
 
-  const filteredParts = useMemo(
-    () => parts.filter((part) => part.id && allowedPartIds.has(part.id)),
-    [allowedPartIds, parts],
-  );
+  const filteredParts = parts;
   const productsTotal = useMemo(() => sumProductFinalCosts(jobProducts), [jobProducts]);
   const computedServiceOnlyCost = useMemo(
     () => toNumber(serviceOnlyCost || finalCost || productsTotal),
@@ -390,20 +355,12 @@ export const RepairJobDetail: React.FC = () => {
       toast.error('تم تفعيل خدمة فقط. أوقف الخيار لإضافة قطع غيار.');
       return;
     }
-    if (!hasProductComponents) {
-      toast.error('لا يمكن صرف قطع غيار لأن المنتج لا يحتوي مكونات معرفة.');
-      return;
-    }
     if (!branchWarehouseId) {
       toast.error('هذا الفرع لا يملك مخزنًا مرتبطًا. لا يمكن صرف قطع الغيار.');
       return;
     }
     const part = parts.find((p) => p.id === selectedPartId);
     if (!part || !job.branchId) return;
-    if (!part.id || !allowedPartIds.has(part.id)) {
-      toast.error('هذه القطعة ليست ضمن مكونات المنتج.');
-      return;
-    }
     const qty = Number(partQty || 0);
     if (qty <= 0) return;
     const nextParts = [...(job.partsUsed || []), {
@@ -1075,11 +1032,6 @@ export const RepairJobDetail: React.FC = () => {
                         هذا الفرع لا يملك مخزنًا مرتبطًا، لذلك لا يمكن صرف قطع الغيار من الطلب.
                       </div>
                     )}
-                    {!hasProductComponents && (
-                      <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                        المنتج المختار في الطلب لا يحتوي مكونات معرفة. يجب إضافة المكونات أولًا قبل صرف قطع الغيار.
-                      </div>
-                    )}
                     <Select value={selectedPartId} onValueChange={setSelectedPartId}>
                       <SelectTrigger><SelectValue placeholder="اختر قطعة" /></SelectTrigger>
                       <SelectContent>{filteredParts.map((p) => <SelectItem key={p.id} value={p.id || ''}>{p.name}</SelectItem>)}</SelectContent>
@@ -1088,7 +1040,7 @@ export const RepairJobDetail: React.FC = () => {
                     <Button
                       variant="outline"
                       onClick={addPartUsage}
-                      disabled={!canEditThisJob || serviceOnly || !hasProductComponents || !branchWarehouseId || (partScope === 'product' && !partProductItemId)}
+                      disabled={!canEditThisJob || serviceOnly || !branchWarehouseId || (partScope === 'product' && !partProductItemId)}
                     >
                       إضافة/خصم
                     </Button>

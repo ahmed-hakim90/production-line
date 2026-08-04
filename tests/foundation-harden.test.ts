@@ -84,6 +84,28 @@ async function main() {
   );
   assert.equal(resolvePortalKind({ can: () => false }), 'generic');
   assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'inventory.view',
+      roleKey: 'materials_warehouse',
+    }),
+    'warehouse_manager',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'inventory.view',
+      inventoryWarehouseId: 'wh-1',
+    }),
+    'warehouse_manager',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'employeeDashboard.view' || p === 'inventory.view',
+      inventoryWarehouseId: 'wh-1',
+    }),
+    'employee',
+    'employee portal still wins over warehouse binding',
+  );
+  assert.equal(
     hasPrivilegedInventoryAccess({
       can: (p) => p === 'inventory.view',
     }),

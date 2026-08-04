@@ -68,6 +68,7 @@ export const TENANT_SCOPED_COLLECTIONS = [
     'disassembly_orders',
     'supplies_receipt_orders',
     'department_consumable_issues',
+    'spare_parts_replenishment_requests',
     'inventory_exceptions',
     'stock_daily_summaries',
     'stock_period_summaries',
@@ -125,6 +126,9 @@ export const TENANT_SCOPED_COLLECTIONS = [
     'quality_rework_orders',
     'quality_capa',
     'quality_print_logs',
+    // Customers (CRM master)
+    'customers',
+    'customer_activities',
     // Repair
     'repair_branches',
     'repair_jobs',
