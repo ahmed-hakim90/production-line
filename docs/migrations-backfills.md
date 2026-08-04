@@ -24,6 +24,16 @@ Requires `GOOGLE_APPLICATION_CREDENTIALS` or application default credentials wit
 
 See [security-tenancy.md](./security-tenancy.md) and [adr/ADR-001-tenant-scoped-settings.md](./adr/ADR-001-tenant-scoped-settings.md).
 
+## Service-center spare parts warehouse role (ADR-004 phase 1)
+
+Repair branches auto-create warehouses with code `RWH-NNN`. Phase 1 sets `warehouseRole: spare_parts` on create.
+
+Existing tenants: opening **فروع الصيانة** (`RepairBranches`) runs `repairBranchService.ensureSparePartsWarehouseRoles()` and updates linked / `RWH-*` warehouses that still have another role (typically `general`).
+
+Binding a user to such a warehouse via Users Management also sets `repairBranchId` / `repairBranchIds` when the warehouse belongs to a repair branch.
+
+Stock ledger migration (`repair_spare_parts_stock` → `stock_items`) is a later ADR-004 slice — not in this backfill.
+
 ## Production floor cutover (Inventory V2)
 
 Script: `scripts/backfill-production-floor-cutover.mjs` (documentation + dry-run scaffold; does **not** invent floor stock from legacy OUT-only issues).

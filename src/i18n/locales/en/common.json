@@ -710,7 +710,7 @@
       "selectEmployee": "Select employee",
       "inventoryWarehouse": "Linked inventory warehouse",
       "allWarehouses": "All warehouses (no restriction)",
-      "inventoryWarehouseHint": "When linked to one warehouse, inventory pages show only that warehouse.",
+      "inventoryWarehouseHint": "When linked to one warehouse, inventory pages show only that warehouse. If it is a service-center spare-parts warehouse, the repair branch is synced automatically.",
       "updateWarehouseSuccess": "Warehouse binding saved successfully.",
       "saveWarehouse": "Save warehouse binding",
       "email": "Email",

@@ -11,6 +11,7 @@ import { employeeService } from '../../hr/employeeService';
 import { userManagementService, type UserManagementRow } from '../services/userManagementService';
 import { activityLogService } from '../services/activityLogService';
 import { warehouseService } from '../../inventory/services/warehouseService';
+import { WAREHOUSE_ROLE_LABELS } from '../../inventory/lib/stockLabels';
 import type { FirestoreEmployee, FirestoreRole } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
@@ -398,10 +399,14 @@ export const UsersManagement: React.FC = () => {
       row,
       roles,
       employeeOptions: allowedEmployeeOptions,
-      warehouseOptions: warehouses.map((wh) => ({
-        value: String(wh.id || ''),
-        label: String(wh.name || wh.id || ''),
-      })).filter((opt) => opt.value),
+      warehouseOptions: warehouses.map((wh) => {
+        const role = wh.warehouseRole || 'general';
+        const roleLabel = WAREHOUSE_ROLE_LABELS[role as keyof typeof WAREHOUSE_ROLE_LABELS] || role;
+        return {
+          value: String(wh.id || ''),
+          label: `${String(wh.name || wh.id || '')}${wh.code ? ` (${wh.code})` : ''} — ${roleLabel}`,
+        };
+      }).filter((opt) => opt.value),
       onUpdateRole: (roleId: string) => handleUpdateRole(row, roleId),
       onUpdateInventoryWarehouse: (warehouseId: string) => handleUpdateInventoryWarehouse(row, warehouseId),
       onLinkEmployee: (employeeId: string) => handleLinkEmployee(row, employeeId),

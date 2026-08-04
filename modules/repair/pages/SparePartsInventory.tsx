@@ -28,6 +28,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairSparePart, type RepairSparePartStock } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
+import { useRepairWarehouseScope } from '../hooks/useRepairWarehouseScope';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairBranchService } from '../services/repairBranchService';
 import { useLowStockAlert } from '../hooks/useLowStockAlert';
@@ -72,10 +73,17 @@ export const SparePartsInventory: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
-  const userBranchIds = useMemo(
-    () => Array.from(new Set([...resolveUserRepairBranchIds(user), ...assignedBranchIds])),
-    [user, assignedBranchIds],
-  );
+  const repairWarehouseScope = useRepairWarehouseScope(branches);
+  const userBranchIds = useMemo(() => {
+    if (canManageAllBranches) {
+      return branches.map((b) => String(b.id || '').trim()).filter(Boolean);
+    }
+    return Array.from(new Set([
+      ...resolveUserRepairBranchIds(user),
+      ...assignedBranchIds,
+      ...repairWarehouseScope.branchIds,
+    ]));
+  }, [canManageAllBranches, branches, user, assignedBranchIds, repairWarehouseScope.branchIds]);
 
   useEffect(() => {
     if (canManageAllBranches || !user?.id) {

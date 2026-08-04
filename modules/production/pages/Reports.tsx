@@ -154,6 +154,7 @@ import {
   shareProductionReportCardToWhatsApp,
 } from '../utils/productionReportShare';
 import type { StockItemBalance, Warehouse } from '../../inventory/types';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import {
@@ -268,6 +269,8 @@ const countPresentReportWorkerOutputs = (report: Pick<ProductionReport, 'workerO
   return rows.reduce((sum, row) => (row.isPresent === false ? sum : sum + 1), 0);
 };
 const NOTE_PREVIEW_LENGTH = 10;
+/** Client-side page size for the reports table (full range is loaded first). */
+const REPORTS_TABLE_PAGE_SIZE = 20;
 
 
 const BY_QTY_SCOPE_LABELS: Record<'all' | 'category' | 'selected', string> = {
@@ -889,6 +892,7 @@ export const Reports: React.FC = () => {
   const [rangeHasMore, setRangeHasMore] = useState(false);
   const [rangeLoading, setRangeLoading] = useState(false);
   const [rangeError, setRangeError] = useState<string | null>(null);
+  const [reportsListPage, setReportsListPage] = useState(1);
   const [generalMonthlyDialogOpen, setGeneralMonthlyDialogOpen] = useState(false);
   const [generalMonthlyPickerValue, setGeneralMonthlyPickerValue] = useState(() =>
     getMonthInputValueFromDate(new Date()),
@@ -1113,38 +1117,7 @@ export const Reports: React.FC = () => {
     };
   }, [ensureReportsUiReferenceData]);
 
-  const loadRangeReports = useCallback(
-    async (from: string, to: string, append: boolean) => {
-      setRangeLoading(true);
-      if (!append) setRangeError(null);
-      try {
-        const employeeIdForQuery = myEmployeeId ?? (filterEmployeeId.trim() || undefined);
-        const pageLimit = from === to ? 500 : 50;
-        const page = await reportService.listByDateRangePaged({
-          startDate: from,
-          endDate: to,
-          limit: pageLimit,
-          cursor: append ? rangeCursor : null,
-          lineId: filterLineId.trim() || undefined,
-          employeeId: employeeIdForQuery,
-        });
-        const current = append ? useAppStore.getState().productionReports : [];
-        useAppStore.setState({
-          productionReports: append ? [...current, ...page.items] : page.items,
-        });
-        setRangeCursor(page.nextCursor);
-        setRangeHasMore(page.hasMore);
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
-        setRangeError(message);
-      } finally {
-        setRangeLoading(false);
-      }
-    },
-    [rangeCursor, filterLineId, filterEmployeeId, myEmployeeId],
-  );
-
-  /** Load every page for a date range so general/monthly summaries are complete. */
+  /** Load every page for a date range so table pagination and summaries see the full period. */
   const loadFullRangeReports = useCallback(
     async (
       from: string,
@@ -1185,7 +1158,9 @@ export const Reports: React.FC = () => {
         setRangeCursor(hasMore ? cursor : null);
         setRangeHasMore(hasMore);
         if (hasMore) {
-          setRangeError('تم تحميل جزء من التقارير فقط. استخدم «تحميل المزيد» لإكمال الباقي.');
+          setRangeError(
+            'تم تحميل جزء من التقارير فقط بسبب حد الحجم. قلّص الفترة أو الفلاتر لعرض الباقي.',
+          );
         }
       } catch (error) {
         const message = error instanceof Error ? error.message : 'تعذر تحميل التقارير للفترة المحددة.';
@@ -1199,15 +1174,13 @@ export const Reports: React.FC = () => {
 
   const fetchReports = useCallback(
     async (from: string, to: string) => {
-      await loadRangeReports(from, to, false);
+      await loadFullRangeReports(from, to);
     },
-    [loadRangeReports],
+    [loadFullRangeReports],
   );
 
   const reportsFilterEffectPrimed = useRef(false);
   const skipNextRangeFilterEffectRef = useRef(false);
-  const loadRangeReportsRef = useRef(loadRangeReports);
-  loadRangeReportsRef.current = loadRangeReports;
   const loadFullRangeReportsRef = useRef(loadFullRangeReports);
   loadFullRangeReportsRef.current = loadFullRangeReports;
   useEffect(() => {
@@ -1224,12 +1197,7 @@ export const Reports: React.FC = () => {
       reportsFilterEffectPrimed.current = true;
       return;
     }
-    // General monthly preview needs the full period, not the first page only.
-    if (viewMode === 'general') {
-      void loadFullRangeReportsRef.current(startDate, endDate);
-      return;
-    }
-    void loadRangeReportsRef.current(startDate, endDate, false);
+    void loadFullRangeReportsRef.current(startDate, endDate);
     // Omit startDate/endDate from deps — period changes call fetchReports directly; avoids double-fetch.
   }, [filterLineId, filterEmployeeId, viewMode]);
 
@@ -1612,6 +1580,32 @@ export const Reports: React.FC = () => {
     rawMaterialOptions,
   ]);
 
+  const reportsTotalPages = Math.max(1, Math.ceil(searchFilteredReports.length / REPORTS_TABLE_PAGE_SIZE));
+  const reportsPage = Math.min(reportsListPage, reportsTotalPages);
+  const pagedReports = useMemo(
+    () => searchFilteredReports.slice(
+      (reportsPage - 1) * REPORTS_TABLE_PAGE_SIZE,
+      reportsPage * REPORTS_TABLE_PAGE_SIZE,
+    ),
+    [searchFilteredReports, reportsPage],
+  );
+
+  useEffect(() => {
+    setReportsListPage(1);
+  }, [
+    factorySearch,
+    filterLineId,
+    filterReportKind,
+    filterProductCategory,
+    filterEmployeeId,
+    startDate,
+    endDate,
+    viewMode,
+    reportGroupBy,
+    linkedWorkOrderIdFilter,
+    linkedProductionPlanIdFilter,
+  ]);
+
   const groupedReports = useMemo(() => {
     if (reportGroupBy === 'none') return [];
 
@@ -1623,7 +1617,7 @@ export const Reports: React.FC = () => {
       waste: number;
     }>();
 
-    searchFilteredReports.forEach((report) => {
+    pagedReports.forEach((report) => {
       let key = 'unknown';
       let label = 'غير محدد';
 
@@ -1663,7 +1657,7 @@ export const Reports: React.FC = () => {
     });
 
     return Array.from(groups.values()).sort((a, b) => a.label.localeCompare(b.label, 'ar'));
-  }, [reportGroupBy, searchFilteredReports, employees, _rawLines, rawMaterialOptions, _rawProducts]);
+  }, [reportGroupBy, pagedReports, employees, _rawLines, rawMaterialOptions, _rawProducts]);
 
   const factoryGeneralRows = useMemo<FactoryGeneralRow[]>(() => {
     const source = displayedReports;
@@ -2126,10 +2120,6 @@ export const Reports: React.FC = () => {
     }
     return 'all';
   }, [viewMode, startDate, endDate, reportBehavior.operationalDayStartHour]);
-  const handleLoadMoreRange = async () => {
-    if ((viewMode !== 'range' && viewMode !== 'general') || rangeLoading || !rangeHasMore) return;
-    await loadRangeReports(startDate, endDate, true);
-  };
 
   const reportsFilterBar = (
     <SmartFilterBar
@@ -4169,7 +4159,7 @@ export const Reports: React.FC = () => {
               />
               <div className="text-xs md:mr-auto font-bold text-[var(--color-text-muted)]">
                 {reportKindFilterLabel(filterReportKind)} | إجمالي {factoryGeneralRows.length} صف | إنتاج {formatNumber(factoryGeneralSummary.produced)} | تقارير {formatNumber(factoryGeneralSummary.reports)}
-                {rangeHasMore ? ' | (غير مكتمل — حمّل المزيد)' : ''}
+                {rangeHasMore ? ' | (غير مكتمل — قلّص الفترة أو الفلاتر)' : ''}
               </div>
             </div>
           </div>
@@ -4285,7 +4275,7 @@ export const Reports: React.FC = () => {
           ) : (
             <SelectableTable<ProductionReport>
               tableId="production-reports-main"
-              data={searchFilteredReports}
+              data={pagedReports}
               columns={reportColumns}
               selectAllScope="filtered"
               enableColumnVisibility
@@ -4304,17 +4294,17 @@ export const Reports: React.FC = () => {
               footer={reportTableFooter}
             />
           )}
-        </div>
-      )}
-      {(viewMode === 'range' || viewMode === 'general') && (
-        <div className="flex items-center justify-center">
-          <Button
-            variant="secondary"
-            onClick={() => void handleLoadMoreRange()}
-            disabled={!rangeHasMore || rangeLoading}
-          >
-            {rangeLoading ? 'جاري التحميل...' : (rangeHasMore ? 'تحميل المزيد' : 'تم تحميل كل النتائج')}
-          </Button>
+          {!rangeLoading && searchFilteredReports.length > 0 && (
+            <Card className="!p-0 overflow-hidden">
+              <DataPaginationFooter
+                page={reportsPage}
+                totalPages={reportsTotalPages}
+                totalItems={searchFilteredReports.length}
+                onPageChange={setReportsListPage}
+                itemLabel="تقرير"
+              />
+            </Card>
+          )}
         </div>
       )}
 

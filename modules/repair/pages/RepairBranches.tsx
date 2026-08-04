@@ -145,6 +145,22 @@ export const RepairBranches: React.FC = () => {
     void loadBranchStats(rows);
   }, [rows]);
 
+  // ADR-004: one-time style backfill of spare_parts role on RWH / branch warehouses.
+  useEffect(() => {
+    let cancelled = false;
+    void repairBranchService.ensureSparePartsWarehouseRoles()
+      .then((result) => {
+        if (cancelled || result.updated <= 0) return;
+        toast.success(`تم تحديث دور ${result.updated} مخزن صيانة إلى «قطع غيار خدمة».`);
+      })
+      .catch(() => {
+        // Non-blocking — page remains usable.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const create = async () => {
     if (!form.name) return;
     if (!form.managerEmployeeId) {

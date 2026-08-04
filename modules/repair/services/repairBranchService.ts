@@ -45,6 +45,7 @@ export const repairBranchService = {
       name: `مخزن صيانة - ${input.name}`,
       code: warehouseCode,
       isActive: true,
+      warehouseRole: 'spare_parts',
     });
     if (!warehouseId) throw new Error('تعذر إنشاء مخزن تلقائي للفرع.');
 
@@ -56,6 +57,44 @@ export const repairBranchService = {
       createdAt: nowIso(),
     });
     return ref.id;
+  },
+
+  async findByWarehouseId(warehouseId: string): Promise<RepairBranch | null> {
+    if (!isConfigured) return null;
+    const wh = String(warehouseId || '').trim();
+    if (!wh) return null;
+    const branches = await this.list();
+    return branches.find((b) => String(b.warehouseId || '').trim() === wh) || null;
+  },
+
+  /**
+   * Ensure warehouses linked to repair branches (and legacy RWH-* codes)
+   * use warehouseRole `spare_parts` (ADR-004 phase 1 backfill).
+   */
+  async ensureSparePartsWarehouseRoles(): Promise<{ updated: number; checked: number }> {
+    if (!isConfigured) return { updated: 0, checked: 0 };
+    const [branches, warehouses] = await Promise.all([
+      this.list(),
+      warehouseService.getAllWarehouses(),
+    ]);
+    const linkedIds = new Set(
+      branches.map((b) => String(b.warehouseId || '').trim()).filter(Boolean),
+    );
+    let updated = 0;
+    let checked = 0;
+    for (const warehouse of warehouses) {
+      const id = String(warehouse.id || '').trim();
+      if (!id) continue;
+      const code = String(warehouse.code || '').trim().toUpperCase();
+      const isLinked = linkedIds.has(id);
+      const isLegacyRepairCode = /^RWH-\d{3}$/.test(code);
+      if (!isLinked && !isLegacyRepairCode) continue;
+      checked += 1;
+      if ((warehouse.warehouseRole || 'general') === 'spare_parts') continue;
+      await warehouseService.update(id, { warehouseRole: 'spare_parts' });
+      updated += 1;
+    }
+    return { updated, checked };
   },
 
   async update(id: string, patch: Partial<Omit<RepairBranch, 'id' | 'tenantId'>>): Promise<void> {

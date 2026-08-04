@@ -42,6 +42,7 @@ function testArabicStageLabels() {
   assert.equal(WAREHOUSE_ROLE_LABELS.final_product, 'منتج تام');
   assert.equal(WAREHOUSE_ROLE_LABELS.production_wip, 'تم الإنتاج — تحت التسليم');
   assert.equal(WAREHOUSE_ROLE_LABELS.production_floor, 'صالة الإنتاج');
+  assert.equal(WAREHOUSE_ROLE_LABELS.spare_parts, 'قطع غيار خدمة');
   assert.equal(transferRequestTypeLabel('production_auto_transfer'), 'ترحيل إلى تم الإنتاج');
   assert.equal(transferRequestTypeLabel('packaging_transfer'), 'تحويل تغليف');
   assert.equal(transferRequestTypeLabel('production_handover'), 'استلام تغليف (تحت التسليم)');

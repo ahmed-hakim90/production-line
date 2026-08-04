@@ -40,6 +40,8 @@ export type WarehouseRole =
   | 'final_product'
   | 'packaging'
   | 'waste'
+  /** After-sales / repair service-center spare parts (not manufacturing routing). */
+  | 'spare_parts'
   | 'general';
 
 export interface Warehouse {

@@ -10,6 +10,7 @@ export const WAREHOUSE_ROLE_LABELS: Record<WarehouseRole, string> = {
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
+  spare_parts: 'قطع غيار خدمة',
 };
 
 export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {

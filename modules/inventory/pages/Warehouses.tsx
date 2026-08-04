@@ -15,6 +15,7 @@ const ROLE_LABELS: Record<WarehouseRole, string> = {
   final_product: 'منتج تام',
   packaging: 'تغليف',
   waste: 'هالك',
+  spare_parts: 'قطع غيار خدمة',
 };
 import { usePermission } from '../../../utils/permissions';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';

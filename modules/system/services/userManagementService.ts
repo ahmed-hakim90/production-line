@@ -2,6 +2,7 @@ import { employeeService } from '../../hr/employeeService';
 import { roleService } from './roleService';
 import { userService } from '../../../services/userService';
 import { deleteUserHard, updateUserCredentialsHard } from '../../auth/services/firebase';
+import { repairBranchService } from '../../repair/services/repairBranchService';
 import type { FirestoreEmployee, FirestoreRole, FirestoreUser } from '../../../types';
 
 export interface UserManagementRow {
@@ -83,8 +84,39 @@ export const userManagementService = {
     await userService.updateRoleId(userId, roleId);
   },
 
+  /**
+   * Bind inventory warehouse; if it belongs to a repair branch, also set repairBranchId
+   * so repair + inventory pages stay aligned (ADR-004).
+   */
   async updateInventoryWarehouseId(userId: string, warehouseId: string | null): Promise<void> {
-    await userService.updateInventoryWarehouseId(userId, warehouseId);
+    const nextWarehouseId = String(warehouseId || '').trim() || null;
+    const previous = await userService.get(userId);
+    const previousWarehouseId = String(previous?.inventoryWarehouseId || '').trim() || null;
+
+    await userService.updateInventoryWarehouseId(userId, nextWarehouseId);
+
+    if (nextWarehouseId) {
+      const branch = await repairBranchService.findByWarehouseId(nextWarehouseId);
+      if (branch?.id) {
+        await userService.update(userId, {
+          repairBranchId: branch.id,
+          repairBranchIds: [branch.id],
+        } as Partial<FirestoreUser>);
+      }
+      return;
+    }
+
+    // Clearing warehouse: clear repair branch only if it pointed at the previous warehouse's branch.
+    if (!previousWarehouseId) return;
+    const previousBranch = await repairBranchService.findByWarehouseId(previousWarehouseId);
+    const previousBranchId = String(previousBranch?.id || '').trim();
+    if (!previousBranchId) return;
+    const currentBranchId = String((previous as FirestoreUser & { repairBranchId?: string })?.repairBranchId || '').trim();
+    if (currentBranchId && currentBranchId !== previousBranchId) return;
+    await userService.update(userId, {
+      repairBranchId: '',
+      repairBranchIds: [],
+    } as Partial<FirestoreUser>);
   },
 
   async toggleUserActive(userId: string, isActive: boolean): Promise<void> {
