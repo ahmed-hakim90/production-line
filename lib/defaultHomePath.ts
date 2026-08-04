@@ -20,6 +20,12 @@ export function resolveDefaultHomeLogicalPath(
   _can: (p: Permission) => boolean,
 ): string | null {
   const n = normalizeDefaultHomeLogicalPath(raw);
+  // Only '' and '/' are allowlisted today → always use role dashboards.
+  // When new paths are added to ALLOWED_DEFAULT_HOME_LOGICAL_PATHS, return them
+  // here after a permission check via `_can`.
   if (!n || n === '/') return null;
+  if (!(ALLOWED_DEFAULT_HOME_LOGICAL_PATHS as readonly string[]).includes(n)) {
+    return null;
+  }
   return null;
 }

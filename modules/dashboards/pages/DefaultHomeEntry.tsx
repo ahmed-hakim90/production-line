@@ -10,7 +10,10 @@ import { PageRouteFallback } from '../../../components/PageRouteFallback';
 const HomeDashboardRouter = lazyNamed(() => import('./HomeDashboardRouter'), 'HomeDashboardRouter');
 
 /**
- * Honors `systemSettings.defaultHomeLogicalPath` when set and permitted; otherwise legacy home dashboards.
+ * Honors `systemSettings.defaultHomeLogicalPath` when a non-default allowlisted
+ * path is configured. Today the settings UI only offers the role-based dashboard
+ * default (`''` / `/`), so this always falls through to HomeDashboardRouter until
+ * ALLOWED_DEFAULT_HOME_LOGICAL_PATHS is expanded.
  */
 export const DefaultHomeEntry: React.FC = () => {
   const { tenantSlug: tenantSlugParam } = useParams<{ tenantSlug: string }>();

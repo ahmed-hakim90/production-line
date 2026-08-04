@@ -10,6 +10,7 @@ import {
   DEFAULT_PLAN_SETTINGS,
   DEFAULT_SYSTEM_SETTINGS,
 } from '../../../utils/dashboardConfig';
+import { syncPlanSettingsWarehouseRouting } from '../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import { resolveOperationPathSettings } from './operationPathSettings';
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -29,7 +30,7 @@ export function resolvePlanSettings(
   input: Partial<PlanSettings> | null | undefined,
 ): PlanSettings {
   const raw = isPlainObject(input) ? (input as Partial<PlanSettings>) : {};
-  return {
+  const merged: PlanSettings = {
     ...DEFAULT_PLAN_SETTINGS,
     ...raw,
     inventoryRouting: mergeObjectLayer(
@@ -41,6 +42,8 @@ export function resolvePlanSettings(
       raw.reportBehavior,
     ) as PlanSettings['reportBehavior'],
   };
+  // Align nested inventoryRouting with legacy warehouse fields + approval flags.
+  return syncPlanSettingsWarehouseRouting(merged);
 }
 
 function resolveAttendanceIntegration(

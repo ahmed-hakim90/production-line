@@ -14,7 +14,7 @@ const OPTIONS: { value: string; label: string }[] = [
 export const DefaultHomePathSection: React.FC<DefaultHomePathSectionProps> = ({ value, onChange }) => (
   <Card title="الصفحة الرئيسية بعد تسجيل الدخول">
     <p className="text-xs text-[var(--color-text-muted)] mb-3">
-      يحدد المسار المنطقي عند فتح الرئيسية <span dir="ltr">/</span> للمستخدمين الذين يملكون صلاحية المسار المختار.
+      حالياً المسار الوحيد المتاح هو لوحات التحكم حسب الدور. خيارات مسارات إضافية ستُضاف هنا عند تفعيلها في النظام.
     </p>
     <select
       className="w-full max-w-md border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3 outline-none focus:border-primary focus:ring-2 focus:ring-primary/20"

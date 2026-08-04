@@ -316,18 +316,6 @@ async function resolveProductionWarehouseId(systemSettings: SystemSettings): Pro
   return '';
 }
 
-/** @deprecated Use resolveInventoryRoutingV1Async from inventoryRoutingService */
-async function resolveInventoryRouting(systemSettings: SystemSettings) {
-  const routing = await resolveInventoryRoutingV1Async(systemSettings);
-  return {
-    decomposedSourceWarehouseId: routing.decomposedWarehouseId,
-    finishedReceiveWarehouseId: routing.finishedStagingWarehouseId,
-    wasteReceiveWarehouseId: routing.wasteWarehouseId,
-    finalProductWarehouseId: routing.finalProductWarehouseId,
-    allowNegativeDecomposedStock: routing.allowNegativeDecomposedStock,
-  };
-}
-
 const PACKAGING_STOCK_TRANSFER_NOTE_PREFIX = 'Packaging stock transfer from report';
 const packagingStockTransferNote = (reportId: string) => `${PACKAGING_STOCK_TRANSFER_NOTE_PREFIX} ${reportId}`;
 

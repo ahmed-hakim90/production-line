@@ -239,7 +239,8 @@ export const DEFAULT_PLAN_SETTINGS: PlanSettings = {
   productionRequestObserverUserIds: [],
   allowNegativeDecomposedStock: false,
   allowNegativeFinishedTransferStock: false,
-  requireFinishedStockApprovalForReports: true,
+  // Keep aligned with inventoryRouting.requireApprovalForProductionEntry (both false by default).
+  requireFinishedStockApprovalForReports: false,
   maxWasteThreshold: 5,
   efficiencyCalculationMode: 'standard',
   averageProductionMode: 'daily',

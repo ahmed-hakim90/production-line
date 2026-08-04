@@ -1,6 +1,6 @@
 /**
  * ProductionReportPrint - Configurable printable production report.
- * Reads printTemplate settings from system_settings/global (via props).
+ * Reads printTemplate settings from system_settings/{tenantId} (via props).
  * Accepts data via props so it contains ZERO business logic.
  */
 import React from 'react';

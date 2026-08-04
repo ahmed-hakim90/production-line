@@ -41,8 +41,11 @@ Notes:
   - `services/userService.ts`
   - `services/backupService.ts`
   - `services/notificationService.ts`
-  - `services/dashboardStatsService.ts`
   - `services/imageCompression.ts`
+
+- Removed unused (no importers):
+  - `services/dashboardStatsService.ts`
+  - `pages/TeamRequests.tsx` (route `/team-requests` redirects to `/production/requests`)
 
 ---
 

@@ -1066,7 +1066,7 @@ interface ProductionPlan {
   status: 'planned' | 'in_progress' | 'completed' | 'paused' | 'cancelled';
 }
 
-// إعدادات النظام (مستند واحد system_settings/global)
+// إعدادات النظام (مستند لكل مستأجر: system_settings/{tenantId})
 interface SystemSettings {
   dashboardWidgets: Record<string, WidgetConfig[]>;
   alertSettings: AlertSettings;
@@ -1343,7 +1343,7 @@ const ALL_COLLECTIONS = [
 | Activity Log تلقائي | الـ Store بيسجل — مش الصفحة |
 | الحماية مزدوجة | Frontend (hide) + Firestore Rules (reject) |
 | TypeScript لكل حاجة | interface واضح لكل document |
-| الإعدادات مركزية | `system_settings/global` + `useAppStore.systemSettings` |
+| الإعدادات مركزية | `system_settings/{tenantId}` + `useAppStore.systemSettings` |
 | المظهر ديناميكي | CSS Variables + `applyTheme()` |
 
 ---
