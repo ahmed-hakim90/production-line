@@ -367,6 +367,16 @@ export type ResolveTenantSlugResult = {
   pendingRegistration?: boolean;
 };
 
+export type PublicRepairTrackJobProduct = {
+  name: string;
+  quantity: number;
+};
+
+export type PublicRepairTrackStatusHistoryItem = {
+  status: string;
+  atMs: number;
+};
+
 export type PublicRepairTrackResult =
   | { found: false; reason: 'tenant_not_found' | 'tenant_not_active' | 'not_found' }
   | {
@@ -377,7 +387,11 @@ export type PublicRepairTrackResult =
         deviceBrand: string;
         deviceModel: string;
         status: string;
+        statusLabel: string;
         updatedAtMs: number;
+        dueAtMs?: number;
+        jobProducts?: PublicRepairTrackJobProduct[];
+        statusHistory?: PublicRepairTrackStatusHistoryItem[];
       };
     };
 

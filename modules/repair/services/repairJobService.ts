@@ -31,12 +31,14 @@ import { generateApprovalToken, sha256Hex } from '../utils/repairApprovalToken';
 import type { RepairJob, RepairJobProduct, RepairJobStatus, RepairPartUsage, RepairStatusHistoryItem } from '../types';
 import { repairReceiptService } from './repairReceiptService';
 import { sparePartsService } from './sparePartsService';
+import { repairSpareIssueService } from './repairSpareIssueService';
 import { repairTreasuryService } from './repairTreasuryService';
 import { repairSalesInvoiceService } from './repairSalesInvoiceService';
 import { repairBranchService } from './repairBranchService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { computeRepairJobCost, normalizePaymentStatus } from '../utils/repairBusinessLogic';
+import { assertRepairStatusTransition } from '../utils/repairStatusTransitions';
 
 const nowIso = () => new Date().toISOString();
 const isoUtcDay = (isoLike: string | undefined | null): string => String(isoLike || '').slice(0, 10);
@@ -50,12 +52,16 @@ const normalizeJob = (job: RepairJob): RepairJob => {
     ? existingProducts.map((item, idx) => ({
         ...item,
         itemId: String(item?.itemId || `item-${idx + 1}`),
+        quantity: Math.max(1, Math.round(Number(item?.quantity || 1))),
+        accessoryIds: Array.isArray(item?.accessoryIds) ? item.accessoryIds.map(String) : undefined,
+        serviceIds: Array.isArray(item?.serviceIds) ? item.serviceIds.map(String) : undefined,
         accessories: String(item?.accessories || (idx === 0 ? job.accessories || '' : '')),
       }))
     : [{
         itemId: 'item-1',
         productId: job.productId,
         productName: String(job.productName || job.deviceBrand || 'منتج'),
+        quantity: 1,
         deviceType: job.deviceType,
         deviceBrand: job.deviceBrand,
         deviceModel: job.deviceModel,
@@ -466,6 +472,23 @@ export const repairJobService = {
     const actorUid = String(input.actorUid || 'unknown');
     const actorName = String(input.actorName || 'مستخدم');
 
+    assertRepairStatusTransition({
+      fromStatus: beforeCanon,
+      toStatus: nextCanon,
+      statuses: settings.workflow.statuses,
+    });
+
+    if (isDeliveredStatus(nextCanon)) {
+      const preview = existing ? computeRepairJobCost(existing) : null;
+      const finalCost = Number(input.finalCost ?? preview?.finalCost ?? existing?.finalCost ?? 0);
+      if (finalCost < 0 || !Number.isFinite(finalCost)) {
+        throw new Error('التكلفة النهائية غير صالحة للتسليم.');
+      }
+      if (existing?.isClosed) {
+        throw new Error('الطلب مغلق ولا يمكن تسليمه مرة أخرى.');
+      }
+    }
+
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists()) throw new Error('طلب الصيانة غير موجود.');
@@ -588,7 +611,8 @@ export const repairJobService = {
         await sparePartsService.releaseAllActiveForJob(input.jobId, actorName);
       }
     } catch (err) {
-      console.warn('repairJobService.changeStatus: release reservations', err);
+      const message = err instanceof Error ? err.message : 'تعذر تحرير حجوزات قطع الغيار.';
+      throw new Error(`تم تحديث الحالة لكن فشل تحرير الحجوزات: ${message}`);
     }
   },
 
@@ -623,6 +647,7 @@ export const repairJobService = {
       customerName: source.customerName,
       customerPhone: source.customerPhone,
       customerAddress: source.customerAddress || '',
+      customerId: source.customerId || '',
       deviceType: lead?.deviceType || source.deviceType,
       deviceBrand: lead?.deviceBrand || source.deviceBrand,
       deviceModel: lead?.deviceModel || source.deviceModel,
@@ -647,6 +672,27 @@ export const repairJobService = {
       isClosed: true,
       notes: [source.notes, `تم إنشاء إعادة إصلاح جديدة مرتبطة.`].filter(Boolean).join('\n'),
     });
+    if (source.customerId && createResult.id) {
+      try {
+        const created = await this.getById(createResult.id);
+        const { customerActivityService } = await import(
+          '@/modules/customers/services/customerActivityService'
+        );
+        await customerActivityService.record({
+          customerId: source.customerId,
+          module: 'repair',
+          action: 'repair.job_created',
+          title: 'إعادة إصلاح مرتبطة',
+          summary: `من الطلب #${source.receiptNo}`,
+          referenceType: 'repair_job',
+          referenceId: createResult.id,
+          referenceLabel: created?.receiptNo || createResult.id,
+          actorUid: input.createdById,
+        });
+      } catch (err) {
+        console.warn('createLinkedReopenJob: customer activity', err);
+      }
+    }
     return createResult;
   },
 
@@ -768,6 +814,22 @@ export const repairJobService = {
         throw new Error('لا يمكن عكس قطع الغيار لأن مخزن الفرع غير محدد.');
       }
       for (const part of row.partsUsed) {
+        const qty = Math.abs(Number(part.quantity || 0));
+        if (!(qty > 0)) continue;
+        const issueId = String(part.issueId || '').trim();
+        if (issueId) {
+          const itemId = String(part.materialId || part.partId || '').trim();
+          if (!itemId) continue;
+          await repairSpareIssueService.returnLines(issueId, [{
+            itemId,
+            quantity: qty,
+            note: [
+              `عكس صرف قطع غيار لطلب #${row.receiptNo || id} بسبب الحذف`,
+              reason ? `السبب: ${reason}` : '',
+            ].filter(Boolean).join(' - '),
+          }]);
+          continue;
+        }
         const partId = String(part.partId || '').trim();
         if (!partId) continue;
         await sparePartsService.adjustStock({
@@ -776,7 +838,7 @@ export const repairJobService = {
           warehouseName: branchWarehouseName,
           partId,
           partName: String(part.partName || '').trim() || partId,
-          quantity: Math.abs(Number(part.quantity || 0)),
+          quantity: qty,
           type: 'IN',
           createdBy: actorName,
           jobId: row.id,

@@ -18,6 +18,9 @@ import { sparePartsService } from '../services/sparePartsService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import { exportHRData } from '../../../utils/exportExcel';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
+import { customerService } from '@/modules/customers/services/customerService';
+import type { Customer } from '@/modules/customers/types';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -48,8 +51,10 @@ export const RepairSalesInvoicePage: React.FC = () => {
   const [selectedPartId, setSelectedPartId] = useState('');
   const [qty, setQty] = useState('1');
   const [price, setPrice] = useState('0');
+  const [customerId, setCustomerId] = useState('');
   const [customerName, setCustomerName] = useState('');
   const [customerPhone, setCustomerPhone] = useState('');
+  const [customers, setCustomers] = useState<Customer[]>([]);
   const [notes, setNotes] = useState('');
   const [lines, setLines] = useState<DraftLine[]>([]);
   const [latestInvoices, setLatestInvoices] = useState<RepairSalesInvoice[]>([]);
@@ -85,6 +90,10 @@ export const RepairSalesInvoicePage: React.FC = () => {
     void repairBranchService.list().then((rows) => {
       setBranches(rows);
     });
+  }, []);
+
+  useEffect(() => {
+    void customerService.listAll({ includeInactive: false }).then(setCustomers).catch(() => setCustomers([]));
   }, []);
 
   useEffect(() => {
@@ -194,9 +203,19 @@ export const RepairSalesInvoicePage: React.FC = () => {
   const resetDraft = () => {
     setEditingInvoiceId(null);
     setLines([]);
+    setCustomerId('');
     setCustomerName('');
     setCustomerPhone('');
     setNotes('');
+  };
+  const applyInvoiceCustomer = (customer: Customer | null) => {
+    if (!customer) {
+      setCustomerId('');
+      return;
+    }
+    setCustomerId(String(customer.id || ''));
+    setCustomerName(customer.name);
+    setCustomerPhone(customer.phone);
   };
   const startEditInvoice = (invoice: RepairSalesInvoice) => {
     if (isCancelledInvoice(invoice)) {
@@ -209,6 +228,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
     }
     setEditingInvoiceId(invoice.id || null);
     setBranchId(invoice.branchId || '');
+    setCustomerId(invoice.customerId || '');
     setCustomerName(invoice.customerName || '');
     setCustomerPhone(invoice.customerPhone || '');
     setNotes(invoice.notes || '');
@@ -286,6 +306,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
           warehouseId: activeBranch?.warehouseId,
           warehouseName: activeBranch?.name ? `مخزن ${activeBranch.name}` : activeBranch?.warehouseCode,
           lines: invoiceLines,
+          customerId: customerId || undefined,
           customerName,
           customerPhone,
           notes,
@@ -300,6 +321,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
           warehouseId: activeBranch?.warehouseId,
           warehouseName: activeBranch?.name ? `مخزن ${activeBranch.name}` : activeBranch?.warehouseCode,
           lines: invoiceLines,
+          customerId: customerId || undefined,
           customerName,
           customerPhone,
           notes,
@@ -489,8 +511,43 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   </SelectContent>
                 </Select>
               </div>
-              <div><Label>اسم العميل</Label><Input value={customerName} onChange={(e) => setCustomerName(e.target.value)} placeholder="مثال: أحمد محمد" /></div>
-              <div><Label>الهاتف</Label><Input value={customerPhone} onChange={(e) => setCustomerPhone(e.target.value)} placeholder="01xxxxxxxxx" /></div>
+              <div className="md:col-span-2">
+                <CustomerPicker
+                  customers={customers}
+                  valueId={customerId}
+                  canCreate={can('customers.create') || can('repair.salesInvoice.create')}
+                  actor={{
+                    userId: String(user?.id || ''),
+                    userName: String(user?.displayName || user?.email || 'مستخدم'),
+                  }}
+                  onSelect={applyInvoiceCustomer}
+                  onCreated={(created) => {
+                    setCustomers((prev) => {
+                      if (prev.some((c) => c.id === created.id)) return prev;
+                      return [...prev, created];
+                    });
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground mt-1">
+                  اختياري — يمكن البيع نقدًا بدون ربط ماستر، أو اختيار/إنشاء عميل لربطه بالتايملاين.
+                </p>
+              </div>
+              <div>
+                <Label>اسم العميل (عرض)</Label>
+                <Input
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  placeholder="عميل نقدي أو من الماستر"
+                />
+              </div>
+              <div>
+                <Label>الهاتف</Label>
+                <Input
+                  value={customerPhone}
+                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  placeholder="01xxxxxxxxx"
+                />
+              </div>
             </CardContent>
           </Card>
 

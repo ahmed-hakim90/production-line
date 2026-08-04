@@ -23,6 +23,8 @@ export type StockSourceModule =
   | 'department_consumable_issue'
   | 'department_consumable_return'
   | 'spare_parts_replenishment'
+  | 'repair_spare_issue'
+  | 'repair_spare_return'
   | 'legacy';
 
 export type StockAdjustmentReason =

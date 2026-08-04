@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
@@ -83,12 +84,11 @@ export const Warehouses: React.FC = () => {
     [rowsData, filterWarehouses],
   );
 
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [roleFilter, setRoleFilter] = useState('');
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (loadError) setMessage({ type: 'error', text: 'تعذر تحميل المخازن.' });
+    if (loadError) toast.error('تعذر تحميل المخازن.');
   }, [loadError]);
 
   const displayRows = useMemo(
@@ -113,16 +113,15 @@ export const Warehouses: React.FC = () => {
     if (!w.id || !canManage) return;
     const ok = window.confirm(DELETE_CONFIRM(w.name || w.code || w.id));
     if (!ok) return;
-    setMessage(null);
     setDeletingId(w.id);
     try {
       const res = await warehouseService.delete(w.id);
       if (res.ok) {
-        setMessage({ type: 'success', text: 'تم حذف المخزن وجميع البيانات المرتبطة به.' });
+        toast.success('تم حذف المخزن وجميع البيانات المرتبطة به.');
         await fetchSystemSettings();
         await load();
       } else {
-        setMessage({ type: 'error', text: res.error || 'تعذر الحذف.' });
+        toast.error(res.error || 'تعذر الحذف.');
       }
     } finally {
       setDeletingId(null);
@@ -160,18 +159,6 @@ export const Warehouses: React.FC = () => {
             : undefined
         }
       />
-
-      {message && (
-        <div
-          className={`rounded-[var(--border-radius-lg)] border px-4 py-3 text-sm font-semibold ${
-            message.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-              : 'border-rose-200 bg-rose-50 text-rose-800'
-          }`}
-        >
-          {message.text}
-        </div>
-      )}
 
       <Card title="قائمة المخازن">
         <SmartFilterBar

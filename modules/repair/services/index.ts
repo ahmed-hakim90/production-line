@@ -5,3 +5,5 @@ export { sparePartsService } from './sparePartsService';
 export { repairTreasuryService } from './repairTreasuryService';
 export { repairSalesInvoiceService } from './repairSalesInvoiceService';
 export { repairServiceEventService } from './repairServiceEventService';
+export { repairFollowUpService } from './repairFollowUpService';
+export { repairComplaintService } from './repairComplaintService';

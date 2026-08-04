@@ -35,6 +35,7 @@ export type Permission =
   | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.locations.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove' | 'inventory.disassembly.manage'
   | 'departmentConsumables.view' | 'departmentConsumables.create' | 'departmentConsumables.approve' | 'departmentConsumables.issue' | 'departmentConsumables.export'
   | 'sparePartsReplenishment.view' | 'sparePartsReplenishment.create' | 'sparePartsReplenishment.approve' | 'sparePartsReplenishment.prepare' | 'sparePartsReplenishment.responsibleApprove' | 'sparePartsReplenishment.receive'
+  | 'repairSpareIssues.view' | 'repairSpareIssues.create' | 'repairSpareIssues.approve' | 'repairSpareIssues.issue'
   | 'productionIssue.create' | 'productionIssue.request' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
   | 'productionHandover.approve'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
@@ -91,10 +92,13 @@ export type Permission =
   | 'repair.adminDashboard.view'
   | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete' | 'repair.jobs.technician'
   | 'repair.parts.view' | 'repair.parts.manage'
+  | 'repair.pricing.manage'
   | 'repair.branches.manage'
   | 'repair.technician.view'
   | 'repair.treasury.view' | 'repair.treasury.manage'
   | 'repair.settings.manage'
+  | 'repair.callCenter.viewAll'
+  | 'repair.complaints.view' | 'repair.complaints.manage'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
   | 'customers.view' | 'customers.create' | 'customers.edit' | 'customers.import'
   | 'print' | 'export' | 'import';
@@ -332,11 +336,19 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repair.jobs.technician', label: 'فني صيانة (طلبات مسندة فقط)' },
       { key: 'repair.parts.view', label: 'عرض قطع الغيار' },
       { key: 'repair.parts.manage', label: 'إدارة قطع الغيار' },
+      { key: 'repair.pricing.manage', label: 'تسعير قطع الغيار وخدمات الصيانة' },
+      { key: 'repairSpareIssues.view', label: 'عرض سندات صرف قطع الغيار' },
+      { key: 'repairSpareIssues.create', label: 'إنشاء سند صرف قطع غيار' },
+      { key: 'repairSpareIssues.approve', label: 'اعتماد سند صرف قطع غيار' },
+      { key: 'repairSpareIssues.issue', label: 'تنفيذ/مرتجع صرف قطع الغيار' },
       { key: 'repair.branches.manage', label: 'إدارة فروع الصيانة' },
       { key: 'repair.technician.view', label: 'عرض أداء الفنيين' },
       { key: 'repair.treasury.view', label: 'عرض خزينة الصيانة' },
       { key: 'repair.treasury.manage', label: 'إدارة خزينة الصيانة' },
       { key: 'repair.settings.manage', label: 'إدارة إعدادات الصيانة' },
+      { key: 'repair.callCenter.viewAll', label: 'مركز اتصال — عرض كل الفروع' },
+      { key: 'repair.complaints.view', label: 'عرض شكاوى الصيانة' },
+      { key: 'repair.complaints.manage', label: 'إدارة شكاوى الصيانة' },
       { key: 'repair.salesInvoice.create', label: 'إنشاء فاتورة بيع قطع الغيار' },
       { key: 'repair.salesInvoice.view', label: 'عرض فواتير بيع قطع الغيار' },
       { key: 'repair.salesInvoice.edit', label: 'تعديل فاتورة بيع قطع الغيار' },
@@ -528,6 +540,18 @@ export function checkPermission(
       permissions['inventory.transactions.create'] === true
       || permissions['inventory.transfers.approve'] === true
     );
+  }
+  if (permission === 'repairSpareIssues.view') {
+    return permissions['repair.parts.view'] === true || permissions['repair.view'] === true;
+  }
+  if (permission === 'repairSpareIssues.create') {
+    return permissions['repair.parts.manage'] === true;
+  }
+  if (permission === 'repairSpareIssues.approve') {
+    return permissions['repair.parts.manage'] === true;
+  }
+  if (permission === 'repairSpareIssues.issue') {
+    return permissions['repair.parts.manage'] === true;
   }
   // New permission — older role docs (including admin) may omit the key entirely.
   if (permission === 'productionIssue.request') {

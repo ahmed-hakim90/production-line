@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
+import { toast } from 'sonner';
 import { Card, Button } from '../UI';
 import type { Warehouse, WarehouseLocationSettings } from '../../../inventory/types';
 import { warehouseLocationSettingsService } from '../../../inventory/services/warehouseLocationSettingsService';
@@ -13,7 +14,6 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
   const [warehouseId, setWarehouseId] = useState('');
   const [settings, setSettings] = useState<WarehouseLocationSettings | null>(null);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
 
   const selectedWarehouse = inventoryWarehouses.find((w) => w.id === warehouseId);
 
@@ -37,16 +37,15 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
   const save = async () => {
     if (!isAdmin || !selectedWarehouse?.id || !settings) return;
     setSaving(true);
-    setMessage('');
     try {
       await warehouseLocationSettingsService.save({
         ...settings,
         warehouseId: selectedWarehouse.id,
         warehouseName: selectedWarehouse.name,
       });
-      setMessage('تم حفظ إعدادات لوكيشن المخزن.');
+      toast.success('تم حفظ إعدادات لوكيشن المخزن.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'تعذر حفظ إعدادات اللوكيشن.');
+      toast.error(error instanceof Error ? error.message : 'تعذر حفظ إعدادات اللوكيشن.');
     } finally {
       setSaving(false);
     }
@@ -123,7 +122,6 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
           </div>
         )}
 
-        {message && <p className="text-sm font-bold text-primary">{message}</p>}
       </div>
     </Card>
   );

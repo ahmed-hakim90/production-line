@@ -38,6 +38,7 @@ import { GeneralSystemBehaviorSection } from '../components/settings/GeneralSyst
 import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionWorkerSettings } from '@/types';
 import { InventoryRoutingSettingsSection } from '../components/settings/InventoryRoutingSettingsSection';
 import { DepartmentConsumablesSettingsSection } from '../components/settings/DepartmentConsumablesSettingsSection';
+import { RepairSpareIssuesSettingsSection } from '../components/settings/RepairSpareIssuesSettingsSection';
 import { WarehouseLocationSettingsSection } from '../components/settings/WarehouseLocationSettingsSection';
 import { ProductionRequestRoutingSettingsSection } from '../components/settings/ProductionRequestRoutingSettingsSection';
 import { ProductionReportBehaviorSettingsSection } from '../components/settings/ProductionReportBehaviorSettingsSection';
@@ -888,6 +889,17 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
             icon="shopping_bag"
           />
           <DepartmentConsumablesSettingsSection
+            isAdmin={isAdmin}
+            localPlanSettings={localPlanSettings}
+            setLocalPlanSettings={setLocalPlanSettings}
+          />
+
+          <SettingsGroupTitle
+            title="قطع غيار الصيانة"
+            description="سياسة اعتماد صرف قطع الغيار من مخازن مراكز الصيانة."
+            icon="build"
+          />
+          <RepairSpareIssuesSettingsSection
             isAdmin={isAdmin}
             localPlanSettings={localPlanSettings}
             setLocalPlanSettings={setLocalPlanSettings}

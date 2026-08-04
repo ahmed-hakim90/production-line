@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
+import { toast } from 'sonner';
 import { Card, Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { stockService } from '../services/stockService';
@@ -123,8 +124,6 @@ export const StockMovementForm: React.FC = () => {
   const [quantity, setQuantity] = useState<number>(0);
   const [transferItems, setTransferItems] = useState<TransferLine[]>([createTransferLine()]);
   const [nextReferenceSeq, setNextReferenceSeq] = useState(1);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [shareToast, setShareToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [printData, setPrintData] = useState<StockTransferPrintData | null>(null);
   const [previewData, setPreviewData] = useState<StockTransferPrintData | null>(null);
@@ -438,8 +437,7 @@ export const StockMovementForm: React.FC = () => {
   const showShareFeedback = (result: ShareResult) => {
     const msg = getShareResultFeedbackMessage(result, { downloadEntityLabel: 'التحويلة' });
     if (!msg) return;
-    setShareToast(msg);
-    setTimeout(() => setShareToast(null), 8000);
+    toast.success(msg);
   };
 
   const printTransfer = async (fileName: string) => {
@@ -457,31 +455,29 @@ export const StockMovementForm: React.FC = () => {
 
   const handleSubmit = async (afterSaveAction: 'none' | 'print' | 'preview' | 'share' = 'none') => {
     if (!selectedOperationPathEnabled) {
-      setMessage({ type: 'error', text: 'هذا المسار متوقف من إعدادات النظام.' });
+      toast.error('هذا المسار متوقف من إعدادات النظام.');
       return;
     }
     if (!effectiveWarehouseId) {
-      setMessage({ type: 'error', text: 'اختر المخزن أولاً.' });
+      toast.error('اختر المخزن أولاً.');
       return;
     }
     if (movementType === 'TRANSFER' && !toWarehouseId) {
-      setMessage({ type: 'error', text: 'اختر مخزن الوجهة للتحويل.' });
+      toast.error('اختر مخزن الوجهة للتحويل.');
       return;
     }
     if (movementType === 'TRANSFER' && toWarehouseId === effectiveWarehouseId) {
       if (!locationId || !toLocationId) {
-        setMessage({ type: 'error', text: 'حدد رف المصدر ورف الوجهة لنقل داخل نفس المخزن.' });
+        toast.error('حدد رف المصدر ورف الوجهة لنقل داخل نفس المخزن.');
         return;
       }
       if (locationId === toLocationId) {
-        setMessage({ type: 'error', text: 'رف المصدر ورف الوجهة يجب أن يكونا مختلفين.' });
+        toast.error('رف المصدر ورف الوجهة يجب أن يكونا مختلفين.');
         return;
       }
     }
 
     setSaving(true);
-    setMessage(null);
-    setShareToast(null);
     try {
       const resolvedReferenceNo = referenceNo;
       let txId: string | null = null;
@@ -489,7 +485,7 @@ export const StockMovementForm: React.FC = () => {
       if (movementType === 'TRANSFER') {
         const validationError = validateTransferLines(transferItems, itemType, getItemById);
         if (validationError) {
-          setMessage({ type: 'error', text: validationError });
+          toast.error(validationError);
           return;
         }
 
@@ -500,10 +496,7 @@ export const StockMovementForm: React.FC = () => {
             const qty = lineQuantityInPieces(line);
             const stockIdentity = resolveLineStockIdentity(line.itemId, 'TRANSFER');
             if (qty > stockIdentity.available) {
-              setMessage({
-                type: 'error',
-                text: `الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`,
-              });
+              toast.error(`الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`);
               return;
             }
             txId = unwrapOrThrow(await createStockMovement({
@@ -545,7 +538,7 @@ export const StockMovementForm: React.FC = () => {
             lineQuantityInPieces,
           );
           if (!requestLines.length) {
-            setMessage({ type: 'error', text: 'تعذر تجهيز أصناف طلب التحويل.' });
+            toast.error('تعذر تجهيز أصناف طلب التحويل.');
             return;
           }
 
@@ -565,31 +558,31 @@ export const StockMovementForm: React.FC = () => {
         }
       } else {
         if (!selectedItem) {
-          setMessage({ type: 'error', text: 'اختر الصنف أولًا.' });
+          toast.error('اختر الصنف أولًا.');
           return;
         }
         if (movementType !== 'ADJUSTMENT' && quantity <= 0) {
-          setMessage({ type: 'error', text: 'الكمية يجب أن تكون أكبر من صفر.' });
+          toast.error('الكمية يجب أن تكون أكبر من صفر.');
           return;
         }
         if (movementType === 'ADJUSTMENT' && quantity === 0) {
-          setMessage({ type: 'error', text: 'كمية التسوية لا يمكن أن تساوي صفر.' });
+          toast.error('كمية التسوية لا يمكن أن تساوي صفر.');
           return;
         }
         if (itemType === 'raw_material' && locationSelectOptions.length > 0 && !locationId) {
-          setMessage({ type: 'error', text: 'حدد اللوكيشن قبل تسجيل حركة مكون.' });
+          toast.error('حدد اللوكيشن قبل تسجيل حركة مكون.');
           return;
         }
         const stockIdentity = resolveLineStockIdentity(selectedItem.id, movementType);
         const available = stockIdentity.available;
         if (movementType === 'OUT' && quantity > available) {
-          setMessage({ type: 'error', text: `الكمية تتجاوز الرصيد المتاح (${available}).` });
+          toast.error(`الكمية تتجاوز الرصيد المتاح (${available}).`);
           return;
         }
         if (movementType === 'ADJUSTMENT') {
           const nextBalance = available + Number(quantity || 0);
           if (nextBalance < 0) {
-            setMessage({ type: 'error', text: `التسوية ستجعل الرصيد سالباً (الحالي ${available}).` });
+            toast.error(`التسوية ستجعل الرصيد سالباً (الحالي ${available}).`);
             return;
           }
         }
@@ -613,14 +606,11 @@ export const StockMovementForm: React.FC = () => {
           createdBy: userDisplayName || 'Current User',
         }, { path: INVENTORY_STOCK_MOVE_PATHS.movementsForm })).transactionId;
       }
-      setMessage({
-        type: 'success',
-        text: movementType === 'TRANSFER'
+      toast.success(movementType === 'TRANSFER'
           ? (isShelfTransfer
             ? 'تم نقل الأصناف من رف إلى رف بنجاح.'
             : 'تم إرسال التحويلة للاعتماد. سيتم ترحيل المخزون بعد الموافقة.')
-          : 'تم تسجيل الحركة بنجاح.',
-      });
+          : 'تم تسجيل الحركة بنجاح.');
 
       if (movementType === 'TRANSFER' && !isShelfTransfer && afterSaveAction !== 'none') {
         const payload = buildTransferPrintData(resolvedReferenceNo, txId);
@@ -650,7 +640,7 @@ export const StockMovementForm: React.FC = () => {
       });
       resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : 'IN');
     } catch (error: any) {
-      setMessage({ type: 'error', text: error?.message || 'تعذر حفظ الحركة.' });
+      toast.error(error?.message || 'تعذر حفظ الحركة.');
     } finally {
       setSaving(false);
     }
@@ -666,42 +656,40 @@ export const StockMovementForm: React.FC = () => {
 
   const handlePreviewWithoutSave = () => {
     if (!effectiveWarehouseId) {
-      setMessage({ type: 'error', text: 'اختر المخزن أولاً.' });
+      toast.error('اختر المخزن أولاً.');
       return;
     }
     if (movementType === 'TRANSFER' && !toWarehouseId) {
-      setMessage({ type: 'error', text: 'اختر مخزن الوجهة للتحويل.' });
+      toast.error('اختر مخزن الوجهة للتحويل.');
       return;
     }
 
     if (movementType === 'TRANSFER') {
       const validationError = validateTransferLines(transferItems, itemType, getItemById);
       if (validationError) {
-        setMessage({ type: 'error', text: validationError });
+        toast.error(validationError);
         return;
       }
-      setMessage(null);
-      setPreviewData(buildTransferPrintData(referenceNo, null));
+        setPreviewData(buildTransferPrintData(referenceNo, null));
       setShowPrintPreview(true);
       return;
     }
 
     if (!selectedItem) {
-      setMessage({ type: 'error', text: 'اختر الصنف أولًا.' });
+      toast.error('اختر الصنف أولًا.');
       return;
     }
     if (movementType !== 'ADJUSTMENT' && quantity <= 0) {
-      setMessage({ type: 'error', text: 'الكمية يجب أن تكون أكبر من صفر.' });
+      toast.error('الكمية يجب أن تكون أكبر من صفر.');
       return;
     }
     if (movementType === 'ADJUSTMENT' && quantity === 0) {
-      setMessage({ type: 'error', text: 'كمية التسوية لا يمكن أن تساوي صفر.' });
+      toast.error('كمية التسوية لا يمكن أن تساوي صفر.');
       return;
     }
 
     const isCarton = itemType === 'finished_good' && Number(selectedItem.unitsPerCarton || 0) > 0;
     const qtyPieces = Number(quantity || 0);
-    setMessage(null);
     setPreviewData({
       transferNo: referenceNo,
       createdAt: new Date().toISOString(),
@@ -1141,16 +1129,6 @@ export const StockMovementForm: React.FC = () => {
           )}
         </div>
 
-        {/* Status message */}
-        {message && (
-          <div className={`mx-5 mb-4 erp-alert${message.type === 'success' ? ' erp-alert-success' : ' erp-alert-error'}`}>
-            <span className="material-icons-round text-[16px] shrink-0">
-              {message.type === 'success' ? 'check_circle' : 'error'}
-            </span>
-            <span>{message.text}</span>
-          </div>
-        )}
-
         {/* Form actions */}
         <div
           className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end items-center"
@@ -1191,23 +1169,6 @@ export const StockMovementForm: React.FC = () => {
           version={APP_VERSION ?? ''}
         />
       </div>
-
-      {/* Share toast */}
-      {shareToast && (
-        <div
-          className="fixed bottom-5 left-1/2 z-50 erp-alert erp-alert-success"
-          style={{ transform: 'translateX(-50%)', maxWidth: 420, boxShadow: 'var(--shadow-modal)' }}
-        >
-          <span className="material-icons-round text-[16px] shrink-0">share</span>
-          <p className="flex-1 text-[13px]">{shareToast}</p>
-          <button
-            onClick={() => setShareToast(null)}
-            style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex', alignItems: 'center', opacity: 0.7 }}
-          >
-            <span className="material-icons-round" style={{ fontSize: 15 }}>close</span>
-          </button>
-        </div>
-      )}
 
       {/* Print preview modal */}
       {showPrintPreview && previewData && (

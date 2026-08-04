@@ -29,6 +29,8 @@ export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {
   department_consumable_issue: 'صرف مستهلكات قسم',
   department_consumable_return: 'مرتجع مستهلكات قسم',
   spare_parts_replenishment: 'تموين قطع غيار للمراكز',
+  repair_spare_issue: 'صرف قطع غيار صيانة',
+  repair_spare_return: 'مرتجع قطع غيار صيانة',
   legacy: 'قديم',
 };
 

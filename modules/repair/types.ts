@@ -76,6 +76,81 @@ export interface RepairPartUsage {
   scope?: 'job' | 'product';
   productItemId?: string;
   productName?: string;
+  /** Manufacturing material id posted on inventory (for returns). */
+  materialId?: string;
+  /** Inventory issue document that posted this usage (ADR-005). */
+  issueId?: string;
+  issueReferenceNo?: string;
+}
+
+export type RepairSpareApprovalMode = 'direct' | 'required';
+
+export type RepairSpareIssueStatus =
+  | 'draft'
+  | 'submitted'
+  | 'approved'
+  | 'issued'
+  | 'rejected'
+  | 'cancelled';
+
+export interface RepairSpareIssueLine {
+  lineId?: string;
+  itemType: 'material';
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  quantity: number;
+  locationId?: string;
+  locationCode?: string;
+  unitCostSnapshot?: number;
+  totalCostSnapshot?: number;
+  returnedQty?: number;
+}
+
+export interface RepairSpareIssue {
+  id?: string;
+  referenceNo: string;
+  status: RepairSpareIssueStatus;
+  approvalMode: RepairSpareApprovalMode;
+  warehouseId: string;
+  warehouseName: string;
+  branchId: string;
+  branchName: string;
+  jobId?: string;
+  jobCode?: string;
+  lines: RepairSpareIssueLine[];
+  note?: string;
+  totalCostSnapshot?: number;
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  submittedAt?: string;
+  submittedBy?: string;
+  submittedByUserId?: string;
+  approvedAt?: string;
+  approvedBy?: string;
+  approvedByUserId?: string;
+  issuedAt?: string;
+  issuedBy?: string;
+  issuedByUserId?: string;
+  rejectedAt?: string;
+  rejectedBy?: string;
+  rejectedByUserId?: string;
+  rejectionReason?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByUserId?: string;
+  tenantId?: string;
+}
+
+export interface RepairSpareReturnLine {
+  lineId?: string;
+  itemId: string;
+  quantity: number;
+  locationId?: string;
+  locationCode?: string;
+  note?: string;
 }
 
 export interface RepairStatusHistoryItem {
@@ -93,9 +168,17 @@ export interface RepairJobProduct {
   deviceBrand?: string;
   deviceModel?: string;
   serialNo?: string;
+  /** كمية نفس المنتج/الطراز في السطر */
+  quantity?: number;
   accessories?: string;
+  /** معرفات من كتالوج إكسسوارات الإعدادات */
+  accessoryIds?: string[];
+  /** معرفات خدمات من كتالوج الإعدادات */
+  serviceIds?: string[];
   diagnosis?: string;
+  /** تكلفة متوقعة للسطر بالكامل (وحدة × كمية) */
   estimatedCost?: number;
+  /** تكلفة نهائية للسطر بالكامل (وحدة × كمية) */
   finalCost?: number;
   inWarranty?: boolean;
 }
@@ -419,6 +502,7 @@ export interface RepairSalesInvoice {
   tenantId: string;
   branchId: string;
   invoiceNo: string;
+  customerId?: string;
   customerName?: string;
   customerPhone?: string;
   notes?: string;
@@ -457,6 +541,66 @@ export interface RepairJobFilters {
   fromDate?: string;
   toDate?: string;
   statuses?: RepairJobStatus[];
+}
+
+export type RepairComplaintStatus = 'open' | 'in_progress' | 'resolved' | 'closed';
+
+export const REPAIR_COMPLAINT_STATUS_LABELS: Record<RepairComplaintStatus, string> = {
+  open: 'مفتوحة',
+  in_progress: 'قيد المتابعة',
+  resolved: 'تم الحل',
+  closed: 'مغلقة',
+};
+
+export interface RepairComplaintFollowUp {
+  id: string;
+  at: string;
+  note: string;
+  actorUid: string;
+  actorName: string;
+  followUpAt?: string;
+}
+
+export interface RepairComplaint {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  customerId?: string;
+  customerName: string;
+  customerPhone: string;
+  jobId?: string;
+  receiptNo?: string;
+  subject: string;
+  notes?: string;
+  status: RepairComplaintStatus;
+  followUps: RepairComplaintFollowUp[];
+  createdAt: string;
+  updatedAt: string;
+  createdByUid?: string;
+  createdByName?: string;
+}
+
+/** حالة التنقل من مركز الاتصال إلى شكاوى الصيانة */
+export type RepairComplaintPrefill = {
+  customerId?: string;
+  customerName?: string;
+  customerPhone?: string;
+  jobId?: string;
+  receiptNo?: string;
+  branchId?: string;
+};
+
+/** متابعة مركز الاتصال — ملاحظة + موعد متابعة اختياري */
+export interface RepairFollowUp {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  note: string;
+  followUpAt?: string;
+  actorUid: string;
+  actorName: string;
+  createdAt: string;
 }
 
 /** حالة التنقل من شاشة مركز الاتصال إلى «جهاز جديد» */

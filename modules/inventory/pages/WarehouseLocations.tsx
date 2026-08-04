@@ -1,6 +1,7 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
+import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
@@ -87,9 +88,23 @@ export const WarehouseLocations: React.FC = () => {
   const [defaultItemKey, setDefaultItemKey] = useState('');
   const [defaultLocationId, setDefaultLocationId] = useState('');
   const [modal, setModal] = useState<LocationModal>(null);
+  const [modalSaving, setModalSaving] = useState(false);
+  const modalSavingRef = useRef(false);
+  const [deletingLocationId, setDeletingLocationId] = useState<string | null>(null);
   const [importRows, setImportRows] = useState<ImportPreviewRow[]>([]);
   const [importFileName, setImportFileName] = useState('');
-  const [message, setMessage] = useState('');
+
+  const beginModalSave = () => {
+    if (modalSavingRef.current) return false;
+    modalSavingRef.current = true;
+    setModalSaving(true);
+    return true;
+  };
+
+  const endModalSave = () => {
+    modalSavingRef.current = false;
+    setModalSaving(false);
+  };
 
   const selectedWarehouse = warehouses.find((w) => w.id === warehouseId);
   const selectedRack = racks.find((rack) => rack.id === selectedRackId);
@@ -124,10 +139,9 @@ export const WarehouseLocations: React.FC = () => {
         const firstRack = rackRows.find((rack) => rack.warehouseId === resolvedWarehouseId && rack.isActive !== false);
         if (firstRack?.id) setSelectedRackId(firstRack.id);
       }
-      setMessage('');
     } catch (error: any) {
       const raw = String(error?.message || '');
-      setMessage(
+      toast.error(
         raw.toLowerCase().includes('permission') || raw.toLowerCase().includes('insufficient')
           ? 'تعذر تحميل اللوكيشنات بسبب صلاحيات Firestore. حدّث الصفحة بعد نشر القواعد.'
           : (raw || 'تعذر تحميل اللوكيشنات.'),
@@ -203,8 +217,7 @@ export const WarehouseLocations: React.FC = () => {
   };
 
   const createRack = async () => {
-    if (!selectedWarehouse?.id || !rackName.trim()) return;
-    setMessage('');
+    if (!selectedWarehouse?.id || !rackName.trim() || !beginModalSave()) return;
     try {
       await warehouseRackService.create({
         warehouseId: selectedWarehouse.id,
@@ -216,11 +229,13 @@ export const WarehouseLocations: React.FC = () => {
       });
       setRackName('');
       setRackCode('');
-      setMessage('تم إنشاء الراك.');
+      toast.success('تم إنشاء الراك.');
       setModal(null);
       await load();
     } catch (error: any) {
-      setMessage(error?.message || 'تعذر إنشاء الراك.');
+      toast.error(error?.message || 'تعذر إنشاء الراك.');
+    } finally {
+      endModalSave();
     }
   };
 
@@ -232,14 +247,13 @@ export const WarehouseLocations: React.FC = () => {
   };
 
   const saveEditRack = async () => {
-    if (!editingRackId || !rackName.trim()) return;
-    setMessage('');
+    if (!editingRackId || !rackName.trim() || !beginModalSave()) return;
     try {
       const result = await warehouseRackService.updateDetails(editingRackId, {
         name: rackName,
         code: rackCode || rackName,
       });
-      setMessage(
+      toast.success(
         result.codesChanged
           ? `تم تعديل الراك وتحديث أكواد ${result.locationsUpdated} رف.`
           : `تم تعديل اسم الراك وتحديث ${result.locationsUpdated} رف (الأكواد كما هي).`,
@@ -250,15 +264,16 @@ export const WarehouseLocations: React.FC = () => {
       setModal(null);
       await load();
     } catch (error: any) {
-      setMessage(error?.message || 'تعذر تعديل الراك.');
+      toast.error(error?.message || 'تعذر تعديل الراك.');
+    } finally {
+      endModalSave();
     }
   };
 
-  const createShelves = async () => {
-    if (!selectedWarehouse?.id || !selectedRack?.id) return;
-    setMessage('');
+  const createShelves = async (): Promise<boolean> => {
+    if (!selectedWarehouse?.id || !selectedRack?.id || !beginModalSave()) return false;
     try {
-      const ids = await warehouseLocationService.createShelves({
+      const { createdIds, skipped } = await warehouseLocationService.createShelves({
         warehouseId: selectedWarehouse.id,
         warehouseName: selectedWarehouse.name,
         warehouseCode: selectedWarehouse.code,
@@ -271,10 +286,20 @@ export const WarehouseLocations: React.FC = () => {
       setShelf('');
       setShelfFrom('');
       setShelfTo('');
-      setMessage(`تم إنشاء ${ids.length} رف.`);
+      if (createdIds.length === 0 && skipped > 0) {
+        toast.success(`كل الأرفف (${skipped}) موجودة مسبقاً — لم يُنشأ تكرار.`);
+      } else if (skipped > 0) {
+        toast.success(`تم إنشاء ${createdIds.length} رف، وتخطي ${skipped} موجود مسبقاً.`);
+      } else {
+        toast.success(`تم إنشاء ${createdIds.length} رف.`);
+      }
       await load();
+      return true;
     } catch (error: any) {
-      setMessage(error?.message || 'تعذر إنشاء الأرفف.');
+      toast.error(error?.message || 'تعذر إنشاء الأرفف.');
+      return false;
+    } finally {
+      endModalSave();
     }
   };
 
@@ -288,6 +313,25 @@ export const WarehouseLocations: React.FC = () => {
     if (!loc.id) return;
     await warehouseLocationService.update(loc.id, { isActive: loc.isActive === false });
     await load();
+  };
+
+  const deleteLocation = async (loc: WarehouseLocation) => {
+    if (!loc.id || deletingLocationId) return;
+    const label = loc.code || loc.shelfName || loc.shelf || loc.id;
+    const ok = window.confirm(
+      `حذف الرف «${label}» نهائياً؟\nلا يمكن التراجع. الحذف مسموح فقط إذا لم يكن عليه أرصدة.`,
+    );
+    if (!ok) return;
+    setDeletingLocationId(loc.id);
+    try {
+      await warehouseLocationService.remove(loc.id);
+      toast.success(`تم حذف الرف ${label}.`);
+      await load();
+    } catch (error: any) {
+      toast.error(error?.message || 'تعذر حذف الرف.');
+    } finally {
+      setDeletingLocationId(null);
+    }
   };
 
   const saveDefaultLocation = async () => {
@@ -304,11 +348,12 @@ export const WarehouseLocations: React.FC = () => {
       locationId: loc.id,
       locationCode: loc.code,
     });
-    setMessage('تم حفظ الرف الافتراضي للصنف.');
+    toast.success('تم حفظ الرف الافتراضي للصنف.');
     await load();
   };
 
   const closeModal = () => {
+    if (modalSavingRef.current) return;
     setModal(null);
     setImportRows([]);
     setImportFileName('');
@@ -382,59 +427,64 @@ export const WarehouseLocations: React.FC = () => {
 
   const applyImport = async () => {
     const ready = importRows.filter((row) => row.status === 'ready');
-    if (!ready.length) return;
-    const rackRows = await warehouseRackService.getAll();
-    const locationRows = await warehouseLocationService.getAll();
-    const rackByKey = new Map(rackRows.map((rack) => [`${rack.warehouseId}__${rack.code}`, rack]));
-    const locationKeys = new Set(locationRows.map((loc) => `${loc.warehouseId}__${loc.rackCode || normalizeCode(loc.rack)}__${loc.shelfCode || normalizeCode(loc.shelf)}`));
-    const nextRows = [...importRows];
-    for (const row of ready) {
-      try {
-        const wh = warehouses.find((w) => w.id === row.warehouseId);
-        if (!wh?.id) throw new Error('المخزن غير موجود.');
-        const rackKey = `${row.warehouseId}__${row.rackCode}`;
-        let rack = rackByKey.get(rackKey);
-        if (!rack?.id) {
-          const id = await warehouseRackService.create({
-            warehouseId: wh.id,
-            warehouseName: wh.name,
-            warehouseCode: wh.code,
-            name: row.rackName,
-            code: row.rackCode,
+    if (!ready.length || !beginModalSave()) return;
+    try {
+      const rackRows = await warehouseRackService.getAll();
+      const locationRows = await warehouseLocationService.getAll();
+      const rackByKey = new Map(rackRows.map((rack) => [`${rack.warehouseId}__${rack.code}`, rack]));
+      const locationKeys = new Set(locationRows.map((loc) => `${loc.warehouseId}__${loc.rackCode || normalizeCode(loc.rack)}__${loc.shelfCode || normalizeCode(loc.shelf)}`));
+      const nextRows = [...importRows];
+      for (const row of ready) {
+        try {
+          const wh = warehouses.find((w) => w.id === row.warehouseId);
+          if (!wh?.id) throw new Error('المخزن غير موجود.');
+          const rackKey = `${row.warehouseId}__${row.rackCode}`;
+          let rack = rackByKey.get(rackKey);
+          if (!rack?.id) {
+            const id = await warehouseRackService.create({
+              warehouseId: wh.id,
+              warehouseName: wh.name,
+              warehouseCode: wh.code,
+              name: row.rackName,
+              code: row.rackCode,
+            });
+            rack = { id: id || '', warehouseId: wh.id, warehouseName: wh.name, warehouseCode: wh.code, name: row.rackName, code: row.rackCode, isActive: true, createdAt: new Date().toISOString() };
+            rackByKey.set(rackKey, rack);
+          }
+          const shelfCodes = warehouseLocationService.buildShelfCodes({
+            mode: row.mode,
+            shelf: row.shelf,
+            from: row.from,
+            to: row.to,
           });
-          rack = { id: id || '', warehouseId: wh.id, warehouseName: wh.name, warehouseCode: wh.code, name: row.rackName, code: row.rackCode, isActive: true, createdAt: new Date().toISOString() };
-          rackByKey.set(rackKey, rack);
+          const missingShelves = shelfCodes.filter((shelfCode) => !locationKeys.has(`${row.warehouseId}__${row.rackCode}__${normalizeCode(shelfCode)}`));
+          for (const shelfCode of missingShelves) {
+            await warehouseLocationService.create({
+              warehouseId: wh.id,
+              warehouseName: wh.name,
+              warehouseCode: wh.code,
+              rackId: rack.id,
+              rackName: rack.name,
+              rackCode: rack.code,
+              rack: rack.name,
+              shelf: shelfCode,
+              skipIfExists: true,
+            });
+            locationKeys.add(`${row.warehouseId}__${row.rackCode}__${normalizeCode(shelfCode)}`);
+          }
+          const idx = nextRows.findIndex((item) => item.rowNo === row.rowNo);
+          if (idx >= 0) nextRows[idx] = { ...nextRows[idx], status: 'done', error: missingShelves.length ? undefined : 'كل الأرفف موجودة بالفعل.' };
+        } catch (error: any) {
+          const idx = nextRows.findIndex((item) => item.rowNo === row.rowNo);
+          if (idx >= 0) nextRows[idx] = { ...nextRows[idx], status: 'error', error: error?.message || 'تعذر استيراد الصف.' };
         }
-        const shelfCodes = warehouseLocationService.buildShelfCodes({
-          mode: row.mode,
-          shelf: row.shelf,
-          from: row.from,
-          to: row.to,
-        });
-        const missingShelves = shelfCodes.filter((shelfCode) => !locationKeys.has(`${row.warehouseId}__${row.rackCode}__${normalizeCode(shelfCode)}`));
-        for (const shelfCode of missingShelves) {
-          await warehouseLocationService.create({
-            warehouseId: wh.id,
-            warehouseName: wh.name,
-            warehouseCode: wh.code,
-            rackId: rack.id,
-            rackName: rack.name,
-            rackCode: rack.code,
-            rack: rack.name,
-            shelf: shelfCode,
-          });
-          locationKeys.add(`${row.warehouseId}__${row.rackCode}__${normalizeCode(shelfCode)}`);
-        }
-        const idx = nextRows.findIndex((item) => item.rowNo === row.rowNo);
-        if (idx >= 0) nextRows[idx] = { ...nextRows[idx], status: 'done', error: missingShelves.length ? undefined : 'كل الأرفف موجودة بالفعل.' };
-      } catch (error: any) {
-        const idx = nextRows.findIndex((item) => item.rowNo === row.rowNo);
-        if (idx >= 0) nextRows[idx] = { ...nextRows[idx], status: 'error', error: error?.message || 'تعذر استيراد الصف.' };
       }
+      setImportRows(nextRows);
+      toast.success('تم تنفيذ استيراد اللوكيشنات.');
+      await load();
+    } finally {
+      endModalSave();
     }
-    setImportRows(nextRows);
-    setMessage('تم تنفيذ استيراد اللوكيشنات.');
-    await load();
   };
 
   if (!can('inventory.view')) {
@@ -478,7 +528,6 @@ export const WarehouseLocations: React.FC = () => {
             أصناف لها رف افتراضي موقوف: {defaultWarnings.slice(0, 6).join('، ')}
           </div>
         )}
-        {message && <p className="px-4 pb-4 text-sm font-semibold text-emerald-700">{message}</p>}
       </Card>
 
       <Card title="إجراءات سريعة">
@@ -583,9 +632,19 @@ export const WarehouseLocations: React.FC = () => {
                           <td className="p-3 text-center">{isEffectivelyInactive ? 'موقوف' : 'نشط'}</td>
                           {canManage && (
                             <td className="p-3 text-center">
-                              <Button size="sm" variant="ghost" onClick={() => void toggleLocation(loc)}>
-                                {loc.isActive === false ? 'تفعيل الرف' : 'تعطيل الرف'}
-                              </Button>
+                              <div className="inline-flex flex-wrap items-center justify-center gap-1">
+                                <Button size="sm" variant="ghost" onClick={() => void toggleLocation(loc)}>
+                                  {loc.isActive === false ? 'تفعيل الرف' : 'تعطيل الرف'}
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  disabled={deletingLocationId === loc.id}
+                                  onClick={() => void deleteLocation(loc)}
+                                >
+                                  {deletingLocationId === loc.id ? 'جاري الحذف...' : 'حذف'}
+                                </Button>
+                              </div>
                             </td>
                           )}
                         </tr>
@@ -622,13 +681,13 @@ export const WarehouseLocations: React.FC = () => {
                   <input className="rounded-lg border px-3 py-2 text-sm" placeholder="كود الراك اختياري" value={rackCode} onChange={(e) => setRackCode(e.target.value)} />
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="secondary" onClick={closeModal}>إلغاء</Button>
+                  <Button variant="secondary" disabled={modalSaving} onClick={closeModal}>إلغاء</Button>
                   <Button
                     variant="primary"
-                    disabled={!canManage || !rackName.trim()}
+                    disabled={!canManage || !rackName.trim() || modalSaving}
                     onClick={() => void createRack()}
                   >
-                    حفظ الراك
+                    {modalSaving ? 'جاري الحفظ...' : 'حفظ الراك'}
                   </Button>
                 </div>
               </div>
@@ -644,13 +703,13 @@ export const WarehouseLocations: React.FC = () => {
                   <input className="rounded-lg border px-3 py-2 text-sm" placeholder="كود الراك" value={rackCode} onChange={(e) => setRackCode(e.target.value)} />
                 </div>
                 <div className="flex justify-end gap-2">
-                  <Button variant="secondary" onClick={closeModal}>إلغاء</Button>
+                  <Button variant="secondary" disabled={modalSaving} onClick={closeModal}>إلغاء</Button>
                   <Button
                     variant="primary"
-                    disabled={!canManage || !rackName.trim()}
+                    disabled={!canManage || !rackName.trim() || modalSaving}
                     onClick={() => void saveEditRack()}
                   >
-                    حفظ التعديل
+                    {modalSaving ? 'جاري الحفظ...' : 'حفظ التعديل'}
                   </Button>
                 </div>
               </div>
@@ -680,16 +739,16 @@ export const WarehouseLocations: React.FC = () => {
                   </div>
                 )}
                 <div className="flex justify-end gap-2">
-                  <Button variant="secondary" onClick={closeModal}>إلغاء</Button>
+                  <Button variant="secondary" disabled={modalSaving} onClick={closeModal}>إلغاء</Button>
                   <Button
                     variant="primary"
-                    disabled={!canManage || !selectedRackId}
+                    disabled={!canManage || !selectedRackId || modalSaving}
                     onClick={async () => {
-                      await createShelves();
-                      setModal(null);
+                      const ok = await createShelves();
+                      if (ok) setModal(null);
                     }}
                   >
-                    حفظ الأرفف
+                    {modalSaving ? 'جاري الحفظ...' : 'حفظ الأرفف'}
                   </Button>
                 </div>
               </div>
@@ -739,9 +798,13 @@ export const WarehouseLocations: React.FC = () => {
                   </div>
                 )}
                 <div className="flex justify-end gap-2">
-                  <Button variant="secondary" onClick={closeModal}>إغلاق</Button>
-                  <Button variant="primary" disabled={!importRows.some((row) => row.status === 'ready')} onClick={() => void applyImport()}>
-                    تنفيذ الاستيراد
+                  <Button variant="secondary" disabled={modalSaving} onClick={closeModal}>إغلاق</Button>
+                  <Button
+                    variant="primary"
+                    disabled={modalSaving || !importRows.some((row) => row.status === 'ready')}
+                    onClick={() => void applyImport()}
+                  >
+                    {modalSaving ? 'جاري الاستيراد...' : 'تنفيذ الاستيراد'}
                   </Button>
                 </div>
               </div>

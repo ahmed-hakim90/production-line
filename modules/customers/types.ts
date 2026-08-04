@@ -51,6 +51,8 @@ export type CustomerActivityAction =
   | 'customer.updated'
   | 'customer.imported'
   | 'repair.job_created'
+  | 'repair.job_linked'
+  | 'repair.invoice_created'
   | (string & {});
 
 export interface CustomerActivity {

@@ -1312,6 +1312,12 @@ export interface PlanSettings {
    */
   departmentConsumableIssueApprovalMode?: 'direct' | 'required';
   /**
+   * سياسة اعتماد صرف قطع غيار مراكز الصيانة:
+   * - direct: مسودة → صرف فوري
+   * - required: مسودة → تقديم → اعتماد → صرف
+   */
+  repairSpareIssueApprovalMode?: 'direct' | 'required';
+  /**
    * يوم بداية شهر التشغيل (1–28). مثال: 26 يعني الفترة من ٢٦ إلى ٢٦ الشهر التالي (نهاية حصرية).
    * يُستخدم لحساب الهدف اليومي = كمية الخطة ÷ أيام الشغل في الفترة.
    */
@@ -1518,12 +1524,27 @@ export interface RepairWorkflowSettings {
 }
 
 export interface RepairDefaultsSettings {
-  /** ط§ظ„ط¶ظ…ط§ظ† ط§ظ„ط§ظپطھط±ط§ط¶ظٹ ط¹ظ†ط¯ ط¥ظ†ط´ط§ط، ط§ظ„ط·ظ„ط¨ */
+  /** الضمان الافتراضي عند إنشاء الطلب */
   defaultWarranty?: 'none' | '3months' | '6months';
-  /** ط§ظ„ط­ط¯ ط§ظ„ط£ط¯ظ†ظ‰ ط§ظ„ط§ظپطھط±ط§ط¶ظٹ ظ„ظ…ط®ط²ظˆظ† ظ‚ط·ط¹ ط§ظ„ط؛ظٹط§ط± */
+  /** الحد الأدنى الافتراضي لمخزون قطع الغيار */
   defaultMinStock?: number;
-  /** SLA ط§ظپطھط±ط§ط¶ظٹ ط¨ط§ظ„ط³ط§ط¹ط§طھ */
+  /** SLA افتراضي بالساعات */
   defaultSlaHours?: number;
+}
+
+/** إكسسوارات قابلة للاختيار عند استلام الجهاز */
+export interface RepairAccessoryCatalogItem {
+  id: string;
+  label: string;
+  enabled?: boolean;
+}
+
+/** خدمات إصلاح بأسعار ثابتة يضبطها أدمن الصيانة */
+export interface RepairServiceCatalogItem {
+  id: string;
+  name: string;
+  price: number;
+  enabled?: boolean;
 }
 
 export interface RepairTreasuryAutoCloseSettings {
@@ -1542,6 +1563,10 @@ export interface RepairSettings {
   workflow?: RepairWorkflowSettings;
   defaults?: RepairDefaultsSettings;
   treasury?: RepairTreasurySettings;
+  /** قائمة الإكسسوارات للاختيار عند الاستلام */
+  accessoriesCatalog?: RepairAccessoryCatalogItem[];
+  /** أنواع خدمات الإصلاح وأسعارها (أدمن الصيانة فقط) */
+  serviceCatalog?: RepairServiceCatalogItem[];
 }
 
 export interface SystemSettings {

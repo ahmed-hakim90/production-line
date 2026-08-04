@@ -32,6 +32,7 @@ import type { FirestoreUserWithRepair, RepairBranch, RepairPartReservation, Repa
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { listAllowedRepairStatusTargets } from '../utils/repairStatusTransitions';
 import { useRepairJobDoc } from '../hooks/useRepairJobDoc';
 import { uploadRepairJobPhoto } from '../utils/repairPhotoStorage';
 import {
@@ -111,6 +112,17 @@ export const RepairJobWorkspace: React.FC = () => {
     () => branches.find((b) => String(b.id) === String(job?.branchId)),
     [branches, job?.branchId],
   );
+  const allowedStatusOptions = useMemo(() => {
+    const current = String(job?.status || status || '');
+    const allowed = new Set([
+      current,
+      ...listAllowedRepairStatusTargets({
+        fromStatus: current,
+        statuses: repairSettings.workflow.statuses,
+      }),
+    ]);
+    return repairSettings.workflow.statuses.filter((s) => s.isEnabled !== false && allowed.has(s.id));
+  }, [job?.status, status, repairSettings.workflow.statuses]);
   const branchWarehouseId = String(branch?.warehouseId || '').trim();
   const branchWarehouseName = branch?.name ? `مخزن ${branch.name}` : String(branch?.warehouseCode || '').trim();
 
@@ -329,11 +341,12 @@ export const RepairJobWorkspace: React.FC = () => {
                 <Select value={status} onValueChange={(v) => setStatus(v)}>
                   <SelectTrigger className="min-h-12 text-base"><SelectValue /></SelectTrigger>
                   <SelectContent>
-                    {repairSettings.workflow.statuses.map((s) => (
+                    {allowedStatusOptions.map((s) => (
                       <SelectItem key={s.id} value={s.id}>{s.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
+                <p className="text-xs text-muted-foreground">الحالات المسموح بها فقط حسب سير العمل.</p>
               </div>
               <div className="space-y-2">
                 <Label>موعد الاستحقاق</Label>

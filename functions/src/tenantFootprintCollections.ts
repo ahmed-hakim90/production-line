@@ -70,6 +70,7 @@ export const TENANT_SCOPED_COLLECTIONS: readonly string[] = [
   'supplies_receipt_orders',
   'department_consumable_issues',
   'spare_parts_replenishment_requests',
+  'repair_spare_issues',
   'inventory_exceptions',
   'stock_daily_summaries',
   'stock_period_summaries',
@@ -146,6 +147,8 @@ export const TENANT_SCOPED_COLLECTIONS: readonly string[] = [
   'repair_treasury_sessions',
   'repair_treasury_entries',
   'repair_sales_invoices',
+  'repair_followups',
+  'repair_complaints',
   'repair_pm_plans',
 
   // Shared registries carrying tenantId

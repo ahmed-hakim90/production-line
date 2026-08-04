@@ -37,7 +37,15 @@ import { AddConsumableStockModal } from '../components/departmentConsumables/Add
 import { CreateDepartmentIssueModal } from '../components/departmentConsumables/CreateDepartmentIssueModal';
 import { ReturnConsumableModal } from '../components/departmentConsumables/ReturnConsumableModal';
 import { ItemMovementTraceModal } from '../components/departmentConsumables/ItemMovementTraceModal';
+import { ImportConsumablesSheetModal } from '../components/departmentConsumables/ImportConsumablesSheetModal';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { stockService } from '../services/stockService';
+import { runConsumableSheetImportJob } from '../lib/applyConsumableSheetImport';
+import {
+  exportDepartmentConsumablesBalancesSheet,
+  type ParsedConsumableSheetRow,
+} from '../../../utils/importDepartmentConsumablesSheet';
+import { useJobsStore } from '../../../components/background-jobs/useJobsStore';
 import {
   INVENTORY_OPERATION_KEYS,
   INVENTORY_STOCK_MOVE_PATHS,
@@ -49,7 +57,7 @@ const THIS_MONTH = new Date().toISOString().slice(0, 7);
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 
 type TabKey = 'issues' | 'report';
-type ModalKey = 'addStock' | 'createIssue' | 'none';
+type ModalKey = 'addStock' | 'createIssue' | 'importSheet' | 'none';
 
 export const DepartmentConsumables: React.FC = () => {
   const { can } = usePermission();
@@ -69,6 +77,13 @@ export const DepartmentConsumables: React.FC = () => {
     INVENTORY_OPERATION_KEYS.stockMove,
     INVENTORY_STOCK_MOVE_PATHS.consumableAddStock,
   );
+  const canImportSheet = (
+    can('inventory.transactions.create') || canCreate || can('materials.manage')
+  ) && isOperationPathEnabled(
+    systemSettings,
+    INVENTORY_OPERATION_KEYS.stockMove,
+    INVENTORY_STOCK_MOVE_PATHS.consumableSheetImport,
+  );
   const {
     scoped,
     warehouseIds,
@@ -77,11 +92,21 @@ export const DepartmentConsumables: React.FC = () => {
     warehouseSelectLocked,
   } = useMaterialsWarehouseScope();
 
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
+  const setPanelHidden = useJobsStore((s) => s.setPanelHidden);
+  const setPanelMinimized = useJobsStore((s) => s.setPanelMinimized);
+
   const [tab, setTab] = useState<TabKey>('issues');
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [activeModal, setActiveModal] = useState<ModalKey>('none');
   const [showDefine, setShowDefine] = useState(false);
+  const [exportingBalances, setExportingBalances] = useState(false);
+  const [sheetBusy, setSheetBusy] = useState(false);
 
   const [warehouses, setWarehouses] = useState<Warehouse[]>([]);
   const [locations, setLocations] = useState<WarehouseLocation[]>([]);
@@ -267,6 +292,228 @@ export const DepartmentConsumables: React.FC = () => {
     toast.success('تم تصدير التقرير.');
   };
 
+  const exportBalancesSheet = async () => {
+    if (!canExport && !canView) {
+      toast.error('ليس لديك صلاحية التصدير.');
+      return;
+    }
+    setExportingBalances(true);
+    try {
+      const visibleWarehouses = filterWarehouses(warehouses);
+      const warehouseById = new Map(visibleWarehouses.map((w) => [w.id!, w]));
+      const consumableById = new Map(consumables.map((c) => [c.id, c]));
+      const consumableIds = new Set(consumables.map((c) => c.id));
+      const [balances, locationBalances] = await Promise.all([
+        stockService.getBalances(),
+        stockService.getLocationBalances({ itemType: 'material' }),
+      ]);
+
+      const rows: Array<{
+        itemCode: string;
+        itemName: string;
+        warehouseCode: string;
+        warehouseName: string;
+        locationCode?: string;
+        quantity: number;
+        unitPrice: number;
+      }> = [];
+
+      const warehousesWithLocations = new Set(
+        locations
+          .filter((l) => l.isActive !== false && warehouseById.has(l.warehouseId))
+          .map((l) => l.warehouseId),
+      );
+
+      for (const bal of locationBalances) {
+        if (bal.itemType !== 'material' || !consumableIds.has(bal.itemId)) continue;
+        const wh = warehouseById.get(bal.warehouseId);
+        if (!wh?.id) continue;
+        const material = consumableById.get(bal.itemId);
+        if (!material) continue;
+        rows.push({
+          itemCode: material.code,
+          itemName: material.name,
+          warehouseCode: wh.code,
+          warehouseName: wh.name,
+          locationCode: bal.locationCode || '',
+          quantity: Number(bal.quantity || 0),
+          unitPrice: Number(material.purchaseCost || 0),
+        });
+      }
+
+      for (const bal of balances) {
+        if (bal.itemType !== 'material' || !consumableIds.has(bal.itemId)) continue;
+        const wh = warehouseById.get(bal.warehouseId);
+        if (!wh?.id) continue;
+        if (warehousesWithLocations.has(bal.warehouseId)) continue;
+        const material = consumableById.get(bal.itemId);
+        if (!material) continue;
+        rows.push({
+          itemCode: material.code,
+          itemName: material.name,
+          warehouseCode: wh.code,
+          warehouseName: wh.name,
+          quantity: Number(bal.quantity || 0),
+          unitPrice: Number(material.purchaseCost || 0),
+        });
+      }
+
+      // Include zero-balance consumables on first scoped warehouse so the sheet is complete.
+      if (!rows.length && consumables.length && visibleWarehouses[0]?.id) {
+        const wh = visibleWarehouses[0];
+        for (const material of consumables) {
+          rows.push({
+            itemCode: material.code,
+            itemName: material.name,
+            warehouseCode: wh.code,
+            warehouseName: wh.name,
+            quantity: 0,
+            unitPrice: Number(material.purchaseCost || 0),
+          });
+        }
+      }
+
+      exportDepartmentConsumablesBalancesSheet(rows);
+      toast.success(`تم تصدير ${rows.length} صف رصيد مستهلكات.`);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تصدير الأرصدة.');
+    } finally {
+      setExportingBalances(false);
+    }
+  };
+
+  const sheetParseContext = useMemo(() => {
+    const visibleWarehouses = filterWarehouses(warehouses);
+    const consumableIds = new Set(consumables.map((c) => c.id));
+    return {
+      materials: consumables.map((c) => ({
+        id: c.id,
+        code: c.code,
+        name: c.name,
+        unit: c.unit,
+        purchaseCost: Number(c.purchaseCost || 0),
+      })),
+      warehouses: visibleWarehouses
+        .filter((w) => w.id)
+        .map((w) => ({ id: w.id!, code: w.code, name: w.name })),
+      locations: locations
+        .filter((l) => l.id && (!scoped || warehouseIds.includes(l.warehouseId)))
+        .map((l) => ({
+          id: l.id!,
+          code: l.code,
+          warehouseId: l.warehouseId,
+          isActive: l.isActive,
+        })),
+      balances: [] as Array<{
+        warehouseId: string;
+        itemId: string;
+        locationId?: string;
+        quantity: number;
+      }>,
+      allowedWarehouseIds: scoped ? warehouseIds : null,
+      _consumableIds: consumableIds,
+    };
+  }, [consumables, filterWarehouses, locations, scoped, warehouseIds, warehouses]);
+
+  const loadSheetParseContext = useCallback(async () => {
+    const base = sheetParseContext;
+    const consumableIds = new Set(base.materials.map((m) => m.id));
+    const [balances, locationBalances] = await Promise.all([
+      stockService.getBalances(),
+      stockService.getLocationBalances({ itemType: 'material' }),
+    ]);
+    const merged: Array<{
+      warehouseId: string;
+      itemId: string;
+      locationId?: string;
+      quantity: number;
+    }> = [];
+
+    for (const bal of locationBalances) {
+      if (bal.itemType !== 'material' || !consumableIds.has(bal.itemId)) continue;
+      if (scoped && !warehouseIds.includes(bal.warehouseId)) continue;
+      merged.push({
+        warehouseId: bal.warehouseId,
+        itemId: bal.itemId,
+        locationId: bal.locationId,
+        quantity: Number(bal.quantity || 0),
+      });
+    }
+
+    const warehousesWithLocations = new Set(
+      base.locations.map((l) => l.warehouseId),
+    );
+    for (const bal of balances) {
+      if (bal.itemType !== 'material' || !consumableIds.has(bal.itemId)) continue;
+      if (scoped && !warehouseIds.includes(bal.warehouseId)) continue;
+      if (warehousesWithLocations.has(bal.warehouseId)) continue;
+      merged.push({
+        warehouseId: bal.warehouseId,
+        itemId: bal.itemId,
+        quantity: Number(bal.quantity || 0),
+      });
+    }
+
+    return {
+      materials: base.materials,
+      warehouses: base.warehouses,
+      locations: base.locations,
+      balances: merged,
+      allowedWarehouseIds: base.allowedWarehouseIds,
+    };
+  }, [scoped, sheetParseContext, warehouseIds]);
+
+  const handleConfirmSheetImport = async (
+    rows: ParsedConsumableSheetRow[],
+    fileName: string,
+  ) => {
+    if (!canImportSheet) {
+      toast.error('مسار رفع شيت المستهلكات غير متاح.');
+      return;
+    }
+    setSheetBusy(true);
+    try {
+      const jobId = addJob({
+        fileName,
+        jobType: 'Department Consumables Sheet',
+        totalRows: rows.length,
+        startedBy: actor,
+      });
+      setActiveModal('none');
+      setPanelHidden(false);
+      setPanelMinimized(false);
+      startJob(jobId, 'تحديث أرصدة وأسعار المستهلكات...');
+      void runConsumableSheetImportJob({
+        jobId,
+        rows,
+        createdBy: actor,
+        onProgress: (processed, total) => {
+          setJobProgress(jobId, {
+            processedRows: processed,
+            totalRows: total,
+            statusText: `جاري التطبيق ${processed}/${total}`,
+          });
+        },
+        onComplete: (added, failed) => {
+          completeJob(jobId, {
+            addedRows: added,
+            failedRows: failed,
+            statusText: failed
+              ? `اكتمل مع أخطاء (${failed} فشل)`
+              : 'اكتمل رفع شيت المستهلكات',
+          });
+          void load();
+        },
+        onFail: (message) => {
+          failJob(jobId, message, 'فشل رفع شيت المستهلكات');
+        },
+      });
+      toast.success('بدأت المهمة — تابع التقدم من «المهام».');
+    } finally {
+      setSheetBusy(false);
+    }
+  };
+
   const openTraceForLine = (line: DepartmentConsumableIssueLine) => {
     setTraceItem({
       id: line.itemId,
@@ -293,6 +540,20 @@ export const DepartmentConsumables: React.FC = () => {
         subtitle="تعريف مستهلكات وإضافتها للمخزن وصرفها نهائياً للأقسام مع تقرير شهري"
         actions={(
           <div className="flex flex-wrap gap-2">
+            {(canExport || canView) && (
+              <Button
+                variant="secondary"
+                onClick={() => void exportBalancesSheet()}
+                disabled={exportingBalances || loading}
+              >
+                {exportingBalances ? 'جاري التصدير...' : 'تصدير أرصدة Excel'}
+              </Button>
+            )}
+            {canImportSheet && (
+              <Button variant="secondary" onClick={() => setActiveModal('importSheet')}>
+                رفع شيت مستهلكات
+              </Button>
+            )}
             {canDefine && (
               <Button variant="secondary" onClick={() => setShowDefine(true)}>
                 تعريف مستهلك
@@ -681,6 +942,16 @@ export const DepartmentConsumables: React.FC = () => {
         consumables={consumables}
         canAdd={canAddStock}
         createdBy={actor}
+      />
+
+      <ImportConsumablesSheetModal
+        open={activeModal === 'importSheet'}
+        onClose={() => setActiveModal('none')}
+        loadParseContext={loadSheetParseContext}
+        confirming={sheetBusy}
+        onConfirm={(rows, fileName) => {
+          void handleConfirmSheetImport(rows, fileName);
+        }}
       />
 
       <CreateDepartmentIssueModal

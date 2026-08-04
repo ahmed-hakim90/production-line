@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { RepairJob } from '../types';
 import { repairJobService } from '../services/repairJobService';
 import { customerPhonesMatch, normalizeCustomerPhoneDigits } from '../utils/customerPhone';
+import { canLoadRepairJobList } from '../utils/repairJobListScope';
 
 const searchFields = (job: RepairJob): string =>
   [
@@ -26,6 +27,8 @@ export function useRepairJobs(params: {
   phoneDigitsFilter?: string;
   /** إن وُجد: لا يُجلب من الشبكة إلا عندما يصل طول الأرقام لهذا الحد (مثلاً شاشة كول سنتر) */
   minPhoneDigitsForQuery?: number;
+  /** عند false: لا يُجلب من الشبكة (مثلاً قبل إدخال نص بحث كافٍ) */
+  fetchEnabled?: boolean;
   technicianOnly?: boolean;
   technicianIds?: string[];
 }) {
@@ -60,21 +63,23 @@ export function useRepairJobs(params: {
     params.minPhoneDigitsForQuery != null ? phoneDigitsLen >= params.minPhoneDigitsForQuery : true;
 
   const enabled = useMemo(() => {
+    if (params.fetchEnabled === false) return false;
     if (!phoneQueryGate) return false;
-    if (params.technicianOnly) {
-      return technicianIdsKey.length > 0;
-    }
-    if (params.canViewAllBranches) return true;
-    if (branchIdsKey.length > 1) return true;
-    if (branchIdsKey.length === 1) return true;
-    return Boolean(params.branchId && params.branchId.trim().length > 0);
+    return canLoadRepairJobList({
+      canViewAllBranches: params.canViewAllBranches,
+      branchIds: branchIdsKey,
+      branchId: params.branchId,
+      technicianOnly: params.technicianOnly,
+      technicianIds: technicianIdsKey,
+    });
   }, [
     phoneQueryGate,
+    params.fetchEnabled,
     params.technicianOnly,
     params.canViewAllBranches,
     params.branchId,
-    branchIdsKey.length,
-    technicianIdsKey.length,
+    branchIdsKey,
+    technicianIdsKey,
   ]);
 
   const { data: jobs = [], isLoading, refetch, isFetching } = useQuery({
@@ -89,8 +94,18 @@ export function useRepairJobs(params: {
       phoneFilterRaw,
     ],
     queryFn: async (): Promise<RepairJob[]> => {
+      if (
+        !canLoadRepairJobList({
+          canViewAllBranches: params.canViewAllBranches,
+          branchIds: branchIdsKey,
+          branchId: params.branchId,
+          technicianOnly: params.technicianOnly,
+          technicianIds: technicianIdsKey,
+        })
+      ) {
+        return [];
+      }
       if (params.technicianOnly) {
-        if (technicianIdsKey.length === 0) return [];
         return repairJobService.listByTechnicianIds(technicianIdsKey);
       }
       if (params.canViewAllBranches) {

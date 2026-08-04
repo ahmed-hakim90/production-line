@@ -165,6 +165,7 @@ export const repairSalesInvoiceService = {
     warehouseName?: string;
     repairJobId?: string;
     lines: RepairSalesInvoiceLine[];
+    customerId?: string;
     customerName?: string;
     customerPhone?: string;
     notes?: string;
@@ -187,6 +188,7 @@ export const repairSalesInvoiceService = {
       warehouseId: input.warehouseId || '',
       warehouseName: input.warehouseName || '',
       repairJobId: input.repairJobId || '',
+      customerId: input.customerId || '',
       customerName: input.customerName || '',
       customerPhone: input.customerPhone || '',
       notes: input.notes || '',
@@ -227,6 +229,28 @@ export const repairSalesInvoiceService = {
       });
     }
 
+    if (input.customerId) {
+      try {
+        const { customerActivityService } = await import(
+          '@/modules/customers/services/customerActivityService'
+        );
+        await customerActivityService.record({
+          customerId: input.customerId,
+          module: 'repair',
+          action: 'repair.invoice_created',
+          title: 'فاتورة بيع قطع غيار',
+          summary: `فاتورة ${invoiceNo} · ${total}`,
+          referenceType: 'repair_sales_invoice',
+          referenceId: ref.id,
+          referenceLabel: invoiceNo,
+          actorUid: input.createdBy,
+          actorName: input.createdByName,
+        });
+      } catch (err) {
+        console.warn('repairSalesInvoiceService.create: customer activity', err);
+      }
+    }
+
     return ref.id;
   },
 
@@ -236,6 +260,7 @@ export const repairSalesInvoiceService = {
     warehouseId?: string;
     warehouseName?: string;
     lines: RepairSalesInvoiceLine[];
+    customerId?: string;
     customerName?: string;
     customerPhone?: string;
     notes?: string;
@@ -297,6 +322,7 @@ export const repairSalesInvoiceService = {
       total: nextTotal,
       warehouseId: input.warehouseId || invoice.warehouseId || '',
       warehouseName: input.warehouseName || invoice.warehouseName || '',
+      customerId: input.customerId || '',
       customerName: input.customerName || '',
       customerPhone: input.customerPhone || '',
       notes: input.notes || '',

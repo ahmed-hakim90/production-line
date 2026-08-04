@@ -1,4 +1,9 @@
-import type { RepairSettings, SystemSettings } from '../../../types';
+import type {
+  RepairAccessoryCatalogItem,
+  RepairServiceCatalogItem,
+  RepairSettings,
+  SystemSettings,
+} from '../../../types';
 
 export type ResolvedRepairStatus = {
   id: string;
@@ -20,6 +25,21 @@ const DEFAULT_STATUSES: ResolvedRepairStatus[] = [
   { id: 'delivered', label: 'تم التسليم', color: '#16a34a', order: 8, isTerminal: true, isEnabled: true },
   { id: 'cancelled', label: 'ملغى', color: '#78716c', order: 9, isTerminal: true, isEnabled: true },
   { id: 'unrepairable', label: 'غير قابل للإصلاح', color: '#ef4444', order: 10, isTerminal: true, isEnabled: true },
+];
+
+const DEFAULT_ACCESSORIES: RepairAccessoryCatalogItem[] = [
+  { id: 'charger', label: 'شاحن', enabled: true },
+  { id: 'cable', label: 'كابل', enabled: true },
+  { id: 'case', label: 'جراب', enabled: true },
+  { id: 'sim', label: 'شريحة', enabled: true },
+  { id: 'memory_card', label: 'كرت ذاكرة', enabled: true },
+];
+
+const DEFAULT_SERVICES: RepairServiceCatalogItem[] = [
+  { id: 'diagnosis', name: 'تشخيص', price: 50, enabled: true },
+  { id: 'screen_repair', name: 'إصلاح شاشة', price: 200, enabled: true },
+  { id: 'battery_replace', name: 'تغيير بطارية', price: 150, enabled: true },
+  { id: 'software', name: 'صيانة برمجية', price: 100, enabled: true },
 ];
 
 const DEFAULT_REPAIR_SETTINGS = {
@@ -51,7 +71,41 @@ const DEFAULT_REPAIR_SETTINGS = {
       blockOperationsIfPrevDayOpen: true,
     },
   },
+  accessoriesCatalog: DEFAULT_ACCESSORIES,
+  serviceCatalog: DEFAULT_SERVICES,
 };
+
+function normalizeAccessoriesCatalog(raw: unknown): RepairAccessoryCatalogItem[] {
+  if (!Array.isArray(raw) || raw.length === 0) return DEFAULT_ACCESSORIES;
+  return raw
+    .map((row, index) => {
+      const item = row as RepairAccessoryCatalogItem;
+      const id = String(item?.id || '').trim() || `acc-${index + 1}`;
+      const label = String(item?.label || '').trim();
+      if (!label) return null;
+      return { id, label, enabled: item?.enabled !== false };
+    })
+    .filter(Boolean) as RepairAccessoryCatalogItem[];
+}
+
+function normalizeServiceCatalog(raw: unknown): RepairServiceCatalogItem[] {
+  if (!Array.isArray(raw) || raw.length === 0) return DEFAULT_SERVICES;
+  return raw
+    .map((row, index) => {
+      const item = row as RepairServiceCatalogItem;
+      const id = String(item?.id || '').trim() || `svc-${index + 1}`;
+      const name = String(item?.name || '').trim();
+      if (!name) return null;
+      const price = Number(item?.price || 0);
+      return {
+        id,
+        name,
+        price: Number.isFinite(price) ? Math.max(0, price) : 0,
+        enabled: item?.enabled !== false,
+      };
+    })
+    .filter(Boolean) as RepairServiceCatalogItem[];
+}
 
 export const resolveRepairSettings = (
   systemSettings: SystemSettings | null | undefined,
@@ -91,6 +145,8 @@ export const resolveRepairSettings = (
   const assignmentTriggerStatusIds =
     rawAssignment.length > 0 ? rawAssignment : (DEFAULT_REPAIR_SETTINGS.workflow.assignmentTriggerStatusIds || []);
   const statusMap = Object.fromEntries(statuses.map((status) => [status.id, status]));
+  const accessoriesCatalog = normalizeAccessoriesCatalog(fromRoot?.accessoriesCatalog);
+  const serviceCatalog = normalizeServiceCatalog(fromRoot?.serviceCatalog);
 
   return {
     access: {
@@ -133,7 +189,26 @@ export const resolveRepairSettings = (
           ?? DEFAULT_REPAIR_SETTINGS.treasury.autoClose.blockOperationsIfPrevDayOpen,
       },
     },
+    accessoriesCatalog,
+    serviceCatalog,
     statusMap,
   };
 };
 
+export function sumServiceCatalogPrices(
+  serviceIds: string[] | undefined,
+  catalog: RepairServiceCatalogItem[],
+): number {
+  if (!serviceIds?.length) return 0;
+  const map = new Map(catalog.filter((s) => s.enabled !== false).map((s) => [s.id, s.price]));
+  return serviceIds.reduce((sum, id) => sum + Math.max(0, Number(map.get(id) || 0)), 0);
+}
+
+export function accessoryLabelsFromIds(
+  accessoryIds: string[] | undefined,
+  catalog: RepairAccessoryCatalogItem[],
+): string {
+  if (!accessoryIds?.length) return '';
+  const map = new Map(catalog.map((a) => [a.id, a.label]));
+  return accessoryIds.map((id) => map.get(id) || id).filter(Boolean).join('، ');
+}

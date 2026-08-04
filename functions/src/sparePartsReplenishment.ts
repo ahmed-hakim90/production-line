@@ -699,8 +699,114 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
   await writeActivity(actor, 'spare_parts_replenishment.receive', requestId, {
     referenceNo: data.referenceNo,
   });
+
+  // Sync received qty into repair branch spare-parts ledger (jobs consume from that ledger).
+  try {
+    await syncReceivedQtyToRepairBranchStock({
+      tenantId: actor.tenantId,
+      toWarehouseId: data.toWarehouseId,
+      lines: ((await ref.get()).data()?.lines as ResolvedLine[] | undefined) || data.lines,
+      actorName: actor.displayName,
+      referenceNo: data.referenceNo,
+      requestId,
+    });
+  } catch (syncErr) {
+    console.error('spare_parts_replenishment.receive repair sync failed', {
+      requestId,
+      tenantId: actor.tenantId,
+      message: syncErr instanceof Error ? syncErr.message : String(syncErr),
+    });
+  }
+
   return { id: requestId };
 };
+
+async function syncReceivedQtyToRepairBranchStock(input: {
+  tenantId: string;
+  toWarehouseId: string;
+  lines: ResolvedLine[];
+  actorName: string;
+  referenceNo: string;
+  requestId: string;
+}): Promise<void> {
+  const warehouseId = String(input.toWarehouseId || '').trim();
+  if (!warehouseId) return;
+
+  const branchSnap = await db
+    .collection('repair_branches')
+    .where('tenantId', '==', input.tenantId)
+    .where('warehouseId', '==', warehouseId)
+    .limit(1)
+    .get();
+  if (branchSnap.empty) return;
+  const branchDoc = branchSnap.docs[0];
+  const branchId = branchDoc.id;
+  const now = toIsoNow();
+
+  for (const line of input.lines || []) {
+    const receivedQty = toNumber(line.receivedQty);
+    if (!(receivedQty > 0)) continue;
+    const materialId = String(line.itemId || '').trim();
+    if (!materialId) continue;
+
+    const existingParts = await db
+      .collection('repair_spare_parts')
+      .where('tenantId', '==', input.tenantId)
+      .where('branchId', '==', branchId)
+      .where('materialId', '==', materialId)
+      .limit(1)
+      .get();
+
+    let partId = existingParts.empty ? '' : existingParts.docs[0].id;
+    if (!partId) {
+      const partRef = db.collection('repair_spare_parts').doc();
+      await partRef.set({
+        tenantId: input.tenantId,
+        branchId,
+        name: String(line.itemName || materialId),
+        code: String(line.itemCode || ''),
+        category: 'تموين',
+        unit: String(line.unit || 'قطعة'),
+        minStock: 0,
+        materialId,
+        purchaseUnitCost: toNumber(line.unitCostSnapshot),
+        createdAt: now,
+      });
+      partId = partRef.id;
+    }
+
+    const stockDocId = `${branchId}__${warehouseId}__${partId}`;
+    const stockRef = db.collection('repair_spare_parts_stock').doc(stockDocId);
+    await db.runTransaction(async (tx) => {
+      const stockSnap = await tx.get(stockRef);
+      const current = stockSnap.exists ? toNumber(stockSnap.data()?.quantity) : 0;
+      tx.set(stockRef, {
+        tenantId: input.tenantId,
+        branchId,
+        warehouseId,
+        partId,
+        quantity: current + receivedQty,
+        updatedAt: now,
+      }, { merge: true });
+      const txRef = db.collection('repair_parts_transactions').doc();
+      tx.set(txRef, {
+        tenantId: input.tenantId,
+        branchId,
+        warehouseId,
+        partId,
+        partName: String(line.itemName || ''),
+        type: 'IN',
+        quantity: receivedQty,
+        unitCost: toNumber(line.unitCostSnapshot),
+        note: `تموين ${input.referenceNo}`,
+        createdBy: input.actorName,
+        createdAt: now,
+        sourceModule: 'spare_parts_replenishment',
+        sourceId: input.requestId,
+      });
+    });
+  }
+}
 
 export const rejectSparePartsReplenishmentHandler = async (request: CallableRequest) => {
   const uid = requireAuth(request);

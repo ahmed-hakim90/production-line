@@ -34,7 +34,11 @@ import { resolveRepairSettings, type ResolvedRepairStatus } from '../config/repa
 import { repairBranchService } from '../services/repairBranchService';
 import { employeeService } from '../../hr/employeeService';
 import type { RepairBranch } from '../types';
-import type { FirestoreEmployee } from '../../../types';
+import type {
+  FirestoreEmployee,
+  RepairAccessoryCatalogItem,
+  RepairServiceCatalogItem,
+} from '../../../types';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { cn } from '@/lib/utils';
 
@@ -64,6 +68,12 @@ export const RepairSettings: React.FC = () => {
   const [timezone, setTimezone] = useState(resolved.treasury.autoClose.timezone || 'Africa/Cairo');
   const [autoCloseEnabled, setAutoCloseEnabled] = useState(Boolean(resolved.treasury.autoClose.enabled));
   const [blockIfPrevDayOpen, setBlockIfPrevDayOpen] = useState(Boolean(resolved.treasury.autoClose.blockOperationsIfPrevDayOpen));
+  const [accessoriesCatalog, setAccessoriesCatalog] = useState<RepairAccessoryCatalogItem[]>(
+    () => resolved.accessoriesCatalog,
+  );
+  const [serviceCatalog, setServiceCatalog] = useState<RepairServiceCatalogItem[]>(
+    () => resolved.serviceCatalog,
+  );
 
   type RepairSettingsManagersData = {
     repairBranches: RepairBranch[];
@@ -165,11 +175,31 @@ export const RepairSettings: React.FC = () => {
     setTimezone(r.treasury.autoClose.timezone || 'Africa/Cairo');
     setAutoCloseEnabled(Boolean(r.treasury.autoClose.enabled));
     setBlockIfPrevDayOpen(Boolean(r.treasury.autoClose.blockOperationsIfPrevDayOpen));
+    setAccessoriesCatalog(r.accessoriesCatalog);
+    setServiceCatalog(r.serviceCatalog);
   }, [fp]);
 
   const onSave = async () => {
     const minStock = Math.max(0, Math.round(Number(defaultMinStock) || 0));
     const sla = Math.max(0, Math.round(Number(defaultSlaHours) || 0));
+    const normalizedAccessories = accessoriesCatalog
+      .map((row, index) => ({
+        id: String(row.id || '').trim() || `acc-${index + 1}`,
+        label: String(row.label || '').trim(),
+        enabled: row.enabled !== false,
+      }))
+      .filter((row) => row.label.length > 0);
+    const normalizedServices = serviceCatalog
+      .map((row, index) => {
+        const price = Number(row.price);
+        return {
+          id: String(row.id || '').trim() || `svc-${index + 1}`,
+          name: String(row.name || '').trim(),
+          price: Number.isFinite(price) ? Math.max(0, price) : 0,
+          enabled: row.enabled !== false,
+        };
+      })
+      .filter((row) => row.name.length > 0);
     setSaving(true);
     try {
       let branchManagersUpdated = false;
@@ -227,6 +257,8 @@ export const RepairSettings: React.FC = () => {
               blockOperationsIfPrevDayOpen: blockIfPrevDayOpen,
             },
           },
+          accessoriesCatalog: normalizedAccessories,
+          serviceCatalog: normalizedServices,
         },
       });
       toast.success(
@@ -375,6 +407,204 @@ export const RepairSettings: React.FC = () => {
               </div>
             </>
           )}
+        </CardContent>
+      </Card>
+
+      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-base font-semibold tracking-tight">إكسسوارات الاستلام</CardTitle>
+          <CardDescription>
+            قائمة الإكسسوارات التي يمكن تسجيلها مع الجهاز عند الاستلام (شاحن، كابل، جراب…).
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
+                  <TableHead className="w-[140px] font-medium">المعرف</TableHead>
+                  <TableHead className="font-medium">الاسم</TableHead>
+                  <TableHead className="w-[90px] text-center font-medium">مفعّل</TableHead>
+                  <TableHead className="w-[72px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {accessoriesCatalog.map((item, index) => (
+                  <TableRow key={`acc-${index}-${item.id}`} className="border-b border-[var(--color-border)]/50 last:border-0">
+                    <TableCell className="align-top py-3">
+                      <Input
+                        value={item.id}
+                        onChange={(e) =>
+                          setAccessoriesCatalog((prev) =>
+                            prev.map((row, i) =>
+                              i === index ? { ...row, id: e.target.value.trim() } : row,
+                            ),
+                          )
+                        }
+                        className="h-9 bg-background font-mono text-xs"
+                        dir="ltr"
+                      />
+                    </TableCell>
+                    <TableCell className="align-top py-3">
+                      <Input
+                        value={item.label}
+                        onChange={(e) =>
+                          setAccessoriesCatalog((prev) =>
+                            prev.map((row, i) => (i === index ? { ...row, label: e.target.value } : row)),
+                          )
+                        }
+                        className="h-9 bg-background"
+                      />
+                    </TableCell>
+                    <TableCell className="text-center align-middle py-3">
+                      <Checkbox
+                        checked={item.enabled !== false}
+                        onCheckedChange={(c) =>
+                          setAccessoriesCatalog((prev) =>
+                            prev.map((row, i) => (i === index ? { ...row, enabled: Boolean(c) } : row)),
+                          )
+                        }
+                        aria-label="مفعّل"
+                      />
+                    </TableCell>
+                    <TableCell className="align-middle py-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setAccessoriesCatalog((prev) => prev.filter((_, i) => i !== index))}
+                      >
+                        حذف
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-dashed"
+            onClick={() =>
+              setAccessoriesCatalog((prev) => [
+                ...prev,
+                { id: `acc_${Date.now()}`, label: 'إكسسوار جديد', enabled: true },
+              ])
+            }
+          >
+            إضافة إكسسوار
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-base font-semibold tracking-tight">خدمات وتكاليف الإصلاح</CardTitle>
+          <CardDescription>
+            أنواع الخدمات وأسعارها الافتراضية عند تسجيل أعمال الإصلاح والفوترة.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
+                  <TableHead className="w-[140px] font-medium">المعرف</TableHead>
+                  <TableHead className="font-medium">الخدمة</TableHead>
+                  <TableHead className="w-[120px] font-medium">السعر</TableHead>
+                  <TableHead className="w-[90px] text-center font-medium">مفعّل</TableHead>
+                  <TableHead className="w-[72px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {serviceCatalog.map((item, index) => (
+                  <TableRow key={`svc-${index}-${item.id}`} className="border-b border-[var(--color-border)]/50 last:border-0">
+                    <TableCell className="align-top py-3">
+                      <Input
+                        value={item.id}
+                        onChange={(e) =>
+                          setServiceCatalog((prev) =>
+                            prev.map((row, i) =>
+                              i === index ? { ...row, id: e.target.value.trim() } : row,
+                            ),
+                          )
+                        }
+                        className="h-9 bg-background font-mono text-xs"
+                        dir="ltr"
+                      />
+                    </TableCell>
+                    <TableCell className="align-top py-3">
+                      <Input
+                        value={item.name}
+                        onChange={(e) =>
+                          setServiceCatalog((prev) =>
+                            prev.map((row, i) => (i === index ? { ...row, name: e.target.value } : row)),
+                          )
+                        }
+                        className="h-9 bg-background"
+                      />
+                    </TableCell>
+                    <TableCell className="align-top py-3">
+                      <Input
+                        type="number"
+                        min={0}
+                        inputMode="decimal"
+                        value={String(item.price ?? 0)}
+                        onChange={(e) =>
+                          setServiceCatalog((prev) =>
+                            prev.map((row, i) =>
+                              i === index
+                                ? { ...row, price: Math.max(0, Number(e.target.value) || 0) }
+                                : row,
+                            ),
+                          )
+                        }
+                        className="h-9 bg-background tabular-nums"
+                        dir="ltr"
+                      />
+                    </TableCell>
+                    <TableCell className="text-center align-middle py-3">
+                      <Checkbox
+                        checked={item.enabled !== false}
+                        onCheckedChange={(c) =>
+                          setServiceCatalog((prev) =>
+                            prev.map((row, i) => (i === index ? { ...row, enabled: Boolean(c) } : row)),
+                          )
+                        }
+                        aria-label="مفعّل"
+                      />
+                    </TableCell>
+                    <TableCell className="align-middle py-3">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive"
+                        onClick={() => setServiceCatalog((prev) => prev.filter((_, i) => i !== index))}
+                      >
+                        حذف
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            className="border-dashed"
+            onClick={() =>
+              setServiceCatalog((prev) => [
+                ...prev,
+                { id: `svc_${Date.now()}`, name: 'خدمة جديدة', price: 0, enabled: true },
+              ])
+            }
+          >
+            إضافة خدمة
+          </Button>
         </CardContent>
       </Card>
 

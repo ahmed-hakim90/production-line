@@ -69,6 +69,7 @@ export const RepairBranches: React.FC = () => {
   const [assignAsBranchManager, setAssignAsBranchManager] = useState(true);
   const [techniciansModalOpen, setTechniciansModalOpen] = useState(false);
   const [techniciansModalBranchId, setTechniciansModalBranchId] = useState('');
+  const [technicianRemovingId, setTechnicianRemovingId] = useState<string | null>(null);
   const [newEmployeeForm, setNewEmployeeForm] = useState({
     name: '',
     phone: '',
@@ -144,6 +145,19 @@ export const RepairBranches: React.FC = () => {
   useEffect(() => {
     void loadBranchStats(rows);
   }, [rows]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void repairBranchService.ensureMaintenanceCenterWarehouseRoles()
+      .then((result) => {
+        if (cancelled || result.updated <= 0) return;
+        toast.success(`تم تحديث دور ${result.updated} مخزن فرع إلى «مخزن مركز صيانة».`);
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const create = async () => {
     if (!form.name) return;
@@ -343,8 +357,15 @@ export const RepairBranches: React.FC = () => {
       if (!id) return;
       map.set(id, String(employee.name || '').trim() || id);
     });
+    users.forEach((user) => {
+      const id = String(user.id || '').trim();
+      if (!id) return;
+      if (!map.has(id)) {
+        map.set(id, String(user.displayName || user.email || '').trim() || id);
+      }
+    });
     return map;
-  }, [employees]);
+  }, [employees, users]);
   const selectedTechniciansBranch = useMemo(
     () => rows.find((branch) => String(branch.id || '') === techniciansModalBranchId) || null,
     [rows, techniciansModalBranchId],
@@ -354,6 +375,32 @@ export const RepairBranches: React.FC = () => {
   const openTechniciansModal = (branchId: string) => {
     setTechniciansModalBranchId(branchId);
     setTechniciansModalOpen(true);
+  };
+
+  const removeTechnicianFromBranch = async (technicianId: string) => {
+    const branchId = String(techniciansModalBranchId || '').trim();
+    const techId = String(technicianId || '').trim();
+    if (!branchId || !techId) return;
+    setTechnicianRemovingId(techId);
+    try {
+      await repairBranchService.removeTechnicianFromBranch(branchId, techId);
+      setRows((prev) =>
+        prev.map((branch) =>
+          String(branch.id || '') === branchId
+            ? {
+              ...branch,
+              technicianIds: (branch.technicianIds || []).filter((id) => String(id || '').trim() !== techId),
+            }
+            : branch,
+        ),
+      );
+      invalidatePageDataCache(BRANCHES_CACHE_KEY);
+      toast.success('تمت إزالة الفني من الفرع.');
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر إزالة الفني من الفرع.');
+    } finally {
+      setTechnicianRemovingId(null);
+    }
   };
 
   return (
@@ -496,7 +543,7 @@ export const RepairBranches: React.FC = () => {
                       className="mt-1 h-auto px-0 py-0 text-xs font-medium whitespace-nowrap justify-start"
                       onClick={() => openTechniciansModal(String(b.id || ''))}
                     >
-                      عرض الفنيين
+                      إدارة الفنيين
                     </Button>
                   </div>
                   <div className="rounded border bg-muted/20 px-3 py-2">
@@ -715,24 +762,47 @@ export const RepairBranches: React.FC = () => {
         <DialogContent dir={dir} className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              الفنيون المعينون - {selectedTechniciansBranch?.name || 'الفرع'}
+              فنيو الفرع — {selectedTechniciansBranch?.name || 'الفرع'}
             </DialogTitle>
             <DialogDescription>
-              عدد الفنيين: {selectedTechnicianIds.length}
+              الفنيون المعيّنون على هذا الفرع يمكنهم رؤية الطلبات المسندة إليهم من «طلباتي (فني)».
+              {' '}
+              العدد: {selectedTechnicianIds.length}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-2 max-h-72 overflow-y-auto">
             {selectedTechnicianIds.length === 0 ? (
-              <div className="text-sm text-muted-foreground">لا يوجد فنيون معينون لهذا الفرع حالياً.</div>
+              <div className="text-sm text-muted-foreground">لا يوجد فنيون معيّنون لهذا الفرع. أضف موظفاً من بطاقة الفرع.</div>
             ) : (
-              selectedTechnicianIds.map((technicianId) => (
-                <div key={technicianId} className="rounded border px-3 py-2 text-sm">
-                  {employeeNameById.get(String(technicianId || '').trim()) || `ID: ${technicianId}`}
-                </div>
-              ))
+              selectedTechnicianIds.map((technicianId) => {
+                const techKey = String(technicianId || '').trim();
+                const removing = technicianRemovingId === techKey;
+                return (
+                  <div key={techKey} className="rounded border px-3 py-2 text-sm flex items-center justify-between gap-2">
+                    <span>{employeeNameById.get(techKey) || `معرف: ${techKey}`}</span>
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      disabled={removing}
+                      onClick={() => void removeTechnicianFromBranch(techKey)}
+                    >
+                      {removing ? 'جاري الإزالة...' : 'إزالة'}
+                    </Button>
+                  </div>
+                );
+              })
             )}
           </div>
-          <DialogFooter>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setTechniciansModalOpen(false);
+                if (techniciansModalBranchId) openAddEmployeeModal(techniciansModalBranchId);
+              }}
+            >
+              إضافة فني
+            </Button>
             <Button variant="outline" onClick={() => setTechniciansModalOpen(false)}>إغلاق</Button>
           </DialogFooter>
         </DialogContent>

@@ -32,6 +32,7 @@ import { sparePartsService } from '../services/sparePartsService';
 import { repairBranchService } from '../services/repairBranchService';
 import { useLowStockAlert } from '../hooks/useLowStockAlert';
 import { LowStockAlert } from '../components/LowStockAlert';
+import { RepairReplenishmentRequestsPanel } from '../components/RepairReplenishmentRequestsPanel';
 import {
   loadAllCatalogMaterials,
   loadProductComponents,
@@ -69,6 +70,9 @@ export const SparePartsInventory: React.FC = () => {
   );
   const canManageAllBranches = repairCtx.canViewAllBranches;
   const canManageParts = can('repair.parts.manage');
+  const canManagePricing = can('repair.pricing.manage') || can('repair.settings.manage');
+  const canViewReplenishment =
+    can('sparePartsReplenishment.view') || can('sparePartsReplenishment.create');
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
@@ -102,7 +106,7 @@ export const SparePartsInventory: React.FC = () => {
   const [catalogComponents, setCatalogComponents] = useState<CatalogComponent[]>([]);
   const [bomComponents, setBomComponents] = useState<CatalogComponent[]>([]);
   const [form, setForm] = useState({
-    sourceMode: 'product_bom' as 'product_bom' | 'all_materials',
+    sourceMode: 'all_materials' as 'product_bom' | 'all_materials',
     productId: '',
     materialId: '',
     unit: 'قطعة',
@@ -299,8 +303,10 @@ export const SparePartsInventory: React.FC = () => {
           : {}),
         ...(selectedMaterial.itemType === 'legacy_raw' ? { rawMaterialId: materialId } : {}),
         ...(Number.isFinite(purchase) && purchase > 0 ? { purchaseUnitCost: purchase } : {}),
-        ...(Number.isFinite(sale) && sale > 0 ? { defaultSalePrice: sale } : {}),
-        ...(Number.isFinite(disc) && disc > 0 ? { warehouseDiscountPercent: Math.min(100, disc) } : {}),
+        ...(canManagePricing && Number.isFinite(sale) && sale > 0 ? { defaultSalePrice: sale } : {}),
+        ...(canManagePricing && Number.isFinite(disc) && disc > 0
+          ? { warehouseDiscountPercent: Math.min(100, disc) }
+          : {}),
       });
       toast.success('تمت إضافة القطعة.');
       setForm((prev) => ({
@@ -370,7 +376,11 @@ export const SparePartsInventory: React.FC = () => {
     }
   };
   const savePartPricing = async () => {
-    if (!partPricingEdit?.id || !canManageParts) return;
+    if (!partPricingEdit?.id) return;
+    if (!canManagePricing) {
+      toast.error('ليس لديك صلاحية تعديل التسعير.');
+      return;
+    }
     try {
       // Purchase cost is priced centrally on materials — centers only set sale price / discount.
       await sparePartsService.updatePartCatalog(partPricingEdit.id, {
@@ -473,6 +483,11 @@ export const SparePartsInventory: React.FC = () => {
                 <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
                   <Button variant="outline">طلبات الصيانة</Button>
                 </Link>
+                {canViewReplenishment && (
+                  <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-replenishment')}>
+                    <Button variant="outline">طلبات التموين من المخزن الرئيسي</Button>
+                  </Link>
+                )}
               </div>
             </div>
           </div>
@@ -604,8 +619,12 @@ export const SparePartsInventory: React.FC = () => {
                 <div><Label>الوحدة</Label><Input value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} /></div>
                 <div><Label>الحد الأدنى</Label><Input type="number" value={form.minStock} onChange={(e) => setForm((p) => ({ ...p, minStock: e.target.value }))} /></div>
                 <div><Label>تكلفة الشراء / وحدة (من المادة — مركزية)</Label><Input type="number" min={0} step="0.01" value={form.purchaseUnitCost} readOnly disabled className="bg-muted" placeholder="تُؤخذ من المادة عند الربط" /></div>
-                <div><Label>سعر البيع الافتراضي</Label><Input type="number" min={0} step="0.01" value={form.defaultSalePrice} onChange={(e) => setForm((p) => ({ ...p, defaultSalePrice: e.target.value }))} placeholder="اختياري" /></div>
-                <div><Label>خصم مخزن %</Label><Input type="number" min={0} max={100} value={form.warehouseDiscountPercent} onChange={(e) => setForm((p) => ({ ...p, warehouseDiscountPercent: e.target.value }))} placeholder="0" /></div>
+                {canManagePricing && (
+                  <>
+                    <div><Label>سعر البيع الافتراضي</Label><Input type="number" min={0} step="0.01" value={form.defaultSalePrice} onChange={(e) => setForm((p) => ({ ...p, defaultSalePrice: e.target.value }))} placeholder="اختياري" /></div>
+                    <div><Label>خصم مخزن %</Label><Input type="number" min={0} max={100} value={form.warehouseDiscountPercent} onChange={(e) => setForm((p) => ({ ...p, warehouseDiscountPercent: e.target.value }))} placeholder="0" /></div>
+                  </>
+                )}
                 <div className="xl:col-span-6 flex justify-end">
                   <Button onClick={createPart}>إضافة الصنف</Button>
                 </div>
@@ -705,21 +724,22 @@ export const SparePartsInventory: React.FC = () => {
                       </td>
                       <td className="p-2">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <Button
-                            variant="secondary"
-                            size="sm"
-                            onClick={() => {
-                              setPartPricingEdit(part);
-                              setPricingForm({
-                                purchaseUnitCost: String(part.purchaseUnitCost ?? ''),
-                                defaultSalePrice: String(part.defaultSalePrice ?? ''),
-                                warehouseDiscountPercent: String(part.warehouseDiscountPercent ?? ''),
-                              });
-                            }}
-                            disabled={!canManageParts}
-                          >
-                            تسعير
-                          </Button>
+                          {canManagePricing && (
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              onClick={() => {
+                                setPartPricingEdit(part);
+                                setPricingForm({
+                                  purchaseUnitCost: String(part.purchaseUnitCost ?? ''),
+                                  defaultSalePrice: String(part.defaultSalePrice ?? ''),
+                                  warehouseDiscountPercent: String(part.warehouseDiscountPercent ?? ''),
+                                });
+                              }}
+                            >
+                              تعديل التسعير
+                            </Button>
+                          )}
                           <Button
                             variant="outline"
                             size="sm"
@@ -782,30 +802,34 @@ export const SparePartsInventory: React.FC = () => {
                 className="bg-muted"
               />
             </div>
-            <div>
-              <Label>سعر البيع الافتراضي</Label>
-              <Input
-                type="number"
-                min={0}
-                step="0.01"
-                value={pricingForm.defaultSalePrice}
-                onChange={(e) => setPricingForm((p) => ({ ...p, defaultSalePrice: e.target.value }))}
-              />
-            </div>
-            <div>
-              <Label>خصم مخزن % (من تكلفة الشراء)</Label>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                value={pricingForm.warehouseDiscountPercent}
-                onChange={(e) => setPricingForm((p) => ({ ...p, warehouseDiscountPercent: e.target.value }))}
-              />
-            </div>
+            {canManagePricing && (
+              <>
+                <div>
+                  <Label>سعر البيع الافتراضي</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    step="0.01"
+                    value={pricingForm.defaultSalePrice}
+                    onChange={(e) => setPricingForm((p) => ({ ...p, defaultSalePrice: e.target.value }))}
+                  />
+                </div>
+                <div>
+                  <Label>خصم مخزن % (من تكلفة الشراء)</Label>
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    value={pricingForm.warehouseDiscountPercent}
+                    onChange={(e) => setPricingForm((p) => ({ ...p, warehouseDiscountPercent: e.target.value }))}
+                  />
+                </div>
+              </>
+            )}
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setPartPricingEdit(null)}>إلغاء</Button>
-            <Button onClick={() => void savePartPricing()} disabled={!canManageParts}>حفظ</Button>
+            <Button onClick={() => void savePartPricing()} disabled={!canManagePricing}>حفظ</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -823,6 +847,7 @@ export const SparePartsInventory: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <RepairReplenishmentRequestsPanel toWarehouseId={activeBranch?.warehouseId} />
       <LowStockAlert open={lowStock.isOpen} onOpenChange={(open) => { if (!open) lowStock.dismiss(); }} entries={lowStock.lowStockEntries} />
     </div>
   );

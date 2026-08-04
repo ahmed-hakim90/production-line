@@ -4,6 +4,7 @@ import { checkPermission } from '../../../utils/permissions';
 import type { FirestoreUserWithRepair } from '../types';
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
+export { canLoadRepairJobList } from './repairJobListScope';
 
 export type RepairManagerScope = 'branch' | 'centers';
 

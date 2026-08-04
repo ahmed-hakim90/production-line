@@ -32,10 +32,39 @@ import {
 } from '../types';
 import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
-import { resolveRepairSettings } from '../config/repairSettings';
+import {
+  accessoryLabelsFromIds,
+  resolveRepairSettings,
+} from '../config/repairSettings';
 import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
+
+type JobProductRow = {
+  itemId: string;
+  productId: string;
+  quantity: string;
+  accessoryIds: string[];
+  accessories: string;
+  diagnosis: string;
+  inWarranty: boolean;
+};
+
+const toggleCatalogId = (ids: string[], id: string): string[] => (
+  ids.includes(id) ? ids.filter((item) => item !== id) : [...ids, id]
+);
+
+const createEmptyProductRow = (): JobProductRow => ({
+  itemId: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+  productId: '',
+  quantity: '1',
+  accessoryIds: [],
+  accessories: '',
+  diagnosis: '',
+  inWarranty: false,
+});
+
+const parseProductQuantity = (raw: string): number => Math.max(1, Math.round(Number(raw) || 1));
 
 export const NewRepairJob: React.FC = () => {
   const { dir } = useAppDirection();
@@ -50,27 +79,13 @@ export const NewRepairJob: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [loading, setLoading] = useState(false);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  const enabledAccessories = useMemo(
+    () => repairSettings.accessoriesCatalog.filter((item) => item.enabled !== false),
+    [repairSettings.accessoriesCatalog],
+  );
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
-  const [jobProducts, setJobProducts] = useState<Array<{
-    itemId: string;
-    productId: string;
-    accessories: string;
-    diagnosis: string;
-    estimatedCost: string;
-    finalCost: string;
-    inWarranty: boolean;
-  }>>([{
-    itemId: `item-${Date.now()}`,
-    productId: '',
-    accessories: '',
-    diagnosis: '',
-    estimatedCost: '',
-    finalCost: '',
-    inWarranty: false,
-  }]);
-  const [isServiceOnly, setIsServiceOnly] = useState(false);
-  const [serviceOnlyCost, setServiceOnlyCost] = useState('');
+  const [jobProducts, setJobProducts] = useState<JobProductRow[]>([createEmptyProductRow()]);
   const [openBranchJobs, setOpenBranchJobs] = useState<RepairJob[]>([]);
   const [selectedSidebarJob, setSelectedSidebarJob] = useState<RepairJob | null>(null);
   const [showTreasuryCloseModal, setShowTreasuryCloseModal] = useState(false);
@@ -81,7 +96,6 @@ export const NewRepairJob: React.FC = () => {
     customerName: '',
     customerPhone: '',
     customerAddress: '',
-    estimatedCost: '',
   });
 
   useEffect(() => {
@@ -197,8 +211,12 @@ export const NewRepairJob: React.FC = () => {
       toast.error('اختر منتجًا واحدًا على الأقل.');
       return;
     }
+    // Reception creates intake only — services/cost are set later by the technician on the job.
     const normalizedProducts: RepairJobProduct[] = validRows.map((row, idx) => {
       const selected = products.find((p) => p.id === row.productId);
+      const quantity = parseProductQuantity(row.quantity);
+      const catalogAccessoryLabels = accessoryLabelsFromIds(row.accessoryIds, repairSettings.accessoriesCatalog);
+      const accessories = [catalogAccessoryLabels, String(row.accessories || '').trim()].filter(Boolean).join(' — ');
       return {
         itemId: row.itemId || `item-${idx + 1}`,
         productId: row.productId,
@@ -206,17 +224,17 @@ export const NewRepairJob: React.FC = () => {
         deviceType: 'منتج',
         deviceBrand: String(selected?.name || ''),
         deviceModel: String(selected?.model || selected?.code || ''),
-        accessories: row.accessories || '',
+        quantity,
+        accessoryIds: row.accessoryIds,
+        serviceIds: [],
+        accessories,
         diagnosis: row.diagnosis || '',
-        estimatedCost: Number(row.estimatedCost || 0),
-        finalCost: row.inWarranty ? 0 : Number(row.finalCost || 0),
+        estimatedCost: 0,
+        finalCost: 0,
         inWarranty: row.inWarranty,
       };
     });
     const leadProduct = normalizedProducts[0];
-    const productsEstimated = normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0);
-    const productsFinal = normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0);
-    const finalCostOverride = isServiceOnly ? Number(serviceOnlyCost || 0) : undefined;
     try {
       const previousDayOpenSession = await repairTreasuryService.getPreviousDayOpenSession(form.branchId);
       if (previousDayOpenSession?.id) {
@@ -251,11 +269,10 @@ export const NewRepairJob: React.FC = () => {
         status: repairSettings.workflow.initialStatusId,
         warranty: repairSettings.defaults.defaultWarranty,
         partsUsed: [],
-        estimatedCost: productsEstimated || Number(form.estimatedCost || 0),
-        finalCost: isServiceOnly ? Number(serviceOnlyCost || 0) : productsFinal,
-        finalCostOverride,
-        isServiceOnly,
-        serviceOnlyCost: isServiceOnly ? Number(serviceOnlyCost || 0) : 0,
+        estimatedCost: 0,
+        finalCost: 0,
+        isServiceOnly: false,
+        serviceOnlyCost: 0,
       }, {
         userId: String(user?.id || '') || undefined,
         userName: String(user?.displayName || user?.email || 'مستخدم'),
@@ -290,7 +307,7 @@ export const NewRepairJob: React.FC = () => {
           <Card>
             <CardHeader>
               <CardTitle>بيانات الاستلام الأساسية</CardTitle>
-              <CardDescription>ابدأ ببيانات العميل، ثم المنتجات والتكلفة.</CardDescription>
+              <CardDescription>استلام فقط: بيانات العميل والمنتجات والإكسسوارات. الخدمات والتكلفة يحددها الفني لاحقًا.</CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
@@ -329,11 +346,13 @@ export const NewRepairJob: React.FC = () => {
                   </div>
                 ) : null}
                 <div className="md:col-span-2 xl:col-span-3 border-t pt-3 mt-1">
-                  <div className="text-sm font-semibold">2) المنتجات والتشخيص</div>
-                  <p className="text-xs text-muted-foreground mt-1 mb-2">أضف منتجًا أو أكثر، وحدد التشخيص وتكلفة كل منتج.</p>
+                  <div className="text-sm font-semibold">2) المنتجات والإكسسوارات</div>
+                  <p className="text-xs text-muted-foreground mt-1 mb-2">
+                    أضف المنتج المستلم والكمية والإكسسوارات ووصف العطل من العميل. اختيار الخدمات يتم من الفني بعد الفحص.
+                  </p>
                 </div>
                 <div className="space-y-1.5 md:col-span-2 xl:col-span-3">
-                  <Label>المنتجات / Products <span className="text-rose-600">*</span></Label>
+                  <Label>المنتجات <span className="text-rose-600">*</span></Label>
                   <div className="space-y-2">
                     {jobProducts.map((row, idx) => (
                       <div key={row.itemId} className="rounded-md border p-2 space-y-2">
@@ -350,28 +369,47 @@ export const NewRepairJob: React.FC = () => {
                             حذف
                           </Button>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                          <Select
-                            value={row.productId}
-                            onValueChange={(value) => {
-                              setJobProducts((prev) => prev.map((item) => (
-                                item.itemId === row.itemId ? { ...item, productId: value } : item
-                              )));
-                            }}
-                          >
-                            <SelectTrigger className={!row.productId ? 'border-rose-300' : ''}>
-                              <SelectValue placeholder="اختر المنتج من الأصناف المعرفة" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {products.filter((p) => p.id).map((product) => (
-                                <SelectItem key={product.id} value={String(product.id)}>
-                                  {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
+                        <div className="space-y-2">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                            <div className="min-w-0 flex-1 space-y-1.5">
+                              <Label className="text-xs">المنتج</Label>
+                              <Select
+                                value={row.productId}
+                                onValueChange={(value) => {
+                                  setJobProducts((prev) => prev.map((item) => (
+                                    item.itemId === row.itemId ? { ...item, productId: value } : item
+                                  )));
+                                }}
+                              >
+                                <SelectTrigger className={!row.productId ? 'border-rose-300' : ''}>
+                                  <SelectValue placeholder="اختر المنتج من الأصناف المعرفة" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  {products.filter((p) => p.id).map((product) => (
+                                    <SelectItem key={product.id} value={String(product.id)}>
+                                      {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
+                                    </SelectItem>
+                                  ))}
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="w-full shrink-0 space-y-1.5 sm:w-28">
+                              <Label className="text-xs">الكمية</Label>
+                              <Input
+                                type="number"
+                                min={1}
+                                value={row.quantity}
+                                onChange={(e) => {
+                                  const value = e.target.value;
+                                  setJobProducts((prev) => prev.map((item) => (
+                                    item.itemId === row.itemId ? { ...item, quantity: value } : item
+                                  )));
+                                }}
+                              />
+                            </div>
+                          </div>
                           <Input
-                            placeholder="تشخيص المنتج"
+                            placeholder="وصف العطل من العميل (اختياري)"
                             value={row.diagnosis}
                             onChange={(e) => {
                               const value = e.target.value;
@@ -380,39 +418,41 @@ export const NewRepairJob: React.FC = () => {
                               )));
                             }}
                           />
-                          <Input
-                            placeholder="الإكسسوارات (لهذا المنتج)"
-                            value={row.accessories}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setJobProducts((prev) => prev.map((item) => (
-                                item.itemId === row.itemId ? { ...item, accessories: value } : item
-                              )));
-                            }}
-                          />
-                          <Input
-                            type="number"
-                            placeholder="تكلفة متوقعة"
-                            value={row.estimatedCost}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setJobProducts((prev) => prev.map((item) => (
-                                item.itemId === row.itemId ? { ...item, estimatedCost: value } : item
-                              )));
-                            }}
-                          />
-                          <Input
-                            type="number"
-                            placeholder="تكلفة نهائية"
-                            value={row.finalCost}
-                            disabled={row.inWarranty}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setJobProducts((prev) => prev.map((item) => (
-                                item.itemId === row.itemId ? { ...item, finalCost: value } : item
-                              )));
-                            }}
-                          />
+                          <div className="space-y-1.5">
+                            <Label className="text-xs">الإكسسوارات المستلمة</Label>
+                            {enabledAccessories.length > 0 ? (
+                              <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                {enabledAccessories.map((accessory) => (
+                                  <label key={accessory.id} className="inline-flex items-center gap-2 text-sm">
+                                    <input
+                                      type="checkbox"
+                                      checked={row.accessoryIds.includes(accessory.id)}
+                                      onChange={() => {
+                                        setJobProducts((prev) => prev.map((item) => (
+                                          item.itemId === row.itemId
+                                            ? { ...item, accessoryIds: toggleCatalogId(item.accessoryIds, accessory.id) }
+                                            : item
+                                        )));
+                                      }}
+                                    />
+                                    {accessory.label}
+                                  </label>
+                                ))}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground">لا توجد إكسسوارات معرفة في الإعدادات.</p>
+                            )}
+                            <Input
+                              placeholder="أخرى (ملاحظات إضافية)"
+                              value={row.accessories}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setJobProducts((prev) => prev.map((item) => (
+                                  item.itemId === row.itemId ? { ...item, accessories: value } : item
+                                )));
+                              }}
+                            />
+                          </div>
                         </div>
                         <label className="inline-flex items-center gap-2 text-sm">
                           <input
@@ -422,7 +462,7 @@ export const NewRepairJob: React.FC = () => {
                               const checked = e.target.checked;
                               setJobProducts((prev) => prev.map((item) => (
                                 item.itemId === row.itemId
-                                  ? { ...item, inWarranty: checked, finalCost: checked ? '0' : item.finalCost }
+                                  ? { ...item, inWarranty: checked }
                                   : item
                               )));
                             }}
@@ -435,50 +475,12 @@ export const NewRepairJob: React.FC = () => {
                       type="button"
                       variant="outline"
                       onClick={() => {
-                        setJobProducts((prev) => [
-                          ...prev,
-                          {
-                            itemId: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                            productId: '',
-                            accessories: '',
-                            diagnosis: '',
-                            estimatedCost: '',
-                            finalCost: '',
-                            inWarranty: false,
-                          },
-                        ]);
+                        setJobProducts((prev) => [...prev, createEmptyProductRow()]);
                       }}
                     >
                       إضافة منتج
                     </Button>
                   </div>
-                </div>
-
-                <div className="md:col-span-2 xl:col-span-3 border-t pt-3 mt-1">
-                  <div className="text-sm font-semibold">3) التكلفة</div>
-                  <p className="text-xs text-muted-foreground mt-1 mb-2">حدد التكلفة التقديرية العامة أو اختر نمط خدمة فقط.</p>
-                </div>
-                <div className="space-y-1.5 xl:max-w-[320px]">
-                  <Label>التكلفة المتوقعة</Label>
-                  <Input type="number" value={form.estimatedCost} onChange={(e) => setForm((p) => ({ ...p, estimatedCost: e.target.value }))} />
-                </div>
-                <div className="space-y-1.5 xl:max-w-[420px]">
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={isServiceOnly}
-                      onChange={(e) => setIsServiceOnly(e.target.checked)}
-                    />
-                    خدمة فقط بدون قطع غيار
-                  </label>
-                  {isServiceOnly && (
-                    <Input
-                      type="number"
-                      value={serviceOnlyCost}
-                      onChange={(e) => setServiceOnlyCost(e.target.value)}
-                      placeholder="تكلفة خدمة الإصلاح"
-                    />
-                  )}
                 </div>
               </div>
             </CardContent>

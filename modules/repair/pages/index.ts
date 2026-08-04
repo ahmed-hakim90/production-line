@@ -9,4 +9,5 @@ export { RepairTechnicianKPIs } from './RepairTechnicianKPIs';
 export { RepairTreasury } from './RepairTreasury';
 export { RepairSettings } from './RepairSettings';
 export { RepairSalesInvoicePage } from './RepairSalesInvoice';
+export { RepairComplaints } from './RepairComplaints';
 export { RepairTrackPublic } from './RepairTrackPublic';

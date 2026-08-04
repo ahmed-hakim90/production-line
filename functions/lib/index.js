@@ -11,6 +11,7 @@ import { buildTenantBackup, assertBackupJsonSize } from './tenantBackupExport.js
 import { deleteTenantCascade } from './tenantDeleteCascade.js';
 import { runAdminImportBackup, saveAdminImportHistory, } from './tenantImportRestore.js';
 import { approveDepartmentConsumableIssueHandler, cancelDepartmentConsumableIssueHandler, createDepartmentConsumableIssueHandler, getDepartmentConsumableMonthlyReportHandler, issueDepartmentConsumableIssueHandler, rejectDepartmentConsumableIssueHandler, returnDepartmentConsumableIssueHandler, submitDepartmentConsumableIssueHandler, } from './departmentConsumableIssues.js';
+import { approveRepairSpareIssueHandler, cancelRepairSpareIssueHandler, createRepairSpareIssueHandler, issueRepairSpareIssueHandler, rejectRepairSpareIssueHandler, returnRepairSpareIssueHandler, submitRepairSpareIssueHandler, } from './repairSpareIssues.js';
 import { approveSparePartsReplenishmentHandler, cancelSparePartsReplenishmentHandler, createSparePartsReplenishmentHandler, prepareSparePartsReplenishmentHandler, receiveSparePartsReplenishmentHandler, rejectSparePartsReplenishmentHandler, responsibleApproveSparePartsReplenishmentHandler, } from './sparePartsReplenishment.js';
 initializeApp();
 const db = getFirestore();
@@ -1390,7 +1391,32 @@ export const resolveTenantSlug = onCall({
 });
 const sanitizeTrackText = (value) => String(value || '').trim();
 const sanitizeTrackSlug = (value) => sanitizeTrackText(value).toLowerCase();
-const normalizeTrackPhone = (value) => sanitizeTrackText(value).replace(/\s+/g, '');
+const normalizeTrackPhoneDigits = (value) => sanitizeTrackText(value).replace(/\D/g, '');
+const trackPhonesMatchLast10 = (storedPhone, queryPhone) => {
+    const stored = normalizeTrackPhoneDigits(storedPhone);
+    const query = normalizeTrackPhoneDigits(queryPhone);
+    if (!stored || !query)
+        return false;
+    const storedTail = stored.slice(-10);
+    const queryTail = query.slice(-10);
+    if (storedTail.length < 10 || queryTail.length < 10)
+        return false;
+    return storedTail === queryTail;
+};
+const REPAIR_TRACK_STATUS_LABELS = {
+    received: 'وارد',
+    diagnosing: 'تشخيص',
+    waiting_approval: 'بانتظار موافقة العميل',
+    waiting_parts: 'بانتظار قطع الغيار',
+    repairing: 'إصلاح',
+    testing: 'اختبار',
+    ready: 'جاهز للتسليم',
+    delivered: 'تم التسليم',
+    cancelled: 'ملغى',
+    unrepairable: 'غير قابل للإصلاح',
+    inspection: 'فحص',
+    repair: 'إصلاح',
+};
 const toEpochMs = (value) => {
     if (!value)
         return 0;
@@ -1422,14 +1448,14 @@ export const trackRepairJobPublic = onCall({
     const payload = (request.data || {});
     const tenantSlug = sanitizeTrackSlug(payload.tenantSlug);
     const receiptNo = sanitizeTrackText(payload.receiptNo);
-    const phone = normalizeTrackPhone(payload.phone);
+    const phone = normalizeTrackPhoneDigits(payload.phone);
     if (!tenantSlug || !/^[a-z0-9]([a-z0-9-]{1,62}[a-z0-9])?$/.test(tenantSlug)) {
         throw new HttpsError('invalid-argument', 'معرّف الشركة غير صالح.');
     }
     if (!receiptNo || receiptNo.length > 64) {
         throw new HttpsError('invalid-argument', 'رقم الإيصال غير صالح.');
     }
-    if (!phone || phone.length > 20) {
+    if (!phone || phone.length < 10 || phone.length > 20) {
         throw new HttpsError('invalid-argument', 'رقم الهاتف غير صالح.');
     }
     const slugSnap = await db.collection(TENANT_SLUGS_COLLECTION).doc(tenantSlug).get();
@@ -1446,14 +1472,37 @@ export const trackRepairJobPublic = onCall({
         .collection(REPAIR_JOBS_COLLECTION)
         .where('tenantId', '==', tenantId)
         .where('receiptNo', '==', receiptNo)
-        .where('customerPhone', '==', phone)
-        .limit(1)
+        .limit(5)
         .get();
-    if (snap.empty) {
+    const matchedDoc = snap.docs.find((docRow) => {
+        const rowPhone = docRow.data().customerPhone;
+        return trackPhonesMatchLast10(rowPhone, phone);
+    });
+    if (!matchedDoc) {
         return { found: false, reason: 'not_found' };
     }
-    const row = snap.docs[0];
+    const row = matchedDoc;
     const data = row.data();
+    const status = String(data.status || 'received');
+    const jobProducts = Array.isArray(data.jobProducts)
+        ? data.jobProducts
+            .slice(0, 30)
+            .map((item) => ({
+            name: String(item?.productName || 'منتج').trim().slice(0, 120),
+            quantity: Math.max(1, Math.round(Number(item?.quantity || 1))),
+        }))
+            .filter((item) => item.name.length > 0)
+        : [];
+    const statusHistory = Array.isArray(data.statusHistory)
+        ? data.statusHistory
+            .slice(-25)
+            .map((entry) => ({
+            status: String(entry?.status || ''),
+            atMs: toEpochMs(entry?.at),
+        }))
+            .filter((entry) => entry.status.length > 0 && entry.atMs > 0)
+        : [];
+    const dueAtMs = toEpochMs(data.dueAt);
     return {
         found: true,
         job: {
@@ -1461,8 +1510,12 @@ export const trackRepairJobPublic = onCall({
             customerName: String(data.customerName || ''),
             deviceBrand: String(data.deviceBrand || ''),
             deviceModel: String(data.deviceModel || ''),
-            status: String(data.status || 'received'),
+            status,
+            statusLabel: REPAIR_TRACK_STATUS_LABELS[status] || status,
             updatedAtMs: toEpochMs(data.updatedAt),
+            ...(dueAtMs > 0 ? { dueAtMs } : {}),
+            ...(jobProducts.length > 0 ? { jobProducts } : {}),
+            ...(statusHistory.length > 0 ? { statusHistory } : {}),
         },
     };
 });
@@ -1553,6 +1606,13 @@ export const issueDepartmentConsumableIssue = onCall({ region: 'us-central1', me
 export const cancelDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '256MiB' }, cancelDepartmentConsumableIssueHandler);
 export const returnDepartmentConsumableIssue = onCall({ region: 'us-central1', memory: '512MiB' }, returnDepartmentConsumableIssueHandler);
 export const getDepartmentConsumableMonthlyReport = onCall({ region: 'us-central1', memory: '512MiB' }, getDepartmentConsumableMonthlyReportHandler);
+export const createRepairSpareIssue = onCall({ region: 'us-central1', memory: '512MiB' }, createRepairSpareIssueHandler);
+export const submitRepairSpareIssue = onCall({ region: 'us-central1', memory: '256MiB' }, submitRepairSpareIssueHandler);
+export const approveRepairSpareIssue = onCall({ region: 'us-central1', memory: '256MiB' }, approveRepairSpareIssueHandler);
+export const rejectRepairSpareIssue = onCall({ region: 'us-central1', memory: '256MiB' }, rejectRepairSpareIssueHandler);
+export const issueRepairSpareIssue = onCall({ region: 'us-central1', memory: '512MiB' }, issueRepairSpareIssueHandler);
+export const cancelRepairSpareIssue = onCall({ region: 'us-central1', memory: '256MiB' }, cancelRepairSpareIssueHandler);
+export const returnRepairSpareIssue = onCall({ region: 'us-central1', memory: '512MiB' }, returnRepairSpareIssueHandler);
 export const createSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, createSparePartsReplenishmentHandler);
 export const approveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, approveSparePartsReplenishmentHandler);
 export const prepareSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, prepareSparePartsReplenishmentHandler);

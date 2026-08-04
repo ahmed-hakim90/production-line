@@ -1,10 +1,11 @@
 import {
-  addDoc,
-  collection,
+  deleteDoc,
   doc,
+  getDoc,
   getDocs,
   orderBy,
   query,
+  runTransaction,
   updateDoc,
   where,
 } from 'firebase/firestore';
@@ -16,11 +17,18 @@ import { warehouseRackService } from './warehouseRackService';
 import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeService';
 
 const COLLECTION = 'warehouse_locations';
+const LOCATION_BALANCES_COLLECTION = 'stock_location_balances';
+const DEFAULT_LOCATIONS_COLLECTION = 'default_item_locations';
 
 const toIsoNow = () => new Date().toISOString();
 const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined));
 const normalizeCode = (value: string) => value.trim().toUpperCase().replace(/\s+/g, '-');
+
+/** Stable id so concurrent "create shelf" clicks cannot insert two docs for the same shelf. */
+function locationDocId(warehouseId: string, rackCode: string, shelfCode: string): string {
+  return `${warehouseId}__${rackCode}__${shelfCode}`.replace(/\//g, '_');
+}
 
 function buildLocationCode(warehouseCode: string | undefined, rackCode: string, shelfCode: string): string {
   const parts = [warehouseCode, rackCode, shelfCode]
@@ -59,6 +67,7 @@ function buildShelfCodes(input: {
 export const warehouseLocationService = {
   buildLocationCode,
   buildShelfCodes,
+  locationDocId,
 
   async getAll(warehouseId?: string): Promise<WarehouseLocation[]> {
     if (!isConfigured) return [];
@@ -89,7 +98,9 @@ export const warehouseLocationService = {
     rack: string;
     shelf: string;
     code?: string;
-  }): Promise<string | null> {
+    /** When true, return existing location id instead of throwing (safe retries / double-submit). */
+    skipIfExists?: boolean;
+  }): Promise<{ id: string; created: boolean } | null> {
     if (!isConfigured) return null;
     const rack = (input.rackName || input.rack).trim();
     const shelf = input.shelf.trim();
@@ -99,14 +110,23 @@ export const warehouseLocationService = {
       throw new Error('حدد المخزن والراك والرف.');
     }
     const code = (input.code?.trim() || buildLocationCode(input.warehouseCode, rackCode, shelfCode)).toUpperCase();
+
+    // Legacy auto-id docs: detect by business key before creating a deterministic-id doc.
     const existing = await getDocs(query(
       tenantQuery(db, COLLECTION),
       where('warehouseId', '==', input.warehouseId),
       where('rackCode', '==', rackCode),
       where('shelfCode', '==', shelfCode),
     ));
-    if (!existing.empty) throw new Error('الرف موجود بالفعل داخل نفس الراك.');
-    const ref = await addDoc(collection(db, COLLECTION), stripUndefined({
+    if (!existing.empty) {
+      if (input.skipIfExists) return { id: existing.docs[0].id, created: false };
+      throw new Error('الرف موجود بالفعل داخل نفس الراك.');
+    }
+
+    const docId = locationDocId(input.warehouseId, rackCode, shelfCode);
+    const ref = doc(db, COLLECTION, docId);
+    const now = toIsoNow();
+    const payload = stripUndefined({
       tenantId: getCurrentTenantId(),
       warehouseId: input.warehouseId,
       warehouseName: input.warehouseName,
@@ -119,10 +139,19 @@ export const warehouseLocationService = {
       shelf,
       code,
       isActive: true,
-      createdAt: toIsoNow(),
-      updatedAt: toIsoNow(),
-    }));
-    return ref.id;
+      createdAt: now,
+      updatedAt: now,
+    });
+
+    return runTransaction(db, async (tx) => {
+      const snap = await tx.get(ref);
+      if (snap.exists()) {
+        if (input.skipIfExists) return { id: snap.id, created: false };
+        throw new Error('الرف موجود بالفعل داخل نفس الراك.');
+      }
+      tx.set(ref, payload);
+      return { id: docId, created: true };
+    });
   },
 
   async createShelves(input: {
@@ -134,13 +163,14 @@ export const warehouseLocationService = {
     shelf?: string;
     from?: string;
     to?: string;
-  }): Promise<string[]> {
+  }): Promise<{ createdIds: string[]; skipped: number }> {
     if (!input.rack?.id) throw new Error('اختر راك صحيح لإنشاء الأرفف.');
     if (input.rack.isActive === false) throw new Error('لا يمكن إنشاء أرفف داخل راك موقوف.');
     const shelfCodes = buildShelfCodes(input);
-    const ids: string[] = [];
+    const createdIds: string[] = [];
+    let skipped = 0;
     for (const shelf of shelfCodes) {
-      const id = await this.create({
+      const result = await this.create({
         warehouseId: input.warehouseId,
         warehouseName: input.warehouseName,
         warehouseCode: input.warehouseCode,
@@ -149,10 +179,56 @@ export const warehouseLocationService = {
         rackCode: input.rack.code,
         rack: input.rack.name,
         shelf,
+        skipIfExists: true,
       });
-      if (id) ids.push(id);
+      if (!result) continue;
+      if (result.created) createdIds.push(result.id);
+      else skipped += 1;
     }
-    return ids;
+    return { createdIds, skipped };
+  },
+
+  /**
+   * Hard-delete a shelf when it has no stock quantity.
+   * Clears zero-qty balance rows and default-location pointers first.
+   */
+  async remove(id: string): Promise<void> {
+    if (!isConfigured || !id) throw new Error('معرّف الرف غير صالح.');
+    const ref = doc(db, COLLECTION, id);
+    const snap = await getDoc(ref);
+    if (!snap.exists()) throw new Error('الرف غير موجود.');
+    const loc = { id: snap.id, ...snap.data() } as WarehouseLocation;
+
+    const balSnap = await getDocs(tenantQuery(
+      db,
+      LOCATION_BALANCES_COLLECTION,
+      where('locationId', '==', id),
+      orderBy('updatedAt', 'desc'),
+    ));
+    const withQty = balSnap.docs.filter((d) => Math.abs(Number(d.data().quantity) || 0) > 1e-9);
+    if (withQty.length > 0) {
+      throw new Error('لا يمكن حذف رف عليه أرصدة. انقل أو صفّر الكمية أولاً.');
+    }
+
+    for (const balDoc of balSnap.docs) {
+      await deleteDoc(balDoc.ref);
+    }
+
+    if (loc.warehouseId) {
+      const defaultsSnap = await getDocs(tenantQuery(
+        db,
+        DEFAULT_LOCATIONS_COLLECTION,
+        where('warehouseId', '==', loc.warehouseId),
+        orderBy('itemName', 'asc'),
+      ));
+      for (const defDoc of defaultsSnap.docs) {
+        if (String(defDoc.data().locationId || '') === id) {
+          await deleteDoc(defDoc.ref);
+        }
+      }
+    }
+
+    await deleteDoc(ref);
   },
 
   async update(id: string, patch: Partial<WarehouseLocation>): Promise<void> {

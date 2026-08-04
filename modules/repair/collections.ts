@@ -8,3 +8,6 @@ export const REPAIR_TREASURY_ENTRIES_COLLECTION = 'repair_treasury_entries';
 export const REPAIR_SALES_INVOICES_COLLECTION = 'repair_sales_invoices';
 export const REPAIR_SERVICE_EVENTS_SUBCOLLECTION = 'service_events';
 export const REPAIR_PART_RESERVATIONS_COLLECTION = 'repair_part_reservations';
+export const REPAIR_SPARE_ISSUES_COLLECTION = 'repair_spare_issues';
+export const REPAIR_COMPLAINTS_COLLECTION = 'repair_complaints';
+export const REPAIR_FOLLOWUPS_COLLECTION = 'repair_followups';
