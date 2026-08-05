@@ -1358,6 +1358,23 @@
       allow create, update, delete: if false;
     }
 
+    // Spare-parts recall (center → central): client read only; mutations via callables.
+    match /spare_parts_recall_requests/{docId} {
+      allow read: if pl_isActiveUser()
+        && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin())
+        && (
+          pl_hasErpPermission('sparePartsRecall.view')
+          || pl_hasErpPermission('sparePartsRecall.create')
+          || pl_hasErpPermission('sparePartsRecall.confirm')
+          || pl_hasErpPermission('sparePartsRecall.cancel')
+          || pl_hasErpPermission('sparePartsReplenishment.view')
+          || pl_hasErpPermission('inventory.view')
+          || pl_isSuperAdmin()
+        )
+        && (pl_canReadTransferWarehouses() || pl_isSuperAdmin());
+      allow create, update, delete: if false;
+    }
+
     // Packaging handover receipts: client read only; confirm via confirmProductionHandoverReceipt callable.
     match /production_handover_receipts/{docId} {
       allow read: if pl_isActiveUser()

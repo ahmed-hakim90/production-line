@@ -14,6 +14,7 @@ import { approveDepartmentConsumableIssueHandler, cancelDepartmentConsumableIssu
 import { approveRepairSpareIssueHandler, cancelRepairSpareIssueHandler, createRepairSpareIssueHandler, issueRepairSpareIssueHandler, rejectRepairSpareIssueHandler, returnRepairSpareIssueHandler, submitRepairSpareIssueHandler, } from './repairSpareIssues.js';
 import { buildPublicRepairApprovalView } from './repairApprovalPublic.js';
 import { approveSparePartsReplenishmentHandler, cancelSparePartsReplenishmentHandler, createSparePartsReplenishmentHandler, prepareSparePartsReplenishmentHandler, receiveSparePartsReplenishmentHandler, rejectSparePartsReplenishmentHandler, responsibleApproveSparePartsReplenishmentHandler, } from './sparePartsReplenishment.js';
+import { cancelSparePartsRecallHandler, confirmSparePartsRecallHandler, createSparePartsRecallHandler, listMaintenanceCenterSpareBalancesHandler, } from './sparePartsRecall.js';
 import { issuePendingRepairPartUsageHandler, requestRepairJobSparePartHandler, } from './repairJobSparePartRequest.js';
 import { mutateRepairSalesInvoiceHandler, } from './repairFinancialOps.js';
 import { mutateRepairPaymentHandler } from './repairPaymentOps.js';
@@ -1803,6 +1804,10 @@ export const responsibleApproveSparePartsReplenishment = onCall({ region: 'us-ce
 export const receiveSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, receiveSparePartsReplenishmentHandler);
 export const rejectSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, rejectSparePartsReplenishmentHandler);
 export const cancelSparePartsReplenishment = onCall({ region: 'us-central1', memory: '512MiB' }, cancelSparePartsReplenishmentHandler);
+export const listMaintenanceCenterSpareBalances = onCall({ region: 'us-central1', memory: '512MiB' }, listMaintenanceCenterSpareBalancesHandler);
+export const createSparePartsRecall = onCall({ region: 'us-central1', memory: '512MiB' }, createSparePartsRecallHandler);
+export const confirmSparePartsRecall = onCall({ region: 'us-central1', memory: '512MiB' }, confirmSparePartsRecallHandler);
+export const cancelSparePartsRecall = onCall({ region: 'us-central1', memory: '256MiB' }, cancelSparePartsRecallHandler);
 export const requestRepairJobSparePart = onCall({ region: 'us-central1', memory: '512MiB' }, requestRepairJobSparePartHandler);
 export const issuePendingRepairPartUsage = onCall({ region: 'us-central1', memory: '512MiB' }, issuePendingRepairPartUsageHandler);
 export const deliverRepairJobAndCollect = onCall({ region: 'us-central1', memory: '512MiB' }, async () => {

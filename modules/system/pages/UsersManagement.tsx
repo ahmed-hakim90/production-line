@@ -25,6 +25,7 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import { resolveUserRepairBranchIds } from '../../repair/types';
+import { getVisibleRoles, getVisibleRolesForAssignment, resolveCanonicalRoleId } from '../lib/visibleRoles';
 
 const USERS_CACHE_KEY = 'system:users-management';
 
@@ -144,6 +145,8 @@ export const UsersManagement: React.FC = () => {
     void loadPage();
   }, [loadPage]);
 
+  const visibleRoles = useMemo(() => getVisibleRoles(roles), [roles]);
+
   const roleById = useMemo(() => {
     const map = new Map<string, FirestoreRole>();
     roles.forEach((role) => {
@@ -160,7 +163,8 @@ export const UsersManagement: React.FC = () => {
       if (statusFilter === 'not_created' && row.user.isActive) return false;
       if (roleFilter !== 'all') {
         const rid = String(row.user.roleId || '').trim();
-        if (rid !== roleFilter) return false;
+        const canonical = resolveCanonicalRoleId(rid, roles);
+        if (rid !== roleFilter && canonical !== roleFilter) return false;
       }
       if (!needle) return true;
       const email = String(row.user.email || '').toLowerCase();
@@ -172,15 +176,15 @@ export const UsersManagement: React.FC = () => {
         employeeName.includes(needle)
       );
     });
-  }, [rows, query, statusFilter, roleFilter]);
+  }, [rows, query, statusFilter, roleFilter, roles]);
 
   const roleFilterOptions = useMemo(
     () =>
-      sortByName(roles.filter((r) => r.id)).map((role) => ({
+      visibleRoles.map((role) => ({
         value: String(role.id || ''),
         label: String(role.name || role.id || ''),
       })),
-    [roles],
+    [visibleRoles],
   );
 
   const setRoleFilterParam = (value: string) => {
@@ -443,9 +447,10 @@ export const UsersManagement: React.FC = () => {
         label: `${getEmployeeDisplayName(employee)}${employee.code ? ` (${employee.code})` : ''}`,
       }));
 
+    const assignmentRoles = getVisibleRolesForAssignment(roles, row.user.roleId);
     openModal(MODAL_KEYS.SYSTEM_USERS_MANAGE, {
       row,
-      roles,
+      roles: assignmentRoles,
       employeeOptions: allowedEmployeeOptions,
       warehouseOptions: warehouses.map((wh) => ({
         value: String(wh.id || ''),
@@ -471,7 +476,7 @@ export const UsersManagement: React.FC = () => {
 
   const openCreateUserModal = () => {
     openModal(MODAL_KEYS.SYSTEM_USERS_CREATE, {
-      roles,
+      roles: visibleRoles,
       employeeOptions: createEmployeeOptions,
       onSubmit: async (input: {
         displayName: string;
@@ -490,7 +495,7 @@ export const UsersManagement: React.FC = () => {
 
   const openImportUsersModal = () => {
     openModal(MODAL_KEYS.SYSTEM_USERS_IMPORT, {
-      roles,
+      roles: visibleRoles,
       employees,
       existingEmails: rows.map((row) => String(row.user.email || '').trim().toLowerCase()),
       onCreateUser: async (input: {

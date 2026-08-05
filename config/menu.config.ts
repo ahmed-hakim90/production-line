@@ -239,12 +239,35 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'inv-production-floor', label: 'مساحة صالة الإنتاج', icon: 'precision_manufacturing', path: '/inventory/production-floor', permission: 'inventory.view' },
       {
         key: 'inv-spare-parts-replenishment',
-        label: 'تموين قطع الغيار (مركزي → مراكز)',
+        label: 'إذن صرف للمراكز (تموين)',
         icon: 'construction',
         path: '/inventory/spare-parts-replenishment',
         permission: 'sparePartsReplenishment.view',
         // Central warehouse operators only — center create/receive lives under /repair/parts.
         anyOfPermissions: ['sparePartsReplenishment.prepare', 'sparePartsReplenishment.approve', 'inventory.view'],
+      },
+      {
+        key: 'inv-spare-parts-in',
+        label: 'إذن إضافة (وارد)',
+        icon: 'add_box',
+        path: '/inventory/movements?movementType=IN',
+        permission: 'inventory.transactions.create',
+      },
+      {
+        key: 'inv-spare-parts-center-stock',
+        label: 'أرصدة المراكز',
+        icon: 'store',
+        path: '/inventory/spare-parts-center-stock',
+        permission: 'sparePartsRecall.view',
+        anyOfPermissions: ['sparePartsRecall.view', 'sparePartsReplenishment.view', 'inventory.view'],
+      },
+      {
+        key: 'inv-spare-parts-recall',
+        label: 'سحب من المراكز',
+        icon: 'keyboard_return',
+        path: '/inventory/spare-parts-recall',
+        permission: 'sparePartsRecall.view',
+        anyOfPermissions: ['sparePartsRecall.view', 'sparePartsRecall.create', 'sparePartsRecall.confirm'],
       },
       // استعلام عبر كل المخازن
       { key: 'inv-balances', label: 'أرصدة كل المخازن', icon: 'inventory_2', path: '/inventory/balances', permission: 'inventory.view' },
@@ -382,6 +405,14 @@ export const MENU_CONFIG: MenuGroup[] = [
       {
         key: 'repair-parts-replenishment', label: 'متابعة التموين', icon: 'local_shipping', path: '/repair/parts-replenishment', permission: 'sparePartsReplenishment.view',
         anyOfPermissions: ['sparePartsReplenishment.view', 'sparePartsReplenishment.create', 'sparePartsReplenishment.receive'],
+      },
+      {
+        key: 'repair-parts-recall',
+        label: 'تأكيد سحب للرئيسي',
+        icon: 'keyboard_return',
+        path: '/inventory/spare-parts-recall',
+        permission: 'sparePartsRecall.view',
+        anyOfPermissions: ['sparePartsRecall.view', 'sparePartsRecall.confirm'],
       },
       { key: 'repair-spare-issues', label: 'سندات صرف قطع الغيار', icon: 'assignment_turned_in', path: '/repair/spare-issues', permission: 'repairSpareIssues.view' },
       { key: 'repair-parts-pricing', label: 'تسعير قطع الغيار', icon: 'sell', path: '/repair/parts-pricing', permission: 'repair.pricing.manage' },

@@ -62,9 +62,29 @@ function roleActions(
     case 'spare_parts_central':
       return [
         {
-          label: 'تموين المراكز',
+          label: 'إذن إضافة (وارد)',
+          path: `/inventory/movements?warehouseId=${encodeURIComponent(warehouseId)}&movementType=IN`,
+          description: 'إدخال رصيد وارد للمخزن المركزي',
+        },
+        {
+          label: 'إذن صرف للمراكز (تموين)',
           path: '/inventory/spare-parts-replenishment',
           description: 'اعتماد / تجهيز / موافقة مسؤول على طلبات المراكز',
+        },
+        {
+          label: 'أرصدة المراكز',
+          path: '/inventory/spare-parts-center-stock',
+          description: 'عرض الكمية ومكانها في كل مركز صيانة',
+        },
+        {
+          label: 'سحب من المراكز',
+          path: '/inventory/spare-parts-recall',
+          description: 'طلب إرجاع قطع من مركز إلى الرئيسي',
+        },
+        {
+          label: 'أرصدة أول المدة / الجرد',
+          path: `/inventory/counts?warehouseId=${encodeURIComponent(warehouseId)}`,
+          description: 'جلسات الجرد والاعتماد — أو ارفع أول المدة من أعلى هذه الصفحة',
         },
         {
           label: 'الأرصدة',
@@ -74,7 +94,7 @@ function roleActions(
         {
           label: 'الحركات',
           path: `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}`,
-          description: 'أحدث حركات الصرف للمراكز',
+          description: 'أحدث حركات الصرف والوارد',
         },
       ];
     case 'maintenance_center':
@@ -83,6 +103,11 @@ function roleActions(
           label: 'طلب تموين / الاستلام',
           path: '/repair/parts-replenishment',
           description: 'طلب قطع غيار من المخزن المركزي ثم تأكيد الاستلام',
+        },
+        {
+          label: 'تأكيد سحب للرئيسي',
+          path: '/inventory/spare-parts-recall',
+          description: 'تأكيد طلبات سحب القطع من هذا المركز إلى المخزن الرئيسي',
         },
         {
           label: 'سندات الصرف',
@@ -194,6 +219,16 @@ export const WarehouseWorkspace: React.FC = () => {
   const canViewRepairParts = can('repair.parts.view');
   const canManageParts = can('repair.parts.manage');
   const canManageCounts = can('inventory.counts.manage');
+  const canCreateMovements = can('inventory.transactions.create');
+  const canViewReplenishment =
+    can('sparePartsReplenishment.view')
+    || can('sparePartsReplenishment.prepare')
+    || can('sparePartsReplenishment.approve');
+  const canViewCenterStock =
+    can('sparePartsRecall.view')
+    || can('sparePartsReplenishment.view')
+    || can('inventory.view');
+  const canCreateRecall = can('sparePartsRecall.create');
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
@@ -248,6 +283,7 @@ export const WarehouseWorkspace: React.FC = () => {
       }
 
       const isCenter = isMaintenanceCenterWarehouseRole(wh.warehouseRole);
+      const isCentralSpareParts = wh.warehouseRole === 'spare_parts_central';
       if (!canViewInventory && !(canViewRepairParts && isCenter)) {
         setWarehouse(null);
         setLinkedBranch(null);
@@ -290,7 +326,7 @@ export const WarehouseWorkspace: React.FC = () => {
         branch?.id && isCenter
           ? sparePartsService.listParts(String(branch.id)).catch(() => [] as RepairSparePart[])
           : Promise.resolve([] as RepairSparePart[]),
-        isCenter
+        isCenter || isCentralSpareParts
           ? materialService.getAll().catch(() => [])
           : Promise.resolve([]),
       ]);
@@ -351,16 +387,22 @@ export const WarehouseWorkspace: React.FC = () => {
   );
 
   const isCenterWarehouse = isMaintenanceCenterWarehouseRole(warehouse?.warehouseRole);
+  const isCentralSparePartsWarehouse = warehouse?.warehouseRole === 'spare_parts_central';
   const backPath = isRepairRoute || isCenterWarehouse
     ? '/repair/parts'
-    : '/inventory/warehouses';
+    : isCentralSparePartsWarehouse
+      ? '/inventory/spare-parts-replenishment'
+      : '/inventory/warehouses';
   const backLabel = isRepairRoute || isCenterWarehouse
     ? 'مخزون الفرع'
-    : 'كل المخازن';
+    : isCentralSparePartsWarehouse
+      ? 'تموين قطع الغيار'
+      : 'كل المخازن';
   const canEnterPage = canViewInventory || canViewRepairParts;
   const showAddPart = isCenterWarehouse && canManageParts && Boolean(linkedBranch?.id);
   const showCountImport = canManageCounts;
   const canCenterCreateFromCount = isCenterWarehouse && Boolean(linkedBranch?.id);
+  const canCatalogSeedFromCount = isCentralSparePartsWarehouse && catalogMaterials.length > 0;
 
   const openCreatedCountSession = useCallback(async (sessionId: string | null) => {
     await load();
@@ -471,10 +513,12 @@ export const WarehouseWorkspace: React.FC = () => {
         </Card>
       </div>
 
-      {(showAddPart || showCountImport) ? (
+      {(showAddPart || showCountImport || isCentralSparePartsWarehouse) ? (
         <Card title="تحكم المخزن">
           <p className="text-xs text-[var(--color-text-muted)] mb-3">
-            الإضافة والجرد تتم من هنا مباشرة دون مغادرة مساحة المخزن.
+            {isCentralSparePartsWarehouse
+              ? 'إضافة وارد، صرف تموين للمراكز، متابعة أرصدة المراكز والسحب للرئيسي — من هنا مباشرة.'
+              : 'الإضافة والجرد تتم من هنا مباشرة دون مغادرة مساحة المخزن.'}
           </p>
           <div className="flex flex-wrap gap-2">
             {showAddPart ? (
@@ -487,19 +531,50 @@ export const WarehouseWorkspace: React.FC = () => {
                 إضافة صنف
               </Button>
             ) : null}
+            {isCentralSparePartsWarehouse && canCreateMovements && warehouse.id ? (
+              <Link
+                to={withTenantPath(
+                  tenantSlug,
+                  `/inventory/movements?warehouseId=${encodeURIComponent(warehouse.id)}&movementType=IN`,
+                )}
+              >
+                <Button type="button" variant="primary">إذن إضافة</Button>
+              </Link>
+            ) : null}
+            {isCentralSparePartsWarehouse && canViewReplenishment ? (
+              <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-replenishment')}>
+                <Button type="button" variant="secondary">إذن صرف للمراكز</Button>
+              </Link>
+            ) : null}
+            {isCentralSparePartsWarehouse && canViewCenterStock ? (
+              <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-center-stock')}>
+                <Button type="button" variant="secondary">أرصدة المراكز</Button>
+              </Link>
+            ) : null}
+            {isCentralSparePartsWarehouse && canCreateRecall ? (
+              <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-recall')}>
+                <Button type="button" variant="secondary">سحب من المراكز</Button>
+              </Link>
+            ) : null}
             {showCountImport ? (
               <Button
                 type="button"
                 variant="primary"
                 onClick={() => {
-                  if (countBalances.length === 0 && !canCenterCreateFromCount) {
-                    toast.error('لا توجد أصناف في هذا المخزن لرفع الجرد.');
+                  if (countBalances.length === 0 && !canCenterCreateFromCount && !canCatalogSeedFromCount) {
+                    toast.error(
+                      isCentralSparePartsWarehouse
+                        ? 'لا توجد مواد في الماستر لرفع أرصدة أول المدة.'
+                        : 'لا توجد أصناف في هذا المخزن لرفع الجرد.',
+                    );
                     return;
                   }
                   setCountImportOpen(true);
                 }}
               >
-                رفع جرد Excel
+                {isCentralSparePartsWarehouse || canCenterCreateFromCount
+                  ? 'رفع أرصدة أول المدة'
+                  : 'رفع جرد Excel'}
               </Button>
             ) : null}
           </div>
@@ -675,6 +750,11 @@ export const WarehouseWorkspace: React.FC = () => {
                   existingParts: branchParts,
                   canManageParts,
                 }
+              : undefined
+          }
+          catalogSeed={
+            canCatalogSeedFromCount && !canCenterCreateFromCount
+              ? { catalogMaterials }
               : undefined
           }
           onPartsChanged={setBranchParts}

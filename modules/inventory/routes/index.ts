@@ -18,6 +18,8 @@ const Disassembly = lazyNamed(() => import('../pages/Disassembly'), 'Disassembly
 const SuppliesReceipt = lazyNamed(() => import('../pages/SuppliesReceipt'), 'SuppliesReceipt');
 const DepartmentConsumables = lazyNamed(() => import('../pages/DepartmentConsumables'), 'DepartmentConsumables');
 const SparePartsReplenishment = lazyNamed(() => import('../pages/SparePartsReplenishment'), 'SparePartsReplenishment');
+const SparePartsCenterStock = lazyNamed(() => import('../pages/SparePartsCenterStock'), 'SparePartsCenterStock');
+const SparePartsRecall = lazyNamed(() => import('../pages/SparePartsRecall'), 'SparePartsRecall');
 const WarehouseWorkspace = lazyNamed(() => import('../pages/WarehouseWorkspace'), 'WarehouseWorkspace');
 const ItemCard = lazyNamed(() => import('../pages/ItemCard'), 'ItemCard');
 const InventoryAnalytics = lazyNamed(() => import('../pages/InventoryAnalytics'), 'InventoryAnalytics');
@@ -70,6 +72,18 @@ export const INVENTORY_ROUTES: AppRouteDef[] = [
     path: '/inventory/spare-parts-replenishment',
     permission: 'sparePartsReplenishment.view',
     component: SparePartsReplenishment,
+    skeleton: 'dashboard',
+  },
+  {
+    path: '/inventory/spare-parts-center-stock',
+    permission: 'sparePartsRecall.view',
+    component: SparePartsCenterStock,
+    skeleton: 'dashboard',
+  },
+  {
+    path: '/inventory/spare-parts-recall',
+    permission: 'sparePartsRecall.view',
+    component: SparePartsRecall,
     skeleton: 'dashboard',
   },
   { path: '/inventory/warehouses', permission: 'inventory.view', component: Warehouses },

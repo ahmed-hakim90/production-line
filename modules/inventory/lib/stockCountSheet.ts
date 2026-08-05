@@ -229,7 +229,7 @@ export function parseStockCountSheet(
   const lines = [...existingLines, ...createdBalanceLines];
   if (createCandidates.length > 0) {
     warnings.push(
-      `${createCandidates.length} صنف جديد سيُضاف إلى مخزن المركز من الماستر داتا قبل إنشاء جلسة الجرد.`,
+      `${createCandidates.length} صنف جديد سيُضاف إلى المخزن من الماستر داتا قبل إنشاء جلسة الجرد.`,
     );
   }
   if (countedByItemId.size < balances.length) {

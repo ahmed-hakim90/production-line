@@ -1756,6 +1756,8 @@ export type FirestoreRoleKey =
   | "hr_manager"
   | "accountant"
   | "materials_warehouse"
+  | "spare_parts_central_warehouse"
+  | "maintenance_center_warehouse"
   | "inventory_viewer"
   | "repair_reception"
   | "repair_technician";

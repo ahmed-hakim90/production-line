@@ -24,6 +24,23 @@ const REPAIR_RECEPTION_PERMISSIONS = [
   'repair.dashboard.view',
   'repair.jobs.create',
   'repair.jobs.edit',
+  'repair.jobs.reception',
+  'repair.finance.view',
+  'repair.payments.view',
+  'repair.payments.collect',
+  'repair.discounts.request',
+  'repair.credit.request',
+  'repair.parts.view',
+  'repairSpareIssues.view',
+  'repairSpareIssues.create',
+  'repairSpareIssues.approve',
+  'repairSpareIssues.issue',
+  'sparePartsReplenishment.view',
+  'sparePartsReplenishment.create',
+  'sparePartsReplenishment.receive',
+  'sparePartsRecall.view',
+  'sparePartsRecall.confirm',
+  'inventory.view',
   'customers.view',
   'customers.create',
   'print',
@@ -31,11 +48,8 @@ const REPAIR_RECEPTION_PERMISSIONS = [
 
 const REPAIR_TECHNICIAN_PERMISSIONS = [
   'dashboard.view',
-  'repair.view',
   'repair.jobs.technician',
-  'repair.jobs.edit',
-  'repair.parts.view',
-  'print',
+  'repair.parts.request',
 ];
 
 const FORBIDDEN = [

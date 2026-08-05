@@ -11,9 +11,17 @@ import { MENU_CONFIG, canAccessMenuItem } from '../config/menu.config.ts';
   assert.equal(reception.name, 'استقبال صيانة');
   assert.ok(reception.permissions.includes('repair.jobs.create'));
   assert.ok(reception.permissions.includes('repair.jobs.edit'));
+  assert.ok(reception.permissions.includes('repair.parts.view'));
+  assert.ok(reception.permissions.includes('sparePartsReplenishment.create'));
+  assert.ok(reception.permissions.includes('sparePartsReplenishment.receive'));
+  assert.ok(reception.permissions.includes('sparePartsRecall.confirm'));
+  assert.ok(reception.permissions.includes('repairSpareIssues.issue'));
+  assert.ok(reception.permissions.includes('inventory.view'));
   assert.ok(!reception.permissions.includes('repair.jobs.technician'));
   assert.ok(!reception.permissions.includes('repair.branches.manage'));
   assert.ok(!reception.permissions.includes('repair.callCenter.viewAll'));
+  assert.ok(!reception.permissions.includes('sparePartsRecall.create'));
+  assert.ok(!reception.permissions.includes('sparePartsReplenishment.prepare'));
 }
 
 {

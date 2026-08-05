@@ -1,7 +1,9 @@
 import assert from 'node:assert/strict';
 import {
   isInventoryMenuItemVisibleForWarehouseScope,
+  isRepairCenterPartsMenuVisible,
   isRepairPartsReplenishmentMenuVisible,
+  isRepairSparePartsRecallMenuVisible,
   resolveAccessibleWarehouseRoles,
 } from '../modules/inventory/lib/inventoryMenuVisibility.ts';
 
@@ -177,6 +179,93 @@ assert.equal(
   isRepairPartsReplenishmentMenuVisible({
     accessibleWarehouseRoles: [],
     warehouseScoped: false,
+    userRepairBranchIds: [],
+    canViewAllBranches: false,
+  }),
+  true,
+);
+
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-spare-parts-in',
+    scoped: true,
+    accessibleWarehouseRoles: ['spare_parts_central'],
+  }),
+  true,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-spare-parts-center-stock',
+    scoped: true,
+    accessibleWarehouseRoles: ['spare_parts_central'],
+  }),
+  true,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-spare-parts-recall',
+    scoped: true,
+    accessibleWarehouseRoles: ['spare_parts_central'],
+  }),
+  true,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-spare-parts-recall',
+    scoped: true,
+    accessibleWarehouseRoles: ['maintenance_center'],
+  }),
+  true,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-spare-parts-center-stock',
+    scoped: true,
+    accessibleWarehouseRoles: ['maintenance_center'],
+  }),
+  false,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'inv-department-consumables',
+    scoped: true,
+    accessibleWarehouseRoles: ['spare_parts_central'],
+  }),
+  false,
+);
+
+assert.equal(
+  isRepairCenterPartsMenuVisible({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: true,
+    userRepairBranchIds: [],
+    canViewAllBranches: false,
+  }),
+  false,
+);
+assert.equal(
+  isRepairCenterPartsMenuVisible({
+    accessibleWarehouseRoles: ['maintenance_center'],
+    warehouseScoped: true,
+    userRepairBranchIds: [],
+    canViewAllBranches: false,
+  }),
+  true,
+);
+
+assert.equal(
+  isRepairSparePartsRecallMenuVisible({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: true,
+    userRepairBranchIds: [],
+    canViewAllBranches: false,
+  }),
+  false,
+);
+assert.equal(
+  isRepairSparePartsRecallMenuVisible({
+    accessibleWarehouseRoles: ['maintenance_center'],
+    warehouseScoped: true,
     userRepairBranchIds: [],
     canViewAllBranches: false,
   }),

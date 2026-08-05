@@ -102,8 +102,15 @@ async function main() {
       can: (p) => p === 'employeeDashboard.view' || p === 'inventory.view',
       inventoryWarehouseId: 'wh-1',
     }),
+    'warehouse_manager',
+    'bound warehouse operator lands on warehouse hub even with employeeDashboard.view',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'employeeDashboard.view' || p === 'inventory.view',
+    }),
     'employee',
-    'employee portal still wins over warehouse binding',
+    'unbound employee with only inventory.view still lands on employee portal',
   );
   assert.equal(
     resolvePortalKind({

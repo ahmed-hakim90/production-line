@@ -92,4 +92,19 @@ const opening = parseStockCountSheet(openingBuffer, [], {
 assert.equal(opening.errors.length, 0);
 assert.equal(opening.lines[0]?.countedQty, 12);
 
+// Central spare-parts warehouse: seed stock_items only (no repair spare-part rows).
+const centralOpening = parseStockCountSheet(openingBuffer, [], {
+  allowCreateFromCatalog: true,
+  catalogMaterials: [
+    { id: 'mat-99', code: 'NEW-99', name: 'قطعة جديدة', unit: 'piece', categoryName: 'قطع غيار' },
+  ],
+  existingPartMaterialIds: new Set(['mat-99']),
+});
+assert.deepEqual(centralOpening.errors, []);
+assert.equal(centralOpening.createCandidates.length, 1);
+assert.equal(centralOpening.createCandidates[0]?.needsSparePart, false);
+assert.equal(centralOpening.createCandidates[0]?.needsStockBalance, true);
+assert.equal(centralOpening.createCandidates[0]?.countedQty, 12);
+assert.ok(centralOpening.warnings.some((w) => w.includes('سيُضاف إلى المخزن')));
+
 console.log('repair-financial-stock-count.test.ts passed');

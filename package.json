@@ -29,6 +29,7 @@
     "cleanup:old-line-worker-assignments": "node scripts/cleanup-old-line-worker-assignments.mjs",
     "cleanup:duplicate-roles": "node scripts/cleanup-duplicate-roles.mjs",
     "seed:repair-roles": "node scripts/seed-repair-builtin-roles.mjs",
+    "seed:maintenance-center-warehouse-users": "node scripts/seed-maintenance-center-warehouse-users.mjs",
     "cleanup:duplicate-materials": "node scripts/cleanup-duplicate-materials.mjs",
     "compose:firestore-rules": "node scripts/compose-firestore-rules.mjs",
     "test:rules": "npm run compose:firestore-rules && npx firebase-tools emulators:exec --only firestore \"node tests/firestore.rules.test.mjs\"",

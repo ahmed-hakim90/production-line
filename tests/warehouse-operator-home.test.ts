@@ -13,7 +13,7 @@ assert.equal(
     boundWarehouseId: 'wh-central-sp',
     boundWarehouseRole: 'spare_parts_central',
   }),
-  '/inventory/spare-parts-replenishment',
+  '/inventory/warehouses/wh-central-sp',
 );
 assert.equal(
   resolveWarehouseOperatorHomePath({
@@ -30,7 +30,7 @@ assert.equal(resolveWarehouseOperatorHomePath({}), '/inventory');
 
 assert.equal(
   resolveWarehouseRolePrimaryPath('wh-1', 'spare_parts_central'),
-  '/inventory/spare-parts-replenishment',
+  '/inventory/warehouses/wh-1',
 );
 assert.equal(
   resolveWarehouseRolePrimaryPath('wh-1', 'maintenance_center'),

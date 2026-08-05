@@ -10,6 +10,7 @@ import {
   type StockCountSheetResult,
 } from '../lib/stockCountSheet';
 import { ensureCenterItemsForStockCount } from '../lib/ensureCenterItemsForStockCount';
+import { ensureCatalogBalancesForStockCount } from '../lib/ensureCatalogBalancesForStockCount';
 import { stockService } from '../services/stockService';
 import type { StockItemBalance } from '../types';
 import type { RepairSparePart } from '../../repair/types';
@@ -28,6 +29,10 @@ type Props = {
     existingParts: RepairSparePart[];
     canManageParts: boolean;
   };
+  /** Central / catalog-only: seed zero stock_items from materials master (no repair parts). */
+  catalogSeed?: {
+    catalogMaterials: StockCountCatalogMaterial[];
+  };
   onCreated?: (sessionId: string | null) => void | Promise<void>;
   onPartsChanged?: (parts: RepairSparePart[]) => void;
 };
@@ -42,6 +47,7 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
   warehouseName,
   balances,
   centerCreate,
+  catalogSeed,
   onCreated,
   onPartsChanged,
 }) => {
@@ -52,7 +58,10 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
   const [fileName, setFileName] = useState('');
   const [parsed, setParsed] = useState<StockCountSheetResult | null>(null);
 
-  const allowCreate = Boolean(centerCreate?.branchId);
+  const allowCreate = Boolean(centerCreate?.branchId) || Boolean(catalogSeed);
+  const isOpeningMode = allowCreate;
+  const isCenterMode = Boolean(centerCreate?.branchId);
+  const catalogMaterials = centerCreate?.catalogMaterials || catalogSeed?.catalogMaterials || [];
   const createCount = parsed?.createCandidates.length || 0;
 
   const previewDiffs = useMemo(() => {
@@ -101,8 +110,11 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
       );
       const result = parseStockCountSheet(data, balances, {
         allowCreateFromCatalog: allowCreate,
-        catalogMaterials: centerCreate?.catalogMaterials || [],
-        existingPartMaterialIds,
+        catalogMaterials,
+        // Central catalog seed: treat materials as already "parts" so needsSparePart stays false.
+        existingPartMaterialIds: isCenterMode
+          ? existingPartMaterialIds
+          : new Set(catalogMaterials.map((m) => String(m.id || '').trim()).filter(Boolean)),
       });
       setParsed(result);
       if (result.errors.length) {
@@ -111,7 +123,9 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
         toast.error('لم يتم العثور على كميات فعلية قابلة للاستيراد.');
       } else {
         const createMsg = result.createCandidates.length
-          ? ` · ${result.createCandidates.length} صنف جديد للمركز`
+          ? isCenterMode
+            ? ` · ${result.createCandidates.length} صنف جديد للمركز`
+            : ` · ${result.createCandidates.length} صنف جديد للمخزن`
           : '';
         toast.success(`جاهز للتأكيد: ${result.importedRows} صنف · ${result.changedRows} فرق${createMsg}.`);
       }
@@ -133,30 +147,39 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
     setConfirming(true);
     try {
       if (parsed.createCandidates.length > 0) {
-        if (!centerCreate?.branchId) {
-          throw new Error('لا يمكن إضافة أصناف جديدة خارج مخزن مركز الصيانة.');
-        }
-        const seeded = await ensureCenterItemsForStockCount({
-          warehouseId,
-          warehouseName,
-          branchId: centerCreate.branchId,
-          candidates: parsed.createCandidates,
-          existingParts: centerCreate.existingParts,
-          createdBy: userDisplayName || 'Current User',
-          canManageParts: centerCreate.canManageParts,
-        });
-        onPartsChanged?.(seeded.parts);
-        if (seeded.createdParts > 0 || seeded.createdBalances > 0) {
-          toast.success(
-            `تمت تهيئة ${seeded.createdParts} قطعة و${seeded.createdBalances} رصيد صفر قبل الجرد.`,
-          );
+        if (centerCreate?.branchId) {
+          const seeded = await ensureCenterItemsForStockCount({
+            warehouseId,
+            warehouseName,
+            branchId: centerCreate.branchId,
+            candidates: parsed.createCandidates,
+            existingParts: centerCreate.existingParts,
+            createdBy: userDisplayName || 'Current User',
+            canManageParts: centerCreate.canManageParts,
+          });
+          onPartsChanged?.(seeded.parts);
+          if (seeded.createdParts > 0 || seeded.createdBalances > 0) {
+            toast.success(
+              `تمت تهيئة ${seeded.createdParts} قطعة و${seeded.createdBalances} رصيد صفر قبل الجرد.`,
+            );
+          }
+        } else if (catalogSeed) {
+          const seeded = await ensureCatalogBalancesForStockCount({
+            warehouseId,
+            candidates: parsed.createCandidates,
+          });
+          if (seeded.createdBalances > 0) {
+            toast.success(`تمت تهيئة ${seeded.createdBalances} رصيد صفر قبل الجرد.`);
+          }
+        } else {
+          throw new Error('لا يمكن إضافة أصناف جديدة لهذا المخزن من الملف.');
         }
       }
 
       const sessionId = await stockService.createCountSession({
         warehouseId,
         warehouseName,
-        note: `جرد مرفوع من ${fileName || 'Excel'} — ${parsed.importedRows} صنف`
+        note: `${isOpeningMode ? 'أول مدة' : 'جرد'} مرفوع من ${fileName || 'Excel'} — ${parsed.importedRows} صنف`
           + (parsed.createCandidates.length ? ` · ${parsed.createCandidates.length} جديد` : ''),
         createdBy: userDisplayName || 'Current User',
         lines: parsed.lines,
@@ -177,10 +200,13 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
   };
 
   const canConfirm = Boolean(parsed && parsed.errors.length === 0 && parsed.importedRows > 0);
+  const newLabel = isCenterMode ? 'جديد للمركز' : 'جديد للمخزن';
 
   return (
     <ModalShell
-      title={`رفع جرد Excel — ${warehouseName}`}
+      title={isOpeningMode
+        ? `رفع أرصدة أول المدة — ${warehouseName}`
+        : `رفع جرد Excel — ${warehouseName}`}
       onClose={handleClose}
       maxWidthClassName="max-w-4xl"
       footer={(
@@ -193,13 +219,13 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
             variant="secondary"
             onClick={() =>
               downloadStockCountTemplate(warehouseName, balances, {
-                mode: allowCreate ? 'opening' : 'count',
-                catalogMaterials: centerCreate?.catalogMaterials,
+                mode: isOpeningMode ? 'opening' : 'count',
+                catalogMaterials,
               })
             }
             disabled={confirming}
           >
-            {allowCreate ? 'تنزيل قالب أول المدة' : 'تنزيل القالب'}
+            {isOpeningMode ? 'تنزيل قالب أول المدة' : 'تنزيل القالب'}
           </Button>
           {parsed?.errors.length ? (
             <Button
@@ -222,10 +248,12 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
       )}
     >
       <p className="text-sm text-[var(--color-text-muted)]">
-        {allowCreate ? (
+        {isOpeningMode ? (
           <>
             لأول مدة المخزن: نزّل القالب واملأ <strong>كود الصنف</strong> و<strong>الكمية الافتتاحية</strong> فقط.
-            الاسم للمساعدة. الأكواد تُطابق ماستر داتا المواد وتُضاف للمركز تلقائياً إن لم تكن موجودة.
+            الاسم للمساعدة. الأكواد تُطابق ماستر داتا المواد
+            {isCenterMode ? ' وتُضاف للمركز تلقائياً إن لم تكن موجودة' : ' وتُهيَّأ أرصدة صفرية في المخزن إن لم تكن موجودة'}.
+            {' '}لا يُرحَّل الرصيد إلا بعد اعتماد جلسة الجرد.
           </>
         ) : (
           <>
@@ -242,7 +270,7 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
           accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
           className="block w-full max-w-md text-sm"
           disabled={parsing || confirming || !warehouseId}
-          aria-label="رفع ملف جرد المخزن"
+          aria-label={isOpeningMode ? 'رفع ملف أرصدة أول المدة' : 'رفع ملف جرد المخزن'}
           onChange={(e) => void handleFile(e.target.files?.[0] || null)}
         />
         {parsing ? <span className="text-sm font-bold text-primary">جاري القراءة…</span> : null}
@@ -263,7 +291,7 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
               <div className="font-bold">{parsed.changedRows}</div>
             </div>
             <div className="rounded-lg border border-[var(--color-border)] p-2">
-              <div className="text-xs text-[var(--color-text-muted)]">جديد للمركز</div>
+              <div className="text-xs text-[var(--color-text-muted)]">{isCenterMode ? 'جديد للمركز' : 'جديد للمخزن'}</div>
               <div className="font-bold text-sky-700">{createCount}</div>
             </div>
             <div className="rounded-lg border border-[var(--color-border)] p-2">
@@ -316,7 +344,7 @@ export const ImportStockCountSheetModal: React.FC<Props> = ({
                         <td className={`p-2 tabular-nums font-bold ${diff < 0 ? 'text-rose-700' : 'text-emerald-700'}`}>
                           {fmt(diff)}
                         </td>
-                        <td className="p-2">{isNew ? 'جديد للمركز' : '—'}</td>
+                        <td className="p-2">{isNew ? newLabel : '—'}</td>
                       </tr>
                     );
                   })}

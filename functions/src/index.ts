@@ -45,6 +45,12 @@ import {
   responsibleApproveSparePartsReplenishmentHandler,
 } from './sparePartsReplenishment.js';
 import {
+  cancelSparePartsRecallHandler,
+  confirmSparePartsRecallHandler,
+  createSparePartsRecallHandler,
+  listMaintenanceCenterSpareBalancesHandler,
+} from './sparePartsRecall.js';
+import {
   issuePendingRepairPartUsageHandler,
   requestRepairJobSparePartHandler,
 } from './repairJobSparePartRequest.js';
@@ -2284,6 +2290,26 @@ export const rejectSparePartsReplenishment = onCall(
 export const cancelSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
   cancelSparePartsReplenishmentHandler,
+);
+
+export const listMaintenanceCenterSpareBalances = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  listMaintenanceCenterSpareBalancesHandler,
+);
+
+export const createSparePartsRecall = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  createSparePartsRecallHandler,
+);
+
+export const confirmSparePartsRecall = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  confirmSparePartsRecallHandler,
+);
+
+export const cancelSparePartsRecall = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  cancelSparePartsRecallHandler,
 );
 
 export const requestRepairJobSparePart = onCall(

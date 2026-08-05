@@ -11,78 +11,18 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { userService } from '../../../services/userService';
 import { withTenantPath } from '../../../lib/tenantPaths';
-import type { FirestoreRole, FirestoreRoleKey } from '../../../types';
+import type { FirestoreRole } from '../../../types';
 import {
   fetchCachedPageData,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import {
+  getRoleGroupKey,
+  getVisibleRoleGroups,
+  type VisibleRoleGroup,
+} from '../lib/visibleRoles';
 
 const ROLES_USER_COUNTS_CACHE_KEY = 'system:roles-user-counts';
-
-const DEFAULT_ROLE_KEY_BY_NAME: Record<string, FirestoreRoleKey> = {
-  [normalizeRoleName('مدير النظام')]: 'admin',
-  [normalizeRoleName('مدير المصنع')]: 'factory_manager',
-  [normalizeRoleName('مشرف الصالة')]: 'hall_supervisor',
-  [normalizeRoleName('مشرف')]: 'supervisor',
-  [normalizeRoleName('مدير الموارد البشرية')]: 'hr_manager',
-  [normalizeRoleName('محاسب')]: 'accountant',
-  [normalizeRoleName('مسؤول مخزن المستلزمات')]: 'materials_warehouse',
-  [normalizeRoleName('استقبال صيانة')]: 'repair_reception',
-  [normalizeRoleName('فني صيانة')]: 'repair_technician',
-};
-
-type VisibleRoleGroup = {
-  key: string;
-  role: FirestoreRole;
-  ids: string[];
-};
-
-function normalizeRoleName(value: unknown): string {
-  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
-}
-
-function getBuiltInRoleKey(role: FirestoreRole): FirestoreRoleKey | undefined {
-  return role.roleKey ?? DEFAULT_ROLE_KEY_BY_NAME[normalizeRoleName(role.name)];
-}
-
-function getRoleGroupKey(role: FirestoreRole): string {
-  const builtInRoleKey = getBuiltInRoleKey(role);
-  if (builtInRoleKey) return `default:${builtInRoleKey}`;
-
-  const normalizedName = normalizeRoleName(role.name);
-  return normalizedName ? `custom:${normalizedName}` : `role:${role.id ?? ''}`;
-}
-
-function canonicalRoleScore(role: FirestoreRole): number {
-  const builtInRoleKey = getBuiltInRoleKey(role);
-  if (!builtInRoleKey) return role.id ? 1 : 0;
-
-  const stableDefaultId = role.id?.endsWith(`__${builtInRoleKey}`) ? 4 : 0;
-  const explicitRoleKey = role.roleKey === builtInRoleKey ? 2 : 0;
-  return stableDefaultId + explicitRoleKey + (role.id ? 1 : 0);
-}
-
-function shouldPreferCanonicalRole(candidate: FirestoreRole, current: FirestoreRole): boolean {
-  return canonicalRoleScore(candidate) > canonicalRoleScore(current);
-}
-
-function getVisibleRoleGroups(roles: FirestoreRole[]): VisibleRoleGroup[] {
-  const groups = new Map<string, VisibleRoleGroup>();
-
-  roles.forEach((role) => {
-    const key = getRoleGroupKey(role);
-    const existing = groups.get(key);
-    if (!existing) {
-      groups.set(key, { key, role, ids: role.id ? [role.id] : [] });
-      return;
-    }
-
-    if (role.id && !existing.ids.includes(role.id)) existing.ids.push(role.id);
-    if (shouldPreferCanonicalRole(role, existing.role)) existing.role = role;
-  });
-
-  return Array.from(groups.values());
-}
 
 export const RolesManagement: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();

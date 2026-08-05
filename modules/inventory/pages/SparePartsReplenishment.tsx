@@ -47,6 +47,7 @@ export const SparePartsReplenishment: React.FC = () => {
   const canPrepare = can('sparePartsReplenishment.prepare');
   const canResponsible = can('sparePartsReplenishment.responsibleApprove');
   const canReceive = can('sparePartsReplenishment.receive');
+  const canManageCounts = can('inventory.counts.manage');
 
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -65,6 +66,10 @@ export const SparePartsReplenishment: React.FC = () => {
   const centralWarehouses = useMemo(
     () => warehouses.filter((w) => w.warehouseRole === 'spare_parts_central'),
     [warehouses],
+  );
+  const primaryCentralWarehouseId = useMemo(
+    () => String(fromWarehouseId || centralWarehouses[0]?.id || '').trim(),
+    [fromWarehouseId, centralWarehouses],
   );
   const centerWarehouses = useMemo(
     () => warehouses.filter((w) => w.warehouseRole === 'maintenance_center'),
@@ -223,11 +228,29 @@ export const SparePartsReplenishment: React.FC = () => {
         title="تموين قطع الغيار للمراكز"
         subtitle="طلب من المركز → اعتماد → تجهيز → موافقة المسؤول → تأكيد الاستلام (دخول الرصيد عند الاستلام فقط). التسعير من ماستر المكونات مركزياً."
         actions={
-          canCreate ? (
-            <Button type="button" onClick={() => setShowCreate((v) => !v)}>
-              {showCreate ? 'إخفاء النموذج' : 'طلب تموين جديد'}
-            </Button>
-          ) : undefined
+          (canManageCounts && primaryCentralWarehouseId) || canCreate
+            ? (
+              <div className="flex flex-wrap items-center gap-2">
+                {canManageCounts && primaryCentralWarehouseId ? (
+                  <Link
+                    to={withTenantPath(
+                      tenantSlug,
+                      `/inventory/warehouses/${encodeURIComponent(primaryCentralWarehouseId)}`,
+                    )}
+                  >
+                    <Button type="button" variant="secondary">
+                      رفع أرصدة أول المدة
+                    </Button>
+                  </Link>
+                ) : null}
+                {canCreate ? (
+                  <Button type="button" onClick={() => setShowCreate((v) => !v)}>
+                    {showCreate ? 'إخفاء النموذج' : 'طلب تموين جديد'}
+                  </Button>
+                ) : null}
+              </div>
+            )
+            : undefined
         }
       />
 

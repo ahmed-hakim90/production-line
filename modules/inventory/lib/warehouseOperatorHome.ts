@@ -18,7 +18,7 @@ export function resolveWarehouseOperatorHomePath(input: {
       return repairCenterWarehouseMenuPath(boundId);
     }
     if (role === 'spare_parts_central') {
-      return '/inventory/spare-parts-replenishment';
+      return `/inventory/warehouses/${boundId}`;
     }
     return `/inventory/warehouses/${boundId}`;
   }
@@ -37,7 +37,7 @@ export function resolveWarehouseRolePrimaryPath(
   if (!id) return '/inventory';
   switch (role) {
     case 'spare_parts_central':
-      return `/inventory/spare-parts-replenishment`;
+      return `/inventory/warehouses/${id}`;
     case 'maintenance_center':
       return '/repair/parts-replenishment';
     case 'raw_material':

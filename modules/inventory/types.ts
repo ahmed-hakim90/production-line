@@ -931,3 +931,56 @@ export interface SparePartsReplenishmentRequest {
   tenantId?: string;
 }
 
+/** سحب قطع غيار من مركز صيانة إلى المخزن المركزي. */
+export type SparePartsRecallStatus = 'submitted' | 'confirmed' | 'cancelled';
+
+export interface SparePartsRecallLine {
+  lineId: string;
+  itemType: 'material';
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  requestedQty: number;
+  confirmedQty?: number;
+  unitCostSnapshot: number;
+  totalCostSnapshot: number;
+}
+
+export interface SparePartsRecallRequest {
+  id?: string;
+  referenceNo: string;
+  status: SparePartsRecallStatus;
+  /** مخزن المركز (مصدر السحب) */
+  fromWarehouseId: string;
+  fromWarehouseName: string;
+  /** المخزن المركزي (وجهة السحب) */
+  toWarehouseId: string;
+  toWarehouseName: string;
+  lines: SparePartsRecallLine[];
+  note?: string;
+  totalCostSnapshot?: number;
+  createdBy: string;
+  createdByUserId?: string;
+  createdAt: string;
+  confirmedAt?: string;
+  confirmedBy?: string;
+  confirmedByUserId?: string;
+  cancelledAt?: string;
+  cancelledBy?: string;
+  cancelledByUserId?: string;
+  tenantId?: string;
+}
+
+export interface MaintenanceCenterSpareBalanceRow {
+  warehouseId: string;
+  warehouseName: string;
+  itemType: string;
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  quantity: number;
+  minStock: number;
+}
+

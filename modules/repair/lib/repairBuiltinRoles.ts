@@ -3,6 +3,8 @@ import type { Permission } from '../../../utils/permissions';
 /**
  * Built-in repair front-desk role — branch-scoped via users.repairBranchIds.
  * Intentionally has create+edit without technician/admin flags so workshop UI stays locked.
+ * Reception also operates the center spare-parts stock (طلب تموين / استلام / تأكيد سحب / صرف)
+ * because centers do not have a separate warehouse operator.
  */
 export const REPAIR_RECEPTION_PERMISSIONS: readonly Permission[] = [
   'dashboard.view',
@@ -16,6 +18,17 @@ export const REPAIR_RECEPTION_PERMISSIONS: readonly Permission[] = [
   'repair.payments.collect',
   'repair.discounts.request',
   'repair.credit.request',
+  'repair.parts.view',
+  'repairSpareIssues.view',
+  'repairSpareIssues.create',
+  'repairSpareIssues.approve',
+  'repairSpareIssues.issue',
+  'sparePartsReplenishment.view',
+  'sparePartsReplenishment.create',
+  'sparePartsReplenishment.receive',
+  'sparePartsRecall.view',
+  'sparePartsRecall.confirm',
+  'inventory.view',
   'customers.view',
   'customers.create',
   'print',

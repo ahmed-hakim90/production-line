@@ -70,6 +70,7 @@ export const TENANT_SCOPED_COLLECTIONS: readonly string[] = [
   'supplies_receipt_orders',
   'department_consumable_issues',
   'spare_parts_replenishment_requests',
+  'spare_parts_recall_requests',
   'repair_spare_issues',
   'inventory_exceptions',
   'stock_daily_summaries',

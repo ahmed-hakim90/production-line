@@ -58,11 +58,21 @@ const MENU_KEYS_BY_WAREHOUSE_ROLE: Record<WarehouseRole, readonly string[]> = {
   ],
   waste: [...SCOPED_SHARED_MENU_KEYS],
   spare_parts_central: [
-    ...SCOPED_SHARED_MENU_KEYS,
+    'inv-dashboard',
+    'inv-balances',
+    'inv-item-card',
+    'inv-transactions',
+    'inv-locations',
+    'inv-counts',
     'inv-spare-parts-replenishment',
+    'inv-spare-parts-in',
+    'inv-spare-parts-center-stock',
+    'inv-spare-parts-recall',
   ],
   maintenance_center: [
     ...SCOPED_SHARED_MENU_KEYS,
+    // Confirm path also lives under الصيانة (repair-parts-recall); inventory key is a backup.
+    'inv-spare-parts-recall',
   ],
   general: [...SCOPED_SHARED_MENU_KEYS],
 };
@@ -141,4 +151,42 @@ export function isRepairPartsReplenishmentMenuVisible(input: {
   }
 
   return true;
+}
+
+/** Hide center-only repair stock screens from central spare-parts operators. */
+export function isRepairCenterPartsMenuVisible(input: {
+  accessibleWarehouseRoles: readonly (WarehouseRole | string)[];
+  warehouseScoped: boolean;
+  userRepairBranchIds: readonly string[];
+  canViewAllBranches: boolean;
+}): boolean {
+  if (input.canViewAllBranches) return true;
+  if ((input.userRepairBranchIds || []).some((id) => Boolean(String(id || '').trim()))) {
+    return true;
+  }
+  const roles = (input.accessibleWarehouseRoles || []).map(
+    (role) => (role || 'general') as WarehouseRole,
+  );
+  if (roles.includes('maintenance_center')) return true;
+  if (
+    input.warehouseScoped
+    && roles.length > 0
+    && roles.every((role) => role === 'spare_parts_central')
+  ) {
+    return false;
+  }
+  return true;
+}
+
+/**
+ * «تأكيد سحب للرئيسي» under الصيانة is for maintenance centers.
+ * Central operators use inventory «سحب من المراكز» instead.
+ */
+export function isRepairSparePartsRecallMenuVisible(input: {
+  accessibleWarehouseRoles: readonly (WarehouseRole | string)[];
+  warehouseScoped: boolean;
+  userRepairBranchIds: readonly string[];
+  canViewAllBranches: boolean;
+}): boolean {
+  return isRepairPartsReplenishmentMenuVisible(input);
 }

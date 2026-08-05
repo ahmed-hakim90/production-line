@@ -25,7 +25,9 @@ import { WAREHOUSE_ROLE_LABELS } from '@/modules/inventory/lib/stockLabels';
 import { useMaterialsWarehouseScope } from '@/modules/inventory/hooks/useMaterialsWarehouseScope';
 import {
   isInventoryMenuItemVisibleForWarehouseScope,
+  isRepairCenterPartsMenuVisible,
   isRepairPartsReplenishmentMenuVisible,
+  isRepairSparePartsRecallMenuVisible,
   resolveAccessibleWarehouseRoles,
 } from '@/modules/inventory/lib/inventoryMenuVisibility';
 import type { WarehouseRole } from '@/modules/inventory/types';
@@ -292,6 +294,26 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             && (
               i.key !== 'repair-parts-replenishment'
               || isRepairPartsReplenishmentMenuVisible({
+                accessibleWarehouseRoles,
+                warehouseScoped,
+                userRepairBranchIds: resolveUserRepairBranchIds(userProfile),
+                canViewAllBranches:
+                  repairAccess.canViewAllBranches || repairAccess.adminSeesAllBranches,
+              })
+            )
+            && (
+              i.key !== 'repair-parts-recall'
+              || isRepairSparePartsRecallMenuVisible({
+                accessibleWarehouseRoles,
+                warehouseScoped,
+                userRepairBranchIds: resolveUserRepairBranchIds(userProfile),
+                canViewAllBranches:
+                  repairAccess.canViewAllBranches || repairAccess.adminSeesAllBranches,
+              })
+            )
+            && (
+              (i.key !== 'repair-parts' && i.key !== 'repair-spare-issues')
+              || isRepairCenterPartsMenuVisible({
                 accessibleWarehouseRoles,
                 warehouseScoped,
                 userRepairBranchIds: resolveUserRepairBranchIds(userProfile),

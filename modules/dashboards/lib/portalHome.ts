@@ -26,20 +26,38 @@ export function isRepairTechnicianPortal(checker: PortalPermissionChecker): bool
   return true;
 }
 
+function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
+  // Center front-desk / tech stay on repair portals even when bound to a maintenance_center warehouse
+  // and granted spare-parts receive/confirm (reception runs the center stock — no separate warehouse role).
+  if (checker.roleKey === 'repair_reception' || checker.roleKey === 'repair_technician') {
+    return false;
+  }
+  const boundWarehouse = Boolean(String(checker.inventoryWarehouseId || '').trim());
+  const warehouseRoleKey = checker.roleKey === 'materials_warehouse'
+    || checker.roleKey === 'inventory_viewer'
+    || checker.roleKey === 'spare_parts_central_warehouse'
+    || checker.roleKey === 'maintenance_center_warehouse';
+  if (warehouseRoleKey) return checker.can('inventory.view') || hasPrivilegedInventoryAccess(checker);
+  if (!boundWarehouse) {
+    return checker.can('inventory.view') && hasPrivilegedInventoryAccess(checker);
+  }
+  // Bound warehouse operators (e.g. central spare parts) land on warehouse hub
+  // even when employeeDashboard.view is also granted on a custom role.
+  return (
+    checker.can('inventory.view')
+    || hasPrivilegedInventoryAccess(checker)
+    || checker.can('sparePartsReplenishment.view')
+    || checker.can('sparePartsRecall.view')
+  );
+}
+
 export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind {
   if (checker.can('adminDashboard.view')) return 'admin';
   if (checker.can('factoryDashboard.view')) return 'factory_manager';
-  if (checker.can('employeeDashboard.view')) return 'employee';
 
-  const boundWarehouse = Boolean(String(checker.inventoryWarehouseId || '').trim());
-  const warehouseRoleKey = checker.roleKey === 'materials_warehouse'
-    || checker.roleKey === 'inventory_viewer';
-  if (
-    checker.can('inventory.view')
-    && (warehouseRoleKey || boundWarehouse || hasPrivilegedInventoryAccess(checker))
-  ) {
-    return 'warehouse_manager';
-  }
+  if (isWarehouseOperatorPortal(checker)) return 'warehouse_manager';
+
+  if (checker.can('employeeDashboard.view')) return 'employee';
 
   if (isRepairTechnicianPortal(checker)) return 'repair_technician';
 

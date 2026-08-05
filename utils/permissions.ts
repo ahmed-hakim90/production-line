@@ -35,6 +35,7 @@ export type Permission =
   | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.locations.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove' | 'inventory.disassembly.manage'
   | 'departmentConsumables.view' | 'departmentConsumables.create' | 'departmentConsumables.approve' | 'departmentConsumables.issue' | 'departmentConsumables.export'
   | 'sparePartsReplenishment.view' | 'sparePartsReplenishment.create' | 'sparePartsReplenishment.approve' | 'sparePartsReplenishment.prepare' | 'sparePartsReplenishment.responsibleApprove' | 'sparePartsReplenishment.receive'
+  | 'sparePartsRecall.view' | 'sparePartsRecall.create' | 'sparePartsRecall.confirm' | 'sparePartsRecall.cancel'
   | 'repairSpareIssues.view' | 'repairSpareIssues.create' | 'repairSpareIssues.approve' | 'repairSpareIssues.issue'
   | 'productionIssue.create' | 'productionIssue.request' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
   | 'productionHandover.approve'
@@ -252,6 +253,10 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'sparePartsReplenishment.prepare', label: 'تجهيز طلب تموين قطع الغيار' },
       { key: 'sparePartsReplenishment.responsibleApprove', label: 'موافقة المسؤول على تموين قطع الغيار' },
       { key: 'sparePartsReplenishment.receive', label: 'تأكيد استلام تموين قطع الغيار بالمركز' },
+      { key: 'sparePartsRecall.view', label: 'عرض سحب قطع الغيار من المراكز' },
+      { key: 'sparePartsRecall.create', label: 'إنشاء طلب سحب من مركز إلى الرئيسي' },
+      { key: 'sparePartsRecall.confirm', label: 'تأكيد تسليم سحب قطع الغيار من المركز' },
+      { key: 'sparePartsRecall.cancel', label: 'إلغاء طلب سحب قطع الغيار' },
     ],
   },
   {
@@ -566,6 +571,32 @@ export function checkPermission(
   if (permission === 'sparePartsReplenishment.receive') {
     return (
       permissions['inventory.transactions.create'] === true
+      || permissions['inventory.transfers.approve'] === true
+    );
+  }
+  if (permission === 'sparePartsRecall.view') {
+    return (
+      permissions['sparePartsReplenishment.view'] === true
+      || permissions['inventory.view'] === true
+    );
+  }
+  if (permission === 'sparePartsRecall.create') {
+    return (
+      permissions['sparePartsReplenishment.prepare'] === true
+      || permissions['inventory.transactions.create'] === true
+    );
+  }
+  if (permission === 'sparePartsRecall.confirm') {
+    return (
+      permissions['sparePartsReplenishment.receive'] === true
+      || permissions['inventory.transactions.create'] === true
+      || permissions['inventory.transfers.approve'] === true
+    );
+  }
+  if (permission === 'sparePartsRecall.cancel') {
+    return (
+      permissions['sparePartsRecall.create'] === true
+      || permissions['sparePartsReplenishment.approve'] === true
       || permissions['inventory.transfers.approve'] === true
     );
   }
