@@ -18,9 +18,20 @@ export function useLowStockAlert(branchId?: string) {
 
   useEffect(() => {
     if (!branchId) return;
-    void sparePartsService.listParts(branchId).then(setParts);
-    void sparePartsService.listStock(branchId).then(setStock);
+    let cancelled = false;
+
+    void sparePartsService.listParts(branchId).then((rows) => {
+      if (!cancelled) setParts(rows);
+    }).catch(() => {
+      if (!cancelled) setParts([]);
+    });
+    void sparePartsService.listStock(branchId).then((rows) => {
+      if (!cancelled) setStock(rows);
+    }).catch(() => {
+      if (!cancelled) setStock([]);
+    });
     void sparePartsService.listActiveReservationsForBranch(branchId).then((rows) => {
+      if (cancelled) return;
       const m: Record<string, number> = {};
       rows.forEach((r) => {
         const pid = String(r.partId || '').trim();
@@ -28,7 +39,13 @@ export function useLowStockAlert(branchId?: string) {
         m[pid] = (m[pid] || 0) + Number(r.quantity || 0);
       });
       setReservedByPart(m);
+    }).catch(() => {
+      if (!cancelled) setReservedByPart({});
     });
+
+    return () => {
+      cancelled = true;
+    };
   }, [branchId]);
 
   const lowStockEntries = useMemo<LowStockEntry[]>(() => {

@@ -10,6 +10,7 @@ import {
   buildSupervisorHourlyRatesMap,
   getByQtyEffectiveMonthlyAmount,
   getWorkingDaysForMonth,
+  isProductionAllocationCostCenter,
 } from '../../../utils/costCalculations';
 import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
 import { reportService } from '../../production/services/reportService';
@@ -186,7 +187,52 @@ export const CostDataHealth: React.FC = () => {
       }
     });
 
-    const activeIndirectCenters = costCenters.filter((center) => center.type === 'indirect' && center.isActive);
+    const productionReportsForCost = monthReports.filter((report) => (
+      (report.reportType || 'finished_product') === 'finished_product'
+      && Number(report.quantityProduced || 0) > 0
+    ));
+    const failedFullCostReports = productionReportsForCost.filter(
+      (report) => report.manufacturingCostPostingState === 'failed',
+    );
+    const missingFullCostReports = productionReportsForCost.filter(
+      (report) => Number(report.fullManufacturingCostSnapshot || 0) <= 0
+        && report.manufacturingCostPostingState !== 'failed',
+    );
+    const missingSourceAmountReports = productionReportsForCost.filter(
+      (report) => Number(report.manufacturingCostSourceQualitySnapshot?.missingAmountLines || 0) > 0,
+    );
+    if (failedFullCostReports.length > 0) {
+      addIssue({
+        id: 'full-cost-posting-failed',
+        type: 'calc',
+        severity: 'critical',
+        title: 'تقارير فشل تجهيز تكلفتها الكاملة',
+        description: `يوجد ${failedFullCostReports.length} تقرير إنتاج في حالة فشل تكلفة التصنيع الكاملة.`,
+        recommendation: 'راجع رسالة الخطأ داخل تبويب التكلفة ثم أعد حساب التقارير بعد استكمال الإعدادات.',
+      });
+    }
+    if (missingFullCostReports.length > 0) {
+      addIssue({
+        id: 'full-cost-snapshot-missing',
+        type: 'calc',
+        severity: 'high',
+        title: 'تقارير لم تُرحّل إلى التكلفة الكاملة بعد',
+        description: `يوجد ${missingFullCostReports.length} تقرير إنتاج بالمنطق القديم فقط خلال ${month}.`,
+        recommendation: 'شغّل ترحيل التكلفة التجريبي للتقارير المفتوحة ولا تعدّل الفترات المقفلة.',
+      });
+    }
+    if (missingSourceAmountReports.length > 0) {
+      addIssue({
+        id: 'full-cost-source-price-missing',
+        type: 'calc',
+        severity: 'high',
+        title: 'مصادر خامات بدون تكلفة معروفة',
+        description: `يوجد ${missingSourceAmountReports.length} تقرير يحتوي بند تكلفة بصفر أو خامة غير مسعرة.`,
+        recommendation: 'راجع سعر شراء الخامة أو طبقة تقييم الصرف قبل اعتماد التكلفة الفعلية.',
+      });
+    }
+
+    const activeIndirectCenters = costCenters.filter(isProductionAllocationCostCenter);
     activeIndirectCenters.forEach((center) => {
       const centerId = String(center.id || '');
       if (!centerId) return;
@@ -503,6 +549,18 @@ export const CostDataHealth: React.FC = () => {
   const highCount = healthIssues.filter((issue) => issue.severity === 'high').length;
   const mediumCount = healthIssues.filter((issue) => issue.severity === 'medium').length;
   const passChecks = healthIssues.length === 0;
+  const costableReportsCount = monthReports.filter((report) => (
+    (report.reportType || 'finished_product') === 'finished_product'
+    && Number(report.quantityProduced || 0) > 0
+  )).length;
+  const fullCostReportsCount = monthReports.filter((report) => (
+    (report.reportType || 'finished_product') === 'finished_product'
+    && Number(report.quantityProduced || 0) > 0
+    && Number(report.fullManufacturingCostSnapshot || 0) > 0
+  )).length;
+  const fullCostCoverage = costableReportsCount > 0
+    ? Math.round((fullCostReportsCount / costableReportsCount) * 100)
+    : 100;
 
   const activeFiltersCount = Number(Boolean(search)) + Number(Boolean(severityFilter)) + Number(Boolean(typeFilter));
 
@@ -514,7 +572,7 @@ export const CostDataHealth: React.FC = () => {
         icon="verified_user"
       />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         <KPIBox
           label="حالة الشهر"
           value={passChecks ? 'سليم' : 'يحتاج مراجعة'}
@@ -524,6 +582,7 @@ export const CostDataHealth: React.FC = () => {
         <KPIBox label="مشاكل حرجة" value={criticalCount} icon="priority_high" colorClass="bg-red-500/10 text-red-600" />
         <KPIBox label="مشاكل مرتفعة" value={highCount} icon="report_problem" colorClass="bg-amber-500/10 text-amber-600" />
         <KPIBox label="مشاكل متوسطة" value={mediumCount} icon="info" colorClass="bg-blue-500/10 text-blue-600" />
+        <KPIBox label="تغطية التكلفة الكاملة" value={`${fullCostCoverage}%`} icon="price_check" colorClass={fullCostCoverage === 100 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-violet-500/10 text-violet-600'} />
       </div>
 
       <SmartFilterBar
@@ -635,4 +694,3 @@ export const CostDataHealth: React.FC = () => {
     </div>
   );
 };
-

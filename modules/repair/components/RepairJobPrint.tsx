@@ -3,13 +3,10 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
-import { resolveRepairJobPrintProducts } from '../lib/repairJobPrint';
-import {
-  REPAIR_JOB_STATUS_LABELS,
-  type RepairBranch,
-  type RepairJob,
-  type RepairJobProduct,
-} from '../types';
+import { resolveRepairJobPrintProducts, type RepairPrintStatusMap } from '../lib/repairJobPrint';
+import { shouldShowRepairPrintCosts } from '../lib/repairJobIntake';
+import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
+import type { RepairBranch, RepairJob, RepairJobProduct } from '../types';
 
 export type RepairJobPrintProps = {
   job: RepairJob | null;
@@ -17,6 +14,7 @@ export type RepairJobPrintProps = {
   products?: RepairJobProduct[];
   trackUrl?: string;
   printSettings?: PrintTemplateSettings;
+  statusMap?: RepairPrintStatusMap;
 };
 
 const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
@@ -38,7 +36,7 @@ const money = (value: number | undefined | null) => {
 };
 
 export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintProps>(
-  function RepairJobPrint({ job, branch, products, trackUrl, printSettings }, ref) {
+  function RepairJobPrint({ job, branch, products, trackUrl, printSettings, statusMap }, ref) {
     if (!job) return <div ref={ref} />;
 
     const ps = { ...DEFAULT_PRINT_TEMPLATE, ...printSettings };
@@ -48,12 +46,12 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
     const rows = resolveRepairJobPrintProducts(job, products);
     const createdAt = job.createdAt ? new Date(job.createdAt).toLocaleString('ar-EG') : '—';
     const printedAt = new Date().toLocaleString('ar-EG');
-    const statusLabel = REPAIR_JOB_STATUS_LABELS[job.status] || job.status;
+    const statusChip = resolveRepairStatusChip(job.status, statusMap);
     const warrantyLabel = WARRANTY_LABELS[job.warranty] || job.warranty || '—';
     const parts = Array.isArray(job.partsUsed) ? job.partsUsed : [];
     // Repair intake slips always include track QR when a public URL exists.
     const showQr = Boolean(trackUrl);
-    const showCosts = ps.showCosts !== false;
+    const showCosts = ps.showCosts !== false && shouldShowRepairPrintCosts(job, products);
 
     const thStyle: React.CSSProperties = {
       border: `1px solid ${ps.primaryColor}`,
@@ -142,7 +140,9 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
               </h1>
             </div>
             <div style={{ flex: 1.2, textAlign: 'center' }}>
-              <p style={{ margin: 0, fontSize: isThermal ? '10pt' : '14pt', fontWeight: 900 }}>طلب صيانة</p>
+              <p style={{ margin: 0, fontSize: isThermal ? '10pt' : '14pt', fontWeight: 900 }}>
+                {showCosts ? 'طلب صيانة' : 'إيصال استلام قطعة صيانة'}
+              </p>
               <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '9pt', color: palette.mutedText, fontWeight: 700 }}>
                 {branch?.name || '—'}
               </p>
@@ -176,7 +176,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           >
             {[
               { label: 'تاريخ الإنشاء', value: createdAt },
-              { label: 'الحالة', value: statusLabel },
+              { label: 'الحالة', value: statusChip.label, emphasize: true },
               { label: 'عدد المنتجات', value: String(rows.length) },
               { label: 'تاريخ الطباعة', value: printedAt },
             ].map((cell, idx, arr) => (
@@ -190,9 +190,29 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                 <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', fontWeight: 700, color: palette.mutedText }}>
                   {cell.label}
                 </p>
-                <p style={{ margin: '0.5mm 0 0', fontSize: isThermal ? '8pt' : '10pt', fontWeight: 900 }}>
-                  {cell.value}
-                </p>
+                {cell.emphasize ? (
+                  <p
+                    style={{
+                      margin: '1mm 0 0',
+                      display: 'inline-block',
+                      padding: isThermal ? '0.8mm 1.5mm' : '1mm 2.5mm',
+                      borderRadius: '1.5mm',
+                      border: `1.5px solid ${statusChip.style.borderColor}`,
+                      background: statusChip.style.backgroundColor,
+                      color: statusChip.style.color,
+                      fontSize: isThermal ? '8pt' : '10pt',
+                      fontWeight: 900,
+                      WebkitPrintColorAdjust: 'exact',
+                      printColorAdjust: 'exact',
+                    }}
+                  >
+                    {cell.value}
+                  </p>
+                ) : (
+                  <p style={{ margin: '0.5mm 0 0', fontSize: isThermal ? '8pt' : '10pt', fontWeight: 900 }}>
+                    {cell.value}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -237,7 +257,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
               <th style={{ ...thStyle, width: '14%' }}>السيريال</th>
               <th style={{ ...thStyle, width: '8%' }}>الكمية</th>
               <th style={{ ...thStyle, width: '16%' }}>الإكسسوارات</th>
-              <th style={{ ...thStyle, width: '18%' }}>التشخيص</th>
+              <th style={{ ...thStyle, width: '18%' }}>وصف العطل</th>
               {showCosts ? <th style={{ ...thStyle, width: '12%' }}>خدمات</th> : null}
             </tr>
           </thead>
@@ -254,7 +274,14 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                 <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{item.serialNo || '—'}</td>
                 <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>{Math.max(1, Number(item.quantity || 1))}</td>
                 <td style={tdStyle}>{item.accessories || '—'}</td>
-                <td style={tdStyle}>{item.diagnosis || '—'}</td>
+                <td style={tdStyle}>
+                  {item.diagnosis || '—'}
+                  {item.technicianDiagnosis ? (
+                    <div style={{ marginTop: 4, fontSize: '8pt', color: palette.mutedText }}>
+                      فني: {item.technicianDiagnosis}
+                    </div>
+                  ) : null}
+                </td>
                 {showCosts ? (
                   <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>
                     {item.inWarranty ? 'مجاني' : money(item.finalCost)}
@@ -325,7 +352,10 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
             توقيع الموظف
           </div>
           <div style={{ borderTop: `1px solid ${palette.border}`, paddingTop: '2mm', textAlign: 'center', fontWeight: 700 }}>
-            توقيع العميل
+            <div>توقيع العميل</div>
+            <div style={{ fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText, fontWeight: 700, marginTop: '1mm' }}>
+              أقرّ باستلام المركز للقطعة بالتفاصيل أعلاه
+            </div>
           </div>
           {showQr && trackUrl ? (
             <div style={{ textAlign: 'center' }}>

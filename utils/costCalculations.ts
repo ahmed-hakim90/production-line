@@ -88,6 +88,22 @@ export const buildActiveReportDaysByLineMonthMap = (
 
 export type CostCenterProductScope = NonNullable<CostCenter['productScope']>;
 
+/**
+ * Legacy production centers have no scope/mode. New repair/admin/collect-only
+ * centers are excluded unless they are explicitly shared with production.
+ */
+export const isProductionAllocationCostCenter = (center: CostCenter): boolean => {
+  if (!center.isActive || !center.id || center.type !== 'indirect') return false;
+  if (center.postingMode && center.postingMode !== 'driver_allocation') return false;
+  if (center.costObjectScope && !['production', 'shared'].includes(center.costObjectScope)) return false;
+  if (
+    !center.costObjectScope
+    && center.accountingCategory
+    && center.accountingCategory !== 'production'
+  ) return false;
+  return true;
+};
+
 export interface ByQtyAllocationRule {
   costCenterId: string;
   costCenterName: string;
@@ -154,9 +170,7 @@ export const buildByQtyAllocationRulesForMonth = (
   const allProductIds = Array.from(monthTotals.keys());
   const monthActiveDays = monthDates.size;
 
-  const activeIndirectCenters = costCenters.filter(
-    (center) => center.type === 'indirect' && center.isActive && center.id,
-  );
+  const activeIndirectCenters = costCenters.filter(isProductionAllocationCostCenter);
 
   return activeIndirectCenters
     .filter((center) => (center.allocationBasis || 'line_percentage') === 'by_qty')
@@ -214,7 +228,7 @@ export const calculateDailyIndirectCost = (
   let totalDaily = 0;
 
   const indirectCenters = costCenters.filter(
-    (c) => c.type === 'indirect' && c.isActive && (c.allocationBasis || 'line_percentage') === 'line_percentage'
+    (c) => isProductionAllocationCostCenter(c) && (c.allocationBasis || 'line_percentage') === 'line_percentage'
   );
 
   for (const center of indirectCenters) {
@@ -308,9 +322,7 @@ export const buildLineAllocatedCostSummary = (
 
   for (const center of costCenters) {
     if (
-      center.type !== 'indirect'
-      || !center.isActive
-      || !center.id
+      !isProductionAllocationCostCenter(center)
       || (center.allocationBasis || 'line_percentage') !== 'line_percentage'
     ) continue;
 
@@ -525,7 +537,7 @@ export const computeProductionCostEngine = ({
     });
   }
 
-  const activeIndirectCenters = costCenters.filter((center) => center.type === 'indirect' && center.isActive && center.id);
+  const activeIndirectCenters = costCenters.filter(isProductionAllocationCostCenter);
   const monthsInScope = new Set<string>();
   reports.forEach((report) => {
     const month = String(report.date?.slice(0, 7) || '');
@@ -934,6 +946,8 @@ function ensureLineMonthIndirectCached(
   costCenters: CostCenter[],
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[],
+  assets: Asset[] = [],
+  assetDepreciations: AssetDepreciation[] = [],
   workingDaysByMonth?: Record<string, number>,
   activeReportDaysByLineMonth?: Map<string, number>,
 ): void {
@@ -947,8 +961,8 @@ function ensureLineMonthIndirectCached(
         costCenters,
         costCenterValues,
         costAllocations,
-        [],
-        [],
+        assets,
+        assetDepreciations,
         workingDaysByMonth,
         activeReportDaysByLineMonth,
       ),
@@ -966,6 +980,8 @@ function computeReportCostParts(
   costCenters: CostCenter[],
   costCenterValues: CostCenterValue[],
   costAllocations: CostAllocation[],
+  assets: Asset[] = [],
+  assetDepreciations: AssetDepreciation[] = [],
   workingDaysByMonth?: Record<string, number>,
   activeReportDaysByLineMonth?: Map<string, number>,
   byQtyRulesByMonth?: Map<string, ByQtyAllocationRule[]>,
@@ -984,6 +1000,8 @@ function computeReportCostParts(
     costCenters,
     costCenterValues,
     costAllocations,
+    assets,
+    assetDepreciations,
     workingDaysByMonth,
     activeReportDaysByLineMonth,
   );
@@ -1079,6 +1097,8 @@ export const buildByQtyRulesByMonthFromReports = (
   costAllocations: CostAllocation[],
   workingDaysByMonth?: Record<string, number>,
   productCategoryById?: Map<string, string>,
+  assets: Asset[] = [],
+  assetDepreciations: AssetDepreciation[] = [],
 ): Map<string, ByQtyAllocationRule[]> => {
   const months = new Set<string>();
   reports.forEach((r) => {
@@ -1092,6 +1112,8 @@ export const buildByQtyRulesByMonthFromReports = (
       buildByQtyAllocationRulesForMonth(month, reports, costCenters, costCenterValues, costAllocations, {
         workingDaysByMonth,
         productCategoryById,
+        assets,
+        assetDepreciations,
       }),
     );
   });
@@ -1111,6 +1133,8 @@ export const getProductionReportCostBreakdown = (
   supervisorHourlyRates?: Map<string, number>,
   workingDaysByMonth?: Record<string, number>,
   productCategoryById?: Map<string, string>,
+  assets: Asset[] = [],
+  assetDepreciations: AssetDepreciation[] = [],
 ): ProductionReportCostBreakdown | null => {
   if (hourlyRate <= 0 && costCenters.length === 0) return null;
   if (!countsTowardProductManufacturingVolume(report)) return null;
@@ -1124,6 +1148,8 @@ export const getProductionReportCostBreakdown = (
     costAllocations,
     workingDaysByMonth,
     productCategoryById,
+    assets,
+    assetDepreciations,
   );
 
   const lineDateQtyTotals = new Map<string, number>();
@@ -1151,6 +1177,8 @@ export const getProductionReportCostBreakdown = (
     costCenters,
     costCenterValues,
     costAllocations,
+    assets,
+    assetDepreciations,
     workingDaysByMonth,
     activeReportDaysByLineMonth,
     byQtyRulesByMonth,
@@ -1164,8 +1192,8 @@ export const getProductionReportCostBreakdown = (
     costCenters,
     costCenterValues,
     costAllocations,
-    [],
-    [],
+    assets,
+    assetDepreciations,
     workingDaysByMonth,
     activeReportDaysByLineMonth,
   );
@@ -1643,6 +1671,8 @@ export const buildProductionReportCostSnapshotPatch = (
     supervisorHourlyRates?: Map<string, number>;
     workingDaysByMonth?: Record<string, number>;
     productCategoryById?: Map<string, string>;
+    assets?: Asset[];
+    assetDepreciations?: AssetDepreciation[];
   },
 ): ProductionReportCostSnapshotPatch | null => {
   if (!report.id) return null;
@@ -1656,6 +1686,8 @@ export const buildProductionReportCostSnapshotPatch = (
     args.supervisorHourlyRates,
     args.workingDaysByMonth,
     args.productCategoryById,
+    args.assets,
+    args.assetDepreciations,
   );
   if (!breakdown) return null;
   const indirectByCenterSnapshot: Record<string, number> = {};

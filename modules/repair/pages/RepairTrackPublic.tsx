@@ -134,7 +134,19 @@ export const RepairTrackPublic: React.FC = () => {
           <CardHeader><CardTitle>بيانات البحث</CardTitle></CardHeader>
           <CardContent className="grid md:grid-cols-2 gap-2">
             <div><Label>رقم الإيصال</Label><Input value={receiptNo} onChange={(e) => setReceiptNo(e.target.value)} placeholder="REP-0001" /></div>
-            <div><Label>رقم الهاتف</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="01xxxxxxxxx" /></div>
+            <div>
+              <Label htmlFor="repair-track-phone">رقم الهاتف</Label>
+              <Input
+                id="repair-track-phone"
+                type="tel"
+                inputMode="tel"
+                autoComplete="tel"
+                dir="ltr"
+                value={phone}
+                onChange={(e) => setPhone(e.target.value)}
+                placeholder="01xxxxxxxxx"
+              />
+            </div>
             <div className="md:col-span-2">
               <Button onClick={() => void search()} disabled={loading || !receiptNo || !phone}>
                 {loading ? 'جاري البحث...' : 'تتبع'}

@@ -52,6 +52,22 @@ const seed = async () => {
       'repair.parts.view': true,
     },
   });
+  await set('roles', 'tenantA-repair-reception-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'repair.view': true,
+      'repair.jobs.reception': true,
+      'repair.finance.view': true,
+      'repair.payments.view': true,
+    },
+  });
+  await set('roles', 'tenantA-repair-technician-role', {
+    tenantId: 'tenantA',
+    permissions: {
+      'repair.jobs.technician': true,
+      'repair.parts.request': true,
+    },
+  });
   await set('roles', 'tenantA-settings-role', {
     tenantId: 'tenantA',
     permissions: {
@@ -147,6 +163,27 @@ const seed = async () => {
     roleId: 'tenantA-inventory-viewer-role',
     inventoryWarehouseId: 'whA',
   });
+  await set('users', 'userASparePartsCentral', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-inventory-viewer-role',
+    inventoryWarehouseId: 'whCentralSp',
+  });
+  await set('users', 'userAMaintCenterBound', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-inventory-viewer-role',
+    inventoryWarehouseId: 'whMaintCenter',
+  });
+  await set('users', 'userACenterParts', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-operator-role',
+    inventoryWarehouseId: 'whA',
+  });
   await set('users', 'userAInventoryWriter', {
     tenantId: 'tenantA',
     isActive: true,
@@ -165,6 +202,22 @@ const seed = async () => {
     isActive: true,
     isSuperAdmin: false,
     roleId: 'tenantA-operator-role',
+    repairBranchId: 'branchA',
+    repairBranchIds: ['branchA'],
+  });
+  await set('users', 'userAReception', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-repair-reception-role',
+    repairBranchId: 'branchA',
+    repairBranchIds: ['branchA'],
+  });
+  await set('users', 'userATechnician', {
+    tenantId: 'tenantA',
+    isActive: true,
+    isSuperAdmin: false,
+    roleId: 'tenantA-repair-technician-role',
     repairBranchId: 'branchA',
     repairBranchIds: ['branchA'],
   });
@@ -255,6 +308,9 @@ const seed = async () => {
     tenantId: 'tenantA',
     branchId: 'branchA',
     status: 'received',
+    technicianId: 'userATechnician',
+    customerPhone: '01000000000',
+    finalCost: 100,
   });
   await set('repair_jobs', 'job_branchB', {
     tenantId: 'tenantA',
@@ -291,6 +347,46 @@ const seed = async () => {
     status: 'active',
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
+  });
+  await set('repair_job_financials', 'job_branchA', {
+    tenantId: 'tenantA',
+    branchId: 'branchA',
+    jobId: 'job_branchA',
+    netAmount: 100,
+    paidAmount: 0,
+    balanceDue: 100,
+  });
+  await set('repair_payment_authorizations', 'job_branchA__r1', {
+    tenantId: 'tenantA',
+    branchId: 'branchA',
+    jobId: 'job_branchA',
+    status: 'approved',
+  });
+  await set('repair_branches', 'branchA', {
+    tenantId: 'tenantA',
+    name: 'فرع A',
+    warehouseId: 'whA',
+    technicianIds: ['emp-tech-a'],
+  });
+  await set('repair_branches', 'branchB', {
+    tenantId: 'tenantA',
+    name: 'فرع B',
+    warehouseId: 'whB',
+    technicianIds: [],
+  });
+  await set('repair_spare_parts', 'part_branchA', {
+    tenantId: 'tenantA',
+    branchId: 'branchA',
+    name: 'قطعة A',
+    code: 'SP-001',
+    createdAt: new Date().toISOString(),
+  });
+  await set('repair_spare_parts', 'part_branchB', {
+    tenantId: 'tenantA',
+    branchId: 'branchB',
+    name: 'قطعة B',
+    code: 'SP-002',
+    createdAt: new Date().toISOString(),
   });
   await set('payroll_records', 'payrollA', {
     tenantId: 'tenantA',
@@ -371,6 +467,28 @@ await seed();
   await assertFails(
     operatorDb.collection('repair_jobs').doc('job_branchB').collection('service_events').doc('ev_branchB').get(),
   );
+}
+
+// 4a) Technician uses a sanitized callable: raw commercial and financial docs are never readable.
+{
+  const technicianDb = testEnv.authenticatedContext('userATechnician').firestore();
+  const receptionDb = testEnv.authenticatedContext('userAReception').firestore();
+  await assertFails(technicianDb.collection('repair_jobs').doc('job_branchA').get());
+  await assertFails(technicianDb.collection('repair_job_financials').doc('job_branchA').get());
+  await assertFails(technicianDb.collection('repair_payment_authorizations').doc('job_branchA__r1').get());
+  await assertSucceeds(receptionDb.collection('repair_jobs').doc('job_branchA').get());
+  await assertSucceeds(receptionDb.collection('repair_job_financials').doc('job_branchA').get());
+  await assertSucceeds(receptionDb.collection('repair_payment_authorizations').doc('job_branchA__r1').get());
+}
+
+// 4b) Center warehouse bind (inventoryWarehouseId) grants spare-parts read for that branch only.
+{
+  const centerDb = testEnv.authenticatedContext('userACenterParts').firestore();
+  await assertSucceeds(centerDb.collection('repair_spare_parts').doc('part_branchA').get());
+  await assertFails(centerDb.collection('repair_spare_parts').doc('part_branchB').get());
+  // Inventory-only bind without repair.parts.view still cannot read spare parts.
+  const invOnlyDb = testEnv.authenticatedContext('userAWarehouseBound').firestore();
+  await assertFails(invOnlyDb.collection('repair_spare_parts').doc('part_branchA').get());
 }
 
 // 5) Production report create transaction may read/write the unique guard doc.
@@ -918,6 +1036,56 @@ await seed();
   await assertFails(boundDb.collection('warehouses').doc('whB').get());
   await assertSucceeds(boundDb.collection('stock_transactions').doc('txA').get());
   await assertFails(boundDb.collection('stock_transactions').doc('txB').get());
+
+  // Central spare-parts bind may read maintenance_center warehouse docs (destinations),
+  // but not other warehouses or center stock balances.
+  await testEnv.withSecurityRulesDisabled(async (context) => {
+    const adb = context.firestore();
+    await adb.collection('warehouses').doc('whCentralSp').set({
+      tenantId: 'tenantA',
+      name: 'Spare Parts Central',
+      code: 'SPC',
+      warehouseRole: 'spare_parts_central',
+      isActive: true,
+    });
+    await adb.collection('warehouses').doc('whMaintCenter').set({
+      tenantId: 'tenantA',
+      name: 'Maintenance Center',
+      code: 'MC1',
+      warehouseRole: 'maintenance_center',
+      isActive: true,
+    });
+    await adb.collection('warehouses').doc('whGeneralBoundPeer').set({
+      tenantId: 'tenantA',
+      name: 'General Peer',
+      code: 'GP',
+      warehouseRole: 'general',
+      isActive: true,
+    });
+    await adb.collection('stock_items').doc('whMaintCenter__material__item1').set({
+      tenantId: 'tenantA',
+      warehouseId: 'whMaintCenter',
+      itemType: 'material',
+      itemId: 'item1',
+      itemName: 'Item 1',
+      itemCode: 'I1',
+      quantity: 3,
+      minStock: 0,
+      updatedAt: createdAt,
+    });
+  });
+
+  const centralSpDb = testEnv.authenticatedContext('userASparePartsCentral').firestore();
+  const maintCenterDb = testEnv.authenticatedContext('userAMaintCenterBound').firestore();
+
+  await assertSucceeds(centralSpDb.collection('warehouses').doc('whCentralSp').get());
+  await assertSucceeds(centralSpDb.collection('warehouses').doc('whMaintCenter').get());
+  await assertFails(centralSpDb.collection('warehouses').doc('whGeneralBoundPeer').get());
+  await assertFails(centralSpDb.collection('stock_items').doc('whMaintCenter__material__item1').get());
+  await assertSucceeds(maintCenterDb.collection('warehouses').doc('whMaintCenter').get());
+  await assertFails(maintCenterDb.collection('warehouses').doc('whCentralSp').get());
+  await assertFails(maintCenterDb.collection('warehouses').doc('whGeneralBoundPeer').get());
+
   await assertSucceeds(boundDb.collection('inventory_transfer_requests').doc('transfer-source-a').get());
   await assertSucceeds(boundDb.collection('inventory_transfer_requests').doc('transfer-destination-a').get());
   await assertSucceeds(

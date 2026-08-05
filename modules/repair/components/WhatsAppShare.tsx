@@ -1,32 +1,45 @@
 import React from 'react';
 import { Button } from '@/components/ui/button';
+import { normalizeWhatsAppPhone } from '../utils/customerPhone';
 
 type WhatsAppShareProps = {
   text: string;
   phone?: string;
   /** نص الزر — افتراضيًا «إرسال واتساب» */
   label?: string;
+  disabled?: boolean;
+  className?: string;
+  size?: 'default' | 'sm' | 'lg' | 'icon';
 };
 
-const normalizeWhatsAppPhone = (phone?: string): string => {
-  if (!phone) return '';
-  const digitsOnly = String(phone).replace(/\D+/g, '');
-  if (!digitsOnly) return '';
-  return digitsOnly.startsWith('00') ? digitsOnly.slice(2) : digitsOnly;
-};
-
-export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({ text, phone, label }) => {
+export const WhatsAppShare: React.FC<WhatsAppShareProps> = ({
+  text,
+  phone,
+  label,
+  disabled,
+  className,
+  size = 'sm',
+}) => {
   const share = () => {
-    const encoded = encodeURIComponent(text);
+    const message = String(text || '').trim();
+    if (!message) return;
+    const encoded = encodeURIComponent(message);
     const normalizedPhone = normalizeWhatsAppPhone(phone);
     const targetUrl = normalizedPhone
       ? `https://wa.me/${normalizedPhone}?text=${encoded}`
       : `https://wa.me/?text=${encoded}`;
-    window.open(targetUrl, '_blank');
+    window.open(targetUrl, '_blank', 'noopener,noreferrer');
   };
 
   return (
-    <Button type="button" variant="outline" size="sm" onClick={share}>
+    <Button
+      type="button"
+      variant="outline"
+      size={size}
+      className={className}
+      disabled={disabled || !String(text || '').trim()}
+      onClick={share}
+    >
       {label || 'إرسال واتساب'}
     </Button>
   );

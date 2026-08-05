@@ -1,4 +1,5 @@
 import type {
+  SparePartsReplenishmentDemandLink,
   SparePartsReplenishmentLine,
   SparePartsReplenishmentRequest,
   SparePartsReplenishmentStatus,
@@ -125,4 +126,101 @@ export function resolveReceiveQty(
   const prepared = resolvePreparedQty(line);
   if (prepared > 0) return prepared;
   return toNumber(line.requestedQty);
+}
+
+/** Open basket may accept more job demands only while still submitted. */
+export function canMergeIntoOpenBasket(
+  doc: Pick<SparePartsReplenishmentRequest, 'status' | 'openBasket'>,
+): boolean {
+  return doc.status === 'submitted' && doc.openBasket !== false;
+}
+
+export type MergeDemandInput = {
+  itemId: string;
+  itemName: string;
+  itemCode: string;
+  unit: string;
+  quantity: number;
+  unitCostSnapshot: number;
+  jobId: string;
+  usageId: string;
+  availabilityAtRequest: 'central' | 'none';
+};
+
+/**
+ * Merge a job demand into open-basket lines (same material → sum qty + append links).
+ * Throws if resulting line count would exceed the max.
+ */
+export function mergeDemandIntoBasketLines(
+  existingLines: SparePartsReplenishmentLine[],
+  demand: MergeDemandInput,
+): SparePartsReplenishmentLine[] {
+  const itemId = String(demand.itemId || '').trim();
+  const jobId = String(demand.jobId || '').trim();
+  const usageId = String(demand.usageId || '').trim();
+  const qty = toNumber(demand.quantity);
+  if (!itemId || !jobId || !usageId || !(qty > 0)) {
+    throw new Error('بيانات الطلب غير صالحة للدمج.');
+  }
+
+  const link: SparePartsReplenishmentDemandLink = { jobId, usageId, quantity: qty };
+  const lines = existingLines.map((line) => ({ ...line }));
+  const idx = lines.findIndex((line) => String(line.itemId || '').trim() === itemId);
+
+  if (idx >= 0) {
+    const line = lines[idx];
+    const nextQty = toNumber(line.requestedQty) + qty;
+    const sourceJobIds = Array.from(
+      new Set([...(line.sourceJobIds || []), jobId].map((id) => String(id || '').trim()).filter(Boolean)),
+    );
+    const demandLinks = [...(line.demandLinks || []), link];
+    const availabilityAtRequest =
+      line.availabilityAtRequest === 'none' || demand.availabilityAtRequest === 'none'
+        ? 'none'
+        : 'central';
+    lines[idx] = {
+      ...line,
+      requestedQty: nextQty,
+      totalCostSnapshot: roundMoney(toNumber(line.unitCostSnapshot) * nextQty),
+      sourceJobIds,
+      demandLinks,
+      availabilityAtRequest,
+    };
+    return lines;
+  }
+
+  if (lines.length >= MAX_SPARE_PARTS_REPLENISHMENT_LINES) {
+    throw new Error(`الحد الأقصى لعدد البنود هو ${MAX_SPARE_PARTS_REPLENISHMENT_LINES}.`);
+  }
+
+  lines.push({
+    lineId: sparePartsLineId(itemId),
+    itemType: 'material',
+    itemId,
+    itemName: String(demand.itemName || itemId),
+    itemCode: String(demand.itemCode || ''),
+    unit: String(demand.unit || 'قطعة'),
+    requestedQty: qty,
+    unitCostSnapshot: toNumber(demand.unitCostSnapshot),
+    totalCostSnapshot: roundMoney(toNumber(demand.unitCostSnapshot) * qty),
+    sourceJobIds: [jobId],
+    demandLinks: [link],
+    availabilityAtRequest: demand.availabilityAtRequest,
+  });
+  return lines;
+}
+
+export function isStockoutDemandLine(
+  line: Pick<SparePartsReplenishmentLine, 'availabilityAtRequest'>,
+): boolean {
+  return line.availabilityAtRequest === 'none';
+}
+
+export function isPendingReplenishmentStatus(status: SparePartsReplenishmentStatus): boolean {
+  return (
+    status === 'submitted'
+    || status === 'approved'
+    || status === 'prepared'
+    || status === 'responsible_approved'
+  );
 }

@@ -7,19 +7,15 @@ import { Label } from '@/components/ui/label';
 import { toast } from '../../../components/Toast';
 import { sparePartsReplenishmentService } from '../../inventory/services/sparePartsReplenishmentService';
 import type { SparePartsReplenishmentRequest } from '../../inventory/types';
-import { canReceiveSparePartsRequest } from '../../inventory/lib/sparePartsReplenishment';
+import {
+  SPARE_PARTS_REPLENISHMENT_STATUS_LABELS,
+  canReceiveSparePartsRequest,
+} from '../../inventory/lib/sparePartsReplenishment';
 import { usePermission } from '../../../utils/permissions';
 import type { RepairSparePart } from '../types';
+import { RepairReplenishmentRequestPreviewModal } from './RepairReplenishmentRequestPreviewModal';
 
-const STATUS_LABEL: Record<string, string> = {
-  submitted: 'طلب جديد',
-  approved: 'معتمد',
-  prepared: 'تم التجهيز',
-  responsible_approved: 'خرج / موافقة مسؤول',
-  received: 'مستلم',
-  rejected: 'مرفوض',
-  cancelled: 'ملغى',
-};
+const STATUS_LABEL = SPARE_PARTS_REPLENISHMENT_STATUS_LABELS;
 
 type DraftLine = { key: string; itemId: string; quantity: string };
 
@@ -45,6 +41,7 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
   const [loading, setLoading] = useState(false);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showCreate, setShowCreate] = useState(false);
+  const [previewRequest, setPreviewRequest] = useState<SparePartsReplenishmentRequest | null>(null);
   const [note, setNote] = useState('');
   const [draftLines, setDraftLines] = useState<DraftLine[]>([
     { key: '1', itemId: '', quantity: '1' },
@@ -133,6 +130,7 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
     try {
       await sparePartsReplenishmentService.receive(requestId);
       toast.success('تم تأكيد استلام التموين.');
+      setPreviewRequest(null);
       await load();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'تعذر تأكيد الاستلام.');
@@ -287,7 +285,15 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
                   const canRecv = canReceive && canReceiveSparePartsRequest(row);
                   return (
                     <tr key={id} className="border-t">
-                      <td className="p-2 font-medium">{row.referenceNo}</td>
+                      <td className="p-2 font-medium">
+                        <button
+                          type="button"
+                          className="text-primary underline-offset-2 hover:underline"
+                          onClick={() => setPreviewRequest(row)}
+                        >
+                          {row.referenceNo}
+                        </button>
+                      </td>
                       <td className="p-2">
                         <Badge variant="secondary">
                           {STATUS_LABEL[row.status] || row.status}
@@ -295,18 +301,26 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
                       </td>
                       <td className="p-2 tabular-nums">{row.lines?.length || 0}</td>
                       <td className="p-2">
-                        {canRecv ? (
+                        <div className="flex flex-wrap items-center gap-1">
                           <Button
                             type="button"
                             size="sm"
-                            disabled={busyId === id}
-                            onClick={() => void receiveRequest(id)}
+                            variant="outline"
+                            onClick={() => setPreviewRequest(row)}
                           >
-                            {busyId === id ? '…' : 'تأكيد الاستلام'}
+                            معاينة
                           </Button>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
+                          {canRecv ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              disabled={busyId === id}
+                              onClick={() => void receiveRequest(id)}
+                            >
+                              {busyId === id ? '…' : 'تأكيد الاستلام'}
+                            </Button>
+                          ) : null}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -316,6 +330,17 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
           </div>
         )}
       </CardContent>
+
+      <RepairReplenishmentRequestPreviewModal
+        request={previewRequest}
+        open={Boolean(previewRequest)}
+        onOpenChange={(open) => {
+          if (!open) setPreviewRequest(null);
+        }}
+        canReceive={canReceive}
+        receiving={Boolean(previewRequest?.id && busyId === String(previewRequest.id))}
+        onConfirmReceive={(requestId) => void receiveRequest(requestId)}
+      />
     </Card>
   );
 };

@@ -18,14 +18,18 @@ import type {
 } from '../types';
 import { resolveUserRepairBranchIds } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
-import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
+import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { customerPhonesMatch, normalizeCustomerPhoneDigits } from '../utils/customerPhone';
 import { StatusBadge } from '../components/StatusBadge';
 import { RepairCallCenterJobPanel } from '../components/RepairCallCenterJobPanel';
 import { customerService } from '@/modules/customers/services/customerService';
 import { CUSTOMER_TYPE_LABELS, type Customer } from '@/modules/customers/types';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { PageHeader } from '@/components/PageHeader';
 
 const MIN_SEARCH_LENGTH = 3;
+const CUSTOMER_JOBS_PAGE_SIZE = 20;
 
 function matchesCallCenterSearch(job: RepairJob, query: string): boolean {
   const q = query.trim();
@@ -126,10 +130,7 @@ export const RepairCallCenter: React.FC = () => {
       }),
     [userProfile, userRoleName, systemSettings, userPermissions],
   );
-  const technicianIds = useMemo(
-    () => resolveRepairTechnicianIds(userProfile, currentEmployee?.id),
-    [userProfile, currentEmployee?.id],
-  );
+  const technicianIds = useRepairTechnicianIds(userProfile, currentEmployee?.id);
 
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
@@ -140,6 +141,7 @@ export const RepairCallCenter: React.FC = () => {
 
   const [searchInput, setSearchInput] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [jobsPage, setJobsPage] = useState(1);
   const [crmCustomers, setCrmCustomers] = useState<Customer[]>([]);
   const [crmLoading, setCrmLoading] = useState(false);
   const [selectedJob, setSelectedJob] = useState<RepairJob | null>(null);
@@ -214,6 +216,17 @@ export const RepairCallCenter: React.FC = () => {
     [rawJobs, debouncedSearch, searchReady],
   );
 
+  useEffect(() => {
+    setJobsPage(1);
+  }, [debouncedSearch]);
+
+  const jobsTotalPages = Math.max(1, Math.ceil(customerJobs.length / CUSTOMER_JOBS_PAGE_SIZE));
+  const safeJobsPage = Math.min(jobsPage, jobsTotalPages);
+  const pagedCustomerJobs = useMemo(
+    () => customerJobs.slice((safeJobsPage - 1) * CUSTOMER_JOBS_PAGE_SIZE, safeJobsPage * CUSTOMER_JOBS_PAGE_SIZE),
+    [customerJobs, safeJobsPage],
+  );
+
   const latestCustomer = customerJobs[0];
   const masterCustomer = useMemo(() => {
     if (crmCustomers[0]) return crmCustomers[0];
@@ -269,30 +282,22 @@ export const RepairCallCenter: React.FC = () => {
   const showDevicesCard = Boolean(searchReady && devices.length > 0);
 
   return (
-    <div className="space-y-4" dir={dir}>
-      <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
-        <CardContent className="pt-6">
-          <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-            <div>
-              <h1 className="text-2xl font-bold">مركز الاتصال</h1>
-              <p className="text-sm text-muted-foreground mt-1">
-                بحث برقم الهاتف أو الإيصال أو اسم العميل — سجل الطلبات، متابعة العملاء، وتسجيل بلاغ جديد.
-              </p>
-              <p className="text-xs text-muted-foreground mt-1">
-                النطاق: {canViewAllCallCenter ? 'كل فروع الصيانة' : `فروعك (${userBranchIds.length || 0})`}
-              </p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
-                <Button variant="outline">كل الطلبات</Button>
-              </Link>
-              <Link to={withTenantPath(tenantSlug, '/repair')}>
-                <Button variant="outline">لوحة الصيانة</Button>
-              </Link>
-            </div>
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
+      <PageHeader
+        title="مركز الاتصال"
+        subtitle={`بحث برقم الهاتف أو الإيصال أو اسم العميل — سجل الطلبات ومتابعة العملاء. النطاق: ${canViewAllCallCenter ? 'كل فروع الصيانة' : `فروعك (${userBranchIds.length || 0})`}`}
+        icon="search"
+        actions={(
+          <div className="flex flex-wrap gap-2">
+            <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
+              <Button variant="outline" size="sm">كل الطلبات</Button>
+            </Link>
+            <Link to={withTenantPath(tenantSlug, '/repair')}>
+              <Button variant="outline" size="sm">لوحة الصيانة</Button>
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      />
 
       <Card>
         <CardHeader>
@@ -523,7 +528,7 @@ export const RepairCallCenter: React.FC = () => {
                     </td>
                   </tr>
                 )}
-                {searchReady && customerJobs.slice(0, 80).map((job) => (
+                {searchReady && pagedCustomerJobs.map((job) => (
                   <tr key={job.id} className="border-t">
                     <td className="p-2 font-mono">#{job.receiptNo}</td>
                     <td className="p-2">{job.customerName}</td>
@@ -554,6 +559,15 @@ export const RepairCallCenter: React.FC = () => {
               </tbody>
             </table>
           </div>
+          {searchReady && customerJobs.length > 0 ? (
+            <DataPaginationFooter
+              page={safeJobsPage}
+              totalPages={jobsTotalPages}
+              totalItems={customerJobs.length}
+              onPageChange={setJobsPage}
+              itemLabel="طلب"
+            />
+          ) : null}
         </CardContent>
       </Card>
 

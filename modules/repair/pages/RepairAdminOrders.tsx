@@ -26,6 +26,9 @@ import type { FirestoreUserWithRepair } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { PageHeader } from '@/components/PageHeader';
+import { withTenantPath } from '@/lib/tenantPaths';
+import { Link, useParams } from 'react-router-dom';
 
 const OVERDUE_DAYS = 7;
 const CURRENCY_FMT = new Intl.NumberFormat('ar-EG');
@@ -48,6 +51,7 @@ const canDeleteRepairJob = (job: RepairJob) => {
 
 export const RepairAdminOrders: React.FC = () => {
   const { dir } = useAppDirection();
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
@@ -171,27 +175,29 @@ export const RepairAdminOrders: React.FC = () => {
   );
 
   return (
-    <div className="space-y-4" dir={dir}>
-      <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
-        <CardContent className="pt-6">
-          <h1 className="text-2xl font-bold">عرض طلبات الصيانة - الإدارة</h1>
-          <p className="text-sm text-muted-foreground mt-1">متابعة الطلبات بالتفاصيل التشغيلية، والفني المسند، وحالة التسليم.</p>
-        </CardContent>
-      </Card>
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
+      <PageHeader
+        title="عرض طلبات الصيانة - الإدارة"
+        subtitle="متابعة الطلبات بالتفاصيل التشغيلية، والفني المسند، وحالة التسليم."
+        icon="fact_check"
+        backAction={{ to: withTenantPath(tenantSlug, '/repair/admin-dashboard') }}
+        actions={(
+          <Link to={withTenantPath(tenantSlug, '/repair/admin-dashboard')}>
+            <Button variant="outline" size="sm">لوحة الأدمن</Button>
+          </Link>
+        )}
+      />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">طلبات متأخرة (+{OVERDUE_DAYS} أيام)</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-rose-600">{CURRENCY_FMT.format(overdueCount)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">بانتظار التسليم</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-amber-600">{CURRENCY_FMT.format(pendingDeliveryCount)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">جاري التسليم</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-indigo-600">{CURRENCY_FMT.format(inDeliveryCount)}</p></CardContent>
-        </Card>
+      <div className="flex flex-wrap gap-2">
+        <Badge variant="outline" className="px-3 py-1.5 text-sm">
+          متأخر (+{OVERDUE_DAYS} أيام): <span className="font-bold text-rose-600 ms-1">{CURRENCY_FMT.format(overdueCount)}</span>
+        </Badge>
+        <Badge variant="outline" className="px-3 py-1.5 text-sm">
+          بانتظار التسليم: <span className="font-bold text-amber-600 ms-1">{CURRENCY_FMT.format(pendingDeliveryCount)}</span>
+        </Badge>
+        <Badge variant="outline" className="px-3 py-1.5 text-sm">
+          جاري التسليم: <span className="font-bold text-indigo-600 ms-1">{CURRENCY_FMT.format(inDeliveryCount)}</span>
+        </Badge>
       </div>
 
       <Card>
@@ -295,6 +301,7 @@ export const RepairAdminOrders: React.FC = () => {
         job={selectedJob}
         branchName={selectedJob ? branchNameById.get(String(selectedJob.branchId || '').trim()) : undefined}
         technicianName={selectedJob ? technicianNameById.get(String(selectedJob.technicianId || '').trim()) : undefined}
+        showWorkshopLink
       />
       <Dialog open={Boolean(jobToDelete)} onOpenChange={(next) => { if (!next) setJobToDelete(null); }}>
         <DialogContent dir={dir}>

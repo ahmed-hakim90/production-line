@@ -5,7 +5,6 @@ import {
   getDoc,
   getDocs,
   onSnapshot,
-  orderBy,
   query,
   runTransaction,
   updateDoc,
@@ -27,7 +26,6 @@ import {
   statusSetsAssignedAt,
   isTerminalFromSettings,
 } from '../utils/repairWorkflowNormalize';
-import { generateApprovalToken, sha256Hex } from '../utils/repairApprovalToken';
 import type { RepairJob, RepairJobProduct, RepairJobStatus, RepairPartUsage, RepairStatusHistoryItem } from '../types';
 import { repairReceiptService } from './repairReceiptService';
 import { sparePartsService } from './sparePartsService';
@@ -37,13 +35,27 @@ import { repairSalesInvoiceService } from './repairSalesInvoiceService';
 import { repairBranchService } from './repairBranchService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { stripRepairProductsToIntake, warrantyScopeFromProducts } from '../lib/repairJobIntake';
 import { computeRepairJobCost, normalizePaymentStatus } from '../utils/repairBusinessLogic';
 import { assertRepairStatusTransition } from '../utils/repairStatusTransitions';
+import { deliverRepairJobAndCollectCallable } from '../../auth/services/firebase';
 
 const nowIso = () => new Date().toISOString();
 const isoUtcDay = (isoLike: string | undefined | null): string => String(isoLike || '').slice(0, 10);
-const withDefined = <T extends Record<string, unknown>>(obj: T): T =>
-  Object.fromEntries(Object.entries(obj).filter(([, value]) => value !== undefined)) as T;
+/** Drop undefined at every nesting level — Firestore rejects undefined in arrays/objects. */
+const withDefined = <T>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => withDefined(item)) as T;
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, withDefined(v)]),
+    ) as T;
+  }
+  return value;
+};
 const makeItemId = () => `item-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 const normalizeJob = (job: RepairJob): RepairJob => {
@@ -82,6 +94,7 @@ const normalizeJob = (job: RepairJob): RepairJob => {
     deviceType: lead?.deviceType || job.deviceType,
     deviceBrand: lead?.deviceBrand || job.deviceBrand,
     deviceModel: lead?.deviceModel || job.deviceModel,
+    deviceSerial: String(lead?.serialNo || job.deviceSerial || '').trim() || job.deviceSerial,
     problemDescription: job.problemDescription || lead?.diagnosis || '',
     estimatedCost: Number(job.estimatedCost || normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0)),
     finalCost: Number(job.finalCostOverride ?? job.finalCost ?? normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0)),
@@ -90,9 +103,16 @@ const normalizeJob = (job: RepairJob): RepairJob => {
   return {
     ...normalizedJob,
     finalCost: cost.finalCost,
-    paymentStatus: normalizePaymentStatus(normalizedJob.paymentStatus, cost.finalCost),
+    paidAmount: normalizedJob.paidAmount,
+    balanceDue: cost.balanceDue,
+    paymentStatus: normalizePaymentStatus(normalizedJob.paymentStatus, cost.finalCost, normalizedJob.paidAmount),
   };
 };
+
+const sortRepairJobsNewest = (rows: RepairJob[]): RepairJob[] =>
+  rows.slice().sort((a, b) =>
+    String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
+  );
 
 type NewRepairJobInput = Omit<
   RepairJob,
@@ -116,39 +136,25 @@ export const repairJobService = {
     return normalizeJob(job);
   },
 
-  /** يولّد توكن موافقة عميل ويخزّن الهاش فقط — الرابط الكامل في الواجهة */
-  async requestCustomerApproval(input: { jobId: string; actorUid: string; actorName: string }): Promise<{ token: string } | null> {
-    if (!isConfigured) return null;
-    const job = await this.getById(input.jobId);
-    if (!job) throw new Error('طلب الصيانة غير موجود.');
-    const token = generateApprovalToken();
-    const hash = await sha256Hex(token);
-    const at = nowIso();
-    const exp = new Date(Date.now() + 7 * 86400000).toISOString();
-    const jobRef = doc(db, REPAIR_JOBS_COLLECTION, input.jobId);
-    const evRef = doc(collection(jobRef, REPAIR_SERVICE_EVENTS_SUBCOLLECTION));
-    const batch = writeBatch(db);
-    batch.update(jobRef, withDefined({
-      approvalStatus: 'pending',
-      approvalRequestedAt: at,
-      approvalTokenHash: hash,
-      approvalTokenExpiresAt: exp,
-      updatedAt: at,
-    }) as Record<string, unknown>);
-    batch.set(evRef, {
-      tenantId: job.tenantId,
-      branchId: job.branchId,
+  /** تسليم + تحصيل + قيد خزينة في معاملة خادم واحدة قابلة لإعادة المحاولة. */
+  async deliverAndCollect(input: {
+    jobId: string;
+    warranty?: RepairJob['warranty'];
+    actorName?: string;
+  }): Promise<{ finalCost: number; collectedAmount: number; treasuryEntryCreated: boolean; deliveryAuthorizationNo?: string }> {
+    if (!isConfigured) return { finalCost: 0, collectedAmount: 0, treasuryEntryCreated: false };
+    const result = await deliverRepairJobAndCollectCallable({
       jobId: input.jobId,
-      at,
-      actorUid: input.actorUid,
-      actorName: input.actorName,
-      action: 'approval_requested',
-      domainEvent: 'customer.approval_requested',
-      eventSchemaVersion: REPAIR_DOMAIN_EVENT_VERSION,
-      note: 'طلب موافقة عميل على التقدير',
+      warranty: input.warranty,
     });
-    await batch.commit();
-    return { token };
+    // حجز القطع ليس جزءًا ماليًا؛ إطلاقه بعد نجاح المعاملة، وإعادة المحاولة آمنة.
+    await sparePartsService.releaseAllActiveForJob(input.jobId, input.actorName || 'system');
+    return {
+      finalCost: Number(result.finalCost || 0),
+      collectedAmount: Number(result.collectedAmount || 0),
+      treasuryEntryCreated: Boolean(result.treasuryEntryCreated),
+      deliveryAuthorizationNo: String(result.deliveryAuthorizationNo || '') || undefined,
+    };
   },
 
   async listByBranch(branchId: string): Promise<RepairJob[]> {
@@ -157,17 +163,16 @@ export const repairJobService = {
       db,
       REPAIR_JOBS_COLLECTION,
       where('branchId', '==', branchId),
-      orderBy('createdAt', 'desc'),
     );
     const snap = await getDocs(q);
-    return snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob));
+    return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
   },
 
   async listAllBranches(): Promise<RepairJob[]> {
     if (!isConfigured) return [];
-    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION, orderBy('createdAt', 'desc'));
+    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION);
     const snap = await getDocs(q);
-    return snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob));
+    return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
   },
 
   subscribeByBranch(branchId: string, cb: (rows: RepairJob[]) => void): Unsubscribe {
@@ -176,11 +181,10 @@ export const repairJobService = {
       db,
       REPAIR_JOBS_COLLECTION,
       where('branchId', '==', branchId),
-      orderBy('createdAt', 'desc'),
     );
     return onSnapshot(
       q,
-      (snap) => cb(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob))),
+      (snap) => cb(sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)))),
       (error) => {
         console.error('repairJobService.subscribeByBranch listener error:', error);
       },
@@ -210,12 +214,11 @@ export const repairJobService = {
         db,
         REPAIR_JOBS_COLLECTION,
         where('branchId', '==', branchId),
-        orderBy('createdAt', 'desc'),
       );
       return onSnapshot(
         q,
         (snap) => {
-          branchRows.set(branchId, snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
+          branchRows.set(branchId, sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob))));
           emit();
         },
         (error) => {
@@ -230,10 +233,10 @@ export const repairJobService = {
 
   subscribeAll(cb: (rows: RepairJob[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION, orderBy('createdAt', 'desc'));
+    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION);
     return onSnapshot(
       q,
-      (snap) => cb(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob))),
+      (snap) => cb(sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)))),
       (error) => {
         console.error('repairJobService.subscribeAll listener error:', error);
       },
@@ -250,11 +253,10 @@ export const repairJobService = {
       db,
       REPAIR_JOBS_COLLECTION,
       where('technicianId', '==', technicianId),
-      orderBy('createdAt', 'desc'),
     );
     return onSnapshot(
       q,
-      (snap) => cb(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob))),
+      (snap) => cb(sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)))),
       (error) => {
         console.error('repairJobService.subscribeByTechnician listener error:', error);
       },
@@ -282,11 +284,10 @@ export const repairJobService = {
       db,
       REPAIR_JOBS_COLLECTION,
       where('technicianId', 'in', normalized),
-      orderBy('createdAt', 'desc'),
     );
     return onSnapshot(
       q,
-      (snap) => cb(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob))),
+      (snap) => cb(sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)))),
       (error) => {
         console.error('repairJobService.subscribeByTechnicianIds listener error:', error);
       },
@@ -316,30 +317,36 @@ export const repairJobService = {
     }) as RepairStatusHistoryItem];
 
     const incomingProducts = Array.isArray(inputRest.jobProducts) ? inputRest.jobProducts : [];
-    const normalizedProducts: RepairJobProduct[] = incomingProducts.length > 0
-      ? incomingProducts.map((item, idx) => ({
-          ...item,
-          itemId: String(item?.itemId || `item-${idx + 1}`),
-          accessories: String(item?.accessories || (idx === 0 ? inputRest.accessories || '' : '')),
-        }))
-      : [{
-          itemId: makeItemId(),
-          productId: inputRest.productId,
-          productName: String(inputRest.productName || inputRest.deviceBrand || 'منتج'),
-          deviceType: inputRest.deviceType,
-          deviceBrand: inputRest.deviceBrand,
-          deviceModel: inputRest.deviceModel,
-          accessories: String(inputRest.accessories || ''),
-          diagnosis: inputRest.problemDescription || '',
-          estimatedCost: Number(inputRest.estimatedCost || 0),
-          finalCost: Number(inputRest.finalCost || 0),
-          inWarranty: (inputRest.warranty || 'none') !== 'none',
-        }];
+    // Intake create: never trust client serviceIds / line prices.
+    const normalizedProducts: RepairJobProduct[] = stripRepairProductsToIntake(
+      incomingProducts.length > 0
+        ? incomingProducts
+        : [{
+            itemId: makeItemId(),
+            productId: inputRest.productId,
+            productName: String(inputRest.productName || inputRest.deviceBrand || 'منتج'),
+            deviceType: inputRest.deviceType,
+            deviceBrand: inputRest.deviceBrand,
+            deviceModel: inputRest.deviceModel,
+            accessories: String(inputRest.accessories || ''),
+            diagnosis: inputRest.problemDescription || '',
+            estimatedCost: 0,
+            finalCost: 0,
+            inWarranty: (inputRest.warranty || 'none') !== 'none',
+          }],
+    ).map((item, idx) => ({
+      ...item,
+      accessories: String(item?.accessories || (idx === 0 ? inputRest.accessories || '' : '')),
+    }));
     const lead = normalizedProducts[0];
     const cost = computeRepairJobCost({
       ...inputRest,
       jobProducts: normalizedProducts,
-      finalCost: Number(inputRest.finalCostOverride ?? inputRest.finalCost ?? normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0)),
+      isServiceOnly: false,
+      serviceOnlyCost: 0,
+      estimatedCost: 0,
+      finalCost: 0,
+      finalCostOverride: undefined,
     } as RepairJob);
     const jobRef = doc(collection(db, REPAIR_JOBS_COLLECTION));
     const batch = writeBatch(db);
@@ -353,10 +360,16 @@ export const repairJobService = {
         deviceType: lead?.deviceType || inputRest.deviceType,
         deviceBrand: lead?.deviceBrand || inputRest.deviceBrand,
         deviceModel: lead?.deviceModel || inputRest.deviceModel,
+        deviceSerial: String(inputRest.deviceSerial || lead?.serialNo || '').trim() || undefined,
         problemDescription: inputRest.problemDescription || lead?.diagnosis || '',
-        estimatedCost: Number(inputRest.estimatedCost || normalizedProducts.reduce((sum, item) => sum + Number(item.estimatedCost || 0), 0)),
+        estimatedCost: 0,
         finalCost: cost.finalCost,
-        paymentStatus: normalizePaymentStatus(inputRest.paymentStatus, cost.finalCost),
+        paidAmount: 0,
+        balanceDue: cost.balanceDue,
+        isServiceOnly: false,
+        serviceOnlyCost: 0,
+        finalCostOverride: undefined,
+        paymentStatus: normalizePaymentStatus(inputRest.paymentStatus, cost.finalCost, 0),
         tenantId,
         receiptNo: receiptResult.receiptNo,
         createdAt: at,
@@ -364,6 +377,7 @@ export const repairJobService = {
         statusHistory: history,
         status: initialCanon,
         warranty: inputRest.warranty || settings.defaults.defaultWarranty,
+        warrantyScope: warrantyScopeFromProducts(normalizedProducts),
         slaHours: typeof inputRest.slaHours === 'number' ? inputRest.slaHours : settings.defaults.defaultSlaHours,
         isClosed: false,
       }),
@@ -401,11 +415,18 @@ export const repairJobService = {
       nextPatch.deviceType = lead?.deviceType || nextPatch.deviceType;
       nextPatch.deviceBrand = lead?.deviceBrand || nextPatch.deviceBrand;
       nextPatch.deviceModel = lead?.deviceModel || nextPatch.deviceModel;
-      if (!nextPatch.problemDescription) {
+      if (lead?.serialNo !== undefined) {
+        nextPatch.deviceSerial = String(lead.serialNo || '').trim();
+      }
+      if (nextPatch.problemDescription === undefined) {
         nextPatch.problemDescription = String(lead?.diagnosis || '');
       }
       const productsTotal = normalizedProducts.reduce((sum, item) => sum + Number(item.finalCost || 0), 0);
       nextPatch.finalCost = Number(nextPatch.finalCostOverride ?? nextPatch.finalCost ?? productsTotal);
+      nextPatch.warrantyScope = warrantyScopeFromProducts(normalizedProducts);
+      if (normalizedProducts.some((item) => item.inWarranty)) {
+        nextPatch.warranty = 'none';
+      }
     }
     if (
       nextPatch.partsUsed !== undefined
@@ -414,13 +435,30 @@ export const repairJobService = {
       || nextPatch.jobProducts !== undefined
       || nextPatch.finalCostOverride !== undefined
       || nextPatch.finalCost !== undefined
+      || nextPatch.paidAmount !== undefined
       || nextPatch.paymentStatus !== undefined
     ) {
       const existing = await this.getById(id);
       const merged = { ...(existing || {}), ...nextPatch } as RepairJob;
       const cost = computeRepairJobCost(merged);
+      const legacyPaidAmount = existing?.paidAmount !== undefined
+        ? Number(existing.paidAmount || 0)
+        : (
+            Number(existing?.finalCost || 0) > 0 && existing?.paymentStatus === 'paid'
+              ? Number(existing.finalCost || 0)
+              : 0
+          );
+      const paidAmount = nextPatch.paidAmount !== undefined
+        ? Math.max(0, Number(nextPatch.paidAmount || 0))
+        : legacyPaidAmount;
       nextPatch.finalCost = cost.finalCost;
-      nextPatch.paymentStatus = normalizePaymentStatus(nextPatch.paymentStatus ?? existing?.paymentStatus, cost.finalCost);
+      nextPatch.paidAmount = Math.min(cost.finalCost, paidAmount);
+      nextPatch.balanceDue = Math.max(0, cost.finalCost - Number(nextPatch.paidAmount || 0));
+      nextPatch.paymentStatus = normalizePaymentStatus(
+        nextPatch.paymentStatus ?? existing?.paymentStatus,
+        cost.finalCost,
+        nextPatch.paidAmount,
+      );
     }
     await updateDoc(doc(db, REPAIR_JOBS_COLLECTION, id), withDefined({
       ...nextPatch,
@@ -437,7 +475,19 @@ export const repairJobService = {
     const existing = await this.getById(id);
     if (!existing) return;
     const at = nowIso();
-    const next = String(technicianId ?? '').trim();
+    let next = String(technicianId ?? '').trim();
+    // Prefer Auth uid when the caller passed an employee id with a linked user,
+    // so «طلباتي» (queries by login uid) always finds the job.
+    if (next) {
+      try {
+        const { employeeService } = await import('../../hr/employeeService');
+        const employee = await employeeService.getById(next);
+        const linkedUserId = String(employee?.userId || '').trim();
+        if (linkedUserId) next = linkedUserId;
+      } catch {
+        // Keep the provided id when employee lookup is unavailable.
+      }
+    }
     const prev = String(existing.technicianId || '').trim();
     await this.update(id, { technicianId: next, assignedAt: at });
     if (!next || prev === next) return;
@@ -479,20 +529,22 @@ export const repairJobService = {
     });
 
     if (isDeliveredStatus(nextCanon)) {
-      const preview = existing ? computeRepairJobCost(existing) : null;
-      const finalCost = Number(input.finalCost ?? preview?.finalCost ?? existing?.finalCost ?? 0);
-      if (finalCost < 0 || !Number.isFinite(finalCost)) {
-        throw new Error('التكلفة النهائية غير صالحة للتسليم.');
-      }
-      if (existing?.isClosed) {
-        throw new Error('الطلب مغلق ولا يمكن تسليمه مرة أخرى.');
-      }
+      throw new Error('التسليم يتم من شاشة التحصيل والتسليم بعد التحقق من إذن الدفع، وليس بتغيير الحالة مباشرة.');
     }
 
     await runTransaction(db, async (tx) => {
       const snap = await tx.get(ref);
       if (!snap.exists()) throw new Error('طلب الصيانة غير موجود.');
       const job = normalizeJob({ id: snap.id, ...snap.data() } as RepairJob);
+      if (nextCanon === 'ready') {
+        const hasSelectedService = (job.jobProducts || []).some((row) =>
+          Array.isArray(row.serviceIds) && row.serviceIds.some((id) => String(id || '').trim()),
+        );
+        const hasUsedPart = (job.partsUsed || []).some((row) => Number(row.quantity || 0) > 0);
+        if (!hasSelectedService && !hasUsedPart) {
+          throw new Error('اختر خدمة صيانة أو سجّل قطعة غيار قبل تحويل الطلب إلى جاهز للتسليم.');
+        }
+      }
       const beforeCanon = mapLegacyRepairStatus(job.status);
       const at = nowIso();
       const history = Array.isArray(job.statusHistory) ? [...job.statusHistory] : [];
@@ -528,7 +580,7 @@ export const repairJobService = {
         domainEvent,
         statusBefore: beforeCanon,
         statusAfter: nextCanon,
-        note: input.reason,
+        ...(input.reason ? { note: input.reason } : {}),
       });
 
       const shouldBreachSla = Boolean(
@@ -556,9 +608,19 @@ export const repairJobService = {
         ...(isDeliveredStatus(nextCanon)
           ? {
               deliveredAt: at,
+              deliveryAuthorizationNo: job.deliveryAuthorizationNo || `DEL-${job.receiptNo || input.jobId}`,
+              deliveryAuthorizationIssuedAt: job.deliveryAuthorizationIssuedAt || at,
+              deliveryAuthorizationIssuedBy: job.deliveryAuthorizationIssuedBy || actorUid,
+              deliveryAuthorizationIssuedByName: job.deliveryAuthorizationIssuedByName || actorName,
               isClosed: true,
               finalCost: Number(input.finalCost ?? job.finalCost ?? 0),
-              paymentStatus: normalizePaymentStatus(job.paymentStatus, Number(input.finalCost ?? job.finalCost ?? 0)),
+              paidAmount: job.paidAmount ?? 0,
+              balanceDue: Math.max(0, Number(input.finalCost ?? job.finalCost ?? 0) - Number(job.paidAmount || 0)),
+              paymentStatus: normalizePaymentStatus(
+                job.paymentStatus,
+                Number(input.finalCost ?? job.finalCost ?? 0),
+                job.paidAmount ?? 0,
+              ),
               warranty: input.warranty ?? job.warranty ?? 'none',
               resolvedAt: at,
               resolutionMinutes: resolutionMins,
@@ -613,6 +675,44 @@ export const repairJobService = {
     } catch (err) {
       const message = err instanceof Error ? err.message : 'تعذر تحرير حجوزات قطع الغيار.';
       throw new Error(`تم تحديث الحالة لكن فشل تحرير الحجوزات: ${message}`);
+    }
+
+    const customerId = String(existing?.customerId || '').trim();
+    if (
+      customerId
+      && (isDeliveredStatus(nextCanon)
+        || isCancelledStatus(nextCanon)
+        || isUnrepairableStatus(nextCanon))
+    ) {
+      try {
+        const { customerActivityService } = await import(
+          '@/modules/customers/services/customerActivityService'
+        );
+        const action = isDeliveredStatus(nextCanon)
+          ? 'repair.job_delivered'
+          : isCancelledStatus(nextCanon)
+            ? 'repair.job_cancelled'
+            : 'repair.job_unrepairable';
+        const title = isDeliveredStatus(nextCanon)
+          ? 'تسليم طلب صيانة'
+          : isCancelledStatus(nextCanon)
+            ? 'إلغاء طلب صيانة'
+            : 'طلب غير قابل للإصلاح';
+        await customerActivityService.record({
+          customerId,
+          module: 'repair',
+          action,
+          title,
+          summary: input.reason || existing?.customerName || '',
+          referenceType: 'repair_job',
+          referenceId: input.jobId,
+          referenceLabel: existing?.receiptNo || input.jobId,
+          actorUid,
+          actorName,
+        });
+      } catch (err) {
+        console.warn('repairJobService.changeStatus: customer activity', err);
+      }
     }
   },
 
@@ -868,8 +968,8 @@ export const repairJobService = {
     if (!isConfigured || !technicianId) return [];
     const constraints = [where('technicianId', '==', technicianId)] as Parameters<typeof query>[1][];
     if (branchId) constraints.push(where('branchId', '==', branchId));
-    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION, ...constraints, orderBy('createdAt', 'desc'));
+    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION, ...constraints);
     const snap = await getDocs(q);
-    return snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob));
+    return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
   },
 };

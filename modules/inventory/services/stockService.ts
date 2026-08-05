@@ -13,7 +13,7 @@ import {
   startAfter,
   QueryDocumentSnapshot,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { createInventoryCountSessionCallable, db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import type {
@@ -1182,19 +1182,18 @@ export const stockService = {
     createdBy: string;
   }): Promise<string | null> {
     if (!isConfigured) return null;
-    const ref = doc(collection(db, COUNTS_COLLECTION));
-    const session: StockCountSession = {
+    const result = await createInventoryCountSessionCallable({
       warehouseId: payload.warehouseId,
       warehouseName: payload.warehouseName,
-      status: 'open',
       note: payload.note,
-      lines: payload.lines,
-      createdBy: payload.createdBy,
-      createdAt: toIsoNow(),
-      tenantId: getCurrentTenantId(),
-    } as StockCountSession;
-    await setDoc(ref, session);
-    return ref.id;
+      lines: payload.lines.map((line) => ({
+        itemType: line.itemType,
+        itemId: line.itemId,
+        expectedQty: Number(line.expectedQty || 0),
+        countedQty: Number(line.countedQty || 0),
+      })),
+    });
+    return result.id;
   },
 
   async getCountSessions(warehouseId?: string): Promise<StockCountSession[]> {
@@ -1244,7 +1243,7 @@ export const stockService = {
         sourceId: session.id,
         note: `Count adjustment from session ${session.id}`,
         createdBy: approvedBy,
-      });
+      }, { internal: true });
     }
 
     await updateDoc(doc(db, COUNTS_COLLECTION, session.id), {
@@ -1253,5 +1252,31 @@ export const stockService = {
       approvedBy,
       adjustmentReason,
     });
+
+    // Keep repair center UI ledger aligned when this warehouse is a maintenance center.
+    try {
+      const { repairBranchService } = await import('../../repair/services/repairBranchService');
+      const { sparePartsService } = await import('../../repair/services/sparePartsService');
+      const branches = await repairBranchService.list().catch(() => []);
+      const branch = branches.find(
+        (row) => String(row.warehouseId || '').trim() === String(session.warehouseId || '').trim(),
+      );
+      if (branch?.id) {
+        for (const line of session.lines) {
+          if (String(line.itemType || '') !== 'material') continue;
+          await sparePartsService.setWarehouseStockAbsolute({
+            branchId: String(branch.id),
+            warehouseId: session.warehouseId,
+            warehouseName: session.warehouseName,
+            materialId: String(line.itemId || '').trim(),
+            quantity: Number(line.countedQty || 0),
+            createdBy: approvedBy,
+            notes: `مزامنة اعتماد جرد ${session.id}`,
+          }).catch(() => false);
+        }
+      }
+    } catch {
+      // Inventory SoT already posted; repair ledger sync is best-effort.
+    }
   },
 };

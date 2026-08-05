@@ -106,6 +106,42 @@ async function main() {
     'employee portal still wins over warehouse binding',
   );
   assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'repair.jobs.technician',
+      roleKey: 'repair_technician',
+    }),
+    'repair_technician',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'repair.jobs.technician',
+    }),
+    'repair_technician',
+    'technician permission alone (without manager dashboards) uses repair home',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'repair.jobs.technician' || p === 'repair.dashboard.view',
+    }),
+    'generic',
+    'ops dashboard permission keeps manager off technician self-home',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'repair.jobs.technician' || p === 'repair.technician.view',
+    }),
+    'generic',
+    'manager KPI permission keeps manager off technician self-home',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'employeeDashboard.view' || p === 'repair.jobs.technician',
+      roleKey: 'repair_technician',
+    }),
+    'employee',
+    'employee portal still wins over repair technician',
+  );
+  assert.equal(
     hasPrivilegedInventoryAccess({
       can: (p) => p === 'inventory.view',
     }),

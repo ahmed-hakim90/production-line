@@ -664,6 +664,17 @@ export const MonthlyProductionCosts: React.FC = () => {
 
   const totalQty = displayRecords.reduce((s, r) => s + r.totalProducedQty, 0);
   const totalCost = displayRecords.reduce((s, r) => s + r.totalProductionCost, 0);
+  const totalFullManufacturingCost = displayRecords.reduce(
+    (sum, row) => sum + Number(row.fullManufacturingCost || 0),
+    0,
+  );
+  const totalFullCostedQty = displayRecords.reduce(
+    (sum, row) => sum + Number(row.fullCostedQty || 0),
+    0,
+  );
+  const fullCostCoveragePct = totalQty > 0
+    ? Math.min(100, (totalFullCostedQty / totalQty) * 100)
+    : 100;
   const totalCartonsEquivalent = useMemo(
     () =>
       displayRecords.reduce((s, r) => {
@@ -951,7 +962,7 @@ export const MonthlyProductionCosts: React.FC = () => {
         />
         <UiCard className={SURFACE_CARD}>
           <CardContent className="p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <KPIBox
                 label="عدد المنتجات"
                 value={displayRecords.length}
@@ -966,18 +977,25 @@ export const MonthlyProductionCosts: React.FC = () => {
                 unit="وحدة"
               />
               <KPIBox
-                label="إجمالي التكلفة"
+                label="إجمالي تكلفة التحويل"
                 value={formatCost(totalCost)}
                 icon="payments"
                 colorClass="bg-amber-500/10 text-amber-600"
                 unit="ج.م"
               />
               <KPIBox
-                label="متوسط تكلفة الوحدة"
+                label="متوسط التحويل للوحدة"
                 value={formatCost(overallAvg)}
                 icon="price_check"
                 colorClass="bg-violet-500/10 text-violet-600"
                 unit="ج.م"
+              />
+              <KPIBox
+                label="تكلفة التصنيع الكاملة"
+                value={totalFullManufacturingCost > 0 ? formatCost(totalFullManufacturingCost) : 'غير مكتملة'}
+                icon="factory"
+                colorClass={fullCostCoveragePct >= 99.999 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-blue-500/10 text-blue-600'}
+                unit={totalFullManufacturingCost > 0 ? `ج.م · تغطية ${formatCost(fullCostCoveragePct)}%` : undefined}
               />
             </div>
           </CardContent>
@@ -1312,7 +1330,12 @@ export const MonthlyProductionCosts: React.FC = () => {
                     })}
                     {baseColumns.avgUnit && (
                       <td className="py-3 px-4 font-mono font-bold text-primary">
-                        {formatCost(r.averageUnitCost)}
+                        <span className="block">{formatCost(r.averageUnitCost)} <small className="font-sans text-[9px] opacity-70">تحويل</small></span>
+                        {Number(r.fullManufacturingAverageUnitCost || 0) > 0 ? (
+                          <span className="block mt-1 text-emerald-600">
+                            {formatCost(r.fullManufacturingAverageUnitCost || 0)} <small className="font-sans text-[9px]">كاملة · {formatCost(r.fullCostCoveragePct || 0)}%</small>
+                          </span>
+                        ) : null}
                       </td>
                     )}
                     {baseColumns.prevMonthAvgClosed && (

@@ -137,6 +137,12 @@ import { resolveSystemSettings } from '../modules/system/lib/resolveSystemSettin
 import { warehouseService } from '../modules/inventory/services/warehouseService';
 import { catalogRawMaterialService as rawMaterialService } from '../modules/catalog/services/catalogRawMaterialService';
 import { materialService } from '../modules/manufacturing/services/materialService';
+import { bomService } from '../modules/manufacturing/services/bomService';
+import { calculateBomItemUnitCost } from '../modules/manufacturing/engines/materialCostEngine';
+import {
+  calculateFullProductionCost,
+  type ProductionCostSourceLine,
+} from '../modules/costs/lib/fullProductionCost';
 import { loadReportsComponentLabelOptions } from '../modules/production/utils/injectionComponentOptions';
 import type { StockItemBalance, Warehouse } from '../modules/inventory/types';
 import {
@@ -217,6 +223,8 @@ import {
   buildProductionReportCostSnapshotPatch,
   buildSupervisorHourlyRatesMap,
   estimateReportCost,
+  getProductionReportCostBreakdown,
+  isProductionAllocationCostCenter,
 } from '../utils/costCalculations';
 import { zktecoSyncService } from '../modules/hr/attendance/services/zktecoSyncService';
 import { attendanceProcessingService } from '../modules/hr/attendance/services/attendanceProcessingService';
@@ -690,18 +698,134 @@ type CostSnapshotStoreGet = () => {
   costCenters: CostCenter[];
   costCenterValues: CostCenterValue[];
   costAllocations: CostAllocation[];
+  assets: Asset[];
+  assetDepreciations: AssetDepreciation[];
   systemSettings: SystemSettings;
 };
+
+function buildEffectiveDepreciationRows(
+  period: string,
+  assets: Asset[],
+  actualRows: AssetDepreciation[],
+): { rows: AssetDepreciation[]; hasScheduledRows: boolean } {
+  const actualByAssetId = new Map(
+    actualRows
+      .filter((row) => row.period === period)
+      .map((row) => [String(row.assetId || ''), row]),
+  );
+  let hasScheduledRows = false;
+  const rows: AssetDepreciation[] = [];
+  for (const asset of assets) {
+    const assetId = String(asset.id || '');
+    if (!assetId || asset.status !== 'active' || !asset.centerId) continue;
+    const actual = actualByAssetId.get(assetId);
+    if (actual) {
+      rows.push(actual);
+      continue;
+    }
+    if (String(asset.purchaseDate || '').slice(0, 7) > period) continue;
+    const scheduledAmount = Math.max(0, Number(asset.monthlyDepreciation || 0));
+    if (scheduledAmount <= 0 || Number(asset.currentValue || 0) <= Number(asset.salvageValue || 0)) continue;
+    hasScheduledRows = true;
+    rows.push({
+      id: `scheduled__${assetId}__${period}`,
+      assetId,
+      period,
+      depreciationAmount: scheduledAmount,
+      accumulatedDepreciation: Number(asset.accumulatedDepreciation || 0) + scheduledAmount,
+      bookValue: Math.max(Number(asset.salvageValue || 0), Number(asset.currentValue || 0) - scheduledAmount),
+    });
+  }
+  return { rows, hasScheduledRows };
+}
+
+async function buildReportMaterialCostSources(
+  report: ProductionReport,
+): Promise<ProductionCostSourceLine[]> {
+  const bomOwnerType = report.reportType === 'component_injection' ? 'material' : 'product';
+  const [bomBundle, materials, movements] = await Promise.all([
+    bomService.getActiveBomWithLegacyFallback(bomOwnerType, String(report.productId || '')),
+    materialService.getAll(),
+    report.id
+      ? stockService.getTransactionsBySource({ sourceModule: 'production_report', sourceId: report.id })
+          .catch(() => [])
+      : Promise.resolve([]),
+  ]);
+  const materialByIdentity = new Map<string, (typeof materials)[number]>();
+  materials.forEach((material) => {
+    if (material.id) materialByIdentity.set(String(material.id), material);
+    if (material.legacyRawMaterialId) materialByIdentity.set(String(material.legacyRawMaterialId), material);
+    materialByIdentity.set(String(material.name || '').trim().toLowerCase(), material);
+  });
+
+  const canonicalMaterialIdentity = (value: unknown, fallbackName?: unknown): string => {
+    const raw = String(value || '').trim();
+    const byId = materialByIdentity.get(raw)
+      || materialByIdentity.get(String(fallbackName || '').trim().toLowerCase());
+    return String(byId?.id || byId?.legacyRawMaterialId || raw || fallbackName || '')
+      .trim()
+      .toLowerCase();
+  };
+
+  const actualItemIds = new Set<string>();
+  const actualLines: ProductionCostSourceLine[] = movements
+    .filter((movement) => movement.movementType === 'OUT' && Number(movement.totalCostSnapshot || 0) > 0)
+    .map((movement, index) => {
+      const itemId = String(movement.itemId || '');
+      const material = materialByIdentity.get(itemId)
+        || materialByIdentity.get(String(movement.itemName || '').trim().toLowerCase());
+      actualItemIds.add(canonicalMaterialIdentity(itemId, movement.itemName));
+      const category = material?.type === 'packaging' || movement.itemType === 'packaging'
+        ? 'packaging'
+        : 'material';
+      return {
+        sourceKey: `stock:${String(movement.id || index)}`,
+        sourceType: 'stock_issue',
+        sourceId: String(movement.id || ''),
+        category,
+        label: String(movement.itemName || material?.name || itemId),
+        amount: Number(movement.totalCostSnapshot || 0),
+        status: 'actual',
+        quantity: Number(movement.quantity || 0),
+        unitCost: Number(movement.unitCostSnapshot || 0),
+      } satisfies ProductionCostSourceLine;
+    });
+
+  const estimatedLines: ProductionCostSourceLine[] = bomBundle.items
+    .filter((item) => !actualItemIds.has(canonicalMaterialIdentity(item.itemId, item.itemName)))
+    .map((item, index) => {
+      const material = materialByIdentity.get(String(item.itemId || ''))
+        || materialByIdentity.get(String(item.itemName || '').trim().toLowerCase())
+        || null;
+      const row = calculateBomItemUnitCost(material, item, Number(report.quantityProduced || 0));
+      return {
+        sourceKey: `bom:${String(bomBundle.bom?.id || 'missing')}:${String(item.id || item.itemId || index)}`,
+        sourceType: bomBundle.isLegacy ? 'legacy_bom_estimate' : 'bom_estimate',
+        sourceId: String(item.id || item.itemId || ''),
+        category: material?.type === 'packaging' ? 'packaging' : 'material',
+        label: String(item.itemName || material?.name || item.itemId),
+        amount: Number(row.totalCost || 0),
+        status: 'estimated',
+        quantity: Number(item.qtyPerUnit || 0) * Number(report.quantityProduced || 0),
+        unitCost: Number(item.qtyPerUnit || 0) > 0
+          ? Number(row.totalCost || 0) / (Number(item.qtyPerUnit || 0) * Number(report.quantityProduced || 0) || 1)
+          : 0,
+        costCenterId: item.costCenterId,
+      } satisfies ProductionCostSourceLine;
+    });
+
+  return [...actualLines, ...estimatedLines];
+}
 
 async function persistProductionReportCostSnapshot(
   reportId: string,
   get: CostSnapshotStoreGet,
-): Promise<void> {
+): Promise<ProductionReport | null> {
   const row = await reportService.getById(reportId);
-  if (!row?.date) return;
+  if (!row?.date) return null;
   const ym = String(row.date).slice(0, 7);
   const range = calendarMonthRangeFromYearMonth(ym);
-  if (!range) return;
+  if (!range) return null;
   const monthRows = await reportService.getByDateRange(range.start, range.end);
   const st = get();
   const supervisorHourlyRates = buildSupervisorHourlyRatesMap(st._rawEmployees);
@@ -709,7 +833,7 @@ async function persistProductionReportCostSnapshot(
   st._rawProducts.forEach((p) => {
     if (p.id) productCategoryById.set(String(p.id), String(p.category || ''));
   });
-  const patch = buildProductionReportCostSnapshotPatch(row, monthRows, {
+  const legacyPatch = buildProductionReportCostSnapshotPatch(row, monthRows, {
     hourlyRate: Number(st.laborSettings?.hourlyRate ?? 0),
     costCenters: st.costCenters,
     costCenterValues: st.costCenterValues,
@@ -717,8 +841,127 @@ async function persistProductionReportCostSnapshot(
     supervisorHourlyRates,
     workingDaysByMonth: st.systemSettings.costMonthlyWorkingDays,
     productCategoryById,
+  }) || {
+    costSnapshotAt: new Date().toISOString(),
+    unitCostSnapshot: 0,
+    laborCostSnapshot: 0,
+    lineIndirectShareSnapshot: 0,
+    supervisorIndirectSnapshot: 0,
+    indirectByCenterSnapshot: {},
+  };
+
+  const effectiveDepreciation = buildEffectiveDepreciationRows(
+    ym,
+    st.assets,
+    st.assetDepreciations,
+  );
+  const withDepreciation = getProductionReportCostBreakdown(
+    row,
+    monthRows,
+    Number(st.laborSettings?.hourlyRate ?? 0),
+    st.costCenters,
+    st.costCenterValues,
+    st.costAllocations,
+    supervisorHourlyRates,
+    st.systemSettings.costMonthlyWorkingDays,
+    productCategoryById,
+    st.assets,
+    effectiveDepreciation.rows,
+  );
+  const legacyConversionCost = Number(legacyPatch.unitCostSnapshot || 0)
+    * Number(row.quantityProduced || 0);
+  const conversionWithDepreciation = Number(withDepreciation?.totalCost ?? legacyConversionCost);
+  const depreciationCost = Math.max(0, conversionWithDepreciation - legacyConversionCost);
+  const materialSources = await buildReportMaterialCostSources(row);
+  const applicableCenterIds = new Set(
+    st.costCenters
+      .filter(isProductionAllocationCostCenter)
+      .map((center) => String(center.id || '')),
+  );
+  const applicableCenterValues = st.costCenterValues.filter(
+    (value) => value.month === ym && applicableCenterIds.has(String(value.costCenterId || '')),
+  );
+  const overheadIsActual = applicableCenterValues.length > 0
+    && applicableCenterValues.every((value) => ['actual', 'closed'].includes(String(value.costingStatus || '')));
+  const sourceLines: ProductionCostSourceLine[] = [
+    ...materialSources,
+    {
+      sourceKey: `labor:${reportId}`,
+      sourceType: 'labor_standard',
+      sourceId: reportId,
+      category: 'direct_labor',
+      label: 'العمالة المباشرة',
+      amount: Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0),
+      status: 'estimated',
+    },
+    {
+      sourceKey: `overhead:${reportId}:${ym}`,
+      sourceType: 'cost_center_absorption',
+      sourceId: ym,
+      category: 'factory_overhead',
+      label: 'التكاليف الصناعية المحملة',
+      amount: Math.max(
+        0,
+        conversionWithDepreciation
+          - Number(withDepreciation?.laborCostTotal ?? legacyPatch.laborCostSnapshot ?? 0)
+          - depreciationCost,
+      ),
+      status: overheadIsActual ? 'actual' : 'estimated',
+    },
+  ];
+  if (depreciationCost > 0) {
+    sourceLines.push({
+      sourceKey: `depreciation:${reportId}:${ym}`,
+      sourceType: effectiveDepreciation.hasScheduledRows ? 'asset_schedule' : 'asset_depreciation',
+      sourceId: ym,
+      category: 'depreciation',
+      label: 'إهلاك أصول المصنع',
+      amount: depreciationCost,
+      status: effectiveDepreciation.hasScheduledRows ? 'scheduled' : 'actual',
+    });
+  }
+  const previousRevision = Math.max(0, Number(row.manufacturingCostRevision || 0));
+  const fullCost = calculateFullProductionCost({
+    reportId,
+    quantityProduced: Number(row.quantityProduced || 0),
+    lines: sourceLines,
+    revision: previousRevision + 1,
   });
-  if (patch) await reportService.update(reportId, patch);
+  const unchanged = row.manufacturingCostVersion === fullCost.version
+    && Number(row.fullManufacturingCostSnapshot || 0) === fullCost.fullManufacturingCost
+    && JSON.stringify(row.manufacturingCostSourcesSnapshot || []) === JSON.stringify(fullCost.sourceLines);
+  const revision = unchanged ? Math.max(1, previousRevision) : fullCost.revision;
+  const finalPatch: Partial<ProductionReport> = {
+    ...legacyPatch,
+    legacyConversionCostSnapshot: legacyConversionCost,
+    manufacturingCostVersion: fullCost.version,
+    manufacturingCostRevision: revision,
+    manufacturingCostStatus: fullCost.status,
+    manufacturingCostPostingState: 'calculated',
+    manufacturingCostPostingError: '',
+    manufacturingCostCalculatedAt: unchanged
+      ? row.manufacturingCostCalculatedAt || new Date().toISOString()
+      : new Date().toISOString(),
+    materialCostSnapshot: fullCost.materialCost,
+    packagingCostSnapshot: fullCost.packagingCost,
+    directLaborCostSnapshot: fullCost.directLaborCost,
+    factoryOverheadCostSnapshot: fullCost.factoryOverheadCost,
+    depreciationCostSnapshot: fullCost.depreciationCost,
+    fullManufacturingCostSnapshot: fullCost.fullManufacturingCost,
+    fullManufacturingUnitCostSnapshot: fullCost.unitManufacturingCost,
+    manufacturingCostSourceQualitySnapshot: fullCost.sourceQuality,
+    manufacturingCostSourcesSnapshot: fullCost.sourceLines,
+  };
+  await reportService.update(reportId, finalPatch);
+  return { ...row, ...finalPatch };
+}
+
+function replaceLoadedReportRow(
+  rows: ProductionReport[],
+  report: ProductionReport,
+): ProductionReport[] {
+  if (!report.id || !rows.some((row) => row.id === report.id)) return rows;
+  return rows.map((row) => row.id === report.id ? report : row);
 }
 
 function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
@@ -4106,6 +4349,8 @@ export const useAppStore = create<AppState>((set, get) => ({
         laborAssignmentSource: Number(savePayload.workersCount || 0) > 0 || detailedWorkersTotal > 0
           ? 'line_worker_assignments'
           : 'none',
+        manufacturingCostPostingState: 'pending',
+        manufacturingCostPostingError: '',
         workerOutputs,
       };
       const rawCycleId =
@@ -4298,9 +4543,28 @@ export const useAppStore = create<AppState>((set, get) => ({
         get()._rebuildProducts();
         get()._rebuildLines();
         try {
-          await persistProductionReportCostSnapshot(id, get);
+          const costedReport = await persistProductionReportCostSnapshot(id, get);
+          if (costedReport) {
+            set((state) => ({
+              todayReports: replaceLoadedReportRow(state.todayReports, costedReport),
+              monthlyReports: replaceLoadedReportRow(state.monthlyReports, costedReport),
+              productionReports: replaceLoadedReportRow(state.productionReports, costedReport),
+              productionReportsRangeCache: Object.fromEntries(
+                Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+                  key,
+                  { ...value, rows: replaceLoadedReportRow(value.rows, costedReport) },
+                ]),
+              ),
+            }));
+          }
         } catch (snapErr) {
           console.warn('persistProductionReportCostSnapshot (create):', snapErr);
+          const costErrorMessage = (snapErr as Error)?.message || 'تعذر حساب تكلفة التصنيع الكاملة.';
+          postSaveWarning = `تم حفظ التقرير ولكن ${costErrorMessage}`;
+          await reportService.update(id, {
+            manufacturingCostPostingState: 'failed',
+            manufacturingCostPostingError: costErrorMessage,
+          }).catch(() => undefined);
         }
         try {
           await syncWorkerDailyPerformanceFromReport(id, { ...reportData, id });
@@ -4781,9 +5045,28 @@ export const useAppStore = create<AppState>((set, get) => ({
       get()._rebuildProducts();
       get()._rebuildLines();
       try {
-        await persistProductionReportCostSnapshot(id, get);
+        const costedReport = await persistProductionReportCostSnapshot(id, get);
+        if (costedReport) {
+          set((state) => ({
+            todayReports: replaceLoadedReportRow(state.todayReports, costedReport),
+            monthlyReports: replaceLoadedReportRow(state.monthlyReports, costedReport),
+            productionReports: replaceLoadedReportRow(state.productionReports, costedReport),
+            productionReportsRangeCache: Object.fromEntries(
+              Object.entries(state.productionReportsRangeCache).map(([key, value]) => [
+                key,
+                { ...value, rows: replaceLoadedReportRow(value.rows, costedReport) },
+              ]),
+            ),
+          }));
+        }
       } catch (snapErr) {
         console.warn('persistProductionReportCostSnapshot (update):', snapErr);
+        const costErrorMessage = (snapErr as Error)?.message || 'تعذر إعادة حساب تكلفة التصنيع الكاملة.';
+        set({ error: costErrorMessage });
+        await reportService.update(id, {
+          manufacturingCostPostingState: 'failed',
+          manufacturingCostPostingError: costErrorMessage,
+        }).catch(() => undefined);
       }
       try {
         await syncWorkerDailyPerformanceFromReport(id, savedReport);

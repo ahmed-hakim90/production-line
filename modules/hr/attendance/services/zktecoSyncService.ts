@@ -31,7 +31,8 @@ const WRITE_CHUNK = 400;
 
 function buildBatchId(): string {
   const now = new Date();
-  return `ATT-${now.toISOString().replace(/[-:TZ.]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`;
+  // Keep '-' at the end so Tailwind's source scanner does not misread the regex as a utility token.
+  return `ATT-${now.toISOString().replace(/[:TZ.\-]/g, '').slice(0, 14)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
 function normalizeKey(raw: string): string {

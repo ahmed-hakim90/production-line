@@ -1,12 +1,18 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Button, SearchableSelect } from '../../../components/UI';
+import { Button } from '@/components/ui/button';
+import { SearchableSelect } from '../../../components/UI';
 import { toast } from '../../../components/Toast';
+import { customerService } from '../../customers/services/customerService';
+import type { CustomerType } from '../../customers/types';
 import { stockService } from '../../inventory/services/stockService';
 import { warehouseLocationService } from '../../inventory/services/warehouseLocationService';
-import { MATERIAL_UNIT_LABELS, type MaterialUnit } from '../../manufacturing/types';
+import { materialService } from '../../manufacturing/services/materialService';
+import { MATERIAL_UNIT_LABELS, type Material, type MaterialUnit } from '../../manufacturing/types';
+import { repairJobService } from '../services/repairJobService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
 import { sparePartsService } from '../services/sparePartsService';
 import type { RepairBranch, RepairSparePart } from '../types';
+import { resolveRepairSalePrice } from '../utils/sparePartPricing';
 import { RepairModalShell } from './RepairModalShell';
 
 type DraftLine = {
@@ -62,8 +68,10 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
   const [note, setNote] = useState('');
   const [jobId, setJobId] = useState('');
   const [jobCode, setJobCode] = useState('');
+  const [jobCustomerType, setJobCustomerType] = useState<CustomerType | null>(null);
   const [lines, setLines] = useState<DraftLine[]>([emptyDraftLine()]);
   const [parts, setParts] = useState<RepairSparePart[]>([]);
+  const [materials, setMaterials] = useState<Material[]>([]);
   const [balances, setBalances] = useState<Map<string, number>>(new Map());
   const [locations, setLocations] = useState<Array<{ id: string; code: string }>>([]);
   const [saving, setSaving] = useState(false);
@@ -78,8 +86,45 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
     setNote('');
     setJobId('');
     setJobCode('');
+    setJobCustomerType(null);
     setLines([emptyDraftLine()]);
   }, [open, usableBranches]);
+
+  useEffect(() => {
+    if (!open) return;
+    const id = String(jobId || '').trim();
+    if (!id) {
+      setJobCustomerType(null);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const job = await repairJobService.getById(id);
+        const customerId = String(job?.customerId || '').trim();
+        if (!customerId) {
+          if (!cancelled) setJobCustomerType(null);
+          return;
+        }
+        const customer = await customerService.getById(customerId);
+        if (!cancelled) {
+          setJobCustomerType(customer?.type === 'trader' ? 'trader' : customer?.type === 'consumer' ? 'consumer' : null);
+        }
+      } catch {
+        if (!cancelled) setJobCustomerType(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, jobId]);
+
+  useEffect(() => {
+    if (!open) return;
+    void materialService.getAll()
+      .then((rows) => setMaterials(rows.filter((m) => m.isActive !== false && m.id)))
+      .catch(() => setMaterials([]));
+  }, [open]);
 
   useEffect(() => {
     let cancelled = false;
@@ -134,23 +179,55 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
   }, [open, branchId, warehouseId]);
 
   const itemOptions = useMemo((): PartOption[] => {
+    const saleByMaterialId = new Map<string, { consumer: number; trader: number }>();
+    for (const material of materials) {
+      const id = String(material.id || '').trim();
+      if (!id) continue;
+      saleByMaterialId.set(id, {
+        consumer: Number(material.defaultSalePrice || 0),
+        trader: Number(material.traderSalePrice || 0),
+      });
+    }
+
     const linked: PartOption[] = [];
     const seen = new Set<string>();
     for (const part of parts) {
       const materialId = String(part.materialId || part.rawMaterialId || '').trim();
       if (!materialId || seen.has(materialId)) continue;
       seen.add(materialId);
+      const prices = saleByMaterialId.get(materialId);
       linked.push({
         value: materialId,
         label: `${part.name}${part.code ? ` (${part.code})` : ''}`,
         partId: part.id,
         partName: part.name,
         unit: part.unit,
-        salePrice: Number(part.defaultSalePrice || 0),
+        salePrice: resolveRepairSalePrice({
+          customerType: jobCustomerType,
+          materialSalePrice: prices?.consumer,
+          materialTraderSalePrice: prices?.trader,
+          partSalePrice: part.defaultSalePrice,
+        }),
+      });
+    }
+    for (const material of materials) {
+      const materialId = String(material.id || '').trim();
+      if (!materialId || seen.has(materialId)) continue;
+      seen.add(materialId);
+      linked.push({
+        value: materialId,
+        label: `${material.name}${material.code ? ` (${material.code})` : ''}`,
+        partName: material.name,
+        unit: material.baseUnit,
+        salePrice: resolveRepairSalePrice({
+          customerType: jobCustomerType,
+          materialSalePrice: material.defaultSalePrice,
+          materialTraderSalePrice: material.traderSalePrice,
+        }),
       });
     }
     return linked;
-  }, [parts]);
+  }, [parts, materials, jobCustomerType]);
 
   const locationsRequired = locations.length > 0;
 
@@ -233,7 +310,7 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       )}
     >
       {usableBranches.length === 0 ? (
-        <p className="text-sm text-[var(--color-text-muted)]">
+        <p className="text-sm text-muted-foreground">
           لا توجد فروع صيانة بمخزن مرتبط. راجع شاشة الفروع أولًا.
         </p>
       ) : null}
@@ -241,19 +318,15 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
         <label className="text-sm space-y-1">
           <span className="font-bold">فرع الصيانة *</span>
-          <select
-            className="w-full border rounded-lg px-3 py-2"
+          <SearchableSelect
+            options={usableBranches.map((b) => ({ value: b.id, label: b.name }))}
             value={branchId}
-            onChange={(e) => {
-              setBranchId(e.target.value);
+            onChange={(value) => {
+              setBranchId(value);
               setLines([emptyDraftLine()]);
             }}
-          >
-            <option value="">اختر فرع</option>
-            {usableBranches.map((b) => (
-              <option key={b.id} value={b.id}>{b.name}</option>
-            ))}
-          </select>
+            placeholder="ابحث واختر فرع"
+          />
         </label>
         <label className="text-sm space-y-1">
           <span className="font-bold">ملاحظة</span>
@@ -285,8 +358,8 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       </div>
 
       {itemOptions.length === 0 && !loadingMeta && (
-        <p className="text-sm text-[var(--color-text-muted)] rounded-lg border border-dashed p-3">
-          لا توجد قطع مربوطة بماستر داتا لهذا الفرع. اربط القطع من شاشة قطع غيار فروع الصيانة أولًا.
+        <p className="text-sm text-muted-foreground rounded-lg border border-dashed p-3">
+          لا توجد أصناف متاحة. تأكد من وجود مواد نشطة في ماستر المكونات.
         </p>
       )}
 
@@ -319,11 +392,13 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
                       : row
                   )));
                 }}
-                placeholder="اختر قطعة غيار"
+                placeholder="ابحث واختر قطعة غيار"
               />
-              <p className="text-[11px] text-[var(--color-text-muted)] h-4">
+              <p className="text-[11px] text-muted-foreground h-4">
                 {line.itemId
-                  ? (salePrice > 0 ? `سعر الاستخدام: ${fmt(salePrice)}` : 'سعر الاستخدام: غير محدد')
+                  ? (salePrice > 0
+                    ? `سعر ${jobCustomerType === 'trader' ? 'التاجر' : 'المستهلك'}: ${fmt(salePrice)}`
+                    : 'السعر: غير محدد')
                   : '\u00a0'}
               </p>
             </div>
@@ -342,27 +417,23 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
                   )));
                 }}
               />
-              <p className="text-[11px] text-[var(--color-text-muted)] h-4">
+              <p className="text-[11px] text-muted-foreground h-4">
                 {line.itemId ? `المتاح: ${fmt(available)}` : '\u00a0'}
               </p>
             </div>
             {locationsRequired && (
-              <div className="w-[7.5rem] shrink-0 space-y-1">
+              <div className="w-[10rem] shrink-0 space-y-1">
                 <p className="text-xs font-bold h-4">الرف</p>
-                <select
-                  className="w-full h-10 border border-[var(--color-border)] rounded-lg px-3 py-2"
+                <SearchableSelect
+                  options={locations.map((loc) => ({ value: loc.id, label: loc.code }))}
                   value={line.locationId}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setLines((prev) => prev.map((row, i) => (
-                      i === index ? { ...row, locationId: e.target.value } : row
+                      i === index ? { ...row, locationId: value } : row
                     )));
                   }}
-                >
-                  <option value="">اختر رف</option>
-                  {locations.map((loc) => (
-                    <option key={loc.id} value={loc.id}>{loc.code}</option>
-                  ))}
-                </select>
+                  placeholder="ابحث واختر رف"
+                />
                 <p className="text-[11px] h-4">{'\u00a0'}</p>
               </div>
             )}
@@ -370,7 +441,7 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
               <p className="text-xs font-bold h-4">{'\u00a0'}</p>
               <Button
                 type="button"
-                variant="danger"
+                variant="destructive"
                 className="h-10"
                 onClick={() => setLines((prev) => (
                   prev.length <= 1 ? [emptyDraftLine()] : prev.filter((_, i) => i !== index)

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Settings2 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -22,7 +21,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { PageHeader } from '@/src/components/erp/PageHeader';
+import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import {
@@ -41,6 +40,7 @@ import type {
 } from '../../../types';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { cn } from '@/lib/utils';
+import { repairServiceCatalogService } from '../services/repairServiceCatalogService';
 
 function repairSettingsFingerprint(settings: ReturnType<typeof useAppStore.getState>['systemSettings']): string {
   try {
@@ -54,8 +54,18 @@ export const RepairSettings: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const systemSettings = useAppStore((s) => s.systemSettings);
   const updateSystemSettings = useAppStore((s) => s.updateSystemSettings);
+  const productCategories = useAppStore((s) => s._productCategories);
   const resolved = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const fp = useMemo(() => repairSettingsFingerprint(systemSettings), [systemSettings]);
+
+  const categoryOptions = useMemo(
+    () =>
+      (productCategories || [])
+        .filter((c) => c.id && c.name)
+        .map((c) => ({ id: String(c.id), name: String(c.name) }))
+        .sort((a, b) => a.name.localeCompare(b.name, 'ar')),
+    [productCategories],
+  );
 
   const [saving, setSaving] = useState(false);
   const [statuses, setStatuses] = useState<ResolvedRepairStatus[]>(() => resolved.workflow.statuses);
@@ -68,6 +78,9 @@ export const RepairSettings: React.FC = () => {
   const [timezone, setTimezone] = useState(resolved.treasury.autoClose.timezone || 'Africa/Cairo');
   const [autoCloseEnabled, setAutoCloseEnabled] = useState(Boolean(resolved.treasury.autoClose.enabled));
   const [blockIfPrevDayOpen, setBlockIfPrevDayOpen] = useState(Boolean(resolved.treasury.autoClose.blockOperationsIfPrevDayOpen));
+  const [allowPartialCollection, setAllowPartialCollection] = useState(
+    Boolean(resolved.payments.allowPartialCollection),
+  );
   const [accessoriesCatalog, setAccessoriesCatalog] = useState<RepairAccessoryCatalogItem[]>(
     () => resolved.accessoriesCatalog,
   );
@@ -175,19 +188,38 @@ export const RepairSettings: React.FC = () => {
     setTimezone(r.treasury.autoClose.timezone || 'Africa/Cairo');
     setAutoCloseEnabled(Boolean(r.treasury.autoClose.enabled));
     setBlockIfPrevDayOpen(Boolean(r.treasury.autoClose.blockOperationsIfPrevDayOpen));
+    setAllowPartialCollection(Boolean(r.payments.allowPartialCollection));
     setAccessoriesCatalog(r.accessoriesCatalog);
     setServiceCatalog(r.serviceCatalog);
   }, [fp]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void repairServiceCatalogService.get()
+      .then((catalog) => {
+        if (!cancelled && catalog.services.length > 0) setServiceCatalog(catalog.services);
+      })
+      .catch(() => {
+        // Keep the sanitized legacy names visible; saving will create the protected catalog.
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const onSave = async () => {
     const minStock = Math.max(0, Math.round(Number(defaultMinStock) || 0));
     const sla = Math.max(0, Math.round(Number(defaultSlaHours) || 0));
     const normalizedAccessories = accessoriesCatalog
-      .map((row, index) => ({
-        id: String(row.id || '').trim() || `acc-${index + 1}`,
-        label: String(row.label || '').trim(),
-        enabled: row.enabled !== false,
-      }))
+      .map((row, index) => {
+        const categoryIds = Array.isArray(row.categoryIds)
+          ? row.categoryIds.map((id) => String(id || '').trim()).filter(Boolean)
+          : [];
+        return {
+          id: String(row.id || '').trim() || `acc-${index + 1}`,
+          label: String(row.label || '').trim(),
+          enabled: row.enabled !== false,
+          ...(categoryIds.length > 0 ? { categoryIds } : {}),
+        };
+      })
       .filter((row) => row.label.length > 0);
     const normalizedServices = serviceCatalog
       .map((row, index) => {
@@ -231,6 +263,7 @@ export const RepairSettings: React.FC = () => {
         );
       }
 
+      await repairServiceCatalogService.save(normalizedServices);
       await updateSystemSettings({
         ...systemSettings,
         repairSettings: {
@@ -257,8 +290,19 @@ export const RepairSettings: React.FC = () => {
               blockOperationsIfPrevDayOpen: blockIfPrevDayOpen,
             },
           },
+          payments: {
+            ...(systemSettings.repairSettings?.payments || {}),
+            allowPartialCollection,
+          },
           accessoriesCatalog: normalizedAccessories,
-          serviceCatalog: normalizedServices,
+          // Names remain available to operational screens; real prices live only
+          // in repair_service_catalog and are never readable by technicians.
+          serviceCatalog: normalizedServices.map(({ id, name, enabled }) => ({
+            id,
+            name,
+            enabled,
+            price: 0,
+          })),
         },
       });
       toast.success(
@@ -275,11 +319,11 @@ export const RepairSettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6">
       <PageHeader
         title="إعدادات الصيانة"
         subtitle="تحكم في سير العمل، الصلاحيات، الافتراضيات، وسياسة خزينة الصيانة."
-        icon={<Settings2 className="h-4 w-4" strokeWidth={2} />}
+        icon="settings"
         actions={
           <Button onClick={onSave} disabled={saving} className="shrink-0">
             {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
@@ -414,7 +458,7 @@ export const RepairSettings: React.FC = () => {
         <CardHeader className="space-y-1 pb-2">
           <CardTitle className="text-base font-semibold tracking-tight">إكسسوارات الاستلام</CardTitle>
           <CardDescription>
-            قائمة الإكسسوارات التي يمكن تسجيلها مع الجهاز عند الاستلام (شاحن، كابل، جراب…).
+            قائمة الإكسسوارات عند الاستلام. اربط كل إكسسوار بفئات المنتجات — بدون فئات = يظهر لكل المنتجات.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -422,10 +466,11 @@ export const RepairSettings: React.FC = () => {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
-                  <TableHead className="w-[140px] font-medium">المعرف</TableHead>
-                  <TableHead className="font-medium">الاسم</TableHead>
-                  <TableHead className="w-[90px] text-center font-medium">مفعّل</TableHead>
-                  <TableHead className="w-[72px]" />
+                  <TableHead className="w-[120px] font-medium">المعرف</TableHead>
+                  <TableHead className="w-[140px] font-medium">الاسم</TableHead>
+                  <TableHead className="font-medium">فئات المنتجات</TableHead>
+                  <TableHead className="w-[72px] text-center font-medium">مفعّل</TableHead>
+                  <TableHead className="w-[64px]" />
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -455,6 +500,41 @@ export const RepairSettings: React.FC = () => {
                         }
                         className="h-9 bg-background"
                       />
+                    </TableCell>
+                    <TableCell className="align-top py-3">
+                      {categoryOptions.length === 0 ? (
+                        <p className="text-xs text-muted-foreground">لا توجد فئات منتجات محمّلة.</p>
+                      ) : (
+                        <div className="flex flex-wrap gap-x-3 gap-y-1.5 max-h-28 overflow-y-auto">
+                          {categoryOptions.map((cat) => {
+                            const checked = (item.categoryIds || []).includes(cat.id);
+                            return (
+                              <label key={cat.id} className="inline-flex items-center gap-1.5 text-xs">
+                                <Checkbox
+                                  checked={checked}
+                                  onCheckedChange={(c) => {
+                                    setAccessoriesCatalog((prev) =>
+                                      prev.map((row, i) => {
+                                        if (i !== index) return row;
+                                        const current = Array.isArray(row.categoryIds) ? row.categoryIds : [];
+                                        const next = c
+                                          ? [...current.filter((id) => id !== cat.id), cat.id]
+                                          : current.filter((id) => id !== cat.id);
+                                        return { ...row, categoryIds: next };
+                                      }),
+                                    );
+                                  }}
+                                  aria-label={cat.name}
+                                />
+                                <span className="truncate max-w-[9rem]">{cat.name}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      )}
+                      {(item.categoryIds || []).length === 0 ? (
+                        <p className="text-[10px] text-muted-foreground mt-1">كل الفئات</p>
+                      ) : null}
                     </TableCell>
                     <TableCell className="text-center align-middle py-3">
                       <Checkbox
@@ -490,7 +570,7 @@ export const RepairSettings: React.FC = () => {
             onClick={() =>
               setAccessoriesCatalog((prev) => [
                 ...prev,
-                { id: `acc_${Date.now()}`, label: 'إكسسوار جديد', enabled: true },
+                { id: `acc_${Date.now()}`, label: 'إكسسوار جديد', enabled: true, categoryIds: [] },
               ])
             }
           >
@@ -653,6 +733,30 @@ export const RepairSettings: React.FC = () => {
               />
             </div>
           </div>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-base font-semibold tracking-tight">إقفال الدفع من شاشة الطلب</CardTitle>
+          <CardDescription>
+            تحكم في الأزرار الظاهرة عند تحصيل وتسليم الطلب من شاشة تفاصيل الطلب.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <label className="flex items-start gap-3 rounded-lg border border-[var(--color-border)]/70 bg-muted/20 p-3 text-sm">
+            <Checkbox
+              checked={allowPartialCollection}
+              onCheckedChange={(checked) => setAllowPartialCollection(checked === true)}
+              className="mt-0.5"
+            />
+            <span>
+              <span className="font-medium text-foreground">إظهار «تحصيل جزئي / مبلغ مخصص»</span>
+              <span className="mt-1 block text-xs text-muted-foreground">
+                عند الإيقاف يبقى زر «تحصيل كامل وتسليم» فقط على شاشة الطلب. التحصيل الجزئي يبقى متاحًا من شاشة التحصيل والتسليم إن لزم.
+              </span>
+            </span>
+          </label>
         </CardContent>
       </Card>
 

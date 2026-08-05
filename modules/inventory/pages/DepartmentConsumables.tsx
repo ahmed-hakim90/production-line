@@ -11,6 +11,7 @@ import { useAppStore } from '../../../store/useAppStore';
 import { departmentsRef } from '../../hr/collections';
 import type { FirestoreDepartment } from '../../hr/types';
 import { materialService } from '../../manufacturing/services/materialService';
+import { MATERIAL_UNIT_LABELS, type MaterialUnit } from '../../manufacturing/types';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { departmentConsumableIssueService } from '../services/departmentConsumableIssueService';
@@ -25,6 +26,7 @@ import {
   departmentConsumableLineKey,
 } from '../lib/departmentConsumableIssue';
 import type { ConsumableOption } from '../lib/itemMovementTrace';
+import { filterConsumableCatalog } from '../lib/itemMovementTrace';
 import type {
   DepartmentConsumableIssue,
   DepartmentConsumableIssueLine,
@@ -55,8 +57,13 @@ import {
 const PAGE_SIZE = 20;
 const THIS_MONTH = new Date().toISOString().slice(0, 7);
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
+const moneyFmt = (n: number) => new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
 
-type TabKey = 'issues' | 'report';
+function consumableUnitLabel(unit: string): string {
+  return MATERIAL_UNIT_LABELS[unit as MaterialUnit] || unit || '—';
+}
+
+type TabKey = 'issues' | 'catalog' | 'report';
 type ModalKey = 'addStock' | 'createIssue' | 'importSheet' | 'none';
 
 export const DepartmentConsumables: React.FC = () => {
@@ -120,6 +127,9 @@ export const DepartmentConsumables: React.FC = () => {
   const [warehouseFilter, setWarehouseFilter] = useState('');
   const [page, setPage] = useState(1);
 
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogPage, setCatalogPage] = useState(1);
+
   const [returnIssue, setReturnIssue] = useState<DepartmentConsumableIssue | null>(null);
   const [returnQtyByLine, setReturnQtyByLine] = useState<Record<string, number>>({});
   const [traceItem, setTraceItem] = useState<ConsumableOption | null>(null);
@@ -181,6 +191,10 @@ export const DepartmentConsumables: React.FC = () => {
     setPage(1);
   }, [search, statusFilter, departmentFilter, warehouseFilter]);
 
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [catalogSearch]);
+
   const visibleWarehouses = useMemo(
     () => filterWarehouses(warehouses),
     [warehouses, filterWarehouses],
@@ -208,6 +222,18 @@ export const DepartmentConsumables: React.FC = () => {
   const totalPages = Math.max(1, Math.ceil(filteredOrders.length / PAGE_SIZE));
   const currentPage = Math.min(page, totalPages);
   const pagedOrders = filteredOrders.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const filteredCatalog = useMemo(
+    () => filterConsumableCatalog(consumables, catalogSearch, consumableUnitLabel),
+    [consumables, catalogSearch],
+  );
+
+  const catalogTotalPages = Math.max(1, Math.ceil(filteredCatalog.length / PAGE_SIZE));
+  const catalogCurrentPage = Math.min(catalogPage, catalogTotalPages);
+  const pagedCatalog = filteredCatalog.slice(
+    (catalogCurrentPage - 1) * PAGE_SIZE,
+    catalogCurrentPage * PAGE_SIZE,
+  );
 
   const runAction = async (issueId: string, action: () => Promise<void>, success: string) => {
     setBusyId(issueId);
@@ -573,14 +599,109 @@ export const DepartmentConsumables: React.FC = () => {
         )}
       />
 
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
         <Button variant={tab === 'issues' ? 'primary' : 'secondary'} onClick={() => setTab('issues')}>
           السندات
+        </Button>
+        <Button variant={tab === 'catalog' ? 'primary' : 'secondary'} onClick={() => setTab('catalog')}>
+          المستهلكات المعرفة
         </Button>
         <Button variant={tab === 'report' ? 'primary' : 'secondary'} onClick={() => setTab('report')}>
           التقرير الشهري
         </Button>
       </div>
+
+      {tab === 'catalog' && (
+        <Card className="p-0 overflow-hidden">
+          <div className="p-4 border-b border-[var(--color-border)]">
+            <SmartFilterBar
+              pageId="department-consumables-catalog"
+              searchPlaceholder="بحث بالاسم / الكود / الوحدة"
+              searchValue={catalogSearch}
+              onSearchChange={setCatalogSearch}
+              extra={canDefine ? (
+                <Button size="sm" onClick={() => setShowDefine(true)}>
+                  تعريف مستهلك
+                </Button>
+              ) : undefined}
+            />
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="erp-table w-full">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th">الكود</th>
+                  <th className="erp-th">الاسم</th>
+                  <th className="erp-th">الوحدة</th>
+                  <th className="erp-th">سعر الوحدة</th>
+                  <th className="erp-th">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading && (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
+                      جاري التحميل...
+                    </td>
+                  </tr>
+                )}
+                {!loading && pagedCatalog.length === 0 && (
+                  <tr>
+                    <td colSpan={5} className="p-6 text-center text-sm text-[var(--color-text-muted)]">
+                      {consumables.length === 0 ? (
+                        <>
+                          لا توجد مستهلكات معرفة بعد
+                          {canDefine && (
+                            <>
+                              {' — '}
+                              <button
+                                type="button"
+                                className="underline font-bold"
+                                onClick={() => setShowDefine(true)}
+                              >
+                                عرّف مستهلكًا
+                              </button>
+                            </>
+                          )}
+                        </>
+                      ) : (
+                        'لا توجد نتائج مطابقة للبحث.'
+                      )}
+                    </td>
+                  </tr>
+                )}
+                {!loading && pagedCatalog.map((item) => (
+                  <tr key={item.id} className="border-t border-[var(--color-border)]">
+                    <td className="p-3 text-sm font-mono tabular-nums">{item.code}</td>
+                    <td className="p-3 text-sm font-bold">{item.name}</td>
+                    <td className="p-3 text-sm">{consumableUnitLabel(item.unit)}</td>
+                    <td className="p-3 text-sm tabular-nums">
+                      {moneyFmt(Number(item.purchaseCost || 0))}
+                    </td>
+                    <td className="p-3">
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        onClick={() => setTraceItem(item)}
+                      >
+                        سجل الحركات
+                      </Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          <DataPaginationFooter
+            page={catalogCurrentPage}
+            totalPages={catalogTotalPages}
+            totalItems={filteredCatalog.length}
+            onPageChange={setCatalogPage}
+            itemLabel="مستهلك"
+          />
+        </Card>
+      )}
 
       {tab === 'issues' && (
         <Card className="p-0 overflow-hidden">

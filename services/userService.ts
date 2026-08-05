@@ -101,6 +101,31 @@ export const userService = {
     }
   },
 
+  /**
+   * Bind user to one repair center (branch). Clears when empty.
+   * Sets both repairBranchId and repairBranchIds for rules + UI isolation.
+   */
+  async updateRepairBranchScope(uid: string, branchId: string | null): Promise<void> {
+    if (!isConfigured) return;
+    try {
+      const trimmed = String(branchId || '').trim();
+      if (!trimmed) {
+        await updateDoc(doc(db, COLLECTION, uid), {
+          repairBranchId: deleteField(),
+          repairBranchIds: deleteField(),
+        });
+        return;
+      }
+      await updateDoc(doc(db, COLLECTION, uid), {
+        repairBranchId: trimmed,
+        repairBranchIds: [trimmed],
+      });
+    } catch (error) {
+      console.error('userService.updateRepairBranchScope error:', error);
+      throw error;
+    }
+  },
+
   /** Update any user fields */
   async update(uid: string, data: Partial<Omit<FirestoreUser, 'id'>>): Promise<void> {
     if (!isConfigured) return;

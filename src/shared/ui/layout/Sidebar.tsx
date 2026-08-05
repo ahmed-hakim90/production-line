@@ -25,9 +25,22 @@ import { WAREHOUSE_ROLE_LABELS } from '@/modules/inventory/lib/stockLabels';
 import { useMaterialsWarehouseScope } from '@/modules/inventory/hooks/useMaterialsWarehouseScope';
 import {
   isInventoryMenuItemVisibleForWarehouseScope,
+  isRepairPartsReplenishmentMenuVisible,
   resolveAccessibleWarehouseRoles,
 } from '@/modules/inventory/lib/inventoryMenuVisibility';
 import type { WarehouseRole } from '@/modules/inventory/types';
+import { repairBranchService } from '@/modules/repair/services/repairBranchService';
+import {
+  resolveUserRepairBranchIds,
+  type FirestoreUserWithRepair,
+} from '@/modules/repair/types';
+import { resolveRepairAccessContext } from '@/modules/repair/utils/repairAccessContext';
+import {
+  buildRepairCenterWarehouseNavSources,
+  isMaintenanceCenterWarehouseRole,
+  repairCenterWarehouseMenuPath,
+  resolveRepairCenterWarehouseIds,
+} from '@/modules/repair/lib/repairCenterWarehouseMenu';
 
 const MAX_SIDEBAR_WAREHOUSES = 24;
 
@@ -107,6 +120,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const [openGroup,   setOpenGroup]   = useState<string | null>(null);
   const [profileOpen, setProfileOpen] = useState(false);
   const [warehouseNavItems, setWarehouseNavItems] = useState<MenuItem[]>([]);
+  const [repairCenterNavItems, setRepairCenterNavItems] = useState<MenuItem[]>([]);
   const profileRef = useRef<HTMLDivElement>(null);
   const {
     filterWarehouses,
@@ -121,6 +135,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
     }),
     [isMaterialsWarehouseRole, loadedWarehouseRoles],
   );
+  const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const systemSettingsFull = useAppStore((s) => s.systemSettings);
+  const repairAccess = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile,
+        userRoleName: roleName,
+        systemSettings: systemSettingsFull,
+        permissions: userPermissions,
+      }),
+    [userProfile, roleName, systemSettingsFull, userPermissions],
+  );
 
   const { collapsed, toggleCollapse } = useSidebar();
   const badgeCounts   = useSidebarBadges();
@@ -133,45 +160,112 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   );
 
   useEffect(() => {
-    if (!can('inventory.view')) {
+    const canInventory = can('inventory.view');
+    const canRepairCenters =
+      can('repair.parts.view')
+      || can('repair.view')
+      || can('sparePartsReplenishment.view')
+      || can('sparePartsReplenishment.create')
+      || can('sparePartsReplenishment.receive');
+
+    if (!canInventory && !canRepairCenters) {
       setWarehouseNavItems([]);
+      setRepairCenterNavItems([]);
       setLoadedWarehouseRoles([]);
       return;
     }
+
     let cancelled = false;
-    void warehouseService.getActiveWarehouses()
-      .then((rows) => {
+    void (async () => {
+      try {
+        const [warehouseRows, branchRows] = await Promise.all([
+          warehouseService.getActiveWarehouses().catch(() => []),
+          canRepairCenters
+            ? repairBranchService.list().catch(() => [])
+            : Promise.resolve([]),
+        ]);
         if (cancelled) return;
-        const scopedRows = filterWarehouses(rows)
-          .filter((w) => Boolean(w.id))
+
+        const scopedRows = filterWarehouses(warehouseRows).filter((w) => Boolean(w.id));
+        const inventoryRows = scopedRows
+          .filter((w) => !isMaintenanceCenterWarehouseRole(w.warehouseRole))
           .slice(0, MAX_SIDEBAR_WAREHOUSES);
-        setLoadedWarehouseRoles(scopedRows.map((w) => (w.warehouseRole || 'general') as WarehouseRole));
+
+        setLoadedWarehouseRoles(
+          inventoryRows.map((w) => (w.warehouseRole || 'general') as WarehouseRole),
+        );
+
         setWarehouseNavItems(
-          scopedRows.map((w) => {
-            const role = w.warehouseRole || 'general';
-            const roleLabel = WAREHOUSE_ROLE_LABELS[role] || role;
+          canInventory
+            ? inventoryRows.map((w) => {
+                const role = w.warehouseRole || 'general';
+                const roleLabel = WAREHOUSE_ROLE_LABELS[role] || role;
+                return {
+                  key: `inv-wh-space-${w.id}`,
+                  label: `${w.name} · ${roleLabel}`,
+                  icon: 'warehouse',
+                  path: `/inventory/warehouses/${w.id}`,
+                  permission: 'inventory.view' as const,
+                  activePatterns: [`/inventory/warehouses/${w.id}`],
+                };
+              })
+            : [],
+        );
+
+        if (!canRepairCenters) {
+          setRepairCenterNavItems([]);
+          return;
+        }
+
+        const allowedWarehouseIds = resolveRepairCenterWarehouseIds({
+          branches: branchRows,
+          canViewAllBranches:
+            repairAccess.canViewAllBranches || repairAccess.adminSeesAllBranches,
+          userBranchIds: resolveUserRepairBranchIds(userProfile),
+          inventoryWarehouseId: userProfile?.inventoryWarehouseId,
+        });
+        const centerSources = buildRepairCenterWarehouseNavSources({
+          warehouses: warehouseRows,
+          branches: branchRows,
+          allowedWarehouseIds,
+        }).slice(0, MAX_SIDEBAR_WAREHOUSES);
+
+        setRepairCenterNavItems(
+          centerSources.map((src) => {
+            const roleLabel = WAREHOUSE_ROLE_LABELS.maintenance_center;
             return {
-              key: `inv-wh-space-${w.id}`,
-              label: `${w.name} · ${roleLabel}`,
+              key: `repair-wh-space-${src.warehouseId}`,
+              label: `${src.warehouseName} · ${roleLabel}`,
               icon: 'warehouse',
-              path: `/inventory/warehouses/${w.id}`,
-              permission: 'inventory.view' as const,
-              activePatterns: [`/inventory/warehouses/${w.id}`],
+              path: repairCenterWarehouseMenuPath(src.warehouseId),
+              permission: 'repair.parts.view' as const,
+              anyOfPermissions: ['repair.parts.view', 'inventory.view'] as MenuItem['anyOfPermissions'],
+              activePatterns: [
+                `/repair/warehouses/${src.warehouseId}`,
+                `/inventory/warehouses/${src.warehouseId}`,
+              ],
             };
           }),
         );
-      })
-      .catch(() => {
+      } catch {
         if (!cancelled) {
           setWarehouseNavItems([]);
+          setRepairCenterNavItems([]);
           setLoadedWarehouseRoles([]);
         }
-      });
+      }
+    })();
+
     return () => {
       cancelled = true;
     };
-    // filterWarehouses already changes when materials/bound scope changes.
-  }, [can, filterWarehouses]);
+  }, [
+    can,
+    filterWarehouses,
+    repairAccess.adminSeesAllBranches,
+    repairAccess.canViewAllBranches,
+    userProfile,
+  ]);
 
   /**
    * وضع الاختصار (أيقونات فقط) مخصص لسطح المكتب (lg+). على الموبايل، درج القائمة المفتوح
@@ -195,24 +289,55 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 accessibleWarehouseRoles,
               })
             )
+            && (
+              i.key !== 'repair-parts-replenishment'
+              || isRepairPartsReplenishmentMenuVisible({
+                accessibleWarehouseRoles,
+                warehouseScoped,
+                userRepairBranchIds: resolveUserRepairBranchIds(userProfile),
+                canViewAllBranches:
+                  repairAccess.canViewAllBranches || repairAccess.adminSeesAllBranches,
+              })
+            )
           ));
-          if (g.key !== 'inventory' || warehouseNavItems.length === 0) {
-            return { ...g, children };
+
+          if (g.key === 'inventory' && warehouseNavItems.length > 0) {
+            const insertAfterKey = children.some((item) => item.key === 'inv-warehouses')
+              ? 'inv-warehouses'
+              : 'inv-dashboard';
+            const insertAt = Math.max(
+              0,
+              children.findIndex((item) => item.key === insertAfterKey) + 1,
+            );
+            return {
+              ...g,
+              children: [
+                ...children.slice(0, insertAt),
+                ...warehouseNavItems.filter((item) => canAccessMenuItem(can, item, roleKey)),
+                ...children.slice(insertAt),
+              ],
+            };
           }
-          // Prefer inserting after warehouses list; if hidden when scoped, after dashboard.
-          const insertAfterKey = children.some((item) => item.key === 'inv-warehouses')
-            ? 'inv-warehouses'
-            : 'inv-dashboard';
-          const insertAt = Math.max(
-            0,
-            children.findIndex((item) => item.key === insertAfterKey) + 1,
-          );
-          const nextChildren = [
-            ...children.slice(0, insertAt),
-            ...warehouseNavItems.filter((item) => canAccessMenuItem(can, item, roleKey)),
-            ...children.slice(insertAt),
-          ];
-          return { ...g, children: nextChildren };
+
+          if (g.key === 'repair' && repairCenterNavItems.length > 0) {
+            const insertAfterKey = children.some((item) => item.key === 'repair-parts')
+              ? 'repair-parts'
+              : 'repair-jobs';
+            const insertAt = Math.max(
+              0,
+              children.findIndex((item) => item.key === insertAfterKey) + 1,
+            );
+            return {
+              ...g,
+              children: [
+                ...children.slice(0, insertAt),
+                ...repairCenterNavItems.filter((item) => canAccessMenuItem(can, item, roleKey)),
+                ...children.slice(insertAt),
+              ],
+            };
+          }
+
+          return { ...g, children };
         })
         .filter((g) => g.children.length > 0),
     [
@@ -220,7 +345,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       can,
       currentEmployee?.level,
       operationPaths,
+      repairAccess.adminSeesAllBranches,
+      repairAccess.canViewAllBranches,
+      repairCenterNavItems,
       roleKey,
+      userProfile,
       warehouseNavItems,
       warehouseScoped,
     ],

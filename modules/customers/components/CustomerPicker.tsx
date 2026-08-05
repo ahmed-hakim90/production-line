@@ -17,6 +17,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
+import { toEnglishDigits } from '@/lib/englishDigits';
 import { customerService } from '../services/customerService';
 import { formatCustomerOptionLabel, matchCustomers } from '../lib/customerSearch';
 import {
@@ -119,7 +120,7 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
             disabled={disabled}
             placeholder="بحث بالكود أو الاسم أو الموبايل…"
             onChange={(e) => {
-              setQuery(e.target.value);
+              setQuery(toEnglishDigits(e.target.value));
               if (selected) onSelect(null);
             }}
           />
@@ -232,8 +233,10 @@ export const CustomerPicker: React.FC<CustomerPickerProps> = ({
             <div className="grid gap-1">
               <Label>الموبايل</Label>
               <Input
+                type="tel"
                 value={form.phone}
                 onChange={(e) => setForm((p) => ({ ...p, phone: e.target.value }))}
+                placeholder="01xxxxxxxxx"
               />
             </div>
             <div className="grid gap-1">

@@ -17,6 +17,7 @@ import type { RepairSpareIssue } from '../modules/repair/types';
 import {
   effectiveSparePartUnitCost,
   repairSparePartSalePrice,
+  resolveRepairSalePrice,
 } from '../modules/repair/utils/sparePartPricing';
 
 /** Mirrors repairSpareIssues aliases in utils/permissions.ts (no inventory fallbacks). */
@@ -135,7 +136,7 @@ assert.equal(
   false,
 );
 
-// Repair UI sale/usage price: catalog option must not surface purchase cost fields.
+// Repair UI sale/usage price: Material company price wins over branch catalog.
 {
   const part = {
     id: 'p1',
@@ -149,9 +150,12 @@ assert.equal(
   const option = {
     value: String(part.materialId),
     label: part.name,
-    salePrice: Number(part.defaultSalePrice || 0),
+    salePrice: resolveRepairSalePrice({
+      materialSalePrice: 150,
+      partSalePrice: part.defaultSalePrice,
+    }),
   };
-  assert.equal(option.salePrice, 120);
+  assert.equal(option.salePrice, 150);
   assert.equal('unitCost' in option, false);
   assert.equal('purchaseCost' in option, false);
 }
@@ -161,6 +165,50 @@ assert.equal(
   assert.equal(repairSparePartSalePrice(part), 90);
   assert.equal(effectiveSparePartUnitCost(part as any), 36);
   assert.notEqual(repairSparePartSalePrice(part), effectiveSparePartUnitCost(part as any));
+}
+
+{
+  assert.equal(resolveRepairSalePrice({ materialSalePrice: 200, partSalePrice: 90 }), 200);
+  assert.equal(resolveRepairSalePrice({ materialSalePrice: 0, partSalePrice: 90 }), 90);
+  assert.equal(resolveRepairSalePrice({ materialSalePrice: null, partSalePrice: 40 }), 40);
+  assert.equal(resolveRepairSalePrice({ materialSalePrice: -1, partSalePrice: 40 }), 40);
+  assert.equal(resolveRepairSalePrice({}), 0);
+  // Trader prefers traderSalePrice when set; otherwise falls back to consumer.
+  assert.equal(
+    resolveRepairSalePrice({
+      customerType: 'trader',
+      materialSalePrice: 200,
+      materialTraderSalePrice: 150,
+      partSalePrice: 90,
+    }),
+    150,
+  );
+  assert.equal(
+    resolveRepairSalePrice({
+      customerType: 'trader',
+      materialSalePrice: 200,
+      materialTraderSalePrice: 0,
+      partSalePrice: 90,
+    }),
+    200,
+  );
+  assert.equal(
+    resolveRepairSalePrice({
+      customerType: 'consumer',
+      materialSalePrice: 200,
+      materialTraderSalePrice: 150,
+    }),
+    200,
+  );
+  assert.equal(
+    resolveRepairSalePrice({
+      customerType: 'trader',
+      materialSalePrice: 0,
+      materialTraderSalePrice: 0,
+      partSalePrice: 90,
+    }),
+    90,
+  );
 }
 
 console.log('repair-spare-issue.test.ts: ok');

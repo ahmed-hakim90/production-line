@@ -10,9 +10,12 @@ import { roleService } from '../services/roleService';
 import { employeeService } from '../../hr/employeeService';
 import { userManagementService, type UserManagementRow } from '../services/userManagementService';
 import { activityLogService } from '../services/activityLogService';
+import { userService } from '../../../services/userService';
 import { warehouseService } from '../../inventory/services/warehouseService';
+import { repairBranchService } from '../../repair/services/repairBranchService';
 import type { FirestoreEmployee, FirestoreRole } from '../../../types';
 import type { Warehouse } from '../../inventory/types';
+import type { RepairBranch } from '../../repair/types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { exportHRData } from '../../../utils/exportExcel';
@@ -21,6 +24,7 @@ import {
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
+import { resolveUserRepairBranchIds } from '../../repair/types';
 
 const USERS_CACHE_KEY = 'system:users-management';
 
@@ -29,6 +33,7 @@ type UsersManagementPageData = {
   roles: FirestoreRole[];
   employees: FirestoreEmployee[];
   warehouses: Warehouse[];
+  repairBranches: RepairBranch[];
 };
 
 function sortByName<T extends { name?: string }>(items: T[]): T[] {
@@ -66,6 +71,7 @@ export const UsersManagement: React.FC = () => {
   const [roles, setRoles] = useState<FirestoreRole[]>(initialUsersCache?.roles ?? []);
   const [employees, setEmployees] = useState<FirestoreEmployee[]>(initialUsersCache?.employees ?? []);
   const [warehouses, setWarehouses] = useState<Warehouse[]>(initialUsersCache?.warehouses ?? []);
+  const [repairBranches, setRepairBranches] = useState<RepairBranch[]>(initialUsersCache?.repairBranches ?? []);
   const [loading, setLoading] = useState(() => initialUsersCache == null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
@@ -84,6 +90,7 @@ export const UsersManagement: React.FC = () => {
     setRoles(data.roles);
     setEmployees(data.employees);
     setWarehouses(data.warehouses);
+    setRepairBranches(data.repairBranches || []);
   }, []);
 
   const loadPage = useCallback(async (opts?: { force?: boolean }) => {
@@ -98,17 +105,19 @@ export const UsersManagement: React.FC = () => {
       const { data } = await fetchCachedPageData(
         USERS_CACHE_KEY,
         async () => {
-          const [rolesRows, nextRows, allEmployees, allWarehouses] = await Promise.all([
+          const [rolesRows, nextRows, allEmployees, allWarehouses, allRepairBranches] = await Promise.all([
             roleService.getAll(),
             userManagementService.getRows(),
             employeeService.getAll(),
             warehouseService.getAllWarehouses(),
+            repairBranchService.list(),
           ]);
           return {
             roles: rolesRows,
             rows: nextRows,
             employees: sortByName(allEmployees.filter((employee) => employee.isActive !== false)),
             warehouses: sortByName(allWarehouses.filter((wh) => wh.isActive !== false)),
+            repairBranches: sortByName(allRepairBranches),
           };
         },
         { force: opts?.force === true, maxAgeMs: 45_000 },
@@ -261,10 +270,14 @@ export const UsersManagement: React.FC = () => {
       if (currentUid && currentUid === row.user.id) {
         const profile = useAppStore.getState().userProfile;
         if (profile) {
+          // Reload profile fields that may have been synced (repair branch with center warehouse).
+          const refreshed = await userService.get(row.user.id!);
           useAppStore.setState({
             userProfile: {
               ...profile,
               inventoryWarehouseId: nextId,
+              repairBranchId: refreshed?.repairBranchId ?? profile.repairBranchId,
+              repairBranchIds: refreshed?.repairBranchIds ?? profile.repairBranchIds,
             },
           });
         }
@@ -274,7 +287,43 @@ export const UsersManagement: React.FC = () => {
         `تحديث مخزن مستخدم: ${row.user.email}`,
         { userId: row.user.id, inventoryWarehouseId: nextId },
       );
-      setSuccess(nextId ? 'تم ربط المستخدم بالمخزن بنجاح.' : 'تم إلغاء ربط المخزن — يرى كل المخازن.');
+      setSuccess(
+        nextId
+          ? 'تم ربط المستخدم بالمخزن بنجاح. إن كان مخزن مركز صيانة سيُربط فرع الصيانة تلقائيًا.'
+          : 'تم إلغاء ربط المخزن — يرى كل المخازن.',
+      );
+    });
+  };
+
+  const handleUpdateRepairBranch = async (row: UserManagementRow, branchId: string) => {
+    if (!row?.user.id) return;
+    const nextId = String(branchId || '').trim() || null;
+    const prevIds = resolveUserRepairBranchIds(row.user as any);
+    const prevId = prevIds[0] || null;
+    if (nextId === prevId || (!nextId && prevIds.length === 0)) {
+      setSuccess('ربط مركز الصيانة مطابق — لا يوجد تغيير.');
+      return;
+    }
+    await withBusy(async () => {
+      await userManagementService.updateRepairBranchScope(row.user.id!, nextId);
+      if (currentUid && currentUid === row.user.id) {
+        const profile = useAppStore.getState().userProfile;
+        if (profile) {
+          useAppStore.setState({
+            userProfile: {
+              ...profile,
+              repairBranchId: nextId || undefined,
+              repairBranchIds: nextId ? [nextId] : undefined,
+            },
+          });
+        }
+      }
+      await activityLogService.logCurrentUser(
+        'UPDATE_USER_ROLE',
+        `تحديث مركز صيانة مستخدم: ${row.user.email}`,
+        { userId: row.user.id, repairBranchId: nextId },
+      );
+      setSuccess(nextId ? 'تم ربط المستخدم بمركز الصيانة بنجاح.' : 'تم إلغاء ربط المركز — بدون عزل فرع.');
     });
   };
 
@@ -402,8 +451,13 @@ export const UsersManagement: React.FC = () => {
         value: String(wh.id || ''),
         label: String(wh.name || wh.id || ''),
       })).filter((opt) => opt.value),
+      repairBranchOptions: repairBranches.map((branch) => ({
+        value: String(branch.id || ''),
+        label: String(branch.name || branch.id || ''),
+      })).filter((opt) => opt.value),
       onUpdateRole: (roleId: string) => handleUpdateRole(row, roleId),
       onUpdateInventoryWarehouse: (warehouseId: string) => handleUpdateInventoryWarehouse(row, warehouseId),
+      onUpdateRepairBranch: (branchId: string) => handleUpdateRepairBranch(row, branchId),
       onLinkEmployee: (employeeId: string) => handleLinkEmployee(row, employeeId),
       onUnlinkEmployee: () => handleUnlinkEmployee(row),
       onToggleActive: () => handleToggleActive(row),

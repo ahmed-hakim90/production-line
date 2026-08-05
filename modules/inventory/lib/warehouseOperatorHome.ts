@@ -1,8 +1,10 @@
 import type { WarehouseRole } from '../types';
+import { repairCenterWarehouseMenuPath } from '../../repair/lib/repairCenterWarehouseMenu';
 
 /**
  * Post-login / inventory-home destination for warehouse operators.
  * Prefer the bound warehouse workspace; materials role falls back to supplies control.
+ * Maintenance-center warehouses open under الصيانة.
  */
 export function resolveWarehouseOperatorHomePath(input: {
   boundWarehouseId?: string | null;
@@ -11,6 +13,13 @@ export function resolveWarehouseOperatorHomePath(input: {
 }): string {
   const boundId = String(input.boundWarehouseId || '').trim();
   if (boundId) {
+    const role = input.boundWarehouseRole || 'general';
+    if (role === 'maintenance_center') {
+      return repairCenterWarehouseMenuPath(boundId);
+    }
+    if (role === 'spare_parts_central') {
+      return '/inventory/spare-parts-replenishment';
+    }
     return `/inventory/warehouses/${boundId}`;
   }
   if (input.isMaterialsWarehouseRole) {
@@ -28,8 +37,9 @@ export function resolveWarehouseRolePrimaryPath(
   if (!id) return '/inventory';
   switch (role) {
     case 'spare_parts_central':
-    case 'maintenance_center':
       return `/inventory/spare-parts-replenishment`;
+    case 'maintenance_center':
+      return '/repair/parts-replenishment';
     case 'raw_material':
     case 'decomposed':
       return '/inventory/raw-materials/control';

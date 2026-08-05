@@ -24,6 +24,29 @@ Requires `GOOGLE_APPLICATION_CREDENTIALS` or application default credentials wit
 
 See [security-tenancy.md](./security-tenancy.md) and [adr/ADR-001-tenant-scoped-settings.md](./adr/ADR-001-tenant-scoped-settings.md).
 
+## Repair built-in roles (reception / technician)
+
+Script: `scripts/seed-repair-builtin-roles.mjs`
+
+Upserts branch-isolated roles for every active tenant (or `--tenant`):
+
+| roleKey | Name | Purpose |
+|---------|------|---------|
+| `repair_reception` | استقبال صيانة | Intake + delivery; no workshop / no cross-center admin |
+| `repair_technician` | فني صيانة | Assigned jobs + workshop parts; no create-intake / no cross-center admin |
+
+```bash
+npm run seed:repair-roles
+npm run seed:repair-roles -- --apply
+npm run seed:repair-roles -- --tenant <tenantId> --apply
+```
+
+Uses Firebase CLI login (REST admin). After seeding, bind each user to one repair center in **إدارة المستخدمين → مركز / فرع الصيانة المرتبط** (`users.repairBranchId` + `repairBranchIds`). Firestore rules already enforce branch scope on `repair_jobs`.
+
+Center warehouse operators may instead be bound via **مخزن المخزون** (`users.inventoryWarehouseId` → the center’s `maintenance_center` warehouse). Saving that bind also syncs `repairBranchIds` when a repair branch points at the same warehouse. Rules also resolve warehouse bind for branch-scoped reads.
+
+Technician assignment stores **employee id** on `repair_branches.technicianIds`. Assign/remove also dual-writes the linked Auth `userId` so `pl_isTechnicianAssignedToBranch` matches. Job `technicianId` prefers Auth uid (service + UI). Opening a job detail with edit rights auto-rewrites legacy employee-only `technicianId` to the linked uid. For older branch rows that only have employee ids: re-assign the technician once, or set `repairBranchIds` / warehouse bind on the user.
+
 ## Production floor cutover (Inventory V2)
 
 Script: `scripts/backfill-production-floor-cutover.mjs` (documentation + dry-run scaffold; does **not** invent floor stock from legacy OUT-only issues).
@@ -57,13 +80,36 @@ Do not strip these in imports/backfills. Path snapshots are informational; autho
 
 ## Customers master (CRM)
 
-No automated Firestore backfill. Import existing customer codes via UI:
+Import existing customer codes via UI:
 
 1. Menu → العملاء → استيراد العملاء
 2. Download Excel template
 3. Upsert by business code (`CST-…` / `TRD-…` or your existing codes)
 
+Link historical repair jobs that lack `customerId`:
+
+1. Menu → العملاء → ربط طلبات الصيانة (`/customers/repair-link`)
+2. Scan → preview matches by unique phone digits (≥7)
+3. Apply links (unique match only; no auto-create; ambiguous phones skipped)
+
 Collections: `customers`, `customer_activities`. See [adr/ADR-004-customers-master-data.md](./adr/ADR-004-customers-master-data.md).
+
+## Repair company-wide material sale price
+
+Sale/usage price for repair is stored once on manufacturing `materials.defaultSalePrice` (not per branch). UI: `/repair/parts-pricing` (`repair.pricing.manage`).
+
+**One-time backfill from legacy branch catalog**
+
+On the pricing page, use **ترحيل أسعار الفروع**:
+
+- For each active material with `defaultSalePrice` empty/0
+- Take the **max** positive `repair_spare_parts.defaultSalePrice` among parts linked via `materialId` / `rawMaterialId`
+- Write that value onto the material (does **not** overwrite an existing material price)
+
+Pure planner: `modules/repair/lib/repairMaterialSalePriceBackfill.ts`
+ADR: [adr/ADR-005-repair-spare-issues-on-inventory.md](./adr/ADR-005-repair-spare-issues-on-inventory.md)
+
+Deploy updated Cloud Functions (`repairSpareIssues`, `requestRepairJobSparePart`) so job issue/pending-supply snapshots use Material price.
 
 ## Other Functions backfills
 

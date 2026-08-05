@@ -2945,11 +2945,13 @@ input[type="radio"] {
   .repair-invoice-page {
     background: #fff !important;
   }
-  .repair-invoice-print-sheet {
-    border: 1px solid #d1d5db !important;
+  .repair-invoice-print-sheet,
+  .repair-invoice-page .print-root {
+    border: none !important;
     box-shadow: none !important;
     break-inside: avoid-page;
     page-break-inside: avoid;
+    max-width: 100% !important;
   }
   .repair-invoice-print-sheet .repair-invoice-table {
     width: 100%;

@@ -1,3 +1,4 @@
+import { toEnglishDigits } from '@/lib/englishDigits';
 import { normalizeCustomerPhoneDigits } from '@/modules/repair/utils/customerPhone';
 import { normalizeCustomerCode } from './customerCode';
 import type { Customer } from '../types';
@@ -13,7 +14,7 @@ export function matchCustomers(
   query: string,
   limit = DEFAULT_LIMIT,
 ): Customer[] {
-  const raw = String(query || '').trim();
+  const raw = toEnglishDigits(String(query || '').trim());
   const active = customers.filter((c) => c.isActive !== false);
   if (!raw) return active.slice(0, limit);
 

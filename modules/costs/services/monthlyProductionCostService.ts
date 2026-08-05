@@ -30,6 +30,7 @@ import { resolveReportType } from '../../production/utils/reportTypes';
 import {
   computeProductionCostEngine,
   getWorkingDaysForMonth,
+  isProductionAllocationCostCenter,
 } from '../../../utils/costCalculations';
 
 const COLLECTION = 'monthly_production_costs';
@@ -66,6 +67,48 @@ type MonthCalculationContext = {
   centerValues: Map<string, CenterResolvedValue>;
   engineCostCenterValues: CostCenterValue[];
 };
+
+function summarizeFullManufacturingCost(reports: CostProductionReport[]) {
+  const totalQty = reports.reduce((sum, report) => sum + Math.max(0, Number(report.quantity || 0)), 0);
+  const costedReports = reports.filter((report) => Number(report.fullManufacturingCostSnapshot || 0) > 0);
+  const fullCostedQty = costedReports.reduce(
+    (sum, report) => sum + Math.max(0, Number(report.quantity || 0)),
+    0,
+  );
+  const materialCost = costedReports.reduce(
+    (sum, report) => sum + Math.max(0, Number(report.materialCostSnapshot || 0)),
+    0,
+  );
+  const packagingCost = costedReports.reduce(
+    (sum, report) => sum + Math.max(0, Number(report.packagingCostSnapshot || 0)),
+    0,
+  );
+  const fullManufacturingCost = costedReports.reduce(
+    (sum, report) => sum + Math.max(0, Number(report.fullManufacturingCostSnapshot || 0)),
+    0,
+  );
+  const coverage = totalQty > 0 ? Math.min(100, (fullCostedQty / totalQty) * 100) : 100;
+  const allActual = costedReports.length > 0
+    && costedReports.every((report) => report.manufacturingCostStatus === 'actual');
+  const fullCostStatus = costedReports.length === 0
+    ? 'missing'
+    : coverage < 99.999
+      ? 'partial'
+      : allActual
+        ? 'actual'
+        : 'provisional';
+  return {
+    materialCost,
+    packagingCost,
+    fullManufacturingCost,
+    fullManufacturingAverageUnitCost: fullCostedQty > 0
+      ? fullManufacturingCost / fullCostedQty
+      : 0,
+    fullCostedQty,
+    fullCostCoveragePct: coverage,
+    fullCostStatus,
+  } as const;
+}
 
 export type MonthlyDashboardProductCost = {
   productId: string;
@@ -247,7 +290,7 @@ async function resolveCenterValuesForMonth(
   workingDaysByMonth?: Record<string, number>,
 ): Promise<Map<string, CenterResolvedValue>> {
   const resolved = new Map<string, CenterResolvedValue>();
-  const activeIndirect = costCenters.filter((c) => c.type === 'indirect' && c.isActive && c.id);
+  const activeIndirect = costCenters.filter(isProductionAllocationCostCenter);
   const monthValueByCenterId = new Map<string, CostCenterValue>();
   costCenterValues.forEach((value) => {
     if (value.month !== month) return;
@@ -596,6 +639,13 @@ export const monthlyProductionCostService = {
         indirectCost: 0,
         totalProductionCost: 0,
         averageUnitCost: 0,
+        materialCost: 0,
+        packagingCost: 0,
+        fullManufacturingCost: 0,
+        fullManufacturingAverageUnitCost: 0,
+        fullCostedQty: 0,
+        fullCostCoveragePct: 100,
+        fullCostStatus: 'missing',
         isClosed: false,
         calculatedAt: serverTimestamp(),
       };
@@ -616,6 +666,7 @@ export const monthlyProductionCostService = {
     const totalCost = totalLabor + totalIndirect;
     const avgUnitCost = totalQty > 0 ? totalCost / totalQty : 0;
     const indirectCenterSnapshots = engine.centerSnapshots;
+    const fullCostSummary = summarizeFullManufacturingCost(productReports);
 
     const record: Omit<MonthlyProductionCost, 'id'> = {
       productId,
@@ -626,6 +677,7 @@ export const monthlyProductionCostService = {
       indirectCenterSnapshots,
       totalProductionCost: totalCost,
       averageUnitCost: avgUnitCost,
+      ...fullCostSummary,
       isClosed: false,
       calculatedAt: serverTimestamp(),
     };

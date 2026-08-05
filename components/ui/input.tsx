@@ -26,8 +26,10 @@ function isNumericInputType(type: string | undefined, inputMode: React.HTMLAttri
 
 const Input = React.forwardRef<HTMLInputElement, InputProps>(
   ({ className, type, value, defaultValue, showZero, dir, lang, inputMode, onChange, ...props }, ref) => {
+    // Only hide bare 0 for quantity/money number fields — never for tel/text (Egyptian phones start with 0).
+    const shouldHideZero = !showZero && (type || "text").toLowerCase() === "number"
     const map = (v: InputProps["value"]) =>
-      showZero || v === undefined ? v : (hideZeroForInput(v) as InputProps["value"])
+      shouldHideZero && v !== undefined ? (hideZeroForInput(v) as InputProps["value"]) : v
 
     const numeric = isNumericInputType(type, inputMode)
     const mappedValue = value !== undefined ? map(value) : undefined

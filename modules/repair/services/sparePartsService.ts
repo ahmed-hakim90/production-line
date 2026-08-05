@@ -46,6 +46,17 @@ export const sparePartsService = {
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairSparePart));
   },
 
+  /** Pricing admin: load catalog parts for one or more repair branches. */
+  async listPartsForBranches(branchIds: string[]): Promise<RepairSparePart[]> {
+    const ids = Array.from(new Set(branchIds.map((id) => String(id || '').trim()).filter(Boolean)));
+    if (!isConfigured || ids.length === 0) return [];
+    const chunks: RepairSparePart[][] = [];
+    for (const branchId of ids) {
+      chunks.push(await sparePartsService.listParts(branchId));
+    }
+    return chunks.flat().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
+  },
+
   async listStock(branchId: string, warehouseId?: string): Promise<RepairSparePartStock[]> {
     if (!isConfigured || !branchId) return [];
     const q = tenantQuery(
@@ -195,8 +206,18 @@ export const sparePartsService = {
     return partRef.id;
   },
 
-  async removePart(partId: string, branchId: string): Promise<void> {
+  /**
+   * Remove a branch spare-part catalog row and its stock docs.
+   * Use `force: true` only for cleanup of wrongly-added / test rows — discards remaining stock
+   * and releases active reservations for that part on the branch.
+   */
+  async removePart(
+    partId: string,
+    branchId: string,
+    opts?: { force?: boolean },
+  ): Promise<void> {
     if (!isConfigured || !partId || !branchId) return;
+    const force = opts?.force === true;
 
     const stockQuery = tenantQuery(
       db,
@@ -206,7 +227,7 @@ export const sparePartsService = {
     );
     const stockSnap = await getDocs(stockQuery);
     const hasStock = stockSnap.docs.some((row) => Number(row.data().quantity || 0) > 0);
-    if (hasStock) {
+    if (hasStock && !force) {
       throw new Error('لا يمكن حذف القطعة طالما يوجد لها رصيد في المخزون.');
     }
     const activeResQ = tenantQuery(
@@ -217,7 +238,7 @@ export const sparePartsService = {
       where('status', '==', 'active'),
     );
     const activeResSnap = await getDocs(activeResQ);
-    if (!activeResSnap.empty) {
+    if (!activeResSnap.empty && !force) {
       throw new Error('لا يمكن حذف القطعة طالما توجد حجوزات نشطة على طلبات صيانة.');
     }
 
@@ -226,6 +247,16 @@ export const sparePartsService = {
     stockSnap.docs.forEach((stockDoc) => {
       batch.delete(stockDoc.ref);
     });
+    if (force && !activeResSnap.empty) {
+      const at = nowIso();
+      activeResSnap.docs.forEach((resDoc) => {
+        batch.update(resDoc.ref, {
+          status: 'released',
+          updatedAt: at,
+          releasedBy: 'force_remove_part',
+        });
+      });
+    }
     await batch.commit();
   },
 
@@ -271,6 +302,8 @@ export const sparePartsService = {
         { merge: true },
       );
 
+      if (Math.abs(qtyDelta) < 0.00001) return;
+
       const txRef = doc(collection(db, REPAIR_PARTS_TRANSACTIONS_COLLECTION));
       const normalizedNotes = [input.notes, input.warehouseName ? `المخزن: ${input.warehouseName}` : undefined]
         .filter(Boolean)
@@ -290,6 +323,50 @@ export const sparePartsService = {
       };
       tx.set(txRef, row);
     });
+  },
+
+  /**
+   * Set warehouse-scoped repair ledger qty to an absolute value (used after inventory count approve).
+   */
+  async setWarehouseStockAbsolute(input: {
+    branchId: string;
+    warehouseId: string;
+    warehouseName?: string;
+    materialId: string;
+    quantity: number;
+    createdBy: string;
+    notes?: string;
+  }): Promise<boolean> {
+    if (!isConfigured) return false;
+    const branchId = String(input.branchId || '').trim();
+    const warehouseId = String(input.warehouseId || '').trim();
+    const materialId = String(input.materialId || '').trim();
+    const target = Number(input.quantity);
+    if (!branchId || !warehouseId || !materialId || !Number.isFinite(target) || target < 0) return false;
+
+    const parts = await this.listParts(branchId);
+    const part = parts.find((row) => {
+      const linked = String(row.materialId || row.rawMaterialId || '').trim();
+      return linked === materialId;
+    });
+    if (!part?.id) return false;
+
+    const stockRows = await this.listStock(branchId, warehouseId);
+    const current = Number(stockRows.find((row) => row.partId === part.id)?.quantity || 0);
+    const delta = target - current;
+    if (Math.abs(delta) < 0.00001) return true;
+    await this.adjustStock({
+      branchId,
+      warehouseId,
+      warehouseName: input.warehouseName,
+      partId: part.id,
+      partName: part.name,
+      quantity: Math.abs(delta),
+      type: delta > 0 ? 'IN' : 'OUT',
+      createdBy: input.createdBy,
+      notes: input.notes || 'مزامنة من اعتماد جرد المخزن',
+    });
+    return true;
   },
 
   async deductPart(

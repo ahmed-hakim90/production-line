@@ -30,6 +30,7 @@ import { SYSTEM_ROUTES } from './modules/system/routes';
 import { REPORTS_ROUTES } from './modules/reports/routes';
 import { INVENTORY_ROUTES } from './modules/inventory/routes';
 import { REPAIR_ROUTES } from './modules/repair/routes';
+import { ACCOUNTING_ROUTES } from './modules/accounting/routes';
 import { CUSTOMER_ROUTES } from './modules/customers/routes';
 import type { AppRouteDef } from './modules/shared/routes';
 import type { PublicRouteDef } from './modules/shared/routes/types';
@@ -298,6 +299,7 @@ const PROTECTED_ROUTES: AppRouteDef[] = [
   ...QUALITY_ROUTES,
   ...HR_ROUTES,
   ...COST_ROUTES,
+  ...ACCOUNTING_ROUTES,
   ...SYSTEM_ROUTES,
   ...REPORTS_ROUTES,
   ...INVENTORY_ROUTES,
@@ -1127,9 +1129,14 @@ const App: React.FC = () => {
       if (isDynamicImportLoadFailure(reason)) {
         if (recoverFromStaleChunk(event)) return;
       }
-      const message = typeof reason === 'string'
+      const rawMessage = typeof reason === 'string'
         ? reason
         : (reason?.message || 'حدث خطأ غير متوقع');
+      const code = String(reason?.code || '').toLowerCase();
+      const message =
+        code.includes('permission-denied') || /missing or insufficient permissions/i.test(String(rawMessage))
+          ? 'ليس لديك صلاحية كافية لتنفيذ هذه العملية.'
+          : String(rawMessage);
       toast.error(message);
     };
 

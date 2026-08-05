@@ -43,6 +43,7 @@ export function computeRepairJobCost(job: Pick<
   | 'estimatedCost'
   | 'finalCost'
   | 'finalCostOverride'
+  | 'paidAmount'
   | 'paymentStatus'
 >): RepairJobCostSummary {
   const partsCost = (job.partsUsed || []).reduce(
@@ -60,7 +61,12 @@ export function computeRepairJobCost(job: Pick<
     || serviceOnlyCost > 0
     || productsFinalCost > 0;
   const finalCost = money(job.finalCostOverride ?? (hasCostComponents ? computedFinal : job.finalCost));
-  const paymentStatus = normalizePaymentStatus(job.paymentStatus, finalCost);
+  const hasPaidAmount = job.paidAmount !== undefined && job.paidAmount !== null;
+  const paidAmount = hasPaidAmount ? Math.min(finalCost, money(job.paidAmount)) : undefined;
+  const paymentStatus = normalizePaymentStatus(job.paymentStatus, finalCost, paidAmount);
+  const balanceDue = paidAmount !== undefined
+    ? Math.max(0, finalCost - paidAmount)
+    : (paymentStatus === 'paid' ? 0 : finalCost);
 
   return {
     partsCost,
@@ -69,14 +75,25 @@ export function computeRepairJobCost(job: Pick<
     productsFinalCost,
     estimatedCost,
     finalCost,
-    balanceDue: paymentStatus === 'paid' ? 0 : finalCost,
+    balanceDue,
     paymentStatus,
   };
 }
 
-export function normalizePaymentStatus(value: unknown, finalCost: number): RepairPaymentStatus {
+export function normalizePaymentStatus(
+  value: unknown,
+  finalCost: number,
+  paidAmount?: number,
+): RepairPaymentStatus {
+  const cost = money(finalCost);
+  if (paidAmount !== undefined && paidAmount !== null) {
+    const paid = money(paidAmount);
+    if (cost <= 0 || paid >= cost - 0.00001) return 'paid';
+    return paid > 0 ? 'partial' : 'unpaid';
+  }
+  // سجلات ما قبل إضافة paidAmount تظل قابلة للقراءة بدون تغيير تاريخها.
   if (value === 'paid' || value === 'partial' || value === 'unpaid') return value;
-  return finalCost > 0 ? 'unpaid' : 'paid';
+  return cost > 0 ? 'unpaid' : 'paid';
 }
 
 export function resolveRepairJobActionState(input: {

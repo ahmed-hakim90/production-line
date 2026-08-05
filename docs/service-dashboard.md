@@ -21,8 +21,8 @@
 ## مؤشرات تشغيلية إضافية
 
 - **متوسط مدة الإصلاح (ساعات)**: متوسط `resolutionMinutes` / 60 للطلبات `delivered` التي تملك الحقل.
-- **تكلفة قطع تحت ضمان**: مجموع `partsUsed` (كمية × `unitCost`) للطلبات التي `warrantyScope === manufacturer` أو فيها منتج `inWarranty`.
-- **متوسط ربحية التسليم**: لكل طلب `delivered`: `finalCost − Σ(partsUsed qty×unitCost) − laborCost` ثم المتوسط.
+- **تكلفة قطع تحت ضمان**: مجموع تكلفة الصرف الفعلية (`partsUsed.totalCostSnapshot` أو `qty × unitCostSnapshot`) للطلبات التي `warrantyScope === manufacturer` أو فيها منتج `inWarranty`. لا يُستخدم `unitCost` بسعر البيع في هذا المؤشر.
+- **متوسط ربحية التسليم**: لكل طلب `delivered` غير ضمان: `finalCost − Σ(partsUsed qty×unitCost) − laborCost` ثم المتوسط.
 
 ## تحسينات الأداء
 

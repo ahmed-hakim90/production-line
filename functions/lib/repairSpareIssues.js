@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import { assertActorWarehousesAllowed, resolveBoundInventoryWarehouseId, } from './inventoryWarehouseScope.js';
+import { loadCustomerTypeInTx, pickRepairSalePrice, roundRepairMoney, } from './repairSalePrice.js';
 const db = getDb();
 const USERS_COLLECTION = 'users';
 const ROLES_COLLECTION = 'roles';
@@ -11,6 +12,8 @@ const WAREHOUSES_COLLECTION = 'warehouses';
 const WAREHOUSE_LOCATIONS_COLLECTION = 'warehouse_locations';
 const MATERIALS_COLLECTION = 'materials';
 const SPARE_PARTS_COLLECTION = 'repair_spare_parts';
+const SPARE_PARTS_STOCK_COLLECTION = 'repair_spare_parts_stock';
+const SPARE_PARTS_TX_COLLECTION = 'repair_parts_transactions';
 const ISSUES_COLLECTION = 'repair_spare_issues';
 const STOCK_ITEMS_COLLECTION = 'stock_items';
 const STOCK_LOCATION_BALANCES_COLLECTION = 'stock_location_balances';
@@ -272,20 +275,136 @@ async function transitionIssueStatus(params) {
     });
 }
 const canIssueNow = (status, approvalMode) => approvalMode === 'direct' ? status === 'draft' : status === 'approved';
-/** Job-facing usage price only — never fall back to purchase cost. */
-const resolveSparePartSalePrice = async (t, tenantId, partId) => {
-    const id = String(partId || '').trim();
-    if (!id)
-        return 0;
-    const snap = await t.get(db.collection(SPARE_PARTS_COLLECTION).doc(id));
-    if (!snap.exists)
-        return 0;
-    const data = snap.data();
-    if (String(data.tenantId || '').trim() !== tenantId)
-        return 0;
-    const sale = toNumber(data.defaultSalePrice);
-    return sale > 0 ? roundMoney(sale) : 0;
+/** Job-facing usage price: Material consumer/trader sale, then legacy part catalog. */
+const resolveSparePartSalePrice = async (t, tenantId, input) => {
+    const materialIdDirect = String(input.materialId || '').trim();
+    const partId = String(input.partId || '').trim();
+    let materialId = materialIdDirect;
+    let partSale = 0;
+    if (partId) {
+        const snap = await t.get(db.collection(SPARE_PARTS_COLLECTION).doc(partId));
+        if (snap.exists) {
+            const data = snap.data();
+            if (String(data.tenantId || '').trim() === tenantId) {
+                partSale = Number(data.defaultSalePrice || 0);
+                if (!materialId) {
+                    materialId = String(data.materialId || data.rawMaterialId || '').trim();
+                }
+            }
+        }
+    }
+    let consumer = 0;
+    let trader = 0;
+    if (materialId) {
+        const matSnap = await t.get(db.collection(MATERIALS_COLLECTION).doc(materialId));
+        if (matSnap.exists) {
+            const data = matSnap.data();
+            if (String(data.tenantId || '').trim() === tenantId) {
+                consumer = Number(data.defaultSalePrice || 0);
+                trader = Number(data.traderSalePrice || 0);
+            }
+        }
+    }
+    const sale = pickRepairSalePrice({
+        customerType: input.customerType,
+        consumerSalePrice: consumer,
+        traderSalePrice: trader,
+        fallbackSalePrice: partSale,
+    });
+    return sale > 0 ? roundRepairMoney(sale) : 0;
 };
+/**
+ * Keep center UI ledger (`repair_spare_parts_stock`) in sync with inventory RSI movements.
+ * Failures are logged only — inventory SoT already posted.
+ */
+async function syncRepairBranchStockDelta(input) {
+    const branchId = String(input.branchId || '').trim();
+    const warehouseId = String(input.warehouseId || '').trim();
+    if (!branchId || !warehouseId)
+        return;
+    const qtyByItem = new Map();
+    for (const line of input.lines) {
+        const itemId = String(line.itemId || '').trim();
+        const quantity = toNumber(line.quantity);
+        if (!itemId || !(quantity > 0))
+            continue;
+        const prev = qtyByItem.get(itemId);
+        if (prev) {
+            prev.quantity += quantity;
+        }
+        else {
+            qtyByItem.set(itemId, {
+                quantity,
+                itemName: String(line.itemName || itemId),
+            });
+        }
+    }
+    if (qtyByItem.size === 0)
+        return;
+    const now = toIsoNow();
+    const hintPartId = String(input.partIdHint || '').trim();
+    for (const [materialId, row] of qtyByItem.entries()) {
+        let partId = '';
+        if (hintPartId && qtyByItem.size === 1) {
+            const hintSnap = await db.collection(SPARE_PARTS_COLLECTION).doc(hintPartId).get();
+            if (hintSnap.exists) {
+                const hint = hintSnap.data();
+                if (String(hint.tenantId || '') === input.tenantId
+                    && String(hint.branchId || '') === branchId
+                    && (!String(hint.materialId || '').trim()
+                        || String(hint.materialId || '').trim() === materialId)) {
+                    partId = hintPartId;
+                }
+            }
+        }
+        if (!partId) {
+            const existingParts = await db
+                .collection(SPARE_PARTS_COLLECTION)
+                .where('tenantId', '==', input.tenantId)
+                .where('branchId', '==', branchId)
+                .where('materialId', '==', materialId)
+                .limit(1)
+                .get();
+            if (existingParts.empty)
+                continue;
+            partId = existingParts.docs[0].id;
+        }
+        const stockDocId = `${branchId}__${warehouseId}__${partId}`;
+        const stockRef = db.collection(SPARE_PARTS_STOCK_COLLECTION).doc(stockDocId);
+        const delta = input.direction === 'OUT' ? -row.quantity : row.quantity;
+        await db.runTransaction(async (tx) => {
+            const stockSnap = await tx.get(stockRef);
+            const current = stockSnap.exists ? toNumber(stockSnap.data()?.quantity) : 0;
+            const next = current + delta;
+            if (next < -0.000001) {
+                throw new Error(`رصيد دفتر الفرع غير كافٍ للصنف ${row.itemName}`);
+            }
+            tx.set(stockRef, {
+                tenantId: input.tenantId,
+                branchId,
+                warehouseId,
+                partId,
+                quantity: Math.max(0, next),
+                updatedAt: now,
+            }, { merge: true });
+            const txRef = db.collection(SPARE_PARTS_TX_COLLECTION).doc();
+            tx.set(txRef, {
+                tenantId: input.tenantId,
+                branchId,
+                warehouseId,
+                partId,
+                partName: row.itemName,
+                quantity: row.quantity,
+                type: input.direction,
+                notes: `${input.direction === 'OUT' ? 'صرف' : 'مرتجع'} ${input.referenceNo}`,
+                createdAt: now,
+                createdBy: input.actorName,
+                sourceId: input.sourceId,
+                sourceModule: input.direction === 'OUT' ? SOURCE_ISSUE : SOURCE_RETURN,
+            });
+        });
+    }
+}
 async function postIssueMovements(params) {
     const { actor, issueId } = params;
     return db.runTransaction(async (t) => {
@@ -357,8 +476,34 @@ async function postIssueMovements(params) {
         const jobId = String(current.jobId || '').trim();
         const jobRef = jobId ? db.collection(JOBS_COLLECTION).doc(jobId) : null;
         const jobSnap = jobRef ? await t.get(jobRef) : null;
+        const jobCustomerId = jobSnap?.exists
+            ? String(jobSnap.data()?.customerId || '').trim()
+            : '';
+        const customerType = await loadCustomerTypeInTx(t, db, actor.tenantId, jobCustomerId);
+        const branchRef = current.branchId
+            ? db.collection('repair_branches').doc(String(current.branchId))
+            : null;
+        const branchSnap = branchRef ? await t.get(branchRef) : null;
+        const cogsJournalRef = jobId
+            ? db.collection('accounting_journal_entries').doc(`${actor.tenantId}__repair_parts_cogs__${issueId}`)
+            : null;
+        const cogsJournalSnap = cogsJournalRef ? await t.get(cogsJournalRef) : null;
         const meta = current.jobPartUsage;
-        const salePrice = await resolveSparePartSalePrice(t, actor.tenantId, meta?.partId);
+        const primaryMaterialId = String(lines[0]?.itemId || '').trim();
+        const salePrice = await resolveSparePartSalePrice(t, actor.tenantId, {
+            partId: meta?.partId,
+            materialId: primaryMaterialId,
+            customerType,
+        });
+        const salePriceByMaterialId = new Map();
+        const uniqueMaterialIds = Array.from(new Set(lines.map((line) => String(line.itemId || '').trim()).filter(Boolean)));
+        for (const materialId of uniqueMaterialIds) {
+            if (materialId === primaryMaterialId && (!meta?.partId || uniqueMaterialIds.length === 1)) {
+                salePriceByMaterialId.set(materialId, salePrice);
+                continue;
+            }
+            salePriceByMaterialId.set(materialId, await resolveSparePartSalePrice(t, actor.tenantId, { materialId, customerType }));
+        }
         for (const row of stockRows) {
             const balSnap = balanceSnapByPath.get(row.balRef.path);
             const balQty = balSnap?.exists ? toNumber(balSnap.data()?.quantity) : 0;
@@ -440,20 +585,55 @@ async function postIssueMovements(params) {
             issuedByUserId: actor.uid,
             totalCostSnapshot: roundMoney(lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0)),
         });
+        const issueCost = roundMoney(lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0));
+        if (jobId && cogsJournalRef && !cogsJournalSnap?.exists && issueCost > 0) {
+            const branch = branchSnap?.data();
+            const accounts = branch?.accountingAccounts;
+            const costCenterId = String(branch?.costCenterId || '').trim();
+            const cogsCode = String(accounts?.partsCogs || '').trim();
+            const inventoryCode = String(accounts?.partsInventory || '').trim();
+            if (!costCenterId || !cogsCode || !inventoryCode) {
+                throw new HttpsError('failed-precondition', 'أكمل مركز التكلفة وحسابات مخزون وتكلفة قطع الغيار للفرع.');
+            }
+            t.create(cogsJournalRef, {
+                tenantId: actor.tenantId,
+                branchId: current.branchId,
+                costCenterId,
+                source: 'repair_parts_issue',
+                sourceId: issueId,
+                referenceNo: current.referenceNo,
+                status: 'posted',
+                postedAt: now,
+                createdBy: actor.uid,
+                createdByName: actor.displayName,
+                totalDebit: issueCost,
+                totalCredit: issueCost,
+                lines: [
+                    { accountCode: cogsCode, accountName: 'تكلفة قطع الغيار المباعة', debit: issueCost, credit: 0, costCenterId },
+                    { accountCode: inventoryCode, accountName: 'مخزون قطع غيار الصيانة', debit: 0, credit: issueCost, costCenterId },
+                ],
+            });
+        }
         if (jobRef && jobSnap?.exists) {
             const jobData = jobSnap.data();
             assertSameTenant(jobData.tenantId, actor.tenantId);
             const prev = Array.isArray(jobData.partsUsed) ? [...jobData.partsUsed] : [];
             for (const line of lines) {
                 const scope = meta?.scope === 'product' ? 'product' : 'job';
-                prev.push(stripUndefined({
+                const usageId = String(meta?.usageId || '').trim();
+                const nextRow = stripUndefined({
+                    ...(usageId ? { usageId } : {}),
                     partId: String(meta?.partId || line.itemId).trim(),
                     partName: String(meta?.partName || line.itemName).trim(),
                     quantity: line.quantity,
-                    // Job totals use sale/usage price; inventory movements keep purchase snapshots.
-                    unitCost: salePrice,
+                    // Job customer totals use sale/usage price; inventory movements keep purchase snapshots.
+                    unitCost: salePriceByMaterialId.get(String(line.itemId || '').trim()) ?? salePrice,
+                    unitCostSnapshot: toNumber(line.unitCostSnapshot),
+                    totalCostSnapshot: toNumber(line.totalCostSnapshot),
                     materialId: line.itemId,
                     scope,
+                    fulfillmentStatus: 'issued',
+                    availabilityAtRequest: 'center',
                     ...(scope === 'product' && meta?.productItemId
                         ? {
                             productItemId: String(meta.productItemId).trim(),
@@ -462,7 +642,15 @@ async function postIssueMovements(params) {
                         : {}),
                     issueId,
                     issueReferenceNo: current.referenceNo,
-                }));
+                });
+                if (usageId) {
+                    const idx = prev.findIndex((row) => String(row.usageId || '').trim() === usageId);
+                    if (idx >= 0) {
+                        prev[idx] = { ...prev[idx], ...nextRow };
+                        continue;
+                    }
+                }
+                prev.push(nextRow);
             }
             t.update(jobRef, { partsUsed: prev, updatedAt: now });
         }
@@ -508,6 +696,7 @@ export async function createRepairSpareIssueHandler(request) {
                 scope: rawMeta.scope === 'product' ? 'product' : 'job',
                 productItemId: String(rawMeta.productItemId || '').trim() || undefined,
                 productName: String(rawMeta.productName || '').trim() || undefined,
+                usageId: String(rawMeta.usageId || '').trim() || undefined,
             })
             : undefined;
         const counterRef = db.collection(INVENTORY_COUNTERS_COLLECTION).doc(actor.tenantId);
@@ -678,6 +867,30 @@ export async function issueRepairSpareIssueHandler(request) {
         const { id } = await loadIssue(issueId, actor);
         const result = await postIssueMovements({ actor, issueId: id });
         if (result.changed) {
+            try {
+                await syncRepairBranchStockDelta({
+                    tenantId: actor.tenantId,
+                    branchId: result.issue.branchId,
+                    warehouseId: result.issue.warehouseId,
+                    lines: (result.issue.lines || []).map((line) => ({
+                        itemId: line.itemId,
+                        quantity: line.quantity,
+                        itemName: line.itemName,
+                    })),
+                    partIdHint: result.issue.jobPartUsage?.partId,
+                    direction: 'OUT',
+                    actorName: actor.displayName,
+                    referenceNo: result.referenceNo,
+                    sourceId: id,
+                });
+            }
+            catch (syncErr) {
+                console.error('repair_spare_issue.issue repair stock sync failed', {
+                    issueId: id,
+                    tenantId: actor.tenantId,
+                    message: syncErr instanceof Error ? syncErr.message : String(syncErr),
+                });
+            }
             await writeAudit({
                 actor,
                 action: 'issue',
@@ -922,6 +1135,45 @@ export async function returnRepairSpareIssueHandler(request) {
             }, { merge: true });
             t.update(issueRef, { lines: nextLines });
         });
+        try {
+            const returnLines = returns.map((row) => ({
+                itemId: String(row.itemId || '').trim(),
+                quantity: toNumber(row.quantity),
+                itemName: undefined,
+            })).filter((line) => line.itemId && line.quantity > 0);
+            // Prefer resolved item ids from the issued document when payload omits them.
+            const byLineId = new Map((data.lines || []).map((line) => [
+                String(line.lineId || ''),
+                line,
+            ]));
+            const synced = returns.map((row) => {
+                const lineId = String(row.lineId || '').trim();
+                const fromDoc = lineId ? byLineId.get(lineId) : undefined;
+                return {
+                    itemId: String(row.itemId || fromDoc?.itemId || '').trim(),
+                    quantity: toNumber(row.quantity),
+                    itemName: fromDoc?.itemName,
+                };
+            }).filter((line) => line.itemId && line.quantity > 0);
+            await syncRepairBranchStockDelta({
+                tenantId: actor.tenantId,
+                branchId: data.branchId,
+                warehouseId: data.warehouseId,
+                lines: synced.length > 0 ? synced : returnLines,
+                partIdHint: data.jobPartUsage?.partId,
+                direction: 'IN',
+                actorName: actor.displayName,
+                referenceNo: data.referenceNo,
+                sourceId: id,
+            });
+        }
+        catch (syncErr) {
+            console.error('repair_spare_issue.return repair stock sync failed', {
+                issueId: id,
+                tenantId: actor.tenantId,
+                message: syncErr instanceof Error ? syncErr.message : String(syncErr),
+            });
+        }
         await writeAudit({
             actor,
             action: 'return',

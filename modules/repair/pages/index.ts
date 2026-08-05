@@ -6,6 +6,7 @@ export { RepairJobDetail } from './RepairJobDetail';
 export { SparePartsInventory } from './SparePartsInventory';
 export { RepairBranches } from './RepairBranches';
 export { RepairTechnicianKPIs } from './RepairTechnicianKPIs';
+export { RepairTechnicianHome } from './RepairTechnicianHome';
 export { RepairTreasury } from './RepairTreasury';
 export { RepairSettings } from './RepairSettings';
 export { RepairSalesInvoicePage } from './RepairSalesInvoice';

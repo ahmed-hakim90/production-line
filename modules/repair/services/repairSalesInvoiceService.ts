@@ -1,68 +1,24 @@
 import {
-  addDoc,
-  collection,
   doc,
   getDoc,
   getDocs,
   limit,
   onSnapshot,
   orderBy,
-  query,
-  updateDoc,
   type Unsubscribe,
   where,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
-import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { db, isConfigured, mutateRepairSalesInvoiceCallable } from '../../auth/services/firebase';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { REPAIR_SALES_INVOICES_COLLECTION } from '../collections';
-import { sparePartsService } from './sparePartsService';
 import type { RepairSalesInvoice, RepairSalesInvoiceLine } from '../types';
-import { repairTreasuryService } from './repairTreasuryService';
-
-const nowIso = () => new Date().toISOString();
-const formatInvoiceNo = (seq: number) => `RSI-${String(seq).padStart(5, '0')}`;
-const normalizeLines = (lines: RepairSalesInvoiceLine[]): RepairSalesInvoiceLine[] =>
-  lines.map((l) => ({
-    partId: l.partId,
-    partName: l.partName,
-    quantity: Math.max(1, Number(l.quantity || 0)),
-    unitPrice: Math.max(0, Number(l.unitPrice || 0)),
-    lineTotal: Math.max(0, Number(l.quantity || 0)) * Math.max(0, Number(l.unitPrice || 0)),
-  }));
-const toLineMap = (lines: RepairSalesInvoiceLine[]) => {
-  const map = new Map<string, { quantity: number; partName: string }>();
-  lines.forEach((line) => {
-    const key = String(line.partId || '').trim();
-    if (!key) return;
-    const prev = map.get(key);
-    map.set(key, {
-      quantity: Number(prev?.quantity || 0) + Number(line.quantity || 0),
-      partName: line.partName || prev?.partName || '',
-    });
-  });
-  return map;
-};
-
-const nextInvoiceNo = async (): Promise<string> => {
-  if (!isConfigured) return formatInvoiceNo(1);
-  const q = query(collection(db, REPAIR_SALES_INVOICES_COLLECTION), orderBy('createdAt', 'desc'), limit(200));
-  const snap = await getDocs(q);
-  const maxSerial = snap.docs.reduce((max, row) => {
-    const no = String((row.data() as RepairSalesInvoice).invoiceNo || '');
-    const m = no.match(/^RSI-(\d+)$/);
-    if (!m) return max;
-    return Math.max(max, Number(m[1] || 0));
-  }, 0);
-  return formatInvoiceNo(maxSerial + 1);
-};
 
 export const repairSalesInvoiceService = {
   async list(branchId?: string): Promise<RepairSalesInvoice[]> {
     if (!isConfigured) return [];
-    const constraints = [orderBy('createdAt', 'desc')] as Parameters<typeof query>[1][];
-    if (branchId) constraints.unshift(where('branchId', '==', branchId));
-    const q = query(collection(db, REPAIR_SALES_INVOICES_COLLECTION), ...constraints);
+    const q = branchId
+      ? tenantQuery(db, REPAIR_SALES_INVOICES_COLLECTION, where('branchId', '==', branchId), orderBy('createdAt', 'desc'))
+      : tenantQuery(db, REPAIR_SALES_INVOICES_COLLECTION, orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairSalesInvoice));
   },
@@ -169,65 +125,28 @@ export const repairSalesInvoiceService = {
     customerName?: string;
     customerPhone?: string;
     notes?: string;
+    discountType?: 'none' | 'amount' | 'percent';
+    discountValue?: number;
+    paymentMethod?: 'cash' | 'card' | 'bank_transfer';
     createdBy: string;
     createdByName?: string;
   }): Promise<string | null> {
     if (!isConfigured) return null;
     if (!input.branchId) throw new Error('الفرع مطلوب.');
     if (!Array.isArray(input.lines) || input.lines.length === 0) throw new Error('أضف سطرًا واحدًا على الأقل.');
-    const tenantId = getCurrentTenantId();
-    const invoiceNo = await nextInvoiceNo();
-    const at = nowIso();
-    const normalized = normalizeLines(input.lines);
-    const total = normalized.reduce((sum, l) => sum + Number(l.lineTotal || 0), 0);
-    const ref = await addDoc(collection(db, REPAIR_SALES_INVOICES_COLLECTION), {
-      tenantId,
+    const result = await mutateRepairSalesInvoiceCallable({
+      operation: 'prepare',
       branchId: input.branchId,
-      invoiceNo,
-      status: 'active',
-      warehouseId: input.warehouseId || '',
-      warehouseName: input.warehouseName || '',
       repairJobId: input.repairJobId || '',
+      lines: input.lines.map((line) => ({ partId: line.partId, quantity: line.quantity })),
       customerId: input.customerId || '',
       customerName: input.customerName || '',
       customerPhone: input.customerPhone || '',
       notes: input.notes || '',
-      total,
-      lines: normalized,
-      createdBy: input.createdBy,
-      createdByName: input.createdByName || '',
-      createdAt: at,
-      updatedAt: at,
-      updatedBy: input.createdBy,
-      updatedByName: input.createdByName || '',
-    } as RepairSalesInvoice);
-
-    for (const line of normalized) {
-      await sparePartsService.adjustStock({
-        branchId: input.branchId,
-        warehouseId: input.warehouseId,
-        warehouseName: input.warehouseName,
-        partId: line.partId,
-        partName: line.partName,
-        quantity: line.quantity,
-        type: 'OUT',
-        createdBy: input.createdByName || input.createdBy || 'system',
-        referenceId: ref.id,
-        notes: `بيع مباشر - فاتورة ${invoiceNo}`,
-      });
-    }
-
-    if (total > 0) {
-      await repairTreasuryService.addEntry({
-        branchId: input.branchId,
-        entryType: 'INCOME',
-        amount: total,
-        note: `تحصيل فاتورة بيع قطع غيار ${invoiceNo}`,
-        referenceId: ref.id,
-        createdBy: input.createdBy,
-        createdByName: input.createdByName || '',
-      });
-    }
+      discountType: input.discountType || 'none',
+      discountValue: Number(input.discountValue || 0),
+      paymentMethod: input.paymentMethod || 'cash',
+    });
 
     if (input.customerId) {
       try {
@@ -239,10 +158,10 @@ export const repairSalesInvoiceService = {
           module: 'repair',
           action: 'repair.invoice_created',
           title: 'فاتورة بيع قطع غيار',
-          summary: `فاتورة ${invoiceNo} · ${total}`,
+          summary: `فاتورة ${result.invoiceNo} · ${result.total}`,
           referenceType: 'repair_sales_invoice',
-          referenceId: ref.id,
-          referenceLabel: invoiceNo,
+          referenceId: result.id,
+          referenceLabel: result.invoiceNo,
           actorUid: input.createdBy,
           actorName: input.createdByName,
         });
@@ -251,7 +170,7 @@ export const repairSalesInvoiceService = {
       }
     }
 
-    return ref.id;
+    return result.id;
   },
 
   async updateInvoice(input: {
@@ -264,6 +183,9 @@ export const repairSalesInvoiceService = {
     customerName?: string;
     customerPhone?: string;
     notes?: string;
+    discountType?: 'none' | 'amount' | 'percent';
+    discountValue?: number;
+    paymentMethod?: 'cash' | 'card' | 'bank_transfer';
     updatedBy: string;
     updatedByName?: string;
   }): Promise<void> {
@@ -271,65 +193,29 @@ export const repairSalesInvoiceService = {
     if (!input.id) throw new Error('رقم الفاتورة غير صالح.');
     if (!input.branchId) throw new Error('الفرع مطلوب.');
     if (!Array.isArray(input.lines) || input.lines.length === 0) throw new Error('أضف سطرًا واحدًا على الأقل.');
-    const invoice = await this.getById(input.id);
-    if (!invoice?.id) throw new Error('الفاتورة غير موجودة.');
-    if ((invoice.status || 'active') === 'cancelled') throw new Error('لا يمكن تعديل فاتورة ملغاة.');
-    if (invoice.branchId !== input.branchId) throw new Error('لا يمكن نقل الفاتورة إلى فرع مختلف.');
-
-    const normalized = normalizeLines(input.lines);
-    const prevTotal = Number(invoice.total || 0);
-    const nextTotal = normalized.reduce((sum, l) => sum + Number(l.lineTotal || 0), 0);
-    const deltaTotal = nextTotal - prevTotal;
-
-    const prevMap = toLineMap(invoice.lines || []);
-    const nextMap = toLineMap(normalized);
-    const allPartIds = new Set([...prevMap.keys(), ...nextMap.keys()]);
-    for (const partId of allPartIds) {
-      const oldQty = Number(prevMap.get(partId)?.quantity || 0);
-      const newQty = Number(nextMap.get(partId)?.quantity || 0);
-      const deltaQty = newQty - oldQty;
-      if (deltaQty === 0) continue;
-      const partName = nextMap.get(partId)?.partName || prevMap.get(partId)?.partName || '';
-      await sparePartsService.adjustStock({
-        branchId: input.branchId,
-        warehouseId: input.warehouseId || invoice.warehouseId,
-        warehouseName: input.warehouseName || invoice.warehouseName,
-        partId,
-        partName,
-        quantity: Math.abs(deltaQty),
-        type: deltaQty > 0 ? 'OUT' : 'IN',
-        createdBy: input.updatedByName || input.updatedBy || 'system',
-        referenceId: invoice.id,
-        notes: `تعديل فاتورة ${invoice.invoiceNo || invoice.id}`,
-      });
-    }
-
-    if (Math.abs(deltaTotal) > 0.00001) {
-      await repairTreasuryService.addEntry({
-        branchId: input.branchId,
-        entryType: deltaTotal > 0 ? 'INCOME' : 'EXPENSE',
-        amount: Math.abs(deltaTotal),
-        note: `تسوية تعديل فاتورة ${invoice.invoiceNo || invoice.id}`,
-        referenceId: `${invoice.id}:edit:${Date.now()}`,
-        createdBy: input.updatedBy,
-        createdByName: input.updatedByName || '',
-      });
-    }
-
-    const at = nowIso();
-    await updateDoc(doc(db, REPAIR_SALES_INVOICES_COLLECTION, invoice.id), {
-      lines: normalized,
-      total: nextTotal,
-      warehouseId: input.warehouseId || invoice.warehouseId || '',
-      warehouseName: input.warehouseName || invoice.warehouseName || '',
+    await mutateRepairSalesInvoiceCallable({
+      operation: 'prepare',
+      id: input.id,
+      branchId: input.branchId,
+      lines: input.lines.map((line) => ({ partId: line.partId, quantity: line.quantity })),
       customerId: input.customerId || '',
       customerName: input.customerName || '',
       customerPhone: input.customerPhone || '',
       notes: input.notes || '',
-      updatedAt: at,
-      updatedBy: input.updatedBy,
-      updatedByName: input.updatedByName || '',
-    } as Partial<RepairSalesInvoice>);
+      discountType: input.discountType || 'none',
+      discountValue: Number(input.discountValue || 0),
+      paymentMethod: input.paymentMethod || 'cash',
+    });
+  },
+
+  async resolveDiscount(id: string, approve: boolean, rejectionReason = ''): Promise<void> {
+    if (!isConfigured || !id) return;
+    await mutateRepairSalesInvoiceCallable({ operation: 'resolve_discount', id, approve, rejectionReason });
+  },
+
+  async postInvoice(id: string): Promise<void> {
+    if (!isConfigured || !id) return;
+    await mutateRepairSalesInvoiceCallable({ operation: 'post', id });
   },
 
   async cancelInvoice(input: {
@@ -343,45 +229,32 @@ export const repairSalesInvoiceService = {
     const invoice = await this.getById(input.id);
     if (!invoice?.id) throw new Error('الفاتورة غير موجودة.');
     if ((invoice.status || 'active') === 'cancelled') throw new Error('الفاتورة ملغاة بالفعل.');
-    if (await repairTreasuryService.hasEntryByReference(invoice.id, 'EXPENSE')) {
-      throw new Error('تم تنفيذ الإلغاء سابقًا ولا يمكن تكراره.');
-    }
-
-    for (const line of invoice.lines || []) {
-      await sparePartsService.adjustStock({
-        branchId: invoice.branchId,
-        warehouseId: invoice.warehouseId,
-        warehouseName: invoice.warehouseName,
-        partId: line.partId,
-        partName: line.partName,
-        quantity: Math.abs(Number(line.quantity || 0)),
-        type: 'IN',
-        createdBy: input.cancelledByName || input.cancelledBy || 'system',
-        referenceId: invoice.id,
-        notes: `إلغاء فاتورة ${invoice.invoiceNo || invoice.id}`,
-      });
-    }
-
-    await repairTreasuryService.addEntry({
-      branchId: invoice.branchId,
-      entryType: 'EXPENSE',
-      amount: Math.abs(Number(invoice.total || 0)),
-      note: `إلغاء فاتورة بيع قطع غيار ${invoice.invoiceNo || invoice.id}`,
-      referenceId: invoice.id,
-      createdBy: input.cancelledBy,
-      createdByName: input.cancelledByName || '',
+    await mutateRepairSalesInvoiceCallable({
+      operation: 'cancel',
+      id: invoice.id,
+      cancelReason: input.cancelReason || '',
     });
 
-    const at = nowIso();
-    await updateDoc(doc(db, REPAIR_SALES_INVOICES_COLLECTION, invoice.id), {
-      status: 'cancelled',
-      cancelledAt: at,
-      cancelledBy: input.cancelledBy,
-      cancelledByName: input.cancelledByName || '',
-      cancelReason: input.cancelReason || '',
-      updatedAt: at,
-      updatedBy: input.cancelledBy,
-      updatedByName: input.cancelledByName || '',
-    } as Partial<RepairSalesInvoice>);
+    if (invoice.customerId) {
+      try {
+        const { customerActivityService } = await import(
+          '@/modules/customers/services/customerActivityService'
+        );
+        await customerActivityService.record({
+          customerId: invoice.customerId,
+          module: 'repair',
+          action: 'repair.invoice_cancelled',
+          title: 'إلغاء فاتورة بيع قطع',
+          summary: input.cancelReason || invoice.invoiceNo || '',
+          referenceType: 'repair_sales_invoice',
+          referenceId: invoice.id,
+          referenceLabel: invoice.invoiceNo || invoice.id,
+          actorUid: input.cancelledBy,
+          actorName: input.cancelledByName,
+        });
+      } catch (err) {
+        console.warn('repairSalesInvoiceService.cancelInvoice: customer activity', err);
+      }
+    }
   },
 };

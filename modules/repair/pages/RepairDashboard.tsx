@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -21,6 +20,7 @@ import {
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { sumManufacturerWarrantyPartsCost } from '../lib/repairManufacturerWarranty';
 import { repairBranchService } from '../services/repairBranchService';
 import {
   REPAIR_JOB_STATUSES,
@@ -31,22 +31,22 @@ import {
   type RepairJob,
   type RepairJobStatus,
 } from '../types';
-import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
-import type { RepairSalesInvoice } from '../types';
-import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { useRepairJobs } from '../hooks/useRepairJobs';
+import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
-import { computeRepairJobCost } from '../utils/repairBusinessLogic';
+import { StatusBadge } from '../components/StatusBadge';
+import { PageHeader } from '@/components/PageHeader';
+import { RepairAdminDashboard } from './RepairAdminDashboard';
 
 const num = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const shortDay = (isoDate: string) =>
   new Intl.DateTimeFormat('ar-EG', { weekday: 'short', day: '2-digit' }).format(new Date(isoDate));
-const shortMonth = (isoDate: string) =>
-  new Intl.DateTimeFormat('ar-EG', { month: 'short' }).format(new Date(isoDate));
 
-export const RepairDashboard: React.FC = () => {
+const RepairOperationalDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const navigate = useNavigate();
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
@@ -63,10 +63,7 @@ export const RepairDashboard: React.FC = () => {
       }),
     [userProfile, userRoleName, systemSettings, userPermissions],
   );
-  const technicianIds = useMemo(
-    () => resolveRepairTechnicianIds(userProfile, currentEmployee?.id),
-    [userProfile, currentEmployee?.id],
-  );
+  const technicianIds = useRepairTechnicianIds(userProfile, currentEmployee?.id);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const userBranchIds = useMemo(() => {
@@ -101,46 +98,14 @@ export const RepairDashboard: React.FC = () => {
     technicianIds,
   });
 
-  const { data: salesInvoices = [], refetch: refetchInvoices } = useQuery({
-    queryKey: ['repairSalesInvoices', repairCtx.canViewAllBranches, userBranchIds.join('|')],
-    queryFn: async (): Promise<RepairSalesInvoice[]> => {
-      if (repairCtx.canViewAllBranches) {
-        return repairSalesInvoiceService.list();
-      }
-      if (userBranchIds.length > 1) {
-        const chunks = await Promise.all(userBranchIds.map((bid) => repairSalesInvoiceService.list(bid)));
-        const byId = new Map<string, RepairSalesInvoice>();
-        chunks.flat().forEach((inv) => {
-          if (inv.id) byId.set(inv.id, inv);
-        });
-        return Array.from(byId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-      }
-      return repairSalesInvoiceService.list(userBranchIds[0]);
-    },
-    enabled: repairCtx.canViewAllBranches || userBranchIds.length > 0,
-    refetchInterval: 60_000,
-    staleTime: 25_000,
-  });
-
   const kpis = useMemo(() => {
     const openJobs = jobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
     const pendingDelivery = jobs.filter((j) => j.status === 'ready').length;
-    const repairRevenue = jobs
-      .filter((j) => isDeliveredStatus(j.status))
-      .reduce((sum, j) => sum + computeRepairJobCost(j).finalCost, 0);
-    const partsRevenue = salesInvoices.reduce((sum, invoice) => sum + Number(invoice.total || 0), 0);
-    const totalRevenue = repairRevenue + partsRevenue;
     const all = jobs.length || 1;
     const successRate = (jobs.filter((j) => isDeliveredStatus(j.status)).length / all) * 100;
-    return { openJobs, pendingDelivery, repairRevenue, partsRevenue, totalRevenue, successRate };
-  }, [jobs, salesInvoices, repairSettings.workflow.openStatusIds]);
+    return { openJobs, pendingDelivery, successRate };
+  }, [jobs, repairSettings.workflow.openStatusIds]);
   const recent = useMemo(() => jobs.slice(0, 6), [jobs]);
-  const avgTicket = useMemo(() => {
-    const delivered = jobs.filter((job) => isDeliveredStatus(job.status));
-    if (delivered.length === 0) return 0;
-    const total = delivered.reduce((sum, row) => sum + computeRepairJobCost(row).finalCost, 0);
-    return total / delivered.length;
-  }, [jobs]);
   const statusChartData = useMemo(
     () =>
       (repairSettings.workflow.statuses.map((s) => s.id).length > 0
@@ -166,25 +131,6 @@ export const RepairDashboard: React.FC = () => {
       if (row) row.total += 1;
     });
     return days;
-  }, [jobs]);
-  const monthlyRevenueData = useMemo(() => {
-    const months = Array.from({ length: 6 }).map((_, idx) => {
-      const d = new Date();
-      d.setMonth(d.getMonth() - (5 - idx));
-      const key = d.toISOString().slice(0, 7);
-      return { key, month: shortMonth(`${key}-01`), revenue: 0, delivered: 0 };
-    });
-    const monthMap = new Map(months.map((m) => [m.key, m]));
-    jobs
-      .filter((job) => isDeliveredStatus(job.status))
-      .forEach((job) => {
-        const key = String(job.createdAt || '').slice(0, 7);
-        const row = monthMap.get(key);
-        if (!row) return;
-        row.delivered += 1;
-        row.revenue += computeRepairJobCost(job).finalCost;
-      });
-    return months;
   }, [jobs]);
 
   const delayedCount = useMemo(() => {
@@ -217,6 +163,11 @@ export const RepairDashboard: React.FC = () => {
     return sum / rows.length / 60;
   }, [jobs]);
 
+  const warrantyPartsCost = useMemo(
+    () => sumManufacturerWarrantyPartsCost(jobs),
+    [jobs],
+  );
+
   const topModels = useMemo(() => {
     const m = new Map<string, number>();
     const hot = new Set(['repairing', 'testing', 'ready', 'delivered', 'unrepairable']);
@@ -231,68 +182,42 @@ export const RepairDashboard: React.FC = () => {
       .slice(0, 10);
   }, [jobs]);
 
-  const profitabilityRows = useMemo(() => {
-    return jobs
-      .filter((j) => isDeliveredStatus(j.status))
-      .map((j) => {
-        const cost = computeRepairJobCost(j);
-        return { rev: cost.finalCost, profit: cost.finalCost - cost.partsCost - cost.laborCost };
-      });
-  }, [jobs]);
-
-  const avgProfit = useMemo(() => {
-    if (profitabilityRows.length === 0) return 0;
-    return profitabilityRows.reduce((s, r) => s + r.profit, 0) / profitabilityRows.length;
-  }, [profitabilityRows]);
-
-  const warrantyPartsCost = useMemo(() => {
-    let sum = 0;
-    jobs.forEach((j) => {
-      const w = j.warrantyScope === 'manufacturer' || (j.jobProducts || []).some((p) => p.inWarranty);
-      if (!w) return;
-      (j.partsUsed || []).forEach((p) => {
-        sum += Number(p.quantity || 0) * Number(p.unitCost || 0);
-      });
-    });
-    return sum;
-  }, [jobs]);
 
   return (
-    <div className="space-y-4">
-      <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
-        <CardContent className="pt-6">
-          <div className="flex items-start justify-between gap-4 flex-wrap">
-            <div>
-              <h1 className="text-2xl font-bold">لوحة الصيانة</h1>
-              <p className="text-sm text-muted-foreground mt-1">متابعة حالة الطلبات، الأداء، والإيرادات في مكان واحد.</p>
-            </div>
-            <div className="flex items-center gap-2 flex-wrap">
-              <Button
-                variant="secondary"
-                type="button"
-                onClick={() => {
-                  void refetchJobs();
-                  void refetchInvoices();
-                }}
-              >
-                تحديث
-              </Button>
-              <Link to={withTenantPath(tenantSlug, '/repair/jobs/new')}>
-                <Button>جهاز جديد</Button>
-              </Link>
-              <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
-                <Button variant="outline">مركز الاتصال</Button>
-              </Link>
-              <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
-                <Button variant="outline">عرض الطلبات</Button>
-              </Link>
-              <Link to={withTenantPath(tenantSlug, '/repair/parts')}>
-                <Button variant="outline">قطع الغيار</Button>
-              </Link>
-            </div>
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6">
+      <PageHeader
+        title="لوحة الصيانة"
+        subtitle="لوحة تشغيل الاستقبال: الوارد والإسناد والانتظار والإصلاح والتحصيل والتسليم."
+        icon="layout_dashboard"
+        primaryAction={can('repair.jobs.create') ? {
+          label: 'جهاز جديد',
+          icon: 'add',
+          onClick: () => navigate(withTenantPath(tenantSlug, '/repair/jobs/new')),
+        } : undefined}
+        actions={(
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button
+              variant="secondary"
+              type="button"
+              size="sm"
+              onClick={() => {
+                void refetchJobs();
+              }}
+            >
+              تحديث
+            </Button>
+            <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
+              <Button variant="outline" size="sm">مركز الاتصال</Button>
+            </Link>
+            <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
+              <Button variant="outline" size="sm">عرض الطلبات</Button>
+            </Link>
+            <Link to={withTenantPath(tenantSlug, '/repair/parts')}>
+              <Button variant="outline" size="sm">قطع الغيار</Button>
+            </Link>
           </div>
-        </CardContent>
-      </Card>
+        )}
+      />
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
         <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">طلبات مفتوحة</CardTitle></CardHeader>
@@ -303,16 +228,24 @@ export const RepairDashboard: React.FC = () => {
           <CardContent><p className="text-3xl font-bold text-amber-800">{num(delayedCount)}</p></CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">بانتظار التسليم</CardTitle></CardHeader>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">جاهز للدفع/التسليم</CardTitle></CardHeader>
           <CardContent><p className="text-3xl font-bold">{num(kpis.pendingDelivery)}</p></CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">إيرادات الصيانة</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-emerald-600">{num(kpis.repairRevenue)}</p></CardContent>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">غير مسند</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold">{num(jobs.filter((job) => !job.technicianId && !isDeliveredStatus(job.status)).length)}</p></CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">مبيعات قطع الغيار (فواتير)</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-sky-600">{num(kpis.partsRevenue)}</p></CardContent>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">انتظار العميل</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold text-violet-700">{num(jobs.filter((job) => ['estimate_ready', 'waiting_approval'].includes(job.status)).length)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">انتظار قطع</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold text-orange-700">{num(jobs.filter((job) => job.status === 'waiting_parts').length)}</p></CardContent>
+        </Card>
+        <Card>
+          <CardHeader><CardTitle className="text-sm text-muted-foreground">قيد الإصلاح/الاختبار</CardTitle></CardHeader>
+          <CardContent><p className="text-3xl font-bold text-sky-700">{num(jobs.filter((job) => ['diagnosing', 'repairing', 'testing'].includes(job.status)).length)}</p></CardContent>
         </Card>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
@@ -325,24 +258,17 @@ export const RepairDashboard: React.FC = () => {
           <CardContent><p className="text-2xl font-semibold">{num(jobs.length)}</p></CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">إجمالي الإيراد التشغيلي</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold text-emerald-700">{num(kpis.totalRevenue)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط قيمة الطلب المنجز</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold text-primary">{num(Math.round(avgTicket))}</p></CardContent>
-        </Card>
-        <Card>
           <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط مدة الإصلاح (ساعة)</CardTitle></CardHeader>
           <CardContent><p className="text-2xl font-semibold">{avgResolutionHours.toFixed(1)}</p></CardContent>
         </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">تكلفة قطع (ضمان)</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold text-orange-700">{num(Math.round(warrantyPartsCost))}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط ربحية التسليم</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold text-emerald-800">{num(Math.round(avgProfit))}</p></CardContent>
+        <Card className="md:col-span-3 lg:col-span-1">
+          <CardHeader>
+            <CardTitle className="text-sm text-muted-foreground">تكلفة قطع تحت ضمان</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold tabular-nums">{num(warrantyPartsCost)} ج.م</p>
+            <p className="mt-1 text-xs text-muted-foreground">من تكلفة الصرف الفعلية (ليس سعر البيع)</p>
+          </CardContent>
         </Card>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
@@ -422,20 +348,6 @@ export const RepairDashboard: React.FC = () => {
         </Card>
       </div>
       <Card>
-        <CardHeader><CardTitle>إيراد الصيانة الشهري (آخر 6 أشهر)</CardTitle></CardHeader>
-        <CardContent className="h-72 min-w-0">
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={monthlyRevenueData}>
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="month" />
-              <YAxis />
-              <Tooltip formatter={(value: number, name: string) => [num(value), name === 'revenue' ? 'الإيراد' : 'طلبات منجزة']} />
-              <Bar dataKey="revenue" fill="#16a34a" radius={[6, 6, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
-        </CardContent>
-      </Card>
-      <Card>
         <CardHeader><CardTitle>آخر الطلبات</CardTitle></CardHeader>
         <CardContent className="space-y-2 text-sm">
           {recent.map((job) => (
@@ -446,7 +358,7 @@ export const RepairDashboard: React.FC = () => {
               </div>
               <div className="flex items-center gap-2">
                 <span>{job.deviceBrand} {job.deviceModel}</span>
-                <Badge variant="secondary">{repairSettings.statusMap[job.status]?.label || REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</Badge>
+                <StatusBadge status={job.status} />
               </div>
             </div>
           ))}
@@ -455,6 +367,19 @@ export const RepairDashboard: React.FC = () => {
       </Card>
     </div>
   );
+};
+
+export const RepairDashboard: React.FC = () => {
+  const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const { can } = usePermission();
+  const technicianOnly = can('repair.jobs.technician')
+    && !can('repair.view')
+    && !can('repair.adminDashboard.view');
+  if (technicianOnly) {
+    return <Navigate replace to={withTenantPath(tenantSlug, '/repair/technician')} />;
+  }
+  if (can('repair.adminDashboard.view')) return <RepairAdminDashboard />;
+  return <RepairOperationalDashboard />;
 };
 
 export default RepairDashboard;

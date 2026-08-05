@@ -13,7 +13,6 @@ import { StatusBadge } from '../components/StatusBadge';
 import type { FirestoreUserWithRepair, RepairBranch, RepairJobStatus } from '../types';
 import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
-import { resolveRepairTechnicianIds } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
 
 const PAGE_SIZE = 20;
@@ -25,12 +24,13 @@ export const RepairMyJobs: React.FC = () => {
   const canView = can('repair.jobs.technician') || can('repair.view');
 
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
-  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const systemSettings = useAppStore((s) => s.systemSettings);
 
+  // New assignments are stored by Auth uid; this also matches the Firestore rule
+  // that guarantees a technician can query only jobs assigned to that account.
   const technicianIds = useMemo(
-    () => resolveRepairTechnicianIds(userProfile, currentEmployee?.id),
-    [userProfile, currentEmployee?.id],
+    () => [String(userProfile?.id || '').trim()].filter(Boolean),
+    [userProfile?.id],
   );
 
   const [branches, setBranches] = useState<RepairBranch[]>([]);
@@ -74,7 +74,7 @@ export const RepairMyJobs: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="p-6" dir={dir}>
+      <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلباتك كفني.</p>
@@ -91,7 +91,7 @@ export const RepairMyJobs: React.FC = () => {
   ) as RepairJobStatus[];
 
   return (
-    <div className="space-y-4 p-4 md:p-6" dir={dir}>
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
       <PageHeader
         title="طلباتي (فني)"
         subtitle="الطلبات المسندة إليك فقط — متابعة سريعة للحالة والورشة"
@@ -109,7 +109,7 @@ export const RepairMyJobs: React.FC = () => {
             pageId="repair-my-jobs"
             searchValue={search}
             onSearchChange={setSearch}
-            searchPlaceholder="بحث: الاسم، الهاتف، الإيصال، نوع الجهاز..."
+            searchPlaceholder="بحث: رقم الإيصال أو نوع الجهاز..."
             quickFilters={[
               {
                 key: 'status',
@@ -131,40 +131,26 @@ export const RepairMyJobs: React.FC = () => {
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th text-right">الإيصال</th>
-                  <th className="erp-th text-right">العميل</th>
                   <th className="erp-th text-right">الفرع</th>
                   <th className="erp-th text-right">الحالة</th>
                   <th className="erp-th text-right">الجهاز</th>
-                  <th className="erp-th text-right">التفاصيل</th>
                   <th className="erp-th text-right">الورشة</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={7}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={5}>
                       <span role="status" aria-live="polite">جاري التحميل...</span>
                     </td>
                   </tr>
                 ) : pagedJobs.map((job) => (
                   <tr key={job.id} className="border-t hover:bg-muted/40">
                     <td className="p-2 font-mono">{job.receiptNo}</td>
-                    <td className="p-2">
-                      <div className="font-medium">{job.customerName}</div>
-                      <div className="text-xs text-muted-foreground">{job.customerPhone}</div>
-                    </td>
                     <td className="p-2">{branchNameById.get(String(job.branchId || '')) || '—'}</td>
                     <td className="p-2"><StatusBadge status={job.status} /></td>
                     <td className="p-2 text-muted-foreground">
                       {job.deviceBrand} {job.deviceModel}
-                    </td>
-                    <td className="p-2">
-                      <Link
-                        className="text-primary underline text-xs"
-                        to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
-                      >
-                        التفاصيل
-                      </Link>
                     </td>
                     <td className="p-2">
                       <Link
@@ -178,10 +164,10 @@ export const RepairMyJobs: React.FC = () => {
                 ))}
                 {!loading && visibleJobs.length === 0 && (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={7}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={5}>
                       {technicianIds.length === 0
-                        ? 'لا يمكن عرض الطلبات — حسابك غير مربوط بموظف أو فني.'
-                        : 'لا توجد طلبات مسندة إليك حالياً.'}
+                        ? 'لا يمكن عرض الطلبات — اربط حسابك بموظف من إدارة المستخدمين.'
+                        : 'لا توجد طلبات مسندة إليك. إن ظهر الفني على الطلب عند الاستقبال، افتح الطلب واضغط «إسناد للموظف» بعد ربط الموظف بالحساب.'}
                     </td>
                   </tr>
                 )}

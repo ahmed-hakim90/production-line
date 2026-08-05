@@ -7,6 +7,11 @@ export interface ProductionReportData {
   workers: number;
   hours: number;
   workOrderId?: string;
+  manufacturingCostStatus?: 'provisional' | 'actual';
+  materialCostSnapshot?: number;
+  packagingCostSnapshot?: number;
+  fullManufacturingCostSnapshot?: number;
+  fullManufacturingUnitCostSnapshot?: number;
 }
 
 export interface IProductionProvider {

@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 
 type EmployeeOption = { value: string; label: string };
 type WarehouseOption = { value: string; label: string };
+type RepairBranchOption = { value: string; label: string };
 type ManageUserPayload = {
   row: {
     user: {
@@ -17,14 +18,18 @@ type ManageUserPayload = {
       roleId: string;
       isActive: boolean;
       inventoryWarehouseId?: string | null;
+      repairBranchId?: string | null;
+      repairBranchIds?: string[] | null;
     };
     employee: { id?: string } | null;
   };
   roles: FirestoreRole[];
   employeeOptions: EmployeeOption[];
   warehouseOptions: WarehouseOption[];
+  repairBranchOptions: RepairBranchOption[];
   onUpdateRole: (roleId: string) => Promise<void>;
   onUpdateInventoryWarehouse: (warehouseId: string) => Promise<void>;
+  onUpdateRepairBranch: (branchId: string) => Promise<void>;
   onLinkEmployee: (employeeId: string) => Promise<void>;
   onUnlinkEmployee: () => Promise<void>;
   onToggleActive: () => Promise<void>;
@@ -41,6 +46,7 @@ export const GlobalManageUserModal: React.FC = () => {
   const [roleTargetId, setRoleTargetId] = useState('');
   const [employeeTargetId, setEmployeeTargetId] = useState('');
   const [warehouseTargetId, setWarehouseTargetId] = useState('');
+  const [repairBranchTargetId, setRepairBranchTargetId] = useState('');
   const [emailTarget, setEmailTarget] = useState('');
   const [passwordTarget, setPasswordTarget] = useState('');
   const [submitting, setSubmitting] = useState(false);
@@ -51,12 +57,17 @@ export const GlobalManageUserModal: React.FC = () => {
   const roles = modalPayload?.roles ?? [];
   const employeeOptions = modalPayload?.employeeOptions ?? [];
   const warehouseOptions = modalPayload?.warehouseOptions ?? [];
+  const repairBranchOptions = modalPayload?.repairBranchOptions ?? [];
 
   useEffect(() => {
     if (!isOpen || !row) return;
     setRoleTargetId(String(row.user.roleId || ''));
     setEmployeeTargetId(String(row.employee?.id || ''));
     setWarehouseTargetId(String(row.user.inventoryWarehouseId || ''));
+    const fromIds = Array.isArray(row.user.repairBranchIds)
+      ? row.user.repairBranchIds.map((id) => String(id || '').trim()).filter(Boolean)
+      : [];
+    setRepairBranchTargetId(String(row.user.repairBranchId || fromIds[0] || ''));
     setEmailTarget(String(row.user.email || ''));
     setPasswordTarget('');
     setMessage(null);
@@ -157,6 +168,25 @@ export const GlobalManageUserModal: React.FC = () => {
             </p>
           </div>
 
+          <div className="space-y-2">
+            <label className="text-xs font-bold text-[var(--color-text-muted)]">
+              {t('modalManager.manageUser.repairBranch')}
+            </label>
+            <select
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]"
+              value={repairBranchTargetId}
+              onChange={(e) => setRepairBranchTargetId(e.target.value)}
+            >
+              <option value="">{t('modalManager.manageUser.allRepairBranches')}</option>
+              {repairBranchOptions.map((branch) => (
+                <option key={branch.value} value={branch.value}>{branch.label}</option>
+              ))}
+            </select>
+            <p className="text-[11px] text-[var(--color-text-muted)]">
+              {t('modalManager.manageUser.repairBranchHint')}
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="space-y-2">
               <label className="text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.manageUser.email')}</label>
@@ -196,6 +226,17 @@ export const GlobalManageUserModal: React.FC = () => {
               disabled={submitting}
             >
               {t('modalManager.manageUser.saveWarehouse')}
+            </Button>
+            <Button
+              onClick={() =>
+                void run(
+                  () => modalPayload.onUpdateRepairBranch(repairBranchTargetId),
+                  t('modalManager.manageUser.updateRepairBranchSuccess'),
+                )
+              }
+              disabled={submitting}
+            >
+              {t('modalManager.manageUser.saveRepairBranch')}
             </Button>
             <Button
               onClick={() => void run(() => modalPayload.onLinkEmployee(employeeTargetId), t('modalManager.manageUser.linkEmployeeSuccess'))}

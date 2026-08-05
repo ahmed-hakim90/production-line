@@ -13,22 +13,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { PageHeader } from '@/components/PageHeader';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import {
-  REPAIR_JOB_STATUS_LABELS,
-  resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairJob,
@@ -36,20 +26,27 @@ import {
   type RepairSparePartStock,
 } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
+import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
+import { repairStockLevelChipType } from '../lib/repairSemanticStatus';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairJobService } from '../services/repairJobService';
 import { useLowStockAlert } from '../hooks/useLowStockAlert';
 import { LowStockAlert } from '../components/LowStockAlert';
-import { RepairReplenishmentRequestsPanel } from '../components/RepairReplenishmentRequestsPanel';
+import { CreateRepairReplenishmentModal } from '../components/CreateRepairReplenishmentModal';
+import { CreateRepairSparePartModal } from '../components/CreateRepairSparePartModal';
+import { toUserSafeFirestoreError } from '../lib/repairFirestoreErrors';
 import {
   loadAllCatalogMaterials,
-  loadProductComponents,
   type CatalogComponent,
 } from '../../catalog/lib/productComponents';
 import { planSparePartCatalogLinks } from '../utils/sparePartCatalogBackfill';
+import { resolveRepairSalePrice } from '../utils/sparePartPricing';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { materialService } from '../../manufacturing/services/materialService';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -89,52 +86,31 @@ export const SparePartsInventory: React.FC = () => {
   const canViewJobs = can('repair.view');
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedBranchId, setSelectedBranchId] = useState('');
-  const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const [branchJobs, setBranchJobs] = useState<RepairJob[]>([]);
   const [jobsLoading, setJobsLoading] = useState(false);
   const userBranchIds = useMemo(
-    () => Array.from(new Set([...resolveUserRepairBranchIds(user), ...assignedBranchIds])),
-    [user, assignedBranchIds],
+    () =>
+      resolveAccessibleRepairBranchIds({
+        user,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: canManageAllBranches,
+      }),
+    [user, branches, currentEmployee?.id, canManageAllBranches],
   );
-
-  useEffect(() => {
-    if (canManageAllBranches || !user?.id) {
-      setAssignedBranchIds([]);
-      return;
-    }
-    void repairBranchService.list().then((rows) => {
-      const uid = String(user.id || '').trim();
-      const eid = String(currentEmployee?.id || '').trim();
-      const ids = rows
-        .filter((branch) => {
-          const t = branch.technicianIds || [];
-          return (uid && t.includes(uid)) || (eid && t.includes(eid));
-        })
-        .map((branch) => branch.id || '')
-        .filter(Boolean);
-      setAssignedBranchIds(ids);
-    });
-  }, [canManageAllBranches, user?.id, currentEmployee?.id]);
   const branchId = selectedBranchId;
   const [parts, setParts] = useState<RepairSparePart[]>([]);
   const [stock, setStock] = useState<RepairSparePartStock[]>([]);
-  const products = useAppStore((s) => s._rawProducts);
+  const [materialSaleById, setMaterialSaleById] = useState<Map<string, {
+    consumer: number;
+    trader: number;
+    cost: number;
+  }>>(new Map());
   const [catalogComponents, setCatalogComponents] = useState<CatalogComponent[]>([]);
-  const [bomComponents, setBomComponents] = useState<CatalogComponent[]>([]);
-  const [form, setForm] = useState({
-    sourceMode: 'all_materials' as 'product_bom' | 'all_materials',
-    productId: '',
-    materialId: '',
-    unit: 'قطعة',
-    minStock: String(repairSettings.defaults.defaultMinStock),
-    defaultSalePrice: '',
-  });
-  useEffect(() => {
-    setForm((prev) => ({ ...prev, minStock: String(repairSettings.defaults.defaultMinStock) }));
-  }, [repairSettings.defaults.defaultMinStock]);
-
   const [isCreatePartModalOpen, setIsCreatePartModalOpen] = useState(false);
   const [linkingCatalog, setLinkingCatalog] = useState(false);
+  const [deletingPartId, setDeletingPartId] = useState<string | null>(null);
+  const [adjustingPartId, setAdjustingPartId] = useState<string | null>(null);
   const [replenishModalOpen, setReplenishModalOpen] = useState(false);
   const [search, setSearch] = useState('');
   const [increaseQty, setIncreaseQty] = useState('1');
@@ -163,19 +139,25 @@ export const SparePartsInventory: React.FC = () => {
       setParts(cached.parts);
       setStock(cached.stock);
     }
-    const { data } = await fetchCachedPageData(
-      sparePartsCacheKey,
-      async () => {
-        const [p, s] = await Promise.all([
-          sparePartsService.listParts(branchId),
-          sparePartsService.listStock(branchId, activeWarehouseId),
-        ]);
-        return { parts: p, stock: s };
-      },
-      { force: opts?.force === true, maxAgeMs: 45_000 },
-    );
-    setParts(data.parts);
-    setStock(data.stock);
+    try {
+      const { data } = await fetchCachedPageData(
+        sparePartsCacheKey,
+        async () => {
+          const [p, s] = await Promise.all([
+            sparePartsService.listParts(branchId),
+            sparePartsService.listStock(branchId, activeWarehouseId),
+          ]);
+          return { parts: p, stock: s };
+        },
+        { force: opts?.force === true, maxAgeMs: 45_000 },
+      );
+      setParts(data.parts);
+      setStock(data.stock);
+    } catch (error: unknown) {
+      setParts([]);
+      setStock([]);
+      toast.error(toUserSafeFirestoreError(error, 'تعذر تحميل مخزون قطع الغيار.'));
+    }
   };
 
   useEffect(() => {
@@ -215,38 +197,46 @@ export const SparePartsInventory: React.FC = () => {
     void loadAllCatalogMaterials()
       .then(setCatalogComponents)
       .catch(() => setCatalogComponents([]));
+    void materialService.getAll()
+      .then((rows) => {
+        const map = new Map<string, { consumer: number; trader: number; cost: number }>();
+        for (const row of rows) {
+          const id = String(row.id || '').trim();
+          if (!id) continue;
+          map.set(id, {
+            consumer: Number(row.defaultSalePrice || 0),
+            trader: Number(row.traderSalePrice || 0),
+            cost: Number(row.purchaseCost || 0),
+          });
+        }
+        setMaterialSaleById(map);
+      })
+      .catch(() => setMaterialSaleById(new Map()));
   }, []);
   useEffect(() => {
-    const productId = String(form.productId || '').trim();
-    if (form.sourceMode !== 'product_bom' || !productId) {
-      setBomComponents([]);
-      return;
-    }
-    let cancelled = false;
-    void loadProductComponents(productId)
+    void repairBranchService.list()
       .then((rows) => {
-        if (!cancelled) setBomComponents(rows);
-      })
-      .catch(() => {
-        if (!cancelled) setBomComponents([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [form.productId, form.sourceMode]);
-  useEffect(() => {
-    void repairBranchService.list().then((rows) => {
-      setBranches(rows);
-      if (!selectedBranchId && rows.length > 0) {
-        const firstAllowed = canManageAllBranches
-          ? rows[0]
-          : rows.find((row) => row.id && userBranchIds.includes(String(row.id)));
-        if (firstAllowed?.id) {
-          setSelectedBranchId(String(firstAllowed.id));
+        setBranches(rows);
+        if (!selectedBranchId && rows.length > 0) {
+          const allowedIds = resolveAccessibleRepairBranchIds({
+            user,
+            branches: rows,
+            currentEmployeeId: currentEmployee?.id,
+            canViewAllBranches: canManageAllBranches,
+          });
+          const firstAllowed = canManageAllBranches
+            ? rows[0]
+            : rows.find((row) => row.id && allowedIds.includes(String(row.id)));
+          if (firstAllowed?.id) {
+            setSelectedBranchId(String(firstAllowed.id));
+          }
         }
-      }
-    });
-  }, [canManageAllBranches, selectedBranchId, userBranchIds]);
+      })
+      .catch((error: unknown) => {
+        setBranches([]);
+        toast.error(toUserSafeFirestoreError(error, 'تعذر تحميل فروع الصيانة.'));
+      });
+  }, [canManageAllBranches, selectedBranchId, user, currentEmployee?.id]);
   useEffect(() => {
     if (canManageAllBranches) return;
     const currentAllowed = userBranchIds.includes(selectedBranchId);
@@ -274,89 +264,14 @@ export const SparePartsInventory: React.FC = () => {
     return { totalItems, totalStock, lowStockCount };
   }, [parts, stockMap]);
 
-  const getNextSparePartCode = () => {
-    const maxSerial = parts.reduce((max, part) => {
-      const match = String(part.code || '').trim().toUpperCase().match(/^SP-(\d{3})$/);
-      if (!match) return max;
-      const current = Number(match[1] || 0);
-      return Number.isFinite(current) ? Math.max(max, current) : max;
-    }, 0);
-    return `SP-${String(maxSerial + 1).padStart(3, '0')}`;
-  };
-
-  const selectableComponents = useMemo(() => {
-    if (form.sourceMode === 'all_materials') return catalogComponents;
-    return bomComponents;
-  }, [bomComponents, catalogComponents, form.sourceMode]);
-
-  const applyComponentSelection = (materialId: string) => {
-    const selected = selectableComponents.find((row) => row.materialId === materialId);
-    setForm((prev) => ({
-      ...prev,
-      materialId,
-      unit: selected?.unitLabel || prev.unit || 'قطعة',
-    }));
-  };
-
-  const createPart = async () => {
-    if (!branchId) return;
-    const selectedMaterial = selectableComponents.find(
-      (material) => material.materialId === form.materialId,
-    );
-    if (!selectedMaterial) {
-      toast.error('اختر مكونًا من الماستر داتا أولًا.');
-      return;
-    }
-    const partName = String(selectedMaterial.materialName || '').trim();
-    const materialId = String(selectedMaterial.materialId || '').trim();
-    const partCode = getNextSparePartCode();
-    const existing = parts.find((part) => {
-      const linkedId = String(part.materialId || part.rawMaterialId || '').trim();
-      if (materialId && linkedId && linkedId === materialId) return true;
-      return String(part.name || '').trim().toLowerCase() === partName.toLowerCase();
-    });
-    if (existing) {
-      toast.error('هذا المكون مضاف بالفعل كقطعة غيار.');
-      return;
-    }
-    try {
-      const sale = Number(form.defaultSalePrice || 0);
-      await sparePartsService.createPart({
-        branchId,
-        name: partName,
-        code: partCode,
-        category: selectedMaterial.categoryName || 'مكونات منتج',
-        unit: form.unit || selectedMaterial.unitLabel || 'قطعة',
-        minStock: Number(form.minStock || 0),
-        materialId,
-        ...(form.sourceMode === 'product_bom' && form.productId
-          ? { sourceProductId: form.productId }
-          : {}),
-        ...(selectedMaterial.itemType === 'legacy_raw' ? { rawMaterialId: materialId } : {}),
-        ...(canManagePricing && Number.isFinite(sale) && sale > 0 ? { defaultSalePrice: sale } : {}),
-      });
-      toast.success('تمت إضافة القطعة.');
-      setForm((prev) => ({
-        ...prev,
-        materialId: '',
-        unit: 'قطعة',
-        minStock: String(repairSettings.defaults.defaultMinStock),
-        defaultSalePrice: '',
-      }));
-      setIsCreatePartModalOpen(false);
-      await load({ force: true });
-    } catch (e: any) {
-      toast.error(e?.message || 'تعذر إضافة القطعة.');
-    }
-  };
-
   const increaseStock = async (part: RepairSparePart) => {
     if (!canManageParts) {
       toast.error('ليس لديك صلاحية تعديل المخزون.');
       return;
     }
-    if (!part.id || !branchId || !activeWarehouseId) return;
+    if (!part.id || !branchId || !activeWarehouseId || adjustingPartId) return;
     const qty = Math.max(1, Number(increaseQty || 1));
+    setAdjustingPartId(part.id);
     try {
       await sparePartsService.adjustStock({
         branchId,
@@ -373,6 +288,8 @@ export const SparePartsInventory: React.FC = () => {
       toast.success('تم تسجيل زيادة الجرد.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إضافة الكمية.');
+    } finally {
+      setAdjustingPartId(null);
     }
   };
   const decreaseStock = async (part: RepairSparePart) => {
@@ -380,8 +297,9 @@ export const SparePartsInventory: React.FC = () => {
       toast.error('ليس لديك صلاحية تعديل المخزون.');
       return;
     }
-    if (!part.id || !branchId || !activeWarehouseId) return;
+    if (!part.id || !branchId || !activeWarehouseId || adjustingPartId) return;
     const qty = Math.max(1, Number(increaseQty || 1));
+    setAdjustingPartId(part.id);
     try {
       await sparePartsService.adjustStock({
         branchId,
@@ -398,6 +316,33 @@ export const SparePartsInventory: React.FC = () => {
       toast.success('تم تسجيل نقص الجرد.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر سحب الكمية.');
+    } finally {
+      setAdjustingPartId(null);
+    }
+  };
+
+  const deletePart = async (part: RepairSparePart) => {
+    if (!canManageParts) {
+      toast.error('ليس لديك صلاحية حذف القطعة.');
+      return;
+    }
+    if (!part.id || !branchId || deletingPartId) return;
+    const qty = Number(stockMap.get(part.id) || 0);
+    const ok = window.confirm(
+      qty > 0
+        ? `الصنف «${part.name}» (${part.code || part.id}) عليه رصيد ${qty}. سيتم حذف الصنف ومسح الرصيد نهائيًا (مناسب لأصناف التجربة أو الربط الخاطئ). هل أنت متأكد؟`
+        : `سيتم حذف الصنف «${part.name}» (${part.code || part.id}) من مخزون الفرع نهائيًا. هل أنت متأكد؟`,
+    );
+    if (!ok) return;
+    setDeletingPartId(part.id);
+    try {
+      await sparePartsService.removePart(part.id, branchId, { force: true });
+      toast.success('تم حذف الصنف.');
+      await load({ force: true });
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر حذف الصنف.');
+    } finally {
+      setDeletingPartId(null);
     }
   };
 
@@ -443,66 +388,70 @@ export const SparePartsInventory: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4" dir={dir}>
-      <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
-        <CardContent className="pt-6">
-          <div className="space-y-4">
-            <div className="flex items-start justify-between gap-3 flex-wrap">
-              <div>
-                <h1 className="text-2xl font-bold">مخزون قطع الغيار</h1>
-                <p className="text-sm text-muted-foreground mt-1">
-                  إدارة أصناف الفرع مرتبطة بماستر داتا المنتجات والمكونات المشتركة في المشروع.
-                </p>
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
+      <PageHeader
+        title="مخزون قطع الغيار"
+        subtitle="إدارة أصناف الفرع مرتبطة بماستر داتا المنتجات والمكونات المشتركة في المشروع."
+        icon="inventory_2"
+        actions={(
+          <div className="flex items-center gap-2 flex-wrap">
+            {(canManageAllBranches || branchOptions.length > 1) && (
+              <div className="w-[220px]">
+                <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="اختر الفرع" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {branchOptions.map((branch) => (
+                      <SelectItem key={branch.id} value={branch.id || ''}>
+                        {branch.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
-              <div className="flex items-center gap-2 flex-wrap">
-                {(canManageAllBranches || branchOptions.length > 1) && (
-                  <div className="w-[220px]">
-                    <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="اختر الفرع" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {branchOptions.map((branch) => (
-                          <SelectItem key={branch.id} value={branch.id || ''}>
-                            {branch.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
+            )}
+            <Link to={withTenantPath(tenantSlug, '/repair')}>
+              <Button variant="outline" size="sm">لوحة الصيانة</Button>
+            </Link>
+            {activeWarehouseId ? (
+              <Link
+                to={withTenantPath(
+                  tenantSlug,
+                  `/repair/warehouses/${encodeURIComponent(activeWarehouseId)}`,
                 )}
-                <Link to={withTenantPath(tenantSlug, '/repair')}>
-                  <Button variant="outline">لوحة الصيانة</Button>
-                </Link>
-                {can('repairSpareIssues.view') && (
-                  <Link to={withTenantPath(tenantSlug, '/repair/spare-issues')}>
-                    <Button variant="outline">سندات الصرف</Button>
-                  </Link>
-                )}
-                {canViewReplenishment && (
-                  <Link to={withTenantPath(tenantSlug, '/repair/parts-replenishment')}>
-                    <Button variant="outline">متابعة التموين</Button>
-                  </Link>
-                )}
-                {canCreateReplenishment && (
-                  <Button
-                    type="button"
-                    onClick={() => setReplenishModalOpen(true)}
-                    disabled={!activeWarehouseId}
-                  >
-                    طلب تموين
-                  </Button>
-                )}
-                {canManagePricing && (
-                  <Link to={withTenantPath(tenantSlug, '/repair/parts-pricing')}>
-                    <Button variant="secondary">تسعير القطع</Button>
-                  </Link>
-                )}
-              </div>
-            </div>
+              >
+                <Button variant="outline" size="sm">مساحة مخزن المركز</Button>
+              </Link>
+            ) : null}
+            {can('repairSpareIssues.view') && (
+              <Link to={withTenantPath(tenantSlug, '/repair/spare-issues')}>
+                <Button variant="outline" size="sm">سندات الصرف</Button>
+              </Link>
+            )}
+            {canViewReplenishment && (
+              <Link to={withTenantPath(tenantSlug, '/repair/parts-replenishment')}>
+                <Button variant="outline" size="sm">متابعة التموين</Button>
+              </Link>
+            )}
+            {canCreateReplenishment && (
+              <Button
+                type="button"
+                size="sm"
+                onClick={() => setReplenishModalOpen(true)}
+                disabled={!activeWarehouseId}
+              >
+                طلب تموين
+              </Button>
+            )}
+            {canManagePricing && (
+              <Link to={withTenantPath(tenantSlug, '/repair/parts-pricing')}>
+                <Button variant="secondary" size="sm">تسعير القطع</Button>
+              </Link>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      />
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <Card>
@@ -533,130 +482,27 @@ export const SparePartsInventory: React.FC = () => {
           هذا الفرع لا يملك مخزنًا مرتبطًا بعد. أنشئ فرعًا جديدًا أو اربط مخزنًا يدويًا للفرع الحالي.
         </div>
       )}
-      {canManageParts && (
-        <div className="flex justify-end gap-2 flex-wrap">
-          {unlinkedPartsCount > 0 && (
-            <Button
-              variant="outline"
-              disabled={linkingCatalog || !branchId}
-              onClick={() => void linkUnlinkedPartsToCatalog()}
-            >
-              {linkingCatalog ? 'جاري الربط...' : `ربط بالماستر داتا (${unlinkedPartsCount})`}
-            </Button>
-          )}
-          <Dialog open={isCreatePartModalOpen} onOpenChange={setIsCreatePartModalOpen}>
-            <DialogTrigger asChild>
-              <Button>إضافة صنف جديد</Button>
-            </DialogTrigger>
-            <DialogContent dir={dir} className="max-w-3xl">
-              <DialogHeader>
-                <DialogTitle>إضافة صنف جديد</DialogTitle>
-                <DialogDescription>
-                  القطع تُختار من كتالوج المكونات المشتركة للمشروع. إدارة الماستر داتا تتم من موديول التصنيع بواسطة المسؤولين فقط.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-6 gap-3">
-                <div className="xl:col-span-2">
-                  <Label>مصدر المكون</Label>
-                  <Select
-                    value={form.sourceMode}
-                    onValueChange={(value) =>
-                      setForm((p) => ({
-                        ...p,
-                        sourceMode: value as 'product_bom' | 'all_materials',
-                        materialId: '',
-                        productId: value === 'all_materials' ? '' : p.productId,
-                      }))
-                    }
-                  >
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="product_bom">مكونات منتج (BOM)</SelectItem>
-                      <SelectItem value="all_materials">كل المواد التصنيعية</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {form.sourceMode === 'product_bom' && (
-                  <div className="xl:col-span-2">
-                    <Label>المنتج</Label>
-                    <Select
-                      value={form.productId}
-                      onValueChange={(value) => setForm((p) => ({ ...p, productId: value, materialId: '' }))}
-                    >
-                      <SelectTrigger><SelectValue placeholder="اختر المنتج" /></SelectTrigger>
-                      <SelectContent>
-                        {products.filter((p) => p.id).map((product) => (
-                          <SelectItem key={product.id} value={String(product.id)}>
-                            {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                )}
-                <div className="xl:col-span-2">
-                  <Label>المكون</Label>
-                  <Select
-                    value={form.materialId}
-                    onValueChange={applyComponentSelection}
-                    disabled={form.sourceMode === 'product_bom' && !form.productId}
-                  >
-                    <SelectTrigger>
-                      <SelectValue
-                        placeholder={
-                          form.sourceMode === 'product_bom' && !form.productId
-                            ? 'اختر المنتج أولًا'
-                            : selectableComponents.length === 0
-                              ? 'لا توجد مكونات'
-                              : 'اختر مكونًا'
-                        }
-                      />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {selectableComponents.map((material) => (
-                        <SelectItem key={material.materialId} value={material.materialId}>
-                          {material.materialName}
-                          {material.materialCode ? ` (${material.materialCode})` : ''}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div><Label>الوحدة</Label><Input value={form.unit} onChange={(e) => setForm((p) => ({ ...p, unit: e.target.value }))} /></div>
-                <div><Label>الحد الأدنى</Label><Input type="number" value={form.minStock} onChange={(e) => setForm((p) => ({ ...p, minStock: e.target.value }))} /></div>
-                {canManagePricing && (
-                  <div>
-                    <Label>سعر الاستخدام / البيع</Label>
-                    <Input
-                      type="number"
-                      min={0}
-                      step="0.01"
-                      value={form.defaultSalePrice}
-                      onChange={(e) => setForm((p) => ({ ...p, defaultSalePrice: e.target.value }))}
-                      placeholder="اختياري"
-                    />
-                  </div>
-                )}
-                <div className="xl:col-span-6 flex justify-end">
-                  <Button onClick={createPart}>إضافة الصنف</Button>
-                </div>
-              </div>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
       <Card>
         <SmartFilterBar
-      pageId="spare-parts-inventory"
+          pageId="spare-parts-inventory"
           searchPlaceholder="ابحث بالاسم أو الكود أو التصنيف..."
           searchValue={search}
           onSearchChange={setSearch}
           extra={
             <>
-              <div className="flex items-center gap-2">
-                <Label className="whitespace-nowrap">الزيادة السريعة</Label>
-                <Input type="number" min={1} value={increaseQty} onChange={(e) => setIncreaseQty(e.target.value)} className="h-[34px] w-[100px]" />
-              </div>
+              {canManageParts && (
+                <div className="flex items-center gap-2">
+                  <Label className="whitespace-nowrap">كمية الجرد</Label>
+                  <Input
+                    type="number"
+                    min={1}
+                    value={increaseQty}
+                    onChange={(e) => setIncreaseQty(e.target.value)}
+                    className="h-[34px] w-[100px]"
+                    title="تُستخدم مع أزرار الزيادة والنقص في الجدول"
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-2">
                 <Button variant={viewMode === 'simple' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('simple')} className="h-[34px]">مبسط</Button>
                 <Button variant={viewMode === 'dense' ? 'default' : 'outline'} size="sm" onClick={() => setViewMode('dense')} className="h-[34px]">كثيف البيانات</Button>
@@ -667,9 +513,44 @@ export const SparePartsInventory: React.FC = () => {
         />
       </Card>
       <Card>
-        <CardHeader>
-          <CardTitle>جدول المخزون</CardTitle>
-          <CardDescription>يمكنك تحديث الرصيد بسرعة باستخدام زر الزيادة.</CardDescription>
+        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 flex-wrap">
+          <div>
+            <CardTitle>جدول المخزون</CardTitle>
+            <CardDescription>
+              {canManageParts
+                ? 'للإدارة: إضافة صنف، زيادة/نقص الجرد، وحذف الصنف عند رصيد صفر. الرصيد ينقص مع الصرف ويزيد باستلام التموين.'
+                : 'عرض الأرصدة فقط. الرصيد ينقص مع صرف الطلبات ويزيد عند استلام التموين من المركزي.'}
+            </CardDescription>
+          </div>
+          {canManageParts && (
+            <div className="flex items-center gap-2 flex-wrap">
+              {unlinkedPartsCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={linkingCatalog || !branchId}
+                  onClick={() => void linkUnlinkedPartsToCatalog()}
+                >
+                  {linkingCatalog ? 'جاري الربط...' : `ربط بالماستر داتا (${unlinkedPartsCount})`}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                disabled={!branchId || !activeWarehouseId}
+                onClick={() => setIsCreatePartModalOpen(true)}
+              >
+                إضافة صنف
+              </Button>
+              <CreateRepairSparePartModal
+                open={isCreatePartModalOpen}
+                onOpenChange={setIsCreatePartModalOpen}
+                branchId={branchId}
+                existingParts={parts}
+                defaultMinStock={repairSettings.defaults.defaultMinStock}
+                onCreated={() => load({ force: true })}
+              />
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           <div className="rounded border overflow-x-auto">
@@ -683,7 +564,9 @@ export const SparePartsInventory: React.FC = () => {
                   {viewMode === 'dense' && <th className="p-2 text-right">الكتالوج</th>}
                   <th className="p-2 text-right">الرصيد</th>
                   <th className="p-2 text-right">الحد الأدنى</th>
-                  {viewMode === 'dense' && <th className="p-2 text-right">سعر الاستخدام</th>}
+                  {viewMode === 'dense' && <th className="p-2 text-right">مستهلك</th>}
+                  {viewMode === 'dense' && <th className="p-2 text-right">تاجر</th>}
+                  {viewMode === 'dense' && <th className="p-2 text-right">تكلفة</th>}
                   <th className="p-2 text-right">الحالة</th>
                   <th className="p-2 text-right">الإجراءات</th>
                 </tr>
@@ -695,6 +578,19 @@ export const SparePartsInventory: React.FC = () => {
                   const isLinked = Boolean(
                     String(part.materialId || '').trim() || String(part.rawMaterialId || '').trim(),
                   );
+                  const materialId = String(part.materialId || part.rawMaterialId || '').trim();
+                  const prices = materialId ? materialSaleById.get(materialId) : undefined;
+                  const consumerPrice = resolveRepairSalePrice({
+                    materialSalePrice: prices?.consumer,
+                    partSalePrice: part.defaultSalePrice,
+                  });
+                  const traderPrice = resolveRepairSalePrice({
+                    customerType: 'trader',
+                    materialSalePrice: prices?.consumer,
+                    materialTraderSalePrice: prices?.trader,
+                    partSalePrice: part.defaultSalePrice,
+                  });
+                  const costPrice = Number(prices?.cost || 0);
                   return (
                     <tr key={part.id} className="border-t">
                       <td className="p-2">{part.name}</td>
@@ -712,52 +608,65 @@ export const SparePartsInventory: React.FC = () => {
                       <td className="p-2 font-mono">{part.minStock}</td>
                       {viewMode === 'dense' && (
                         <td className="p-2 font-mono">
-                          {Number(part.defaultSalePrice) > 0 ? Number(part.defaultSalePrice).toFixed(2) : '—'}
+                          {consumerPrice > 0 ? consumerPrice.toFixed(2) : '—'}
+                        </td>
+                      )}
+                      {viewMode === 'dense' && (
+                        <td className="p-2 font-mono">
+                          {traderPrice > 0 ? traderPrice.toFixed(2) : '—'}
+                        </td>
+                      )}
+                      {viewMode === 'dense' && (
+                        <td className="p-2 font-mono">
+                          {costPrice > 0 ? costPrice.toFixed(2) : '—'}
                         </td>
                       )}
                       <td className="p-2">
-                        <Badge variant={isLow ? 'destructive' : 'secondary'}>{isLow ? 'منخفض' : 'جيد'}</Badge>
+                        <ErpStatusBadge
+                          label={isLow ? 'منخفض' : 'جيد'}
+                          type={repairStockLevelChipType(isLow)}
+                        />
                       </td>
                       <td className="p-2">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          {canManagePricing && (
+                        {canManageParts ? (
+                          <div className="flex items-center gap-2 flex-wrap">
                             <Button
-                              variant="secondary"
+                              variant="outline"
                               size="sm"
-                              onClick={() => {
-                                setPartPricingEdit(part);
-                                setPricingForm({
-                                  defaultSalePrice: String(part.defaultSalePrice ?? ''),
-                                });
-                              }}
+                              iconName="add"
+                              tone="submit"
+                              onClick={() => void increaseStock(part)}
+                              disabled={Boolean(adjustingPartId) || Boolean(deletingPartId)}
+                              title="زيادة الرصيد (جرد يدوي)"
                             >
-                              تعديل السعر
+                              زيادة +{Math.max(1, Number(increaseQty || 1))}
                             </Button>
-                          )}
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            iconName="add"
-                            tone="submit"
-                            onClick={() => increaseStock(part)}
-                            disabled={!canManageParts}
-                          >
-                            +{Math.max(1, Number(increaseQty || 1))}
-                          </Button>
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            iconName="remove"
-                            tone="undo"
-                            onClick={() => decreaseStock(part)}
-                            disabled={!canManageParts}
-                          >
-                            -{Math.max(1, Number(increaseQty || 1))}
-                          </Button>
-                          <Button variant="destructive" size="sm" onClick={() => setPartPendingDelete(part)} disabled={!canManageParts}>
-                            حذف
-                          </Button>
-                        </div>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              iconName="remove"
+                              tone="undo"
+                              onClick={() => void decreaseStock(part)}
+                              disabled={Boolean(adjustingPartId) || Boolean(deletingPartId) || qty <= 0}
+                              title="نقص الرصيد (جرد يدوي)"
+                            >
+                              نقص -{Math.max(1, Number(increaseQty || 1))}
+                            </Button>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              iconName="delete"
+                              tone="delete"
+                              onClick={() => void deletePart(part)}
+                              disabled={Boolean(deletingPartId) || Boolean(adjustingPartId)}
+                              title="حذف الصنف من مخزون الفرع (حتى لو كان تجربة أو مربوطًا بالغلط)"
+                            >
+                              {deletingPartId === part.id ? 'جاري الحذف...' : 'حذف'}
+                            </Button>
+                          </div>
+                        ) : (
+                          <span className="text-xs text-muted-foreground">عرض فقط</span>
+                        )}
                       </td>
                     </tr>
                   );
@@ -774,48 +683,6 @@ export const SparePartsInventory: React.FC = () => {
           </div>
         </CardContent>
       </Card>
-      <Dialog open={Boolean(partPricingEdit)} onOpenChange={(open) => !open && setPartPricingEdit(null)}>
-        <DialogContent dir={dir} className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>سعر الاستخدام / البيع</DialogTitle>
-            <DialogDescription>
-              سعر واحد للقطعة في مركز الصيانة. تكلفة الشراء لا تظهر ولا تُعدَّل من هنا.
-            </DialogDescription>
-          </DialogHeader>
-          <div className="grid gap-3">
-            {canManagePricing && (
-              <div>
-                <Label>سعر الاستخدام / البيع</Label>
-                <Input
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  value={pricingForm.defaultSalePrice}
-                  onChange={(e) => setPricingForm({ defaultSalePrice: e.target.value })}
-                />
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPartPricingEdit(null)}>إلغاء</Button>
-            <Button onClick={() => void savePartPricing()} disabled={!canManagePricing}>حفظ</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-      <Dialog open={Boolean(partPendingDelete)} onOpenChange={(open) => !open && setPartPendingDelete(null)}>
-        <DialogContent dir={dir} className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>تأكيد حذف قطعة الغيار</DialogTitle>
-            <DialogDescription>
-              هل تريد حذف قطعة الغيار "{partPendingDelete?.name}"؟ لا يمكن التراجع عن هذا الإجراء.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setPartPendingDelete(null)}>إلغاء</Button>
-            <Button variant="destructive" onClick={removePart}>حذف نهائي</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
       {canViewJobs && (
         <Card>
           <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
@@ -855,7 +722,7 @@ export const SparePartsInventory: React.FC = () => {
                           {job.receiptNo || job.id}
                         </td>
                         <td className="p-2">
-                          {REPAIR_JOB_STATUS_LABELS[job.status] || job.status}
+                          <StatusBadge status={job.status} />
                         </td>
                         <td className="p-2">{job.customerName || '—'}</td>
                         <td className="p-2">
@@ -878,9 +745,12 @@ export const SparePartsInventory: React.FC = () => {
         </Card>
       )}
 
-      <RepairReplenishmentRequestsPanel
-        toWarehouseId={activeBranch?.warehouseId}
+      <CreateRepairReplenishmentModal
+        open={replenishModalOpen}
+        onOpenChange={setReplenishModalOpen}
+        toWarehouseId={activeWarehouseId}
         parts={parts}
+        onCreated={() => void load({ force: true })}
       />
       <LowStockAlert open={lowStock.isOpen} onOpenChange={(open) => { if (!open) lowStock.dismiss(); }} entries={lowStock.lowStockEntries} />
     </div>

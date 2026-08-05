@@ -859,6 +859,13 @@ export type SparePartsReplenishmentStatus =
   | 'rejected'
   | 'cancelled';
 
+/** Demand link from a repair job into a replenishment basket line. */
+export interface SparePartsReplenishmentDemandLink {
+  jobId: string;
+  usageId: string;
+  quantity: number;
+}
+
 export interface SparePartsReplenishmentLine {
   lineId: string;
   itemType: 'material';
@@ -875,6 +882,11 @@ export interface SparePartsReplenishmentLine {
   /** تكلفة الوحدة من ماستر المكونات (مركزي) — لا يُسعّر من المركز */
   unitCostSnapshot: number;
   totalCostSnapshot: number;
+  /** Repair jobs that demanded this line (open basket from job picker). */
+  sourceJobIds?: string[];
+  demandLinks?: SparePartsReplenishmentDemandLink[];
+  /** Snapshot when first demanded: central stock > 0 vs zero everywhere. */
+  availabilityAtRequest?: 'central' | 'none';
 }
 
 export interface SparePartsReplenishmentRequest {
@@ -890,6 +902,10 @@ export interface SparePartsReplenishmentRequest {
   lines: SparePartsReplenishmentLine[];
   note?: string;
   totalCostSnapshot?: number;
+  /** Repair branch that owns the destination warehouse (job basket). */
+  sourceBranchId?: string;
+  /** When true, more job demands may merge while status is still submitted. */
+  openBasket?: boolean;
   createdBy: string;
   createdByUserId?: string;
   createdAt: string;

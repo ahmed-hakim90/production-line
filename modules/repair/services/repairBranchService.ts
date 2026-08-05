@@ -3,6 +3,7 @@ import {
   arrayRemove,
   arrayUnion,
   collection,
+  getDoc,
   getDocs,
   orderBy,
   doc,
@@ -14,20 +15,25 @@ import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { REPAIR_BRANCHES_COLLECTION } from '../collections';
 import type { RepairBranch } from '../types';
 import { warehouseService } from '../../inventory/services/warehouseService';
+import {
+  isRepairCenterWarehouse,
+  otherMainBranchIds,
+  repairMaintenanceWarehouseName,
+} from '../lib/repairBranchMain';
 
 const nowIso = () => new Date().toISOString();
-const WAREHOUSE_CODE_PREFIX = 'RWH-';
 
-const resolveNextWarehouseCode = async (): Promise<string> => {
-  const warehouses = await warehouseService.getAllWarehouses();
-  const maxSerial = warehouses.reduce((max, warehouse) => {
-    const code = String(warehouse.code || '').trim().toUpperCase();
-    const match = code.match(/^RWH-(\d{3})$/);
-    if (!match) return max;
-    const value = Number(match[1] || 0);
-    return Number.isFinite(value) ? Math.max(max, value) : max;
-  }, 0);
-  return `${WAREHOUSE_CODE_PREFIX}${String(maxSerial + 1).padStart(3, '0')}`;
+const clearOtherMainBranches = async (exceptId?: string | null): Promise<void> => {
+  const branches = await repairBranchService.list();
+  const ids = otherMainBranchIds(branches, exceptId);
+  await Promise.all(
+    ids.map((id) =>
+      updateDoc(doc(db, REPAIR_BRANCHES_COLLECTION, id), {
+        isMain: false,
+        updatedAt: nowIso(),
+      }),
+    ),
+  );
 };
 
 export const repairBranchService = {
@@ -40,21 +46,44 @@ export const repairBranchService = {
 
   async create(input: Omit<RepairBranch, 'id' | 'createdAt' | 'tenantId'>): Promise<string | null> {
     if (!isConfigured) return null;
-    const warehouseCode = await resolveNextWarehouseCode();
-    const warehouseId = await warehouseService.create({
-      name: `مخزن صيانة - ${input.name}`,
-      code: warehouseCode,
-      isActive: true,
-      warehouseRole: 'maintenance_center',
-    });
-    if (!warehouseId) throw new Error('تعذر إنشاء مخزن تلقائي للفرع.');
+    const name = String(input.name || '').trim();
+    if (!name) throw new Error('اسم الفرع مطلوب.');
+    if (!String(input.managerEmployeeId || '').trim()) {
+      throw new Error('اختر المسؤول عن الفرع قبل الحفظ.');
+    }
 
+    let warehouseId = String(input.warehouseId || '').trim();
+    if (!warehouseId) throw new Error('اختر مخزن مركز صيانة قبل إضافة الفرع.');
+
+    const warehouse = await warehouseService.getById(warehouseId);
+    if (!warehouse?.id) throw new Error('المخزن المختار غير موجود.');
+    if (!isRepairCenterWarehouse(warehouse)) {
+      throw new Error('اختر مخزنًا بدور «مخزن مركز صيانة».');
+    }
+    const taken = await this.findByWarehouseId(warehouseId);
+    if (taken) throw new Error('هذا المخزن مرتبط بفرع صيانة آخر.');
+    const warehouseCode = String(warehouse.code || '').trim();
+    if ((warehouse.warehouseRole || 'general') !== 'maintenance_center') {
+      await warehouseService.update(warehouseId, { warehouseRole: 'maintenance_center' });
+    }
+
+    if (input.isMain) {
+      await clearOtherMainBranches(null);
+    }
+
+    const at = nowIso();
     const ref = await addDoc(collection(db, REPAIR_BRANCHES_COLLECTION), {
       ...input,
+      name,
+      phone: String(input.phone || '').trim(),
+      address: String(input.address || '').trim(),
+      isMain: Boolean(input.isMain),
       warehouseId,
       warehouseCode,
+      technicianIds: Array.isArray(input.technicianIds) ? input.technicianIds : [],
       tenantId: getCurrentTenantId(),
-      createdAt: nowIso(),
+      createdAt: at,
+      updatedAt: at,
     });
     return ref.id;
   },
@@ -98,7 +127,48 @@ export const repairBranchService = {
 
   async update(id: string, patch: Partial<Omit<RepairBranch, 'id' | 'tenantId'>>): Promise<void> {
     if (!isConfigured) return;
-    await updateDoc(doc(db, REPAIR_BRANCHES_COLLECTION, id), patch as Record<string, unknown>);
+    const branchId = String(id || '').trim();
+    if (!branchId) throw new Error('معرف الفرع غير صالح.');
+
+    const snap = await getDoc(doc(db, REPAIR_BRANCHES_COLLECTION, branchId));
+    if (!snap.exists()) throw new Error('الفرع غير موجود.');
+    const existing = snap.data() as RepairBranch;
+
+    const nextName = patch.name !== undefined ? String(patch.name || '').trim() : undefined;
+    if (nextName !== undefined && !nextName) {
+      throw new Error('اسم الفرع مطلوب.');
+    }
+    if (patch.managerEmployeeId !== undefined && !String(patch.managerEmployeeId || '').trim()) {
+      throw new Error('اختر المسؤول عن الفرع قبل حفظ التعديلات.');
+    }
+
+    if (patch.isMain === true) {
+      await clearOtherMainBranches(branchId);
+    }
+
+    if (nextName && nextName !== String(existing.name || '').trim()) {
+      const warehouseId = String(existing.warehouseId || '').trim();
+      if (warehouseId) {
+        const warehouse = await warehouseService.getById(warehouseId);
+        const previousAutoName = repairMaintenanceWarehouseName(String(existing.name || ''));
+        // Only auto-rename warehouse when it still follows the default naming pattern.
+        if (!warehouse?.name || warehouse.name === previousAutoName) {
+          await warehouseService.update(warehouseId, {
+            name: repairMaintenanceWarehouseName(nextName),
+          });
+        }
+      }
+    }
+
+    const nextPatch: Record<string, unknown> = {
+      ...patch,
+      updatedAt: nowIso(),
+    };
+    if (nextName !== undefined) nextPatch.name = nextName;
+    if (patch.phone !== undefined) nextPatch.phone = String(patch.phone || '').trim();
+    if (patch.address !== undefined) nextPatch.address = String(patch.address || '').trim();
+
+    await updateDoc(doc(db, REPAIR_BRANCHES_COLLECTION, branchId), nextPatch);
   },
 
   async remove(id: string): Promise<void> {
@@ -120,17 +190,100 @@ export const repairBranchService = {
     };
   },
 
+  async linkWarehouse(branchId: string, warehouseId: string): Promise<void> {
+    if (!isConfigured) return;
+    const id = String(branchId || '').trim();
+    const whId = String(warehouseId || '').trim();
+    if (!id) throw new Error('معرف الفرع غير صالح.');
+    if (!whId) throw new Error('اختر مخزن مركز صيانة.');
+
+    const snap = await getDoc(doc(db, REPAIR_BRANCHES_COLLECTION, id));
+    if (!snap.exists()) throw new Error('الفرع غير موجود.');
+
+    const warehouse = await warehouseService.getById(whId);
+    if (!warehouse?.id) throw new Error('المخزن المختار غير موجود.');
+    if (!isRepairCenterWarehouse(warehouse)) {
+      throw new Error('اختر مخزنًا بدور «مخزن مركز صيانة».');
+    }
+
+    const taken = await this.findByWarehouseId(whId);
+    if (taken && String(taken.id || '') !== id) {
+      throw new Error('هذا المخزن مرتبط بفرع صيانة آخر.');
+    }
+
+    if ((warehouse.warehouseRole || 'general') !== 'maintenance_center') {
+      await warehouseService.update(whId, { warehouseRole: 'maintenance_center' });
+    }
+
+    await updateDoc(doc(db, REPAIR_BRANCHES_COLLECTION, id), {
+      warehouseId: whId,
+      warehouseCode: String(warehouse.code || '').trim(),
+      updatedAt: nowIso(),
+    });
+  },
+
+  async updateLinkedWarehouse(
+    branchId: string,
+    patch: { name?: string; code?: string; isActive?: boolean },
+  ): Promise<void> {
+    if (!isConfigured) return;
+    const id = String(branchId || '').trim();
+    if (!id) throw new Error('معرف الفرع غير صالح.');
+    const snap = await getDoc(doc(db, REPAIR_BRANCHES_COLLECTION, id));
+    if (!snap.exists()) throw new Error('الفرع غير موجود.');
+    const existing = snap.data() as RepairBranch;
+    const warehouseId = String(existing.warehouseId || '').trim();
+    if (!warehouseId) throw new Error('لا يوجد مخزن مرتبط بهذا الفرع.');
+
+    const nextName = patch.name !== undefined ? String(patch.name || '').trim() : undefined;
+    const nextCode = patch.code !== undefined ? String(patch.code || '').trim() : undefined;
+    if (nextName !== undefined && !nextName) throw new Error('اسم المخزن مطلوب.');
+    if (nextCode !== undefined && !nextCode) throw new Error('كود المخزن مطلوب.');
+
+    await warehouseService.update(warehouseId, {
+      ...(nextName !== undefined ? { name: nextName } : {}),
+      ...(nextCode !== undefined ? { code: nextCode } : {}),
+      ...(patch.isActive !== undefined ? { isActive: patch.isActive } : {}),
+    });
+
+    const branchPatch: Record<string, unknown> = { updatedAt: nowIso() };
+    if (nextCode !== undefined) branchPatch.warehouseCode = nextCode;
+    await updateDoc(doc(db, REPAIR_BRANCHES_COLLECTION, id), branchPatch);
+  },
+
   async assignTechnicianToBranch(branchId: string, technicianId: string): Promise<void> {
     if (!isConfigured || !branchId || !technicianId) return;
+    // technicianId is an employee id; also store linked Auth uid so Firestore
+    // pl_isTechnicianAssignedToBranch (auth.uid in technicianIds) matches the UI.
+    const ids = new Set<string>([technicianId]);
+    try {
+      const { employeeService } = await import('../../hr/employeeService');
+      const employee = await employeeService.getById(technicianId);
+      const userId = String(employee?.userId || '').trim();
+      if (userId) ids.add(userId);
+    } catch {
+      // Keep employee id even if employee lookup fails.
+    }
     await updateDoc(doc(db, REPAIR_BRANCHES_COLLECTION, branchId), {
-      technicianIds: arrayUnion(technicianId),
+      technicianIds: arrayUnion(...Array.from(ids)),
+      updatedAt: nowIso(),
     });
   },
 
   async removeTechnicianFromBranch(branchId: string, technicianId: string): Promise<void> {
     if (!isConfigured || !branchId || !technicianId) return;
+    const ids = new Set<string>([technicianId]);
+    try {
+      const { employeeService } = await import('../../hr/employeeService');
+      const employee = await employeeService.getById(technicianId);
+      const userId = String(employee?.userId || '').trim();
+      if (userId) ids.add(userId);
+    } catch {
+      // Still remove the provided id.
+    }
     await updateDoc(doc(db, REPAIR_BRANCHES_COLLECTION, branchId), {
-      technicianIds: arrayRemove(technicianId),
+      technicianIds: arrayRemove(...Array.from(ids)),
+      updatedAt: nowIso(),
     });
   },
 };

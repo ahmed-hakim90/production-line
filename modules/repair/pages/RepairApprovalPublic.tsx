@@ -1,11 +1,27 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { isConfigured, submitRepairApprovalPublicCallable } from '../../../services/firebase';
+import {
+  getRepairApprovalPublicCallable,
+  isConfigured,
+  submitRepairApprovalPublicCallable,
+  type PublicRepairApprovalEstimate,
+} from '../../../services/firebase';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+
+const fmtMoney = (value: number) =>
+  `${Number(value || 0).toLocaleString('ar-EG', { maximumFractionDigits: 2 })} ج.م`;
+
+const approvalStatusLabel = (status: string): string => {
+  if (status === 'pending') return 'بانتظار موافقتكم';
+  if (status === 'approved') return 'تمت الموافقة';
+  if (status === 'rejected') return 'تم الرفض';
+  return status || '—';
+};
 
 export const RepairApprovalPublic: React.FC = () => {
   const { dir } = useAppDirection();
@@ -15,14 +31,49 @@ export const RepairApprovalPublic: React.FC = () => {
   const token = useMemo(() => String(searchParams.get('token') || '').trim(), [searchParams]);
   const [note, setNote] = useState('');
   const [loading, setLoading] = useState(false);
+  const [loadingEstimate, setLoadingEstimate] = useState(false);
+  const [estimate, setEstimate] = useState<PublicRepairApprovalEstimate | null>(null);
   const [done, setDone] = useState<'approved' | 'rejected' | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!jobId || !token) {
       setError('الرابط غير مكتمل. تأكد من نسخ الرابط كاملًا من رسالة الواتساب.');
+      return;
     }
-  }, [jobId, token]);
+    if (!isConfigured || !tenantSlug.trim()) {
+      setError('تعذر تحميل التقدير.');
+      return;
+    }
+
+    let cancelled = false;
+    setLoadingEstimate(true);
+    setError('');
+    void getRepairApprovalPublicCallable({
+      tenantSlug: tenantSlug.trim(),
+      jobId,
+      token,
+    })
+      .then((res) => {
+        if (cancelled) return;
+        setEstimate(res.estimate);
+        if (res.estimate.approvalStatus === 'approved' || res.estimate.approvalStatus === 'rejected') {
+          setDone(res.estimate.approvalStatus);
+        }
+      })
+      .catch((e: unknown) => {
+        if (cancelled) return;
+        const message = e instanceof Error ? e.message : 'تعذر تحميل تفاصيل التقدير.';
+        setError(message || 'تعذر تحميل تفاصيل التقدير.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingEstimate(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [jobId, token, tenantSlug]);
 
   const submit = async (decision: 'approved' | 'rejected') => {
     if (!isConfigured) return;
@@ -41,12 +92,16 @@ export const RepairApprovalPublic: React.FC = () => {
         note: decision === 'rejected' ? note : undefined,
       });
       setDone(decision);
-    } catch (e: any) {
-      setError(e?.message || 'تعذر تنفيذ الطلب.');
+      setEstimate((prev) => (prev ? { ...prev, approvalStatus: decision } : prev));
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'تعذر تنفيذ الطلب.';
+      setError(message || 'تعذر تنفيذ الطلب.');
     } finally {
       setLoading(false);
     }
   };
+
+  const canDecide = Boolean(estimate && estimate.approvalStatus === 'pending' && !done);
 
   return (
     <div className="min-h-screen bg-slate-50 p-4" dir={dir}>
@@ -56,16 +111,142 @@ export const RepairApprovalPublic: React.FC = () => {
             <CardTitle>موافقة العميل على التقدير</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
+            {loadingEstimate ? (
+              <p className="text-sm text-muted-foreground">جاري تحميل تفاصيل التقدير…</p>
+            ) : null}
+
+            {estimate ? (
+              <div className="space-y-4 text-sm">
+                <div className="rounded-lg border bg-white p-3 space-y-2">
+                  <div className="flex items-center justify-between gap-2 flex-wrap">
+                    <span className="font-medium">بيانات العميل</span>
+                    <Badge variant="outline">{approvalStatusLabel(estimate.approvalStatus)}</Badge>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">الاسم</span>
+                      <span className="font-medium text-end">{estimate.customerName || '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">الهاتف</span>
+                      <span className="font-medium tabular-nums text-end" dir="ltr">{estimate.customerPhone || '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">رقم الإيصال</span>
+                      <span className="font-medium tabular-nums">{estimate.receiptNo || '—'}</span>
+                    </div>
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">الجهاز</span>
+                      <span className="font-medium text-end">
+                        {[estimate.deviceBrand, estimate.deviceModel].filter(Boolean).join(' ') || '—'}
+                        {estimate.deviceType ? ` (${estimate.deviceType})` : ''}
+                      </span>
+                    </div>
+                    {estimate.problemDescription ? (
+                      <div className="pt-1 border-t">
+                        <div className="text-muted-foreground mb-1">وصف العطل</div>
+                        <p className="leading-relaxed">{estimate.problemDescription}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+
+                {estimate.parts.length > 0 ? (
+                  <div className="rounded-lg border bg-white p-3 space-y-2">
+                    <div className="font-medium">قطع الغيار المقترحة</div>
+                    <div className="divide-y rounded-md border">
+                      {estimate.parts.map((part, idx) => (
+                        <div key={`${part.partName}-${idx}`} className="flex items-start justify-between gap-3 px-3 py-2">
+                          <div className="min-w-0">
+                            <div className="font-medium">{part.partName}</div>
+                            <div className="text-xs text-muted-foreground tabular-nums">
+                              ×{part.quantity.toLocaleString('ar-EG')}
+                              {part.unitPrice > 0 ? ` · ${fmtMoney(part.unitPrice)} للوحدة` : ''}
+                            </div>
+                          </div>
+                          <div className="shrink-0 font-medium tabular-nums">{fmtMoney(part.lineTotal)}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed p-3 text-muted-foreground">
+                    لا توجد قطع غيار مسجّلة على هذا التقدير حالياً.
+                  </div>
+                )}
+
+                {estimate.products.length > 0 ? (
+                  <div className="rounded-lg border bg-white p-3 space-y-2">
+                    <div className="font-medium">بنود المنتجات / الخدمات</div>
+                    <div className="divide-y rounded-md border">
+                      {estimate.products.map((row, idx) => (
+                        <div key={`${row.name}-${idx}`} className="flex items-center justify-between gap-3 px-3 py-2">
+                          <span>
+                            {row.name}
+                            <span className="text-muted-foreground text-xs ms-1">×{row.quantity}</span>
+                          </span>
+                          <span className="tabular-nums font-medium">{fmtMoney(row.lineCost)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+
+                <div className="rounded-lg border bg-slate-50 p-3 space-y-2">
+                  <div className="font-medium">ملخص التكلفة</div>
+                  <div className="flex justify-between gap-2 text-xs text-muted-foreground">
+                    <span>إذن الدفع</span>
+                    <span className="tabular-nums">{estimate.authorizationNo} · إصدار {estimate.revision}</span>
+                  </div>
+                  {estimate.partsCost > 0 ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">قطع الغيار</span>
+                      <span className="tabular-nums">{fmtMoney(estimate.partsCost)}</span>
+                    </div>
+                  ) : null}
+                  {estimate.laborCost > 0 ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">أجور الصيانة</span>
+                      <span className="tabular-nums">{fmtMoney(estimate.laborCost)}</span>
+                    </div>
+                  ) : null}
+                  {estimate.serviceOnlyCost > 0 ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">خدمة</span>
+                      <span className="tabular-nums">{fmtMoney(estimate.serviceOnlyCost)}</span>
+                    </div>
+                  ) : null}
+                  {estimate.productsCost > 0 ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">بنود المنتجات</span>
+                      <span className="tabular-nums">{fmtMoney(estimate.productsCost)}</span>
+                    </div>
+                  ) : null}
+                  {estimate.discountAmount > 0 ? (
+                    <div className="flex justify-between gap-2 text-rose-700">
+                      <span>الخصم المعتمد</span>
+                      <span className="tabular-nums">- {fmtMoney(estimate.discountAmount)}</span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-2 border-t pt-2 text-base">
+                    <span className="font-bold">إجمالي التقدير</span>
+                    <span className="font-bold tabular-nums text-primary">{fmtMoney(estimate.estimatedTotal)}</span>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
             {done ? (
               <p className="text-emerald-700 font-medium">
                 {done === 'approved' ? 'تم تسجيل موافقتكم. شكراً لكم.' : 'تم تسجيل الرفض. يمكنكم التواصل مع الفرع.'}
               </p>
-            ) : (
+            ) : canDecide ? (
               <>
                 <p className="text-sm text-muted-foreground">
-                  تأكيد أو رفض تقدير الإصلاح المرتبط بهذا الرابط. لا يُطلب تسجيل دخول.
+                  راجعوا التفاصيل أعلاه ثم أكّدوا أو ارفضوا التقدير. لا يُطلب تسجيل دخول.
                 </p>
-                {error && <p className="text-sm text-red-600">{error}</p>}
                 <div className="space-y-2">
                   <Label htmlFor="rej-note">ملاحظة عند الرفض (اختياري)</Label>
                   <Input
@@ -96,7 +277,7 @@ export const RepairApprovalPublic: React.FC = () => {
                   </ToneActionButton>
                 </div>
               </>
-            )}
+            ) : null}
           </CardContent>
         </Card>
       </div>

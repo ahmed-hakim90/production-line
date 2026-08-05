@@ -1,13 +1,22 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import * as XLSX from 'xlsx';
 import {
   customerCodePrefixForType,
   maxCustomerSeqFromCodes,
   normalizeCustomerCode,
 } from '../modules/customers/lib/customerCode';
+import {
+  chunkCustomerImportRows,
+  CUSTOMER_IMPORT_CREATE_CHUNK,
+  CUSTOMER_IMPORT_UPDATE_CHUNK,
+  partitionCustomerImportWriteRows,
+} from '../modules/customers/lib/customerImportBatch';
 import { formatCustomerOptionLabel, matchCustomers } from '../modules/customers/lib/customerSearch';
-import { parseCustomerTypeLabel, type Customer } from '../modules/customers/types';
 import { parseCustomersExcel } from '../modules/customers/lib/importCustomers';
-import * as XLSX from 'xlsx';
+import { parseCustomerTypeLabel, type Customer } from '../modules/customers/types';
 
 function sampleCustomer(partial: Partial<Customer> & Pick<Customer, 'code' | 'name' | 'phone'>): Customer {
   return {
@@ -62,7 +71,64 @@ function sampleCustomer(partial: Partial<Customer> & Pick<Customer, 'code' | 'na
   assert.equal(parsed.readyCount, 2);
   assert.equal(parsed.errorCount, 1);
   assert.equal(parsed.rows.find((r) => r.code === 'CST-00001')?.status, 'update');
+  assert.equal(parsed.rows.find((r) => r.code === 'CST-00001')?.existingId, 'old');
   assert.equal(parsed.rows.find((r) => r.code === 'TRD-00001')?.status, 'create');
+}
+
+{
+  // Phone format is not validated on import — store as uploaded.
+  const wb = XLSX.utils.book_new();
+  const aoa = [
+    ['الكود', 'النوع', 'الاسم', 'الهاتف'],
+    ['CST-00099', 'مستهلك', 'قصير', '12'],
+    ['CST-00100', 'تاجر', 'بدون هاتف', ''],
+  ];
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(aoa), 'العملاء');
+  const buffer = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }) as ArrayBuffer;
+  const parsed = parseCustomersExcel(buffer);
+  assert.equal(parsed.errorCount, 0);
+  assert.equal(parsed.readyCount, 2);
+  assert.equal(parsed.rows.find((r) => r.code === 'CST-00099')?.phone, '12');
+  assert.equal(parsed.rows.find((r) => r.code === 'CST-00100')?.phone, '');
+}
+
+{
+  assert.ok(CUSTOMER_IMPORT_UPDATE_CHUNK <= 500);
+  assert.ok(CUSTOMER_IMPORT_CREATE_CHUNK * 2 <= 500);
+  const rows = [
+    {
+      rowNo: 2,
+      code: 'CST-1',
+      type: 'consumer' as const,
+      name: 'أ',
+      phone: '',
+      isActive: true,
+      existingId: 'id-1',
+    },
+    {
+      rowNo: 3,
+      code: 'CST-2',
+      type: 'consumer' as const,
+      name: 'ب',
+      phone: '',
+      isActive: true,
+    },
+  ];
+  const parts = partitionCustomerImportWriteRows(rows);
+  assert.equal(parts.updates.length, 1);
+  assert.equal(parts.creates.length, 1);
+  assert.equal(chunkCustomerImportRows(new Array(450).fill(0), CUSTOMER_IMPORT_UPDATE_CHUNK).length, 2);
+  assert.equal(chunkCustomerImportRows(new Array(250).fill(0), CUSTOMER_IMPORT_CREATE_CHUNK).length, 2);
+}
+
+{
+  const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+  const applySrc = readFileSync(join(root, 'modules/customers/lib/applyCustomersImport.ts'), 'utf8');
+  assert.match(applySrc, /importUpsertMany/);
+  assert.doesNotMatch(applySrc, /upsertByCode/);
+  const serviceSrc = readFileSync(join(root, 'modules/customers/services/customerService.ts'), 'utf8');
+  assert.match(serviceSrc, /writeBatch/);
+  assert.match(serviceSrc, /importUpsertMany/);
 }
 
 console.log('customers-master.test.ts: ok');

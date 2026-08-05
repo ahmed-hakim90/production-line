@@ -6,9 +6,13 @@ import {
   limit,
   orderBy,
   runTransaction,
+  startAfter,
   updateDoc,
   where,
+  writeBatch,
   onSnapshot,
+  type QueryConstraint,
+  type QueryDocumentSnapshot,
   type Unsubscribe,
 } from 'firebase/firestore';
 import { isConfigured, db } from '@/services/firebase';
@@ -33,11 +37,31 @@ import {
   maxCustomerSeqFromCodes,
   normalizeCustomerCode,
 } from '../lib/customerCode';
-import type { Customer, CustomerCreateInput, CustomerUpdateInput, CustomerType } from '../types';
+import { classifyCustomerSizeTier, isCustomerSizeTier } from '../lib/customerSizeTier';
+import {
+  chunkCustomerImportRows,
+  CUSTOMER_IMPORT_CREATE_CHUNK,
+  CUSTOMER_IMPORT_UPDATE_CHUNK,
+  partitionCustomerImportWriteRows,
+  type CustomerImportWriteRow,
+} from '../lib/customerImportBatch';
+import type {
+  Customer,
+  CustomerCreateInput,
+  CustomerFollowUpInput,
+  CustomerFollowUpStatus,
+  CustomerMetricsInput,
+  CustomerUpdateInput,
+  CustomerType,
+} from '../types';
+import { CUSTOMER_FOLLOW_UP_LABELS, isCustomerFollowUpStatus } from '../types';
 import { customerActivityService } from './customerActivityService';
 
 const CUSTOMER_CODE_PADDING = 5;
+/** Total rows listAll will fetch across pages (import / KPI / lists). */
 const LIST_SOFT_CAP = 12_000;
+/** Firestore rejects structured-query limit values above 10_000. */
+const FIRESTORE_QUERY_LIMIT_MAX = 10_000;
 
 const stripUndefined = <T extends Record<string, unknown>>(obj: T): Record<string, unknown> =>
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
@@ -46,8 +70,23 @@ function customerClaimRef(tenantId: string, code: string) {
   return doc(db, ENTITY_CODE_CLAIMS_COLLECTION, buildEntityCodeClaimId(tenantId, CUSTOMER_ENTITY_TYPE, code));
 }
 
+function parseOptionalNumber(value: unknown): number | undefined {
+  if (value == null || value === '') return undefined;
+  const n = typeof value === 'number' ? value : Number(String(value).replace(/,/g, '').trim());
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function normalizeFollowUpStatus(value: unknown): CustomerFollowUpStatus {
+  return isCustomerFollowUpStatus(value) ? value : 'none';
+}
+
 function normalizeCustomerDoc(id: string, data: Record<string, unknown>): Customer {
   const phone = String(data.phone || '');
+  const businessVolume = parseOptionalNumber(data.businessVolume);
+  const balance = parseOptionalNumber(data.balance);
+  const sizeTier = isCustomerSizeTier(data.sizeTier)
+    ? data.sizeTier
+    : classifyCustomerSizeTier(businessVolume);
   return {
     id,
     tenantId: String(data.tenantId || ''),
@@ -59,6 +98,12 @@ function normalizeCustomerDoc(id: string, data: Record<string, unknown>): Custom
     address: data.address != null ? String(data.address) : undefined,
     notes: data.notes != null ? String(data.notes) : undefined,
     isActive: data.isActive !== false,
+    businessVolume,
+    balance,
+    sizeTier,
+    followUpStatus: normalizeFollowUpStatus(data.followUpStatus),
+    followUpNotes: data.followUpNotes != null ? String(data.followUpNotes) : undefined,
+    metricsUpdatedAt: data.metricsUpdatedAt != null ? String(data.metricsUpdatedAt) : undefined,
     createdAt: String(data.createdAt || ''),
     updatedAt: String(data.updatedAt || ''),
     createdBy: data.createdBy != null ? String(data.createdBy) : undefined,
@@ -70,7 +115,6 @@ function normalizeCustomerDoc(id: string, data: Record<string, unknown>): Custom
 
 function validateCreateInput(input: CustomerCreateInput): void {
   if (!String(input.name || '').trim()) throw new Error('اسم العميل مطلوب.');
-  if (!String(input.phone || '').trim()) throw new Error('رقم هاتف العميل مطلوب.');
   if (input.type !== 'consumer' && input.type !== 'trader') {
     throw new Error('نوع العميل غير صالح. اختر مستهلك أو تاجر.');
   }
@@ -88,10 +132,23 @@ export const customerService = {
 
   async listAll(opts?: { includeInactive?: boolean; max?: number }): Promise<Customer[]> {
     if (!isConfigured) return [];
-    const max = opts?.max ?? LIST_SOFT_CAP;
-    const q = tenantQuery(db, CUSTOMERS_COLLECTIONS.CUSTOMERS, orderBy('code', 'asc'), limit(max));
-    const snap = await getDocs(q);
-    const rows = snap.docs.map((d) => normalizeCustomerDoc(d.id, d.data() as Record<string, unknown>));
+    const max = Math.max(1, Math.min(Number(opts?.max ?? LIST_SOFT_CAP) || LIST_SOFT_CAP, LIST_SOFT_CAP));
+    const rows: Customer[] = [];
+    let cursor: QueryDocumentSnapshot | null = null;
+
+    while (rows.length < max) {
+      const pageSize = Math.min(FIRESTORE_QUERY_LIMIT_MAX, max - rows.length);
+      const constraints: QueryConstraint[] = [orderBy('code', 'asc'), limit(pageSize)];
+      if (cursor) constraints.push(startAfter(cursor));
+      const snap = await getDocs(tenantQuery(db, CUSTOMERS_COLLECTIONS.CUSTOMERS, ...constraints));
+      if (snap.empty) break;
+      for (const d of snap.docs) {
+        rows.push(normalizeCustomerDoc(d.id, d.data() as Record<string, unknown>));
+      }
+      cursor = snap.docs[snap.docs.length - 1] ?? null;
+      if (snap.docs.length < pageSize) break;
+    }
+
     if (opts?.includeInactive) return rows;
     return rows.filter((r) => r.isActive !== false);
   },
@@ -156,9 +213,8 @@ export const customerService = {
     validateCreateInput(input);
     const tenantId = getCurrentTenantId();
     const now = new Date().toISOString();
-    const phone = String(input.phone).trim();
+    const phone = String(input.phone || '').trim();
     const phoneDigits = buildCustomerPhoneDigits(phone);
-    if (phoneDigits.length < 7) throw new Error('رقم الهاتف غير صالح.');
 
     const explicitCode = normalizeCustomerCode(input.code || '');
     const customerRef = doc(collection(db, CUSTOMERS_COLLECTIONS.CUSTOMERS));
@@ -283,9 +339,7 @@ export const customerService = {
     if (!nextCode) throw new Error('كود العميل مطلوب.');
 
     const nextPhone = input.phone !== undefined ? String(input.phone).trim() : existing.phone;
-    if (!nextPhone) throw new Error('رقم هاتف العميل مطلوب.');
     const phoneDigits = buildCustomerPhoneDigits(nextPhone);
-    if (phoneDigits.length < 7) throw new Error('رقم الهاتف غير صالح.');
 
     const nextType = input.type ?? existing.type;
     if (nextType !== 'consumer' && nextType !== 'trader') {
@@ -394,13 +448,322 @@ export const customerService = {
     return { id: String(created.id), created: true };
   },
 
+  /**
+   * Bulk Excel import path: batched writes, skips per-row CRM/activity logs.
+   * Prefer `existingId` from the preview pass so updates avoid getByCode round-trips.
+   */
+  async importUpsertMany(
+    rows: CustomerImportWriteRow[],
+    actor?: { userId?: string; userName?: string },
+    opts?: {
+      onProgress?: (processed: number, total: number) => void;
+      shouldCancel?: () => boolean;
+    },
+  ): Promise<{ created: number; updated: number; failed: number }> {
+    if (!isConfigured) throw new Error('النظام غير متصل.');
+    const total = rows.length;
+    if (total === 0) return { created: 0, updated: 0, failed: 0 };
+
+    const tenantId = getCurrentTenantId();
+    const now = new Date().toISOString();
+    const actorUid = String(actor?.userId || '');
+    const actorName = String(actor?.userName || '');
+    let created = 0;
+    let updated = 0;
+    let failed = 0;
+    let processed = 0;
+
+    const bump = (n: number) => {
+      processed = Math.min(total, processed + n);
+      opts?.onProgress?.(processed, total);
+    };
+    const cancelled = () => Boolean(opts?.shouldCancel?.());
+
+    const { updates, creates } = partitionCustomerImportWriteRows(rows);
+
+    for (const chunk of chunkCustomerImportRows(updates, CUSTOMER_IMPORT_UPDATE_CHUNK)) {
+      if (cancelled()) throw new Error('تم إلغاء المهمة.');
+      const batch = writeBatch(db);
+      const queued: CustomerImportWriteRow[] = [];
+      for (const row of chunk) {
+        const id = String(row.existingId || '').trim();
+        const code = normalizeCustomerCode(row.code);
+        const name = String(row.name || '').trim();
+        if (!id || !code || !name || (row.type !== 'consumer' && row.type !== 'trader')) {
+          failed += 1;
+          continue;
+        }
+        const phone = String(row.phone || '').trim();
+        batch.update(
+          customerDocRef(id),
+          stripUndefined({
+            type: row.type,
+            name,
+            phone,
+            phoneDigits: buildCustomerPhoneDigits(phone),
+            address: String(row.address || '').trim(),
+            notes: String(row.notes || '').trim(),
+            isActive: row.isActive !== false,
+            updatedAt: now,
+            updatedBy: actorUid,
+            updatedByName: actorName,
+          }),
+        );
+        queued.push(row);
+      }
+      if (queued.length > 0) {
+        try {
+          await batch.commit();
+          updated += queued.length;
+        } catch (error) {
+          console.error('customers import update batch failed; falling back per row', error);
+          for (const row of queued) {
+            try {
+              const phone = String(row.phone || '').trim();
+              await updateDoc(
+                customerDocRef(String(row.existingId)),
+                stripUndefined({
+                  type: row.type,
+                  name: String(row.name).trim(),
+                  phone,
+                  phoneDigits: buildCustomerPhoneDigits(phone),
+                  address: String(row.address || '').trim(),
+                  notes: String(row.notes || '').trim(),
+                  isActive: row.isActive !== false,
+                  updatedAt: now,
+                  updatedBy: actorUid,
+                  updatedByName: actorName,
+                }),
+              );
+              updated += 1;
+            } catch (rowError) {
+              failed += 1;
+              console.error('customers import update row failed', row.rowNo, rowError);
+            }
+          }
+        }
+      }
+      bump(chunk.length);
+    }
+
+    for (const chunk of chunkCustomerImportRows(creates, CUSTOMER_IMPORT_CREATE_CHUNK)) {
+      if (cancelled()) throw new Error('تم إلغاء المهمة.');
+
+      const prepared: Array<{
+        row: CustomerImportWriteRow;
+        code: string;
+        customerRef: ReturnType<typeof doc>;
+        claimRef: ReturnType<typeof doc>;
+      }> = [];
+      let skippedInvalid = 0;
+
+      for (const row of chunk) {
+        const code = normalizeCustomerCode(row.code);
+        const name = String(row.name || '').trim();
+        if (!code || !name || (row.type !== 'consumer' && row.type !== 'trader')) {
+          failed += 1;
+          skippedInvalid += 1;
+          continue;
+        }
+        prepared.push({
+          row,
+          code,
+          customerRef: doc(collection(db, CUSTOMERS_COLLECTIONS.CUSTOMERS)),
+          claimRef: customerClaimRef(tenantId, code),
+        });
+      }
+
+      const claimSnaps = await Promise.all(prepared.map((p) => getDoc(p.claimRef)));
+      const batch = writeBatch(db);
+      const queued: typeof prepared = [];
+      let claimConflicts = 0;
+
+      for (let i = 0; i < prepared.length; i += 1) {
+        const item = prepared[i];
+        if (claimSnaps[i]?.exists()) {
+          failed += 1;
+          claimConflicts += 1;
+          continue;
+        }
+        const phone = String(item.row.phone || '').trim();
+        batch.set(item.claimRef, {
+          tenantId,
+          entityType: CUSTOMER_ENTITY_TYPE,
+          code: item.code,
+          ownerId: item.customerRef.id,
+          ownerCollection: CUSTOMERS_COLLECTIONS.CUSTOMERS,
+          createdAt: now,
+        });
+        batch.set(
+          item.customerRef,
+          stripUndefined({
+            tenantId,
+            code: item.code,
+            type: item.row.type,
+            name: String(item.row.name).trim(),
+            phone,
+            phoneDigits: buildCustomerPhoneDigits(phone),
+            address: String(item.row.address || '').trim(),
+            notes: String(item.row.notes || '').trim(),
+            isActive: item.row.isActive !== false,
+            createdAt: now,
+            updatedAt: now,
+            createdBy: actorUid,
+            createdByName: actorName,
+          }),
+        );
+        queued.push(item);
+      }
+
+      if (queued.length > 0) {
+        try {
+          await batch.commit();
+          created += queued.length;
+        } catch (error) {
+          console.error('customers import create batch failed; falling back per row', error);
+          for (const item of queued) {
+            try {
+              await this.create({
+                code: item.code,
+                type: item.row.type,
+                name: item.row.name,
+                phone: item.row.phone,
+                address: item.row.address,
+                notes: item.row.notes,
+                isActive: item.row.isActive,
+                createdBy: actorUid,
+                createdByName: actorName,
+              });
+              created += 1;
+            } catch (rowError) {
+              failed += 1;
+              console.error('customers import create row failed', item.row.rowNo, rowError);
+            }
+          }
+        }
+      }
+
+      bump(skippedInvalid + claimConflicts + queued.length);
+    }
+
+    try {
+      await activityLogService.logCurrentUser('CUSTOMER_IMPORT', 'استيراد عملاء', {
+        created,
+        updated,
+        failed,
+        total,
+      });
+    } catch {
+      // Non-blocking — import data already committed.
+    }
+
+    return { created, updated, failed };
+  },
+
+  /**
+   * يحدّث حجم الشغل والرصيد لعميل موجود بالكود — لا ينشئ عميلاً جديداً.
+   */
+  async applyMetricsByCode(
+    code: string,
+    input: CustomerMetricsInput,
+  ): Promise<Customer> {
+    if (!isConfigured) throw new Error('النظام غير متصل.');
+    const normalized = normalizeCustomerCode(code);
+    if (!normalized) throw new Error('كود العميل مطلوب.');
+    if (!Number.isFinite(input.businessVolume) || input.businessVolume < 0) {
+      throw new Error('حجم الشغل غير صالح.');
+    }
+    if (!Number.isFinite(input.balance)) {
+      throw new Error('الرصيد غير صالح.');
+    }
+
+    const existing = await this.getByCode(normalized);
+    if (!existing?.id) throw new Error('العميل غير موجود بهذا الكود.');
+
+    const now = new Date().toISOString();
+    const sizeTier = classifyCustomerSizeTier(input.businessVolume);
+    await updateDoc(
+      customerDocRef(existing.id),
+      stripUndefined({
+        businessVolume: input.businessVolume,
+        balance: input.balance,
+        sizeTier,
+        metricsUpdatedAt: now,
+        updatedAt: now,
+        updatedBy: input.updatedBy || '',
+        updatedByName: input.updatedByName || '',
+      }),
+    );
+
+    const updated = await this.getById(existing.id);
+    if (!updated) throw new Error('تعذر قراءة العميل بعد تحديث المؤشرات.');
+
+    await customerActivityService.record({
+      customerId: existing.id,
+      module: 'customers',
+      action: 'customer.metrics_imported',
+      title: 'تحديث مؤشرات العميل',
+      summary: `حجم الشغل ${input.businessVolume} — الرصيد ${input.balance}`,
+      actorUid: input.updatedBy,
+      actorName: input.updatedByName,
+      metadata: {
+        businessVolume: input.businessVolume,
+        balance: input.balance,
+        sizeTier,
+      },
+    });
+
+    return updated;
+  },
+
+  async updateFollowUp(id: string, input: CustomerFollowUpInput): Promise<Customer> {
+    if (!isConfigured || !id) throw new Error('معرّف العميل غير صالح.');
+    if (!isCustomerFollowUpStatus(input.followUpStatus)) {
+      throw new Error('حالة المتابعة غير صالحة.');
+    }
+    const existing = await this.getById(id);
+    if (!existing) throw new Error('العميل غير موجود.');
+
+    const now = new Date().toISOString();
+    const notes = String(input.followUpNotes || '').trim();
+    await updateDoc(
+      customerDocRef(id),
+      stripUndefined({
+        followUpStatus: input.followUpStatus,
+        followUpNotes: notes,
+        updatedAt: now,
+        updatedBy: input.updatedBy || '',
+        updatedByName: input.updatedByName || '',
+      }),
+    );
+
+    const updated = await this.getById(id);
+    if (!updated) throw new Error('تعذر قراءة العميل بعد تحديث المتابعة.');
+
+    const followLabel = CUSTOMER_FOLLOW_UP_LABELS[input.followUpStatus];
+    await customerActivityService.record({
+      customerId: id,
+      module: 'customers',
+      action: 'customer.follow_up_updated',
+      title: 'تحديث متابعة العميل',
+      summary: notes ? `${followLabel} — ${notes.slice(0, 120)}` : followLabel,
+      actorUid: input.updatedBy,
+      actorName: input.updatedByName,
+      metadata: {
+        followUpStatus: input.followUpStatus,
+      },
+    });
+
+    return updated;
+  },
+
   subscribeAll(cb: (rows: Customer[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
     const q = tenantQuery(
       db,
       CUSTOMERS_COLLECTIONS.CUSTOMERS,
       orderBy('code', 'asc'),
-      limit(LIST_SOFT_CAP),
+      limit(FIRESTORE_QUERY_LIMIT_MAX),
     );
     return onSnapshot(
       q,

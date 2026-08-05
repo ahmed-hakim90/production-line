@@ -37,6 +37,16 @@ export interface Material {
   purchaseUnit?: string;
   conversionRate?: number;
   purchaseCost?: number;
+  /**
+   * Company-wide consumer (retail) repair sale price — shared by all repair centers.
+   * Never confused with purchaseCost — inventory keeps purchase; repair UI uses this.
+   */
+  defaultSalePrice?: number;
+  /**
+   * Company-wide trader (wholesale) repair sale price.
+   * When missing/0, resolveRepairSalePrice falls back to defaultSalePrice.
+   */
+  traderSalePrice?: number;
   wastePercent?: number;
   isManufacturedInternally?: boolean;
   /** Optional explicit link to finished/semi-finished product used for dynamic manufacturing average rollup. */
@@ -130,7 +140,7 @@ export interface ProductionPlanMaterialRequirements {
 }
 
 export const MATERIAL_TYPE_LABELS: Record<MaterialType, string> = {
-  raw_material: 'مادة خام',
+  raw_material: 'مكون',
   semi_finished: 'نصف مصنع',
   consumable: 'مستهلكات',
   packaging: 'تعبئة وتغليف',

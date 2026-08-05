@@ -9,6 +9,7 @@ import {
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { REPAIR_JOBS_COLLECTION, REPAIR_SERVICE_EVENTS_SUBCOLLECTION } from '../collections';
+import { stripUndefinedDeep } from '../lib/stripUndefinedDeep';
 import { REPAIR_DOMAIN_EVENT_VERSION } from '../utils/repairDomainEvents';
 import type { RepairServiceEvent } from '../types';
 
@@ -17,7 +18,7 @@ const withSchemaVersion = (event: Omit<RepairServiceEvent, 'id' | 'jobId'>): Rec
   if (event.domainEvent && event.eventSchemaVersion === undefined) {
     base.eventSchemaVersion = REPAIR_DOMAIN_EVENT_VERSION;
   }
-  return base;
+  return stripUndefinedDeep(base);
 };
 
 export const appendRepairServiceEventTx = (

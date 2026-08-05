@@ -4,6 +4,7 @@ import type { FirestoreUser } from '../../types';
 export const REPAIR_JOB_STATUSES = [
   'received',
   'diagnosing',
+  'estimate_ready',
   'waiting_approval',
   'waiting_parts',
   'repairing',
@@ -20,6 +21,7 @@ export type RepairJobStatus = string;
 export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
   received: 'وارد',
   diagnosing: 'تشخيص',
+  estimate_ready: 'التقدير جاهز لمراجعة الاستقبال',
   waiting_approval: 'بانتظار موافقة العميل',
   waiting_parts: 'بانتظار قطع الغيار',
   repairing: 'إصلاح',
@@ -34,6 +36,7 @@ export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
 export const REPAIR_JOB_STATUS_COLORS: Record<string, string> = {
   received: '#64748b',
   diagnosing: '#f59e0b',
+  estimate_ready: '#0284c7',
   waiting_approval: '#a855f7',
   waiting_parts: '#ea580c',
   repairing: '#0ea5e9',
@@ -64,11 +67,168 @@ export interface RepairBranch {
   managerEmployeeName?: string;
   warehouseId?: string;
   warehouseCode?: string;
+  costCenterId?: string;
+  accountingAccounts?: RepairBranchAccountingAccounts;
   technicianIds?: string[];
   createdAt: string;
+  updatedAt?: string;
 }
 
+export interface RepairBranchAccountingAccounts {
+  cash: string;
+  card: string;
+  bankTransfer: string;
+  customerDeposits: string;
+  receivables: string;
+  serviceRevenue: string;
+  partsRevenue: string;
+  discounts: string;
+  partsInventory: string;
+  partsCogs: string;
+}
+
+export type RepairPaymentMethod = 'cash' | 'card' | 'bank_transfer';
+export type RepairDiscountType = 'none' | 'amount' | 'percent';
+export type RepairFinancialApprovalType = 'discount' | 'credit';
+export type RepairFinancialApprovalStatus = 'pending' | 'approved' | 'rejected' | 'cancelled';
+
+export interface RepairPricedLine {
+  id: string;
+  name: string;
+  quantity: number;
+  unitPrice: number;
+  lineTotal: number;
+}
+
+export interface RepairProtectedServiceCatalog {
+  id?: string;
+  tenantId: string;
+  revision: number;
+  services: Array<{
+    id: string;
+    name: string;
+    price: number;
+    enabled: boolean;
+  }>;
+  createdAt: string;
+  createdBy: string;
+  updatedAt: string;
+  updatedBy: string;
+}
+
+export type RepairSettlementType = 'standard' | 'warranty';
+
+export interface RepairJobFinancial {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  receiptNo: string;
+  serviceGross: number;
+  partsGross: number;
+  grossAmount: number;
+  discountType: RepairDiscountType;
+  discountValue: number;
+  discountAmount: number;
+  netAmount: number;
+  paidAmount: number;
+  balanceDue: number;
+  paymentStatus: 'unpaid' | 'partial' | 'paid';
+  /** warranty = manufacturer warranty close (zero revenue, no collection). */
+  settlementType?: RepairSettlementType;
+  authorizationRevision: number;
+  currentAuthorizationId?: string;
+  creditApprovalStatus?: RepairFinancialApprovalStatus;
+  costCenterId?: string;
+  migrationEvidence?: 'treasury_entries' | 'legacy_status' | 'manual_review' | 'native';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RepairPaymentAuthorization {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  receiptNo: string;
+  authorizationNo: string;
+  revision: number;
+  grossAmount: number;
+  serviceGross: number;
+  partsGross: number;
+  serviceLines?: RepairPricedLine[];
+  partLines?: RepairPricedLine[];
+  discountType: RepairDiscountType;
+  discountValue: number;
+  discountAmount: number;
+  netAmount: number;
+  paidAmount: number;
+  balanceDue: number;
+  taxRate?: number;
+  taxAmount?: number;
+  /** warranty = zero-revenue manufacturer close; collect is forbidden. */
+  settlementType?: RepairSettlementType;
+  status: 'draft' | 'pending_approval' | 'approved' | 'partial' | 'paid' | 'void';
+  discountApprovalStatus?: RepairFinancialApprovalStatus;
+  creditApprovalStatus?: RepairFinancialApprovalStatus;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface RepairPayment {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  authorizationId: string;
+  paymentNo: string;
+  amount: number;
+  method: RepairPaymentMethod;
+  status: 'posted' | 'reversed';
+  treasuryEntryId: string;
+  journalEntryId: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  reversedAt?: string;
+  reversedBy?: string;
+  reversalReason?: string;
+}
+
+export interface RepairFinancialApproval {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  authorizationId: string;
+  type: RepairFinancialApprovalType;
+  status: RepairFinancialApprovalStatus;
+  requestedAmount: number;
+  reason: string;
+  requestedBy: string;
+  requestedByName: string;
+  requestedAt: string;
+  resolvedBy?: string;
+  resolvedByName?: string;
+  resolvedAt?: string;
+  resolutionNote?: string;
+}
+
+/** Availability snapshot when the technician requested the part from a repair job. */
+export type RepairPartAvailabilityAtRequest = 'center' | 'central' | 'none';
+
+/** Fulfillment lifecycle for job-linked spare part demand. */
+export type RepairPartFulfillmentStatus =
+  | 'pending_supply'
+  | 'ready_to_issue'
+  | 'issued'
+  | 'cancelled';
+
 export interface RepairPartUsage {
+  /** Stable id for this usage line (required for pending-supply fulfillment). */
+  usageId?: string;
   partId: string;
   partName: string;
   quantity: number;
@@ -81,6 +241,16 @@ export interface RepairPartUsage {
   /** Inventory issue document that posted this usage (ADR-005). */
   issueId?: string;
   issueReferenceNo?: string;
+  /** Purchase unit cost from inventory issue (COGS); distinct from sale `unitCost`. */
+  unitCostSnapshot?: number;
+  /** Purchase line total from inventory issue (COGS). */
+  totalCostSnapshot?: number;
+  /** Where stock was available when requested (server-computed). */
+  availabilityAtRequest?: RepairPartAvailabilityAtRequest;
+  /** pending_supply until center receives replenishment; then ready_to_issue / issued. */
+  fulfillmentStatus?: RepairPartFulfillmentStatus;
+  replenishmentRequestId?: string;
+  replenishmentReferenceNo?: string;
 }
 
 export type RepairSpareApprovalMode = 'direct' | 'required';
@@ -175,7 +345,10 @@ export interface RepairJobProduct {
   accessoryIds?: string[];
   /** معرفات خدمات من كتالوج الإعدادات */
   serviceIds?: string[];
+  /** وصف العطل من الاستقبال / العميل — لا يُعدَّل في الورشة */
   diagnosis?: string;
+  /** تشخيص الفني بعد الفحص */
+  technicianDiagnosis?: string;
   /** تكلفة متوقعة للسطر بالكامل (وحدة × كمية) */
   estimatedCost?: number;
   /** تكلفة نهائية للسطر بالكامل (وحدة × كمية) */
@@ -211,6 +384,10 @@ export interface RepairJob {
   estimatedCost?: number;
   finalCostOverride?: number;
   finalCost?: number;
+  /** إجمالي ما تم ترحيله/تحصيله فعليًا — مصدر حالة السداد للطلبات الجديدة. */
+  paidAmount?: number;
+  /** الرصيد المتبقي المحسوب، محفوظ لتسهيل التقارير والفرز. */
+  balanceDue?: number;
   paymentStatus?: 'unpaid' | 'partial' | 'paid';
   closedReason?: string;
   laborCost?: number;
@@ -234,6 +411,11 @@ export interface RepairJob {
   createdAt: string;
   updatedAt: string;
   deliveredAt?: string;
+  /** رقم ثابت لإذن تسليم المنتج، يُنشأ داخل معاملة التسليم ولا يتغير عند إعادة الطباعة. */
+  deliveryAuthorizationNo?: string;
+  deliveryAuthorizationIssuedAt?: string;
+  deliveryAuthorizationIssuedBy?: string;
+  deliveryAuthorizationIssuedByName?: string;
   assignedAt?: string;
   resolvedAt?: string;
   slaHours?: number;
@@ -429,6 +611,14 @@ export interface RepairTreasuryEntry {
   amount: number;
   note?: string;
   referenceId?: string;
+  source?: string;
+  sourceId?: string;
+  paymentMethod?: RepairPaymentMethod;
+  costCenterId?: string;
+  journalEntryId?: string;
+  /** نوع مصروف خزينة يدوي مُرحَّل محاسبياً */
+  expenseType?: string;
+  expenseAccountId?: string;
   createdBy: string;
   createdByName?: string;
   createdAt: string;
@@ -479,6 +669,35 @@ export interface RepairTreasuryBranchDailyBreakdown {
   closing: number;
 }
 
+export type RepairTreasuryMonthCloseStatus = 'closed' | 'open';
+
+export interface RepairTreasuryMonthCloseSnapshot {
+  sessionsCount: number;
+  totalOpening: number;
+  totalIncome: number;
+  totalExpense: number;
+  netMovement: number;
+  totalClosing: number;
+}
+
+export interface RepairTreasuryMonthClose {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  month: string;
+  status: RepairTreasuryMonthCloseStatus;
+  closedAt?: string;
+  closedBy?: string;
+  closedByName?: string;
+  closingNote?: string;
+  reopenedAt?: string;
+  reopenedBy?: string;
+  reopenedByName?: string;
+  reopenReason?: string;
+  snapshot?: RepairTreasuryMonthCloseSnapshot;
+  updatedAt?: string;
+}
+
 export interface RepairTreasuryMonthlyReportData {
   month: string;
   sessionStatus: RepairTreasurySessionStatusFilter;
@@ -487,13 +706,35 @@ export interface RepairTreasuryMonthlyReportData {
   summaries: RepairTreasuryBranchMonthlySummary[];
   dailyBreakdown: RepairTreasuryBranchDailyBreakdown[];
   sessions: RepairTreasurySessionDetailsRow[];
+  /** حالة إقفال الشهر لكل فرع ظاهر في التقرير */
+  monthCloseByBranchId: Record<string, RepairTreasuryMonthClose | null>;
+  paymentMethodSummaries: Array<{
+    branchId: string;
+    branchName: string;
+    costCenterId: string;
+    paymentMethod: RepairPaymentMethod | 'unspecified';
+    income: number;
+    expense: number;
+    net: number;
+    entriesCount: number;
+  }>;
+  reconciliation: {
+    entriesCount: number;
+    missingPaymentMethod: number;
+    missingCostCenter: number;
+    missingJournalReference: number;
+  };
 }
 
 export interface RepairSalesInvoiceLine {
   partId: string;
   partName: string;
+  /** Manufacturing material id when the line is linked to inventory SoT. */
+  materialId?: string;
   quantity: number;
   unitPrice: number;
+  /** Immutable inventory cost snapshot, written by the server only. */
+  unitCost?: number;
   lineTotal: number;
 }
 
@@ -506,9 +747,24 @@ export interface RepairSalesInvoice {
   customerName?: string;
   customerPhone?: string;
   notes?: string;
+  grossAmount?: number;
+  discountType?: 'none' | 'amount' | 'percent';
+  discountValue?: number;
+  discountAmount?: number;
   total: number;
+  taxRate?: 0;
+  taxAmount?: 0;
+  paymentMethod?: RepairPaymentMethod;
+  costCenterId?: string;
   lines: RepairSalesInvoiceLine[];
-  status?: 'active' | 'cancelled';
+  status?: 'draft' | 'pending_discount_approval' | 'ready_to_post' | 'posted' | 'cancelled';
+  discountApprovalStatus?: 'not_required' | 'pending' | 'approved' | 'rejected';
+  discountRequestedBy?: string;
+  journalEntryId?: string;
+  treasuryEntryId?: string;
+  reversalJournalEntryId?: string;
+  /** إصدار تسلسلي لمنع تكرار تسويات التعديل/الإلغاء على الخادم. */
+  revision?: number;
   warehouseId?: string;
   warehouseName?: string;
   repairJobId?: string;
@@ -528,11 +784,17 @@ export interface RepairTechnicianKPI {
   technicianId: string;
   technicianName: string;
   totalJobs: number;
-  successRate: number;
-  avgRepairDays: number;
+  deliveredJobs: number;
+  unrepairableJobs: number;
+  successRate: number | null;
+  deliveryRate: number;
+  avgRepairDays: number | null;
   technicianRevenue: number;
   openJobsCount: number;
+  delayedJobsCount: number;
+  readyJobsCount: number;
   breakdownByDeviceType: Record<string, number>;
+  breakdownByStatus: Record<string, number>;
 }
 
 export interface RepairJobFilters {

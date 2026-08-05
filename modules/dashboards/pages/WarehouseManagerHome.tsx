@@ -60,7 +60,15 @@ export const WarehouseManagerHome: React.FC = () => {
   );
 
   // Fast path: known bound id → workspace immediately (no wait for full list).
-  if (warehouseId) {
+  // Role may be unknown yet; after list loads, maintenance centers use repair path via homePath.
+  if (warehouseId && warehouses && boundWarehouse) {
+    return <Navigate to={withTenantPath(tenantSlug, homePath)} replace />;
+  }
+  if (warehouseId && warehouses === null) {
+    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
+  }
+  if (warehouseId && !boundWarehouse) {
+    // Bound id exists but not in filtered list — still open inventory workspace.
     return <Navigate to={withTenantPath(tenantSlug, `/inventory/warehouses/${warehouseId}`)} replace />;
   }
 
@@ -75,9 +83,15 @@ export const WarehouseManagerHome: React.FC = () => {
 
   // Single scoped warehouse discovered from list.
   if (scoped && warehouseIds.length === 1 && warehouseIds[0]) {
+    const only = warehouses.find((w) => w.id === warehouseIds[0]);
+    const path = resolveWarehouseOperatorHomePath({
+      boundWarehouseId: warehouseIds[0],
+      boundWarehouseRole: only?.warehouseRole,
+      isMaterialsWarehouseRole,
+    });
     return (
       <Navigate
-        to={withTenantPath(tenantSlug, `/inventory/warehouses/${warehouseIds[0]}`)}
+        to={withTenantPath(tenantSlug, path)}
         replace
       />
     );
@@ -106,7 +120,13 @@ export const WarehouseManagerHome: React.FC = () => {
           {warehouses.map((w) => (
             <Link
               key={w.id}
-              to={withTenantPath(tenantSlug, `/inventory/warehouses/${w.id}`)}
+              to={withTenantPath(
+                tenantSlug,
+                resolveWarehouseOperatorHomePath({
+                  boundWarehouseId: w.id,
+                  boundWarehouseRole: w.warehouseRole,
+                }),
+              )}
               className="rounded-xl border border-[var(--color-border)] p-4 hover:bg-[var(--color-surface-hover)]"
             >
               <div className="font-bold text-sm">{w.name}</div>

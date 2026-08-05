@@ -62,6 +62,7 @@ export type Permission =
   | 'activityLog.view'
   | 'quickAction.view'
   | 'costs.view' | 'costs.manage' | 'costs.closePeriod'
+  | 'accounting.view' | 'accounting.accounts.manage' | 'accounting.journals.post' | 'accounting.journals.reverse' | 'accounting.periods.manage' | 'accounting.settings.manage' | 'accounting.inventory.view'
   | 'plans.view' | 'plans.create' | 'plans.edit' | 'plans.componentInjection.manage'
   | 'routing.view' | 'routing.manage' | 'routing.execute' | 'routing.analytics'
   | 'workOrders.view' | 'workOrders.create' | 'workOrders.edit' | 'workOrders.delete' | 'workOrders.viewCost' | 'workOrders.componentInjection.manage'
@@ -90,9 +91,12 @@ export type Permission =
   | 'repair.view'
   | 'repair.dashboard.view'
   | 'repair.adminDashboard.view'
-  | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete' | 'repair.jobs.technician'
-  | 'repair.parts.view' | 'repair.parts.manage'
+  | 'repair.jobs.create' | 'repair.jobs.edit' | 'repair.jobs.delete' | 'repair.jobs.technician' | 'repair.jobs.reception'
+  | 'repair.parts.view' | 'repair.parts.manage' | 'repair.parts.request'
   | 'repair.pricing.manage'
+  | 'repair.finance.view' | 'repair.payments.view' | 'repair.payments.collect' | 'repair.payments.reverse'
+  | 'repair.discounts.request' | 'repair.discounts.approve'
+  | 'repair.credit.request' | 'repair.credit.approve' | 'repair.accounting.manage'
   | 'repair.branches.manage'
   | 'repair.technician.view'
   | 'repair.treasury.view' | 'repair.treasury.manage'
@@ -334,9 +338,20 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repair.jobs.edit', label: 'تعديل طلب صيانة' },
       { key: 'repair.jobs.delete', label: 'حذف طلب صيانة' },
       { key: 'repair.jobs.technician', label: 'فني صيانة (طلبات مسندة فقط)' },
+      { key: 'repair.jobs.reception', label: 'استقبال الصيانة والتسليم' },
       { key: 'repair.parts.view', label: 'عرض قطع الغيار' },
       { key: 'repair.parts.manage', label: 'إدارة قطع الغيار' },
+      { key: 'repair.parts.request', label: 'طلب قطعة من الورشة بدون أسعار' },
       { key: 'repair.pricing.manage', label: 'تسعير قطع الغيار وخدمات الصيانة' },
+      { key: 'repair.finance.view', label: 'عرض ماليات طلبات الصيانة' },
+      { key: 'repair.payments.view', label: 'عرض أذونات ودفعات الصيانة' },
+      { key: 'repair.payments.collect', label: 'تحصيل دفعات الصيانة' },
+      { key: 'repair.payments.reverse', label: 'عكس دفعة صيانة' },
+      { key: 'repair.discounts.request', label: 'طلب خصم صيانة' },
+      { key: 'repair.discounts.approve', label: 'اعتماد خصم صيانة' },
+      { key: 'repair.credit.request', label: 'طلب تسليم برصيد' },
+      { key: 'repair.credit.approve', label: 'اعتماد تسليم برصيد' },
+      { key: 'repair.accounting.manage', label: 'إعداد حسابات ومراكز تكلفة الصيانة' },
       { key: 'repairSpareIssues.view', label: 'عرض سندات صرف قطع الغيار' },
       { key: 'repairSpareIssues.create', label: 'إنشاء سند صرف قطع غيار' },
       { key: 'repairSpareIssues.approve', label: 'اعتماد سند صرف قطع غيار' },
@@ -353,6 +368,19 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repair.salesInvoice.view', label: 'عرض فواتير بيع قطع الغيار' },
       { key: 'repair.salesInvoice.edit', label: 'تعديل فاتورة بيع قطع الغيار' },
       { key: 'repair.salesInvoice.cancel', label: 'إلغاء فاتورة بيع قطع الغيار' },
+    ],
+  },
+  {
+    key: 'accounting',
+    label: 'الحسابات العامة',
+    permissions: [
+      { key: 'accounting.view', label: 'عرض موديول الحسابات والتقارير' },
+      { key: 'accounting.accounts.manage', label: 'إدارة شجرة الحسابات' },
+      { key: 'accounting.journals.post', label: 'إنشاء وترحيل قيود يدوية' },
+      { key: 'accounting.journals.reverse', label: 'عكس القيود المحاسبية' },
+      { key: 'accounting.periods.manage', label: 'إقفال وإعادة فتح الفترات' },
+      { key: 'accounting.settings.manage', label: 'إدارة السياسات والربط المحاسبي' },
+      { key: 'accounting.inventory.view', label: 'عرض قيمة المخزون محاسبيًا' },
     ],
   },
   {

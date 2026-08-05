@@ -24,7 +24,8 @@
     "back": "Back",
     "clearSelection": "Clear selection",
     "noResults": "No results",
-    "selectPlaceholder": "Select..."
+    "selectPlaceholder": "Select...",
+    "searchPlaceholder": "Search..."
   },
   "notifications": {
     "title": "Notifications",
@@ -713,6 +714,11 @@
       "inventoryWarehouseHint": "When linked to one warehouse, inventory pages show only that warehouse.",
       "updateWarehouseSuccess": "Warehouse binding saved successfully.",
       "saveWarehouse": "Save warehouse binding",
+      "repairBranch": "Linked repair center / branch",
+      "allRepairBranches": "All repair centers (no restriction — not recommended for reception/technician)",
+      "repairBranchHint": "Full isolation: the user only sees data for the linked center (jobs, parts, treasury per permissions).",
+      "updateRepairBranchSuccess": "Repair center binding saved successfully.",
+      "saveRepairBranch": "Save repair center binding",
       "email": "Email",
       "newPasswordOptional": "New password (optional)",
       "leaveBlankPasswordHint": "Leave blank if you do not want to change it",

@@ -47,6 +47,8 @@ export type ParsedConsumableSheetRow = {
   priceChanged: boolean;
   willUpdateQty: boolean;
   willUpdatePrice: boolean;
+  /** Create a new consumable material before applying qty/price updates. */
+  willCreateItem: boolean;
   errors: string[];
 };
 
@@ -57,6 +59,7 @@ export type ConsumableSheetParseResult = {
   errorCount: number;
   qtyUpdateCount: number;
   priceUpdateCount: number;
+  createCount: number;
   fileErrors: string[];
 };
 
@@ -77,8 +80,11 @@ const HEADER_MAP: Record<string, HeaderField> = {
   code: 'itemCode',
   'item code': 'itemCode',
   'اسم الصنف': 'itemName',
+  الصنف: 'itemName',
+  المستهلك: 'itemName',
   الاسم: 'itemName',
   name: 'itemName',
+  'item name': 'itemName',
   'كود المخزن': 'warehouseCode',
   'كود مخزن': 'warehouseCode',
   'warehouse code': 'warehouseCode',
@@ -88,6 +94,7 @@ const HEADER_MAP: Record<string, HeaderField> = {
   'كود الرف': 'locationCode',
   'كود الموقع': 'locationCode',
   'كود اللوكيشن': 'locationCode',
+  الرف: 'locationCode',
   اللوكيشن: 'locationCode',
   'location code': 'locationCode',
   الرصيد: 'quantity',
@@ -100,6 +107,28 @@ const HEADER_MAP: Record<string, HeaderField> = {
   cost: 'unitPrice',
   price: 'unitPrice',
 };
+
+/** Same shape as DefineConsumableModal — Arabic-safe prefix + unique stamp. */
+export function suggestConsumableSheetItemCode(name: string, reservedCodes: Set<string>): string {
+  const prefix = String(name || '')
+    .trim()
+    .replace(/\s+/g, '')
+    .slice(0, 4)
+    .toUpperCase()
+    .replace(/[^A-Z0-9\u0600-\u06FF]/g, '');
+  const safe = prefix && /^[A-Z0-9]/.test(prefix) ? prefix.slice(0, 4) : 'CNS';
+  for (let attempt = 0; attempt < 80; attempt += 1) {
+    const stamp = `${Date.now().toString(36).toUpperCase().slice(-5)}${attempt.toString(36).toUpperCase()}`;
+    const code = `${safe}-${stamp}`;
+    if (!reservedCodes.has(code)) {
+      reservedCodes.add(code);
+      return code;
+    }
+  }
+  const fallback = `CNS-${Date.now().toString(36).toUpperCase()}-${reservedCodes.size}`;
+  reservedCodes.add(fallback);
+  return fallback;
+}
 
 function normalizeHeader(value: string): string {
   return value
@@ -118,8 +147,13 @@ function mapHeader(raw: string): HeaderField | undefined {
   if (/رف|لوكيشن|location|shelf/.test(norm)) return 'locationCode';
   if (/مخزن|warehouse/.test(norm) && /كود|code/.test(norm)) return 'warehouseCode';
   if (/مخزن|warehouse/.test(norm)) return 'warehouseName';
-  if (/كود|code/.test(norm)) return 'itemCode';
-  if (/اسم|name/.test(norm)) return 'itemName';
+  if ((/كود|code/.test(norm)) && (/صنف|مادة|مستهلك|item|material|sku/.test(norm))) {
+    return 'itemCode';
+  }
+  if (/كود|code/.test(norm) && !/مخزن|warehouse|رف|location|shelf/.test(norm)) {
+    return 'itemCode';
+  }
+  if (/اسم|name|صنف|مستهلك/.test(norm)) return 'itemName';
   return undefined;
 }
 
@@ -166,6 +200,15 @@ export function downloadDepartmentConsumablesSheetTemplate(): void {
       'كود الرف': '',
       الرصيد: 100,
       'سعر الوحدة': 2.5,
+    },
+    {
+      'كود الصنف': '',
+      'اسم الصنف': 'صنف جديد بدون كود — يُنشأ تلقائياً',
+      'كود المخزن': 'WH-01',
+      'اسم المخزن': 'مخزن المستلزمات',
+      'كود الرف': '',
+      الرصيد: 50,
+      'سعر الوحدة': 1,
     },
   ];
   const ws = XLSX.utils.json_to_sheet(rows);
@@ -222,31 +265,26 @@ export function parseDepartmentConsumablesSheetFromBuffer(
     allowedWarehouseIds?: string[] | null;
   },
 ): ConsumableSheetParseResult {
+  const emptyResult = (fileErrors: string[]): ConsumableSheetParseResult => ({
+    rows: [],
+    totalRows: 0,
+    validCount: 0,
+    errorCount: 0,
+    qtyUpdateCount: 0,
+    priceUpdateCount: 0,
+    createCount: 0,
+    fileErrors,
+  });
+
   const wb = XLSX.read(data, { type: 'array' });
   const ws = wb.Sheets[wb.SheetNames[0]];
   if (!ws) {
-    return {
-      rows: [],
-      totalRows: 0,
-      validCount: 0,
-      errorCount: 0,
-      qtyUpdateCount: 0,
-      priceUpdateCount: 0,
-      fileErrors: ['الملف لا يحتوي على ورقة عمل.'],
-    };
+    return emptyResult(['الملف لا يحتوي على ورقة عمل.']);
   }
 
   const aoa = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1, defval: '', raw: false });
   if (aoa.length < 2) {
-    return {
-      rows: [],
-      totalRows: 0,
-      validCount: 0,
-      errorCount: 0,
-      qtyUpdateCount: 0,
-      priceUpdateCount: 0,
-      fileErrors: ['الملف فارغ أو بدون صفوف بيانات.'],
-    };
+    return emptyResult(['الملف فارغ أو بدون صفوف بيانات.']);
   }
 
   const headers = (aoa[0] || []).map((h) => mapHeader(String(h || '')));
@@ -259,7 +297,9 @@ export function parseDepartmentConsumablesSheetFromBuffer(
   const priceIdx = headers.findIndex((h) => h === 'unitPrice');
 
   const fileErrors: string[] = [];
-  if (itemCodeIdx < 0) fileErrors.push('عمود «كود الصنف» مطلوب.');
+  if (itemCodeIdx < 0 && itemNameIdx < 0) {
+    fileErrors.push('عمود «كود الصنف» أو «اسم الصنف» مطلوب.');
+  }
   if (warehouseCodeIdx < 0 && warehouseNameIdx < 0) {
     fileErrors.push('عمود «كود المخزن» أو «اسم المخزن» مطلوب.');
   }
@@ -267,19 +307,14 @@ export function parseDepartmentConsumablesSheetFromBuffer(
     fileErrors.push('يلزم عمود «الرصيد» أو «سعر الوحدة» على الأقل.');
   }
   if (fileErrors.length) {
-    return {
-      rows: [],
-      totalRows: 0,
-      validCount: 0,
-      errorCount: 0,
-      qtyUpdateCount: 0,
-      priceUpdateCount: 0,
-      fileErrors,
-    };
+    return emptyResult(fileErrors);
   }
 
   const materialByCode = new Map(
     input.materials.map((m) => [normalizeCode(m.code), m] as const),
+  );
+  const materialByName = new Map(
+    input.materials.map((m) => [normalizeName(m.name), m] as const),
   );
   const warehouseByCode = new Map(
     input.warehouses.map((w) => [normalizeCode(w.code), w] as const),
@@ -303,10 +338,16 @@ export function parseDepartmentConsumablesSheetFromBuffer(
     ? new Set(input.allowedWarehouseIds)
     : null;
 
+  const reservedCodes = new Set(
+    input.materials.map((m) => normalizeCode(m.code)).filter(Boolean),
+  );
+  /** Pending new items keyed by normalized name so duplicate rows share one code. */
+  const pendingCreateByName = new Map<string, { code: string; name: string; unit: string }>();
+
   const rows: ParsedConsumableSheetRow[] = [];
   for (let i = 1; i < aoa.length; i += 1) {
     const line = aoa[i] || [];
-    const itemCode = normalizeCode(itemCodeIdx >= 0 ? line[itemCodeIdx] : '');
+    const itemCodeRaw = normalizeCode(itemCodeIdx >= 0 ? line[itemCodeIdx] : '');
     const itemNameHint = String(itemNameIdx >= 0 ? line[itemNameIdx] ?? '' : '').trim();
     const warehouseCode = normalizeCode(warehouseCodeIdx >= 0 ? line[warehouseCodeIdx] : '');
     const warehouseNameHint = String(warehouseNameIdx >= 0 ? line[warehouseNameIdx] ?? '' : '').trim();
@@ -316,14 +357,52 @@ export function parseDepartmentConsumablesSheetFromBuffer(
     const targetQty = qtyEmpty ? null : parseNumericCell(line[qtyIdx]);
     const targetPrice = priceEmpty ? null : parseNumericCell(line[priceIdx]);
 
-    if (!itemCode && !warehouseCode && !warehouseNameHint && qtyEmpty && priceEmpty) {
+    if (!itemCodeRaw && !itemNameHint && !warehouseCode && !warehouseNameHint && qtyEmpty && priceEmpty) {
       continue;
     }
 
     const errors: string[] = [];
-    const material = itemCode ? materialByCode.get(itemCode) : undefined;
-    if (!itemCode) errors.push('كود الصنف مطلوب.');
-    else if (!material) errors.push('المستهلك غير موجود أو ليس من نوع مستهلكات.');
+    let material = itemCodeRaw ? materialByCode.get(itemCodeRaw) : undefined;
+    if (!material && itemNameHint) {
+      material = materialByName.get(normalizeName(itemNameHint));
+    }
+
+    let willCreateItem = false;
+    let itemCode = itemCodeRaw;
+    let itemName = material?.name || itemNameHint;
+    let itemId = material?.id || '';
+    let unit = material?.unit || 'piece';
+
+    if (material) {
+      itemCode = normalizeCode(material.code) || itemCode;
+      itemName = material.name;
+      itemId = material.id;
+      unit = material.unit || 'piece';
+    } else if (itemCodeRaw && !itemNameHint) {
+      errors.push('المستهلك غير موجود أو ليس من نوع مستهلكات.');
+    } else if (!itemNameHint && !itemCodeRaw) {
+      errors.push('كود الصنف أو اسم الصنف مطلوب.');
+    } else if (!itemNameHint) {
+      // Code provided but unknown, and no name to create under.
+      errors.push('المستهلك غير موجود — أضف اسم الصنف لإنشائه.');
+    } else {
+      // New consumable: reuse pending code for same name within this sheet.
+      const nameKey = normalizeName(itemNameHint);
+      let pending = pendingCreateByName.get(nameKey);
+      if (!pending) {
+        const code = itemCodeRaw && !reservedCodes.has(itemCodeRaw)
+          ? itemCodeRaw
+          : suggestConsumableSheetItemCode(itemNameHint, reservedCodes);
+        if (itemCodeRaw) reservedCodes.add(itemCodeRaw);
+        pending = { code, name: itemNameHint, unit: 'piece' };
+        pendingCreateByName.set(nameKey, pending);
+      }
+      willCreateItem = true;
+      itemCode = pending.code;
+      itemName = pending.name;
+      itemId = '';
+      unit = pending.unit;
+    }
 
     let warehouse =
       (warehouseCode ? warehouseByCode.get(warehouseCode) : undefined)
@@ -364,18 +443,20 @@ export function parseDepartmentConsumablesSheetFromBuffer(
     const priceChanged = targetPrice !== null
       && Math.abs(targetPrice - currentPrice) > 0.000_001;
     const willUpdateQty = targetQty !== null && Math.abs(qtyDelta) > 0.000_001;
-    const willUpdatePrice = priceChanged;
+    const willUpdatePrice = willCreateItem
+      ? targetPrice !== null
+      : priceChanged;
 
-    if (!errors.length && !willUpdateQty && !willUpdatePrice) {
+    if (!errors.length && !willCreateItem && !willUpdateQty && !willUpdatePrice) {
       errors.push('لا تغيير عن الرصيد/السعر الحالي.');
     }
 
     rows.push({
       rowIndex: i + 1,
       itemCode: itemCode || '',
-      itemName: material?.name || itemNameHint,
-      itemId: material?.id || '',
-      unit: material?.unit || '',
+      itemName,
+      itemId,
+      unit,
       warehouseCode: warehouse?.code || warehouseCode,
       warehouseName: warehouse?.name || warehouseNameHint,
       warehouseId: warehouse?.id || '',
@@ -389,6 +470,7 @@ export function parseDepartmentConsumablesSheetFromBuffer(
       priceChanged,
       willUpdateQty,
       willUpdatePrice,
+      willCreateItem,
       errors,
     });
   }
@@ -401,6 +483,7 @@ export function parseDepartmentConsumablesSheetFromBuffer(
     errorCount: rows.length - validCount,
     qtyUpdateCount: rows.filter((r) => r.errors.length === 0 && r.willUpdateQty).length,
     priceUpdateCount: rows.filter((r) => r.errors.length === 0 && r.willUpdatePrice).length,
+    createCount: rows.filter((r) => r.errors.length === 0 && r.willCreateItem).length,
     fileErrors: [],
   };
 }

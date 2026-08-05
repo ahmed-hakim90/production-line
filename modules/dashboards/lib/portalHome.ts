@@ -8,6 +8,7 @@ export type PortalKind =
   | 'factory_manager'
   | 'employee'
   | 'warehouse_manager'
+  | 'repair_technician'
   | 'generic';
 
 export type PortalPermissionChecker = {
@@ -15,6 +16,15 @@ export type PortalPermissionChecker = {
   roleKey?: string | null;
   inventoryWarehouseId?: string | null;
 };
+
+/** Self-scoped repair tech home — not managers with ops/KPI dashboards. */
+export function isRepairTechnicianPortal(checker: PortalPermissionChecker): boolean {
+  if (checker.roleKey === 'repair_technician') return true;
+  if (!checker.can('repair.jobs.technician')) return false;
+  if (checker.can('repair.dashboard.view')) return false;
+  if (checker.can('repair.technician.view')) return false;
+  return true;
+}
 
 export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind {
   if (checker.can('adminDashboard.view')) return 'admin';
@@ -30,6 +40,8 @@ export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind 
   ) {
     return 'warehouse_manager';
   }
+
+  if (isRepairTechnicianPortal(checker)) return 'repair_technician';
 
   return 'generic';
 }

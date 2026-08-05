@@ -22,6 +22,16 @@ type Props = {
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 
+function rowStatusLabel(row: ParsedConsumableSheetRow): string {
+  if (row.errors.length) return row.errors.join(' · ');
+  const parts: string[] = [];
+  if (row.willCreateItem) parts.push('إنشاء صنف');
+  if (row.willUpdateQty) parts.push('كمية');
+  if (row.willCreateItem && row.targetPrice !== null) parts.push('سعر');
+  else if (row.willUpdatePrice) parts.push('سعر');
+  return parts.join(' + ') || '—';
+}
+
 export const ImportConsumablesSheetModal: React.FC<Props> = ({
   open,
   onClose,
@@ -77,6 +87,7 @@ export const ImportConsumablesSheetModal: React.FC<Props> = ({
         errorCount: 0,
         qtyUpdateCount: 0,
         priceUpdateCount: 0,
+        createCount: 0,
         fileErrors: [error instanceof Error ? error.message : 'تعذر قراءة الشيت.'],
       });
     } finally {
@@ -122,7 +133,8 @@ export const ImportConsumablesSheetModal: React.FC<Props> = ({
       )}
     >
       <p className="text-sm text-[var(--color-text-muted)]">
-        ارفع شيت Excel فيه كود الصنف والمخزن والرصيد و/أو سعر الوحدة. بعد المعاينة يتم التنفيذ في «المهام».
+        ارفع شيت Excel فيه اسم أو كود الصنف والمخزن والرصيد و/أو سعر الوحدة.
+        الأصناف الجديدة بدون كود تُنشأ تلقائياً بكود مولَّد، ثم يُنفَّذ التطبيق في «المهام».
       </p>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -144,6 +156,7 @@ export const ImportConsumablesSheetModal: React.FC<Props> = ({
             <span>صفوف: {result.totalRows}</span>
             <span className="text-emerald-700">صالح: {result.validCount}</span>
             <span className="text-rose-700">أخطاء: {result.errorCount}</span>
+            <span className="text-sky-700">إنشاء أصناف: {result.createCount}</span>
             <span>تحديث كمية: {result.qtyUpdateCount}</span>
             <span>تحديث سعر: {result.priceUpdateCount}</span>
           </div>
@@ -172,12 +185,15 @@ export const ImportConsumablesSheetModal: React.FC<Props> = ({
                 {previewRows.map((row) => (
                   <tr
                     key={`${row.rowIndex}-${row.itemCode}-${row.warehouseId}-${row.locationCode}`}
-                    className={row.errors.length ? 'bg-rose-50' : ''}
+                    className={row.errors.length ? 'bg-rose-50' : row.willCreateItem ? 'bg-sky-50' : ''}
                   >
                     <td className="px-2 py-1.5 border-t border-[var(--color-border)]">{row.rowIndex}</td>
                     <td className="px-2 py-1.5 border-t border-[var(--color-border)]">
                       <div className="font-bold">{row.itemName || '—'}</div>
-                      <div className="text-[var(--color-text-muted)]">{row.itemCode}</div>
+                      <div className="text-[var(--color-text-muted)] font-mono">
+                        {row.itemCode || '—'}
+                        {row.willCreateItem ? ' (جديد)' : ''}
+                      </div>
                     </td>
                     <td className="px-2 py-1.5 border-t border-[var(--color-border)]">
                       {row.warehouseName || row.warehouseCode || '—'}
@@ -195,12 +211,7 @@ export const ImportConsumablesSheetModal: React.FC<Props> = ({
                       {row.targetPrice === null ? '—' : fmt(row.targetPrice)}
                     </td>
                     <td className="px-2 py-1.5 border-t border-[var(--color-border)]">
-                      {row.errors.length
-                        ? row.errors.join(' · ')
-                        : [
-                            row.willUpdateQty ? 'كمية' : null,
-                            row.willUpdatePrice ? 'سعر' : null,
-                          ].filter(Boolean).join(' + ') || '—'}
+                      {rowStatusLabel(row)}
                     </td>
                   </tr>
                 ))}

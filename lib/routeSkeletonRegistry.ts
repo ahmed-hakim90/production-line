@@ -6,6 +6,7 @@ import { MANUFACTURING_ROUTES } from '@/modules/manufacturing/routes';
 import { QUALITY_ROUTES } from '@/modules/quality/routes';
 import { HR_ROUTES } from '@/modules/hr/routes';
 import { COST_ROUTES } from '@/modules/costs/routes';
+import { ACCOUNTING_ROUTES } from '@/modules/accounting/routes';
 import { SYSTEM_ROUTES } from '@/modules/system/routes';
 import { REPORTS_ROUTES } from '@/modules/reports/routes';
 import { INVENTORY_ROUTES } from '@/modules/inventory/routes';
@@ -19,6 +20,7 @@ const ALL_PROTECTED_ROUTES = [
   ...QUALITY_ROUTES,
   ...HR_ROUTES,
   ...COST_ROUTES,
+  ...ACCOUNTING_ROUTES,
   ...SYSTEM_ROUTES,
   ...REPORTS_ROUTES,
   ...INVENTORY_ROUTES,

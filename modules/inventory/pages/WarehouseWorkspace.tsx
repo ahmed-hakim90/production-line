@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
+import { useAppStore } from '../../../store/useAppStore';
+import { toast } from '../../../components/Toast';
 import { warehouseService } from '../services/warehouseService';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import { sparePartsReplenishmentService } from '../services/sparePartsReplenishmentService';
+import { ImportStockCountSheetModal } from '../components/ImportStockCountSheetModal';
 import { WAREHOUSE_ROLE_LABELS, sourceModuleLabel } from '../lib/stockLabels';
 import {
   SPARE_PARTS_REPLENISHMENT_STATUS_LABELS,
@@ -20,6 +23,27 @@ import type {
   WarehouseRole,
 } from '../types';
 import type { InventoryTransferRequest } from '../types';
+import { repairBranchService } from '../../repair/services/repairBranchService';
+import { sparePartsService } from '../../repair/services/sparePartsService';
+import { CreateRepairSparePartModal } from '../../repair/components/CreateRepairSparePartModal';
+import {
+  resolveUserRepairBranchIds,
+  type FirestoreUserWithRepair,
+  type RepairBranch,
+  type RepairSparePart,
+} from '../../repair/types';
+import { resolveRepairAccessContext } from '../../repair/utils/repairAccessContext';
+import {
+  isMaintenanceCenterWarehouseRole,
+  repairCenterWarehouseMenuPath,
+  resolveRepairCenterWarehouseIds,
+} from '../../repair/lib/repairCenterWarehouseMenu';
+import { resolveRepairSettings } from '../../repair/config/repairSettings';
+import { materialService } from '../../manufacturing/services/materialService';
+import type { StockCountCatalogMaterial } from '../lib/stockCountSheet';
+import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
+import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
+import { toUserSafeFirestoreError } from '../../repair/lib/repairFirestoreErrors';
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 2 }).format(Number(n || 0));
@@ -56,19 +80,14 @@ function roleActions(
     case 'maintenance_center':
       return [
         {
-          label: 'طلب تموين',
-          path: `/inventory/spare-parts-replenishment?toWarehouseId=${encodeURIComponent(warehouseId)}`,
+          label: 'طلب تموين / الاستلام',
+          path: '/repair/parts-replenishment',
           description: 'طلب قطع غيار من المخزن المركزي ثم تأكيد الاستلام',
         },
         {
-          label: 'الأرصدة',
-          path: `/inventory/balances?warehouseId=${encodeURIComponent(warehouseId)}`,
-          description: 'ما لدى المركز حالياً',
-        },
-        {
-          label: 'الحركات',
-          path: `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}`,
-          description: 'أحدث دخول/خروج للمخزن',
+          label: 'سندات الصرف',
+          path: '/repair/spare-issues',
+          description: 'صرف قطع الغيار على أوامر الصيانة',
         },
       ];
     case 'final_product':
@@ -168,38 +187,128 @@ function roleActions(
 
 export const WarehouseWorkspace: React.FC = () => {
   const { tenantSlug, warehouseId } = useParams<{ tenantSlug?: string; warehouseId?: string }>();
+  const location = useLocation();
   const { can } = usePermission();
-  const canView = can('inventory.view');
+  const { openModal } = useGlobalModalManager();
+  const canViewInventory = can('inventory.view');
+  const canViewRepairParts = can('repair.parts.view');
+  const canManageParts = can('repair.parts.manage');
+  const canManageCounts = can('inventory.counts.manage');
+  const user = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const userPermissions = useAppStore((s) => s.userPermissions);
+  const userRoleName = useAppStore((s) => s.userRoleName);
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  const repairCtx = useMemo(
+    () =>
+      resolveRepairAccessContext({
+        userProfile: user,
+        userRoleName,
+        systemSettings,
+        permissions: userPermissions,
+      }),
+    [user, userRoleName, systemSettings, userPermissions],
+  );
+  const isRepairRoute = location.pathname.includes('/repair/warehouses/');
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [warehouse, setWarehouse] = useState<Warehouse | null>(null);
   const [balances, setBalances] = useState<StockItemBalance[]>([]);
+  const [countBalances, setCountBalances] = useState<StockItemBalance[]>([]);
   const [transactions, setTransactions] = useState<StockTransaction[]>([]);
   const [pendingTransfers, setPendingTransfers] = useState<InventoryTransferRequest[]>([]);
   const [replenishments, setReplenishments] = useState<SparePartsReplenishmentRequest[]>([]);
+  const [linkedBranch, setLinkedBranch] = useState<RepairBranch | null>(null);
+  const [branchParts, setBranchParts] = useState<RepairSparePart[]>([]);
+  const [catalogMaterials, setCatalogMaterials] = useState<StockCountCatalogMaterial[]>([]);
+  const [accessDenied, setAccessDenied] = useState(false);
+  const [addPartOpen, setAddPartOpen] = useState(false);
+  const [countImportOpen, setCountImportOpen] = useState(false);
 
   const load = useCallback(async () => {
     const id = String(warehouseId || '').trim();
-    if (!canView || !id) return;
+    if (!id || (!canViewInventory && !canViewRepairParts)) return;
     setLoading(true);
     setError(null);
+    setAccessDenied(false);
     try {
-      const allWhs = await warehouseService.getAllWarehouses();
+      const [allWhs, branches] = await Promise.all([
+        warehouseService.getAllWarehouses(),
+        repairBranchService.list().catch(() => [] as RepairBranch[]),
+      ]);
       const wh = allWhs.find((row) => row.id === id) || null;
       if (!wh) {
         setWarehouse(null);
+        setLinkedBranch(null);
+        setBranchParts([]);
         setError('المخزن غير موجود.');
         return;
       }
+
+      const isCenter = isMaintenanceCenterWarehouseRole(wh.warehouseRole);
+      if (!canViewInventory && !(canViewRepairParts && isCenter)) {
+        setWarehouse(null);
+        setLinkedBranch(null);
+        setBranchParts([]);
+        setAccessDenied(true);
+        setError('ليس لديك صلاحية عرض هذا المخزن.');
+        return;
+      }
+
+      if (isCenter && (isRepairRoute || !canViewInventory)) {
+        const allowedIds = new Set(
+          resolveRepairCenterWarehouseIds({
+            branches,
+            canViewAllBranches: repairCtx.canViewAllBranches || repairCtx.adminSeesAllBranches,
+            userBranchIds: resolveUserRepairBranchIds(user),
+            inventoryWarehouseId: user?.inventoryWarehouseId,
+          }),
+        );
+        if (allowedIds.size > 0 && !allowedIds.has(id) && !repairCtx.canViewAllBranches) {
+          setWarehouse(null);
+          setLinkedBranch(null);
+          setBranchParts([]);
+          setAccessDenied(true);
+          setError('هذا المخزن غير مرتبط بفرعك.');
+          return;
+        }
+      }
+
+      const branch = branches.find((row) => String(row.warehouseId || '').trim() === id) || null;
       setWarehouse(wh);
-      const [bal, tx, transfers, spr] = await Promise.all([
+      setLinkedBranch(branch);
+
+      const [bal, tx, transfers, spr, parts, materials] = await Promise.all([
         stockService.getBalances(id).catch(() => [] as StockItemBalance[]),
         stockService.getTransactions(id).catch(() => [] as StockTransaction[]),
-        transferApprovalService.getAll().catch(() => [] as InventoryTransferRequest[]),
+        canViewInventory
+          ? transferApprovalService.getAll().catch(() => [] as InventoryTransferRequest[])
+          : Promise.resolve([] as InventoryTransferRequest[]),
         sparePartsReplenishmentService.listRecent(50).catch(() => [] as SparePartsReplenishmentRequest[]),
+        branch?.id && isCenter
+          ? sparePartsService.listParts(String(branch.id)).catch(() => [] as RepairSparePart[])
+          : Promise.resolve([] as RepairSparePart[]),
+        isCenter
+          ? materialService.getAll().catch(() => [])
+          : Promise.resolve([]),
       ]);
+      setCountBalances(bal);
       setBalances(bal.slice(0, 30));
+      setBranchParts(parts);
+      setCatalogMaterials(
+        (materials || [])
+          .filter((row) => row.isActive !== false && row.id)
+          .map((row) => ({
+            id: String(row.id),
+            code: String(row.code || ''),
+            name: String(row.name || ''),
+            unit: String(row.baseUnit || 'piece'),
+            categoryName: String(row.categoryName || ''),
+            minStock: Number(row.minStock || 0),
+          })),
+      );
       setTransactions(tx.slice(0, 20));
       setPendingTransfers(
         (transfers || [])
@@ -214,38 +323,95 @@ export const WarehouseWorkspace: React.FC = () => {
           (r) => r.fromWarehouseId === id || r.toWarehouseId === id,
         ).slice(0, 15),
       );
-    } catch (err: any) {
-      setError(err?.message || 'تعذر تحميل مساحة المخزن.');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'تعذر تحميل مساحة المخزن.');
     } finally {
       setLoading(false);
     }
-  }, [canView, warehouseId]);
+  }, [
+    canViewInventory,
+    canViewRepairParts,
+    isRepairRoute,
+    repairCtx.adminSeesAllBranches,
+    repairCtx.canViewAllBranches,
+    user,
+    warehouseId,
+  ]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   const actions = useMemo(
-    () => (warehouse?.id ? roleActions(warehouse.warehouseRole, warehouse.id) : []),
+    () =>
+      warehouse?.id
+        ? roleActions(warehouse.warehouseRole, warehouse.id)
+        : [],
     [warehouse],
   );
 
+  const isCenterWarehouse = isMaintenanceCenterWarehouseRole(warehouse?.warehouseRole);
+  const backPath = isRepairRoute || isCenterWarehouse
+    ? '/repair/parts'
+    : '/inventory/warehouses';
+  const backLabel = isRepairRoute || isCenterWarehouse
+    ? 'مخزون الفرع'
+    : 'كل المخازن';
+  const canEnterPage = canViewInventory || canViewRepairParts;
+  const showAddPart = isCenterWarehouse && canManageParts && Boolean(linkedBranch?.id);
+  const showCountImport = canManageCounts;
+  const canCenterCreateFromCount = isCenterWarehouse && Boolean(linkedBranch?.id);
+
+  const openCreatedCountSession = useCallback(async (sessionId: string | null) => {
+    await load();
+    if (!sessionId || !canManageCounts) return;
+    try {
+      const sessions = await stockService.getCountSessions(String(warehouseId || ''));
+      const session = sessions.find((row) => row.id === sessionId);
+      if (!session) return;
+      openModal(MODAL_KEYS.INVENTORY_STOCK_COUNT_SESSION, {
+        session,
+        canManage: canManageCounts,
+        createdBy: userDisplayName || 'Current User',
+        onUpdated: () => {
+          void load();
+        },
+      });
+    } catch (error: unknown) {
+      toast.error(toUserSafeFirestoreError(error, 'تم إنشاء الجلسة. حدّث الصفحة لفتحها.'));
+    }
+  }, [canManageCounts, load, openModal, userDisplayName, warehouseId]);
+
   const lowStock = useMemo(
-    () => balances.filter((b) => Number(b.quantity || 0) <= Number(b.minStock || 0)).length,
-    [balances],
+    () => countBalances.filter((b) => Number(b.quantity || 0) <= Number(b.minStock || 0)).length,
+    [countBalances],
   );
-  const totalSkus = balances.length;
+  const totalSkus = countBalances.length;
   const awaitingReceipt = replenishments.filter((r) => r.status === 'responsible_approved').length;
   const awaitingPrepare = replenishments.filter(
     (r) => r.status === 'approved' || r.status === 'submitted',
   ).length;
 
-  if (!canView) {
+  if (!canEnterPage) {
     return (
       <div className="p-6">
         <PageHeader title="مساحة المخزن" />
         <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية العرض.</p>
       </div>
+    );
+  }
+
+  if (
+    warehouse
+    && isMaintenanceCenterWarehouseRole(warehouse.warehouseRole)
+    && !isRepairRoute
+    && warehouseId
+  ) {
+    return (
+      <Navigate
+        to={withTenantPath(tenantSlug, repairCenterWarehouseMenuPath(warehouseId))}
+        replace
+      />
     );
   }
 
@@ -263,8 +429,8 @@ export const WarehouseWorkspace: React.FC = () => {
       <div className="p-6 space-y-3">
         <PageHeader title="مساحة المخزن" />
         <p className="text-sm text-rose-700">{error || 'المخزن غير موجود.'}</p>
-        <Link className="text-sm font-bold text-primary underline" to={withTenantPath(tenantSlug, '/inventory/warehouses')}>
-          العودة لقائمة المخازن
+        <Link className="text-sm font-bold text-primary underline" to={withTenantPath(tenantSlug, backPath)}>
+          {accessDenied ? 'العودة' : backLabel}
         </Link>
       </div>
     );
@@ -278,9 +444,9 @@ export const WarehouseWorkspace: React.FC = () => {
         actions={(
           <Link
             className="text-sm font-bold text-primary underline"
-            to={withTenantPath(tenantSlug, '/inventory/warehouses')}
+            to={withTenantPath(tenantSlug, backPath)}
           >
-            كل المخازن
+            {backLabel}
           </Link>
         )}
       />
@@ -305,12 +471,52 @@ export const WarehouseWorkspace: React.FC = () => {
         </Card>
       </div>
 
+      {(showAddPart || showCountImport) ? (
+        <Card title="تحكم المخزن">
+          <p className="text-xs text-[var(--color-text-muted)] mb-3">
+            الإضافة والجرد تتم من هنا مباشرة دون مغادرة مساحة المخزن.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {showAddPart ? (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => setAddPartOpen(true)}
+                disabled={!linkedBranch?.id}
+              >
+                إضافة صنف
+              </Button>
+            ) : null}
+            {showCountImport ? (
+              <Button
+                type="button"
+                variant="primary"
+                onClick={() => {
+                  if (countBalances.length === 0 && !canCenterCreateFromCount) {
+                    toast.error('لا توجد أصناف في هذا المخزن لرفع الجرد.');
+                    return;
+                  }
+                  setCountImportOpen(true);
+                }}
+              >
+                رفع جرد Excel
+              </Button>
+            ) : null}
+          </div>
+          {isCenterWarehouse && canManageParts && !linkedBranch?.id ? (
+            <p className="mt-2 text-xs text-amber-800">
+              لا يوجد فرع صيانة مربوط بهذا المخزن — لا يمكن إضافة صنف من هنا.
+            </p>
+          ) : null}
+        </Card>
+      ) : null}
+
       <Card title="إجراءات هذا المخزن">
         <div className="grid gap-2 md:grid-cols-2">
           {actions.map((action) => (
             <Link
               key={action.path}
-              to={withTenantPath(action.path, tenantSlug)}
+              to={withTenantPath(tenantSlug, action.path)}
               className="rounded-xl border border-[var(--color-border)] p-3 hover:bg-[var(--color-surface-hover)]"
             >
               <div className="font-bold text-sm">{action.label}</div>
@@ -342,7 +548,12 @@ export const WarehouseWorkspace: React.FC = () => {
           <div className="mt-3">
             <Link
               className="text-sm font-bold text-primary underline"
-              to={withTenantPath(tenantSlug, '/inventory/spare-parts-replenishment')}
+              to={withTenantPath(
+                tenantSlug,
+                warehouse.warehouseRole === 'maintenance_center'
+                  ? '/repair/parts-replenishment'
+                  : '/inventory/spare-parts-replenishment',
+              )}
             >
               فتح شاشة التموين الكاملة
             </Link>
@@ -433,6 +644,43 @@ export const WarehouseWorkspace: React.FC = () => {
       <div className="flex justify-end">
         <Button type="button" variant="ghost" onClick={() => void load()}>تحديث</Button>
       </div>
+
+      {showAddPart && linkedBranch?.id ? (
+        <CreateRepairSparePartModal
+          open={addPartOpen}
+          onOpenChange={setAddPartOpen}
+          branchId={String(linkedBranch.id)}
+          existingParts={branchParts}
+          defaultMinStock={repairSettings.defaults.defaultMinStock}
+          onCreated={async () => {
+            const parts = await sparePartsService.listParts(String(linkedBranch.id)).catch(() => [] as RepairSparePart[]);
+            setBranchParts(parts);
+            await load();
+          }}
+        />
+      ) : null}
+
+      {showCountImport ? (
+        <ImportStockCountSheetModal
+          open={countImportOpen}
+          onClose={() => setCountImportOpen(false)}
+          warehouseId={String(warehouse.id)}
+          warehouseName={warehouse.name}
+          balances={countBalances}
+          centerCreate={
+            canCenterCreateFromCount && linkedBranch?.id
+              ? {
+                  branchId: String(linkedBranch.id),
+                  catalogMaterials,
+                  existingParts: branchParts,
+                  canManageParts,
+                }
+              : undefined
+          }
+          onPartsChanged={setBranchParts}
+          onCreated={(sessionId) => void openCreatedCountSession(sessionId)}
+        />
+      ) : null}
     </div>
   );
 };

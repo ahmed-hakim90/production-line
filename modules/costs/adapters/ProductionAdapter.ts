@@ -54,6 +54,11 @@ export class ProductionAdapter implements IProductionProvider {
       supervisorIndirectCost: Number(report.supervisorIndirectCost || 0),
       productCategory: String(productCategoryById.get(String(report.productId || '')) || ''),
       reportType: resolveReportType(report.reportType),
+      manufacturingCostStatus: report.manufacturingCostStatus,
+      materialCostSnapshot: Number(report.materialCostSnapshot || 0),
+      packagingCostSnapshot: Number(report.packagingCostSnapshot || 0),
+      fullManufacturingCostSnapshot: Number(report.fullManufacturingCostSnapshot || 0),
+      fullManufacturingUnitCostSnapshot: Number(report.fullManufacturingUnitCostSnapshot || 0),
     } as ProductionReportWithMeta));
   }
 

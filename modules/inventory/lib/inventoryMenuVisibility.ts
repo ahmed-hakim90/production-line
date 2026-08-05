@@ -63,7 +63,6 @@ const MENU_KEYS_BY_WAREHOUSE_ROLE: Record<WarehouseRole, readonly string[]> = {
   ],
   maintenance_center: [
     ...SCOPED_SHARED_MENU_KEYS,
-    'inv-spare-parts-replenishment',
   ],
   general: [...SCOPED_SHARED_MENU_KEYS],
 };
@@ -104,10 +103,42 @@ export function isInventoryMenuItemVisibleForWarehouseScope(input: {
   if (!key) return true;
   // Dynamic per-warehouse shortcuts injected by the sidebar.
   if (key.startsWith('inv-wh-space-')) return true;
+  // Maintenance-center warehouse shortcuts live under الصيانة, not inventory scope.
+  if (key.startsWith('repair-wh-space-')) return true;
   if (!input.scoped) return true;
 
   const roles = input.accessibleWarehouseRoles || [];
   if (roles.length === 0) return false;
 
   return allowedMenuKeysForRoles(roles).has(key);
+}
+
+/**
+ * «متابعة تموين القطع» is for maintenance centers.
+ * Hide it from spare-parts-central-only operators (they use central replenishment).
+ */
+export function isRepairPartsReplenishmentMenuVisible(input: {
+  accessibleWarehouseRoles: readonly (WarehouseRole | string)[];
+  warehouseScoped: boolean;
+  userRepairBranchIds: readonly string[];
+  canViewAllBranches: boolean;
+}): boolean {
+  if (input.canViewAllBranches) return true;
+  if ((input.userRepairBranchIds || []).some((id) => Boolean(String(id || '').trim()))) {
+    return true;
+  }
+  const roles = (input.accessibleWarehouseRoles || []).map(
+    (role) => (role || 'general') as WarehouseRole,
+  );
+  if (roles.includes('maintenance_center')) return true;
+
+  if (
+    input.warehouseScoped
+    && roles.length > 0
+    && roles.every((role) => role === 'spare_parts_central')
+  ) {
+    return false;
+  }
+
+  return true;
 }

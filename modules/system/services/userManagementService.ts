@@ -85,6 +85,31 @@ export const userManagementService = {
 
   async updateInventoryWarehouseId(userId: string, warehouseId: string | null): Promise<void> {
     await userService.updateInventoryWarehouseId(userId, warehouseId);
+    const nextWarehouseId = String(warehouseId || '').trim();
+    if (!nextWarehouseId) return;
+
+    // Center operators often get only inventoryWarehouseId — also bind repairBranchIds
+    // so Firestore branch-scoped reads (jobs / spare parts) succeed.
+    try {
+      const { warehouseService } = await import('../../inventory/services/warehouseService');
+      const warehouse = await warehouseService.getById(nextWarehouseId);
+      if ((warehouse?.warehouseRole || 'general') !== 'maintenance_center') return;
+      const { repairBranchService } = await import('../../repair/services/repairBranchService');
+      const branches = await repairBranchService.list();
+      const linked = branches.find(
+        (branch) => String(branch.warehouseId || '').trim() === nextWarehouseId,
+      );
+      const branchId = String(linked?.id || '').trim();
+      if (branchId) {
+        await userService.updateRepairBranchScope(userId, branchId);
+      }
+    } catch {
+      // Warehouse/branch sync is best-effort; inventory bind already saved.
+    }
+  },
+
+  async updateRepairBranchScope(userId: string, branchId: string | null): Promise<void> {
+    await userService.updateRepairBranchScope(userId, branchId);
   },
 
   async toggleUserActive(userId: string, isActive: boolean): Promise<void> {

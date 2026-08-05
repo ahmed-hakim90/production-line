@@ -4,15 +4,11 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Trash2 } from 'lucide-react';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { PageHeader } from '@/components/PageHeader';
+import { SearchableSelect } from '@/components/UI';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
@@ -22,7 +18,6 @@ import { unwrapOrThrow } from '@/shared/usecases';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import {
-  REPAIR_JOB_STATUS_LABELS,
   resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
@@ -31,8 +26,10 @@ import {
   type RepairJobProduct,
 } from '../types';
 import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
+import { StatusBadge } from '../components/StatusBadge';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import {
+  accessoriesForProductCategory,
   accessoryLabelsFromIds,
   resolveRepairSettings,
 } from '../config/repairSettings';
@@ -44,6 +41,7 @@ type JobProductRow = {
   itemId: string;
   productId: string;
   quantity: string;
+  serialNo: string;
   accessoryIds: string[];
   accessories: string;
   diagnosis: string;
@@ -58,6 +56,7 @@ const createEmptyProductRow = (): JobProductRow => ({
   itemId: `item-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
   productId: '',
   quantity: '1',
+  serialNo: '',
   accessoryIds: [],
   accessories: '',
   diagnosis: '',
@@ -79,10 +78,23 @@ export const NewRepairJob: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [loading, setLoading] = useState(false);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
-  const enabledAccessories = useMemo(
-    () => repairSettings.accessoriesCatalog.filter((item) => item.enabled !== false),
-    [repairSettings.accessoriesCatalog],
+  const productOptions = useMemo(
+    () => products
+      .filter((p) => p.id)
+      .map((product) => ({
+        value: String(product.id),
+        label: `${product.name}${product.model ? ` - ${product.model}` : ''}${product.code ? ` (${product.code})` : ''}`.trim(),
+      })),
+    [products],
   );
+
+  const accessoriesForRow = (productId: string) => {
+    const selected = products.find((p) => String(p.id) === String(productId));
+    return accessoriesForProductCategory(
+      repairSettings.accessoriesCatalog,
+      selected?.categoryId,
+    );
+  };
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [jobProducts, setJobProducts] = useState<JobProductRow[]>([createEmptyProductRow()]);
@@ -217,6 +229,7 @@ export const NewRepairJob: React.FC = () => {
       const quantity = parseProductQuantity(row.quantity);
       const catalogAccessoryLabels = accessoryLabelsFromIds(row.accessoryIds, repairSettings.accessoriesCatalog);
       const accessories = [catalogAccessoryLabels, String(row.accessories || '').trim()].filter(Boolean).join(' — ');
+      const serialNo = String(row.serialNo || '').trim();
       return {
         itemId: row.itemId || `item-${idx + 1}`,
         productId: row.productId,
@@ -225,7 +238,10 @@ export const NewRepairJob: React.FC = () => {
         deviceBrand: String(selected?.name || ''),
         deviceModel: String(selected?.model || selected?.code || ''),
         quantity,
-        accessoryIds: row.accessoryIds,
+        ...(serialNo ? { serialNo } : {}),
+        ...(Array.isArray(row.accessoryIds) && row.accessoryIds.length > 0
+          ? { accessoryIds: row.accessoryIds }
+          : {}),
         serviceIds: [],
         accessories,
         diagnosis: row.diagnosis || '',
@@ -246,6 +262,10 @@ export const NewRepairJob: React.FC = () => {
     }
     setLoading(true);
     try {
+      const canonicalCustomer = await customerService.getById(customerId);
+      if (!canonicalCustomer?.id || canonicalCustomer.isActive === false) {
+        throw new Error('العميل غير موجود في الماستر أو غير نشط. أعد اختياره.');
+      }
       const result = unwrapOrThrow(await createRepairJob({
         serviceEventActor: {
           uid: String(user?.id || ''),
@@ -255,13 +275,14 @@ export const NewRepairJob: React.FC = () => {
         productId: leadProduct?.productId,
         productName: leadProduct?.productName || 'منتج',
         jobProducts: normalizedProducts,
-        customerId,
-        customerName: form.customerName,
-        customerPhone: form.customerPhone,
-        customerAddress: form.customerAddress || '',
+        customerId: canonicalCustomer.id,
+        customerName: canonicalCustomer.name,
+        customerPhone: canonicalCustomer.phone,
+        customerAddress: form.customerAddress || canonicalCustomer.address || '',
         deviceType: leadProduct?.deviceType || 'عام',
         deviceBrand: leadProduct?.deviceBrand || 'غير محدد',
         deviceModel: leadProduct?.deviceModel || 'غير محدد',
+        deviceSerial: leadProduct?.serialNo || '',
         deviceColor: '',
         devicePassword: '',
         accessories: leadProduct?.accessories || '',
@@ -278,11 +299,11 @@ export const NewRepairJob: React.FC = () => {
         userName: String(user?.displayName || user?.email || 'مستخدم'),
       }));
       if (!result.jobId) throw new Error('تعذر إنشاء الطلب.');
-      toast.success('تم تسجيل جهاز الصيانة.');
+      toast.success('تم تسجيل جهاز الصيانة. يمكنك طباعة كارت القطعة وإيصال العميل.');
       if (result.usedFallbackReceipt) {
         toast.info('تم استخدام رقم إيصال بديل تلقائيًا بسبب صلاحيات عداد الإيصالات.');
       }
-      navigate(withTenantPath(tenantSlug, `/repair/jobs/${result.jobId}`));
+      navigate(withTenantPath(tenantSlug, `/repair/jobs/${result.jobId}?print=intake`));
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إنشاء الطلب.');
     } finally {
@@ -291,17 +312,17 @@ export const NewRepairJob: React.FC = () => {
   };
 
   return (
-    <div className="w-full max-w-none mx-auto px-3 md:px-5 xl:px-8" dir={dir}>
+    <div className="erp-ds-clean w-full max-w-none mx-auto space-y-4 p-4 md:p-6" dir={dir}>
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
         <div className="space-y-4 lg:order-1">
-          <div className="flex items-center justify-between gap-2">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight">تسجيل جهاز صيانة</h1>
-              <p className="text-sm text-muted-foreground mt-1">أدخل بيانات العميل والجهاز قبل إنشاء طلب الصيانة.</p>
-            </div>
-            <Button variant="outline" type="button" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
-              رجوع للطلبات
-            </Button>
+          <PageHeader
+            title="تسجيل جهاز صيانة"
+            subtitle="استلام فقط: العميل والمنتجات والإكسسوارات. الخدمات والتكلفة يحددها الفني بعد الفحص."
+            icon="add"
+            backAction={{ to: withTenantPath(tenantSlug, '/repair/jobs') }}
+          />
+          <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+            مسار الاستقبال: سجّل العميل والجهاز فقط. التشخيص وقطع الغيار والتكلفة تتم من شاشة الورشة بعد إسناد الفني.
           </div>
 
           <Card>
@@ -330,9 +351,11 @@ export const NewRepairJob: React.FC = () => {
                     onSelect={applyMasterCustomer}
                     onCreated={(created) => {
                       setCustomers((prev) => {
-                        if (prev.some((c) => c.id === created.id)) return prev;
-                        return [...prev, created];
+                        const next = prev.filter((c) => c.id !== created.id);
+                        return [...next, created].sort((a, b) => a.code.localeCompare(b.code, 'ar'));
                       });
+                      applyMasterCustomer(created);
+                      toast.success(`تم إنشاء العميل ${created.name} واختياره على الطلب.`);
                     }}
                   />
                 </div>
@@ -361,37 +384,39 @@ export const NewRepairJob: React.FC = () => {
                           <Button
                             type="button"
                             variant="ghost"
+                            size="icon"
                             onClick={() => {
                               setJobProducts((prev) => (prev.length <= 1 ? prev : prev.filter((item) => item.itemId !== row.itemId)));
                             }}
                             disabled={jobProducts.length <= 1}
+                            aria-label={`حذف منتج ${idx + 1}`}
                           >
-                            حذف
+                            <Trash2 className="h-4 w-4 text-rose-500" />
                           </Button>
                         </div>
                         <div className="space-y-2">
                           <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
                             <div className="min-w-0 flex-1 space-y-1.5">
                               <Label className="text-xs">المنتج</Label>
-                              <Select
+                              <SearchableSelect
+                                options={productOptions}
                                 value={row.productId}
-                                onValueChange={(value) => {
+                                onChange={(value) => {
+                                  const nextAccessories = accessoriesForRow(value);
+                                  const allowed = new Set(nextAccessories.map((a) => a.id));
                                   setJobProducts((prev) => prev.map((item) => (
-                                    item.itemId === row.itemId ? { ...item, productId: value } : item
+                                    item.itemId === row.itemId
+                                      ? {
+                                          ...item,
+                                          productId: value,
+                                          accessoryIds: item.accessoryIds.filter((id) => allowed.has(id)),
+                                        }
+                                      : item
                                   )));
                                 }}
-                              >
-                                <SelectTrigger className={!row.productId ? 'border-rose-300' : ''}>
-                                  <SelectValue placeholder="اختر المنتج من الأصناف المعرفة" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {products.filter((p) => p.id).map((product) => (
-                                    <SelectItem key={product.id} value={String(product.id)}>
-                                      {product.name} {product.model ? `- ${product.model}` : ''} {product.code ? `(${product.code})` : ''}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
+                                placeholder="ابحث واختر المنتج من الأصناف المعرفة"
+                                className={!row.productId ? 'border-rose-300' : ''}
+                              />
                             </div>
                             <div className="w-full shrink-0 space-y-1.5 sm:w-28">
                               <Label className="text-xs">الكمية</Label>
@@ -408,40 +433,63 @@ export const NewRepairJob: React.FC = () => {
                               />
                             </div>
                           </div>
-                          <Input
-                            placeholder="وصف العطل من العميل (اختياري)"
-                            value={row.diagnosis}
-                            onChange={(e) => {
-                              const value = e.target.value;
-                              setJobProducts((prev) => prev.map((item) => (
-                                item.itemId === row.itemId ? { ...item, diagnosis: value } : item
-                              )));
-                            }}
-                          />
+                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                            <Input
+                              placeholder="السيريال (اختياري)"
+                              value={row.serialNo}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setJobProducts((prev) => prev.map((item) => (
+                                  item.itemId === row.itemId ? { ...item, serialNo: value } : item
+                                )));
+                              }}
+                            />
+                            <Input
+                              placeholder="وصف العطل من العميل (اختياري)"
+                              value={row.diagnosis}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                setJobProducts((prev) => prev.map((item) => (
+                                  item.itemId === row.itemId ? { ...item, diagnosis: value } : item
+                                )));
+                              }}
+                            />
+                          </div>
                           <div className="space-y-1.5">
                             <Label className="text-xs">الإكسسوارات المستلمة</Label>
-                            {enabledAccessories.length > 0 ? (
-                              <div className="flex flex-wrap gap-x-4 gap-y-1">
-                                {enabledAccessories.map((accessory) => (
-                                  <label key={accessory.id} className="inline-flex items-center gap-2 text-sm">
-                                    <input
-                                      type="checkbox"
-                                      checked={row.accessoryIds.includes(accessory.id)}
-                                      onChange={() => {
-                                        setJobProducts((prev) => prev.map((item) => (
-                                          item.itemId === row.itemId
-                                            ? { ...item, accessoryIds: toggleCatalogId(item.accessoryIds, accessory.id) }
-                                            : item
-                                        )));
-                                      }}
-                                    />
-                                    {accessory.label}
-                                  </label>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="text-xs text-muted-foreground">لا توجد إكسسوارات معرفة في الإعدادات.</p>
-                            )}
+                            {(() => {
+                              const rowAccessories = accessoriesForRow(row.productId);
+                              if (!row.productId) {
+                                return (
+                                  <p className="text-xs text-muted-foreground">اختر المنتج أولاً لعرض إكسسوارات فئته.</p>
+                                );
+                              }
+                              if (rowAccessories.length === 0) {
+                                return (
+                                  <p className="text-xs text-muted-foreground">لا توجد إكسسوارات لهذه الفئة — يمكنك إضافة ملاحظات أدناه.</p>
+                                );
+                              }
+                              return (
+                                <div className="flex flex-wrap gap-x-4 gap-y-1">
+                                  {rowAccessories.map((accessory) => (
+                                    <label key={accessory.id} className="inline-flex items-center gap-2 text-sm">
+                                      <input
+                                        type="checkbox"
+                                        checked={row.accessoryIds.includes(accessory.id)}
+                                        onChange={() => {
+                                          setJobProducts((prev) => prev.map((item) => (
+                                            item.itemId === row.itemId
+                                              ? { ...item, accessoryIds: toggleCatalogId(item.accessoryIds, accessory.id) }
+                                              : item
+                                          )));
+                                        }}
+                                      />
+                                      {accessory.label}
+                                    </label>
+                                  ))}
+                                </div>
+                              );
+                            })()}
                             <Input
                               placeholder="أخرى (ملاحظات إضافية)"
                               value={row.accessories}
@@ -467,7 +515,7 @@ export const NewRepairJob: React.FC = () => {
                               )));
                             }}
                           />
-                          داخل الضمان (إصلاح مجاني)
+                          داخل ضمان الشركة المصنعة (إصلاح مجاني)
                         </label>
                       </div>
                     ))}
@@ -522,7 +570,7 @@ export const NewRepairJob: React.FC = () => {
                   >
                     <div className="flex items-center justify-between gap-2 text-[11px] text-muted-foreground">
                       <span>#{job.receiptNo}</span>
-                      <span>{repairSettings.statusMap[job.status]?.label || REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</span>
+                      <StatusBadge status={job.status} className="px-1.5 py-0 text-[10px]" />
                     </div>
                     <div className="mt-1 text-xs font-medium truncate">{job.customerName || 'عميل غير محدد'}</div>
                     <div className="text-[11px] text-muted-foreground truncate">{job.customerPhone || '-'}</div>

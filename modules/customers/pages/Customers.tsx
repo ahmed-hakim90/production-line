@@ -29,6 +29,11 @@ import { Pencil } from 'lucide-react';
 import { customerService } from '../services/customerService';
 import { downloadCustomersTemplate } from '../lib/importCustomers';
 import {
+  CUSTOMER_LIST_LOAD_FALLBACK,
+  toCustomerListLoadErrorMessage,
+  waitForTenantId,
+} from '../lib/customerListLoadError';
+import {
   CUSTOMER_TYPE_LABELS,
   CUSTOMER_TYPE_OPTIONS,
   type Customer,
@@ -58,6 +63,7 @@ export const Customers: React.FC = () => {
 
   const [rows, setRows] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -68,12 +74,26 @@ export const Customers: React.FC = () => {
 
   const load = async () => {
     setLoading(true);
+    setLoadError(null);
     try {
+      const tenantId = await waitForTenantId();
+      if (!tenantId) {
+        const message = toCustomerListLoadErrorMessage(
+          new Error('Tenant context not initialised'),
+        );
+        setLoadError(message);
+        setRows([]);
+        toast.error(message);
+        return;
+      }
       const list = await customerService.listAll({ includeInactive: true });
       setRows(list);
-    } catch {
-      toast.error('تعذر تحميل العملاء.');
+      setLoadError(null);
+    } catch (error: unknown) {
+      const message = toCustomerListLoadErrorMessage(error, CUSTOMER_LIST_LOAD_FALLBACK);
+      setLoadError(message);
       setRows([]);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -180,6 +200,11 @@ export const Customers: React.FC = () => {
         subtitle="ماستر بيانات العملاء (مستهلك / تاجر) — المرجع لكل الموديولات"
         actions={
           <div className="flex flex-wrap gap-2">
+            {canEdit && (
+              <Button type="button" variant="outline" asChild>
+                <Link to={withTenantPath(tenantSlug, '/customers/repair-link')}>ربط طلبات الصيانة</Link>
+              </Button>
+            )}
             {canImport && (
               <>
                 <Button type="button" variant="outline" onClick={() => downloadCustomersTemplate()}>
@@ -251,6 +276,20 @@ export const Customers: React.FC = () => {
                     </td>
                   </tr>
                 ))
+              ) : loadError ? (
+                <tr>
+                  <td colSpan={7} className="p-6 text-center">
+                    <p className="text-sm text-destructive font-medium">{loadError}</p>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="mt-3"
+                      onClick={() => void load()}
+                    >
+                      إعادة المحاولة
+                    </Button>
+                  </td>
+                </tr>
               ) : paged.length === 0 ? (
                 <tr>
                   <td colSpan={7} className="p-6 text-center text-sm text-muted-foreground">

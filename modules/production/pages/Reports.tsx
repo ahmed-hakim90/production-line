@@ -279,9 +279,11 @@ const BY_QTY_SCOPE_LABELS: Record<'all' | 'category' | 'selected', string> = {
 function ReportCostBreakdownPanel({
   breakdown,
   noCostSettings,
+  report,
 }: {
   breakdown: ProductionReportCostBreakdown | null;
   noCostSettings: boolean;
+  report?: ProductionReport | null;
 }) {
   if (noCostSettings) {
     return (
@@ -299,8 +301,80 @@ function ReportCostBreakdownPanel({
     breakdown.lineDateTotalQty > 0
       ? `${formatCost(breakdown.lineDailyIndirect)} × (${formatNumber(breakdown.quantityProduced)} ÷ ${formatNumber(breakdown.lineDateTotalQty)})`
       : '—';
+  const hasFullManufacturingCost = Number(report?.fullManufacturingCostSnapshot || 0) > 0;
   return (
     <div className="space-y-3 text-sm">
+      {report?.manufacturingCostPostingState === 'pending' ? (
+        <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 p-3 text-xs font-bold text-amber-700">
+          جاري تجهيز تكلفة التصنيع الكاملة لهذا التقرير.
+        </div>
+      ) : null}
+      {report?.manufacturingCostPostingState === 'failed' ? (
+        <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50 p-3 text-xs text-rose-700">
+          <strong className="block mb-1">فشل تجهيز تكلفة التصنيع الكاملة</strong>
+          {report.manufacturingCostPostingError || 'أعد حفظ التقرير أو راجع إعدادات التكلفة.'}
+        </div>
+      ) : null}
+      {hasFullManufacturingCost && report ? (
+        <div className="rounded-[var(--border-radius-lg)] border-2 border-primary/20 bg-primary/5 overflow-hidden">
+          <div className="px-3 py-2.5 flex items-center justify-between gap-2 border-b border-primary/15">
+            <div>
+              <p className="font-black text-[var(--color-text)]">تكلفة التصنيع الكاملة</p>
+              <p className="text-[10px] text-[var(--color-text-muted)] mt-0.5">
+                إصدار {report.manufacturingCostRevision || 1} · {report.manufacturingCostVersion || 'full-manufacturing-v1'}
+              </p>
+            </div>
+            <span className={`rounded-full px-2.5 py-1 text-[10px] font-black ${report.manufacturingCostStatus === 'actual' ? 'bg-emerald-100 text-emerald-700' : 'bg-amber-100 text-amber-700'}`}>
+              {report.manufacturingCostStatus === 'actual' ? 'فعلية' : 'مبدئية'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 divide-x divide-x-reverse divide-primary/10 border-b border-primary/10">
+            <div className="p-3">
+              <span className="block text-[11px] text-[var(--color-text-muted)]">الخامات</span>
+              <strong className="tabular-nums">{formatCost(report.materialCostSnapshot || 0)} ج.م</strong>
+            </div>
+            <div className="p-3">
+              <span className="block text-[11px] text-[var(--color-text-muted)]">التعبئة والتغليف</span>
+              <strong className="tabular-nums">{formatCost(report.packagingCostSnapshot || 0)} ج.م</strong>
+            </div>
+            <div className="p-3 border-t border-primary/10">
+              <span className="block text-[11px] text-[var(--color-text-muted)]">العمالة المباشرة</span>
+              <strong className="tabular-nums">{formatCost(report.directLaborCostSnapshot || 0)} ج.م</strong>
+            </div>
+            <div className="p-3 border-t border-primary/10">
+              <span className="block text-[11px] text-[var(--color-text-muted)]">التكاليف الصناعية</span>
+              <strong className="tabular-nums">{formatCost(report.factoryOverheadCostSnapshot || 0)} ج.م</strong>
+            </div>
+            <div className="p-3 border-t border-primary/10 col-span-2">
+              <span className="block text-[11px] text-[var(--color-text-muted)]">الإهلاك</span>
+              <strong className="tabular-nums">{formatCost(report.depreciationCostSnapshot || 0)} ج.م</strong>
+            </div>
+          </div>
+          <div className="px-3 py-3 flex items-end justify-between gap-3">
+            <div>
+              <span className="block text-[11px] text-[var(--color-text-muted)]">إجمالي التقرير</span>
+              <strong className="text-base tabular-nums text-primary">{formatCost(report.fullManufacturingCostSnapshot || 0)} ج.م</strong>
+            </div>
+            <div className="text-left">
+              <span className="block text-[11px] text-[var(--color-text-muted)]">تكلفة الوحدة</span>
+              <strong className="text-lg tabular-nums text-violet-600">{formatCost(report.fullManufacturingUnitCostSnapshot || 0)} ج.م</strong>
+            </div>
+          </div>
+          {report.manufacturingCostSourceQualitySnapshot ? (
+            <p className="px-3 pb-3 text-[10px] text-[var(--color-text-muted)]">
+              المصادر: {report.manufacturingCostSourceQualitySnapshot.actualLines} فعلي · {' '}
+              {report.manufacturingCostSourceQualitySnapshot.estimatedLines} تقديري · {' '}
+              {report.manufacturingCostSourceQualitySnapshot.scheduledLines} مجدول
+              {report.manufacturingCostSourceQualitySnapshot.missingAmountLines > 0
+                ? ` · ${report.manufacturingCostSourceQualitySnapshot.missingAmountLines} مصدر يحتاج تسعير`
+                : ''}
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+      <p className="text-xs font-black text-[var(--color-text-muted)]">
+        {hasFullManufacturingCost ? 'تفصيل تكلفة التحويل للمطابقة مع النظام السابق' : 'تكلفة التحويل الحالية (لا تشمل الخامات)'}
+      </p>
       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden divide-y divide-[var(--color-border)]">
         <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
           <span className="text-[var(--color-text-muted)] font-medium">تكلفة العمالة</span>
@@ -412,7 +486,7 @@ function ReportCostBreakdownPanel({
           <span className="font-black tabular-nums text-[var(--color-text)]">{formatCost(breakdown.supervisorIndirectTotal)} ج.م</span>
         </div>
         <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 bg-primary/5">
-          <span className="font-bold text-[var(--color-text)]">إجمالي التكلفة</span>
+          <span className="font-bold text-[var(--color-text)]">إجمالي تكلفة التحويل</span>
           <span className="font-black tabular-nums text-primary">{formatCost(breakdown.totalCost)} ج.م</span>
         </div>
         <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2">
@@ -420,7 +494,7 @@ function ReportCostBreakdownPanel({
           <span className="font-bold tabular-nums">{formatNumber(breakdown.quantityProduced)}</span>
         </div>
         <div className="px-3 py-2.5 flex flex-wrap items-center justify-between gap-2 border-t-2 border-primary/20">
-          <span className="font-bold text-[var(--color-text)]">تكلفة الوحدة</span>
+          <span className="font-bold text-[var(--color-text)]">تكلفة التحويل للوحدة</span>
           <span className="font-black tabular-nums text-violet-600 text-base">{formatCost(breakdown.costPerUnit)} ج.م</span>
         </div>
       </div>
@@ -1408,7 +1482,7 @@ export const Reports: React.FC = () => {
   const reportCosts = useMemo(() => {
     if (!canViewCosts) return new Map<string, number>();
     const hourlyRate = laborSettings?.hourlyRate ?? 0;
-    return buildReportsCosts(
+    const conversionCosts = buildReportsCosts(
       displayedReports,
       hourlyRate,
       costCenters,
@@ -1418,6 +1492,12 @@ export const Reports: React.FC = () => {
       costMonthlyWorkingDays,
       productCategoryById,
     );
+    displayedReports.forEach((report) => {
+      if (!report.id) return;
+      const fullUnitCost = Number(report.fullManufacturingUnitCostSnapshot || 0);
+      if (fullUnitCost > 0) conversionCosts.set(report.id, fullUnitCost);
+    });
+    return conversionCosts;
   }, [canViewCosts, displayedReports, laborSettings, costCenters, costCenterValues, costAllocations, supervisorHourlyRates, costMonthlyWorkingDays, productCategoryById]);
 
   const hourlyRateForCosts = laborSettings?.hourlyRate ?? 0;
@@ -3576,7 +3656,12 @@ export const Reports: React.FC = () => {
               className="text-sm font-bold text-primary hover:underline"
               title="تفاصيل التكلفة"
             >
-              {formatCost(uc)} ج.م
+              <span className="block">{formatCost(uc)} ج.م</span>
+              <small className={`block font-sans text-[9px] no-underline ${r.fullManufacturingUnitCostSnapshot ? (r.manufacturingCostStatus === 'actual' ? 'text-emerald-600' : 'text-amber-600') : 'text-[var(--color-text-muted)]'}`}>
+                {r.fullManufacturingUnitCostSnapshot
+                  ? (r.manufacturingCostStatus === 'actual' ? 'كاملة فعلية' : 'كاملة مبدئية')
+                  : 'تكلفة تحويل'}
+              </small>
             </button>
           );
         },
@@ -4400,6 +4485,7 @@ export const Reports: React.FC = () => {
               <ReportCostBreakdownPanel
                 breakdown={costDetailBreakdown}
                 noCostSettings={noCostSettingsForBreakdown}
+                report={costDetailReport}
               />
             </div>
           </div>
@@ -4594,6 +4680,7 @@ export const Reports: React.FC = () => {
                       <ReportCostBreakdownPanel
                         breakdown={drawerCostBreakdown}
                         noCostSettings={noCostSettingsForBreakdown}
+                        report={row}
                       />
                     ) : (
                       <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-sm text-[var(--color-text-muted)]">

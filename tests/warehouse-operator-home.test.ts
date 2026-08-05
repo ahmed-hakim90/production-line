@@ -9,6 +9,20 @@ assert.equal(
   '/inventory/warehouses/wh-sp',
 );
 assert.equal(
+  resolveWarehouseOperatorHomePath({
+    boundWarehouseId: 'wh-central-sp',
+    boundWarehouseRole: 'spare_parts_central',
+  }),
+  '/inventory/spare-parts-replenishment',
+);
+assert.equal(
+  resolveWarehouseOperatorHomePath({
+    boundWarehouseId: 'wh-center',
+    boundWarehouseRole: 'maintenance_center',
+  }),
+  '/repair/warehouses/wh-center',
+);
+assert.equal(
   resolveWarehouseOperatorHomePath({ isMaterialsWarehouseRole: true }),
   '/inventory/raw-materials/control',
 );
@@ -17,6 +31,10 @@ assert.equal(resolveWarehouseOperatorHomePath({}), '/inventory');
 assert.equal(
   resolveWarehouseRolePrimaryPath('wh-1', 'spare_parts_central'),
   '/inventory/spare-parts-replenishment',
+);
+assert.equal(
+  resolveWarehouseRolePrimaryPath('wh-1', 'maintenance_center'),
+  '/repair/parts-replenishment',
 );
 assert.equal(
   resolveWarehouseRolePrimaryPath('wh-1', 'final_product'),

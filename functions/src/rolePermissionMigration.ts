@@ -21,6 +21,15 @@ type RoleDoc = {
 
 /** Additive-only grants for built-in roles. Never used to revoke. */
 const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
+  accountant: [
+    'accounting.view',
+    'accounting.accounts.manage',
+    'accounting.journals.post',
+    'accounting.journals.reverse',
+    'accounting.periods.manage',
+    'accounting.settings.manage',
+    'accounting.inventory.view',
+  ],
   factory_manager: [
     'reports.create',
     'reports.edit',
@@ -65,6 +74,27 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
   inventory_viewer: [
     'sparePartsReplenishment.view',
   ],
+  repair_reception: [
+    'dashboard.view',
+    'repair.view',
+    'repair.dashboard.view',
+    'repair.jobs.create',
+    'repair.jobs.edit',
+    'repair.jobs.reception',
+    'repair.finance.view',
+    'repair.payments.view',
+    'repair.payments.collect',
+    'repair.discounts.request',
+    'repair.credit.request',
+    'customers.view',
+    'customers.create',
+    'print',
+  ],
+  repair_technician: [
+    'dashboard.view',
+    'repair.jobs.technician',
+    'repair.parts.request',
+  ],
 };
 
 const normalizeRoleName = (value: unknown): string =>
@@ -78,6 +108,8 @@ const NAME_TO_ROLE_KEY: Record<string, string> = {
   [normalizeRoleName('مشرف الصالة')]: 'hall_supervisor',
   [normalizeRoleName('مسؤول مخزن المستلزمات')]: 'materials_warehouse',
   [normalizeRoleName('عرض مخزون فقط')]: 'inventory_viewer',
+  [normalizeRoleName('استقبال صيانة')]: 'repair_reception',
+  [normalizeRoleName('فني صيانة')]: 'repair_technician',
 };
 
 const resolveRoleKey = (role: RoleDoc): string => {

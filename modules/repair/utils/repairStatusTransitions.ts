@@ -98,3 +98,36 @@ export function listAllowedRepairStatusTargets(input: {
       }
     });
 }
+
+/**
+ * Workshop (technician) may advance only through open statuses up to «جاهز للتسليم»,
+ * plus unrepairable. Customer approval, cancellation and delivery belong to reception.
+ */
+export function isWorkshopStatusWithinReadyCap(
+  statusId: string,
+  statuses: ResolvedRepairStatus[],
+): boolean {
+  const mapped = mapLegacyRepairStatus(statusId);
+  if (isDeliveredStatus(mapped)) return false;
+  if (isCancelledStatus(mapped) || mapped === 'waiting_approval') return false;
+  if (isUnrepairableStatus(mapped)) return true;
+
+  const enabled = (statuses || [])
+    .filter((s) => s.isEnabled !== false)
+    .slice()
+    .sort((a, b) => a.order - b.order);
+  const readyIndex = enabled.findIndex((s) => s.id === 'ready');
+  const statusIndex = enabled.findIndex((s) => s.id === mapped);
+  if (statusIndex < 0) return false;
+  if (readyIndex < 0) return !Boolean(enabled[statusIndex]?.isTerminal);
+  return statusIndex <= readyIndex;
+}
+
+export function listAllowedWorkshopStatusTargets(input: {
+  fromStatus: string;
+  statuses: ResolvedRepairStatus[];
+}): string[] {
+  return listAllowedRepairStatusTargets(input).filter((id) =>
+    isWorkshopStatusWithinReadyCap(id, input.statuses),
+  );
+}

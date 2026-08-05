@@ -2,17 +2,21 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   limit,
   orderBy,
   query,
   runTransaction,
+  setDoc,
   where,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { db, isConfigured, mutateRepairTreasuryCallable } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
 import {
   REPAIR_TREASURY_ENTRIES_COLLECTION,
+  REPAIR_TREASURY_MONTH_CLOSES_COLLECTION,
   REPAIR_TREASURY_SESSIONS_COLLECTION,
 } from '../collections';
 import type {
@@ -20,6 +24,8 @@ import type {
   RepairTreasuryBranchMonthlySummary,
   RepairTreasuryEntry,
   RepairTreasuryEntryType,
+  RepairTreasuryMonthClose,
+  RepairTreasuryMonthCloseSnapshot,
   RepairTreasuryMonthlyReportData,
   RepairTreasurySession,
   RepairTreasurySessionDetailsRow,
@@ -27,9 +33,35 @@ import type {
 } from '../types';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { resolveRepairSettings } from '../config/repairSettings';
+import {
+  assertCanCloseRepairTreasuryMonth,
+  assertCanReopenRepairTreasuryMonth,
+  assertMonthWritableOrThrow,
+  buildRepairTreasuryMonthCloseDocId,
+  isRepairTreasuryMonthClosedStatus,
+  monthKeyFromIso,
+  normalizeTreasuryMonth,
+} from '../lib/repairTreasuryMonthlyClose';
+import { toRepairTreasuryErrorMessage } from '../lib/repairTreasuryErrors';
 
 const nowIso = () => new Date().toISOString();
 const utcDay = (isoLike: string) => String(isoLike || '').slice(0, 10);
+const emptyMonthlyReport = (
+  month: string,
+  sessionStatus: RepairTreasurySessionStatusFilter = 'all',
+  branchFilter = '',
+): RepairTreasuryMonthlyReportData => ({
+  month,
+  sessionStatus,
+  branchFilter,
+  visibleBranchIds: [],
+  summaries: [],
+  dailyBreakdown: [],
+  sessions: [],
+  monthCloseByBranchId: {},
+  paymentMethodSummaries: [],
+  reconciliation: { entriesCount: 0, missingPaymentMethod: 0, missingCostCenter: 0, missingJournalReference: 0 },
+});
 const computeSessionBalance = (entries: RepairTreasuryEntry[]): number => entries.reduce((sum, entry) => {
   const amount = Number(entry.amount || 0);
   if (entry.entryType === 'OPENING') return sum + amount;
@@ -37,23 +69,12 @@ const computeSessionBalance = (entries: RepairTreasuryEntry[]): number => entrie
   if (entry.entryType === 'EXPENSE' || entry.entryType === 'TRANSFER_OUT') return sum - amount;
   return sum;
 }, 0);
-const normalizeTreasuryError = (error: any, fallbackMessage: string): Error => {
-  const code = String(error?.code || '').toLowerCase();
-  const message = String(error?.message || '').trim();
-  if (code.includes('permission-denied')) {
-    return new Error('ليس لديك صلاحية للوصول إلى خزينة الصيانة.');
-  }
-  if (code.includes('failed-precondition')) {
-    return new Error(message || 'لا يمكن تنفيذ العملية في الحالة الحالية.');
-  }
-  if (message) {
-    return new Error(message);
-  }
-  return new Error(fallbackMessage);
-};
+const normalizeTreasuryError = (error: any, fallbackMessage: string): Error => (
+  new Error(toRepairTreasuryErrorMessage(error, fallbackMessage))
+);
 
 const getMonthRange = (month: string): { startIso: string; endIso: string } => {
-  const safeMonth = /^\d{4}-\d{2}$/.test(month) ? month : new Date().toISOString().slice(0, 7);
+  const safeMonth = normalizeTreasuryMonth(month);
   const [y, m] = safeMonth.split('-').map(Number);
   const start = new Date(Date.UTC(y, m - 1, 1, 0, 0, 0, 0));
   const end = new Date(Date.UTC(y, m, 0, 23, 59, 59, 999));
@@ -73,30 +94,14 @@ export const repairTreasuryService = {
     branchNameMap?: Record<string, string>;
   }): Promise<RepairTreasuryMonthlyReportData> {
     if (!isConfigured) {
-      return {
-        month: input.month,
-        sessionStatus: input.sessionStatus || 'all',
-        branchFilter: input.branchId || '',
-        visibleBranchIds: [],
-        summaries: [],
-        dailyBreakdown: [],
-        sessions: [],
-      };
+      return emptyMonthlyReport(input.month, input.sessionStatus || 'all', input.branchId || '');
     }
     try {
       const visibleBranchIds = Array.from(
         new Set((input.allowedBranchIds || []).map((id) => String(id || '').trim()).filter(Boolean)),
       );
       if (!visibleBranchIds.length) {
-        return {
-          month: input.month,
-          sessionStatus: input.sessionStatus || 'all',
-          branchFilter: '',
-          visibleBranchIds: [],
-          summaries: [],
-          dailyBreakdown: [],
-          sessions: [],
-        };
+        return emptyMonthlyReport(input.month, input.sessionStatus || 'all', '');
       }
       const includeAllBranches = Boolean(input.includeAllBranches);
       const requestedBranchId = String(input.branchId || '').trim();
@@ -106,10 +111,16 @@ export const repairTreasuryService = {
       const targetBranchIds = includeAllBranches
         ? visibleBranchIds
         : (requestedBranchId ? [requestedBranchId] : [visibleBranchIds[0]]);
-      const { startIso, endIso } = getMonthRange(input.month);
+      const month = normalizeTreasuryMonth(input.month);
+      const { startIso, endIso } = getMonthRange(month);
       const sessionStatus = input.sessionStatus || 'all';
       const groupedSessions = await Promise.all(targetBranchIds.map((branchId) => this.listSessions(branchId)));
       const groupedEntries = await Promise.all(targetBranchIds.map((branchId) => this.listEntries(branchId)));
+      const monthCloses = await this.listMonthCloses(targetBranchIds, month);
+      const monthCloseByBranchId: Record<string, RepairTreasuryMonthClose | null> = {};
+      targetBranchIds.forEach((branchId) => {
+        monthCloseByBranchId[branchId] = monthCloses.find((row) => row.branchId === branchId) || null;
+      });
       const allSessions = groupedSessions.flat().filter((session) => {
         const openedAt = String(session.openedAt || '');
         if (!openedAt || openedAt < startIso || openedAt > endIso) return false;
@@ -213,17 +224,217 @@ export const repairTreasuryService = {
         });
       });
 
+      const visibleSessionIds = new Set(allSessions.map((session) => String(session.id || '')).filter(Boolean));
+      const visibleEntries = groupedEntries.flat().filter((entry) => visibleSessionIds.has(String(entry.sessionId || '')));
+      const paymentGroups = new Map<string, RepairTreasuryMonthlyReportData['paymentMethodSummaries'][number]>();
+      visibleEntries.forEach((entry) => {
+        if (!['INCOME', 'EXPENSE'].includes(entry.entryType)) return;
+        const method = entry.paymentMethod || 'unspecified';
+        const costCenterId = String(entry.costCenterId || '');
+        const key = `${entry.branchId}::${costCenterId}::${method}`;
+        const current = paymentGroups.get(key) || {
+          branchId: entry.branchId,
+          branchName: String(input.branchNameMap?.[entry.branchId] || entry.branchId),
+          costCenterId,
+          paymentMethod: method,
+          income: 0,
+          expense: 0,
+          net: 0,
+          entriesCount: 0,
+        };
+        const amount = Number(entry.amount || 0);
+        if (entry.entryType === 'INCOME') current.income += amount;
+        if (entry.entryType === 'EXPENSE') current.expense += amount;
+        current.net = current.income - current.expense;
+        current.entriesCount += 1;
+        paymentGroups.set(key, current);
+      });
+      const businessEntries = visibleEntries.filter((entry) => ['INCOME', 'EXPENSE'].includes(entry.entryType));
+
       return {
-        month: input.month,
+        month,
         sessionStatus,
         branchFilter: includeAllBranches ? 'ALL' : (targetBranchIds[0] || ''),
         visibleBranchIds: targetBranchIds,
         summaries: Array.from(summaryByBranch.values()).sort((a, b) => a.branchName.localeCompare(b.branchName, 'ar')),
         dailyBreakdown: Array.from(dailyByBranchDay.values()).sort((a, b) => `${a.day}${a.branchName}`.localeCompare(`${b.day}${b.branchName}`, 'ar')),
         sessions: sessionRows.sort((a, b) => String(b.openedAt || '').localeCompare(String(a.openedAt || ''))),
+        monthCloseByBranchId,
+        paymentMethodSummaries: Array.from(paymentGroups.values()).sort((a, b) => `${a.branchName}${a.paymentMethod}`.localeCompare(`${b.branchName}${b.paymentMethod}`, 'ar')),
+        reconciliation: {
+          entriesCount: businessEntries.length,
+          missingPaymentMethod: businessEntries.filter((entry) => !entry.paymentMethod).length,
+          missingCostCenter: businessEntries.filter((entry) => !entry.costCenterId).length,
+          missingJournalReference: businessEntries.filter((entry) => !entry.journalEntryId).length,
+        },
       };
     } catch (error: any) {
       throw normalizeTreasuryError(error, 'تعذر تحميل تقرير الخزائن الشهري.');
+    }
+  },
+
+  async getMonthClose(branchId: string, month: string): Promise<RepairTreasuryMonthClose | null> {
+    if (!isConfigured) return null;
+    try {
+      const tenantId = getCurrentTenantId();
+      const safeBranchId = String(branchId || '').trim();
+      if (!safeBranchId) return null;
+      const docId = buildRepairTreasuryMonthCloseDocId(tenantId, safeBranchId, month);
+      const snap = await getDoc(doc(db, REPAIR_TREASURY_MONTH_CLOSES_COLLECTION, docId));
+      if (!snap.exists()) return null;
+      return { id: snap.id, ...snap.data() } as RepairTreasuryMonthClose;
+    } catch (error: any) {
+      // Missing collection rules (or get of absent doc denied) must not break the monthly report /
+      // daily treasury — treat as "no close record" (month open).
+      const code = String(error?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return null;
+      throw normalizeTreasuryError(error, 'تعذر تحميل حالة إقفال الشهر.');
+    }
+  },
+
+  async isMonthClosed(branchId: string, month: string): Promise<boolean> {
+    const row = await this.getMonthClose(branchId, month);
+    return isRepairTreasuryMonthClosedStatus(row?.status);
+  },
+
+  async listMonthCloses(branchIds: string[], month?: string): Promise<RepairTreasuryMonthClose[]> {
+    if (!isConfigured) return [];
+    try {
+      const ids = Array.from(new Set((branchIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+      if (!ids.length) return [];
+      const safeMonth = normalizeTreasuryMonth(month || '');
+      const rows = await Promise.all(ids.map((branchId) => this.getMonthClose(branchId, safeMonth)));
+      return rows.filter(Boolean) as RepairTreasuryMonthClose[];
+    } catch (error: any) {
+      const code = String(error?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return [];
+      throw normalizeTreasuryError(error, 'تعذر تحميل سجلات الإقفال الشهري.');
+    }
+  },
+
+  async assertMonthWritable(branchId: string, atIso?: string): Promise<void> {
+    const month = monthKeyFromIso(atIso || nowIso());
+    const closed = await this.isMonthClosed(branchId, month);
+    assertMonthWritableOrThrow({ monthClosed: closed, month });
+  },
+
+  async closeMonth(input: {
+    branchId: string;
+    month: string;
+    closedBy: string;
+    closedByName: string;
+    note?: string;
+    snapshot?: RepairTreasuryMonthCloseSnapshot;
+  }): Promise<RepairTreasuryMonthClose> {
+    if (!isConfigured) throw new Error('النظام غير مُعد.');
+    try {
+      const tenantId = getCurrentTenantId();
+      const branchId = String(input.branchId || '').trim();
+      const month = normalizeTreasuryMonth(input.month);
+      if (!branchId) throw new Error('الفرع مطلوب لإقفال الشهر.');
+
+      const existing = await this.getMonthClose(branchId, month);
+      const { startIso, endIso } = getMonthRange(month);
+      const sessions = await this.listSessions(branchId);
+      const monthSessions = sessions.filter((session) => {
+        const openedAt = String(session.openedAt || '');
+        return openedAt >= startIso && openedAt <= endIso;
+      });
+      const openCount = monthSessions.filter((session) => session.status === 'open').length;
+      assertCanCloseRepairTreasuryMonth({
+        alreadyClosed: isRepairTreasuryMonthClosedStatus(existing?.status),
+        openSessionsCount: openCount,
+      });
+
+      let snapshot = input.snapshot;
+      if (!snapshot) {
+        const report = await this.getMonthlyReport({
+          month,
+          allowedBranchIds: [branchId],
+          branchId,
+          includeAllBranches: false,
+        });
+        const summary = report.summaries.find((row) => row.branchId === branchId);
+        snapshot = {
+          sessionsCount: Number(summary?.sessionsCount || 0),
+          totalOpening: Number(summary?.totalOpening || 0),
+          totalIncome: Number(summary?.totalIncome || 0),
+          totalExpense: Number(summary?.totalExpense || 0),
+          netMovement: Number(summary?.netMovement || 0),
+          totalClosing: Number(summary?.totalClosing || 0),
+        };
+      }
+
+      const at = nowIso();
+      const docId = buildRepairTreasuryMonthCloseDocId(tenantId, branchId, month);
+      const payload: RepairTreasuryMonthClose = {
+        tenantId,
+        branchId,
+        month,
+        status: 'closed',
+        closedAt: at,
+        closedBy: input.closedBy,
+        closedByName: input.closedByName,
+        closingNote: String(input.note || '').trim(),
+        snapshot,
+        updatedAt: at,
+        ...(existing?.reopenedAt ? {
+          reopenedAt: existing.reopenedAt,
+          reopenedBy: existing.reopenedBy,
+          reopenedByName: existing.reopenedByName,
+          reopenReason: existing.reopenReason,
+        } : {}),
+      };
+      await setDoc(doc(db, REPAIR_TREASURY_MONTH_CLOSES_COLLECTION, docId), payload, { merge: true });
+      return { id: docId, ...payload };
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر إقفال الشهر.');
+    }
+  },
+
+  async reopenMonth(input: {
+    branchId: string;
+    month: string;
+    reopenedBy: string;
+    reopenedByName: string;
+    reopenReason: string;
+  }): Promise<RepairTreasuryMonthClose> {
+    if (!isConfigured) throw new Error('النظام غير مُعد.');
+    try {
+      const tenantId = getCurrentTenantId();
+      const branchId = String(input.branchId || '').trim();
+      const month = normalizeTreasuryMonth(input.month);
+      const reason = String(input.reopenReason || '').trim();
+      if (!branchId) throw new Error('الفرع مطلوب لإعادة فتح الشهر.');
+
+      const existing = await this.getMonthClose(branchId, month);
+      assertCanReopenRepairTreasuryMonth({
+        currentlyClosed: isRepairTreasuryMonthClosedStatus(existing?.status),
+        reopenReason: reason,
+      });
+
+      const at = nowIso();
+      const docId = buildRepairTreasuryMonthCloseDocId(tenantId, branchId, month);
+      const payload: RepairTreasuryMonthClose = {
+        tenantId,
+        branchId,
+        month,
+        status: 'open',
+        closedAt: existing?.closedAt,
+        closedBy: existing?.closedBy,
+        closedByName: existing?.closedByName,
+        closingNote: existing?.closingNote,
+        snapshot: existing?.snapshot,
+        reopenedAt: at,
+        reopenedBy: input.reopenedBy,
+        reopenedByName: input.reopenedByName,
+        reopenReason: reason,
+        updatedAt: at,
+      };
+      await setDoc(doc(db, REPAIR_TREASURY_MONTH_CLOSES_COLLECTION, docId), payload, { merge: true });
+      return { id: docId, ...payload };
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر إعادة فتح الشهر.');
     }
   },
 
@@ -232,7 +443,7 @@ export const repairTreasuryService = {
     try {
       const constraints = [orderBy('openedAt', 'desc')] as Parameters<typeof query>[1][];
       if (branchId) constraints.unshift(where('branchId', '==', branchId));
-      const q = query(collection(db, REPAIR_TREASURY_SESSIONS_COLLECTION), ...constraints);
+      const q = tenantQuery(db, REPAIR_TREASURY_SESSIONS_COLLECTION, ...constraints);
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairTreasurySession));
     } catch (error: any) {
@@ -240,12 +451,24 @@ export const repairTreasuryService = {
     }
   },
 
+  /**
+   * List sessions for many branches with per-branch queries.
+   * Prefer this over `listSessions()` without branchId: security rules require
+   * branch scope for non–branch-admins, and missing composite indexes fail closed.
+   */
+  async listSessionsForBranches(branchIds: string[]): Promise<RepairTreasurySession[]> {
+    const ids = Array.from(new Set((branchIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    if (!ids.length) return [];
+    const grouped = await Promise.all(ids.map((branchId) => this.listSessions(branchId)));
+    return grouped.flat();
+  },
+
   async listEntries(branchId?: string): Promise<RepairTreasuryEntry[]> {
     if (!isConfigured) return [];
     try {
       const constraints = [orderBy('createdAt', 'desc')] as Parameters<typeof query>[1][];
       if (branchId) constraints.unshift(where('branchId', '==', branchId));
-      const q = query(collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION), ...constraints);
+      const q = tenantQuery(db, REPAIR_TREASURY_ENTRIES_COLLECTION, ...constraints);
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairTreasuryEntry));
     } catch (error: any) {
@@ -256,8 +479,9 @@ export const repairTreasuryService = {
   async getOpenSession(branchId: string): Promise<RepairTreasurySession | null> {
     if (!isConfigured || !branchId) return null;
     try {
-      const q = query(
-        collection(db, REPAIR_TREASURY_SESSIONS_COLLECTION),
+      const q = tenantQuery(
+        db,
+        REPAIR_TREASURY_SESSIONS_COLLECTION,
         where('branchId', '==', branchId),
         where('status', '==', 'open'),
         orderBy('openedAt', 'desc'),
@@ -303,8 +527,9 @@ export const repairTreasuryService = {
   async hasIncomeEntryByReference(sessionId: string, referenceId: string): Promise<boolean> {
     if (!isConfigured || !sessionId || !referenceId) return false;
     try {
-      const q = query(
-        collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION),
+      const q = tenantQuery(
+        db,
+        REPAIR_TREASURY_ENTRIES_COLLECTION,
         where('sessionId', '==', sessionId),
         where('entryType', '==', 'INCOME'),
         where('referenceId', '==', referenceId),
@@ -322,7 +547,7 @@ export const repairTreasuryService = {
     try {
       const constraints = [where('referenceId', '==', referenceId)] as Parameters<typeof query>[1][];
       if (entryType) constraints.push(where('entryType', '==', entryType));
-      const q = query(collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION), ...constraints, limit(1));
+      const q = tenantQuery(db, REPAIR_TREASURY_ENTRIES_COLLECTION, ...constraints, limit(1));
       const snap = await getDocs(q);
       return !snap.empty;
     } catch (error: any) {
@@ -335,7 +560,7 @@ export const repairTreasuryService = {
     try {
       const constraints = [where('referenceId', '==', referenceId)] as Parameters<typeof query>[1][];
       if (entryType) constraints.push(where('entryType', '==', entryType));
-      const q = query(collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION), ...constraints, orderBy('createdAt', 'desc'));
+      const q = tenantQuery(db, REPAIR_TREASURY_ENTRIES_COLLECTION, ...constraints, orderBy('createdAt', 'desc'));
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairTreasuryEntry));
     } catch (error: any) {
@@ -352,6 +577,7 @@ export const repairTreasuryService = {
   }): Promise<string | null> {
     if (!isConfigured) return null;
     try {
+      await this.assertMonthWritable(input.branchId, nowIso());
       const tenantId = getCurrentTenantId();
       const existing = await this.getOpenSession(input.branchId);
       if (existing?.id) throw new Error('يوجد خزينة مفتوحة بالفعل لهذا الفرع.');
@@ -388,32 +614,45 @@ export const repairTreasuryService = {
     amount: number;
     note?: string;
     referenceId?: string;
+    paymentMethod?: 'cash' | 'card' | 'bank_transfer';
+    costCenterId?: string;
+    expenseType?: string;
     createdBy: string;
     createdByName?: string;
   }): Promise<string | null> {
     if (!isConfigured) return null;
     try {
-      const tenantId = getCurrentTenantId();
+      await this.assertMonthWritable(input.branchId, nowIso());
+      if (!String(input.costCenterId || '').trim()) throw new Error('مركز التكلفة مطلوب للحركة اليدوية.');
+      if (!['cash', 'card', 'bank_transfer'].includes(String(input.paymentMethod || ''))) {
+        throw new Error('وسيلة الدفع مطلوبة للحركة اليدوية.');
+      }
+      if (String(input.note || '').trim().length < 3) throw new Error('سبب الحركة مطلوب بوضوح.');
+      if (input.entryType === 'EXPENSE' && !String(input.expenseType || '').trim()) {
+        throw new Error('اختر نوع المصروف قبل التسجيل.');
+      }
       const openSession = await this.ensureOpenSession(input.branchId);
+      if (openSession.openedAt) {
+        await this.assertMonthWritable(input.branchId, openSession.openedAt);
+      }
       if (input.entryType === 'INCOME' && input.referenceId) {
         const alreadyPosted = await this.hasIncomeEntryByReference(openSession.id || '', input.referenceId);
         if (alreadyPosted) {
           throw new Error('تم تسجيل تحصيل خزينة مسبقًا لنفس المرجع.');
         }
       }
-      const ref = await addDoc(collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION), {
-        tenantId,
+      const requestId = `manual_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
+      const result = await mutateRepairTreasuryCallable({
+        operation: 'post_manual_entry',
+        requestId,
         branchId: input.branchId,
-        sessionId: openSession.id,
         entryType: input.entryType,
         amount: Math.abs(Number(input.amount || 0)),
-        note: input.note || '',
-        referenceId: input.referenceId || '',
-        createdBy: input.createdBy,
-        createdByName: input.createdByName || '',
-        createdAt: nowIso(),
-      } as RepairTreasuryEntry);
-      return ref.id;
+        note: String(input.note || '').trim(),
+        paymentMethod: input.paymentMethod as 'cash' | 'card' | 'bank_transfer',
+        expenseType: input.expenseType,
+      });
+      return String(result.entryId || requestId);
     } catch (error: any) {
       throw normalizeTreasuryError(error, 'تعذر تسجيل حركة الخزينة.');
     }
@@ -436,8 +675,11 @@ export const repairTreasuryService = {
       const normalizedDifferenceReason = String(input.differenceReason || '').trim();
       const openSession = await this.getOpenSession(input.branchId);
       if (!openSession?.id) throw new Error('لا توجد خزينة مفتوحة للإقفال.');
-      const sessionEntriesQuery = query(
-        collection(db, REPAIR_TREASURY_ENTRIES_COLLECTION),
+      await this.assertMonthWritable(input.branchId, openSession.openedAt || nowIso());
+      const sessionEntriesQuery = tenantQuery(
+        db,
+        REPAIR_TREASURY_ENTRIES_COLLECTION,
+        where('branchId', '==', input.branchId),
         where('sessionId', '==', openSession.id),
       );
       const sessionEntriesSnap = await getDocs(sessionEntriesQuery);

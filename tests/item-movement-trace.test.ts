@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  filterConsumableCatalog,
   isBomEligibleMaterialType,
   movementFateLabel,
   movementPathLabel,
@@ -56,5 +57,24 @@ assert.equal(
   }),
   'مرتجع من قسم',
 );
+
+{
+  const catalog = filterConsumableCatalog(
+    [
+      { id: '2', name: 'منظف', code: 'CLN-2', unit: 'liter' },
+      { id: '1', name: 'جلانس', code: 'GLS-1', unit: 'piece' },
+    ],
+    '',
+  );
+  assert.deepEqual(catalog.map((r) => r.id), ['1', '2']);
+
+  const byName = filterConsumableCatalog(catalog, 'جلانس');
+  assert.equal(byName.length, 1);
+  assert.equal(byName[0]?.code, 'GLS-1');
+
+  const byUnitAr = filterConsumableCatalog(catalog, 'قطعة', (u) => (u === 'piece' ? 'قطعة' : u));
+  assert.equal(byUnitAr.length, 1);
+  assert.equal(byUnitAr[0]?.id, '1');
+}
 
 console.log('item-movement-trace.test.ts: ok');

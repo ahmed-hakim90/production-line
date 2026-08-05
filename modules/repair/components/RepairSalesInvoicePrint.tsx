@@ -27,6 +27,7 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
     const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
     const cancelled = String(invoice.status || '').toLowerCase() === 'cancelled';
+    const statusLabel = ({ draft: 'مسودة', pending_discount_approval: 'بانتظار اعتماد الخصم', ready_to_post: 'جاهزة للترحيل', posted: 'مرحّلة', cancelled: 'ملغاة/معكوسة' } as Record<string, string>)[String(invoice.status || '')] || 'مرحّلة قديمة';
     const createdAt = invoice.createdAt ? new Date(invoice.createdAt).toLocaleString('ar-EG') : '—';
     const printedAt = new Date().toLocaleString('ar-EG');
     const lines = Array.isArray(invoice.lines) ? invoice.lines : [];
@@ -137,7 +138,7 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
           >
             {[
               { label: 'التاريخ', value: createdAt },
-              { label: 'الحالة', value: cancelled ? 'ملغاة' : 'نشطة' },
+              { label: 'الحالة', value: statusLabel },
               { label: 'عدد البنود', value: String(lines.length) },
               { label: 'تاريخ الطباعة', value: printedAt },
             ].map((cell, idx, arr) => (
@@ -228,8 +229,11 @@ export const RepairSalesInvoicePrint = React.forwardRef<HTMLDivElement, RepairSa
             fontWeight: 900,
           }}
         >
-          <span>الإجمالي النهائي</span>
-          <span style={{ fontSize: isThermal ? '11pt' : '14pt' }}>{fmt(Number(invoice.total || 0))} ج.م</span>
+          <span>
+            الإجمالي {fmt(Number(invoice.grossAmount ?? invoice.total ?? 0))} ج.م
+            {Number(invoice.discountAmount || 0) > 0 ? ` — الخصم ${fmt(Number(invoice.discountAmount || 0))} ج.م` : ''}
+          </span>
+          <span style={{ fontSize: isThermal ? '11pt' : '14pt' }}>الصافي {fmt(Number(invoice.total || 0))} ج.م</span>
         </div>
 
         <div

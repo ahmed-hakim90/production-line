@@ -544,7 +544,26 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
             message: syncErr instanceof Error ? syncErr.message : String(syncErr),
         });
     }
-    return { id: requestId };
+    // Mark job demand links ready and attempt auto-issue to repair jobs.
+    let fulfillSummary = { marked: 0, issued: 0, failed: 0 };
+    try {
+        const { fulfillJobDemandsAfterReplenishmentReceive } = await import('./repairJobSparePartRequest.js');
+        const receivedLines = (await ref.get()).data()?.lines || data.lines;
+        fulfillSummary = await fulfillJobDemandsAfterReplenishmentReceive({
+            request,
+            tenantId: actor.tenantId,
+            requestId,
+            lines: receivedLines || [],
+        });
+    }
+    catch (fulfillErr) {
+        console.error('spare_parts_replenishment.receive job fulfill failed', {
+            requestId,
+            tenantId: actor.tenantId,
+            message: fulfillErr instanceof Error ? fulfillErr.message : String(fulfillErr),
+        });
+    }
+    return { id: requestId, fulfillSummary };
 };
 async function syncReceivedQtyToRepairBranchStock(input) {
     const warehouseId = String(input.toWarehouseId || '').trim();

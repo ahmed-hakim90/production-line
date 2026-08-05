@@ -1,10 +1,9 @@
-
 export enum ProductionLineStatus {
-  ACTIVE = 'active',
-  MAINTENANCE = 'maintenance',
-  IDLE = 'idle',
-  WARNING = 'warning',
-  INJECTION = 'injection',
+  ACTIVE = "active",
+  MAINTENANCE = "maintenance",
+  IDLE = "idle",
+  WARNING = "warning",
+  INJECTION = "injection",
 }
 
 // â”€â”€â”€ UI Types (consumed by components â€” do NOT change) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -33,7 +32,7 @@ export interface Product {
   /** FK to product_categories when set. */
   categoryId?: string | null;
   stockLevel: number;
-  stockStatus: 'available' | 'low' | 'out';
+  stockStatus: "available" | "low" | "out";
   openingStock: number;
   totalProduction: number;
   avgDailyProduction: number;
@@ -43,13 +42,13 @@ export interface Product {
   assemblyMode?: ProductAssemblyMode;
 }
 
-export type EmploymentType = 'full_time' | 'part_time' | 'contract' | 'daily';
+export type EmploymentType = "full_time" | "part_time" | "contract" | "daily";
 
 export const EMPLOYMENT_TYPE_LABELS: Record<EmploymentType, string> = {
-  full_time: 'دوام كامل',
-  part_time: 'دوام جزئي',
-  contract: 'عقد',
-  daily: 'يومي',
+  full_time: "دوام كامل",
+  part_time: "دوام جزئي",
+  contract: "عقد",
+  daily: "يومي",
 };
 
 export interface Employee {
@@ -69,7 +68,7 @@ export interface Employee {
   isActive: boolean;
   code?: string;
   acNo?: string;
-  shiftType?: 'shift1' | 'shift2' | 'shift3' | 'flexible';
+  shiftType?: "shift1" | "shift2" | "shift3" | "flexible";
   workDays?: number[];
 }
 
@@ -148,7 +147,7 @@ export interface FirestoreEmployee {
   email?: string;
   code?: string;
   acNo?: string;
-  shiftType?: 'shift1' | 'shift2' | 'shift3' | 'flexible';
+  shiftType?: "shift1" | "shift2" | "shift3" | "flexible";
   workDays?: number[];
   createdAt?: any;
 }
@@ -156,47 +155,48 @@ export interface FirestoreEmployee {
 // â”€â”€â”€ Activity Log â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type ActivityAction =
-  | 'LOGIN'
-  | 'LOGOUT'
-  | 'CREATE_REPORT'
-  | 'UPDATE_REPORT'
-  | 'DELETE_REPORT'
-  | 'CREATE_LEAVE_REQUEST'
-  | 'APPROVE_LEAVE'
-  | 'REJECT_LEAVE'
-  | 'CREATE_LOAN_REQUEST'
-  | 'APPROVE_LOAN'
-  | 'REJECT_LOAN'
-  | 'PROCESS_INSTALLMENT'
-  | 'CREATE_USER'
-  | 'UPDATE_USER_ROLE'
-  | 'TOGGLE_USER_ACTIVE'
-  | 'APPROVE_USER'
-  | 'REJECT_USER'
-  | 'SALARY_CHANGE'
-  | 'QUALITY_CREATE_INSPECTION'
-  | 'QUALITY_UPDATE_INSPECTION'
-  | 'QUALITY_CREATE_DEFECT'
-  | 'QUALITY_CREATE_REWORK'
-  | 'QUALITY_UPDATE_REWORK'
-  | 'QUALITY_CREATE_CAPA'
-  | 'QUALITY_UPDATE_CAPA'
-  | 'QUALITY_CREATE_WORKER'
-  | 'QUALITY_UPDATE_WORKER'
-  | 'QUALITY_DELETE_WORKER'
-  | 'QUALITY_SET_POLICIES'
-  | 'QUALITY_UPDATE_REASON'
-  | 'QUALITY_DELETE_REASON'
-  | 'QUALITY_UPSERT_TEMPLATE'
-  | 'QUALITY_REMOVE_TEMPLATE'
-  | 'QUALITY_UPSERT_SAMPLING_PLAN'
-  | 'QUALITY_REMOVE_SAMPLING_PLAN'
-  | 'QUALITY_UPDATE_REWORK_POLICIES'
-  | 'QUALITY_UPDATE_PRINT_TEMPLATES'
-  | 'QUALITY_EXPORT_DOCUMENT'
-  | 'CUSTOMER_CREATE'
-  | 'CUSTOMER_UPDATE'
-  | 'ROUTING_SOFT_DELETE_PLAN';
+  | "LOGIN"
+  | "LOGOUT"
+  | "CREATE_REPORT"
+  | "UPDATE_REPORT"
+  | "DELETE_REPORT"
+  | "CREATE_LEAVE_REQUEST"
+  | "APPROVE_LEAVE"
+  | "REJECT_LEAVE"
+  | "CREATE_LOAN_REQUEST"
+  | "APPROVE_LOAN"
+  | "REJECT_LOAN"
+  | "PROCESS_INSTALLMENT"
+  | "CREATE_USER"
+  | "UPDATE_USER_ROLE"
+  | "TOGGLE_USER_ACTIVE"
+  | "APPROVE_USER"
+  | "REJECT_USER"
+  | "SALARY_CHANGE"
+  | "QUALITY_CREATE_INSPECTION"
+  | "QUALITY_UPDATE_INSPECTION"
+  | "QUALITY_CREATE_DEFECT"
+  | "QUALITY_CREATE_REWORK"
+  | "QUALITY_UPDATE_REWORK"
+  | "QUALITY_CREATE_CAPA"
+  | "QUALITY_UPDATE_CAPA"
+  | "QUALITY_CREATE_WORKER"
+  | "QUALITY_UPDATE_WORKER"
+  | "QUALITY_DELETE_WORKER"
+  | "QUALITY_SET_POLICIES"
+  | "QUALITY_UPDATE_REASON"
+  | "QUALITY_DELETE_REASON"
+  | "QUALITY_UPSERT_TEMPLATE"
+  | "QUALITY_REMOVE_TEMPLATE"
+  | "QUALITY_UPSERT_SAMPLING_PLAN"
+  | "QUALITY_REMOVE_SAMPLING_PLAN"
+  | "QUALITY_UPDATE_REWORK_POLICIES"
+  | "QUALITY_UPDATE_PRINT_TEMPLATES"
+  | "QUALITY_EXPORT_DOCUMENT"
+  | "CUSTOMER_CREATE"
+  | "CUSTOMER_UPDATE"
+  | "CUSTOMER_IMPORT"
+  | "ROUTING_SOFT_DELETE_PLAN";
 
 export interface ActivityLog {
   id?: string;
@@ -228,9 +228,9 @@ export interface PackagingReportLine {
 }
 
 /** Injection reports: morning (صباحي) or evening (مسائي) shift on the same line/day. */
-export type ProductionReportShift = 'morning' | 'evening';
-export type ProductionReportLifecycleStatus = 'open' | 'closed';
-export type ProductAssemblyMode = 'individual' | 'team';
+export type ProductionReportShift = "morning" | "evening";
+export type ProductionReportLifecycleStatus = "open" | "closed";
+export type ProductAssemblyMode = "individual" | "team";
 
 export interface ProductionShiftWorkerSnapshot {
   employeeId: string;
@@ -283,26 +283,64 @@ export interface ProductionReport {
   supervisorIndirectSnapshot?: number;
   /** Per cost-center indirect share (line_percentage + by_qty); excludes supervisor */
   indirectByCenterSnapshot?: Record<string, number>;
+  /** Compatibility snapshot: the pre-full-cost engine's labor + industrial overhead. */
+  legacyConversionCostSnapshot?: number;
+  /** Full manufacturing costing V1. Kept separate from unitCostSnapshot during migration. */
+  manufacturingCostVersion?: string;
+  manufacturingCostRevision?: number;
+  manufacturingCostStatus?: "provisional" | "actual";
+  manufacturingCostPostingState?: "pending" | "calculated" | "failed";
+  manufacturingCostPostingError?: string;
+  manufacturingCostCalculatedAt?: string;
+  materialCostSnapshot?: number;
+  packagingCostSnapshot?: number;
+  directLaborCostSnapshot?: number;
+  factoryOverheadCostSnapshot?: number;
+  depreciationCostSnapshot?: number;
+  fullManufacturingCostSnapshot?: number;
+  fullManufacturingUnitCostSnapshot?: number;
+  manufacturingCostSourceQualitySnapshot?: {
+    actualLines: number;
+    estimatedLines: number;
+    scheduledLines: number;
+    missingAmountLines: number;
+  };
+  manufacturingCostSourcesSnapshot?: Array<{
+    sourceKey: string;
+    sourceType: string;
+    sourceId?: string;
+    category: "material" | "packaging" | "direct_labor" | "factory_overhead" | "depreciation";
+    label: string;
+    amount: number;
+    status: "actual" | "estimated" | "scheduled";
+    quantity?: number;
+    unitCost?: number;
+    costCenterId?: string;
+  }>;
   notes?: string;
   workOrderId?: string;
   /** اختياري: ربط التقرير بدورة توريد (باتش) لاحتساب الهالك والتتبع */
   supplyCycleId?: string;
-  reportType?: 'finished_product' | 'component_injection' | 'packaging' | 'component_waste';
+  reportType?:
+    | "finished_product"
+    | "component_injection"
+    | "packaging"
+    | "component_waste";
   /** Employee-dashboard shift lifecycle; missing means legacy completed report. */
   lifecycleStatus?: ProductionReportLifecycleStatus;
   shiftStartedAt?: string;
   shiftClosedAt?: string;
   shiftStartedByUid?: string;
   shiftClosedByUid?: string;
-  shiftStartContext?: 'plan' | 'general';
+  shiftStartContext?: "plan" | "general";
   /** Snapshot captured at shift start from the line worker attendance step. */
   shiftWorkers?: ProductionShiftWorkerSnapshot[];
   productionPlanId?: string;
-  productionPlanLinkMode?: 'manual' | 'auto';
+  productionPlanLinkMode?: "manual" | "auto";
   assemblyModeSnapshot?: ProductAssemblyMode;
   workerTargetsApplied?: boolean;
-  workerTargetSource?: 'line_product' | 'plan_daily' | 'none';
-  laborAssignmentSource?: 'line_worker_assignments' | 'manual' | 'none';
+  workerTargetSource?: "line_product" | "plan_daily" | "none";
+  laborAssignmentSource?: "line_worker_assignments" | "manual" | "none";
   /** When set for packaging reports, quantities come from lines; productId/quantityProduced are derived for legacy fields. */
   packagingLines?: PackagingReportLine[];
   componentScrapItems?: ReportComponentScrapItem[];
@@ -326,8 +364,8 @@ export interface ProductionReportWorkerOutput {
   notes?: string;
 }
 
-export type ProductionAttendanceStatus = 'present' | 'absent';
-export type ProductionAttendanceSource = 'shift_workers' | 'worker_outputs';
+export type ProductionAttendanceStatus = "present" | "absent";
+export type ProductionAttendanceSource = "shift_workers" | "worker_outputs";
 
 export interface ProductionAttendanceRecord {
   id?: string;
@@ -353,7 +391,7 @@ export interface ProductionAttendanceRecord {
   createdAt?: unknown;
 }
 
-export type ProductionWorkerType = 'production';
+export type ProductionWorkerType = "production";
 
 export interface ProductionWorkerStarRating {
   behavior: number;
@@ -365,7 +403,8 @@ export interface ProductionWorkerStarRating {
   updatedAt?: unknown;
 }
 
-export type ProductionWorkerRatingReviewStatus = 'pending' | 'approved' | 'rejected';
+export type ProductionWorkerRatingReviewStatus =
+  "pending" | "approved" | "rejected";
 
 export interface ProductionWorkerManagementReview {
   status: ProductionWorkerRatingReviewStatus;
@@ -435,7 +474,7 @@ export interface ProductionWorkerTarget {
   productId: string;
   lineId?: string;
   dailyTargetQty: number;
-  unit: 'piece';
+  unit: "piece";
   isActive: boolean;
   effectiveFrom: string;
   effectiveTo?: string;
@@ -444,13 +483,13 @@ export interface ProductionWorkerTarget {
 }
 
 export type WorkerDailyAchievementStatus =
-  | 'achieved'
-  | 'below_target'
-  | 'over_target'
-  | 'absent'
-  | 'no_output'
-  | 'no_target'
-  | 'leave';
+  | "achieved"
+  | "below_target"
+  | "over_target"
+  | "absent"
+  | "no_output"
+  | "no_target"
+  | "leave";
 
 export interface WorkerDailyAchievement {
   workerId: string;
@@ -505,7 +544,12 @@ export interface WorkerDailyPerformanceLog {
   productId: string;
   productName: string;
   targetQty: number;
-  targetSource?: 'worker_product_line' | 'worker_product' | 'line_product' | 'product_default' | 'missing';
+  targetSource?:
+    | "worker_product_line"
+    | "worker_product"
+    | "line_product"
+    | "product_default"
+    | "missing";
   outputQty: number;
   achievementPercent: number;
   isPresent?: boolean;
@@ -522,8 +566,13 @@ export interface WorkerPerformanceSummary extends WorkerMonthlyAchievement {
   updatedAt?: unknown;
 }
 
-export type ProductionBonusMethod = 'per_extra_unit' | 'per_achievement_percent' | 'fixed_tier' | 'target_plus_extra';
-export type ProductionBonusExtraMethod = 'none' | 'per_extra_unit' | 'per_extra_achievement_percent';
+export type ProductionBonusMethod =
+  | "per_extra_unit"
+  | "per_achievement_percent"
+  | "fixed_tier"
+  | "target_plus_extra";
+export type ProductionBonusExtraMethod =
+  "none" | "per_extra_unit" | "per_extra_achievement_percent";
 
 export interface ProductionBonusSettings {
   enabled: boolean;
@@ -577,8 +626,8 @@ export interface ReportComponentScrapItem {
 }
 
 /** دورة توريد / باتش — خام أو تام */
-export type SupplyCycleKind = 'raw_material' | 'finished_good';
-export type SupplyCycleStatus = 'draft' | 'open' | 'closed';
+export type SupplyCycleKind = "raw_material" | "finished_good";
+export type SupplyCycleStatus = "draft" | "open" | "closed";
 
 export interface SupplyCycle {
   id?: string;
@@ -606,7 +655,7 @@ export interface SupplyCycle {
   updatedByUid?: string;
 }
 
-export type SupplyCycleWasteLineSource = 'manual' | 'production_report';
+export type SupplyCycleWasteLineSource = "manual" | "production_report";
 
 export interface SupplyCycleWasteLine {
   id?: string;
@@ -630,11 +679,7 @@ export interface LineStatus {
 }
 
 export type LineWorkerLaborRole =
-  | 'production'
-  | 'packaging'
-  | 'quality'
-  | 'maintenance'
-  | 'external';
+  "production" | "packaging" | "quality" | "maintenance" | "external";
 
 export interface LineWorkerAssignment {
   id?: string;
@@ -652,7 +697,8 @@ export interface LineWorkerAssignment {
   assignedBy?: string;
 }
 
-export type SupervisorLineAssignmentReason = 'assign' | 'reassign' | 'remove' | 'migrate';
+export type SupervisorLineAssignmentReason =
+  "assign" | "reassign" | "remove" | "migrate";
 
 export interface SupervisorLineAssignment {
   id?: string;
@@ -669,9 +715,11 @@ export interface SupervisorLineAssignment {
   reason?: SupervisorLineAssignmentReason;
 }
 
-export type PlanPriority = 'low' | 'medium' | 'high' | 'urgent';
-export type PlanStatus = 'planned' | 'in_progress' | 'completed' | 'paused' | 'cancelled';
-export type SmartStatus = 'on_track' | 'at_risk' | 'delayed' | 'critical' | 'completed';
+export type PlanPriority = "low" | "medium" | "high" | "urgent";
+export type PlanStatus =
+  "planned" | "in_progress" | "completed" | "paused" | "cancelled";
+export type SmartStatus =
+  "on_track" | "at_risk" | "delayed" | "critical" | "completed";
 
 export interface ProductionPlan {
   id?: string;
@@ -687,7 +735,7 @@ export interface ProductionPlan {
   priority: PlanPriority;
   estimatedCost: number;
   actualCost: number;
-  planType?: 'finished_product' | 'component_injection';
+  planType?: "finished_product" | "component_injection";
   supervisorId?: string;
   shift?: ProductionReportShift;
   workOrderId?: string;
@@ -704,7 +752,8 @@ export interface ProductionPlan {
   createdAt?: any;
 }
 
-export type ProductionPlanFollowUpStatus = 'open' | 'in_progress' | 'resolved' | 'cancelled';
+export type ProductionPlanFollowUpStatus =
+  "open" | "in_progress" | "resolved" | "cancelled";
 
 export interface ProductionPlanFollowUp {
   id?: string;
@@ -723,8 +772,9 @@ export interface ProductionPlanFollowUp {
 
 // â”€â”€â”€ Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export type WorkOrderStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
-export type WorkOrderPauseReason = 'manual';
+export type WorkOrderStatus =
+  "pending" | "in_progress" | "completed" | "cancelled";
+export type WorkOrderPauseReason = "manual";
 
 export interface WorkOrderPauseWindow {
   startAt: any;
@@ -748,7 +798,7 @@ export interface WorkOrder {
   estimatedDurationDays?: number;
   estimatedCost: number;
   actualCost: number;
-  workOrderType?: 'finished_product' | 'component_injection';
+  workOrderType?: "finished_product" | "component_injection";
   status: WorkOrderStatus;
   notes?: string;
   breakStartTime?: string; // HH:mm
@@ -770,8 +820,8 @@ export interface WorkOrder {
   completedAt?: any;
 }
 
-export type WorkOrderScanAction = 'IN' | 'OUT';
-export type WorkOrderScanSessionStatus = 'open' | 'closed';
+export type WorkOrderScanAction = "IN" | "OUT";
+export type WorkOrderScanSessionStatus = "open" | "closed";
 
 export interface WorkOrderScanEvent {
   id?: string;
@@ -800,14 +850,9 @@ export interface WorkOrderScanSession {
   status: WorkOrderScanSessionStatus;
 }
 
-export type QualityInspectionType = 'final' | 'ipqc';
+export type QualityInspectionType = "final" | "ipqc";
 export type QualityInspectionStatus =
-  | 'pending'
-  | 'passed'
-  | 'failed'
-  | 'rework'
-  | 'approved'
-  | 'rejected';
+  "pending" | "passed" | "failed" | "rework" | "approved" | "rejected";
 
 export interface QualityInspection {
   id?: string;
@@ -826,7 +871,7 @@ export interface QualityInspection {
   attachments?: FileAttachmentMeta[];
 }
 
-export type QualityDefectSeverity = 'low' | 'medium' | 'high' | 'critical';
+export type QualityDefectSeverity = "low" | "medium" | "high" | "critical";
 
 export interface QualityDefect {
   id?: string;
@@ -840,7 +885,7 @@ export interface QualityDefect {
   reasonLabel: string;
   severity: QualityDefectSeverity;
   quantity: number;
-  status: 'open' | 'reworked' | 'scrap' | 'closed';
+  status: "open" | "reworked" | "scrap" | "closed";
   createdBy: string;
   createdAt: any;
   notes?: string;
@@ -867,7 +912,7 @@ export interface QualityReasonCatalogItem {
 export interface QualityWorkerAssignment {
   id?: string;
   employeeId: string;
-  qualityRole: 'inspector' | 'senior' | 'lead' | 'manager';
+  qualityRole: "inspector" | "senior" | "lead" | "manager";
   activeLines?: string[];
   activeProducts?: string[];
   isActive: boolean;
@@ -881,7 +926,7 @@ export interface QualityReworkOrder {
   defectId: string;
   sessionId?: string;
   serialBarcode?: string;
-  status: 'open' | 'in_progress' | 'done' | 'scrap';
+  status: "open" | "in_progress" | "done" | "scrap";
   assignedTo?: string;
   notes?: string;
   createdAt?: any;
@@ -897,7 +942,7 @@ export interface QualityCAPA {
   actionPlan: string;
   ownerId: string;
   dueDate?: string;
-  status: 'open' | 'in_progress' | 'done' | 'closed';
+  status: "open" | "in_progress" | "done" | "closed";
   createdAt?: any;
   updatedAt?: any;
 }
@@ -955,7 +1000,8 @@ export interface WorkOrderLiveSummary {
   lastScanAt?: any;
 }
 
-export type QualityStatus = 'pending' | 'approved' | 'rejected' | 'not_required';
+export type QualityStatus =
+  "pending" | "approved" | "rejected" | "not_required";
 
 export interface WorkOrderQualitySummary {
   inspectedUnits: number;
@@ -971,16 +1017,16 @@ export interface WorkOrderQualitySummary {
 // â”€â”€â”€ Notifications â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export type NotificationType =
-  | 'production_report'
-  | 'work_order_assigned'
-  | 'work_order_updated'
-  | 'work_order_completed'
-  | 'quality_report_created'
-  | 'quality_report_updated'
-  | 'report_compliance_daily'
-  | 'manual_broadcast'
-  | 'daily_report_missing'
-  | 'inventory_transfer_pending';
+  | "production_report"
+  | "work_order_assigned"
+  | "work_order_updated"
+  | "work_order_completed"
+  | "quality_report_created"
+  | "quality_report_updated"
+  | "report_compliance_daily"
+  | "manual_broadcast"
+  | "daily_report_missing"
+  | "inventory_transfer_pending";
 
 export interface AppNotification {
   id?: string;
@@ -993,7 +1039,7 @@ export interface AppNotification {
   createdAt?: any;
 }
 
-export type PresenceState = 'online' | 'idle' | 'offline';
+export type PresenceState = "online" | "idle" | "offline";
 
 export interface UserPresence {
   id?: string; // userId
@@ -1016,19 +1062,46 @@ export interface UserPresence {
 
 export interface CostCenter {
   id?: string;
+  tenantId?: string;
+  code?: string;
   name: string;
-  type: 'indirect' | 'direct';
-  allocationBasis?: 'line_percentage' | 'by_qty';
-  productScope?: 'all' | 'selected' | 'category';
+  type: "indirect" | "direct";
+  /** General-ledger classification; production allocation fields remain optional consumers. */
+  accountingCategory?:
+    | "production"
+    | "repair"
+    | "warehouse"
+    | "branch"
+    | "administration"
+    | "sales"
+    | "other";
+  parentId?: string | null;
+  branchId?: string | null;
+  warehouseId?: string | null;
+  allowPosting?: boolean;
+  /** How this center reaches a cost object; collect_only never reaches production automatically. */
+  postingMode?: "direct_assignment" | "driver_allocation" | "collect_only";
+  /** Prevents a repair/admin/shared center from entering production unless explicitly configured. */
+  costObjectScope?: "production" | "repair" | "shared" | "none";
+  allocationDriver?:
+    | "machine_hours"
+    | "labor_hours"
+    | "good_units"
+    | "floor_area"
+    | "fixed_percentage"
+    | "kwh";
+  allocationBasis?: "line_percentage" | "by_qty";
+  productScope?: "all" | "selected" | "category";
   productIds?: string[];
   productCategories?: string[];
-  valueSource?: 'manual' | 'salaries' | 'combined';
-  employeeScope?: 'selected' | 'department';
+  valueSource?: "manual" | "salaries" | "combined";
+  employeeScope?: "selected" | "department";
   employeeIds?: string[];
   employeeDepartmentIds?: string[];
   manualAdjustment?: number;
   isActive: boolean;
   createdAt?: any;
+  updatedAt?: any;
 }
 
 export interface CostCenterValue {
@@ -1036,16 +1109,23 @@ export interface CostCenterValue {
   costCenterId: string;
   month: string;
   amount: number;
+  /** Amount used by live costing before the period's source invoice/payroll is final. */
+  provisionalAmount?: number;
+  /** Approved source amount used by month close. */
+  actualAmount?: number;
+  costingStatus?: "provisional" | "actual" | "closed";
+  revision?: number;
+  sourceReference?: string;
   manualAmount?: number;
   salariesAmount?: number;
-  valueSource?: 'manual' | 'salaries' | 'combined';
-  employeeScopeSnapshot?: 'selected' | 'department';
+  valueSource?: "manual" | "salaries" | "combined";
+  employeeScopeSnapshot?: "selected" | "department";
   employeeIdsSnapshot?: string[];
   employeeDepartmentIdsSnapshot?: string[];
-  productScopeSnapshot?: 'all' | 'selected' | 'category';
+  productScopeSnapshot?: "all" | "selected" | "category";
   productIdsSnapshot?: string[];
   productCategoriesSnapshot?: string[];
-  allocationBasisSnapshot?: 'line_percentage' | 'by_qty';
+  allocationBasisSnapshot?: "line_percentage" | "by_qty";
   workingDays?: number;
 }
 
@@ -1054,10 +1134,10 @@ export interface CostAllocation {
   costCenterId: string;
   month: string;
   allocations: { lineId: string; percentage: number }[];
-  productScope?: 'all' | 'selected' | 'category';
+  productScope?: "all" | "selected" | "category";
   productIds?: string[];
   productCategories?: string[];
-  allocationBasis?: 'line_percentage' | 'by_qty';
+  allocationBasis?: "line_percentage" | "by_qty";
 }
 
 export interface LaborSettings {
@@ -1068,8 +1148,8 @@ export interface LaborSettings {
 
 // â”€â”€â”€ Assets & Depreciation â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-export type AssetDepreciationMethod = 'straight_line' | 'declining_balance';
-export type AssetStatus = 'active' | 'inactive' | 'disposed';
+export type AssetDepreciationMethod = "straight_line" | "declining_balance";
+export type AssetStatus = "active" | "inactive" | "disposed";
 
 export interface Asset {
   id?: string;
@@ -1114,19 +1194,19 @@ export interface AssetDepreciationRunResult {
 export interface MonthlyProductionCost {
   id?: string;
   productId: string;
-  month: string;            // "YYYY-MM"
+  month: string; // "YYYY-MM"
   totalProducedQty: number;
   directCost?: number;
   indirectCost?: number;
   indirectCenterSnapshots?: Array<{
     costCenterId: string;
     centerName: string;
-    valueSource: 'manual' | 'salaries' | 'combined';
-    allocationBasis: 'line_percentage' | 'by_qty';
-    productScope: 'all' | 'selected' | 'category';
+    valueSource: "manual" | "salaries" | "combined";
+    allocationBasis: "line_percentage" | "by_qty";
+    productScope: "all" | "selected" | "category";
     productIds: string[];
     productCategories: string[];
-    employeeScope: 'selected' | 'department';
+    employeeScope: "selected" | "department";
     employeeIds: string[];
     employeeDepartmentIds: string[];
     manualAmount: number;
@@ -1134,7 +1214,15 @@ export interface MonthlyProductionCost {
     resolvedAmount: number;
   }>;
   totalProductionCost: number;
-  averageUnitCost: number;  // totalProductionCost / totalProducedQty
+  averageUnitCost: number; // totalProductionCost / totalProducedQty
+  /** Full-cost migration fields; legacy totals above remain conversion cost. */
+  materialCost?: number;
+  packagingCost?: number;
+  fullManufacturingCost?: number;
+  fullManufacturingAverageUnitCost?: number;
+  fullCostedQty?: number;
+  fullCostCoveragePct?: number;
+  fullCostStatus?: "missing" | "partial" | "provisional" | "actual";
   isClosed: boolean;
   calculatedAt?: any;
 }
@@ -1146,7 +1234,7 @@ export interface WidgetConfig {
   visible: boolean;
 }
 
-export type CustomWidgetType = 'kpi' | 'text' | 'quick_link';
+export type CustomWidgetType = "kpi" | "text" | "quick_link";
 
 export interface CustomWidgetConfig {
   id: string;
@@ -1176,9 +1264,10 @@ export interface KPIThreshold {
   warning: number;
 }
 
-export type PaperSize = 'a4' | 'a5' | 'thermal';
-export type PaperOrientation = 'portrait' | 'landscape';
-export type PrintThemePreset = 'erpnext' | 'classic' | 'high_contrast' | 'minimal';
+export type PaperSize = "a4" | "a5" | "thermal";
+export type PaperOrientation = "portrait" | "landscape";
+export type PrintThemePreset =
+  "erpnext" | "classic" | "high_contrast" | "minimal";
 
 export interface PrintTemplateSettings {
   logoUrl: string;
@@ -1272,7 +1361,7 @@ export interface PlanSettings {
   packagingSourceWarehouseId?: string;
   packagingTargetWarehouseId?: string;
   transferApprovalPermission?: string;
-  transferDisplayUnit?: 'piece' | 'carton';
+  transferDisplayUnit?: "piece" | "carton";
   hrApproverUserIds?: string[];
   /** First configured approver for production-created leave/loan/penalty requests. */
   productionRequestFirstApproverEmployeeId?: string;
@@ -1286,8 +1375,8 @@ export interface PlanSettings {
   allowNegativeFinishedTransferStock?: boolean;
   requireFinishedStockApprovalForReports?: boolean;
   maxWasteThreshold: number;
-  efficiencyCalculationMode: 'standard' | 'weighted';
-  averageProductionMode: 'daily' | 'weekly' | 'monthly';
+  efficiencyCalculationMode: "standard" | "weighted";
+  averageProductionMode: "daily" | "weekly" | "monthly";
   injectionRawMaterialCategoryKeywords: string;
   /** بادئة كود دورة التوريد (مثال SC) — الصيغة PREFIX-YYYY-NNNN */
   supplyCycleBatchCodePrefix?: string;
@@ -1310,13 +1399,13 @@ export interface PlanSettings {
    * - direct: مسودة → صرف فوري
    * - required: مسودة → تقديم → اعتماد → صرف
    */
-  departmentConsumableIssueApprovalMode?: 'direct' | 'required';
+  departmentConsumableIssueApprovalMode?: "direct" | "required";
   /**
    * سياسة اعتماد صرف قطع غيار مراكز الصيانة:
    * - direct: مسودة → صرف فوري
    * - required: مسودة → تقديم → اعتماد → صرف
    */
-  repairSpareIssueApprovalMode?: 'direct' | 'required';
+  repairSpareIssueApprovalMode?: "direct" | "required";
   /**
    * يوم بداية شهر التشغيل (1–28). مثال: 26 يعني الفترة من ٢٦ إلى ٢٦ الشهر التالي (نهاية حصرية).
    * يُستخدم لحساب الهدف اليومي = كمية الخطة ÷ أيام الشغل في الفترة.
@@ -1356,22 +1445,23 @@ export interface ReportBehaviorSettings {
   autoPostReportToPlanAndWorkOrder?: boolean;
 }
 
-export const DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS: ProductionWorkerPerformanceSettings = {
-  productionWorkerOutputEnabled: false,
-  excludeWeeklyOff: true,
-  excludeApprovedLeave: true,
-  countAbsentAsZero: true,
-  countNoReportAsZero: true,
-  productionWorkerOutputMustMatchReportQty: false,
-  achievementWarningThreshold: 80,
-};
+export const DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS: ProductionWorkerPerformanceSettings =
+  {
+    productionWorkerOutputEnabled: false,
+    excludeWeeklyOff: true,
+    excludeApprovedLeave: true,
+    countAbsentAsZero: true,
+    countNoReportAsZero: true,
+    productionWorkerOutputMustMatchReportQty: false,
+    achievementWarningThreshold: 80,
+  };
 
 export const DEFAULT_PRODUCTION_BONUS_SETTINGS: ProductionBonusSettings = {
   enabled: false,
-  method: 'target_plus_extra',
+  method: "target_plus_extra",
   minimumAchievementPercent: 100,
   targetBonusAmount: 0,
-  extraBonusMethod: 'per_extra_unit',
+  extraBonusMethod: "per_extra_unit",
   bonusPerExtraUnit: 0,
   bonusPerAchievementPercent: 0,
   maxBonus: 0,
@@ -1407,10 +1497,10 @@ export interface BrandingSettings {
   timezone: string;
 }
 
-export type ThemeMode = 'light' | 'dark' | 'auto';
-export type UIDensity = 'comfortable' | 'compact';
+export type ThemeMode = "light" | "dark" | "auto";
+export type UIDensity = "comfortable" | "compact";
 
-export type SidebarIconStyle = 'colorful' | 'primary' | 'muted';
+export type SidebarIconStyle = "colorful" | "primary" | "muted";
 
 export interface ThemeSettings {
   primaryColor: string;
@@ -1450,9 +1540,10 @@ export interface AlertToggleSettings {
   enableCostVarianceAlert: boolean;
 }
 
-export type QuickActionColor = 'primary' | 'emerald' | 'amber' | 'rose' | 'violet' | 'slate';
-export type QuickActionType = 'navigate' | 'export_excel';
-export type ExportImportButtonVariant = 'primary' | 'secondary' | 'outline';
+export type QuickActionColor =
+  "primary" | "emerald" | "amber" | "rose" | "violet" | "slate";
+export type QuickActionType = "navigate" | "export_excel";
+export type ExportImportButtonVariant = "primary" | "secondary" | "outline";
 
 export interface QuickActionItem {
   id: string;
@@ -1502,7 +1593,7 @@ export interface AttendanceIntegrationSettings {
 /** ط¥ط¹ط¯ط§ط¯ط§طھ ط§ط®طھظٹط§ط±ظٹط© ظ„ط¹ط²ظ„ طµظ„ط§ط­ظٹط§طھ ط§ظ„طµظٹط§ظ†ط© ط­ط³ط¨ ط§ظ„ظپط±ط¹ (طھظڈظ‚ط±ط£ ظ…ظ† system_settings ط¹ظ†ط¯ ط§ظ„طھظˆظپط±). */
 export interface RepairAccessSettings {
   /** ظ…ط¯ظٹط± ظپط±ط¹ ظˆط§ط­ط¯ ظ…ظ‚ط§ط¨ظ„ ظ…ط¯ظٹط± ط¹ظ„ظ‰ ظƒظ„ ظ…ط±ط§ظƒط² ط§ظ„طµظٹط§ظ†ط© */
-  managerScope?: 'branch' | 'centers';
+  managerScope?: "branch" | "centers";
 }
 
 export interface RepairWorkflowSettings {
@@ -1525,7 +1616,7 @@ export interface RepairWorkflowSettings {
 
 export interface RepairDefaultsSettings {
   /** الضمان الافتراضي عند إنشاء الطلب */
-  defaultWarranty?: 'none' | '3months' | '6months';
+  defaultWarranty?: "none" | "3months" | "6months";
   /** الحد الأدنى الافتراضي لمخزون قطع الغيار */
   defaultMinStock?: number;
   /** SLA افتراضي بالساعات */
@@ -1537,6 +1628,11 @@ export interface RepairAccessoryCatalogItem {
   id: string;
   label: string;
   enabled?: boolean;
+  /**
+   * فئات المنتجات التي يظهر معها هذا الإكسسوار.
+   * قائمة فارغة/غير موجودة = يظهر لكل الفئات (توافق خلفي).
+   */
+  categoryIds?: string[];
 }
 
 /** خدمات إصلاح بأسعار ثابتة يضبطها أدمن الصيانة */
@@ -1549,7 +1645,7 @@ export interface RepairServiceCatalogItem {
 
 export interface RepairTreasuryAutoCloseSettings {
   enabled?: boolean;
-  mode?: 'scheduled_midnight';
+  mode?: "scheduled_midnight";
   timezone?: string;
   blockOperationsIfPrevDayOpen?: boolean;
 }
@@ -1558,11 +1654,18 @@ export interface RepairTreasurySettings {
   autoClose?: RepairTreasuryAutoCloseSettings;
 }
 
+/** سياسات التحصيل والتسليم من شاشة الطلب */
+export interface RepairPaymentsUiSettings {
+  /** إظهار زر «تحصيل جزئي / مبلغ مخصص» على شاشة الطلب. الافتراضي: مفعّل */
+  allowPartialCollection?: boolean;
+}
+
 export interface RepairSettings {
   access?: RepairAccessSettings;
   workflow?: RepairWorkflowSettings;
   defaults?: RepairDefaultsSettings;
   treasury?: RepairTreasurySettings;
+  payments?: RepairPaymentsUiSettings;
   /** قائمة الإكسسوارات للاختيار عند الاستلام */
   accessoriesCatalog?: RepairAccessoryCatalogItem[];
   /** أنواع خدمات الإصلاح وأسعارها (أدمن الصيانة فقط) */
@@ -1614,7 +1717,7 @@ export interface FirestoreTenant {
   phone?: string;
   address?: string;
   theme?: ThemeSettings;
-  status: 'pending' | 'active' | 'suspended';
+  status: "pending" | "active" | "suspended";
   createdAt?: any;
   approvedAt?: any;
   approvedBy?: string;
@@ -1633,7 +1736,7 @@ export interface PendingTenant {
   adminEmail: string;
   adminDisplayName: string;
   requestedAt?: any;
-  status: 'pending' | 'approved' | 'rejected';
+  status: "pending" | "approved" | "rejected";
   rejectionReason?: string;
   adminUid?: string;
 }
@@ -1641,18 +1744,21 @@ export interface PendingTenant {
 // â”€â”€â”€ Dynamic Roles & Permissions â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /** @deprecated use FirestoreRole + dynamic permissions instead */
-export type UserRole = 'admin' | 'factory_manager' | 'hall_supervisor' | 'supervisor';
+export type UserRole =
+  "admin" | "factory_manager" | "hall_supervisor" | "supervisor";
 
 /** Stable key for defaults and Cloud Functions (e.g. admin, factory_manager) */
 export type FirestoreRoleKey =
-  | 'admin'
-  | 'factory_manager'
-  | 'hall_supervisor'
-  | 'supervisor'
-  | 'hr_manager'
-  | 'accountant'
-  | 'materials_warehouse'
-  | 'inventory_viewer';
+  | "admin"
+  | "factory_manager"
+  | "hall_supervisor"
+  | "supervisor"
+  | "hr_manager"
+  | "accountant"
+  | "materials_warehouse"
+  | "inventory_viewer"
+  | "repair_reception"
+  | "repair_technician";
 
 export interface FirestoreRole {
   id?: string;
@@ -1676,7 +1782,8 @@ export interface FirestoreUser {
   /**
    * When set, inventory module pages are limited to this warehouse
    * (balances, movements, transfers, approvals involving this warehouse).
-   * If the warehouse belongs to a repair service center, repairBranchId is synced too.
+   * For maintenance_center warehouses, Firestore also treats this bind as
+   * access to the linked repair branch (spare parts / jobs scope).
    */
   inventoryWarehouseId?: string | null;
   /** Primary repair / service-center branch for this user (ADR-004). */
@@ -1690,7 +1797,7 @@ export interface FirestoreUser {
   };
   uiPreferences?: {
     /** UI language preference stored per user. */
-    language?: 'ar' | 'en';
+    language?: "ar" | "en";
     [key: string]: unknown;
   };
   createdAt?: any;

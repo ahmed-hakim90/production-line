@@ -31,6 +31,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { Skeleton } from '@/components/ui/skeleton';
 import { LegacyLoadingSkeleton } from '@/src/shared/ui/skeletons';
 import { cn } from '@/lib/utils';
+import { searchableSelectFilter } from '@/lib/searchableSelectFilter';
 import { tableIconActionToneClass } from '@/src/components/erp/TableIconAction';
 import { resolveButtonLook } from './buttonLook';
 
@@ -338,8 +339,8 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
         </UiButton>
       </PopoverTrigger>
       <PopoverContent className="z-[500] w-[--radix-popover-trigger-width] p-0" align="start">
-        <Command>
-          <CommandInput placeholder={resolvedPlaceholder} />
+        <Command filter={searchableSelectFilter}>
+          <CommandInput placeholder={t('shared.searchPlaceholder')} />
           <CommandList>
             <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
             <CommandGroup>

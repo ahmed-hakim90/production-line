@@ -83,3 +83,24 @@ export function suggestConsumableCode(name: string): string {
   const safe = prefix && /^[A-Z0-9]/.test(prefix) ? prefix.slice(0, 4) : 'CNS';
   return `${safe}-${stamp}`;
 }
+
+/** Catalog list for defined department consumables — sorted + search by name/code/unit. */
+export function filterConsumableCatalog(
+  items: ConsumableOption[],
+  search: string,
+  unitLabelFn?: (unit: string) => string,
+): ConsumableOption[] {
+  const rows = [...items].sort((a, b) =>
+    a.name.localeCompare(b.name, 'ar') || a.code.localeCompare(b.code, 'ar'));
+  const q = search.trim().toLowerCase();
+  if (!q) return rows;
+  return rows.filter((row) => {
+    const unitLabel = unitLabelFn?.(row.unit) || '';
+    return (
+      row.name.toLowerCase().includes(q)
+      || row.code.toLowerCase().includes(q)
+      || row.unit.toLowerCase().includes(q)
+      || unitLabel.toLowerCase().includes(q)
+    );
+  });
+}

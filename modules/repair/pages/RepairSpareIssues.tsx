@@ -1,6 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../../../components/UI';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { repairBranchService } from '../services/repairBranchService';
@@ -14,8 +17,8 @@ import {
   canRejectRepairSpareIssue,
   canSubmitRepairSpareIssue,
 } from '../lib/repairSpareIssue';
+import { repairSpareIssueStatusChipType } from '../lib/repairSemanticStatus';
 import type { RepairBranch, RepairSpareIssue, RepairSpareIssueStatus } from '../types';
-import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 
 const PAGE_SIZE = 20;
 
@@ -30,6 +33,12 @@ const toUserSafeError = (error: unknown, fallback: string): string => {
   }
   if (code.includes('unauthenticated')) {
     return 'يجب تسجيل الدخول أولًا ثم إعادة المحاولة.';
+  }
+  if (
+    code.includes('failed-precondition')
+    || /requires an index|create it here/i.test(message)
+  ) {
+    return 'فهرس قاعدة البيانات غير جاهز بعد. أعد المحاولة بعد دقائق أو راجع نشر فهارس Firestore.';
   }
   if (message && !/firebase|firestore|https?:\/\//i.test(message)) {
     return message;
@@ -56,14 +65,33 @@ export const RepairSpareIssues: React.FC = () => {
     if (!canView) return;
     setLoading(true);
     try {
-      const [branchRows, issues] = await Promise.all([
-        repairBranchService.list(),
-        repairSpareIssueService.listRecent(200),
-      ]);
-      setBranches(branchRows);
+      let branchRows: RepairBranch[] = [];
+      try {
+        branchRows = await repairBranchService.list();
+        setBranches(branchRows);
+      } catch (branchErr: unknown) {
+        setBranches([]);
+        toast.error(toUserSafeError(branchErr, 'تعذر تحميل فروع الصيانة.'));
+      }
+
+      const warehouseIds = Array.from(
+        new Set(
+          branchRows
+            .map((b) => String(b.warehouseId || '').trim())
+            .filter(Boolean),
+        ),
+      );
+
+      if (warehouseIds.length === 0) {
+        setRows([]);
+        return;
+      }
+
+      const issues = await repairSpareIssueService.listRecent(200, warehouseIds);
       setRows(issues);
     } catch (e: unknown) {
-      toast.error(toUserSafeError(e, 'تعذر تحميل سندات صرف قطع الغيار.'));
+      setRows([]);
+      toast.error(toUserSafeError(e, 'تعذر تحميل سندات الصرف.'));
     } finally {
       setLoading(false);
     }
@@ -105,16 +133,18 @@ export const RepairSpareIssues: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="p-6">
+      <div className="erp-ds-clean space-y-4 p-4 md:p-6">
         <Card>
-          <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية عرض سندات صرف قطع الغيار.</p>
+          <CardContent className="p-4">
+            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض سندات صرف قطع الغيار.</p>
+          </CardContent>
         </Card>
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6">
       <PageHeader
         title="سندات صرف قطع الغيار"
         subtitle="صرف من مخزن مركز الصيانة على أوامر الصيانة مع دورة اعتماد"
@@ -125,31 +155,33 @@ export const RepairSpareIssues: React.FC = () => {
         ) : undefined}
       />
 
-      <Card className="!p-4 flex flex-wrap items-center gap-3">
-        <label className="text-xs font-bold text-[var(--color-text-muted)]">الحالة</label>
-        <select
-          className="rounded-lg border px-3 py-2 text-sm"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value as RepairSpareIssueStatus | '')}
-        >
-          <option value="">الكل</option>
-          {(Object.keys(REPAIR_SPARE_ISSUE_STATUS_LABELS) as RepairSpareIssueStatus[]).map((s) => (
-            <option key={s} value={s}>{REPAIR_SPARE_ISSUE_STATUS_LABELS[s]}</option>
-          ))}
-        </select>
-        <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
-          تحديث
-        </Button>
-        <span className="text-xs text-[var(--color-text-muted)] ms-auto">
-          الفروع: {branches.length} — السندات: {filtered.length}
-        </span>
+      <Card>
+        <CardContent className="p-4 flex flex-wrap items-center gap-3">
+          <label className="text-xs font-medium text-muted-foreground">الحالة</label>
+          <select
+            className="rounded-lg border px-3 py-2 text-sm bg-background"
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as RepairSpareIssueStatus | '')}
+          >
+            <option value="">الكل</option>
+            {(Object.keys(REPAIR_SPARE_ISSUE_STATUS_LABELS) as RepairSpareIssueStatus[]).map((s) => (
+              <option key={s} value={s}>{REPAIR_SPARE_ISSUE_STATUS_LABELS[s]}</option>
+            ))}
+          </select>
+          <Button type="button" variant="secondary" size="sm" onClick={() => void load()} disabled={loading}>
+            تحديث
+          </Button>
+          <span className="text-xs text-muted-foreground ms-auto">
+            الفروع: {branches.length} — السندات: {filtered.length}
+          </span>
+        </CardContent>
       </Card>
 
-      <Card className="!p-0 overflow-hidden">
+      <Card className="overflow-hidden">
         {loading ? (
-          <div className="py-16 text-center text-[var(--color-text-muted)]">جاري التحميل...</div>
+          <div className="py-16 text-center text-muted-foreground">جاري التحميل...</div>
         ) : paged.length === 0 ? (
-          <div className="py-16 text-center text-[var(--color-text-muted)] space-y-3">
+          <div className="py-16 text-center text-muted-foreground space-y-3">
             <p>لا توجد سندات.</p>
             {canCreate && (
               <Button type="button" onClick={() => setShowCreate(true)}>إنشاء سند صرف</Button>
@@ -175,12 +207,15 @@ export const RepairSpareIssues: React.FC = () => {
                   const busy = busyId === id;
                   return (
                     <tr key={id} className="border-t border-[var(--color-border)]">
-                      <td className="px-3 py-2 text-sm font-bold">{row.referenceNo}</td>
+                      <td className="px-3 py-2 text-sm font-semibold">{row.referenceNo}</td>
                       <td className="px-3 py-2 text-sm">{row.branchName}</td>
                       <td className="px-3 py-2 text-sm">{row.warehouseName}</td>
                       <td className="px-3 py-2 text-sm">{row.jobCode || row.jobId || '—'}</td>
                       <td className="px-3 py-2 text-sm">
-                        {REPAIR_SPARE_ISSUE_STATUS_LABELS[row.status] || row.status}
+                        <ErpStatusBadge
+                          label={REPAIR_SPARE_ISSUE_STATUS_LABELS[row.status] || row.status}
+                          type={repairSpareIssueStatusChipType(row.status)}
+                        />
                       </td>
                       <td className="px-3 py-2 text-sm tabular-nums">{row.lines?.length || 0}</td>
                       <td className="px-3 py-2">
@@ -210,7 +245,7 @@ export const RepairSpareIssues: React.FC = () => {
                             <Button
                               type="button"
                               size="sm"
-                              variant="secondary"
+                              variant="destructive"
                               disabled={busy}
                               onClick={() => void runAction(id, () => repairSpareIssueService.reject(id), 'تم رفض السند.')}
                             >
@@ -231,7 +266,7 @@ export const RepairSpareIssues: React.FC = () => {
                             <Button
                               type="button"
                               size="sm"
-                              variant="secondary"
+                              variant="outline"
                               disabled={busy}
                               onClick={() => void runAction(id, () => repairSpareIssueService.cancel(id), 'تم إلغاء السند.')}
                             >

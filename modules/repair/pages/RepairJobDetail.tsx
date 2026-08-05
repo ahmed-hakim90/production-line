@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { Download, Printer, Trash2 } from 'lucide-react';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { Download, FileCheck2, Printer, Trash2, Banknote, CheckCircle2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
@@ -23,6 +23,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { SearchableSelect } from '@/components/UI';
 import { exportToPDF } from '../../../utils/reportExport';
 import { useManagedPrint } from '../../../utils/printManager';
 import { withTenantPath } from '@/lib/tenantPaths';
@@ -30,14 +31,33 @@ import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import { repairJobService } from '../services/repairJobService';
+import { repairPaymentService } from '../services/repairPaymentService';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
+import { repairJobSparePartRequestService } from '../services/repairJobSparePartRequestService';
 import { userService } from '../../../services/userService';
 import { employeeService } from '../../hr/employeeService';
-import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
+import { buildRepairApprovalPublicUrl, buildRepairTrackPublicUrl } from '../lib/repairPublicLinks';
+import { resolveRepairJobPaymentCloseState } from '../lib/repairJobPaymentClose';
+import { isManufacturerWarrantyJob, isWarrantySettlementAuth } from '../lib/repairManufacturerWarranty';
+import {
+  formatRepairApprovalRequestMessage,
+  formatRepairIntakeConfirmationMessage,
+  formatRepairReadyMessage,
+  formatRepairWhatsAppMessage,
+} from '../utils/whatsappRepairMessage';
 import { RepairJobPrint } from '../components/RepairJobPrint';
+import { RepairJobProductCardPrint } from '../components/RepairJobProductCardPrint';
+import { DeliveryReceiptPDF } from '../components/DeliveryReceiptPDF';
+import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
+import {
+  REPAIR_PART_AVAILABILITY_LABELS,
+  REPAIR_PART_FULFILLMENT_LABELS,
+  effectiveFulfillmentStatus,
+  isReadyToIssueUsage,
+} from '../lib/repairPartFulfillment';
 import { StatusBadge } from '../components/StatusBadge';
 import { WhatsAppShare } from '../components/WhatsAppShare';
 import {
@@ -45,17 +65,23 @@ import {
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairJob,
+  type RepairJobFinancial,
   type RepairJobProduct,
+  type RepairPaymentAuthorization,
+  type RepairPaymentMethod,
   type RepairPartUsage,
   type RepairSparePart,
 } from '../types';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
-import { resolveRepairAccessContext, resolveRepairTechnicianIds } from '../utils/repairAccessContext';
+import { resolveRepairAccessContext } from '../utils/repairAccessContext';
+import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
+import { canManageRepairWorkshopWork, isSingleBranchTechnician } from '../lib/repairJobIntake';
+import { resolveTechnicianIdForJobAssignment } from '../lib/repairTechnicianAssignment';
 import { repairSparePartSalePrice } from '../utils/sparePartPricing';
 import { resolveRepairSettings, sumServiceCatalogPrices, accessoryLabelsFromIds } from '../config/repairSettings';
 import { listAllowedRepairStatusTargets } from '../utils/repairStatusTransitions';
-import { computeRepairJobCost } from '../utils/repairBusinessLogic';
+import { computeRepairJobCost, resolveRepairJobActionState } from '../utils/repairBusinessLogic';
 import {
   isCancelledStatus,
   isDeliveredStatus,
@@ -95,6 +121,7 @@ const inferProducts = (job: RepairJob | null): RepairJobProduct[] => {
     deviceModel: job.deviceModel,
     accessories: String(job.accessories || ''),
     diagnosis: job.problemDescription || '',
+    technicianDiagnosis: '',
     estimatedCost: toNumber(job.estimatedCost),
     finalCost: toNumber(job.finalCost),
     inWarranty: (job.warranty || 'none') !== 'none',
@@ -104,6 +131,7 @@ const inferProducts = (job: RepairJob | null): RepairJobProduct[] => {
 export const RepairJobDetail: React.FC = () => {
   const { dir } = useAppDirection();
   const { jobId = '', tenantSlug = '' } = useParams<{ jobId: string; tenantSlug?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
@@ -113,10 +141,6 @@ export const RepairJobDetail: React.FC = () => {
   const currentEmployee = useAppStore((s) => s.currentEmployee);
   const catalogProducts = useAppStore((s) => s._rawProducts);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
-  const enabledAccessories = useMemo(
-    () => repairSettings.accessoriesCatalog.filter((item) => item.enabled !== false),
-    [repairSettings.accessoriesCatalog],
-  );
   const enabledServices = useMemo(
     () => repairSettings.serviceCatalog.filter((item) => item.enabled !== false),
     [repairSettings.serviceCatalog],
@@ -131,11 +155,10 @@ export const RepairJobDetail: React.FC = () => {
       }),
     [userProfile, userRoleName, systemSettings, userPermissions],
   );
-  const technicianIds = useMemo(
-    () => resolveRepairTechnicianIds(userProfile, currentEmployee?.id),
-    [userProfile, currentEmployee?.id],
-  );
+  const technicianIds = useRepairTechnicianIds(userProfile, currentEmployee?.id);
   const [job, setJob] = useState<RepairJob | null>(null);
+  const [financial, setFinancial] = useState<RepairJobFinancial | null>(null);
+  const [paymentAuthorization, setPaymentAuthorization] = useState<RepairPaymentAuthorization | null>(null);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [parts, setParts] = useState<RepairSparePart[]>([]);
   const [status, setStatus] = useState<RepairJob['status']>(repairSettings.workflow.initialStatusId);
@@ -151,7 +174,8 @@ export const RepairJobDetail: React.FC = () => {
   const [selectedPartId, setSelectedPartId] = useState('');
   const [partQty, setPartQty] = useState('1');
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('');
-  const [branchTechnicians, setBranchTechnicians] = useState<Array<{ id: string; name: string }>>([]);
+  const [branchTechnicians, setBranchTechnicians] = useState<Array<{ id: string; userId?: string; name: string }>>([]);
+  const [technicianNameById, setTechnicianNameById] = useState<Record<string, string>>({});
   const [showReopenOptions, setShowReopenOptions] = useState(false);
   const [reopenTreasuryHandling, setReopenTreasuryHandling] = useState<'reverse' | 'keep'>('keep');
   const [selectedReopenProductIds, setSelectedReopenProductIds] = useState<string[]>([]);
@@ -162,13 +186,62 @@ export const RepairJobDetail: React.FC = () => {
   const [linkCustomerId, setLinkCustomerId] = useState('');
   const [linkingCustomer, setLinkingCustomer] = useState(false);
   const [exportingPdf, setExportingPdf] = useState(false);
+  const [exportingDeliveryPdf, setExportingDeliveryPdf] = useState(false);
+  const [issuingUsageId, setIssuingUsageId] = useState<string | null>(null);
+  const [intakePrintOpen, setIntakePrintOpen] = useState(false);
+  const [approvalUrl, setApprovalUrl] = useState('');
+  const [creatingApprovalLink, setCreatingApprovalLink] = useState(false);
+  const [preparingPaymentAuth, setPreparingPaymentAuth] = useState(false);
+  const [collectDialogOpen, setCollectDialogOpen] = useState(false);
+  const [collectAmount, setCollectAmount] = useState('');
+  const [collectMethod, setCollectMethod] = useState<RepairPaymentMethod>('cash');
+  const [collectAndDeliver, setCollectAndDeliver] = useState(false);
+  const [paymentBusy, setPaymentBusy] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
+  const productCardPrintRef = useRef<HTMLDivElement>(null);
+  const deliveryAuthorizationPrintRef = useRef<HTMLDivElement>(null);
   const printTemplate = systemSettings?.printTemplate;
-  const handlePrint = useManagedPrint({
+  const productCardPrintSettings = useMemo(
+    () => ({ ...DEFAULT_PRINT_TEMPLATE, ...printTemplate, paperSize: 'a5' as const }),
+    [printTemplate],
+  );
+  const handlePrintReceipt = useManagedPrint({
     contentRef: printRef,
     printSettings: printTemplate,
-    documentTitle: job ? `طلب-صيانة-${job.receiptNo}` : 'طلب-صيانة',
+    documentTitle: job ? `ايصال-استلام-${job.receiptNo}` : 'ايصال-استلام',
   });
+  const handlePrintProductCards = useManagedPrint({
+    contentRef: productCardPrintRef,
+    printSettings: productCardPrintSettings,
+    documentTitle: job ? `كارت-قطعة-${job.receiptNo}` : 'كارت-قطعة',
+  });
+  const handlePrintDeliveryAuthorization = useManagedPrint({
+    contentRef: deliveryAuthorizationPrintRef,
+    printSettings: printTemplate,
+    documentTitle: job ? `اذن-تسليم-${job.deliveryAuthorizationNo || job.receiptNo}` : 'اذن-تسليم',
+  });
+  const printDeliveryAuthorizationRef = useRef(handlePrintDeliveryAuthorization);
+  printDeliveryAuthorizationRef.current = handlePrintDeliveryAuthorization;
+
+  const queueDeliveryAuthorizationPrint = () => {
+    // Print after the delivered document (authorization no.) has painted.
+    // Do not use an effect keyed on the print handler — its identity changes and cancels the timer.
+    window.setTimeout(() => {
+      try {
+        printDeliveryAuthorizationRef.current();
+      } catch {
+        toast.error('تعذر فتح الطباعة تلقائيًا. استخدم زر طباعة إذن التسليم.');
+      }
+    }, 450);
+  };
+
+  useEffect(() => {
+    if (searchParams.get('print') !== 'intake') return;
+    setIntakePrintOpen(true);
+    const next = new URLSearchParams(searchParams);
+    next.delete('print');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   useEffect(() => {
     void repairJobService.getById(jobId).then((row) => {
@@ -187,6 +260,28 @@ export const RepairJobDetail: React.FC = () => {
     void repairBranchService.list().then(setBranches);
     void customerService.listAll({ includeInactive: false }).then(setCustomers).catch(() => setCustomers([]));
   }, [jobId, repairSettings.workflow.initialStatusId, repairSettings.defaults.defaultWarranty]);
+
+  useEffect(() => {
+    const canLoadPaymentDocs =
+      can('repair.finance.view')
+      || can('repair.payments.view')
+      || can('repair.payments.collect')
+      || can('repair.discounts.request');
+    if (!jobId || !canLoadPaymentDocs) {
+      setFinancial(null);
+      setPaymentAuthorization(null);
+      return;
+    }
+    void repairPaymentService.getFinancial(jobId).then(async (row) => {
+      setFinancial(row);
+      setPaymentAuthorization(row?.currentAuthorizationId
+        ? await repairPaymentService.getAuthorization(row.currentAuthorizationId)
+        : null);
+    }).catch(() => {
+      setFinancial(null);
+      setPaymentAuthorization(null);
+    });
+  }, [jobId, can]);
 
   useEffect(() => {
     const id = String(job?.customerId || '').trim();
@@ -209,15 +304,15 @@ export const RepairJobDetail: React.FC = () => {
     void sparePartsService.listParts(job.branchId).then(setParts);
   }, [job?.branchId]);
 
-  const [partCatalogSearch, setPartCatalogSearch] = useState('');
-  const filteredParts = useMemo(() => {
-    const q = partCatalogSearch.trim().toLowerCase();
-    if (!q) return parts;
-    return parts.filter((p) => {
-      const hay = `${p.name || ''} ${p.code || ''} ${p.category || ''} ${p.materialId || ''}`.toLowerCase();
-      return hay.includes(q);
-    });
-  }, [parts, partCatalogSearch]);
+  const partOptions = useMemo(
+    () => parts
+      .filter((p) => p.id)
+      .map((p) => ({
+        value: String(p.id),
+        label: `${p.name}${p.code ? ` (${p.code})` : ''}`.trim(),
+      })),
+    [parts],
+  );
   const allowedStatusOptions = useMemo(() => {
     const current = String(job?.status || status || '');
     const allowed = new Set([
@@ -245,9 +340,10 @@ export const RepairJobDetail: React.FC = () => {
       estimatedCost: 0,
       finalCost: 0,
       finalCostOverride: manualFinalOverride ? toNumber(finalCost) : undefined,
+      paidAmount: job?.paidAmount,
       paymentStatus: job?.paymentStatus,
     });
-  }, [finalCost, job?.laborCost, job?.partsUsed, job?.paymentStatus, jobProducts, manualFinalOverride, serviceOnly, serviceOnlyCost]);
+  }, [finalCost, job?.laborCost, job?.paidAmount, job?.partsUsed, job?.paymentStatus, jobProducts, manualFinalOverride, serviceOnly, serviceOnlyCost]);
   const effectiveFinalCost = computedJobCost.finalCost;
   const hasInWarrantyProduct = useMemo(() => jobProducts.some((item) => item.inWarranty), [jobProducts]);
 
@@ -259,9 +355,11 @@ export const RepairJobDetail: React.FC = () => {
   const branchWarehouseCode = String(branch?.warehouseCode || '').trim();
 
   useEffect(() => {
-    const technicianIds = (branch?.technicianIds || []).map((id) => String(id || '').trim()).filter(Boolean);
-    if (technicianIds.length === 0) {
+    const branchTechIds = (branch?.technicianIds || []).map((id) => String(id || '').trim()).filter(Boolean);
+    const assignedId = String(job?.technicianId || '').trim();
+    if (branchTechIds.length === 0 && !assignedId) {
       setBranchTechnicians([]);
+      setTechnicianNameById({});
       setSelectedTechnicianId('');
       return;
     }
@@ -283,26 +381,52 @@ export const RepairJobDetail: React.FC = () => {
         const id = String(user.id || '').trim();
         if (id) usersById.set(id, user);
       });
-      const options = technicianIds.map((id) => {
+
+      const resolveName = (id: string): { name: string; userId?: string } => {
         const employee = employeesById.get(id) || employeesByUserId.get(id);
         const employeeUserId = String(employee?.userId || '').trim();
-        const user = usersById.get(employeeUserId) || usersById.get(id);
-        const userName = String(user?.displayName || '').trim();
-        const employeeName = String(employee?.name || '').trim();
-        const userEmail = String(user?.email || '').trim();
+        const user = usersById.get(id) || (employeeUserId ? usersById.get(employeeUserId) : undefined);
         const name = String(
-          employeeName
-          || userName
-          || userEmail
-          || 'فني غير معرف',
-        ).trim();
-        return { id, name };
+          employee?.name
+          || user?.displayName
+          || user?.email
+          || '',
+        ).trim() || 'فني غير معرف';
+        return {
+          name,
+          userId: employeeUserId || (usersById.has(id) ? id : undefined),
+        };
+      };
+
+      const nameMap: Record<string, string> = {};
+      const options = branchTechIds.map((id) => {
+        const resolved = resolveName(id);
+        nameMap[id] = resolved.name;
+        if (resolved.userId) nameMap[resolved.userId] = resolved.name;
+        return { id, userId: resolved.userId, name: resolved.name };
       });
+
+      // Job may be assigned by auth UID even when branch stores employee ids (or vice versa).
+      if (assignedId && !nameMap[assignedId]) {
+        const resolved = resolveName(assignedId);
+        nameMap[assignedId] = resolved.name;
+        if (resolved.userId) nameMap[resolved.userId] = resolved.name;
+      }
+
+      // Cross-link: if assigned UID matches a branch option's userId, prefer that name.
+      options.forEach((opt) => {
+        if (opt.userId) nameMap[opt.userId] = opt.name;
+        nameMap[opt.id] = opt.name;
+      });
+
       setBranchTechnicians(options);
+      setTechnicianNameById(nameMap);
       setSelectedTechnicianId((prev) => {
-        if (prev && technicianIds.includes(prev)) return prev;
-        const currentJobTechnicianId = String(job?.technicianId || '').trim();
-        if (currentJobTechnicianId && technicianIds.includes(currentJobTechnicianId)) return currentJobTechnicianId;
+        if (prev && (branchTechIds.includes(prev) || options.some((o) => o.userId === prev))) return prev;
+        if (assignedId) {
+          const byId = options.find((o) => o.id === assignedId || o.userId === assignedId);
+          if (byId) return byId.id;
+        }
         return options[0]?.id || '';
       });
     });
@@ -359,6 +483,7 @@ export const RepairJobDetail: React.FC = () => {
       deviceType: lead?.deviceType || job.deviceType || '',
       deviceBrand: lead?.deviceBrand || job.deviceBrand || '',
       deviceModel: lead?.deviceModel || job.deviceModel || '',
+      deviceSerial: String(lead?.serialNo || '').trim(),
       problemDescription: lead?.diagnosis || job.problemDescription || '',
       accessories: normalizedProducts[0]?.accessories || job.accessories || '',
       estimatedCost: costForSave.estimatedCost || costForSave.finalCost,
@@ -368,55 +493,15 @@ export const RepairJobDetail: React.FC = () => {
         : (nextServiceOnly ? toNumber(serviceOnlyCost || finalCost) : undefined),
       serviceOnlyCost: nextServiceOnly ? toNumber(serviceOnlyCost || finalCost) : 0,
       warranty: normalizedProducts.some((item) => item.inWarranty) ? 'none' : warranty,
+      warrantyScope: normalizedProducts.some((item) => item.inWarranty)
+        ? 'manufacturer' as const
+        : 'none' as const,
     };
     await repairJobService.update(jobId, payload);
     const refreshed = await repairJobService.getById(jobId);
     if (refreshed) {
       setJob(refreshed);
       setJobProducts(inferProducts(refreshed));
-    }
-  };
-
-  const applyStatus = async () => {
-    if (!canEditThisJob) {
-      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
-      return;
-    }
-    try {
-      await persistProducts(jobProducts, serviceOnly);
-      const finalCostNumber = effectiveFinalCost;
-      const needsTreasuryPosting = isDeliveredStatus(status)
-        && finalCostNumber > 0
-        && !isDeliveredStatus(job?.status || '');
-      if (needsTreasuryPosting) {
-        await repairTreasuryService.ensureOpenSession(job?.branchId || '');
-      }
-      await repairJobService.changeStatus({
-        jobId,
-        status,
-        technicianId: userProfile?.id,
-        reason: isUnrepairableStatus(status) || isCancelledStatus(status) ? reason : undefined,
-        finalCost: isDeliveredStatus(status) ? finalCostNumber : undefined,
-        warranty: isDeliveredStatus(status) ? warranty : undefined,
-        actorUid: userProfile?.id || '',
-        actorName: userProfile?.displayName || userProfile?.email || 'مستخدم',
-      });
-      if (needsTreasuryPosting) {
-        await repairTreasuryService.addEntry({
-          branchId: job.branchId,
-          entryType: 'INCOME',
-          amount: finalCostNumber,
-          note: `تحصيل تسليم طلب صيانة #${job.receiptNo}`,
-          referenceId: jobId,
-          createdBy: userProfile?.id || '',
-          createdByName: userProfile?.displayName || userProfile?.email || 'system',
-        });
-      }
-      const next = await repairJobService.getById(jobId);
-      setJob(next);
-      toast.success(needsTreasuryPosting ? 'تم تحديث الحالة وتسجيل التحصيل بالخزينة.' : 'تم تحديث الحالة.');
-    } catch (e: any) {
-      toast.error(e?.message || 'تعذر تحديث الحالة.');
     }
   };
 
@@ -443,18 +528,28 @@ export const RepairJobDetail: React.FC = () => {
       toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
       return;
     }
-    const technicianId = String(selectedTechnicianId || '').trim();
+    const selectedId = String(selectedTechnicianId || '').trim();
     const branchTechnicianIds = (branch?.technicianIds || []).map((id) => String(id || '').trim());
-    if (!technicianId) {
+    if (!selectedId) {
       toast.error('اختر فنيًا أولًا.');
       return;
     }
-    if (!branchTechnicianIds.includes(technicianId)) {
+    if (!branchTechnicianIds.includes(selectedId)) {
       toast.error('الفني المختار غير مربوط بهذا الفرع.');
       return;
     }
+    const { assignId, hasLinkedUser } = resolveTechnicianIdForJobAssignment({
+      selectedBranchTechnicianId: selectedId,
+      branchTechnicians,
+    });
+    if (!hasLinkedUser) {
+      toast.error(
+        'هذا الموظف غير مربوط بحساب مستخدم. اربط الموظف بالمستخدم من إدارة المستخدمين ثم أعد الإسناد، وإلا لن يظهر الطلب في «طلباتي».',
+      );
+      return;
+    }
     try {
-      await repairJobService.assignTechnician(jobId, technicianId, {
+      await repairJobService.assignTechnician(jobId, assignId, {
         uid: userProfile?.id || '',
         name: userProfile?.displayName || userProfile?.email || 'مستخدم',
       });
@@ -466,8 +561,8 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const addPartUsage = async () => {
-    if (!canEditThisJob) {
-      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+    if (!canEditThisJob || !canManageWorkshopWork) {
+      toast.error('صرف القطع يتم من صفحة الورشة فقط.');
       return;
     }
     if (serviceOnly) {
@@ -494,32 +589,22 @@ export const RepairJobDetail: React.FC = () => {
       });
 
       if (materialId) {
-        const created = await repairSpareIssueService.create({
-          warehouseId: branchWarehouseId,
-          branchId: job.branchId,
+        const result = await repairJobSparePartRequestService.request({
           jobId,
-          jobCode: String(job.receiptNo || job.id || ''),
-          note: 'صرف من طلب صيانة',
-          lines: [{ itemId: materialId, quantity: qty }],
-          jobPartUsage: {
-            partId: part.id || '',
-            partName: part.name,
-            scope: partScope,
-            ...(partScope === 'product'
-              ? {
-                  productItemId: partProductItemId,
-                  productName:
-                    jobProducts.find((item) => item.itemId === partProductItemId)?.productName || '',
-                }
-              : {}),
-          },
+          materialId,
+          quantity: qty,
         });
-        if (created.approvalMode === 'direct') {
-          await repairSpareIssueService.issue(created.id);
-          toast.success(`تم صرف القطعة على المخازن (${created.referenceNo}).`);
+        if (result.path === 'center') {
+          toast.success(
+            result.approvalMode === 'direct'
+              ? `تم صرف القطعة على المخازن (${result.referenceNo}).`
+              : `تم إنشاء سند ${result.referenceNo} بانتظار الاعتماد من شاشة سندات صرف قطع الغيار.`,
+          );
         } else {
           toast.success(
-            `تم إنشاء سند ${created.referenceNo} بانتظار الاعتماد من شاشة سندات صرف قطع الغيار.`,
+            result.availability === 'none'
+              ? `سُجّلت القطعة بانتظار التوريد (ناقصة) — ${result.replenishmentReferenceNo}.`
+              : `سُجّلت القطعة بانتظار التوريد — ${result.replenishmentReferenceNo}.`,
           );
         }
         setJob(await repairJobService.getById(jobId));
@@ -558,9 +643,26 @@ export const RepairJobDetail: React.FC = () => {
     }
   };
 
+  const issuePendingUsage = async (usageId: string) => {
+    if (!jobId || !canEditThisJob || !canManageWorkshopWork) {
+      toast.error('صرف القطع يتم من صفحة الورشة فقط.');
+      return;
+    }
+    setIssuingUsageId(usageId);
+    try {
+      const result = await repairJobSparePartRequestService.issuePending({ jobId, usageId });
+      toast.success(`تم صرف القطعة (${result.referenceNo}).`);
+      setJob(await repairJobService.getById(jobId));
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر صرف القطعة.');
+    } finally {
+      setIssuingUsageId(null);
+    }
+  };
+
   const removePartUsage = async (idx: number) => {
-    if (!canEditThisJob) {
-      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+    if (!canEditThisJob || !canManageWorkshopWork) {
+      toast.error('تعديل القطع يتم من صفحة الورشة فقط.');
       return;
     }
     if (!job?.branchId || !branchWarehouseId) {
@@ -665,6 +767,10 @@ export const RepairJobDetail: React.FC = () => {
   };
 
   const saveMultiProductDetails = async () => {
+    if (!canManageWorkshopWork) {
+      toast.error('الخدمات والتشخيص النهائي تُحدَّث من صفحة الورشة.');
+      return;
+    }
     if (!canEditThisJob) {
       toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
       return;
@@ -675,7 +781,21 @@ export const RepairJobDetail: React.FC = () => {
       return;
     }
     try {
-      await persistProducts(jobProducts, serviceOnly);
+      const productsToSave = canManageWorkshopWork
+        ? jobProducts
+        : jobProducts.map((row) => {
+            const existing = (job?.jobProducts || []).find((p) => String(p.itemId) === String(row.itemId));
+            return {
+              ...row,
+              serviceIds: Array.isArray(existing?.serviceIds) ? existing!.serviceIds : [],
+              estimatedCost: Number(existing?.estimatedCost || 0),
+              finalCost: Number(existing?.finalCost || 0),
+            };
+          });
+      await persistProducts(
+        productsToSave,
+        canManageWorkshopWork ? serviceOnly : Boolean(job?.isServiceOnly),
+      );
       toast.success('تم حفظ بيانات المنتجات والتشخيص.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر حفظ بيانات المنتجات.');
@@ -809,41 +929,330 @@ export const RepairJobDetail: React.FC = () => {
       setExportingPdf(false);
     }
   };
-  const appBaseUrl = useMemo(() => {
-    const envUrl = String(import.meta.env.VITE_PUBLIC_APP_URL || import.meta.env.VITE_SITE_URL || '').trim();
-    if (envUrl) return envUrl.replace(/\/+$/, '');
-    if (typeof window === 'undefined') return '';
-    return String(window.location.origin || '').replace(/\/+$/, '');
-  }, []);
+  const exportDeliveryAuthorization = async () => {
+    if (!deliveryAuthorizationPrintRef.current || !job || !isDeliveredStatus(job.status)) {
+      toast.error('إذن التسليم متاح بعد إتمام التسليم فقط.');
+      return;
+    }
+    setExportingDeliveryPdf(true);
+    try {
+      await exportToPDF(
+        deliveryAuthorizationPrintRef.current,
+        `delivery-authorization-${job.deliveryAuthorizationNo || job.receiptNo}`,
+      );
+      toast.success('تم تنزيل إذن التسليم PDF.');
+    } catch {
+      toast.error('تعذر تصدير إذن التسليم.');
+    } finally {
+      setExportingDeliveryPdf(false);
+    }
+  };
+  const reloadPaymentDocs = async (id: string) => {
+    try {
+      const row = await repairPaymentService.getFinancial(id);
+      setFinancial(row);
+      setPaymentAuthorization(row?.currentAuthorizationId
+        ? await repairPaymentService.getAuthorization(row.currentAuthorizationId)
+        : null);
+    } catch {
+      // Keep previous UI if the actor can prepare but cannot read finance docs.
+    }
+  };
+
+  const refreshJobAndPayment = async (id: string) => {
+    const [nextJob] = await Promise.all([
+      repairJobService.getById(id),
+      reloadPaymentDocs(id),
+    ]);
+    if (nextJob) {
+      setJob(nextJob);
+      setStatus(nextJob.status);
+      setWarranty(nextJob.warranty || repairSettings.defaults.defaultWarranty || 'none');
+    }
+    return nextJob;
+  };
+
+  const preparePaymentAuthorizationFromJob = async () => {
+    if (!job?.id) return;
+    if (!(can('repair.payments.collect') || can('repair.discounts.request'))) {
+      toast.error('ليس لديك صلاحية تجهيز إذن الدفع.');
+      return;
+    }
+    if (job.status !== 'ready') {
+      toast.error('تجهيز إذن الدفع متاح بعد وصول الطلب لحالة جاهز للتسليم.');
+      return;
+    }
+    setPreparingPaymentAuth(true);
+    try {
+      await repairPaymentService.prepare({
+        jobId: job.id,
+        discountType: 'none',
+        discountValue: 0,
+      });
+      await refreshJobAndPayment(job.id);
+      toast.success(
+        isManufacturerWarrantyJob(job)
+          ? 'تم تجهيز إقفال الضمان — جاهز للتسليم بدون تحصيل.'
+          : 'تم تجهيز إذن الدفع وأصبح جاهزًا للتحصيل.',
+      );
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تجهيز إذن الدفع.');
+    } finally {
+      setPreparingPaymentAuth(false);
+    }
+  };
+
+  const openCollectDialog = (opts?: { deliverAfter?: boolean }) => {
+    if (!paymentAuthorization?.id) {
+      toast.error('جهّز إذن الدفع أولًا.');
+      return;
+    }
+    if (isWarrantySettlementAuth(paymentAuthorization)) {
+      toast.error('إذن ضمان المصنّع لا يُحصَّل. استخدم التسليم مباشرة.');
+      return;
+    }
+    if (!can('repair.payments.collect')) {
+      toast.error('ليس لديك صلاحية تحصيل دفعة.');
+      return;
+    }
+    const due = Number(paymentAuthorization.balanceDue || 0);
+    setCollectAmount(String(due > 0 ? due : 0));
+    setCollectMethod('cash');
+    setCollectAndDeliver(Boolean(opts?.deliverAfter));
+    setCollectDialogOpen(true);
+  };
+
+  const confirmReceptionDelivery = async (opts?: { autoPrint?: boolean; skipConfirm?: boolean }) => {
+    if (!job?.id || !can('repair.jobs.reception')) {
+      toast.error('التسليم متاح لموظف الاستقبال فقط.');
+      return false;
+    }
+    if (!opts?.skipConfirm) {
+      const warrantyClose = isManufacturerWarrantyJob(job) || isWarrantySettlementAuth(paymentAuthorization);
+      const confirmed = window.confirm(
+        warrantyClose
+          ? `تأكيد تسليم ضمان مصنّع #${job.receiptNo}؟\nبدون تحصيل ولا قيد إيراد (تكلفة القطع عند الصرف فقط).`
+          : `تأكيد تسليم الطلب #${job.receiptNo}؟\nالصافي: ${Number(financial?.netAmount || paymentAuthorization?.netAmount || 0).toLocaleString('ar-EG')} ج.م\nالمتبقي: ${Number(financial?.balanceDue || paymentAuthorization?.balanceDue || 0).toLocaleString('ar-EG')} ج.م`,
+      );
+      if (!confirmed) return false;
+    }
+    try {
+      await repairPaymentService.deliver({ jobId: job.id, warranty });
+      await refreshJobAndPayment(job.id);
+      toast.success(
+        isManufacturerWarrantyJob(job) || isWarrantySettlementAuth(paymentAuthorization)
+          ? 'تم تسليم ضمان المصنّع وإقفال الطلب بدون إيراد.'
+          : 'تم تسليم المنتج وإقفال الطلب وإثبات القيد المحاسبي.',
+      );
+      if (opts?.autoPrint) queueDeliveryAuthorizationPrint();
+      return true;
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تسليم المنتج.');
+      return false;
+    }
+  };
+
+  const submitCollectFromJob = async () => {
+    if (!job?.id || !paymentAuthorization?.id) return;
+    const amount = Number(collectAmount || 0);
+    if (!(amount > 0)) {
+      toast.error('أدخل مبلغًا صحيحًا.');
+      return;
+    }
+    if (collectAndDeliver) {
+      const ok = window.confirm(
+        `تأكيد تحصيل ${amount.toLocaleString('ar-EG')} ج.م وتسليم الطلب #${job.receiptNo} ثم طباعة إذن التسليم؟`,
+      );
+      if (!ok) return;
+    }
+    setPaymentBusy(true);
+    try {
+      const requestId = globalThis.crypto?.randomUUID?.() || `pay-${Date.now()}`;
+      await repairPaymentService.collect({
+        authorizationId: paymentAuthorization.id,
+        amount,
+        method: collectMethod,
+        requestId,
+      });
+      toast.success('تم تسجيل الدفعة وترحيلها للخزينة والحسابات.');
+      setCollectDialogOpen(false);
+      const authId = paymentAuthorization.id;
+      await refreshJobAndPayment(job.id);
+      if (collectAndDeliver) {
+        const refreshed = await repairPaymentService.getAuthorization(authId);
+        const remaining = Number(refreshed?.balanceDue || 0);
+        if (remaining > 0.001) {
+          toast.error('ما زال هناك رصيد متبقٍ — أكمل التحصيل قبل التسليم.');
+          return;
+        }
+        await confirmReceptionDelivery({ autoPrint: true, skipConfirm: true });
+      }
+    } catch (error: unknown) {
+      toast.error(error instanceof Error ? error.message : 'تعذر تسجيل الدفعة.');
+    } finally {
+      setPaymentBusy(false);
+    }
+  };
   const trackUrl = useMemo(() => {
     if (!job) return '';
-    if (!appBaseUrl) return '';
-    const slugFromPath = typeof window === 'undefined'
-      ? ''
-      : window.location.pathname.split('/').filter(Boolean)[1] || '';
-    const effectiveSlug = String(tenantSlug || slugFromPath || '').trim();
-    if (!effectiveSlug) return `${appBaseUrl}/track`;
-    const params = new URLSearchParams();
-    if (job.receiptNo) params.set('receipt', String(job.receiptNo));
-    if (job.customerPhone) params.set('phone', String(job.customerPhone));
-    const query = params.toString();
-    return `${appBaseUrl}/track/${encodeURIComponent(effectiveSlug)}${query ? `?${query}` : ''}`;
-  }, [appBaseUrl, job, tenantSlug]);
+    return buildRepairTrackPublicUrl({
+      tenantSlug,
+      receiptNo: job.receiptNo,
+      customerPhone: job.customerPhone,
+    });
+  }, [job, tenantSlug]);
   const whatsappText = useMemo(() => {
     if (!job) return '';
-    const baseMessage = formatRepairWhatsAppMessage(job);
-    if (!trackUrl) return `${baseMessage}\nرابط متابعة الطلب: /track`;
-    return [
-      baseMessage,
-      `رابط متابعة الطلب (  اضغط هنا): ${trackUrl}`,
-    ].join('\n');
+    return formatRepairWhatsAppMessage(job, trackUrl || undefined);
   }, [job, trackUrl]);
+  const waIntake = useMemo(() => {
+    if (!job) return '';
+    return formatRepairIntakeConfirmationMessage(job, trackUrl || undefined);
+  }, [job, trackUrl]);
+  const waReady = useMemo(() => {
+    if (!job) return '';
+    return formatRepairReadyMessage(job, trackUrl || undefined);
+  }, [job, trackUrl]);
+  const waApproval = useMemo(() => {
+    if (!job) return '';
+    return formatRepairApprovalRequestMessage(job, approvalUrl);
+  }, [job, approvalUrl]);
   const isAssignedToCurrentTechnician = useMemo(() => {
     const assigned = String(job?.technicianId || '').trim();
     return assigned.length > 0 && technicianIds.includes(assigned);
   }, [job?.technicianId, technicianIds]);
   const canEditThisJob = can('repair.jobs.edit') || (repairCtx.isRepairTechnician && isAssignedToCurrentTechnician);
-  const canViewThisJob = !repairCtx.jobsTechnicianOnly || isAssignedToCurrentTechnician;
+  const actionState = useMemo(() => {
+    if (!job) return null;
+    return resolveRepairJobActionState({
+      job,
+      access: repairCtx,
+      technicianIds,
+      canEditByPermission: can('repair.jobs.edit'),
+    });
+  }, [job, repairCtx, technicianIds, can]);
+  const canManageWorkshopWork = canManageRepairWorkshopWork({
+    canEditJob: canEditThisJob,
+    isRepairTechnician: repairCtx.isRepairTechnician,
+    isAssignedTechnician: isAssignedToCurrentTechnician,
+    canManageBranches: can('repair.branches.manage'),
+    canViewAllCallCenter: can('repair.callCenter.viewAll'),
+    canCreateJobs: can('repair.jobs.create'),
+    canEditJobs: can('repair.jobs.edit'),
+  });
+  const canRequestApprovalLink = Boolean(
+    actionState?.canRequestApproval
+    && can('repair.jobs.reception')
+    && (job?.status === 'estimate_ready' || job?.status === 'waiting_approval'),
+  );
+  const canPreparePaymentAuth = can('repair.payments.collect') || can('repair.discounts.request');
+  const paymentClose = useMemo(
+    () => resolveRepairJobPaymentCloseState({
+      jobStatus: job?.status || '',
+      authorization: paymentAuthorization,
+      canPrepare: canPreparePaymentAuth,
+      canCollect: can('repair.payments.collect'),
+      allowPartialCollection: repairSettings.payments.allowPartialCollection !== false,
+      canDeliver: can('repair.jobs.reception'),
+      isManufacturerWarrantyJob: job ? isManufacturerWarrantyJob(job) : false,
+    }),
+    [job, paymentAuthorization, canPreparePaymentAuth, can, repairSettings.payments.allowPartialCollection],
+  );
+
+  const generateApprovalLink = async () => {
+    if (!job?.id || !canRequestApprovalLink) {
+      toast.error('لا تملك صلاحية إنشاء رابط موافقة لهذا الطلب.');
+      return;
+    }
+    setCreatingApprovalLink(true);
+    try {
+      if (!financial?.currentAuthorizationId) {
+        await repairPaymentService.prepare({
+          jobId: job.id,
+          discountType: 'none',
+          discountValue: 0,
+          reason: 'تقدير فني لموافقة العميل',
+        });
+      }
+      const r = await repairPaymentService.requestCustomerApproval(job.id);
+      if (!r?.token) {
+        toast.error('تعذر إنشاء رابط الموافقة.');
+        return;
+      }
+      const url = buildRepairApprovalPublicUrl({
+        tenantSlug,
+        jobId: job.id,
+        token: r.token,
+      });
+      if (!url) {
+        toast.error('تعذر بناء رابط الموافقة. تحقق من إعدادات الرابط العام.');
+        return;
+      }
+      setApprovalUrl(url);
+      const [nextJob, nextFinancial] = await Promise.all([
+        repairJobService.getById(job.id),
+        repairPaymentService.getFinancial(job.id),
+      ]);
+      if (nextJob) setJob(nextJob);
+      if (nextFinancial) {
+        setFinancial(nextFinancial);
+        if (nextFinancial.currentAuthorizationId) {
+          setPaymentAuthorization(await repairPaymentService.getAuthorization(nextFinancial.currentAuthorizationId));
+        }
+      }
+      toast.success('تم إنشاء رابط موافقة جديد.');
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'تعذر إنشاء الرابط.');
+    } finally {
+      setCreatingApprovalLink(false);
+    }
+  };
+
+  const canAssignTechnician = canEditThisJob;
+  const isFixedTechnicianAssignment = isSingleBranchTechnician(branch?.technicianIds)
+    || branchTechnicians.length === 1;
+
+  useEffect(() => {
+    if (!job?.id || !canAssignTechnician || branchTechnicians.length === 0) return;
+    const assignedId = String(job.technicianId || '').trim();
+    if (!assignedId) return;
+    const match = branchTechnicians.find(
+      (tech) => tech.id === assignedId || String(tech.userId || '').trim() === assignedId,
+    );
+    const linkedUserId = String(match?.userId || '').trim();
+    // Legacy rows stored employee id — rewrite to Auth uid once so «طلباتي» finds the job.
+    if (!linkedUserId || linkedUserId === assignedId) return;
+    let cancelled = false;
+    void repairJobService
+      .assignTechnician(job.id, linkedUserId, {
+        uid: userProfile?.id || '',
+        name: userProfile?.displayName || userProfile?.email || 'مستخدم',
+      })
+      .then(async () => {
+        if (cancelled) return;
+        const refreshed = await repairJobService.getById(String(job.id));
+        if (!cancelled && refreshed) setJob(refreshed);
+      })
+      .catch(() => {
+        // Best-effort heal; assignment UI still works manually.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [branchTechnicians, canAssignTechnician, job?.id, job?.technicianId, userProfile?.displayName, userProfile?.email, userProfile?.id]);
+
+  const assignedTechnicianLabel = useMemo(() => {
+    const assignedId = String(job?.technicianId || '').trim();
+    if (!assignedId) return 'غير مسند';
+    const fromMap = String(technicianNameById[assignedId] || '').trim();
+    if (fromMap && fromMap !== 'فني غير معرف') return fromMap;
+    const match = branchTechnicians.find(
+      (tech) => tech.id === assignedId || tech.userId === assignedId,
+    );
+    if (match?.name && match.name !== 'فني غير معرف') return match.name;
+    return fromMap || 'فني غير معرف';
+  }, [branchTechnicians, job?.technicianId, technicianNameById]);
+  const canViewThisJob = !repairCtx.jobsTechnicianOnly;
   const canDeleteJob = Boolean(job) && !isDeliveredStatus(job?.status || '') && !Boolean(job?.isClosed) && canEditThisJob;
 
   const deleteJob = async () => {
@@ -865,14 +1274,14 @@ export const RepairJobDetail: React.FC = () => {
 
   if (!job) {
     return (
-      <div dir={dir} className="erp-ds-clean space-y-4" role="status" aria-live="polite">
+      <div dir={dir} className="erp-ds-clean space-y-4 p-4 md:p-6" role="status" aria-live="polite">
         <PageHeader title="تفاصيل طلب الصيانة" subtitle="جاري تحميل الطلب…" />
       </div>
     );
   }
   if (!canViewThisJob) {
     return (
-      <div dir={dir} className="erp-ds-clean space-y-4">
+      <div dir={dir} className="erp-ds-clean space-y-4 p-4 md:p-6">
         <PageHeader title="تفاصيل طلب الصيانة" />
         <div className="rounded border border-amber-300 bg-amber-50 p-4 text-amber-900 text-sm">
           هذا الطلب غير مسند لك، ولا تملك صلاحية عرضه.
@@ -881,33 +1290,114 @@ export const RepairJobDetail: React.FC = () => {
     );
   }
 
-  const warrantyLabel =
+  /** ضمان الورشة بعد الإصلاح (مدة) — غير ضمان الجهاز عند الاستلام (inWarranty على المنتج). */
+  const workshopWarrantyLabel =
     job.warranty === '3months' ? '3 شهور' : job.warranty === '6months' ? '6 شهور' : 'بدون';
   const accessoriesSummary =
     jobProducts.map((item) => String(item.accessories || '').trim()).filter(Boolean).join(' | ')
     || job.accessories
     || '—';
+  const financialJob: RepairJob = financial
+    ? {
+        ...job,
+        finalCost: financial.netAmount,
+        paidAmount: financial.paidAmount,
+        balanceDue: financial.balanceDue,
+        paymentStatus: financial.paymentStatus,
+      }
+    : job;
 
   return (
-    <div className="erp-ds-clean space-y-4" dir={dir}>
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
       <PageHeader
         title={`طلب صيانة #${job.receiptNo}`}
-        subtitle="مراجعة الحالة والمنتجات وقطع الغيار، مع طباعة وفق قالب النظام."
+        subtitle={
+          isDeliveredStatus(job.status)
+            ? 'الطلب مقفل بعد التسليم — اطبع إذن التسليم من الصندوق أدناه أو أعد فتح الإصلاح إن لزم.'
+            : 'شاشة الاستقبال: عرض الطلب والإيصال وإسناد الفني. شغل الورشة من صفحة الفني.'
+        }
         icon="fact_check"
-        backAction={{ to: withTenantPath(tenantSlug, '/repair/admin-orders') }}
+        backAction={{ to: withTenantPath(tenantSlug, '/repair/jobs') }}
         actions={(
           <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={job.status} />
-            <Button type="button" variant="outline" size="sm" onClick={() => handlePrint()}>
-              <Printer className="h-4 w-4 ms-1" />
-              طباعة
-            </Button>
-            <Button type="button" variant="outline" size="sm" onClick={() => void exportReceipt()} disabled={exportingPdf}>
-              <Download className="h-4 w-4 ms-1" />
-              {exportingPdf ? 'جاري التصدير…' : 'تنزيل PDF'}
-            </Button>
-            <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
-            {isDeliveredStatus(job.status) ? (
+            <StatusBadge status={job.status} size="md" />
+            {!isDeliveredStatus(job.status)
+              && (can('repair.adminDashboard.view') || can('repair.branches.manage')) ? (
+              <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
+                <Button type="button" variant="secondary" size="sm">فتح الورشة</Button>
+              </Link>
+            ) : null}
+            {!isDeliveredStatus(job.status) ? (
+              <>
+                <Button type="button" variant="outline" size="sm" onClick={() => handlePrintProductCards()}>
+                  <Printer className="h-4 w-4 ms-1" />
+                  كارت القطعة
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => handlePrintReceipt()}>
+                  <Printer className="h-4 w-4 ms-1" />
+                  إيصال العميل
+                </Button>
+                <Button type="button" variant="outline" size="sm" onClick={() => void exportReceipt()} disabled={exportingPdf}>
+                  <Download className="h-4 w-4 ms-1" />
+                  {exportingPdf ? 'جاري التصدير…' : 'تنزيل PDF'}
+                </Button>
+                <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
+              </>
+            ) : null}
+            {/* طباعة/PDF إذن التسليم تظهر في صندوق الإقفال بعد التسليم لتفادي التكرار */}
+            {isDeliveredStatus(job.status) && !paymentClose.canPrintAction ? (
+              <>
+                <Button type="button" size="sm" onClick={() => handlePrintDeliveryAuthorization()}>
+                  <Printer className="h-4 w-4 ms-1" />
+                  طباعة إذن التسليم
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void exportDeliveryAuthorization()}
+                  disabled={exportingDeliveryPdf}
+                >
+                  <Download className="h-4 w-4 ms-1" />
+                  {exportingDeliveryPdf ? 'جاري التصدير…' : 'PDF إذن التسليم'}
+                </Button>
+              </>
+            ) : null}
+            {!isDeliveredStatus(job.status) && paymentClose.canPrepareAction ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={preparingPaymentAuth}
+                onClick={() => void preparePaymentAuthorizationFromJob()}
+              >
+                <FileCheck2 className="h-4 w-4 ms-1" />
+                {preparingPaymentAuth
+                  ? 'جاري التجهيز…'
+                  : (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')}
+              </Button>
+            ) : null}
+            {!isDeliveredStatus(job.status) && paymentClose.canCollectAndDeliverAction ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={paymentBusy}
+                onClick={() => openCollectDialog({ deliverAfter: true })}
+              >
+                <Banknote className="h-4 w-4 ms-1" />
+                تحصيل كامل وتسليم
+              </Button>
+            ) : null}
+            {!isDeliveredStatus(job.status) && paymentClose.canDeliverOnlyAction ? (
+              <Button
+                type="button"
+                size="sm"
+                disabled={paymentBusy}
+                onClick={() => void confirmReceptionDelivery({ autoPrint: true })}
+              >
+                {paymentClose.isWarrantySettlement ? 'تسليم ضمان' : 'تأكيد تسليم المنتج'}
+              </Button>
+            ) : null}
+            {isDeliveredStatus(job.status) && canEditThisJob ? (
               <Button type="button" variant="secondary" size="sm" onClick={() => setShowReopenOptions((v) => !v)}>
                 {showReopenOptions ? 'إخفاء إعادة الإصلاح' : 'إعادة إصلاح'}
               </Button>
@@ -915,6 +1405,179 @@ export const RepairJobDetail: React.FC = () => {
           </div>
         )}
       />
+
+      {paymentClose.showPanel ? (
+        <section
+          className={
+            paymentClose.step === 'print'
+              ? 'rounded-xl border border-emerald-200/90 bg-gradient-to-l from-emerald-50 via-white to-white p-4 shadow-sm ring-1 ring-emerald-100'
+              : paymentClose.step === 'blocked'
+                ? 'rounded-xl border border-rose-200 bg-rose-50/60 p-4 shadow-sm'
+                : 'rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50 via-white to-white p-4 shadow-sm ring-1 ring-sky-100'
+          }
+        >
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="min-w-0 space-y-1.5">
+              <div className="flex flex-wrap items-center gap-2">
+                {paymentClose.step === 'print' ? (
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+                ) : null}
+                <h2 className="text-base font-semibold tracking-tight text-foreground">
+                  {paymentClose.step === 'print'
+                    ? (paymentClose.isWarrantySettlement ? 'تسليم ضمان جاهز' : 'إذن التسليم جاهز')
+                    : paymentClose.step === 'collect'
+                      ? 'التحصيل والتسليم'
+                      : paymentClose.step === 'deliver'
+                        ? (paymentClose.isWarrantySettlement ? 'تسليم ضمان مصنّع' : 'جاهز للتسليم')
+                        : paymentClose.step === 'prepare'
+                          ? (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')
+                          : 'إقفال الدفع والتسليم'}
+                </h2>
+                {paymentClose.step !== 'print' ? (
+                  <span
+                    className={
+                      paymentClose.step === 'blocked'
+                        ? 'inline-flex items-center rounded-md border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800'
+                        : paymentClose.step === 'collect' || paymentClose.step === 'deliver'
+                          ? 'inline-flex items-center rounded-md border border-emerald-300/70 bg-emerald-100/80 px-2 py-0.5 text-[11px] font-medium text-emerald-900'
+                          : 'inline-flex items-center rounded-md border border-sky-300/70 bg-sky-100/80 px-2 py-0.5 text-[11px] font-medium text-sky-900'
+                    }
+                  >
+                    {paymentClose.step === 'blocked' ? 'موقوف' : paymentClose.stepLabel}
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center rounded-md border border-emerald-300/80 bg-emerald-100/90 px-2 py-0.5 text-[11px] font-medium text-emerald-900">
+                    {paymentClose.isWarrantySettlement
+                      ? 'ضمان — بدون تحصيل'
+                      : (paymentClose.balanceDue <= 0 ? 'مسدد بالكامل' : 'مُسلَّم')}
+                  </span>
+                )}
+              </div>
+              {paymentClose.step === 'print' ? (
+                <p className="text-sm text-emerald-950/80">
+                  رقم الإذن{' '}
+                  <span className="font-mono font-semibold tracking-wide" dir="ltr">
+                    {job.deliveryAuthorizationNo || `DEL-${job.receiptNo}`}
+                  </span>
+                </p>
+              ) : (
+                <p className="text-sm text-muted-foreground">
+                  {paymentClose.step === 'blocked'
+                    ? paymentClose.stepLabel
+                    : paymentClose.isWarrantySettlement
+                      ? 'تجهيز إقفال الضمان ← التسليم ← طباعة (بدون تحصيل أو إيراد)'
+                      : 'تجهيز الإذن ← التحصيل ← التسليم ← طباعة إذن التسليم'}
+                </p>
+              )}
+            </div>
+            {paymentClose.canPrintAction ? (
+              <div className="flex shrink-0 flex-wrap gap-2">
+                <Button type="button" onClick={() => handlePrintDeliveryAuthorization()}>
+                  <Printer className="h-4 w-4 ms-1" />
+                  طباعة إذن التسليم
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={exportingDeliveryPdf}
+                  onClick={() => void exportDeliveryAuthorization()}
+                >
+                  <Download className="h-4 w-4 ms-1" />
+                  {exportingDeliveryPdf ? 'جاري التصدير…' : 'تصدير PDF'}
+                </Button>
+              </div>
+            ) : null}
+          </div>
+
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {[
+              { key: 'net', label: 'الصافي', value: paymentClose.netAmount },
+              { key: 'paid', label: 'المدفوع', value: paymentClose.paidAmount },
+              { key: 'due', label: 'المتبقي', value: paymentClose.balanceDue },
+            ].map((row) => {
+              const settledDue = row.key === 'due' && row.value <= 0 && paymentClose.step === 'print';
+              return (
+                <div
+                  key={row.key}
+                  className={
+                    settledDue
+                      ? 'rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5'
+                      : 'rounded-lg border border-border/70 bg-background/95 px-3 py-2.5'
+                  }
+                >
+                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
+                  <div
+                    className={
+                      settledDue
+                        ? 'mt-0.5 text-base font-semibold tabular-nums tracking-tight text-emerald-800'
+                        : 'mt-0.5 text-base font-semibold tabular-nums tracking-tight'
+                    }
+                  >
+                    {row.value.toLocaleString('ar-EG')}
+                    <span className="ms-1 text-xs font-medium text-muted-foreground">ج.م</span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          {!paymentClose.canPrintAction ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {paymentClose.canPrepareAction ? (
+                <Button
+                  type="button"
+                  disabled={preparingPaymentAuth || paymentBusy}
+                  onClick={() => void preparePaymentAuthorizationFromJob()}
+                >
+                  <FileCheck2 className="h-4 w-4 ms-1" />
+                  {preparingPaymentAuth
+                    ? 'جاري التجهيز…'
+                    : (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')}
+                </Button>
+              ) : null}
+              {paymentClose.canCollectAndDeliverAction ? (
+                <Button
+                  type="button"
+                  disabled={paymentBusy}
+                  onClick={() => openCollectDialog({ deliverAfter: true })}
+                >
+                  <Banknote className="h-4 w-4 ms-1" />
+                  تحصيل كامل وتسليم
+                </Button>
+              ) : null}
+              {paymentClose.canCollectAction ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={paymentBusy}
+                  onClick={() => openCollectDialog({ deliverAfter: false })}
+                >
+                  تحصيل جزئي / مبلغ مخصص
+                </Button>
+              ) : null}
+              {paymentClose.canDeliverOnlyAction ? (
+                <Button
+                  type="button"
+                  disabled={paymentBusy}
+                  onClick={() => void confirmReceptionDelivery({ autoPrint: true })}
+                >
+                  <CheckCircle2 className="h-4 w-4 ms-1" />
+                  {paymentClose.isWarrantySettlement
+                    ? 'تسليم ضمان وطباعة الإذن'
+                    : 'تأكيد التسليم وطباعة الإذن'}
+                </Button>
+              ) : null}
+              {paymentClose.step === 'blocked' ? (
+                <Button type="button" variant="outline" asChild>
+                  <Link to={withTenantPath(tenantSlug, '/repair/payments')}>
+                    فتح شاشة التحصيل
+                  </Link>
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </section>
+      ) : null}
 
       {isDeliveredStatus(job.status) && showReopenOptions ? (
         <Card>
@@ -968,6 +1631,62 @@ export const RepairJobDetail: React.FC = () => {
 
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         <aside className="space-y-4 lg:col-span-1 lg:order-2 lg:sticky lg:top-4">
+          {!isDeliveredStatus(job.status) ? (
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base">متابعة العميل (واتساب)</CardTitle>
+                <CardDescription>مراسلة العميل بسرعة من الاستقبال — استلام، موافقة، وجاهزية.</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="min-h-11 w-full"
+                    disabled={!canRequestApprovalLink || creatingApprovalLink}
+                    onClick={() => void generateApprovalLink()}
+                  >
+                    {creatingApprovalLink ? 'جاري الإنشاء…' : 'إنشاء رابط موافقة'}
+                  </Button>
+                  <WhatsAppShare
+                    phone={job.customerPhone}
+                    text={waIntake}
+                    label="واتساب استلام"
+                    className="min-h-11 w-full"
+                    size="default"
+                  />
+                  <WhatsAppShare
+                    phone={job.customerPhone}
+                    text={waApproval}
+                    label="واتساب موافقة"
+                    disabled={!approvalUrl}
+                    className="min-h-11 w-full"
+                    size="default"
+                  />
+                  <WhatsAppShare
+                    phone={job.customerPhone}
+                    text={waReady}
+                    label="جاهز للاستلام"
+                    className="min-h-11 w-full"
+                    size="default"
+                  />
+                </div>
+                {approvalUrl ? (
+                  <Input
+                    readOnly
+                    className="min-h-10 text-xs font-mono"
+                    value={approvalUrl}
+                    onFocus={(e) => e.target.select()}
+                  />
+                ) : (
+                  <p className="text-[11px] text-muted-foreground">
+                    أنشئ رابط الموافقة قبل إرسال تقدير واتساب.
+                  </p>
+                )}
+              </CardContent>
+            </Card>
+          ) : null}
+
           <Card>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">ملخص الطلب</CardTitle>
@@ -1008,14 +1727,34 @@ export const RepairJobDetail: React.FC = () => {
                   <dd className="font-medium tabular-nums">{jobProducts.length} سطر / {productsQtyTotal} قطعة</dd>
                 </div>
                 <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
-                  <dt className="text-muted-foreground">التكلفة</dt>
+                  <dt className="text-muted-foreground">صافي المطلوب</dt>
                   <dd className="font-medium tabular-nums">
-                    {Number(job.finalCost || 0) > 0 ? `${Number(job.finalCost || 0).toLocaleString('ar-EG')} ج.م` : '—'}
+                    {financial ? `${Number(financial.netAmount || 0).toLocaleString('ar-EG')} ج.م` : 'لم يُجهز إذن الدفع'}
                   </dd>
                 </div>
+                {paymentAuthorization && Number(paymentAuthorization.grossAmount || 0) <= 0 && !isWarrantySettlementAuth(paymentAuthorization) ? (
+                  <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-950">
+                    إذن الدفع الحالي قيمته صفر وغير صالح للتحصيل أو التسليم. اختر خدمة مسعّرة أو قطعة غيار ثم جهّز إصدارًا جديدًا.
+                  </div>
+                ) : null}
+                {paymentAuthorization && isWarrantySettlementAuth(paymentAuthorization) ? (
+                  <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
+                    ضمان مصنّع — بدون إيراد ولا تحصيل. تكلفة القطع تُسجَّل عند الصرف فقط.
+                  </div>
+                ) : null}
+                {hasInWarrantyProduct && !paymentAuthorization ? (
+                  <div className="rounded-md border border-sky-200 bg-sky-50/70 p-2 text-xs text-sky-950">
+                    الطلب معلّم كضمان مصنّع: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.
+                  </div>
+                ) : null}
+                {job.status === 'ready' ? (
+                  <p className="rounded-md border border-dashed px-2 py-1.5 text-xs text-muted-foreground">
+                    إقفال الدفع والتسليم من اللوحة أعلى الصفحة (تجهيز → تحصيل → تسليم → طباعة).
+                  </p>
+                ) : null}
                 <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">الضمان</dt>
-                  <dd className="font-medium">{warrantyLabel}</dd>
+                  <dt className="text-muted-foreground">ضمان الورشة</dt>
+                  <dd className="font-medium">{workshopWarrantyLabel}</dd>
                 </div>
               </dl>
 
@@ -1072,9 +1811,6 @@ export const RepairJobDetail: React.FC = () => {
                       <span>{part.partName}</span>
                       <span className="tabular-nums text-muted-foreground">
                         ×{part.quantity}
-                        {Number(part.unitCost || 0) > 0
-                          ? ` · ${Number(part.unitCost).toLocaleString('ar-EG')} ج.م`
-                          : ''}
                       </span>
                     </div>
                   ))}
@@ -1098,238 +1834,67 @@ export const RepairJobDetail: React.FC = () => {
         <div className="space-y-4 lg:col-span-2 lg:order-1">
           <Card>
             <CardHeader>
-              <CardTitle className="text-base">المنتجات والتشخيص</CardTitle>
+              <CardTitle className="text-base">المنتجات المستلمة</CardTitle>
               <CardDescription>
-                اختر المنتج من الماستر وحدد الكمية. التكلفة تُحسب من خدمات الإصلاح و/أو قطع الغيار المستخدمة.
+                بيانات الاستلام للعرض. الخدمات والتشخيص النهائي والحالة تُحدَّث من صفحة الورشة.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
-              {jobProducts.map((item, idx) => (
-                <div key={item.itemId} className="rounded-md border p-3 space-y-3">
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="text-sm font-medium">منتج {idx + 1}</div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => removeProductRow(item.itemId)}
-                      disabled={jobProducts.length <= 1}
-                      aria-label={`حذف منتج ${idx + 1}`}
-                    >
-                      <Trash2 className="h-4 w-4 text-rose-500" />
-                    </Button>
-                  </div>
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label>المنتج (ماستر) <span className="text-rose-600">*</span></Label>
-                      <Select
-                        value={String(item.productId || '')}
-                        onValueChange={(value) => applyMasterProduct(item.itemId, value)}
-                      >
-                        <SelectTrigger className={!item.productId ? 'border-rose-300' : undefined}>
-                          <SelectValue placeholder="اختر من المنتجات المعرفة" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {catalogProducts.filter((p) => p.id).map((product) => (
-                            <SelectItem key={product.id} value={String(product.id)}>
-                              {product.name}
-                              {product.model ? ` — ${product.model}` : ''}
-                              {product.code ? ` (${product.code})` : ''}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label>الكمية</Label>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={String(item.quantity || 1)}
-                        onChange={(e) => updateProduct(item.itemId, {
-                          quantity: Math.max(1, Math.round(Number(e.target.value) || 1)),
-                        })}
-                      />
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <Label>السيريال</Label>
-                      <Input
-                        value={item.serialNo || ''}
-                        onChange={(e) => updateProduct(item.itemId, { serialNo: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <Label>الإكسسوارات (من الإعدادات)</Label>
-                      <div className="flex flex-wrap gap-3 rounded-md border p-2">
-                        {enabledAccessories.map((accessory) => (
-                          <label key={accessory.id} className="inline-flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={(item.accessoryIds || []).includes(accessory.id)}
-                              onChange={() => updateProduct(item.itemId, {
-                                accessoryIds: toggleCatalogId(item.accessoryIds, accessory.id),
-                              })}
-                            />
-                            {accessory.label}
-                          </label>
-                        ))}
-                        {enabledAccessories.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">لا توجد إكسسوارات في الإعدادات.</span>
-                        ) : null}
+              {jobProducts.map((item, idx) => {
+                const serviceNames = (item.serviceIds || [])
+                  .map((id) => enabledServices.find((service) => service.id === id)?.name || id)
+                  .filter(Boolean);
+                return (
+                  <div key={item.itemId} className="rounded-md border p-3 space-y-2 text-sm">
+                    <div className="font-medium">منتج {idx + 1}: {item.productName || '—'}</div>
+                    <div className="grid gap-1 sm:grid-cols-2">
+                      <div><span className="text-muted-foreground">الكمية:</span> {item.quantity || 1}</div>
+                      <div><span className="text-muted-foreground">السيريال:</span> {item.serialNo || '—'}</div>
+                      <div className="sm:col-span-2"><span className="text-muted-foreground">الإكسسوارات:</span> {item.accessories || '—'}</div>
+                      <div className="sm:col-span-2"><span className="text-muted-foreground">وصف العطل (عميل):</span> {item.diagnosis || '—'}</div>
+                      <div className="sm:col-span-2"><span className="text-muted-foreground">تشخيص الفني:</span> {item.technicianDiagnosis || 'لم يُسجَّل بعد'}</div>
+                      <div className="sm:col-span-2">
+                        <span className="text-muted-foreground">الخدمات:</span>{' '}
+                        {serviceNames.length > 0 ? serviceNames.join('، ') : 'لم تُحدد بعد من الورشة'}
                       </div>
-                      <Input
-                        className="mt-2"
-                        placeholder="أخرى (ملاحظات إضافية)"
-                        value={item.accessories || ''}
-                        onChange={(e) => updateProduct(item.itemId, { accessories: e.target.value })}
-                      />
-                    </div>
-                    <div className="space-y-1 md:col-span-2">
-                      <Label>خدمات الإصلاح (من الإعدادات)</Label>
-                      <div className="flex flex-wrap gap-3 rounded-md border p-2">
-                        {enabledServices.map((service) => (
-                          <label key={service.id} className="inline-flex items-center gap-2 text-sm">
-                            <input
-                              type="checkbox"
-                              checked={(item.serviceIds || []).includes(service.id)}
-                              onChange={() => updateProduct(item.itemId, {
-                                serviceIds: toggleCatalogId(item.serviceIds, service.id),
-                              })}
-                            />
-                            {service.name} ({Number(service.price || 0).toLocaleString('ar-EG')} ج.م)
-                          </label>
-                        ))}
-                        {enabledServices.length === 0 ? (
-                          <span className="text-xs text-muted-foreground">عرّف الخدمات من إعدادات الصيانة.</span>
-                        ) : null}
+                      <div>
+                        <span className="text-muted-foreground">ضمان الجهاز:</span>{' '}
+                        {item.inWarranty ? 'داخل الضمان (مصنّع)' : 'خارج الضمان'}
                       </div>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        تكلفة خدمات هذا السطر: {Number(item.finalCost || 0).toLocaleString('ar-EG')} ج.م
-                        {' '}(سعر الخدمة × الكمية{item.inWarranty ? ' — ضمان مجاني' : ''})
-                      </p>
                     </div>
                   </div>
-                  <div className="space-y-1">
-                    <Label>التشخيص</Label>
-                    <textarea
-                      className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={item.diagnosis || ''}
-                      onChange={(e) => updateProduct(item.itemId, { diagnosis: e.target.value })}
-                    />
-                  </div>
-                  <label className="inline-flex items-center gap-2 text-sm">
-                    <input
-                      type="checkbox"
-                      checked={Boolean(item.inWarranty)}
-                      onChange={(e) => {
-                        const checked = e.target.checked;
-                        updateProduct(item.itemId, {
-                          inWarranty: checked,
-                          finalCost: checked ? 0 : item.finalCost,
-                        });
-                      }}
-                    />
-                    داخل الضمان (إصلاح مجاني)
-                  </label>
-                </div>
-              ))}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button type="button" variant="outline" onClick={addProductRow}>إضافة منتج</Button>
-                <Button type="button" onClick={saveMultiProductDetails} disabled={!canEditThisJob}>
-                  حفظ المنتجات والتشخيص
-                </Button>
-              </div>
+                );
+              })}
+              {job.isServiceOnly ? (
+                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                  وضع «خدمة فقط» مفعّل — التكلفة من خدمات الكتالوج المختارة.
+                </p>
+              ) : null}
+              {canManageWorkshopWork && !isDeliveredStatus(job.status) ? (
+                <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
+                  <Button type="button" variant="outline" className="w-full sm:w-auto">
+                    تعديل الخدمات والتشخيص من الورشة
+                  </Button>
+                </Link>
+              ) : !isDeliveredStatus(job.status) ? (
+                <p className="text-xs text-muted-foreground">
+                  الاستقبال يعرض التغييرات فقط. الفني يحدّث الخدمات والحالة من صفحة الورشة.
+                </p>
+              ) : null}
             </CardContent>
           </Card>
 
           <div className="grid gap-4 md:grid-cols-2">
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">تحديث الحالة</CardTitle>
+                <CardTitle className="text-base">الحالة الحالية</CardTitle>
+                <CardDescription>عرض فقط — تغيير الحالة وأسبابها من الورشة.</CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <div className="space-y-1">
-                  <Label>الحالة</Label>
-                  <Select value={status} onValueChange={(v) => setStatus(v as RepairJob['status'])}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      {allowedStatusOptions.map((statusOption) => (
-                        <SelectItem key={statusOption.id} value={statusOption.id}>
-                          {statusOption.label || REPAIR_JOB_STATUS_LABELS[statusOption.id] || statusOption.id}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <p className="text-xs text-muted-foreground">تظهر الحالات المسموح الانتقال إليها فقط.</p>
+                <div className="flex items-center justify-between gap-2 rounded border px-3 py-2">
+                  <span className="text-sm text-muted-foreground">الحالة</span>
+                  <StatusBadge status={job.status} />
                 </div>
-                {isUnrepairableStatus(status) ? (
-                  <div className="space-y-1">
-                    <Label htmlFor="unrepairable-reason">سبب عدم إمكانية الإصلاح</Label>
-                    <textarea
-                      id="unrepairable-reason"
-                      placeholder="اكتب السبب بالتفصيل"
-                      className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                    />
-                  </div>
-                ) : null}
-                {isCancelledStatus(status) ? (
-                  <div className="space-y-1">
-                    <Label htmlFor="cancel-reason">سبب الإلغاء</Label>
-                    <textarea
-                      id="cancel-reason"
-                      placeholder="مثال: رفض العميل التكلفة، سحب الجهاز…"
-                      className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm"
-                      value={reason}
-                      onChange={(e) => setReason(e.target.value)}
-                    />
-                  </div>
-                ) : null}
-                {isDeliveredStatus(status) ? (
-                  <div className="space-y-2">
-                    <label className="inline-flex items-center gap-2 text-sm">
-                      <input
-                        type="checkbox"
-                        checked={manualFinalOverride}
-                        onChange={(e) => setManualFinalOverride(e.target.checked)}
-                      />
-                      تعديل يدوي للإجمالي النهائي
-                    </label>
-                    <div className="space-y-1">
-                      <Label>التكلفة النهائية</Label>
-                      <Input
-                        type="number"
-                        value={finalCost}
-                        onChange={(e) => setFinalCost(e.target.value)}
-                        disabled={!manualFinalOverride}
-                      />
-                    </div>
-                    {!manualFinalOverride ? (
-                      <p className="text-xs text-muted-foreground">
-                        الإجمالي المحسوب: {effectiveFinalCost.toLocaleString('ar-EG')} ج.م
-                        {' '}(خدمات {productsServiceTotal.toLocaleString('ar-EG')}
-                        {' · '}قطع {computedJobCost.partsCost.toLocaleString('ar-EG')}
-                        {serviceOnly ? ` · خدمة فقط ${toNumber(serviceOnlyCost).toLocaleString('ar-EG')}` : ''})
-                      </p>
-                    ) : null}
-                    <p className="text-xs text-muted-foreground">
-                      {hasInWarrantyProduct ? 'يوجد منتج داخل الضمان' : 'لا يوجد منتج داخل الضمان'}
-                    </p>
-                    <div className="space-y-1">
-                      <Label>ضمان الورشة</Label>
-                      <Select value={warranty} onValueChange={(v) => setWarranty(v as RepairJob['warranty'])}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">بدون</SelectItem>
-                          <SelectItem value="3months">3 شهور</SelectItem>
-                          <SelectItem value="6months">6 شهور</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                  </div>
-                ) : null}
-                <Button onClick={applyStatus} disabled={!canEditThisJob}>حفظ الحالة</Button>
                 {Array.isArray(job.statusHistory) && job.statusHistory.length > 0 ? (
                   <div className="space-y-2 border-t pt-3">
                     <p className="text-sm font-medium">سجل الحالة</p>
@@ -1347,167 +1912,196 @@ export const RepairJobDetail: React.FC = () => {
                       </div>
                     ))}
                   </div>
+                ) : (
+                  <p className="text-xs text-muted-foreground">لا يوجد سجل حالات بعد.</p>
+                )}
+                {canManageWorkshopWork && !isDeliveredStatus(job.status) ? (
+                  <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
+                    <Button type="button" variant="secondary" className="w-full">تغيير الحالة من الورشة</Button>
+                  </Link>
                 ) : null}
               </CardContent>
             </Card>
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">قطع الغيار والإسناد</CardTitle>
-                <CardDescription>صرف قطع، خدمة فقط، أو إسناد فني.</CardDescription>
+                <CardTitle className="text-base">إسناد الفني وقطع الغيار</CardTitle>
+                <CardDescription>
+                  الاستقبال يسند الفني فقط. صرف القطع من الورشة.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-3">
-                <label className="inline-flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={serviceOnly}
-                    onChange={(e) => {
-                      const checked = e.target.checked;
-                      setServiceOnly(checked);
-                      if (checked && !serviceOnlyCost) {
-                        setServiceOnlyCost(String(effectiveFinalCost || 0));
-                      }
-                    }}
-                  />
-                  خدمة فقط بدون قطع غيار
-                </label>
-                {serviceOnly ? (
-                  <div className="space-y-1">
-                    <Label>تكلفة خدمة الإصلاح</Label>
-                    <Input
-                      type="number"
-                      value={serviceOnlyCost}
-                      onChange={(e) => setServiceOnlyCost(e.target.value)}
-                    />
+                <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                  <span className="text-muted-foreground">الفني الحالي: </span>
+                  <strong>{assignedTechnicianLabel}</strong>
+                </div>
+                {canAssignTechnician && !isDeliveredStatus(job.status) && selectedTechnicianId && !branchTechnicians.find((t) => t.id === selectedTechnicianId)?.userId ? (
+                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                    الموظف المختار غير مربوط بحساب مستخدم — اربطه من إدارة المستخدمين قبل الإسناد حتى يظهر الطلب في «طلباتي».
+                  </p>
+                ) : null}
+                {!isDeliveredStatus(job.status) ? (
+                  <div className="space-y-2 border-t pt-3">
+                    <div className="space-y-1">
+                      <Label>إسناد لموظف من الفرع</Label>
+                      {isFixedTechnicianAssignment && branchTechnicians.length === 1 ? (
+                        <div className="min-h-10 rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center">
+                          {branchTechnicians[0].name}
+                          <span className="ms-2 text-xs text-muted-foreground">(ثابت — الموظف الوحيد بالفرع)</span>
+                        </div>
+                      ) : (
+                        <Select
+                          value={selectedTechnicianId}
+                          onValueChange={setSelectedTechnicianId}
+                          disabled={!canAssignTechnician || branchTechnicians.length === 0}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="لا يوجد موظفون مربوطون بالفرع" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {branchTechnicians.map((technician) => (
+                              <SelectItem key={technician.id} value={technician.id}>
+                                {technician.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        onClick={assignToBranchTechnician}
+                        disabled={!canAssignTechnician || !selectedTechnicianId || branchTechnicians.length === 0}
+                      >
+                        إسناد للموظف
+                      </Button>
+                      {canManageWorkshopWork ? (
+                        <Button variant="secondary" onClick={assignToMe} disabled={!canAssignTechnician}>
+                          إسناد لي
+                        </Button>
+                      ) : null}
+                    </div>
                   </div>
                 ) : null}
-                <div className="space-y-1">
-                  <Label>نطاق الصرف</Label>
-                  <Select value={partScope} onValueChange={(v) => setPartScope(v as 'job' | 'product')}>
-                    <SelectTrigger><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="job">على مستوى الطلب</SelectItem>
-                      <SelectItem value="product">مرتبط بمنتج</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                {partScope === 'product' ? (
-                  <div className="space-y-1">
-                    <Label>المنتج</Label>
-                    <Select value={partProductItemId} onValueChange={setPartProductItemId}>
-                      <SelectTrigger><SelectValue placeholder="اختر منتجًا" /></SelectTrigger>
-                      <SelectContent>
-                        {jobProducts.map((item, idx) => (
-                          <SelectItem key={item.itemId} value={item.itemId}>
-                            {item.productName || `منتج ${idx + 1}`}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                ) : null}
-                {!branchWarehouseId ? (
-                  <div className="rounded border border-amber-300 bg-amber-50 p-2 text-xs text-amber-900">
-                    هذا الفرع لا يملك مخزنًا مرتبطًا، لذلك لا يمكن صرف قطع الغيار من الطلب.
-                  </div>
-                ) : null}
-                <div className="space-y-1">
-                  <Label>القطعة (بحث في كل قطع الفرع — غير مقيد بـ BOM المنتج)</Label>
-                  <Input
-                    value={partCatalogSearch}
-                    onChange={(e) => setPartCatalogSearch(e.target.value)}
-                    placeholder="ابحث بالاسم أو الكود أو المادة…"
-                  />
-                  <Select value={selectedPartId} onValueChange={setSelectedPartId}>
-                    <SelectTrigger><SelectValue placeholder="اختر قطعة" /></SelectTrigger>
-                    <SelectContent>
-                      {filteredParts.map((p) => (
-                        <SelectItem key={p.id} value={p.id || ''}>{p.name}{p.code ? ` (${p.code})` : ''}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-1">
-                  <Label>الكمية</Label>
-                  <Input type="number" min={1} value={partQty} onChange={(e) => setPartQty(e.target.value)} />
-                </div>
-                <Button
-                  variant="outline"
-                  onClick={addPartUsage}
-                  disabled={!canEditThisJob || serviceOnly || !branchWarehouseId || (partScope === 'product' && !partProductItemId)}
-                >
-                  إضافة / خصم
-                </Button>
-
-                <div className="space-y-2 border-t pt-3">
-                  <div className="space-y-1">
-                    <Label>إسناد لفني من الفرع</Label>
-                    <Select
-                      value={selectedTechnicianId}
-                      onValueChange={setSelectedTechnicianId}
-                      disabled={branchTechnicians.length === 0}
-                    >
-                      <SelectTrigger>
-                        <SelectValue placeholder="لا يوجد فنيون مربوطون بالفرع" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {branchTechnicians.map((technician) => (
-                          <SelectItem key={technician.id} value={technician.id}>
-                            {technician.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      onClick={assignToBranchTechnician}
-                      disabled={!canEditThisJob || !selectedTechnicianId || branchTechnicians.length === 0}
-                    >
-                      إسناد للفني
-                    </Button>
-                    <Button variant="secondary" onClick={assignToMe} disabled={!canEditThisJob}>
-                      إسناد لي
-                    </Button>
-                    <Button variant="ghost" onClick={() => void saveMultiProductDetails()} disabled={!canEditThisJob}>
-                      حفظ وضع الخدمة
-                    </Button>
-                  </div>
-                </div>
 
                 {Array.isArray(job.partsUsed) && job.partsUsed.length > 0 ? (
                   <div className="space-y-1 border-t pt-3">
-                    <p className="text-sm font-medium">قطع الغيار المستخدمة</p>
-                    {job.partsUsed.map((part: RepairPartUsage, idx) => (
-                      <div key={`${part.partId}-${idx}`} className="flex items-center justify-between gap-2 rounded border px-2 py-1.5 text-sm">
-                        <div className="min-w-0">
-                          <span>{part.partName}</span>
-                          {part.scope === 'product' ? (
-                            <span className="ms-1 text-xs text-muted-foreground">
-                              ({part.productName || 'منتج محدد'})
-                            </span>
-                          ) : null}
-                        </div>
-                        <div className="flex items-center gap-1">
+                    <p className="text-sm font-medium">قطع الغيار المستخدمة (عرض)</p>
+                    {job.partsUsed.map((part: RepairPartUsage, idx) => {
+                      const fulfillment = effectiveFulfillmentStatus(part);
+                      const usageId = String(part.usageId || '');
+                      return (
+                        <div key={usageId || `${part.partId}-${idx}`} className="flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-1.5 text-sm">
+                          <div className="min-w-0 space-y-1">
+                            <div>
+                              <span>{part.partName}</span>
+                              {part.scope === 'product' ? (
+                                <span className="ms-1 text-xs text-muted-foreground">
+                                  ({part.productName || 'منتج محدد'})
+                                </span>
+                              ) : null}
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge variant="outline">{REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}</Badge>
+                              {part.availabilityAtRequest ? (
+                                <Badge variant="secondary">
+                                  {REPAIR_PART_AVAILABILITY_LABELS[part.availabilityAtRequest]}
+                                </Badge>
+                              ) : null}
+                            </div>
+                          </div>
                           <Badge variant="secondary">× {part.quantity}</Badge>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => void removePartUsage(idx)}
-                            aria-label={`حذف ${part.partName}`}
-                          >
-                            <Trash2 className="h-4 w-4 text-rose-500" />
-                          </Button>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
+                    {canManageWorkshopWork && !isDeliveredStatus(job.status) ? (
+                      <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)} className="inline-block pt-1">
+                        <Button type="button" variant="outline" size="sm">إدارة القطع من الورشة</Button>
+                      </Link>
+                    ) : null}
                   </div>
-                ) : null}
+                ) : (
+                  <p className="text-xs text-muted-foreground border-t pt-3">لا توجد قطع مسجّلة على الطلب بعد.</p>
+                )}
               </CardContent>
             </Card>
           </div>
         </div>
       </div>
+
+      <Dialog
+        open={collectDialogOpen}
+        onOpenChange={(open) => {
+          if (!open && !paymentBusy) {
+            setCollectDialogOpen(false);
+            setCollectAndDeliver(false);
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{collectAndDeliver ? 'تحصيل كامل وتسليم' : 'تسجيل دفعة'}</DialogTitle>
+            <DialogDescription>
+              الرصيد الحالي {Number(paymentAuthorization?.balanceDue || 0).toLocaleString('ar-EG', {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2,
+              })} ج.م. ستُرحل الدفعة للخزينة والقيد المحاسبي
+              {collectAndDeliver ? ' ثم يُسلَّم الطلب ويُطبع إذن التسليم.' : '.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3">
+            <div>
+              <Label>المبلغ</Label>
+              <Input
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={collectAmount}
+                disabled={paymentBusy || collectAndDeliver}
+                onChange={(e) => setCollectAmount(e.target.value)}
+              />
+            </div>
+            <div>
+              <Label>وسيلة الدفع</Label>
+              <Select
+                value={collectMethod}
+                onValueChange={(value) => setCollectMethod(value as RepairPaymentMethod)}
+                disabled={paymentBusy}
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="cash">نقدي</SelectItem>
+                  <SelectItem value="card">بطاقة</SelectItem>
+                  <SelectItem value="bank_transfer">تحويل بنكي</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={paymentBusy}
+              onClick={() => {
+                setCollectDialogOpen(false);
+                setCollectAndDeliver(false);
+              }}
+            >
+              إلغاء
+            </Button>
+            <Button type="button" disabled={paymentBusy} onClick={() => void submitCollectFromJob()}>
+              <CheckCircle2 className="ms-1 h-4 w-4" />
+              {paymentBusy
+                ? 'جاري التنفيذ…'
+                : collectAndDeliver
+                  ? 'تأكيد التحصيل والتسليم'
+                  : 'تأكيد التحصيل'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={linkCustomerOpen} onOpenChange={setLinkCustomerOpen}>
         <DialogContent>
@@ -1545,14 +2139,69 @@ export const RepairJobDetail: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Off-screen system print document — same DOM for print + PDF */}
+      <Dialog open={intakePrintOpen} onOpenChange={setIntakePrintOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>طباعة بعد الاستلام</DialogTitle>
+            <DialogDescription>
+              اطبع كارت القطعة للصقه على الجهاز، وإيصال العميل ليوقّع أنه سلّم القطعة للمركز.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button
+              type="button"
+              className="flex-1"
+              onClick={() => {
+                setIntakePrintOpen(false);
+                handlePrintProductCards();
+              }}
+            >
+              طباعة كارت القطعة (A5)
+            </Button>
+            <Button
+              type="button"
+              variant="secondary"
+              className="flex-1"
+              onClick={() => {
+                setIntakePrintOpen(false);
+                handlePrintReceipt();
+              }}
+            >
+              طباعة إيصال العميل
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIntakePrintOpen(false)}>
+              لاحقاً
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Off-screen system print documents — same DOM for print + PDF */}
       <div className="pointer-events-none fixed -left-[10000px] top-0" aria-hidden>
         <RepairJobPrint
           ref={printRef}
-          job={job}
+          job={financialJob}
           branch={branch}
           products={jobProducts}
           trackUrl={trackUrl}
+          printSettings={printTemplate}
+          statusMap={repairSettings.statusMap}
+        />
+        <RepairJobProductCardPrint
+          ref={productCardPrintRef}
+          job={financialJob}
+          branch={branch}
+          products={jobProducts}
+          printSettings={productCardPrintSettings}
+          statusMap={repairSettings.statusMap}
+        />
+        <DeliveryReceiptPDF
+          ref={deliveryAuthorizationPrintRef}
+          job={financialJob}
+          branch={branch}
+          products={jobProducts}
           printSettings={printTemplate}
         />
       </div>

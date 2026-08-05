@@ -1,6 +1,6 @@
 import React from 'react';
 import { X } from 'lucide-react';
-import { Button } from '../../../components/UI';
+import { Button } from '@/components/ui/button';
 
 type ModalShellProps = {
   title: string;

@@ -1,0 +1,205 @@
+import React, { useEffect, useMemo, useState } from "react";
+import { PageHeader } from "@/components/PageHeader";
+import { Card, CardContent } from "@/components/ui/card";
+import { Skeleton } from "@/components/ui/skeleton";
+import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter";
+import { SmartFilterBar } from "@/src/components/erp/SmartFilterBar";
+import { AccountingPeriodToolbar } from "../components/AccountingPeriodToolbar";
+import { useAccountingBaseData } from "../hooks/useAccountingBaseData";
+import {
+  accountingMoney,
+  buildTrialBalance,
+  postedEntries,
+} from "../lib/accountingReports";
+import {
+  PAGE_SIZE,
+  accountingMonthStart,
+  accountingToday,
+  exportAccountingCsv,
+  formatAccountingMoney,
+} from "../lib/accountingUi";
+
+export const AccountingTrialBalance: React.FC = () => {
+  const { accounts, journals, loading, reload } = useAccountingBaseData();
+  const [from, setFrom] = useState(accountingMonthStart());
+  const [to, setTo] = useState(accountingToday());
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+
+  const filteredEntries = useMemo(
+    () => postedEntries(journals, from, to),
+    [journals, from, to],
+  );
+  const trial = useMemo(
+    () => buildTrialBalance(accounts, filteredEntries),
+    [accounts, filteredEntries],
+  );
+  const visible = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return trial;
+    return trial.filter((row) =>
+      `${row.code} ${row.name}`.toLowerCase().includes(q),
+    );
+  }, [trial, search]);
+
+  useEffect(() => setPage(1), [from, to, search]);
+
+  const totals = useMemo(
+    () => ({
+      debit: accountingMoney(trial.reduce((sum, row) => sum + row.debit, 0)),
+      credit: accountingMoney(trial.reduce((sum, row) => sum + row.credit, 0)),
+    }),
+    [trial],
+  );
+
+  const totalPages = Math.max(1, Math.ceil(visible.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = visible.slice(
+    (safePage - 1) * PAGE_SIZE,
+    safePage * PAGE_SIZE,
+  );
+
+  return (
+    <div className="erp-ds-clean space-y-5" dir="rtl">
+      <PageHeader
+        title="ميزان المراجعة"
+        subtitle="إجمالي المدين والدائن ورصيد كل حساب"
+        icon="balance"
+        backAction={false}
+        moreActions={[
+          {
+            label: "طباعة",
+            icon: "print",
+            onClick: () => window.print(),
+            group: "تصدير",
+          },
+          {
+            label: "تصدير CSV",
+            icon: "download",
+            onClick: () =>
+              exportAccountingCsv(
+                "trial-balance.csv",
+                ["الكود", "الحساب", "مدين", "دائن", "الرصيد"],
+                visible.map((row) => [
+                  row.code,
+                  row.name,
+                  row.debit,
+                  row.credit,
+                  row.balance,
+                ]),
+              ),
+            group: "تصدير",
+          },
+        ]}
+      />
+
+      <Card className="!p-0 overflow-hidden shadow-none">
+        <CardContent className="border-b p-4">
+          <AccountingPeriodToolbar
+            from={from}
+            to={to}
+            onFromChange={setFrom}
+            onToChange={setTo}
+            onRefresh={() => void reload()}
+            refreshing={loading}
+            onPrint={() => window.print()}
+            onExport={() =>
+              exportAccountingCsv(
+                "trial-balance.csv",
+                ["الكود", "الحساب", "مدين", "دائن", "الرصيد"],
+                visible.map((row) => [
+                  row.code,
+                  row.name,
+                  row.debit,
+                  row.credit,
+                  row.balance,
+                ]),
+              )
+            }
+          />
+        </CardContent>
+        <SmartFilterBar
+          pageId="accounting-trial"
+          searchPlaceholder="بحث بالكود أو اسم الحساب"
+          searchValue={search}
+          onSearchChange={setSearch}
+        />
+        <div className="erp-table-scroll">
+          <table className="erp-table">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th text-start">الكود</th>
+                <th className="erp-th text-start">الحساب</th>
+                <th className="erp-th">مدين</th>
+                <th className="erp-th">دائن</th>
+                <th className="erp-th">الرصيد</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading
+                ? Array.from({ length: 5 }).map((_, index) => (
+                    <tr key={index}>
+                      <td colSpan={5} className="p-3">
+                        <Skeleton className="h-8 w-full" />
+                      </td>
+                    </tr>
+                  ))
+                : null}
+              {!loading &&
+                paged.map((row) => (
+                  <tr key={row.code}>
+                    <td className="font-mono tabular-nums">{row.code}</td>
+                    <td>{row.name}</td>
+                    <td className="text-center tabular-nums">
+                      {formatAccountingMoney(row.debit)}
+                    </td>
+                    <td className="text-center tabular-nums">
+                      {formatAccountingMoney(row.credit)}
+                    </td>
+                    <td className="text-center font-semibold tabular-nums">
+                      {formatAccountingMoney(row.balance)}
+                    </td>
+                  </tr>
+                ))}
+              {!loading && visible.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="p-10 text-center text-muted-foreground"
+                  >
+                    لا توجد حركة في الفترة.
+                  </td>
+                </tr>
+              ) : null}
+            </tbody>
+            {!loading && trial.length > 0 ? (
+              <tfoot>
+                <tr className="border-t-2 font-bold">
+                  <td colSpan={2} className="p-3">
+                    الإجمالي
+                  </td>
+                  <td className="p-3 text-center tabular-nums">
+                    {formatAccountingMoney(totals.debit)}
+                  </td>
+                  <td className="p-3 text-center tabular-nums">
+                    {formatAccountingMoney(totals.credit)}
+                  </td>
+                  <td className="p-3 text-center tabular-nums">
+                    {formatAccountingMoney(totals.debit - totals.credit)}
+                  </td>
+                </tr>
+              </tfoot>
+            ) : null}
+          </table>
+        </div>
+        <DataPaginationFooter
+          page={safePage}
+          totalPages={totalPages}
+          totalItems={visible.length}
+          onPageChange={setPage}
+          itemLabel="حساب"
+        />
+      </Card>
+    </div>
+  );
+};

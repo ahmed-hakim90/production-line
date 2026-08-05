@@ -30,6 +30,7 @@ import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { repairCenterWarehouseMenuPath } from '../../repair/lib/repairCenterWarehouseMenu';
 
 const DELETE_CONFIRM = (name: string) =>
   `سيتم حذف المخزن «${name}» وجميع البيانات المرتبطة به نهائيًا:\n`
@@ -202,13 +203,19 @@ export const Warehouses: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {displayRows.map((w) => (
+                {displayRows.map((w) => {
+                  const workspacePath = w.id
+                    ? ((w.warehouseRole || 'general') === 'maintenance_center'
+                      ? repairCenterWarehouseMenuPath(w.id)
+                      : `/inventory/warehouses/${w.id}`)
+                    : '';
+                  return (
                   <tr key={w.id || w.code} className="border-b border-[var(--color-border)]/60 hover:bg-[var(--color-surface-hover)]">
                     <td className="py-2.5 px-3 font-medium text-[var(--color-text)]">
                       {w.id ? (
                         <Link
                           className="text-primary underline-offset-2 hover:underline"
-                          to={withTenantPath(tenantSlug, `/inventory/warehouses/${w.id}`)}
+                          to={withTenantPath(tenantSlug, workspacePath)}
                         >
                           {w.name}
                         </Link>
@@ -223,7 +230,7 @@ export const Warehouses: React.FC = () => {
                     <td className="py-2.5 px-3 text-end">
                       <div className="flex justify-end gap-1">
                         {w.id ? (
-                          <Link to={withTenantPath(tenantSlug, `/inventory/warehouses/${w.id}`)}>
+                          <Link to={withTenantPath(tenantSlug, workspacePath)}>
                             <Button type="button" size="sm" variant="ghost">
                               مساحة المخزن
                             </Button>
@@ -253,7 +260,8 @@ export const Warehouses: React.FC = () => {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

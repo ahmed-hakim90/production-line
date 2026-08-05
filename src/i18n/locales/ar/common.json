@@ -24,7 +24,8 @@
     "back": "رجوع",
     "clearSelection": "مسح الاختيار",
     "noResults": "لا توجد نتائج",
-    "selectPlaceholder": "اختر..."
+    "selectPlaceholder": "اختر...",
+    "searchPlaceholder": "بحث..."
   },
   "notifications": {
     "title": "الإشعارات",
@@ -713,6 +714,11 @@
       "inventoryWarehouseHint": "عند الربط بمخزن واحد تظهر له صفحات المخزون الخاصة بهذا المخزن فقط.",
       "updateWarehouseSuccess": "تم حفظ ربط المخزن بنجاح.",
       "saveWarehouse": "حفظ ربط المخزن",
+      "repairBranch": "مركز / فرع الصيانة المرتبط",
+      "allRepairBranches": "كل مراكز الصيانة (بدون تقييد — غير موصى به للاستقبال/الفني)",
+      "repairBranchHint": "عزل كامل: المستخدم يرى فقط بيانات المركز المربوط (طلبات، قطع، خزينة حسب صلاحياته).",
+      "updateRepairBranchSuccess": "تم حفظ ربط مركز الصيانة بنجاح.",
+      "saveRepairBranch": "حفظ ربط مركز الصيانة",
       "email": "البريد الإلكتروني",
       "newPasswordOptional": "كلمة مرور جديدة (اختياري)",
       "leaveBlankPasswordHint": "اتركه فارغًا إن لم ترغب بالتغيير",

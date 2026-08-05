@@ -62,6 +62,9 @@ type ResolvedLine = {
   receivedQty?: number;
   unitCostSnapshot: number;
   totalCostSnapshot: number;
+  sourceJobIds?: string[];
+  demandLinks?: Array<{ jobId: string; usageId: string; quantity: number }>;
+  availabilityAtRequest?: 'central' | 'none';
 };
 
 type RequestDoc = {
@@ -74,6 +77,8 @@ type RequestDoc = {
   lines: ResolvedLine[];
   note?: string;
   totalCostSnapshot?: number;
+  sourceBranchId?: string;
+  openBasket?: boolean;
   createdBy: string;
   createdByUserId?: string;
   createdAt: string;
@@ -747,7 +752,31 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
     });
   }
 
-  return { id: requestId };
+  // Mark job demand links ready and attempt auto-issue to repair jobs.
+  let fulfillSummary = { marked: 0, issued: 0, failed: 0 };
+  try {
+    const { fulfillJobDemandsAfterReplenishmentReceive } = await import(
+      './repairJobSparePartRequest.js'
+    );
+    const receivedLines = ((await ref.get()).data()?.lines as Array<{
+      itemId?: string;
+      demandLinks?: Array<{ jobId: string; usageId: string; quantity: number }>;
+    }> | undefined) || data.lines;
+    fulfillSummary = await fulfillJobDemandsAfterReplenishmentReceive({
+      request,
+      tenantId: actor.tenantId,
+      requestId,
+      lines: receivedLines || [],
+    });
+  } catch (fulfillErr) {
+    console.error('spare_parts_replenishment.receive job fulfill failed', {
+      requestId,
+      tenantId: actor.tenantId,
+      message: fulfillErr instanceof Error ? fulfillErr.message : String(fulfillErr),
+    });
+  }
+
+  return { id: requestId, fulfillSummary };
 };
 
 async function syncReceivedQtyToRepairBranchStock(input: {

@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import {
   isInventoryMenuItemVisibleForWarehouseScope,
+  isRepairPartsReplenishmentMenuVisible,
   resolveAccessibleWarehouseRoles,
 } from '../modules/inventory/lib/inventoryMenuVisibility.ts';
 
@@ -114,6 +115,13 @@ assert.equal(
 );
 assert.equal(
   isInventoryMenuItemVisibleForWarehouseScope({
+    menuKey: 'repair-wh-space-abc',
+    ...materialsScoped,
+  }),
+  true,
+);
+assert.equal(
+  isInventoryMenuItemVisibleForWarehouseScope({
     menuKey: 'inv-production-floor',
     scoped: false,
     accessibleWarehouseRoles: ['decomposed'],
@@ -125,6 +133,52 @@ assert.equal(
     menuKey: 'inv-production-floor',
     scoped: true,
     accessibleWarehouseRoles: ['production_floor'],
+  }),
+  true,
+);
+
+assert.equal(
+  isRepairPartsReplenishmentMenuVisible({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: true,
+    userRepairBranchIds: [],
+    canViewAllBranches: false,
+  }),
+  false,
+);
+assert.equal(
+  isRepairPartsReplenishmentMenuVisible({
+    accessibleWarehouseRoles: ['maintenance_center'],
+    warehouseScoped: true,
+    userRepairBranchIds: [],
+    canViewAllBranches: false,
+  }),
+  true,
+);
+assert.equal(
+  isRepairPartsReplenishmentMenuVisible({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: true,
+    userRepairBranchIds: ['branch-1'],
+    canViewAllBranches: false,
+  }),
+  true,
+);
+assert.equal(
+  isRepairPartsReplenishmentMenuVisible({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: true,
+    userRepairBranchIds: [],
+    canViewAllBranches: true,
+  }),
+  true,
+);
+assert.equal(
+  isRepairPartsReplenishmentMenuVisible({
+    accessibleWarehouseRoles: [],
+    warehouseScoped: false,
+    userRepairBranchIds: [],
+    canViewAllBranches: false,
   }),
   true,
 );

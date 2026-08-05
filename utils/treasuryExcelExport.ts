@@ -30,6 +30,11 @@ export const exportTreasuryMonthlyExcel = (input: {
   summaries: RepairTreasuryBranchMonthlySummary[];
   dailyBreakdown: RepairTreasuryBranchDailyBreakdown[];
   sessions: RepairTreasurySessionDetailsRow[];
+  paymentMethodSummaries?: Array<{
+    branchName: string; costCenterId: string; paymentMethod: string;
+    income: number; expense: number; net: number; entriesCount: number;
+  }>;
+  reconciliation?: { entriesCount: number; missingPaymentMethod: number; missingCostCenter: number; missingJournalReference: number };
 }) => {
   const wb = XLSX.utils.book_new();
 
@@ -92,6 +97,36 @@ export const exportTreasuryMonthlyExcel = (input: {
     ws['!cols'] = autoCols(sessionRows);
     setSheetRtl(ws);
     XLSX.utils.book_append_sheet(wb, ws, 'SessionDetails');
+  }
+
+  const paymentRows = (input.paymentMethodSummaries || []).map((row, index) => ({
+    '#': index + 1,
+    الفرع: row.branchName,
+    'مركز التكلفة': row.costCenterId || 'غير مربوط',
+    'وسيلة الدفع': ({ cash: 'نقدي', card: 'بطاقة', bank_transfer: 'تحويل بنكي', unspecified: 'غير محدد' } as Record<string, string>)[row.paymentMethod] || row.paymentMethod,
+    وارد: Number(row.income.toFixed(2)),
+    منصرف: Number(row.expense.toFixed(2)),
+    الصافي: Number(row.net.toFixed(2)),
+    الحركات: row.entriesCount,
+  }));
+  if (paymentRows.length > 0) {
+    const ws = XLSX.utils.json_to_sheet(paymentRows);
+    ws['!cols'] = autoCols(paymentRows);
+    setSheetRtl(ws);
+    XLSX.utils.book_append_sheet(wb, ws, 'PaymentMethods');
+  }
+
+  if (input.reconciliation) {
+    const rows = [{
+      'عدد الحركات': input.reconciliation.entriesCount,
+      'بدون وسيلة دفع': input.reconciliation.missingPaymentMethod,
+      'بدون مركز تكلفة': input.reconciliation.missingCostCenter,
+      'بدون مرجع قيد': input.reconciliation.missingJournalReference,
+    }];
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = autoCols(rows);
+    setSheetRtl(ws);
+    XLSX.utils.book_append_sheet(wb, ws, 'Reconciliation');
   }
 
   if (wb.SheetNames.length === 0) {

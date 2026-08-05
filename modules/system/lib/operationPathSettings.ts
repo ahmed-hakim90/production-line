@@ -161,6 +161,7 @@ export const MATERIAL_CREATE_PATHS = {
   materialsPage: 'materials_page',
   materialsImport: 'materials_import',
   consumableDefineModal: 'consumable_define_modal',
+  consumableSheetImport: 'consumable_sheet_import',
   productsComponentsImport: 'products_components_import',
   migration: 'migration',
 } as const;
@@ -168,6 +169,7 @@ export const MATERIAL_CREATE_PATHS = {
 export const MATERIAL_UPDATE_PATHS = {
   materialsPage: 'materials_page',
   materialsImport: 'materials_import',
+  repairPartsPricing: 'repair_parts_pricing',
   migration: 'migration',
 } as const;
 
@@ -337,6 +339,7 @@ export const OPERATION_PATH_REGISTRY: ReadonlyArray<OperationPathRegistryEntry> 
       { key: MATERIAL_CREATE_PATHS.materialsPage, label: 'صفحة المواد', description: 'إنشاء مادة من نموذج الصفحة.' },
       { key: MATERIAL_CREATE_PATHS.materialsImport, label: 'استيراد المواد', description: 'إنشاء مواد من ملف.' },
       { key: MATERIAL_CREATE_PATHS.consumableDefineModal, label: 'تعريف مستهلك', description: 'إنشاء مادة مستهلكة من شاشة المستهلكات.' },
+      { key: MATERIAL_CREATE_PATHS.consumableSheetImport, label: 'رفع شيت مستهلكات', description: 'إنشاء مستهلك جديد أثناء رفع شيت الأرصدة/الأسعار.' },
       { key: MATERIAL_CREATE_PATHS.productsComponentsImport, label: 'استيراد مكونات المنتجات', description: 'إنشاء مادة مفقودة أثناء استيراد المكونات.' },
       { key: MATERIAL_CREATE_PATHS.migration, label: 'ترحيل بيانات التصنيع', description: 'إنشاء مواد خلال الترحيل الإداري.' },
     ],
@@ -349,6 +352,7 @@ export const OPERATION_PATH_REGISTRY: ReadonlyArray<OperationPathRegistryEntry> 
     paths: [
       { key: MATERIAL_UPDATE_PATHS.materialsPage, label: 'صفحة المواد', description: 'تعديل مادة من النموذج.' },
       { key: MATERIAL_UPDATE_PATHS.materialsImport, label: 'استيراد المواد', description: 'تحديث مواد من ملف.' },
+      { key: MATERIAL_UPDATE_PATHS.repairPartsPricing, label: 'تسعير قطع الغيار', description: 'حفظ سعر المستهلك وسعر التاجر وسعر التكلفة على المكوّن لكل مراكز الصيانة.' },
       { key: MATERIAL_UPDATE_PATHS.migration, label: 'ترحيل بيانات التصنيع', description: 'تحديث مادة خلال الترحيل.' },
     ],
   },

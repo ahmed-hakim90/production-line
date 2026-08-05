@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx';
-import { buildCustomerPhoneDigits, normalizeCustomerCode } from './customerCode';
+import { normalizeCustomerCode } from './customerCode';
 import {
   parseCustomerTypeLabel,
   type Customer,
@@ -96,12 +96,12 @@ export function parseCustomersExcel(
     const activeRaw = getCell(raw, ['الحالة', 'نشط', 'status', 'active', 'isactive']);
     const type = parseCustomerTypeLabel(typeRaw);
     const isActive = parseActiveFlag(activeRaw);
-    const phoneDigits = buildCustomerPhoneDigits(phone);
 
     let status: CustomerImportRowStatus = 'create';
     let error: string | undefined;
     let existingId: string | undefined;
 
+    // Phone is stored as uploaded (no format validation) — matching/repair can use digits later.
     if (!code && !name && !phone) {
       status = 'skip';
       error = 'صف فارغ';
@@ -111,9 +111,6 @@ export function parseCustomersExcel(
     } else if (!name) {
       status = 'error';
       error = 'الاسم مطلوب';
-    } else if (!phone || phoneDigits.length < 7) {
-      status = 'error';
-      error = 'هاتف غير صالح';
     } else if (!type) {
       status = 'error';
       error = 'النوع يجب أن يكون مستهلك أو تاجر';
@@ -180,7 +177,7 @@ export function downloadCustomersTemplate(): void {
     ['الكود', 'نعم', 'فريد داخل الشركة — مفتاح الإنشاء/التحديث'],
     ['النوع', 'نعم', 'مستهلك أو تاجر'],
     ['الاسم', 'نعم', ''],
-    ['الهاتف', 'نعم', '7 أرقام على الأقل'],
+    ['الهاتف', 'لا', 'يُحفظ كما في الملف بدون تحقق من الصيغة'],
     ['العنوان', 'لا', ''],
     ['ملاحظات', 'لا', ''],
     ['الحالة', 'لا', 'نشط / غير نشط — الافتراضي نشط'],

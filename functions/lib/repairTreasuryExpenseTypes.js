@@ -1,0 +1,57 @@
+/** كتالوج أنواع مصروف خزينة الصيانة — يجب أن يطابق modules/repair/lib/repairTreasuryExpenseTypes.ts */
+export const REPAIR_TREASURY_EXPENSE_TYPES = [
+    {
+        key: 'salaries',
+        label: 'مرتبات وأجور فنيين',
+        accountCode: '611001',
+        accountName: 'مرتبات وأجور فنيين الصيانة',
+    },
+    {
+        key: 'packaging',
+        label: 'تعبئة وتغليف',
+        accountCode: '612001',
+        accountName: 'تعبئة وتغليف — صيانة',
+    },
+    {
+        key: 'electricity',
+        label: 'كهرباء',
+        accountCode: '612002',
+        accountName: 'كهرباء — صيانة',
+    },
+    {
+        key: 'internet',
+        label: 'إنترنت واتصالات',
+        accountCode: '612003',
+        accountName: 'إنترنت واتصالات — صيانة',
+    },
+    {
+        key: 'water',
+        label: 'مياه',
+        accountCode: '612004',
+        accountName: 'مياه — صيانة',
+    },
+    {
+        key: 'cleaning',
+        label: 'نظافة',
+        accountCode: '612005',
+        accountName: 'نظافة — صيانة',
+    },
+    {
+        key: 'office_supplies',
+        label: 'أدوات مكتبية',
+        accountCode: '612006',
+        accountName: 'أدوات مكتبية — صيانة',
+    },
+    {
+        key: 'other',
+        label: 'مصروفات صيانة أخرى',
+        accountCode: '612099',
+        accountName: 'مصروفات صيانة أخرى',
+    },
+];
+export const REPAIR_MANUAL_INCOME_ACCOUNT_CODE = '419002';
+export const REPAIR_MANUAL_INCOME_ACCOUNT_NAME = 'إيرادات متنوعة صيانة';
+export function getRepairTreasuryExpenseType(key) {
+    const normalized = String(key || '').trim();
+    return REPAIR_TREASURY_EXPENSE_TYPES.find((row) => row.key === normalized) || null;
+}

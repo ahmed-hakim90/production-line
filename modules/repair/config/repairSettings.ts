@@ -17,14 +17,15 @@ export type ResolvedRepairStatus = {
 const DEFAULT_STATUSES: ResolvedRepairStatus[] = [
   { id: 'received', label: 'وارد', color: '#64748b', order: 1, isTerminal: false, isEnabled: true },
   { id: 'diagnosing', label: 'تشخيص', color: '#f59e0b', order: 2, isTerminal: false, isEnabled: true },
-  { id: 'waiting_approval', label: 'بانتظار موافقة العميل', color: '#a855f7', order: 3, isTerminal: false, isEnabled: true },
-  { id: 'waiting_parts', label: 'بانتظار قطع الغيار', color: '#ea580c', order: 4, isTerminal: false, isEnabled: true },
-  { id: 'repairing', label: 'إصلاح', color: '#0ea5e9', order: 5, isTerminal: false, isEnabled: true },
-  { id: 'testing', label: 'اختبار', color: '#6366f1', order: 6, isTerminal: false, isEnabled: true },
-  { id: 'ready', label: 'جاهز للتسليم', color: '#22c55e', order: 7, isTerminal: false, isEnabled: true },
-  { id: 'delivered', label: 'تم التسليم', color: '#16a34a', order: 8, isTerminal: true, isEnabled: true },
-  { id: 'cancelled', label: 'ملغى', color: '#78716c', order: 9, isTerminal: true, isEnabled: true },
-  { id: 'unrepairable', label: 'غير قابل للإصلاح', color: '#ef4444', order: 10, isTerminal: true, isEnabled: true },
+  { id: 'estimate_ready', label: 'التقدير جاهز لمراجعة الاستقبال', color: '#0284c7', order: 3, isTerminal: false, isEnabled: true },
+  { id: 'waiting_approval', label: 'بانتظار موافقة العميل', color: '#a855f7', order: 4, isTerminal: false, isEnabled: true },
+  { id: 'waiting_parts', label: 'بانتظار قطع الغيار', color: '#ea580c', order: 5, isTerminal: false, isEnabled: true },
+  { id: 'repairing', label: 'إصلاح', color: '#0ea5e9', order: 6, isTerminal: false, isEnabled: true },
+  { id: 'testing', label: 'اختبار', color: '#6366f1', order: 7, isTerminal: false, isEnabled: true },
+  { id: 'ready', label: 'جاهز للتسليم', color: '#22c55e', order: 8, isTerminal: false, isEnabled: true },
+  { id: 'delivered', label: 'تم التسليم', color: '#16a34a', order: 9, isTerminal: true, isEnabled: true },
+  { id: 'cancelled', label: 'ملغى', color: '#78716c', order: 10, isTerminal: true, isEnabled: true },
+  { id: 'unrepairable', label: 'غير قابل للإصلاح', color: '#ef4444', order: 11, isTerminal: true, isEnabled: true },
 ];
 
 const DEFAULT_ACCESSORIES: RepairAccessoryCatalogItem[] = [
@@ -50,13 +51,14 @@ const DEFAULT_REPAIR_SETTINGS = {
     openStatusIds: [
       'received',
       'diagnosing',
+      'estimate_ready',
       'waiting_approval',
       'waiting_parts',
       'repairing',
       'testing',
       'ready',
     ],
-    assignmentTriggerStatusIds: ['diagnosing', 'waiting_parts', 'repairing', 'testing'],
+    assignmentTriggerStatusIds: ['diagnosing', 'estimate_ready', 'waiting_parts', 'repairing', 'testing'],
   },
   defaults: {
     defaultWarranty: 'none' as const,
@@ -71,6 +73,9 @@ const DEFAULT_REPAIR_SETTINGS = {
       blockOperationsIfPrevDayOpen: true,
     },
   },
+  payments: {
+    allowPartialCollection: true,
+  },
   accessoriesCatalog: DEFAULT_ACCESSORIES,
   serviceCatalog: DEFAULT_SERVICES,
 };
@@ -83,7 +88,15 @@ function normalizeAccessoriesCatalog(raw: unknown): RepairAccessoryCatalogItem[]
       const id = String(item?.id || '').trim() || `acc-${index + 1}`;
       const label = String(item?.label || '').trim();
       if (!label) return null;
-      return { id, label, enabled: item?.enabled !== false };
+      const categoryIds = Array.isArray(item?.categoryIds)
+        ? item.categoryIds.map((cid) => String(cid || '').trim()).filter(Boolean)
+        : [];
+      return {
+        id,
+        label,
+        enabled: item?.enabled !== false,
+        ...(categoryIds.length > 0 ? { categoryIds } : {}),
+      };
     })
     .filter(Boolean) as RepairAccessoryCatalogItem[];
 }
@@ -121,7 +134,19 @@ export const resolveRepairSettings = (
   const fromRoot = systemSettings?.repairSettings;
   const fallbackManagerScope = systemSettings?.repairAccess?.managerScope;
   const rawStatuses = Array.isArray(fromRoot?.workflow?.statuses) ? fromRoot.workflow.statuses : [];
-  const statuses = (rawStatuses.length > 0 ? rawStatuses : DEFAULT_STATUSES)
+  const configuredStatuses = rawStatuses.length > 0 ? [...rawStatuses] : [...DEFAULT_STATUSES];
+  if (!configuredStatuses.some((status) => String(status?.id || '') === 'estimate_ready')) {
+    const diagnosingOrder = Number(configuredStatuses.find((status) => String(status?.id || '') === 'diagnosing')?.order || 2);
+    configuredStatuses.push({
+      id: 'estimate_ready',
+      label: 'التقدير جاهز لمراجعة الاستقبال',
+      color: '#0284c7',
+      order: diagnosingOrder + 0.5,
+      isTerminal: false,
+      isEnabled: true,
+    });
+  }
+  const statuses = configuredStatuses
     .map((status, index) => ({
       id: String(status?.id || '').trim(),
       label: String(status?.label || '').trim() || String(status?.id || '').trim(),
@@ -189,6 +214,11 @@ export const resolveRepairSettings = (
           ?? DEFAULT_REPAIR_SETTINGS.treasury.autoClose.blockOperationsIfPrevDayOpen,
       },
     },
+    payments: {
+      allowPartialCollection:
+        fromRoot?.payments?.allowPartialCollection
+        ?? DEFAULT_REPAIR_SETTINGS.payments.allowPartialCollection,
+    },
     accessoriesCatalog,
     serviceCatalog,
     statusMap,
@@ -211,4 +241,24 @@ export function accessoryLabelsFromIds(
   if (!accessoryIds?.length) return '';
   const map = new Map(catalog.map((a) => [a.id, a.label]));
   return accessoryIds.map((id) => map.get(id) || id).filter(Boolean).join('، ');
+}
+
+/**
+ * إكسسوارات ظاهرة لمنتج حسب فئته.
+ * categoryIds فارغة = متاح لكل الفئات. بدون فئة منتج = نعرض فقط الإكسسوارات العامة.
+ */
+export function accessoriesForProductCategory(
+  catalog: RepairAccessoryCatalogItem[],
+  categoryId: string | null | undefined,
+): RepairAccessoryCatalogItem[] {
+  const enabled = catalog.filter((item) => item.enabled !== false);
+  const cat = String(categoryId || '').trim();
+  return enabled.filter((item) => {
+    const ids = Array.isArray(item.categoryIds)
+      ? item.categoryIds.map((id) => String(id || '').trim()).filter(Boolean)
+      : [];
+    if (ids.length === 0) return true;
+    if (!cat) return false;
+    return ids.includes(cat);
+  });
 }

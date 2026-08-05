@@ -6,7 +6,9 @@ import {
 } from '../modules/repair/utils/repairBusinessLogic';
 import {
   assertRepairStatusTransition,
+  isWorkshopStatusWithinReadyCap,
   listAllowedRepairStatusTargets,
+  listAllowedWorkshopStatusTargets,
 } from '../modules/repair/utils/repairStatusTransitions';
 import { sumServiceCatalogPrices } from '../modules/repair/config/repairSettings';
 import type { RepairAccessContext } from '../modules/repair/utils/repairAccessContext';
@@ -143,6 +145,27 @@ const defaultStatuses: ResolvedRepairStatus[] = [
   const allowedFromReady = listAllowedRepairStatusTargets({ fromStatus: 'ready', statuses: defaultStatuses });
   assert.ok(allowedFromReady.includes('delivered'));
   assert.ok(allowedFromReady.includes('cancelled'));
+
+  assert.equal(isWorkshopStatusWithinReadyCap('ready', defaultStatuses), true);
+  assert.equal(isWorkshopStatusWithinReadyCap('testing', defaultStatuses), true);
+  assert.equal(isWorkshopStatusWithinReadyCap('delivered', defaultStatuses), false);
+  assert.equal(isWorkshopStatusWithinReadyCap('cancelled', defaultStatuses), false);
+  assert.equal(isWorkshopStatusWithinReadyCap('waiting_approval', defaultStatuses), false);
+  assert.equal(isWorkshopStatusWithinReadyCap('unrepairable', defaultStatuses), true);
+
+  const workshopFromRepairing = listAllowedWorkshopStatusTargets({
+    fromStatus: 'repairing',
+    statuses: defaultStatuses,
+  });
+  assert.ok(workshopFromRepairing.includes('testing') || workshopFromRepairing.includes('ready'));
+  assert.equal(workshopFromRepairing.includes('delivered'), false);
+
+  const workshopFromReady = listAllowedWorkshopStatusTargets({
+    fromStatus: 'ready',
+    statuses: defaultStatuses,
+  });
+  assert.equal(workshopFromReady.includes('delivered'), false);
+  assert.equal(workshopFromReady.includes('cancelled'), false);
 }
 
 {

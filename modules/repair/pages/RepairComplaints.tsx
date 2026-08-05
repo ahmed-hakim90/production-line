@@ -5,7 +5,6 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
   DialogContent,
@@ -23,6 +22,7 @@ import {
 } from '@/components/ui/select';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
@@ -32,6 +32,7 @@ import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairComplaintService } from '../services/repairComplaintService';
+import { repairComplaintStatusChipType } from '../lib/repairSemanticStatus';
 import {
   REPAIR_COMPLAINT_STATUS_LABELS,
   resolveUserRepairBranchIds,
@@ -51,13 +52,6 @@ const PAGE_SIZE = 20;
 type LocationState = {
   complaintPrefill?: RepairComplaintPrefill;
   openCreate?: boolean;
-};
-
-const statusBadgeVariant = (status: RepairComplaintStatus): 'default' | 'secondary' | 'outline' | 'destructive' => {
-  if (status === 'open') return 'destructive';
-  if (status === 'in_progress') return 'default';
-  if (status === 'resolved') return 'secondary';
-  return 'outline';
 };
 
 export const RepairComplaints: React.FC = () => {
@@ -344,7 +338,7 @@ export const RepairComplaints: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="p-6">
+      <div className="erp-ds-clean space-y-4 p-4 md:p-6">
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض شكاوى الصيانة.</p>
@@ -355,7 +349,7 @@ export const RepairComplaints: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
+    <div className="erp-ds-clean space-y-4 p-4 md:p-6">
       <PageHeader
         title="شكاوى الصيانة"
         subtitle="تسجيل ومتابعة شكاوى العملاء المرتبطة بطلبات الصيانة"
@@ -455,9 +449,10 @@ export const RepairComplaints: React.FC = () => {
                     </td>
                     <td className="px-3 py-2 text-sm">{branchName(row.branchId)}</td>
                     <td className="px-3 py-2">
-                      <Badge variant={statusBadgeVariant(row.status)}>
-                        {REPAIR_COMPLAINT_STATUS_LABELS[row.status]}
-                      </Badge>
+                      <ErpStatusBadge
+                        label={REPAIR_COMPLAINT_STATUS_LABELS[row.status]}
+                        type={repairComplaintStatusChipType(row.status)}
+                      />
                     </td>
                     <td className="px-3 py-2 text-sm font-mono">
                       {row.receiptNo ? `#${row.receiptNo}` : row.jobId ? 'مرتبط' : '—'}
@@ -616,9 +611,10 @@ export const RepairComplaints: React.FC = () => {
                 </div>
                 <div>
                   <span className="text-muted-foreground">الحالة: </span>
-                  <Badge variant={statusBadgeVariant(selected.status)}>
-                    {REPAIR_COMPLAINT_STATUS_LABELS[selected.status]}
-                  </Badge>
+                  <ErpStatusBadge
+                    label={REPAIR_COMPLAINT_STATUS_LABELS[selected.status]}
+                    type={repairComplaintStatusChipType(selected.status)}
+                  />
                 </div>
                 {selected.receiptNo || selected.jobId ? (
                   <div className="sm:col-span-2 flex flex-wrap items-center gap-2">

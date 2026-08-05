@@ -34,6 +34,9 @@ export const GlobalCostCenterModal: React.FC = () => {
   const [form, setForm] = useState({
     name: '',
     type: 'indirect' as 'indirect' | 'direct',
+    postingMode: 'driver_allocation' as NonNullable<CostCenter['postingMode']>,
+    costObjectScope: 'production' as NonNullable<CostCenter['costObjectScope']>,
+    allocationDriver: 'good_units' as NonNullable<CostCenter['allocationDriver']>,
     allocationBasis: 'by_qty' as 'line_percentage' | 'by_qty',
     productScope: 'selected' as 'all' | 'selected' | 'category',
     productIds: [] as string[],
@@ -57,6 +60,9 @@ export const GlobalCostCenterModal: React.FC = () => {
       setForm({
         name: cc.name,
         type: cc.type,
+        postingMode: cc.postingMode || (cc.type === 'direct' ? 'direct_assignment' : 'driver_allocation'),
+        costObjectScope: cc.costObjectScope || 'production',
+        allocationDriver: cc.allocationDriver || (cc.allocationBasis === 'line_percentage' ? 'fixed_percentage' : 'good_units'),
         allocationBasis: cc.allocationBasis || 'by_qty',
         productScope: cc.productScope || 'selected',
         productIds: cc.productIds || [],
@@ -72,6 +78,9 @@ export const GlobalCostCenterModal: React.FC = () => {
       setForm({
         name: '',
         type: 'indirect',
+        postingMode: 'driver_allocation',
+        costObjectScope: 'production',
+        allocationDriver: 'good_units',
         allocationBasis: 'by_qty',
         productScope: 'selected',
         productIds: [],
@@ -122,16 +131,19 @@ export const GlobalCostCenterModal: React.FC = () => {
 
   const handleSave = async () => {
     if (!form.name.trim()) return;
-    if (form.type === 'indirect' && form.productScope === 'selected' && form.productIds.length === 0) return;
-    if (form.type === 'indirect' && form.productScope === 'category' && form.productCategories.length === 0) return;
+    const distributesToProduction = form.type === 'indirect'
+      && form.postingMode === 'driver_allocation'
+      && ['production', 'shared'].includes(form.costObjectScope);
+    if (distributesToProduction && form.productScope === 'selected' && form.productIds.length === 0) return;
+    if (distributesToProduction && form.productScope === 'category' && form.productCategories.length === 0) return;
     if (
-      form.type === 'indirect'
+      distributesToProduction
       && ['salaries', 'combined'].includes(form.valueSource)
       && form.employeeScope === 'selected'
       && form.employeeIds.length === 0
     ) return;
     if (
-      form.type === 'indirect'
+      distributesToProduction
       && ['salaries', 'combined'].includes(form.valueSource)
       && form.employeeScope === 'department'
       && form.employeeDepartmentIds.length === 0
@@ -227,25 +239,69 @@ export const GlobalCostCenterModal: React.FC = () => {
             <select
               className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
               value={form.type}
-              onChange={(e) => setForm({ ...form, type: e.target.value as 'indirect' | 'direct' })}
+              onChange={(e) => {
+                const type = e.target.value as 'indirect' | 'direct';
+                setForm({
+                  ...form,
+                  type,
+                  postingMode: type === 'direct' ? 'direct_assignment' : 'driver_allocation',
+                });
+              }}
             >
               <option value="indirect">{t('modalManager.costCenter.typeIndirect')}</option>
               <option value="direct">{t('modalManager.costCenter.typeDirect')}</option>
             </select>
           </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">نطاق مركز التكلفة</label>
+              <select
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none"
+                value={form.costObjectScope}
+                onChange={(e) => setForm({ ...form, costObjectScope: e.target.value as NonNullable<CostCenter['costObjectScope']> })}
+              >
+                <option value="production">الإنتاج فقط</option>
+                <option value="shared">مشترك ويُسمح بتحميله على الإنتاج</option>
+                <option value="none">تجميع وتحليل فقط</option>
+              </select>
+            </div>
+            <div className="space-y-2">
+              <label className="block text-sm font-bold text-[var(--color-text-muted)]">طريقة التحميل</label>
+              <select
+                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none"
+                value={form.postingMode}
+                disabled={form.type === 'direct'}
+                onChange={(e) => setForm({ ...form, postingMode: e.target.value as NonNullable<CostCenter['postingMode']> })}
+              >
+                {form.type === 'direct' ? <option value="direct_assignment">تحميل مباشر على أمر الإنتاج</option> : null}
+                {form.type === 'indirect' ? <option value="driver_allocation">تجميع ثم توزيع</option> : null}
+                {form.type === 'indirect' ? <option value="collect_only">تجميع فقط بدون توزيع</option> : null}
+              </select>
+            </div>
+          </div>
           {form.type === 'indirect' && (
             <>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.allocationBasis')}</label>
-                <select
-                  className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
-                  value={form.allocationBasis}
-                  onChange={(e) => setForm({ ...form, allocationBasis: e.target.value as 'line_percentage' | 'by_qty' })}
-                >
-                  <option value="by_qty">{t('modalManager.costCenter.allocationByQty')}</option>
-                  <option value="line_percentage">{t('modalManager.costCenter.allocationByLinePercentage')}</option>
-                </select>
-              </div>
+              {form.postingMode === 'driver_allocation' && ['production', 'shared'].includes(form.costObjectScope) ? (
+                <div className="space-y-2">
+                  <label className="block text-sm font-bold text-[var(--color-text-muted)]">محرك التحميل المفعّل حاليًا</label>
+                  <select
+                    className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none"
+                    value={form.allocationDriver}
+                    onChange={(e) => {
+                      const allocationDriver = e.target.value as NonNullable<CostCenter['allocationDriver']>;
+                      setForm({
+                        ...form,
+                        allocationDriver,
+                        allocationBasis: allocationDriver === 'good_units' ? 'by_qty' : 'line_percentage',
+                      });
+                    }}
+                  >
+                    <option value="good_units">الكمية الجيدة المنتجة</option>
+                    <option value="fixed_percentage">نسب ثابتة على الخطوط</option>
+                  </select>
+                  <p className="text-[11px] text-[var(--color-text-muted)]">ساعات الماكينات والكيلووات تُفعّل بعد ربط مصدر القياس؛ لا يتم افتراضها تلقائيًا.</p>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.costCenter.productScope')}</label>
                 <select
@@ -461,4 +517,3 @@ export const GlobalCostCenterModal: React.FC = () => {
     </div>
   );
 };
-

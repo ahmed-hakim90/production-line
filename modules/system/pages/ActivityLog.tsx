@@ -62,6 +62,7 @@ const ACTION_LABELS: Partial<Record<ActivityAction, { label: string; icon: strin
   ROUTING_SOFT_DELETE_PLAN: { label: 'حذف مسار إنتاج', icon: 'delete', variant: 'danger' },
   CUSTOMER_CREATE: { label: 'إنشاء عميل', icon: 'person_add', variant: 'success' },
   CUSTOMER_UPDATE: { label: 'تحديث عميل', icon: 'edit', variant: 'warning' },
+  CUSTOMER_IMPORT: { label: 'استيراد عملاء', icon: 'upload_file', variant: 'info' },
 };
 
 interface ActivityLogUserGroup {

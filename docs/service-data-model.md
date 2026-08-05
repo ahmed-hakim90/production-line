@@ -10,8 +10,9 @@
 |--------|--------|
 | `status` | حالة المسار (قيم موحّدة جديدة + دعم قراءة قيم قديمة) |
 | `laborCost` | تكلفة عمالة للتحليل والربحية |
-| `warrantyScope` | `none` / `manufacturer` / `in_store` — ضمان الجهاز عند الاستلام |
+| `warrantyScope` | `none` / `manufacturer` / `in_store` — ضمان الجهاز عند الاستلام. يُكتب تلقائيًا `manufacturer` عند وجود أي منتج `inWarranty`، وإلا `none`. |
 | `warrantyExpiresAt` | تاريخ انتهاء ضمان الجهاز (ISO) |
+| `financialState` | يتضمن `warranty_ready` بعد تجهيز إقفال الضمان و`warranty_settled` بعد التسليم بدون إيراد |
 | `priority` | `normal` / `urgent` |
 | `deviceSerial` | سريال سريع للبحث |
 | `intakePhotoUrls` / `repairPhotoUrls` | مصفوفات روابط تخزين |

@@ -4,6 +4,7 @@ import type { RepairJob } from '../types';
 import { repairJobService } from '../services/repairJobService';
 import { customerPhonesMatch, normalizeCustomerPhoneDigits } from '../utils/customerPhone';
 import { canLoadRepairJobList } from '../utils/repairJobListScope';
+import { repairTechnicianService } from '../services/repairTechnicianService';
 
 const searchFields = (job: RepairJob): string =>
   [
@@ -106,7 +107,7 @@ export function useRepairJobs(params: {
         return [];
       }
       if (params.technicianOnly) {
-        return repairJobService.listByTechnicianIds(technicianIdsKey);
+        return repairTechnicianService.list();
       }
       if (params.canViewAllBranches) {
         return repairJobService.listAllBranches();

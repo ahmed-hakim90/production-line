@@ -209,6 +209,19 @@ service cloud.firestore {
         );
     }
 
+    /**
+     * Center warehouse operators are often bound via users.inventoryWarehouseId
+     * without users.repairBranchIds — allow the linked repair branch only.
+     */
+    function pl_isBoundToRepairBranchWarehouse(branchId) {
+      return pl_isInventoryWarehouseBound()
+        && branchId != null
+        && branchId != ''
+        && exists(/databases/$(database)/documents/repair_branches/$(branchId))
+        && get(/databases/$(database)/documents/repair_branches/$(branchId)).data.get('warehouseId', '')
+          == pl_boundInventoryWarehouseId();
+    }
+
     function pl_canViewAllRepairBranches() {
       return pl_isRepairBranchAdmin()
         || pl_hasErpPermission('repair.callCenter.viewAll');
@@ -252,7 +265,8 @@ service cloud.firestore {
     function pl_canAccessRepairBranch(branchId) {
       return pl_currentUserHasRepairBranch(branchId)
         || pl_isTechnicianAssignedToBranch(branchId)
-        || pl_isBranchManager(branchId);
+        || pl_isBranchManager(branchId)
+        || pl_isBoundToRepairBranchWarehouse(branchId);
     }
 
     function pl_canReadRepairBranchScoped() {
@@ -403,6 +417,26 @@ service cloud.firestore {
     function pl_canUpdateWarehouseDoc(warehouseDocId) {
       return pl_sameTenantOrLegacyUpdate()
         && pl_canAccessInventoryWarehouse(warehouseDocId);
+    }
+
+    /**
+     * Bound spare-parts central operators need destination center warehouse docs
+     * for replenishment dropdowns — warehouses collection only (not stock_*).
+     */
+    function pl_isBoundSparePartsCentralWarehouse() {
+      return pl_isInventoryWarehouseBound()
+        && exists(/databases/$(database)/documents/warehouses/$(pl_boundInventoryWarehouseId()))
+        && get(/databases/$(database)/documents/warehouses/$(pl_boundInventoryWarehouseId()))
+          .data.get('warehouseRole', '') == 'spare_parts_central';
+    }
+
+    function pl_canReadMaintenanceCenterWarehouseAsCentral(docId) {
+      return pl_isBoundSparePartsCentralWarehouse()
+        && docId is string
+        && docId != ''
+        && exists(/databases/$(database)/documents/warehouses/$(docId))
+        && get(/databases/$(database)/documents/warehouses/$(docId))
+          .data.get('warehouseRole', '') == 'maintenance_center';
     }
 
     function pl_canCreateRepairTreasuryEntryForOpenSession() {
@@ -895,17 +929,158 @@ service cloud.firestore {
     }
 
     match /repair_jobs/{id} {
-      allow read: if pl_hasErpPermission('repair.view') && pl_canReadRepairBranchScoped();
-      allow create: if pl_hasErpPermission('repair.jobs.create') && pl_canCreateRepairBranchScoped();
-      allow update: if pl_hasErpPermission('repair.jobs.edit') && pl_canUpdateRepairBranchScoped();
+      allow read: if (
+        (
+          pl_hasErpPermission('repair.view')
+          || pl_hasErpPermission('repair.jobs.reception')
+        ) && pl_canReadRepairBranchScoped()
+      );
+      allow create: if pl_hasErpPermission('repair.jobs.create')
+        && pl_canCreateRepairBranchScoped()
+        && request.resource.data.get('customerId', '') is string
+        && request.resource.data.get('customerId', '').size() > 0
+        && exists(/databases/$(database)/documents/customers/$(request.resource.data.customerId))
+        && get(/databases/$(database)/documents/customers/$(request.resource.data.customerId)).data.tenantId == pl_tenantId();
+      allow update: if (
+        pl_hasErpPermission('repair.jobs.edit')
+        || pl_hasErpPermission('repair.jobs.reception')
+      ) && pl_canUpdateRepairBranchScoped();
       allow delete: if pl_hasErpPermission('repair.jobs.delete') && pl_canReadRepairBranchScoped();
     }
 
     match /repair_jobs/{jobId}/service_events/{eventId} {
-      allow read: if pl_hasErpPermission('repair.view') && pl_canReadRepairBranchScoped();
-      allow create: if pl_hasErpPermission('repair.jobs.create') && pl_canCreateRepairBranchScoped();
+      allow read: if (
+        (
+          pl_hasErpPermission('repair.view')
+          || pl_hasErpPermission('repair.jobs.reception')
+        ) && pl_canReadRepairBranchScoped()
+      ) || (
+        pl_hasErpPermission('repair.jobs.technician')
+        && get(/databases/$(database)/documents/repair_jobs/$(jobId)).data.get('technicianId', '') == request.auth.uid
+        && pl_canReadRepairBranchScoped()
+      );
+      allow create: if (
+        pl_hasErpPermission('repair.jobs.create')
+        || pl_hasErpPermission('repair.jobs.reception')
+        || (
+          pl_hasErpPermission('repair.jobs.technician')
+          && get(/databases/$(database)/documents/repair_jobs/$(jobId)).data.get('technicianId', '') == request.auth.uid
+        )
+      ) && pl_canCreateRepairBranchScoped();
       allow update: if pl_hasErpPermission('repair.jobs.edit') && pl_canUpdateRepairBranchScoped();
       allow delete: if pl_hasErpPermission('repair.jobs.delete') && pl_canReadRepairBranchScoped();
+    }
+
+    // Financial documents are server-managed and field-separated from the
+    // technical job so technicians cannot read prices or payment information.
+    match /repair_job_financials/{id} {
+      allow read: if pl_hasErpPermission('repair.finance.view') && pl_canReadRepairBranchScoped();
+      allow create, update, delete: if false;
+    }
+
+    match /repair_payment_authorizations/{id} {
+      allow read: if (
+        pl_hasErpPermission('repair.payments.view')
+        || pl_hasErpPermission('repair.finance.view')
+        || pl_hasErpPermission('repair.discounts.approve')
+        || pl_hasErpPermission('repair.credit.approve')
+      ) && pl_canReadRepairBranchScoped();
+      allow create, update, delete: if false;
+    }
+
+    match /repair_payments/{id} {
+      allow read: if (
+        pl_hasErpPermission('repair.payments.view')
+        || pl_hasErpPermission('repair.finance.view')
+      ) && pl_canReadRepairBranchScoped();
+      allow create, update, delete: if false;
+    }
+
+    match /repair_financial_approvals/{id} {
+      allow read: if (
+        pl_hasErpPermission('repair.discounts.request')
+        || pl_hasErpPermission('repair.discounts.approve')
+        || pl_hasErpPermission('repair.credit.request')
+        || pl_hasErpPermission('repair.credit.approve')
+      ) && pl_canReadRepairBranchScoped();
+      allow create, update, delete: if false;
+    }
+
+    match /accounting_accounts/{id} {
+      allow read: if (
+        pl_hasErpPermission('accounting.view')
+        || pl_hasErpPermission('accounting.accounts.manage')
+        || pl_hasErpPermission('repair.finance.view')
+        || pl_hasErpPermission('repair.accounting.manage')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    match /accounting_journal_entries/{id} {
+      allow read: if (
+        pl_hasErpPermission('accounting.view')
+        || pl_hasErpPermission('accounting.journals.post')
+        || pl_hasErpPermission('repair.finance.view')
+        || pl_hasErpPermission('repair.accounting.manage')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    match /accounting_settings/{id} {
+      allow read: if pl_hasErpPermission('accounting.view') && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    match /accounting_periods/{id} {
+      allow read: if pl_hasErpPermission('accounting.view') && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    match /accounting_sequences/{id} {
+      allow read, create, update, delete: if false;
+    }
+
+    match /repair_financial_migration_reviews/{id} {
+      allow read: if (
+        pl_hasErpPermission('repair.finance.view')
+        || pl_hasErpPermission('repair.accounting.manage')
+      ) && pl_canReadRepairBranchScoped();
+      allow create, update, delete: if false;
+    }
+
+    match /repair_service_catalog/{id} {
+      allow read: if (
+        pl_hasErpPermission('repair.settings.manage')
+        || pl_hasErpPermission('repair.finance.view')
+        || pl_hasErpPermission('repair.payments.view')
+      ) && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
+    // A technician account receives a sanitized repair catalog through a
+    // callable. Firestore cannot hide individual price fields, so direct
+    // material reads are denied unless the account also has a commercial or
+    // inventory-management permission.
+    match /materials/{id} {
+      allow read: if (
+        !pl_hasErpPermission('repair.jobs.technician')
+        || pl_hasErpPermission('repair.pricing.manage')
+        || pl_hasErpPermission('inventory.view')
+        || pl_hasErpPermission('inventory.transactions.create')
+        || pl_hasErpPermission('manufacturing.materials.manage')
+      ) && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
+      allow create: if (
+        !pl_hasErpPermission('repair.jobs.technician')
+        || pl_hasErpPermission('manufacturing.materials.manage')
+      ) && (pl_sameTenantOrLegacyWrite() || pl_superAdminTenantScopedCreateOk());
+      allow update: if (
+        !pl_hasErpPermission('repair.jobs.technician')
+        || pl_hasErpPermission('manufacturing.materials.manage')
+      ) && (pl_sameTenantOrLegacyUpdate() || pl_superAdminTenantScopedUpdateOk());
+      allow delete: if (
+        !pl_hasErpPermission('repair.jobs.technician')
+        || pl_hasErpPermission('manufacturing.materials.manage')
+      ) && (pl_sameTenantOrLegacyRead() || pl_isSuperAdmin());
     }
 
     match /repair_followups/{id} {
@@ -959,17 +1134,42 @@ service cloud.firestore {
       allow update, delete: if false;
     }
 
+    // get of a missing close doc must succeed (resource == null) so monthly report
+    // can treat "no close row" as open — pl_canReadRepairBranchScoped alone denies misses.
+    match /repair_treasury_month_closes/{id} {
+      allow read: if (
+          pl_hasErpPermission('repair.treasury.view')
+          || pl_hasErpPermission('repair.treasury.manage')
+        )
+        && pl_sameTenantOrLegacyRead()
+        && (
+          pl_isRepairBranchAdmin()
+          || resource == null
+          || (
+            'branchId' in resource.data
+            && pl_canAccessRepairBranch(resource.data.branchId)
+          )
+        );
+      allow create: if pl_hasErpPermission('repair.treasury.manage') && pl_canCreateRepairBranchScoped();
+      allow update: if pl_hasErpPermission('repair.treasury.manage') && pl_canUpdateRepairBranchScoped();
+      allow delete: if false;
+    }
+
     match /repair_sales_invoices/{id} {
       allow read: if (
           pl_hasErpPermission('repair.salesInvoice.view')
           || pl_hasErpPermission('repair.salesInvoice.create')
         ) && pl_canReadRepairBranchScoped();
-      allow create: if pl_hasErpPermission('repair.salesInvoice.create') && pl_canCreateRepairBranchScoped();
-      allow update: if (
-          pl_hasErpPermission('repair.salesInvoice.edit')
-          || pl_hasErpPermission('repair.salesInvoice.cancel')
-        ) && pl_canUpdateRepairBranchScoped();
-      allow delete: if false;
+      // Financial/inventory lifecycle is server-managed. This prevents clients
+      // from overriding prices, approval state, stock, treasury or journals.
+      allow create, update, delete: if false;
+    }
+
+    // Server-managed atomic sequence counters. Clients may include them in a
+    // tenant backup, but invoice numbering can only be mutated by Admin SDK.
+    match /repair_counters/{id} {
+      allow read: if pl_sameTenantOrLegacyRead() || pl_isSuperAdmin();
+      allow create, update, delete: if false;
     }
 
     match /repair_complaints/{id} {
@@ -1249,7 +1449,11 @@ service cloud.firestore {
 
     // Inventory warehouse-scoped collections (users.inventoryWarehouseId).
     match /warehouses/{docId} {
-      allow read: if pl_isActiveUser() && (pl_canReadWarehouseDoc(docId) || pl_isSuperAdmin());
+      allow read: if pl_isActiveUser() && (
+        pl_canReadWarehouseDoc(docId)
+        || pl_canReadMaintenanceCenterWarehouseAsCentral(docId)
+        || pl_isSuperAdmin()
+      );
       allow create: if pl_isActiveUser() && (pl_canWriteWarehouseDoc(docId) || pl_superAdminTenantScopedCreateOk());
       allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseDoc(docId) || pl_superAdminTenantScopedUpdateOk());
       allow delete: if pl_isActiveUser() && (pl_canReadWarehouseDoc(docId) || pl_isSuperAdmin());
@@ -1339,7 +1543,8 @@ service cloud.firestore {
 
     match /stock_counts/{docId} {
       allow read: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
-      allow create: if pl_isActiveUser() && (pl_canWriteWarehouseIdField() || pl_superAdminTenantScopedCreateOk());
+      // Creation revalidates the warehouse balances in a server transaction.
+      allow create: if false;
       allow update: if pl_isActiveUser() && (pl_canUpdateWarehouseIdField() || pl_superAdminTenantScopedUpdateOk());
       allow delete: if pl_isActiveUser() && (pl_canReadWarehouseIdField() || pl_isSuperAdmin());
     }

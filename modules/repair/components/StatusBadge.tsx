@@ -1,26 +1,44 @@
-import React from 'react';
+import React, { useMemo } from 'react';
+import { CheckCircle2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { REPAIR_JOB_STATUS_LABELS, type RepairJobStatus } from '../types';
+import { cn } from '@/lib/utils';
+import { useAppStore } from '@/store/useAppStore';
+import { resolveRepairSettings } from '../config/repairSettings';
+import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
+import type { RepairJobStatus } from '../types';
+import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
 
-const classMap: Record<string, string> = {
-  received: 'bg-slate-100 text-slate-800',
-  diagnosing: 'bg-amber-100 text-amber-800',
-  waiting_approval: 'bg-violet-100 text-violet-900',
-  waiting_parts: 'bg-orange-100 text-orange-900',
-  repairing: 'bg-sky-100 text-sky-800',
-  testing: 'bg-indigo-100 text-indigo-900',
-  ready: 'bg-emerald-100 text-emerald-800',
-  delivered: 'bg-green-100 text-green-800',
-  cancelled: 'bg-stone-200 text-stone-800',
-  unrepairable: 'bg-rose-100 text-rose-800',
-  inspection: 'bg-amber-100 text-amber-800',
-  repair: 'bg-sky-100 text-sky-800',
-};
+export const StatusBadge: React.FC<{
+  status: RepairJobStatus;
+  className?: string;
+  /** Larger chip for page headers. */
+  size?: 'sm' | 'md';
+}> = ({ status, className, size = 'sm' }) => {
+  const systemSettings = useAppStore((s) => s.systemSettings);
+  const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
+  const chip = useMemo(
+    () => resolveRepairStatusChip(status, repairSettings.statusMap),
+    [status, repairSettings.statusMap],
+  );
+  const delivered = isDeliveredStatus(status);
 
-export const StatusBadge: React.FC<{ status: RepairJobStatus }> = ({ status }) => {
   return (
-    <Badge className={classMap[status] || 'bg-slate-100 text-slate-800'}>
-      {REPAIR_JOB_STATUS_LABELS[status] || status}
+    <Badge
+      variant="outline"
+      className={cn(
+        'inline-flex items-center gap-1 border font-medium hover:bg-[inherit]',
+        size === 'md' ? 'rounded-lg px-3 py-1.5 text-sm' : 'rounded-lg px-2.5 py-1 text-xs',
+        className,
+      )}
+      style={chip.style}
+    >
+      {delivered ? (
+        <CheckCircle2
+          className={size === 'md' ? 'h-3.5 w-3.5 shrink-0' : 'h-3 w-3 shrink-0'}
+          aria-hidden
+        />
+      ) : null}
+      {chip.label}
     </Badge>
   );
 };

@@ -17,6 +17,8 @@ export interface MenuItem {
   selfSupervisorOnly?: boolean;
   /** Hide from these built-in role keys (role-focused navigation). */
   excludeRoleKeys?: FirestoreRoleKey[];
+  /** Show only for these built-in role keys, even when an administrator has every permission. */
+  includeRoleKeys?: FirestoreRoleKey[];
   activePatterns?: string[];
   /**
    * When `activePatterns` or the default `path/` prefix matches, skip if the logical path
@@ -46,6 +48,9 @@ export function canAccessMenuItem(
   item: MenuItem,
   roleKey?: FirestoreRoleKey | string | null,
 ): boolean {
+  if (item.includeRoleKeys?.length && (!roleKey || !item.includeRoleKeys.includes(roleKey as FirestoreRoleKey))) {
+    return false;
+  }
   if (roleKey && item.excludeRoleKeys?.length && item.excludeRoleKeys.includes(roleKey as FirestoreRoleKey)) {
     return false;
   }
@@ -307,6 +312,22 @@ export const MENU_CONFIG: MenuGroup[] = [
     ],
   },
   {
+    key: 'accounting',
+    label: 'الحسابات',
+    icon: 'account_balance',
+    children: [
+      { key: 'accounting-dashboard', label: 'لوحة الحسابات', icon: 'monitoring', path: '/accounting', permission: 'accounting.view' },
+      { key: 'accounting-journals', label: 'القيود اليومية', icon: 'receipt_long', path: '/accounting/journals', permission: 'accounting.view' },
+      { key: 'accounting-ledger', label: 'دفتر الأستاذ', icon: 'menu_book', path: '/accounting/ledger', permission: 'accounting.view' },
+      { key: 'accounting-trial', label: 'ميزان المراجعة', icon: 'balance', path: '/accounting/trial-balance', permission: 'accounting.view' },
+      { key: 'accounting-repair-pnl', label: 'ربحية الصيانة', icon: 'trending_up', path: '/accounting/repair-pnl', permission: 'accounting.view' },
+      { key: 'accounting-inventory', label: 'قيمة المخزون', icon: 'inventory_2', path: '/accounting/inventory-valuation', permission: 'accounting.inventory.view' },
+      { key: 'accounting-chart', label: 'شجرة الحسابات', icon: 'account_tree', path: '/accounting/chart', permission: 'accounting.view' },
+      { key: 'accounting-cost-centers', label: 'مراكز التكلفة', icon: 'account_balance', path: '/accounting/cost-centers', permission: 'accounting.view' },
+      { key: 'accounting-settings', label: 'إعدادات الحسابات', icon: 'settings', path: '/accounting/settings', permission: 'accounting.view' },
+    ],
+  },
+  {
     key: 'costs',
     label: 'التكاليف',
     icon: 'account_balance',
@@ -350,25 +371,26 @@ export const MENU_CONFIG: MenuGroup[] = [
     icon: 'build_circle',
     children: [
       { key: 'repair-dashboard', label: 'لوحة الصيانة', icon: 'dashboard', path: '/repair', permission: 'repair.dashboard.view' },
-      { key: 'repair-call-center', label: 'مركز الاتصال', icon: 'call', path: '/repair/call-center', permission: 'repair.view' },
+      { key: 'repair-new-job', label: 'تسجيل طلب جديد', icon: 'add_circle', path: '/repair/jobs/new', permission: 'repair.jobs.create' },
       { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
+      { key: 'repair-payments', label: 'التحصيل والتسليم', icon: 'payments', path: '/repair/payments', permission: 'repair.payments.view' },
+      { key: 'repair-call-center', label: 'مركز الاتصال', icon: 'call', path: '/repair/call-center', permission: 'repair.view' },
+      { key: 'repair-technician-home', label: 'لوحة الفني', icon: 'engineering', path: '/repair/technician', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
+      { key: 'repair-my-jobs', label: 'طلباتي (فني)', icon: 'engineering', path: '/repair/my-jobs', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
+      { key: 'repair-admin-dashboard', label: 'لوحة الإدارة', icon: 'admin_panel_settings', path: '/repair/admin-dashboard', permission: 'repair.adminDashboard.view' },
+      { key: 'repair-parts', label: 'قطع غيار المراكز', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
       {
-        key: 'repair-my-jobs',
-        label: 'طلباتي (فني)',
-        icon: 'engineering',
-        path: '/repair/my-jobs',
-        permission: 'repair.jobs.technician',
-        anyOfPermissions: ['repair.jobs.technician', 'repair.view'],
-        exact: true,
+        key: 'repair-parts-replenishment', label: 'متابعة التموين', icon: 'local_shipping', path: '/repair/parts-replenishment', permission: 'sparePartsReplenishment.view',
+        anyOfPermissions: ['sparePartsReplenishment.view', 'sparePartsReplenishment.create', 'sparePartsReplenishment.receive'],
       },
-      { key: 'repair-parts', label: 'قطع غيار فروع الصيانة', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
       { key: 'repair-spare-issues', label: 'سندات صرف قطع الغيار', icon: 'assignment_turned_in', path: '/repair/spare-issues', permission: 'repairSpareIssues.view' },
-      { key: 'repair-complaints', label: 'شكاوى الصيانة', icon: 'report', path: '/repair/complaints', permission: 'repair.complaints.view' },
+      { key: 'repair-parts-pricing', label: 'تسعير قطع الغيار', icon: 'sell', path: '/repair/parts-pricing', permission: 'repair.pricing.manage' },
+      { key: 'repair-sales-invoice', label: 'فواتير بيع القطع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },
+      { key: 'repair-complaints', label: 'الشكاوى', icon: 'report', path: '/repair/complaints', permission: 'repair.complaints.view' },
       { key: 'repair-treasury', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/treasury', permission: 'repair.treasury.view' },
-      { key: 'repair-sales-invoice', label: 'فاتورة بيع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },
-      { key: 'repair-branches', label: 'الفروع', icon: 'store', path: '/repair/branches', permission: 'repair.branches.manage' },
+      { key: 'repair-treasury-report', label: 'تقرير الخزينة', icon: 'bar_chart', path: '/repair/treasury-report', permission: 'repair.treasury.view' },
       { key: 'repair-kpis', label: 'أداء الفنيين', icon: 'leaderboard', path: '/repair/technician-kpis', permission: 'repair.technician.view' },
-      { key: 'repair-admin-dashboard', label: 'لوحة الأدمن', icon: 'admin_panel_settings', path: '/repair/admin-dashboard', permission: 'repair.adminDashboard.view' },
+      { key: 'repair-branches', label: 'الفروع', icon: 'store', path: '/repair/branches', permission: 'repair.branches.manage' },
       { key: 'repair-settings', label: 'إعدادات الصيانة', icon: 'settings', path: '/repair/settings', permission: 'repair.settings.manage' },
     ],
   },

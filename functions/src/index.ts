@@ -34,6 +34,7 @@ import {
   returnRepairSpareIssueHandler,
   submitRepairSpareIssueHandler,
 } from './repairSpareIssues.js';
+import { buildPublicRepairApprovalView } from './repairApprovalPublic.js';
 import {
   approveSparePartsReplenishmentHandler,
   cancelSparePartsReplenishmentHandler,
@@ -43,6 +44,19 @@ import {
   rejectSparePartsReplenishmentHandler,
   responsibleApproveSparePartsReplenishmentHandler,
 } from './sparePartsReplenishment.js';
+import {
+  issuePendingRepairPartUsageHandler,
+  requestRepairJobSparePartHandler,
+} from './repairJobSparePartRequest.js';
+import {
+  mutateRepairSalesInvoiceHandler,
+} from './repairFinancialOps.js';
+import { mutateRepairPaymentHandler } from './repairPaymentOps.js';
+import { mutateRepairTreasuryHandler } from './repairTreasuryOps.js';
+import { repairTechnicianOpsHandler } from './repairTechnicianOps.js';
+import { mutateAccountingHandler } from './accountingOps.js';
+import { mutateRepairServiceCatalogHandler } from './repairServiceCatalogOps.js';
+import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js';
 
 initializeApp();
 
@@ -973,12 +987,42 @@ export const scheduledAssetDepreciationJob = onSchedule(
 
 export const scheduledRepairTreasuryAutoCloseJob = onSchedule(
   {
-    schedule: '0 0 * * *',
-    timeZone: 'Africa/Cairo',
+    // Hourly dispatcher: each tenant is closed only at midnight in its configured timezone.
+    schedule: '5 * * * *',
+    timeZone: 'UTC',
     region: 'us-central1',
     memory: '256MiB',
   },
   async () => {
+    const settingsByTenant = new Map<string, {
+      enabled: boolean;
+      timezone: string;
+      localDay: string;
+      localHour: number;
+    }>();
+    const localClock = (date: Date, timezone: string) => {
+      let safeTimezone = timezone;
+      try {
+        new Intl.DateTimeFormat('en-CA', { timeZone: safeTimezone }).format(date);
+      } catch {
+        safeTimezone = 'Africa/Cairo';
+      }
+      const parts = new Intl.DateTimeFormat('en-CA', {
+        timeZone: safeTimezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        hourCycle: 'h23',
+      }).formatToParts(date);
+      const value = (type: Intl.DateTimeFormatPartTypes) => parts.find((part) => part.type === type)?.value || '';
+      return {
+        timezone: safeTimezone,
+        day: `${value('year')}-${value('month')}-${value('day')}`,
+        hour: Number(value('hour') || 0),
+      };
+    };
+    const now = new Date();
     const sessionsSnap = await db
       .collection(REPAIR_TREASURY_SESSIONS_COLLECTION)
       .where('status', '==', 'open')
@@ -1000,6 +1044,35 @@ export const scheduledRepairTreasuryAutoCloseJob = onSchedule(
       const tenantId = String(session.tenantId || '').trim();
       if (!branchId || !tenantId) continue;
       if (session.needsManualClose === true) continue;
+
+      let tenantClock = settingsByTenant.get(tenantId);
+      if (!tenantClock) {
+        const settingsSnap = await db.collection('system_settings').doc(tenantId).get();
+        const settings = settingsSnap.data() as {
+          branding?: { timezone?: string };
+          repairSettings?: {
+            treasury?: { autoClose?: { enabled?: boolean; timezone?: string } };
+          };
+        } | undefined;
+        const autoClose = settings?.repairSettings?.treasury?.autoClose;
+        const clock = localClock(
+          now,
+          String(autoClose?.timezone || settings?.branding?.timezone || 'Africa/Cairo'),
+        );
+        tenantClock = {
+          enabled: autoClose?.enabled !== false,
+          timezone: clock.timezone,
+          localDay: clock.day,
+          localHour: clock.hour,
+        };
+        settingsByTenant.set(tenantId, tenantClock);
+      }
+      if (!tenantClock.enabled || tenantClock.localHour !== 0) continue;
+      const openedAt = String((session as { openedAt?: string }).openedAt || '');
+      const openedAtMs = Date.parse(openedAt);
+      if (!Number.isFinite(openedAtMs)) continue;
+      const openedLocalDay = localClock(new Date(openedAtMs), tenantClock.timezone).day;
+      if (openedLocalDay >= tenantClock.localDay) continue;
 
       const entriesSnap = await db
         .collection(REPAIR_TREASURY_ENTRIES_COLLECTION)
@@ -1863,6 +1936,145 @@ export const trackRepairJobPublic = onCall(
   },
 );
 
+const resolveApprovalTokenExpiryMs = (expRaw: unknown): number => {
+  if (!expRaw) return 0;
+  if (typeof expRaw === 'object' && expRaw !== null && typeof (expRaw as { toDate?: () => Date }).toDate === 'function') {
+    return (expRaw as { toDate: () => Date }).toDate().getTime();
+  }
+  const parsed = Date.parse(String(expRaw));
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+type PublicApprovalLinkContext = {
+  tenantId: string;
+  jobId: string;
+  job: Record<string, unknown>;
+  jobRef: FirebaseFirestore.DocumentReference;
+};
+
+/** Shared: resolve tenant + job and verify public approval token (fail closed). */
+async function loadPublicRepairApprovalJob(input: {
+  tenantSlug: string;
+  jobId: string;
+  token: string;
+  requirePending: boolean;
+}): Promise<PublicApprovalLinkContext> {
+  const tenantSlug = sanitizeTrackSlug(input.tenantSlug);
+  const jobId = String(input.jobId || '').trim();
+  const token = String(input.token || '').trim();
+  if (!tenantSlug || !jobId || !token) {
+    throw new HttpsError('invalid-argument', 'بيانات غير كافية.');
+  }
+
+  const slugSnap = await db.collection(TENANT_SLUGS_COLLECTION).doc(tenantSlug).get();
+  const tenantId = String((slugSnap.data() as { tenantId?: string } | undefined)?.tenantId || '').trim();
+  if (!slugSnap.exists || !tenantId) {
+    throw new HttpsError('not-found', 'الشركة غير موجودة.');
+  }
+  const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
+  if (!tenantSnap.exists || String((tenantSnap.data() as { status?: string } | undefined)?.status || '') !== 'active') {
+    throw new HttpsError('failed-precondition', 'الشركة غير متاحة.');
+  }
+
+  const jobRef = db.collection(REPAIR_JOBS_COLLECTION).doc(jobId);
+  const jobSnap = await jobRef.get();
+  if (!jobSnap.exists) {
+    throw new HttpsError('not-found', 'الطلب غير موجود.');
+  }
+  const job = jobSnap.data() as Record<string, unknown>;
+  if (String(job.tenantId || '') !== tenantId) {
+    throw new HttpsError('permission-denied', 'لا يتطابق الطلب مع الشركة.');
+  }
+  const hash = createHash('sha256').update(token, 'utf8').digest('hex');
+  if (String(job.approvalTokenHash || '') !== hash) {
+    throw new HttpsError('permission-denied', 'رابط الموافقة غير صالح.');
+  }
+  const expMs = resolveApprovalTokenExpiryMs(job.approvalTokenExpiresAt);
+  if (expMs && Date.now() > expMs) {
+    throw new HttpsError('failed-precondition', 'انتهت صلاحية الرابط.');
+  }
+  if (input.requirePending && String(job.approvalStatus || '') !== 'pending') {
+    throw new HttpsError('failed-precondition', 'لا يوجد طلب موافقة نشط.');
+  }
+  return { tenantId, jobId, job, jobRef };
+}
+
+/** Public: load estimate details (customer + spare parts) for signed approval link. */
+export const getRepairApprovalPublic = onCall(
+  {
+    region: 'us-central1',
+    memory: '128MiB',
+    cors: true,
+    invoker: 'public',
+  },
+  async (request) => {
+    const data = (request.data || {}) as {
+      tenantSlug?: string;
+      jobId?: string;
+      token?: string;
+    };
+    const ctx = await loadPublicRepairApprovalJob({
+      tenantSlug: String(data.tenantSlug || ''),
+      jobId: String(data.jobId || ''),
+      token: String(data.token || ''),
+      requirePending: false,
+    });
+    const authorizationId = String(ctx.job.approvalAuthorizationId || '');
+    const approvalRevision = Math.max(0, Number(ctx.job.approvalRevision || 0));
+    if (!authorizationId || approvalRevision <= 0) {
+      throw new HttpsError('failed-precondition', 'رابط الموافقة غير مرتبط بإصدار تقدير صالح.');
+    }
+    const authorizationSnap = authorizationId
+      ? await db.collection('repair_payment_authorizations').doc(authorizationId).get()
+      : null;
+    const authorization = authorizationSnap?.data() as Record<string, unknown> | undefined;
+    if (
+      !authorizationSnap?.exists
+      || String(authorization?.tenantId || '') !== ctx.tenantId
+      || String(authorization?.jobId || '') !== ctx.jobId
+      || Number(authorization?.revision || 0) !== approvalRevision
+      || String(authorization?.status || '') === 'void'
+    ) {
+      throw new HttpsError('failed-precondition', 'انتهت صلاحية إصدار التقدير أو تم استبداله.');
+    }
+    const currentAuthorization = authorization as Record<string, unknown>;
+    const legacy = buildPublicRepairApprovalView(ctx.job);
+    const serviceLines = Array.isArray(currentAuthorization.serviceLines)
+      ? currentAuthorization.serviceLines as Array<Record<string, unknown>> : [];
+    const partLines = Array.isArray(currentAuthorization.partLines)
+      ? currentAuthorization.partLines as Array<Record<string, unknown>> : [];
+    const serviceGross = Number(currentAuthorization.serviceGross || 0);
+    const partsGross = Number(currentAuthorization.partsGross || 0);
+    const netAmount = Number(currentAuthorization.netAmount || 0);
+    return {
+      ok: true as const,
+      estimate: {
+        ...legacy,
+        revision: approvalRevision,
+        authorizationNo: String(currentAuthorization.authorizationNo || authorizationId),
+        productsCost: serviceGross,
+        partsCost: partsGross,
+        laborCost: 0,
+        serviceOnlyCost: 0,
+        grossAmount: Number(currentAuthorization.grossAmount || 0),
+        discountAmount: Number(currentAuthorization.discountAmount || 0),
+        estimatedTotal: netAmount,
+        products: serviceLines.map((row) => ({
+          name: String(row.name || 'خدمة صيانة'),
+          quantity: Number(row.quantity || 0),
+          lineCost: Number(row.lineTotal || 0),
+        })),
+        parts: partLines.map((row) => ({
+          partName: String(row.name || 'قطعة غيار'),
+          quantity: Number(row.quantity || 0),
+          unitPrice: Number(row.unitPrice || 0),
+          lineTotal: Number(row.lineTotal || 0),
+        })),
+      },
+    };
+  },
+);
+
 /** Public: customer approval / rejection via signed link (token hashed in Firestore). */
 export const submitRepairApprovalPublic = onCall(
   {
@@ -1879,78 +2091,86 @@ export const submitRepairApprovalPublic = onCall(
       decision?: 'approved' | 'rejected';
       note?: string;
     };
-    const tenantSlug = sanitizeTrackSlug(data.tenantSlug);
-    const jobId = String(data.jobId || '').trim();
-    const token = String(data.token || '').trim();
     const decision = data.decision;
     const note = String(data.note || '').trim().slice(0, 2000);
-    if (!tenantSlug || !jobId || !token || (decision !== 'approved' && decision !== 'rejected')) {
+    if (decision !== 'approved' && decision !== 'rejected') {
       throw new HttpsError('invalid-argument', 'بيانات غير كافية.');
     }
 
-    const slugSnap = await db.collection(TENANT_SLUGS_COLLECTION).doc(tenantSlug).get();
-    const tenantId = String((slugSnap.data() as { tenantId?: string } | undefined)?.tenantId || '').trim();
-    if (!slugSnap.exists || !tenantId) {
-      throw new HttpsError('not-found', 'الشركة غير موجودة.');
-    }
-    const tenantSnap = await db.collection(TENANTS_COLLECTION).doc(tenantId).get();
-    if (!tenantSnap.exists || String((tenantSnap.data() as { status?: string } | undefined)?.status || '') !== 'active') {
-      throw new HttpsError('failed-precondition', 'الشركة غير متاحة.');
-    }
+    const ctx = await loadPublicRepairApprovalJob({
+      tenantSlug: String(data.tenantSlug || ''),
+      jobId: String(data.jobId || ''),
+      token: String(data.token || ''),
+      requirePending: true,
+    });
+    const { tenantId, jobId, jobRef } = ctx;
+    const expectedHash = createHash('sha256')
+      .update(String(data.token || '').trim(), 'utf8')
+      .digest('hex');
+    const eventRef = jobRef.collection('service_events').doc();
+    const afterStatus = await db.runTransaction(async (tx) => {
+      const currentSnap = await tx.get(jobRef);
+      if (!currentSnap.exists) throw new HttpsError('not-found', 'الطلب غير موجود.');
+      const job = currentSnap.data() as Record<string, unknown>;
+      if (String(job.tenantId || '') !== tenantId || String(job.approvalTokenHash || '') !== expectedHash) {
+        throw new HttpsError('permission-denied', 'رابط الموافقة غير صالح.');
+      }
+      const expMs = resolveApprovalTokenExpiryMs(job.approvalTokenExpiresAt);
+      if (expMs && Date.now() > expMs) throw new HttpsError('failed-precondition', 'انتهت صلاحية الرابط.');
+      if (String(job.approvalStatus || '') !== 'pending') {
+        throw new HttpsError('failed-precondition', 'تم الرد على طلب الموافقة بالفعل.');
+      }
+      const authorizationId = String(job.approvalAuthorizationId || '');
+      const revision = Math.max(0, Number(job.approvalRevision || 0));
+      if (!authorizationId || revision <= 0) {
+        throw new HttpsError('failed-precondition', 'رابط الموافقة غير مرتبط بإصدار تقدير صالح.');
+      }
+      const authorizationRef = db.collection('repair_payment_authorizations').doc(authorizationId);
+      const authorizationSnap = await tx.get(authorizationRef);
+      if (
+        !authorizationSnap.exists
+        || String(authorizationSnap.data()?.tenantId || '') !== tenantId
+        || String(authorizationSnap.data()?.jobId || '') !== jobId
+        || Number(authorizationSnap.data()?.revision || 0) !== revision
+        || String(authorizationSnap.data()?.status || '') === 'void'
+      ) throw new HttpsError('failed-precondition', 'انتهت صلاحية إصدار التقدير أو تم استبداله.');
 
-    const jobRef = db.collection(REPAIR_JOBS_COLLECTION).doc(jobId);
-    const jobSnap = await jobRef.get();
-    if (!jobSnap.exists) {
-      throw new HttpsError('not-found', 'الطلب غير موجود.');
-    }
-    const job = jobSnap.data() as Record<string, unknown>;
-    if (String(job.tenantId || '') !== tenantId) {
-      throw new HttpsError('permission-denied', 'لا يتطابق الطلب مع الشركة.');
-    }
-    const hash = createHash('sha256').update(token, 'utf8').digest('hex');
-    if (String(job.approvalTokenHash || '') !== hash) {
-      throw new HttpsError('permission-denied', 'رابط الموافقة غير صالح.');
-    }
-    if (String(job.approvalStatus || '') !== 'pending') {
-      throw new HttpsError('failed-precondition', 'لا يوجد طلب موافقة نشط.');
-    }
-    const expRaw = job.approvalTokenExpiresAt as { toDate?: () => Date } | string | undefined;
-    const expMs =
-      expRaw && typeof expRaw === 'object' && typeof (expRaw as { toDate?: () => Date }).toDate === 'function'
-        ? (expRaw as { toDate: () => Date }).toDate().getTime()
-        : expRaw
-          ? Date.parse(String(expRaw))
-          : 0;
-    if (expMs && Date.now() > expMs) {
-      throw new HttpsError('failed-precondition', 'انتهت صلاحية الرابط.');
-    }
-
-    const at = new Date().toISOString();
-    const prevStatus = String(job.status || '');
-    const patch: Record<string, unknown> = {
-      approvalResolvedAt: at,
-      approvalNote: note,
-      approvalStatus: decision === 'approved' ? 'approved' : 'rejected',
-      updatedAt: at,
-    };
-    if (decision === 'approved' && prevStatus === 'waiting_approval') {
-      patch.status = 'waiting_parts';
-    }
-    await jobRef.update(patch);
-    const afterStatus = String(patch.status || prevStatus);
-    await jobRef.collection('service_events').add({
-      tenantId: job.tenantId,
-      branchId: job.branchId,
-      jobId,
-      at,
-      actorUid: 'public_customer',
-      actorName: 'العميل — رابط عام',
-      action: 'approval_resolved',
-      domainEvent: decision === 'approved' ? 'customer.approved' : 'customer.rejected',
-      eventSchemaVersion: 1,
-      statusBefore: prevStatus,
-      statusAfter: afterStatus,
-      note: decision === 'approved' ? 'موافقة عبر الرابط العام' : `رفض عبر الرابط: ${note || '—'}`,
+      const at = new Date().toISOString();
+      const prevStatus = String(job.status || '');
+      const parts = Array.isArray(job.partsUsed) ? job.partsUsed as Array<Record<string, unknown>> : [];
+      const waitsForParts = parts.some((row) => ['pending_supply', 'ready_to_issue']
+        .includes(String(row.fulfillmentStatus || '')));
+      const nextStatus = decision === 'approved' && prevStatus === 'waiting_approval'
+        ? (waitsForParts ? 'waiting_parts' : 'repairing')
+        : prevStatus;
+      tx.update(jobRef, {
+        approvalResolvedAt: at,
+        approvalNote: note,
+        approvalStatus: decision === 'approved' ? 'approved' : 'rejected',
+        updatedAt: at,
+        ...(nextStatus !== prevStatus ? { status: nextStatus } : {}),
+      });
+      tx.update(authorizationRef, {
+        customerApprovalStatus: decision,
+        customerApprovalResolvedAt: at,
+        customerApprovalNote: note,
+        updatedAt: at,
+      });
+      tx.create(eventRef, {
+        tenantId: job.tenantId,
+        branchId: job.branchId,
+        jobId,
+        at,
+        actorUid: 'public_customer',
+        actorName: 'العميل — رابط عام',
+        action: 'approval_resolved',
+        domainEvent: decision === 'approved' ? 'customer.approved' : 'customer.rejected',
+        eventSchemaVersion: 1,
+        statusBefore: prevStatus,
+        statusAfter: nextStatus,
+        note: decision === 'approved' ? 'موافقة عبر الرابط العام' : `رفض عبر الرابط: ${note || '—'}`,
+      });
+      return nextStatus;
     });
     return { ok: true as const, status: afterStatus };
   },
@@ -2064,6 +2284,61 @@ export const rejectSparePartsReplenishment = onCall(
 export const cancelSparePartsReplenishment = onCall(
   { region: 'us-central1', memory: '512MiB' },
   cancelSparePartsReplenishmentHandler,
+);
+
+export const requestRepairJobSparePart = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  requestRepairJobSparePartHandler,
+);
+
+export const issuePendingRepairPartUsage = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  issuePendingRepairPartUsageHandler,
+);
+
+export const deliverRepairJobAndCollect = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  async () => {
+    throw new HttpsError(
+      'failed-precondition',
+      'تم تعطيل مسار التسليم والتحصيل القديم. استخدم إذن الدفع والتحصيل ثم التسليم من المسار الجديد.',
+    );
+  },
+);
+
+export const mutateRepairSalesInvoice = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  mutateRepairSalesInvoiceHandler,
+);
+
+export const mutateRepairPayment = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  mutateRepairPaymentHandler,
+);
+
+export const mutateRepairTreasury = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  mutateRepairTreasuryHandler,
+);
+
+export const repairTechnicianOps = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  repairTechnicianOpsHandler,
+);
+
+export const mutateAccounting = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  mutateAccountingHandler,
+);
+
+export const mutateRepairServiceCatalog = onCall(
+  { region: 'us-central1', memory: '256MiB' },
+  mutateRepairServiceCatalogHandler,
+);
+
+export const createInventoryCountSession = onCall(
+  { region: 'us-central1', memory: '512MiB' },
+  createInventoryCountSessionHandler,
 );
 
 export { confirmProductionHandoverReceipt } from './productionHandover.js';

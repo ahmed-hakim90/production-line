@@ -30,8 +30,10 @@
 ## الشاشات
 
 - `/repair/parts` — لمستخدم مركز الصيانة: كتالوج الفرع + جدول الطلبات المفتوحة + إنشاء/استلام تموين (بدون فتح موديول المخازن)
+- `/repair/parts-replenishment` — متابعة تموين المركز (إنشاء/استلام)
+- `/repair/warehouses/:warehouseId` — مساحة مخزن مركز الصيانة (تظهر في قائمة الصيانة حسب فرع المستخدم)
 - `/inventory/spare-parts-replenishment` — لموظفي المخزن المركزي (اعتماد / تجهيز / موافقة مسؤول)
-- `/inventory/warehouses/:warehouseId` — مساحة شاملة لكل مخزن (أرصدة، حركات، إجراءات حسب الدور)
+- `/inventory/warehouses/:warehouseId` — مساحة المخازن غير المركزية؛ مخزن `maintenance_center` يُحوَّل تلقائياً إلى `/repair/warehouses/:id`
 
 إنشاء طلب التموين من المركز يمكنه إغفال `fromWarehouseId`؛ الـ Cloud Function يختار مخزن `spare_parts_central` النشط تلقائياً.
 
@@ -39,6 +41,9 @@
 
 - اختيار قطع الغيار في طلب الصيانة **غير مقيد بـ BOM المنتج**
 - في موديول الصيانة يظهر **سعر الاستخدام/البيع فقط**؛ تكلفة الشراء تبقى على `materials` للمخازن/التصنيع
+- من طلب الصيانة يمكن اختيار أي مكوّن نشط: إن كان الرصيد في مخزن المركز كافياً يُصرف فوراً؛ وإلا يُسجَّل «بانتظار التوريد» ويُدمج في سلة تموين `submitted` مفتوحة لنفس المركز حتى الاعتماد
+- بعد استلام التموين يُحاول النظام صرف الأسطر المرتبطة تلقائياً؛ وإن فشل يظهر زر «صرف الآن»
+- «قطع ناقصة» للأدمن = أصناف معرفة برصيد صفر في المركز والمركزي عند الطلب (`availabilityAtRequest: none`)
 
 ## Callables
 
@@ -49,6 +54,8 @@
 - `receiveSparePartsReplenishment`
 - `rejectSparePartsReplenishment`
 - `cancelSparePartsReplenishment`
+- `requestRepairJobSparePart` — اختيار قطعة من طلب صيانة (خصم مركز أو سلة تموين)
+- `issuePendingRepairPartUsage` — صرف يدوي بعد الاستلام لسطر `ready_to_issue`
 
 مجموعة: `spare_parts_replenishment_requests` (قراءة عميل فقط؛ الكتابة عبر Admin SDK).
 
@@ -58,11 +65,15 @@
 
 | حالة المستخدم | الوجهة |
 |---------------|--------|
-| مربوط بمخزن (`inventoryWarehouseId`) | مساحة المخزن `/inventory/warehouses/:id` |
+| مربوط بمخزن مركز صيانة (`maintenance_center`) | مساحة المركز `/repair/warehouses/:id` |
+| مربوط بمخزن قطع غيار مركزي (`spare_parts_central`) | شاشة التموين `/inventory/spare-parts-replenishment` |
+| مربوط بمخزن آخر (`inventoryWarehouseId`) | مساحة المخزن `/inventory/warehouses/:id` |
 | دور مستلزمات بدون ربط | تحكم المستلزمات `/inventory/raw-materials/control` |
 | صلاحيات مخازن بدون نطاق | لوحة المخازن `/inventory` |
 
-هذا مستقل عن دور المخزن التشغيلي (`spare_parts_central` / `maintenance_center` / …) — مساحة المخزن تعرض الإجراءات حسب الدور.
+مخازن `maintenance_center` تظهر في قائمة **الصيانة** فقط، مقيّدة بفرع المستخدم المرتبط.
+
+مستخدم مربوط بمخزن `spare_parts_central` يرى مستندات مخازن `maintenance_center` كوجهات تموين (قراءة `warehouses` فقط؛ الأرصدة تبقى على نطاق المخزن المرتبط). عنصر القائمة «متابعة تموين القطع» للمراكز فقط — المركزي يستخدم «تموين قطع الغيار (مركزي → مراكز)».
 
 ## الصلاحيات والمستخدمين
 

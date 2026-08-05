@@ -17,7 +17,13 @@ import {
   canReceiveSparePartsRequest,
   canRejectSparePartsRequest,
   canResponsibleApproveSparePartsRequest,
+  isPendingReplenishmentStatus,
+  isStockoutDemandLine,
 } from '../lib/sparePartsReplenishment';
+import {
+  formatDurationArabic,
+  replenishmentDurationMs,
+} from '@/modules/repair/lib/repairPartFulfillment';
 import type {
   SparePartsReplenishmentRequest,
   SparePartsReplenishmentStatus,
@@ -48,6 +54,7 @@ export const SparePartsReplenishment: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [rows, setRows] = useState<SparePartsReplenishmentRequest[]>([]);
   const [statusFilter, setStatusFilter] = useState('');
+  const [stockoutOnly, setStockoutOnly] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
 
   const [fromWarehouseId, setFromWarehouseId] = useState('');
@@ -114,9 +121,40 @@ export const SparePartsReplenishment: React.FC = () => {
   }, [load]);
 
   const filtered = useMemo(() => {
-    if (!statusFilter) return rows;
-    return rows.filter((r) => r.status === statusFilter);
-  }, [rows, statusFilter]);
+    let list = rows;
+    if (statusFilter) {
+      list = list.filter((r) => r.status === statusFilter);
+    }
+    if (stockoutOnly) {
+      list = list.filter((r) => (r.lines || []).some((line) => isStockoutDemandLine(line)));
+    }
+    return list;
+  }, [rows, statusFilter, stockoutOnly]);
+
+  const kpis = useMemo(() => {
+    const pending = rows.filter((r) => isPendingReplenishmentStatus(r.status));
+    const received = rows.filter((r) => r.status === 'received');
+    const durations = received
+      .map((r) => replenishmentDurationMs(r.createdAt, r.receivedAt))
+      .filter((ms): ms is number => ms != null);
+    const avgMs = durations.length
+      ? durations.reduce((sum, ms) => sum + ms, 0) / durations.length
+      : null;
+    const stockoutLineCount = rows.reduce(
+      (sum, r) => sum + (r.lines || []).filter((line) => isStockoutDemandLine(line)).length,
+      0,
+    );
+    const stockoutRequestCount = rows.filter((r) =>
+      (r.lines || []).some((line) => isStockoutDemandLine(line)),
+    ).length;
+    return {
+      pendingCount: pending.length,
+      receivedCount: received.length,
+      avgDurationLabel: formatDurationArabic(avgMs),
+      stockoutLineCount,
+      stockoutRequestCount,
+    };
+  }, [rows]);
 
   const runAction = async (
     id: string,
@@ -192,6 +230,25 @@ export const SparePartsReplenishment: React.FC = () => {
           ) : undefined
         }
       />
+
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Card title="مطلوب ولم يُستلم">
+          <p className="text-3xl font-bold text-amber-700">{kpis.pendingCount}</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">طلبات قبل تأكيد الاستلام</p>
+        </Card>
+        <Card title="تم التموين + المدة">
+          <p className="text-3xl font-bold">{kpis.receivedCount}</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            متوسط زمن التنفيذ: {kpis.avgDurationLabel}
+          </p>
+        </Card>
+        <Card title="قطع ناقصة (صفر هنا وهناك)">
+          <p className="text-3xl font-bold text-rose-700">{kpis.stockoutLineCount}</p>
+          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+            في {kpis.stockoutRequestCount} طلب — أصناف معرفة بدون رصيد عند الطلب
+          </p>
+        </Card>
+      </div>
 
       {centralWarehouses.length === 0 || centerWarehouses.length === 0 ? (
         <Card title="تهيئة المخازن">
@@ -329,6 +386,14 @@ export const SparePartsReplenishment: React.FC = () => {
               ),
             )}
           </select>
+          <label className="inline-flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={stockoutOnly}
+              onChange={(e) => setStockoutOnly(e.target.checked)}
+            />
+            ناقص فقط
+          </label>
           <Button type="button" size="sm" variant="ghost" onClick={() => void load()}>
             تحديث
           </Button>
@@ -358,6 +423,12 @@ export const SparePartsReplenishment: React.FC = () => {
                         {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[row.status]}
                         {row.totalCostSnapshot != null
                           ? ` · تكلفة مركزية ${fmt(row.totalCostSnapshot)}`
+                          : ''}
+                        {row.status === 'received'
+                          ? ` · المدة ${formatDurationArabic(replenishmentDurationMs(row.createdAt, row.receivedAt))}`
+                          : ''}
+                        {(row.lines || []).some((line) => isStockoutDemandLine(line))
+                          ? ' · يحتوي قطعاً ناقصة'
                           : ''}
                       </div>
                     </div>

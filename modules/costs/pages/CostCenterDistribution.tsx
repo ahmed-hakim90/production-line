@@ -54,6 +54,8 @@ export const CostCenterDistribution: React.FC = () => {
   const [departmentNameMap, setDepartmentNameMap] = useState<Record<string, string>>({});
   const [salariesAmount, setSalariesAmount] = useState<number>(0);
   const [refreshingSalaries, setRefreshingSalaries] = useState(false);
+  const [costingStatus, setCostingStatus] = useState<'provisional' | 'actual'>('provisional');
+  const [sourceReference, setSourceReference] = useState('');
 
   const parseLocaleNumber = React.useCallback((value: string): number => {
     const normalized = String(value ?? '')
@@ -89,8 +91,12 @@ export const CostCenterDistribution: React.FC = () => {
   React.useEffect(() => {
     if (!existingValue) {
       setMonthlyAmount(0);
+      setCostingStatus('provisional');
+      setSourceReference('');
       return;
     }
+    setCostingStatus(existingValue.costingStatus === 'actual' || existingValue.costingStatus === 'closed' ? 'actual' : 'provisional');
+    setSourceReference(String(existingValue.sourceReference || ''));
     const valueSource = existingValue.valueSource || center?.valueSource || 'manual';
     if (valueSource === 'combined' && existingValue.manualAmount !== undefined) {
       const fixed = Number(center?.manualAdjustment || 0);
@@ -364,6 +370,13 @@ export const CostCenterDistribution: React.FC = () => {
         costCenterId: id,
         month: selectedMonth,
         amount: resolvedSnapshotBase,
+        provisionalAmount: costingStatus === 'provisional'
+          ? resolvedSnapshotBase
+          : Number(existingValue?.provisionalAmount ?? existingValue?.amount ?? resolvedSnapshotBase),
+        actualAmount: costingStatus === 'actual' ? resolvedSnapshotBase : Number(existingValue?.actualAmount || 0),
+        costingStatus,
+        revision: Math.max(1, Number(existingValue?.revision || 0) + 1),
+        sourceReference: sourceReference.trim(),
         manualAmount: manualSnapshot,
         salariesAmount: salariesSnapshot,
         valueSource,
@@ -402,6 +415,13 @@ export const CostCenterDistribution: React.FC = () => {
         costCenterId: id,
         month: selectedMonth,
         amount: resolvedSnapshotBase,
+        provisionalAmount: costingStatus === 'provisional'
+          ? resolvedSnapshotBase
+          : Number(existingValue?.provisionalAmount ?? existingValue?.amount ?? resolvedSnapshotBase),
+        actualAmount: costingStatus === 'actual' ? resolvedSnapshotBase : Number(existingValue?.actualAmount || 0),
+        costingStatus,
+        revision: Math.max(1, Number(existingValue?.revision || 0) + 1),
+        sourceReference: sourceReference.trim(),
         manualAmount: manualSnapshot,
         salariesAmount: salariesSnapshot,
         valueSource,
@@ -612,7 +632,7 @@ export const CostCenterDistribution: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KPICard label="قيمة المركز الفعلية" value={formatCost(effectiveMonthlyAmount)} iconType="money" color="indigo" />
+        <KPICard label={costingStatus === 'actual' ? 'القيمة الفعلية المعتمدة' : 'القيمة المبدئية اللحظية'} value={formatCost(effectiveMonthlyAmount)} iconType="money" color="indigo" />
         <KPICard label="إجمالي التوزيع" value={`${totalPercentage.toFixed(1)}%`} iconType="metric" color={totalPercentage > 100 ? 'red' : 'green'} />
         <KPICard label="المتبقي" value={`${remainingPercentage.toFixed(1)}%`} iconType="trend" color={remainingPercentage < 0 ? 'red' : 'amber'} />
       </div>
@@ -633,7 +653,19 @@ export const CostCenterDistribution: React.FC = () => {
       {/* Monthly Value */}
       <Card title="القيمة الشهرية">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-          <div className="space-y-2 lg:col-span-6">
+          <div className="space-y-2 lg:col-span-3">
+            <label className="block text-sm font-bold text-[var(--color-text-muted)]">حالة القيمة</label>
+            <select
+              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none"
+              value={costingStatus}
+              onChange={(e) => setCostingStatus(e.target.value as 'provisional' | 'actual')}
+              disabled={!canManage}
+            >
+              <option value="provisional">مبدئية — تظهر لحظيًا في التقارير</option>
+              <option value="actual">فعلية — فاتورة/مصدر معتمد</option>
+            </select>
+          </div>
+          <div className="space-y-2 lg:col-span-5">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">المبلغ (ج.م)</label>
             <input
               type="number"
@@ -669,20 +701,30 @@ export const CostCenterDistribution: React.FC = () => {
                 </div>
               )}
           </div>
-          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center lg:col-span-3">
+          <div className="bg-[#f8f9fa] rounded-[var(--border-radius-lg)] p-4 text-center lg:col-span-2">
             <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1">يومي ({appliedWorkingDays} يوم)</p>
             <p className="text-lg font-bold text-primary">
               {effectiveMonthlyAmount > 0 && appliedWorkingDays > 0 ? formatCost(effectiveMonthlyAmount / appliedWorkingDays) : '—'}
             </p>
           </div>
           {canManage && (
-            <div className="lg:col-span-3 lg:justify-self-end">
+            <div className="lg:col-span-2 lg:justify-self-end">
               <Button variant="primary" onClick={handleSaveValue} disabled={saving}>
                 {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
                 حفظ
               </Button>
             </div>
           )}
+        </div>
+        <div className="mt-4 space-y-2">
+          <label className="block text-sm font-bold text-[var(--color-text-muted)]">مرجع المصدر (اختياري)</label>
+          <input
+            className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none"
+            value={sourceReference}
+            onChange={(e) => setSourceReference(e.target.value)}
+            disabled={!canManage}
+            placeholder="مثال: فاتورة كهرباء أغسطس 2026 / رقم المستند"
+          />
         </div>
         <p className="mt-2 text-xs font-bold text-[var(--color-text-muted)]">
           عدد أيام الشهر يتم أخذه تلقائيًا من صفحة إعدادات التكلفة ({appliedWorkingDays} يوم لهذا الشهر). الإهلاك المرتبط بالأصول لنفس المركز في هذا الشهر: <span className="text-primary">{formatCost(centerMonthlyDepreciation)} ج.م</span> (يضاف تلقائيًا في الحسابات)
@@ -855,6 +897,4 @@ export const CostCenterDistribution: React.FC = () => {
     </div>
   );
 };
-
-
 

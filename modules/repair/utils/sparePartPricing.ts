@@ -1,20 +1,48 @@
+import type { CustomerType } from '../../customers/types';
 import type { RepairSparePart } from '../types';
 
 const clampPct = (n: number) => Math.min(100, Math.max(0, n));
 
-/**
- * Sale/usage price shown in the repair module (single price for centers).
- * Never falls back to purchase cost.
- */
-export function repairSparePartSalePrice(part: Pick<RepairSparePart, 'defaultSalePrice'>): number {
-  const sale = Number(part.defaultSalePrice ?? 0);
+/** Normalize a non-negative money amount; invalid → 0. */
+export function normalizeRepairSalePrice(value: unknown): number {
+  const sale = Number(value ?? 0);
   if (!Number.isFinite(sale) || sale < 0) return 0;
   return Math.round(sale * 10000) / 10000;
 }
 
 /**
+ * Company-wide sale price by customer type:
+ * - trader → Material.traderSalePrice when > 0, else consumer price
+ * - consumer / missing type → Material.defaultSalePrice (consumer), then legacy part catalog
+ * Never falls back to purchase cost.
+ */
+export function resolveRepairSalePrice(input: {
+  customerType?: CustomerType | string | null;
+  materialSalePrice?: number | null;
+  materialTraderSalePrice?: number | null;
+  partSalePrice?: number | null;
+}): number {
+  const consumer =
+    normalizeRepairSalePrice(input.materialSalePrice)
+    || normalizeRepairSalePrice(input.partSalePrice);
+  if (input.customerType === 'trader') {
+    const trader = normalizeRepairSalePrice(input.materialTraderSalePrice);
+    if (trader > 0) return trader;
+  }
+  return consumer;
+}
+
+/**
+ * Legacy helper: part catalog sale only.
+ * Prefer resolveRepairSalePrice when a Material price may exist.
+ */
+export function repairSparePartSalePrice(part: Pick<RepairSparePart, 'defaultSalePrice'>): number {
+  return normalizeRepairSalePrice(part.defaultSalePrice);
+}
+
+/**
  * Internal purchase cost after warehouse discount — inventory/manufacturing only.
- * Do not surface this in repair center UI.
+ * Do not use as a customer-facing sale price.
  */
 export function effectiveSparePartUnitCost(part: RepairSparePart): number {
   const base = Number(part.purchaseUnitCost ?? 0);

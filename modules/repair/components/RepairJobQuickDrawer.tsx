@@ -8,11 +8,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog';
-import { Badge } from '@/components/ui/badge';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { REPAIR_JOB_STATUS_LABELS, type RepairJob } from '../types';
+import { buildRepairTrackPublicUrl } from '../lib/repairPublicLinks';
 import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
 import { WhatsAppShare } from './WhatsAppShare';
+import { StatusBadge } from './StatusBadge';
 import { computeRepairJobCost } from '../utils/repairBusinessLogic';
 
 type RepairJobQuickDrawerProps = {
@@ -22,6 +23,7 @@ type RepairJobQuickDrawerProps = {
   tenantSlug?: string;
   branchName?: string;
   technicianName?: string;
+  showWorkshopLink?: boolean;
 };
 
 const printJobSummary = (job: RepairJob, branchName?: string, technicianName?: string) => {
@@ -73,33 +75,19 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
   tenantSlug,
   branchName,
   technicianName,
+  showWorkshopLink = false,
 }) => {
-  const appBaseUrl = useMemo(() => {
-    const envUrl = String(import.meta.env.VITE_PUBLIC_APP_URL || import.meta.env.VITE_SITE_URL || '').trim();
-    if (envUrl) return envUrl.replace(/\/+$/, '');
-    if (typeof window === 'undefined') return '';
-    return String(window.location.origin || '').replace(/\/+$/, '');
-  }, []);
   const trackUrl = useMemo(() => {
-    if (!job || !appBaseUrl) return '';
-    const slugFromPath = typeof window === 'undefined'
-      ? ''
-      : window.location.pathname.split('/').filter(Boolean)[1] || '';
-    const effectiveSlug = String(tenantSlug || slugFromPath || '').trim();
-    if (!effectiveSlug) return `${appBaseUrl}/track`;
-    const params = new URLSearchParams();
-    if (job.receiptNo) params.set('receipt', String(job.receiptNo));
-    if (job.customerPhone) params.set('phone', String(job.customerPhone));
-    const query = params.toString();
-    return `${appBaseUrl}/track/${encodeURIComponent(effectiveSlug)}${query ? `?${query}` : ''}`;
-  }, [appBaseUrl, job, tenantSlug]);
+    if (!job) return '';
+    return buildRepairTrackPublicUrl({
+      tenantSlug,
+      receiptNo: job.receiptNo,
+      customerPhone: job.customerPhone,
+    });
+  }, [job, tenantSlug]);
   const whatsappText = useMemo(() => {
     if (!job) return '';
-    const lines = [formatRepairWhatsAppMessage(job)];
-    if (trackUrl) {
-      lines.push(`رابط متابعة الطلب: ${trackUrl}`);
-    }
-    return lines.join('\n');
+    return formatRepairWhatsAppMessage(job, trackUrl || undefined);
   }, [job, trackUrl]);
 
   if (!job) return null;
@@ -119,7 +107,7 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
 
         <div className="space-y-3 text-sm">
           <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="outline">{REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</Badge>
+            <StatusBadge status={job.status} />
             <span className="text-muted-foreground">تاريخ الإنشاء: {new Date(job.createdAt).toLocaleString('ar-EG')}</span>
           </div>
 
@@ -143,10 +131,20 @@ export const RepairJobQuickDrawer: React.FC<RepairJobQuickDrawerProps> = ({
             <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
             {job.id && (
               <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}>
-                <Button type="button">فتح صفحة الطلب كاملة</Button>
+                <Button type="button" variant="secondary">التفاصيل / إيصال</Button>
               </Link>
             )}
+            {job.id && showWorkshopLink ? (
+              <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
+                <Button type="button">فتح الورشة</Button>
+              </Link>
+            ) : null}
           </div>
+          {trackUrl ? (
+            <div className="rounded border bg-muted/20 p-2 text-[11px] break-all" dir="ltr">
+              {trackUrl}
+            </div>
+          ) : null}
         </div>
       </DialogContent>
     </Dialog>

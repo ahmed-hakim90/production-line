@@ -27,6 +27,8 @@ const DEFAULT_ROLE_KEY_BY_NAME: Record<string, FirestoreRoleKey> = {
   [normalizeRoleName('مدير الموارد البشرية')]: 'hr_manager',
   [normalizeRoleName('محاسب')]: 'accountant',
   [normalizeRoleName('مسؤول مخزن المستلزمات')]: 'materials_warehouse',
+  [normalizeRoleName('استقبال صيانة')]: 'repair_reception',
+  [normalizeRoleName('فني صيانة')]: 'repair_technician',
 };
 
 type VisibleRoleGroup = {

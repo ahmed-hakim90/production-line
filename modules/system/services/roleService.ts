@@ -18,6 +18,10 @@ import { db, isConfigured } from '../../auth/services/firebase';
 import type { FirestoreRole } from '../../../types';
 import { ALL_PERMISSIONS, type Permission } from '../../../utils/permissions';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
+import {
+  REPAIR_BUILTIN_ROLE_DEFS,
+  type RepairBuiltinRoleKey,
+} from '../../repair/lib/repairBuiltinRoles';
 
 const COLLECTION = 'roles';
 
@@ -238,6 +242,13 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'employees.view',
           'employees.viewDetails',
           'selfService.view',
+          'accounting.view',
+          'accounting.accounts.manage',
+          'accounting.journals.post',
+          'accounting.journals.reverse',
+          'accounting.periods.manage',
+          'accounting.settings.manage',
+          'accounting.inventory.view',
           'print',
           'export',
         ]),
@@ -311,6 +322,18 @@ function getDefaultRoles(): Omit<FirestoreRole, 'id' | 'tenantId'>[] {
           'export',
         ]),
         roleKey: 'inventory_viewer',
+      },
+      {
+        name: REPAIR_BUILTIN_ROLE_DEFS.repair_reception.name,
+        color: REPAIR_BUILTIN_ROLE_DEFS.repair_reception.color,
+        permissions: permsFrom([...REPAIR_BUILTIN_ROLE_DEFS.repair_reception.permissions]),
+        roleKey: 'repair_reception',
+      },
+      {
+        name: REPAIR_BUILTIN_ROLE_DEFS.repair_technician.name,
+        color: REPAIR_BUILTIN_ROLE_DEFS.repair_technician.color,
+        permissions: permsFrom([...REPAIR_BUILTIN_ROLE_DEFS.repair_technician.permissions]),
+        roleKey: 'repair_technician',
       },
     ];
   }
@@ -517,6 +540,7 @@ export const roleService = {
       }
 
       await this.ensureProductionWorkerPermissionsOnRoles();
+      await this.ensureRepairBuiltinRoleCatalogPermissions();
       await this.ensureAdminRoleCatalogPermissions();
       return this.getAll();
     })();
@@ -564,6 +588,56 @@ export const roleService = {
         });
         patched += 1;
       }
+    }
+    return patched;
+  },
+
+  /**
+   * Keep built-in repair reception/technician roles aligned with the isolated presets.
+   * Creates missing docs and overwrites permissions for these two roleKeys only.
+   */
+  async ensureRepairBuiltinRoleCatalogPermissions(): Promise<number> {
+    if (!isConfigured) return 0;
+    const tid = getCurrentTenantId();
+    const roles = await this.getAll();
+    const byKey = new Map<string, FirestoreRole>();
+    for (const role of roles) {
+      const key = resolveDefaultRoleKey(role);
+      if (key) byKey.set(key, role);
+    }
+
+    let patched = 0;
+    const keys = Object.keys(REPAIR_BUILTIN_ROLE_DEFS) as RepairBuiltinRoleKey[];
+    for (const roleKey of keys) {
+      const def = REPAIR_BUILTIN_ROLE_DEFS[roleKey];
+      const nextPermissions = permsFrom([...def.permissions]);
+      const existing = byKey.get(roleKey);
+      if (!existing?.id) {
+        await setDoc(doc(db, COLLECTION, defaultRoleDocId(tid, roleKey)), {
+          name: def.name,
+          color: def.color,
+          permissions: nextPermissions,
+          roleKey,
+          tenantId: tid,
+        });
+        patched += 1;
+        continue;
+      }
+
+      const current = existing.permissions ?? {};
+      const same =
+        ALL_PERMISSIONS.every((perm) => Boolean(current[perm]) === Boolean(nextPermissions[perm]))
+        && existing.name === def.name
+        && existing.roleKey === roleKey;
+      if (same) continue;
+
+      await this.update(existing.id, {
+        name: def.name,
+        color: def.color,
+        permissions: nextPermissions,
+        roleKey,
+      });
+      patched += 1;
     }
     return patched;
   },
