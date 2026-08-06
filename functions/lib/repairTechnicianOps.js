@@ -83,6 +83,22 @@ export const sanitizeRepairJobForTechnician = (id, raw) => {
     }
     return result;
 };
+const resolveActorTechnicianIds = async (actor) => {
+    const ids = new Set([actor.uid]);
+    const employeeSnap = await db.collection('employees')
+        .where('tenantId', '==', actor.tenantId)
+        .where('userId', '==', actor.uid)
+        .limit(1)
+        .get();
+    if (!employeeSnap.empty) {
+        ids.add(employeeSnap.docs[0].id);
+    }
+    return Array.from(ids).filter(Boolean);
+};
+const isAssignedToActor = (job, technicianIds) => {
+    const assigned = String(job.technicianId || '').trim();
+    return assigned.length > 0 && technicianIds.includes(assigned);
+};
 const loadAssignedJob = async (actor, jobId) => {
     const ref = db.collection('repair_jobs').doc(jobId);
     const snap = await ref.get();
@@ -92,14 +108,18 @@ const loadAssignedJob = async (actor, jobId) => {
     if (String(job.tenantId || '') !== actor.tenantId) {
         throw new HttpsError('permission-denied', 'الطلب خارج شركتك.');
     }
-    if (!actor.isSuperAdmin && String(job.technicianId || '') !== actor.uid) {
-        throw new HttpsError('permission-denied', 'الطلب غير مسند لك.');
+    if (!actor.isSuperAdmin) {
+        const technicianIds = await resolveActorTechnicianIds(actor);
+        if (!isAssignedToActor(job, technicianIds)) {
+            throw new HttpsError('permission-denied', 'الطلب غير مسند لك.');
+        }
     }
     return { ref, job };
 };
 const listAssigned = async (actor) => {
+    const technicianIds = await resolveActorTechnicianIds(actor);
     const snap = await db.collection('repair_jobs')
-        .where('technicianId', '==', actor.uid)
+        .where('technicianId', 'in', technicianIds.slice(0, 10))
         .limit(500)
         .get();
     const jobs = snap.docs

@@ -844,6 +844,7 @@
         pl_isRepairBranchAdmin()
         || pl_hasErpPermission('repair.view')
         || pl_hasErpPermission('repair.dashboard.view')
+        || pl_hasErpPermission('repair.jobs.technician')
         || pl_hasErpPermission('repair.parts.view')
         || pl_hasErpPermission('repair.parts.manage')
         || pl_hasErpPermission('repairSpareIssues.view')

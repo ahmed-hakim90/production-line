@@ -83,7 +83,7 @@ export function useRepairJobs(params: {
     technicianIdsKey,
   ]);
 
-  const { data: jobs = [], isLoading, refetch, isFetching } = useQuery({
+  const { data: jobs = [], isLoading, refetch, isFetching, error, isError } = useQuery({
     queryKey: [
       'repairJobs',
       params.canViewAllBranches ? 'all' : 'scoped',
@@ -127,6 +127,7 @@ export function useRepairJobs(params: {
     enabled,
     refetchInterval: 45_000,
     staleTime: 20_000,
+    retry: 1,
   });
 
   const phoneFilter = phoneFilterRaw;
@@ -146,5 +147,5 @@ export function useRepairJobs(params: {
     return rows;
   }, [jobs, debouncedSearch, phoneFilter, params.minPhoneDigitsForQuery, phoneDigitsLen]);
 
-  return { jobs: filteredJobs, rawJobs: jobs, loading: isLoading, refetch, isFetching };
+  return { jobs: filteredJobs, rawJobs: jobs, loading: isLoading, refetch, isFetching, error: isError ? error : null };
 }

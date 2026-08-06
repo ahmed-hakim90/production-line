@@ -3,7 +3,7 @@ import { FieldPath } from 'firebase-admin/firestore';
 import { HttpsError } from 'firebase-functions/v2/https';
 import { onDocumentCreated } from 'firebase-functions/v2/firestore';
 import { getDb } from './adminApp.js';
-import { CUSTOMER_PORTAL_PIN_DIGITS, CUSTOMER_PORTAL_SESSION_MS, nextPortalCredentialVersion, portalSessionMatchesCredential, } from './customerPortalCredentialPolicy.js';
+import { canWritePortalPin, CUSTOMER_PORTAL_PIN_DIGITS, CUSTOMER_PORTAL_SESSION_MS, nextPortalCredentialVersion, portalSessionMatchesCredential, } from './customerPortalCredentialPolicy.js';
 const db = getDb();
 const JOBS = 'repair_jobs';
 const BRANCHES = 'repair_branches';
@@ -544,14 +544,32 @@ async function generatePin(actor, data) {
     const customer = await db.collection('customers').doc(customerId).get();
     if (!customer.exists || text(customer.data()?.tenantId, 128) !== actor.tenantId)
         throw new HttpsError('not-found', 'العميل غير موجود.');
-    const pin = String(randomInt(100000, 1000000));
-    const salt = randomBytes(16).toString('hex');
     const ref = db.collection(CREDENTIALS).doc(`${actor.tenantId}__${customerId}`);
     const old = await ref.get();
+    const isConfigured = old.exists && old.data()?.isActive !== false;
+    if (!canWritePortalPin(isConfigured, data.confirmReset)) {
+        throw new HttpsError('failed-precondition', 'يوجد PIN ثابت ومفعل لهذا العميل. استخدم إعادة تعيين PIN فقط إذا كنت تريد إلغاء الرقم الحالي.');
+    }
+    const pin = String(randomInt(100000, 1000000));
+    const salt = randomBytes(16).toString('hex');
     const version = nextPortalCredentialVersion(old.data()?.version);
     await ref.set({ tenantId: actor.tenantId, customerId, salt, pinHash: pinHash(pin, salt), version,
         isActive: true, updatedAt: nowIso(), updatedBy: actor.uid }, { merge: true });
-    return { ok: true, pin };
+    return { ok: true, pin, reset: isConfigured };
+}
+async function getPortalPinStatus(actor, data) {
+    requirePermission(actor, ['customers.edit', 'repair.customerPortal.manage'], 'لا تملك صلاحية إدارة بوابة العملاء.');
+    const customerId = text(data.customerId, 128);
+    const customer = await db.collection('customers').doc(customerId).get();
+    if (!customer.exists || text(customer.data()?.tenantId, 128) !== actor.tenantId) {
+        throw new HttpsError('not-found', 'العميل غير موجود.');
+    }
+    const credential = await db.collection(CREDENTIALS).doc(`${actor.tenantId}__${customerId}`).get();
+    return {
+        ok: true,
+        configured: credential.exists && credential.data()?.isActive !== false,
+        updatedAt: text(credential.data()?.updatedAt, 40),
+    };
 }
 async function assignRequest(actor, data) {
     requirePermission(actor, ['repair.customerRequests.assign', 'repair.callCenter.viewAll'], 'لا تملك صلاحية توزيع الطلبات.');
@@ -908,6 +926,8 @@ export async function mutateRepairCustomerOpsHandler(request) {
     const action = text(data.action, 60);
     if (action === 'generatePortalPin')
         return generatePin(actor, data);
+    if (action === 'getPortalPinStatus')
+        return getPortalPinStatus(actor, data);
     if (action === 'ensureWarehouses') {
         requirePermission(actor, ['repair.branches.manage'], 'لا تملك صلاحية إدارة المراكز.');
         const branchId = text(data.branchId, 128);

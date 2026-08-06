@@ -8,6 +8,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useRepairJobs } from '../hooks/useRepairJobs';
+import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { repairBranchService } from '../services/repairBranchService';
 import { StatusBadge } from '../components/StatusBadge';
 import type { FirestoreUserWithRepair, RepairBranch, RepairJobStatus } from '../types';
@@ -24,31 +25,38 @@ export const RepairMyJobs: React.FC = () => {
   const canView = can('repair.jobs.technician') || can('repair.view');
 
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const systemSettings = useAppStore((s) => s.systemSettings);
 
-  // New assignments are stored by Auth uid; this also matches the Firestore rule
-  // that guarantees a technician can query only jobs assigned to that account.
-  const technicianIds = useMemo(
-    () => [String(userProfile?.id || '').trim()].filter(Boolean),
-    [userProfile?.id],
-  );
+  const technicianIds = useRepairTechnicianIds(userProfile, currentEmployee?.id);
 
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<RepairJobStatus | 'all'>('all');
   const [page, setPage] = useState(1);
+  const [listError, setListError] = useState('');
 
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
 
   useEffect(() => {
-    void repairBranchService.list().then(setBranches);
+    void repairBranchService.list()
+      .then(setBranches)
+      .catch(() => setBranches([]));
   }, []);
 
-  const { jobs, loading, refetch, isFetching } = useRepairJobs({
+  const { jobs, loading, refetch, isFetching, error } = useRepairJobs({
     technicianOnly: true,
     technicianIds,
     searchText: search,
   });
+
+  useEffect(() => {
+    if (!error) {
+      setListError('');
+      return;
+    }
+    setListError('تعذر تحميل الطلبات المسندة. أعد المحاولة أو تأكد من ربط الحساب بموظف وإسناد الطلبات إليك.');
+  }, [error]);
 
   const branchNameById = useMemo(() => {
     const map = new Map<string, string>();
@@ -165,9 +173,10 @@ export const RepairMyJobs: React.FC = () => {
                 {!loading && visibleJobs.length === 0 && (
                   <tr>
                     <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                      {technicianIds.length === 0
-                        ? 'لا يمكن عرض الطلبات — اربط حسابك بموظف من إدارة المستخدمين.'
-                        : 'لا توجد طلبات مسندة إليك. إن ظهر الفني على الطلب عند الاستقبال، افتح الطلب واضغط «إسناد للموظف» بعد ربط الموظف بالحساب.'}
+                      {listError
+                        || (technicianIds.length === 0
+                          ? 'لا يمكن عرض الطلبات — اربط حسابك بموظف من إدارة المستخدمين.'
+                          : 'لا توجد طلبات مسندة إليك. من الاستقبال: افتح الطلب واختر الفني ثم احفظ الإسناد (مع ربط الموظف بالحساب).')}
                     </td>
                   </tr>
                 )}

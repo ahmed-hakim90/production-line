@@ -10,6 +10,7 @@ import { usePermission } from '../../../utils/permissions';
 import { StatusBadge } from '../components/StatusBadge';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { useRepairJobs } from '../hooks/useRepairJobs';
+import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import {
   formatRepairTechnicianDeviceLabel,
   resolveRepairTechnicianHomeRange,
@@ -58,14 +59,12 @@ export const RepairTechnicianHome: React.FC = () => {
 
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const systemSettings = useAppStore((s) => s.systemSettings);
 
   const [period, setPeriod] = useState<RepairTechnicianHomePeriod>('monthly');
 
-  const technicianIds = useMemo(
-    () => [String(userProfile?.id || '').trim()].filter(Boolean),
-    [userProfile?.id],
-  );
+  const technicianIds = useRepairTechnicianIds(userProfile, currentEmployee?.id);
 
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
 
