@@ -104,6 +104,10 @@ export type Permission =
   | 'repair.settings.manage'
   | 'repair.callCenter.viewAll'
   | 'repair.complaints.view' | 'repair.complaints.manage'
+  | 'repair.customerPortal.manage'
+  | 'repair.customerRequests.view' | 'repair.customerRequests.assign' | 'repair.customerRequests.receive'
+  | 'repair.custody.view' | 'repair.custody.record' | 'repair.custody.correct' | 'repair.custody.handover'
+  | 'repair.replacements.view' | 'repair.replacements.create' | 'repair.replacements.approve' | 'repair.replacements.deliver'
   | 'repair.salesInvoice.create' | 'repair.salesInvoice.view' | 'repair.salesInvoice.edit' | 'repair.salesInvoice.cancel'
   | 'customers.view' | 'customers.create' | 'customers.edit' | 'customers.import'
   | 'print' | 'export' | 'import';
@@ -369,6 +373,18 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repair.callCenter.viewAll', label: 'مركز اتصال — عرض كل الفروع' },
       { key: 'repair.complaints.view', label: 'عرض شكاوى الصيانة' },
       { key: 'repair.complaints.manage', label: 'إدارة شكاوى الصيانة' },
+      { key: 'repair.customerPortal.manage', label: 'إدارة PIN بوابة العملاء' },
+      { key: 'repair.customerRequests.view', label: 'عرض طلبات العملاء' },
+      { key: 'repair.customerRequests.assign', label: 'توزيع طلبات العملاء على المراكز' },
+      { key: 'repair.customerRequests.receive', label: 'تأكيد استلام طلبات العملاء' },
+      { key: 'repair.custody.view', label: 'عرض عهدة أجهزة العملاء' },
+      { key: 'repair.custody.record', label: 'تسجيل غير القابل للإصلاح' },
+      { key: 'repair.custody.correct', label: 'تصحيح أرصدة وقرارات العهدة' },
+      { key: 'repair.custody.handover', label: 'تأكيد التسليم الفعلي وخروج العهدة' },
+      { key: 'repair.replacements.view', label: 'عرض طلبات الاستبدال' },
+      { key: 'repair.replacements.create', label: 'إنشاء طلب استبدال' },
+      { key: 'repair.replacements.approve', label: 'اعتماد أو رفض طلب استبدال' },
+      { key: 'repair.replacements.deliver', label: 'تأكيد تسليم المنتج البديل' },
       { key: 'repair.salesInvoice.create', label: 'إنشاء فاتورة بيع قطع الغيار' },
       { key: 'repair.salesInvoice.view', label: 'عرض فواتير بيع قطع الغيار' },
       { key: 'repair.salesInvoice.edit', label: 'تعديل فاتورة بيع قطع الغيار' },

@@ -20,6 +20,8 @@ const ROLE_LABELS: Record<WarehouseRole, string> = {
   waste: 'هالك',
   spare_parts_central: 'قطع غيار (مركزي)',
   maintenance_center: 'مخزن مركز صيانة',
+  repair_customer_custody: 'عهدة أجهزة العملاء',
+  repair_unrepairable: 'غير قابل للإصلاح',
 };
 import { usePermission } from '../../../utils/permissions';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';

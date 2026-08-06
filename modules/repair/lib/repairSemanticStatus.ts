@@ -35,6 +35,30 @@ export function repairSpareIssueStatusChipType(status: string): RepairSemanticSt
   return 'muted';
 }
 
+export function repairCustomerRequestStatusChipType(status: string): RepairSemanticStatusType {
+  if (status === 'submitted') return 'warning';
+  if (status === 'assigned') return 'info';
+  if (status === 'converted') return 'success';
+  if (status === 'cancelled') return 'muted';
+  return 'muted';
+}
+
+export function repairReplacementStatusChipType(status: string): RepairSemanticStatusType {
+  if (status === 'pending_approval') return 'warning';
+  if (status === 'approved') return 'info';
+  if (status === 'delivered') return 'success';
+  if (status === 'rejected') return 'danger';
+  if (status === 'cancelled') return 'muted';
+  return 'muted';
+}
+
+/** مدة بقاء العهدة: تنبيه تشغيلي للأرصدة المتأخرة. */
+export function repairCustodyAgeChipType(ageDays: number): RepairSemanticStatusType {
+  if (ageDays >= 14) return 'danger';
+  if (ageDays >= 7) return 'warning';
+  return 'muted';
+}
+
 export function repairTreasuryEntryTypeChip(
   entryType: string,
 ): { label: string; type: RepairSemanticStatusType } {

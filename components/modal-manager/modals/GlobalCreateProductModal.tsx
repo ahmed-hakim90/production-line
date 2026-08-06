@@ -60,6 +60,7 @@ function productSaveErrorMessage(e: unknown, t: (key: string) => string): string
     return t('modalManager.createProduct.categoryInvalidError');
   }
   if (e.message.includes('غير مصرح')) return e.message;
+  if (e.message.includes('باركود')) return e.message;
   if (e.message.startsWith('تعذر') || e.message.startsWith('هذا المسار')) return e.message;
   return t('modalManager.createProduct.saveError');
 }
@@ -70,6 +71,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
   categoryId: null,
   categoryName: '',
   code: '',
+  barcode: '',
   openingBalance: 0,
   chineseUnitCost: 0,
   innerBoxCost: 0,
@@ -171,6 +173,7 @@ export const GlobalCreateProductModal: React.FC = () => {
       categoryId: editingRaw.categoryId ?? null,
       categoryName: editingRaw.categoryName ?? editingProduct.category,
       code: editingProduct.code,
+      barcode: editingRaw.barcode ?? '',
       openingBalance: editingProduct.openingStock,
       chineseUnitCost: editingRaw.chineseUnitCost ?? 0,
       innerBoxCost: editingRaw.innerBoxCost ?? 0,
@@ -262,6 +265,10 @@ export const GlobalCreateProductModal: React.FC = () => {
     }
     if (!selectedCategoryId) {
       toast.error(t('modalManager.createProduct.categoryRequiredError'));
+      return;
+    }
+    if (!String(form.barcode || '').trim()) {
+      toast.error('باركود عبوة المنتج مطلوب.');
       return;
     }
     const nonNegativeValues = [
@@ -519,6 +526,20 @@ export const GlobalCreateProductModal: React.FC = () => {
                         {codeLocked ? t('entityCode.lockHint') : t('entityCode.unlockedHint')}
                       </p>
                     </div>
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="product-barcode">باركود عبوة المنتج</Label>
+                    <Input
+                      id="product-barcode"
+                      dir="ltr"
+                      inputMode="numeric"
+                      value={form.barcode || ''}
+                      onChange={(e) => setForm((current) => ({ ...current, barcode: e.target.value.trim() }))}
+                      placeholder="مثال: 6221234567890"
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      باركود واحد وفريد داخل الشركة، ويستخدمه العميل لإنشاء طلب الصيانة.
+                    </p>
                   </div>
                 </section>
 
@@ -843,4 +864,3 @@ export const GlobalCreateProductModal: React.FC = () => {
     </Dialog>
   );
 };
-

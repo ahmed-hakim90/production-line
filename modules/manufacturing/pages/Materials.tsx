@@ -59,6 +59,13 @@ import {
 } from '@/utils/importMaterials';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2, Pencil, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  MaterialSparePartsPricingPanel,
+  buildSparePartsPricingUpdate,
+} from '../components/MaterialSparePartsPricingPanel';
+import { materialShowsSparePartsPricing } from '../lib/materialSparePartsPricing';
+import { repairPartsPricingService } from '../../repair/services/repairPartsPricingService';
+import { normalizeRepairSalePrice } from '../../repair/utils/sparePartPricing';
 
 const PAGE_SIZE = 20;
 
@@ -82,6 +89,8 @@ const EMPTY_FORM = {
   purchaseUnit: '',
   conversionRate: 1,
   purchaseCost: 0,
+  defaultSalePrice: 0,
+  traderSalePrice: 0,
   wastePercent: 0,
   isManufacturedInternally: false,
   isActive: true,
@@ -109,6 +118,7 @@ export const Materials: React.FC = () => {
   const location = useLocation();
   const canView = can('materials.view');
   const canManage = can('materials.manage');
+  const canManagePricing = can('repair.pricing.manage');
   const userRoleId = useAppStore((s) => s.userRoleId);
   const applyRole = useAppStore((s) => s._applyRole);
   const fetchRoles = useAppStore((s) => s.fetchRoles);
@@ -281,6 +291,8 @@ export const Materials: React.FC = () => {
       purchaseUnit: row.purchaseUnit ?? '',
       conversionRate: Number(row.conversionRate ?? 1),
       purchaseCost: Number(row.purchaseCost ?? 0),
+      defaultSalePrice: normalizeRepairSalePrice(row.defaultSalePrice),
+      traderSalePrice: normalizeRepairSalePrice(row.traderSalePrice),
       wastePercent: Number(row.wastePercent ?? 0),
       isManufacturedInternally: Boolean(row.isManufacturedInternally),
       isActive: row.isActive !== false,
@@ -388,6 +400,13 @@ export const Materials: React.FC = () => {
       toast.error('التكلفة ونسبة الهالك لا يمكن أن تكونا أقل من صفر.');
       return;
     }
+    if (
+      canManagePricing
+      && (Number(form.defaultSalePrice) < 0 || Number(form.traderSalePrice) < 0)
+    ) {
+      toast.error('أسعار البيع لا يمكن أن تكون أقل من صفر.');
+      return;
+    }
     setSaving(true);
     try {
       const payload = {
@@ -401,6 +420,11 @@ export const Materials: React.FC = () => {
         purchaseCost: isInternallyManufactured ? 0 : Number(form.purchaseCost),
         wastePercent: isInternallyManufactured ? 0 : Number(form.wastePercent),
       };
+      // Sale prices are never written via client material CRUD — callable only.
+      delete (payload as { defaultSalePrice?: number }).defaultSalePrice;
+      delete (payload as { traderSalePrice?: number }).traderSalePrice;
+
+      let savedId = editing?.id || '';
       if (editing?.id) {
         await update.mutateAsync({
           id: editing.id,
@@ -408,11 +432,46 @@ export const Materials: React.FC = () => {
           path: MATERIAL_UPDATE_PATHS.materialsPage,
         });
       } else {
-        await create.mutateAsync({
+        savedId = await create.mutateAsync({
           data: payload,
           path: MATERIAL_CREATE_PATHS.materialsPage,
         });
       }
+
+      const codeForPricing = editing
+        ? form.code.trim()
+        : (generatedCode || form.code.trim());
+      const pricingTarget = {
+        id: savedId || editing?.id,
+        type: form.type,
+        code: codeForPricing,
+        isActive: form.isActive,
+        defaultSalePrice: editing?.defaultSalePrice,
+        traderSalePrice: editing?.traderSalePrice,
+        purchaseCost: editing?.purchaseCost ?? payload.purchaseCost,
+      } as Material;
+
+      if (
+        canManagePricing
+        && savedId
+        && materialShowsSparePartsPricing(pricingTarget)
+      ) {
+        const pricingUpdate = buildSparePartsPricingUpdate({
+          material: {
+            ...pricingTarget,
+            id: savedId,
+            code: codeForPricing,
+            purchaseCost: Number(payload.purchaseCost),
+          },
+          consumer: Number(form.defaultSalePrice),
+          trader: Number(form.traderSalePrice),
+          cost: Number(payload.purchaseCost),
+        });
+        if (pricingUpdate) {
+          await repairPartsPricingService.update([pricingUpdate]);
+        }
+      }
+
       setShowForm(false);
       toast.success(editing ? 'تم تحديث المادة.' : 'تمت إضافة المادة.');
       await refetch();
@@ -603,13 +662,20 @@ export const Materials: React.FC = () => {
     return <p className="p-8 text-center text-muted-foreground">لا توجد صلاحية لعرض المواد</p>;
   }
 
-  const colCount = canManage ? 10 : 9;
+  const showPricingCols = canManagePricing;
+  const colCount = (canManage ? 10 : 9) + (showPricingCols ? 2 : 0);
+  const formPricingCode = editing ? form.code : generatedCode;
+  const showFormPricingFields = canManagePricing && materialShowsSparePartsPricing({
+    type: form.type,
+    code: formPricingCode,
+    isActive: form.isActive,
+  });
 
   return (
     <div className="erp-ds-clean space-y-5 p-4 md:p-6">
       <PageHeader
         title="المواد التصنيعية"
-        subtitle="إدارة المواد الخام، نصف المصنع، المستهلكات، والتعبئة"
+        subtitle="إدارة المواد الخام، نصف المصنع، المستهلكات، والتعبئة — تسعير قطع الغيار (MAT) من هنا"
         primaryAction={
           canManage ? { label: 'إضافة مادة', onClick: openCreate, icon: 'add' } : undefined
         }
@@ -645,6 +711,20 @@ export const Materials: React.FC = () => {
           },
         ]}
       />
+
+      {canManagePricing ? (
+        <div className="rounded-xl border border-border bg-card p-3">
+          <div className="mb-2 text-sm font-semibold">تسعير قطع الغيار (ماستر MAT)</div>
+          <p className="mb-3 text-xs text-muted-foreground">
+            سعر المستهلك والجملة والتكلفة تُحفظ على المكوّن فقط — لا تسعير من شاشات الصيانة.
+          </p>
+          <MaterialSparePartsPricingPanel
+            materials={rows}
+            canManagePricing={canManagePricing}
+            onUpdated={async () => { await refetch(); }}
+          />
+        </div>
+      ) : null}
 
       <input
         ref={importInputRef}
@@ -715,6 +795,12 @@ export const Materials: React.FC = () => {
                     { key: 'type' as const, label: 'النوع', sortable: true },
                     { key: null, label: 'الوحدة', sortable: false },
                     { key: 'purchaseCost' as const, label: 'تكلفة الشراء', sortable: true },
+                    ...(showPricingCols
+                      ? [
+                          { key: null, label: 'سعر المستهلك', sortable: false },
+                          { key: null, label: 'سعر الجملة', sortable: false },
+                        ] as const
+                      : []),
                     { key: 'wastePercent' as const, label: 'هالك %', sortable: true },
                     { key: null, label: 'التصنيع', sortable: false },
                     { key: null, label: 'الحالة', sortable: false },
@@ -786,6 +872,20 @@ export const Materials: React.FC = () => {
                       <td className="px-4 py-3 text-sm tabular-nums font-semibold">
                         {arNum(Number(row.purchaseCost ?? 0))}
                       </td>
+                      {showPricingCols ? (
+                        <>
+                          <td className="px-4 py-3 text-sm tabular-nums">
+                            {materialShowsSparePartsPricing(row)
+                              ? arNum(normalizeRepairSalePrice(row.defaultSalePrice))
+                              : '—'}
+                          </td>
+                          <td className="px-4 py-3 text-sm tabular-nums">
+                            {materialShowsSparePartsPricing(row)
+                              ? arNum(normalizeRepairSalePrice(row.traderSalePrice))
+                              : '—'}
+                          </td>
+                        </>
+                      ) : null}
                       <td className="px-4 py-3 text-sm tabular-nums text-center">
                         {arNum(Number(row.wastePercent ?? 0))}
                       </td>
@@ -1048,6 +1148,46 @@ export const Materials: React.FC = () => {
                     }
                   />
                 </div>
+                {showFormPricingFields ? (
+                  <>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="material-consumer-price">سعر المستهلك</Label>
+                      <Input
+                        id="material-consumer-price"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={form.defaultSalePrice}
+                        onChange={(e) =>
+                          setForm((current) => ({
+                            ...current,
+                            defaultSalePrice: Number(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label htmlFor="material-trader-price">سعر الجملة</Label>
+                      <Input
+                        id="material-trader-price"
+                        type="number"
+                        inputMode="decimal"
+                        min="0"
+                        step="0.01"
+                        placeholder="0.00"
+                        value={form.traderSalePrice}
+                        onChange={(e) =>
+                          setForm((current) => ({
+                            ...current,
+                            traderSalePrice: Number(e.target.value),
+                          }))
+                        }
+                      />
+                    </div>
+                  </>
+                ) : null}
                 <div className="space-y-1.5">
                   <Label htmlFor="material-conversion-rate">
                     {usesWeightPerPiece

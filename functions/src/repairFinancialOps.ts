@@ -251,7 +251,7 @@ export const deliverRepairJobAndCollectHandler = async (request: CallableRequest
       throw new HttpsError('failed-precondition', 'التسليم مسموح فقط بعد وصول الطلب إلى حالة «جاهز للتسليم».');
     }
     const pendingParts = (Array.isArray(job.partsUsed) ? job.partsUsed : [])
-      .some((raw) => ['pending_supply', 'ready_to_issue', 'reserved']
+      .some((raw) => ['pending_supply', 'ready_to_issue']
         .includes(String((raw as Record<string, unknown>).fulfillmentStatus || '')));
     if (!alreadyDelivered && pendingParts) {
       throw new HttpsError('failed-precondition', 'لا يمكن التسليم قبل استلام وصرف كل قطع الغيار المعلقة.');
@@ -591,6 +591,18 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
   const warehouseId = String(branch.warehouseId || '').trim();
   if (!warehouseId) throw new HttpsError('failed-precondition', 'لا يوجد مخزن مرتبط بفرع الصيانة.');
 
+  let invoiceCustomer: Record<string, unknown> | null = null;
+  const requestedCustomerId = String(payload.customerId || '').trim();
+  if (operation === 'prepare') {
+    if (!requestedCustomerId) throw new HttpsError('invalid-argument', 'اختيار العميل مطلوب قبل حفظ الفاتورة.');
+    const customerSnap = await db.collection('customers').doc(requestedCustomerId).get();
+    const customer = customerSnap.data() as Record<string, unknown> | undefined;
+    if (!customerSnap.exists || String(customer?.tenantId || '') !== actor.tenantId || customer?.isActive === false) {
+      throw new HttpsError('failed-precondition', 'العميل غير موجود أو غير نشط أو خارج الشركة.');
+    }
+    invoiceCustomer = customer || null;
+  }
+
   if (operation === 'resolve_discount') {
     const invoiceRef = existingRef!;
     const approve = payload.approve === true;
@@ -616,7 +628,7 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
   }
 
   const customerType = operation === 'prepare'
-    ? await loadCustomerType(db, actor.tenantId, payload.customerId)
+    ? await loadCustomerType(db, actor.tenantId, requestedCustomerId)
     : null;
   const nextLines = operation === 'prepare'
     ? await resolveInvoiceLinesFromMaterials(actor, branchId, payload.lines, customerType)
@@ -652,8 +664,11 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
         tenantId: actor.tenantId, branchId, invoiceNo, status, warehouseId,
         warehouseName: String(branch.name || '').trim() ? `مخزن ${String(branch.name || '').trim()}` : warehouseId,
         repairJobId: String(payload.repairJobId || current?.repairJobId || '').trim(),
-        customerId: String(payload.customerId || '').trim(), customerName: String(payload.customerName || '').trim(),
-        customerPhone: String(payload.customerPhone || '').trim(), notes: String(payload.notes || '').trim(),
+        customerId: requestedCustomerId,
+        customerName: String(invoiceCustomer?.name || '').trim(),
+        customerPhone: String(invoiceCustomer?.phone || '').trim(),
+        customerCode: String(invoiceCustomer?.code || '').trim(),
+        notes: String(payload.notes || '').trim(),
         grossAmount, discountType: discount.type, discountValue: discount.value, discountAmount: discount.amount,
         total: nextTotal, taxRate: 0, taxAmount: 0, paymentMethod: String(payload.paymentMethod || current?.paymentMethod || 'cash'),
         lines: nextLines, revision, discountApprovalStatus: discount.amount > 0 ? 'pending' : 'not_required',
@@ -667,6 +682,13 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
         tx.set(counterRef, { tenantId: actor.tenantId, value: sequence, updatedAt: at }, { merge: true });
         tx.create(invoiceRef, docData);
       }
+      tx.set(db.collection('customer_activities').doc(`repair-sales-invoice-prepared__${invoiceRef.id}__v${revision}`), {
+        tenantId: actor.tenantId, customerId: requestedCustomerId, module: 'repair',
+        action: 'repair.invoice_created', title: 'فاتورة بيع قطع غيار',
+        summary: `فاتورة ${invoiceNo} · الصافي ${nextTotal}`,
+        referenceType: 'repair_sales_invoice', referenceId: invoiceRef.id, referenceLabel: invoiceNo,
+        at, actorUid: actor.uid, actorName: actor.displayName,
+      });
       return { invoiceNo, total: nextTotal, revision, status };
     });
     return { ok: true as const, operation, id: invoiceRef.id, ...result };
@@ -950,6 +972,15 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
         updatedBy: actor.uid,
         updatedByName: actor.displayName,
       });
+      if (String(current.customerId || '').trim()) {
+        tx.set(db.collection('customer_activities').doc(`repair-sales-invoice-posted__${invoiceRef.id}__v${revision}`), {
+          tenantId: actor.tenantId, customerId: String(current.customerId || ''), module: 'repair',
+          action: 'repair.invoice_posted', title: 'تم ترحيل فاتورة بيع قطع غيار',
+          summary: `فاتورة ${invoiceNo} · الصافي ${nextTotal}`,
+          referenceType: 'repair_sales_invoice', referenceId: invoiceRef.id, referenceLabel: invoiceNo,
+          at, actorUid: actor.uid, actorName: actor.displayName,
+        });
+      }
     } else {
       tx.update(invoiceRef, {
         status: 'cancelled',
@@ -962,6 +993,15 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
         updatedBy: actor.uid,
         updatedByName: actor.displayName,
       });
+      if (String(current.customerId || '').trim()) {
+        tx.set(db.collection('customer_activities').doc(`repair-sales-invoice-cancelled__${invoiceRef.id}__v${revision}`), {
+          tenantId: actor.tenantId, customerId: String(current.customerId || ''), module: 'repair',
+          action: 'repair.invoice_cancelled', title: 'تم إلغاء فاتورة بيع قطع غيار',
+          summary: String(payload.cancelReason || '').trim() || invoiceNo,
+          referenceType: 'repair_sales_invoice', referenceId: invoiceRef.id, referenceLabel: invoiceNo,
+          at, actorUid: actor.uid, actorName: actor.displayName,
+        });
+      }
     }
 
     if (sessionRef && session && Math.abs(treasuryDelta) > 0.00001 && !treasuryEntrySnap?.exists) {
@@ -1019,9 +1059,10 @@ export const mutateRepairSalesInvoiceHandler = async (request: CallableRequest) 
       postedAt: at, createdAt: at, createdBy: actor.uid, createdByName: actor.displayName,
       totalDebit: journalTotal, totalCredit: journalTotal, lines: journalLines,
     });
+    const hasTreasuryMovement = Boolean(sessionRef) && Math.abs(treasuryDelta) > 0.00001;
     tx.update(invoiceRef, operation === 'post'
-      ? { journalEntryId: journalRef.id, treasuryEntryId: treasuryEntryRef.id, costCenterId }
-      : { reversalJournalEntryId: journalRef.id, reversalTreasuryEntryId: treasuryEntryRef.id });
+      ? { journalEntryId: journalRef.id, ...(hasTreasuryMovement ? { treasuryEntryId: treasuryEntryRef.id } : {}), costCenterId }
+      : { reversalJournalEntryId: journalRef.id, ...(hasTreasuryMovement ? { reversalTreasuryEntryId: treasuryEntryRef.id } : {}) });
 
     return {
       id: invoiceRef.id,

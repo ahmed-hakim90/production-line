@@ -9,11 +9,10 @@ export function roundRepairMoney(value) {
 }
 /**
  * trader → traderSalePrice when > 0, else consumer.
- * consumer / missing → consumer (defaultSalePrice), then optional legacy fallback.
+ * consumer / missing → consumer (defaultSalePrice) only — no branch catalog fallback.
  */
 export function pickRepairSalePrice(input) {
-    const consumer = normalizeRepairSalePrice(input.consumerSalePrice)
-        || normalizeRepairSalePrice(input.fallbackSalePrice);
+    const consumer = normalizeRepairSalePrice(input.consumerSalePrice);
     if (input.customerType === 'trader') {
         const trader = normalizeRepairSalePrice(input.traderSalePrice);
         if (trader > 0)

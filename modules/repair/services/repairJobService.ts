@@ -22,6 +22,7 @@ import {
   isCancelledStatus,
   isDeliveredStatus,
   isUnrepairableStatus,
+  buildRepairResolutionFields,
   mapLegacyRepairStatus,
   statusSetsAssignedAt,
   isTerminalFromSettings,
@@ -36,6 +37,7 @@ import { repairBranchService } from './repairBranchService';
 import { systemSettingsService } from '../../system/services/systemSettingsService';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { stripRepairProductsToIntake, warrantyScopeFromProducts } from '../lib/repairJobIntake';
+import { repairCustomerOperationsService } from './repairCustomerOperationsService';
 import { computeRepairJobCost, normalizePaymentStatus } from '../utils/repairBusinessLogic';
 import { assertRepairStatusTransition } from '../utils/repairStatusTransitions';
 import { deliverRepairJobAndCollectCallable } from '../../auth/services/firebase';
@@ -349,10 +351,7 @@ export const repairJobService = {
       finalCostOverride: undefined,
     } as RepairJob);
     const jobRef = doc(collection(db, REPAIR_JOBS_COLLECTION));
-    const batch = writeBatch(db);
-    batch.set(
-      jobRef,
-      withDefined({
+    const jobPayload = withDefined({
         ...withDefined(inputRest),
         jobProducts: normalizedProducts,
         productId: lead?.productId || inputRest.productId,
@@ -380,23 +379,11 @@ export const repairJobService = {
         warrantyScope: warrantyScopeFromProducts(normalizedProducts),
         slaHours: typeof inputRest.slaHours === 'number' ? inputRest.slaHours : settings.defaults.defaultSlaHours,
         isClosed: false,
-      }),
-    );
-    const evRef = doc(collection(jobRef, REPAIR_SERVICE_EVENTS_SUBCOLLECTION));
-    batch.set(evRef, {
-      tenantId,
-      branchId: inputRest.branchId,
-      jobId: jobRef.id,
-      at,
-      actorUid: String(serviceEventActor?.uid || 'unknown'),
-      actorName: String(serviceEventActor?.name || 'نظام'),
-      action: 'job_created',
-      domainEvent: 'job.created',
-      eventSchemaVersion: REPAIR_DOMAIN_EVENT_VERSION,
-      statusAfter: initialCanon,
-      note: `إنشاء طلب صيانة — إيصال ${receiptResult.receiptNo}`,
     });
-    await batch.commit();
+    await repairCustomerOperationsService.createRepairJobWithCustody(
+      jobRef.id,
+      jobPayload as unknown as Record<string, unknown>,
+    );
     return { id: jobRef.id, usedFallbackReceipt: receiptResult.usedFallback };
   },
 
@@ -565,9 +552,7 @@ export const repairJobService = {
 
       const setsAssigned = statusSetsAssignedAt(nextCanon, settings.workflow.assignmentTriggerStatusIds);
       const terminal = isTerminalFromSettings(nextCanon, settings.statusMap);
-      const resolutionMins = job.assignedAt
-        ? Math.max(0, Math.round((Date.parse(at) - Date.parse(String(job.assignedAt || at))) / 60000))
-        : undefined;
+      const resolutionFields = buildRepairResolutionFields(job.assignedAt, at);
 
       const domainEvent = resolveDomainEventForStatusChange(beforeCanon, nextCanon);
       appendRepairServiceEventTx(tx, input.jobId, {
@@ -599,7 +584,8 @@ export const repairJobService = {
         });
       }
 
-      tx.update(ref, {
+      // Firestore Transaction.update rejects undefined (e.g. resolutionMinutes without assignedAt).
+      tx.update(ref, withDefined({
         status: nextCanon,
         statusHistory: history,
         updatedAt: at,
@@ -623,7 +609,7 @@ export const repairJobService = {
               ),
               warranty: input.warranty ?? job.warranty ?? 'none',
               resolvedAt: at,
-              resolutionMinutes: resolutionMins,
+              ...resolutionFields,
               closedReason: input.reason || job.closedReason || 'delivered',
             }
           : {}),
@@ -633,7 +619,7 @@ export const repairJobService = {
               closedReason: input.reason || job.closedReason || 'unrepairable',
               resolvedAt: at,
               isClosed: true,
-              resolutionMinutes: resolutionMins,
+              ...resolutionFields,
             }
           : {}),
         ...(isCancelledStatus(nextCanon)
@@ -642,21 +628,21 @@ export const repairJobService = {
               closedReason: input.reason || job.closedReason || 'cancelled',
               resolvedAt: at,
               isClosed: true,
-              resolutionMinutes: resolutionMins,
+              ...resolutionFields,
             }
           : {}),
         ...(terminal && !isDeliveredStatus(nextCanon) && !isUnrepairableStatus(nextCanon) && !isCancelledStatus(nextCanon)
           ? {
               resolvedAt: at,
               isClosed: true,
-              resolutionMinutes: resolutionMins,
+              ...resolutionFields,
               closedReason: input.reason || job.closedReason || 'terminal_status',
             }
           : {}),
         ...(job.dueAt && Date.parse(at) > Date.parse(String(job.dueAt)) && !job.breachedAt
           ? { breachedAt: at }
           : {}),
-      });
+      }));
     });
 
     try {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -47,6 +48,7 @@ const PAGE_SIZE = 20;
 type DraftLine = RepairSalesInvoiceLine & { key: string; materialId?: string };
 
 export const RepairSalesInvoicePage: React.FC = () => {
+  const [searchParams] = useSearchParams();
   const { dir } = useAppDirection();
   const { can } = usePermission();
   const canCreate = can('repair.salesInvoice.create');
@@ -102,6 +104,11 @@ export const RepairSalesInvoicePage: React.FC = () => {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelling, setCancelling] = useState(false);
   const printRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    const invoice = String(searchParams.get('invoice') || '').trim();
+    if (invoice) setSearch(invoice);
+  }, [searchParams]);
 
   const activeBranch = useMemo(
     () => branches.find((branch) => branch.id === branchId) || null,
@@ -552,6 +559,10 @@ export const RepairSalesInvoicePage: React.FC = () => {
         toast.error('لا توجد بنود للحفظ.');
         return;
       }
+      if (!customerId) {
+        toast.error('اختيار العميل مطلوب قبل حفظ الفاتورة.');
+        return;
+      }
       for (const line of lines) {
         const materialId = String(line.materialId || '').trim();
         const available = materialId
@@ -927,7 +938,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   }}
                 />
                 <p className="text-[11px] text-muted-foreground mt-1">
-                  اختياري — يمكن البيع نقدًا بدون ربط ماستر، أو اختيار/إنشاء عميل.
+                  مطلوب — تُربط الفاتورة ببطاقة العميل وتظهر ضمن تحليله المالي.
                 </p>
               </div>
               <div>
@@ -935,8 +946,8 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 <Input
                   className="mt-2"
                   value={customerName}
-                  onChange={(e) => setCustomerName(e.target.value)}
-                  placeholder="عميل نقدي أو من الماستر"
+                  readOnly
+                  placeholder="يُملأ من ماستر العميل"
                 />
               </div>
               <div>
@@ -945,7 +956,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   className="mt-2"
                   type="tel"
                   value={customerPhone}
-                  onChange={(e) => setCustomerPhone(e.target.value)}
+                  readOnly
                   placeholder="01xxxxxxxxx"
                 />
               </div>
@@ -975,6 +986,15 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 <div>
                   <Label>قيمة الخصم</Label>
                   <Input className="mt-2" type="number" min={0} max={discountType === 'percent' ? 100 : undefined} value={discountValue} onChange={(event) => setDiscountValue(event.target.value)} disabled={discountType === 'none'} />
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="mt-2 w-full"
+                    onClick={() => { setDiscountType('percent'); setDiscountValue('100'); }}
+                  >
+                    خصم كامل 100%
+                  </Button>
                 </div>
               </div>
             </CardContent>
@@ -998,7 +1018,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   </div>
                   {!loading && partOptions.length === 0 && (
                     <p className="mt-1.5 text-xs text-muted-foreground">
-                      لا توجد مواد أو قطع في التسعير/كتالوج الفرع. أضف مكونات من تسعير قطع الغيار أو مخزون المركز.
+                      لا توجد مواد أو قطع مسعّرة في الماستر/كتالوج الفرع. سعّر المكوّنات من المواد التصنيعية أو أضفها لمخزون المركز.
                     </p>
                   )}
                 </div>

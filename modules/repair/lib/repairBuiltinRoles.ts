@@ -23,6 +23,14 @@ export const REPAIR_RECEPTION_PERMISSIONS: readonly Permission[] = [
   'repairSpareIssues.create',
   'repairSpareIssues.approve',
   'repairSpareIssues.issue',
+  'repair.customerRequests.view',
+  'repair.customerRequests.receive',
+  'repair.custody.view',
+  'repair.custody.record',
+  'repair.custody.handover',
+  'repair.replacements.view',
+  'repair.replacements.create',
+  'repair.replacements.deliver',
   'sparePartsReplenishment.view',
   'sparePartsReplenishment.create',
   'sparePartsReplenishment.receive',
@@ -42,6 +50,8 @@ export const REPAIR_TECHNICIAN_PERMISSIONS: readonly Permission[] = [
   'dashboard.view',
   'repair.jobs.technician',
   'repair.parts.request',
+  'repair.custody.view',
+  'repair.custody.record',
 ] as const;
 
 /** Permissions that must never appear on reception/technician presets (cross-center / admin). */

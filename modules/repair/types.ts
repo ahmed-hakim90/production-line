@@ -67,6 +67,12 @@ export interface RepairBranch {
   managerEmployeeName?: string;
   warehouseId?: string;
   warehouseCode?: string;
+  /** Customer-owned products currently held by the center. */
+  custodyWarehouseId?: string;
+  custodyWarehouseCode?: string;
+  /** Customer-owned products declared unrepairable. */
+  unrepairableWarehouseId?: string;
+  unrepairableWarehouseCode?: string;
   costCenterId?: string;
   accountingAccounts?: RepairBranchAccountingAccounts;
   technicianIds?: string[];
@@ -83,6 +89,7 @@ export interface RepairBranchAccountingAccounts {
   serviceRevenue: string;
   partsRevenue: string;
   discounts: string;
+  warrantyAllowances: string;
   partsInventory: string;
   partsCogs: string;
 }
@@ -97,6 +104,9 @@ export interface RepairPricedLine {
   name: string;
   quantity: number;
   unitPrice: number;
+  /** Immutable internal standard service cost snapshot (warranty analytics only). */
+  unitInternalCost?: number;
+  internalCostTotal?: number;
   lineTotal: number;
 }
 
@@ -108,6 +118,7 @@ export interface RepairProtectedServiceCatalog {
     id: string;
     name: string;
     price: number;
+    internalCost?: number;
     enabled: boolean;
   }>;
   createdAt: string;
@@ -134,8 +145,12 @@ export interface RepairJobFinancial {
   paidAmount: number;
   balanceDue: number;
   paymentStatus: 'unpaid' | 'partial' | 'paid';
-  /** warranty = manufacturer warranty close (zero revenue, no collection). */
+  /** warranty = manufacturer warranty close (full allowance, zero net collection). */
   settlementType?: RepairSettlementType;
+  warrantyPartsActualCost?: number;
+  warrantyServiceInternalCost?: number;
+  warrantyActualCost?: number;
+  settledAt?: string;
   authorizationRevision: number;
   currentAuthorizationId?: string;
   creditApprovalStatus?: RepairFinancialApprovalStatus;
@@ -166,8 +181,11 @@ export interface RepairPaymentAuthorization {
   balanceDue: number;
   taxRate?: number;
   taxAmount?: number;
-  /** warranty = zero-revenue manufacturer close; collect is forbidden. */
+  /** warranty = full manufacturer allowance; collect is forbidden. */
   settlementType?: RepairSettlementType;
+  warrantyPartsActualCost?: number;
+  warrantyServiceInternalCost?: number;
+  warrantyActualCost?: number;
   status: 'draft' | 'pending_approval' | 'approved' | 'partial' | 'paid' | 'void';
   discountApprovalStatus?: RepairFinancialApprovalStatus;
   creditApprovalStatus?: RepairFinancialApprovalStatus;
@@ -354,6 +372,16 @@ export interface RepairJobProduct {
   /** تكلفة نهائية للسطر بالكامل (وحدة × كمية) */
   finalCost?: number;
   inWarranty?: boolean;
+  /** Quantity physically received into the center custody warehouse. */
+  receivedQuantity?: number;
+  /** Quantity transferred from custody to the unrepairable warehouse. */
+  unrepairableQuantity?: number;
+  unrepairableReason?: string;
+  unrepairableRecordedAt?: string;
+  unrepairableRecordedBy?: string;
+  unrepairableRecordedByName?: string;
+  /** Repaired/cancelled quantity physically handed back to the customer. */
+  handedOverQuantity?: number;
 }
 
 export interface RepairJob {
@@ -429,6 +457,133 @@ export interface RepairJob {
   closedAt?: string;
   reopenedFromJobId?: string;
   parentJobId?: string;
+  /** Portal/customer request that was converted into this repair job. */
+  sourceCustomerRequestId?: string;
+  custodyPostedAt?: string;
+  custodyWarehouseId?: string;
+}
+
+export type CustomerServiceRequestStatus = 'submitted' | 'assigned' | 'converted' | 'cancelled';
+
+export interface CustomerServiceRequestLine {
+  lineId: string;
+  productId: string;
+  productName: string;
+  productCode: string;
+  barcode: string;
+  requestedQuantity: number;
+  receivedQuantity?: number;
+  note?: string;
+  differenceNote?: string;
+}
+
+export interface CustomerServiceRequest {
+  id?: string;
+  tenantId: string;
+  requestNo: string;
+  customerId: string;
+  customerCode: string;
+  customerName: string;
+  customerPhone: string;
+  customerAddress?: string;
+  status: CustomerServiceRequestStatus;
+  branchId?: string;
+  branchName?: string;
+  lines: CustomerServiceRequestLine[];
+  convertedJobId?: string;
+  convertedReceiptNo?: string;
+  createdAt: string;
+  updatedAt: string;
+  assignedAt?: string;
+  convertedAt?: string;
+}
+
+export type CustomerServiceEventAction =
+  | 'request.created'
+  | 'request.assigned'
+  | 'request.reassigned'
+  | 'request.received'
+  | 'request.converted'
+  | 'job.technician_assigned'
+  | 'job.unrepairable_recorded'
+  | 'job.handed_over'
+  | 'replacement.created'
+  | 'replacement.approved'
+  | 'replacement.rejected'
+  | 'replacement.delivered'
+  | 'replacement.cancelled';
+
+export interface CustomerServiceEvent {
+  id?: string;
+  tenantId: string;
+  customerId: string;
+  referenceType: 'customer_request' | 'repair_job' | 'replacement_request';
+  referenceId: string;
+  action: CustomerServiceEventAction;
+  title: string;
+  message: string;
+  branchId?: string;
+  actorUid?: string;
+  actorName?: string;
+  createdAt: string;
+}
+
+export type RepairReplacementStatus =
+  | 'pending_approval'
+  | 'approved'
+  | 'rejected'
+  | 'delivered'
+  | 'cancelled';
+
+export interface RepairReplacementRequest {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  receiptNo: string;
+  jobProductItemId: string;
+  customerId?: string;
+  customerName: string;
+  customerPhone: string;
+  originalProductId: string;
+  originalProductName: string;
+  requestedQuantity: number;
+  replacementProductId?: string;
+  replacementProductName?: string;
+  replacementProductCode?: string;
+  approvedQuantity?: number;
+  status: RepairReplacementStatus;
+  reason?: string;
+  resolutionNote?: string;
+  createdBy: string;
+  createdByName: string;
+  createdAt: string;
+  updatedAt: string;
+  approvedAt?: string;
+  deliveredAt?: string;
+}
+
+export interface RepairCustodyRecord {
+  id?: string;
+  tenantId: string;
+  branchId: string;
+  jobId: string;
+  receiptNo: string;
+  jobProductItemId: string;
+  customerId?: string;
+  customerName: string;
+  productId: string;
+  productName: string;
+  productCode?: string;
+  receivedQuantity: number;
+  unrepairableQuantity: number;
+  handedOverQuantity: number;
+  custodyHandedOverQuantity?: number;
+  unrepairableHandedOverQuantity?: number;
+  custodyWarehouseId: string;
+  unrepairableWarehouseId: string;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export type RepairServiceEventAction =
@@ -771,6 +926,7 @@ export interface RepairSalesInvoice {
   createdBy: string;
   createdByName?: string;
   createdAt: string;
+  postedAt?: string;
   updatedAt?: string;
   updatedBy?: string;
   updatedByName?: string;

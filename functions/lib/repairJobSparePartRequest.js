@@ -6,6 +6,7 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import { createRepairSpareIssueHandler, issueRepairSpareIssueHandler, } from './repairSpareIssues.js';
 import { loadCustomerType, pickRepairSalePrice, roundRepairMoney } from './repairSalePrice.js';
+import { consumeReservedInTx, releaseStockInTx, reserveStockInTx, } from './stockReservation.js';
 const db = getDb();
 const USERS = 'users';
 const ROLES = 'roles';
@@ -142,6 +143,45 @@ const readStockQty = async (tenantId, warehouseId, itemId) => {
         return 0;
     return toNumber(snap.data()?.quantity);
 };
+/** Physical quantity minus reserved holds. */
+const readAvailableStockQty = async (tenantId, warehouseId, itemId) => {
+    const snap = await db.collection(STOCK_ITEMS).doc(balanceDocId(warehouseId, 'material', itemId)).get();
+    if (!snap.exists)
+        return 0;
+    const data = snap.data();
+    if (String(data.tenantId || '').trim() !== tenantId)
+        return 0;
+    const quantity = toNumber(data.quantity);
+    const reserved = Math.max(0, toNumber(data.reservedQty));
+    return Math.max(0, quantity - reserved);
+};
+const reserveCenterStock = async (input) => {
+    const balRef = db.collection(STOCK_ITEMS).doc(balanceDocId(input.warehouseId, 'material', input.materialId));
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(balRef);
+        reserveStockInTx(tx, balRef, {
+            tenantId: input.tenantId,
+            qty: input.quantity,
+            warehouseId: input.warehouseId,
+            itemType: 'material',
+            itemId: input.materialId,
+            label: 'مخزن المركز',
+        }, snap.exists ? snap.data() : undefined);
+    });
+};
+const releaseOrConsumeCenterStock = async (input) => {
+    const balRef = db.collection(STOCK_ITEMS).doc(balanceDocId(input.warehouseId, 'material', input.materialId));
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(balRef);
+        const bal = snap.exists ? snap.data() : undefined;
+        if (input.mode === 'consume') {
+            consumeReservedInTx(tx, balRef, { tenantId: input.tenantId, qty: input.quantity }, bal);
+        }
+        else {
+            releaseStockInTx(tx, balRef, { tenantId: input.tenantId, qty: input.quantity }, bal);
+        }
+    });
+};
 const resolveCentralWarehouseId = async (tenantId) => {
     const snap = await db
         .collection(WAREHOUSES)
@@ -176,7 +216,6 @@ const loadWarehouse = async (tenantId, warehouseId) => {
     };
 };
 const ensureBranchSparePart = async (input) => {
-    const materialSale = toNumber(input.materialSalePrice) > 0 ? roundMoney(toNumber(input.materialSalePrice)) : 0;
     const resolvedSale = roundRepairMoney(pickRepairSalePrice({
         customerType: input.customerType,
         consumerSalePrice: input.materialSalePrice,
@@ -190,15 +229,9 @@ const ensureBranchSparePart = async (input) => {
         .limit(1)
         .get();
     if (!existing.empty) {
-        const doc = existing.docs[0];
-        const data = doc.data();
-        const partSale = toNumber(data.defaultSalePrice) > 0 ? roundMoney(toNumber(data.defaultSalePrice)) : 0;
-        const salePrice = resolvedSale > 0
-            ? resolvedSale
-            : (materialSale > 0 ? materialSale : partSale);
         return {
-            partId: doc.id,
-            salePrice,
+            partId: existing.docs[0].id,
+            salePrice: resolvedSale,
         };
     }
     const partRef = db.collection(SPARE_PARTS).doc();
@@ -213,11 +246,9 @@ const ensureBranchSparePart = async (input) => {
         minStock: 0,
         materialId: input.materialId,
         purchaseUnitCost: input.unitCostSnapshot,
-        // Cache of company consumer price for offline/legacy UI; source of truth is Material.
-        defaultSalePrice: materialSale,
         createdAt: now,
     });
-    return { partId: partRef.id, salePrice: resolvedSale > 0 ? resolvedSale : materialSale };
+    return { partId: partRef.id, salePrice: resolvedSale };
 };
 const mergeDemandIntoLines = (existingLines, demand) => {
     const itemId = demand.itemId;
@@ -421,41 +452,70 @@ export const requestRepairJobSparePartHandler = async (request) => {
     const unitCostSnapshot = roundMoney(materialPurchaseCostPerBaseUnit(material));
     const centralWarehouseId = await resolveCentralWarehouseId(actor.tenantId);
     const [centerQty, centralQty] = await Promise.all([
-        readStockQty(actor.tenantId, warehouseId, materialId),
-        readStockQty(actor.tenantId, centralWarehouseId, materialId),
+        readAvailableStockQty(actor.tenantId, warehouseId, materialId),
+        readAvailableStockQty(actor.tenantId, centralWarehouseId, materialId),
     ]);
     const availability = resolveAvailability(centerQty, centralQty, quantity);
     if (availability === 'center') {
-        const result = await issueFromCenterStock(request, {
-            actor,
+        await reserveCenterStock({
+            tenantId: actor.tenantId,
             warehouseId,
-            branchId,
-            jobId,
-            jobCode: String(job.receiptNo || jobId),
             materialId,
             quantity,
-            itemName,
-            itemCode,
-            unit,
-            unitCostSnapshot,
-            materialSalePrice: toNumber(material.defaultSalePrice),
-            materialTraderSalePrice: toNumber(material.traderSalePrice),
-            customerType,
         });
-        await writeActivity(actor, 'repair_job_spare_part.center_issue', jobId, {
-            materialId,
-            quantity,
-            issueId: result.issueId,
-            referenceNo: result.referenceNo,
-        });
-        return {
-            path: 'center',
-            availability,
-            issueId: result.issueId,
-            referenceNo: result.referenceNo,
-            status: result.status,
-            approvalMode: result.approvalMode,
-        };
+        try {
+            const result = await issueFromCenterStock(request, {
+                actor,
+                warehouseId,
+                branchId,
+                jobId,
+                jobCode: String(job.receiptNo || jobId),
+                materialId,
+                quantity,
+                itemName,
+                itemCode,
+                unit,
+                unitCostSnapshot,
+                materialSalePrice: toNumber(material.defaultSalePrice),
+                materialTraderSalePrice: toNumber(material.traderSalePrice),
+                customerType,
+            });
+            // Direct issue posts OUT immediately — drop the hold. Draft RSI keeps the hold
+            // until issue/cancel (tracked via issue approval path using available qty checks).
+            if (String(result.status || '') === 'issued' || result.approvalMode === 'direct') {
+                await releaseOrConsumeCenterStock({
+                    tenantId: actor.tenantId,
+                    warehouseId,
+                    materialId,
+                    quantity,
+                    mode: 'consume',
+                });
+            }
+            await writeActivity(actor, 'repair_job_spare_part.center_issue', jobId, {
+                materialId,
+                quantity,
+                issueId: result.issueId,
+                referenceNo: result.referenceNo,
+            });
+            return {
+                path: 'center',
+                availability,
+                issueId: result.issueId,
+                referenceNo: result.referenceNo,
+                status: result.status,
+                approvalMode: result.approvalMode,
+            };
+        }
+        catch (err) {
+            await releaseOrConsumeCenterStock({
+                tenantId: actor.tenantId,
+                warehouseId,
+                materialId,
+                quantity,
+                mode: 'release',
+            });
+            throw err;
+        }
     }
     // pending_supply + upsert open basket
     const usageId = `usage-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
@@ -626,34 +686,79 @@ export const issuePendingRepairPartUsageHandler = async (request) => {
     if (!warehouseId) {
         throw new HttpsError('failed-precondition', 'هذا الفرع لا يملك مخزناً مرتبطاً.');
     }
-    const centerQty = await readStockQty(actor.tenantId, warehouseId, materialId);
+    const centerQty = await readAvailableStockQty(actor.tenantId, warehouseId, materialId);
     if (centerQty < quantity) {
-        throw new HttpsError('failed-precondition', 'الرصيد غير كافٍ في مخزن المركز للصرف.');
+        throw new HttpsError('failed-precondition', 'الرصيد المتاح غير كافٍ في مخزن المركز للصرف.');
     }
     const materialSnap = await db.collection(MATERIALS).doc(materialId).get();
     const material = materialSnap.data();
-    const result = await issueFromCenterStock(request, {
-        actor,
-        warehouseId,
-        branchId,
-        jobId,
-        jobCode: String(job.receiptNo || jobId),
-        materialId,
-        quantity,
-        itemName: String(usage.partName || material?.name || materialId),
-        itemCode: String(material?.code || ''),
-        unit: String(material?.baseUnit || material?.unit || 'قطعة'),
-        unitCostSnapshot: roundMoney(materialPurchaseCostPerBaseUnit(material || {})),
-        materialSalePrice: toNumber(material?.defaultSalePrice),
-        materialTraderSalePrice: toNumber(material?.traderSalePrice),
-        customerType,
-        usageId,
-    });
-    return {
-        issueId: result.issueId,
-        referenceNo: result.referenceNo,
-        status: result.status,
-    };
+    const alreadyReserved = toNumber(usage.reservedQty) > 0
+        && String(usage.reservedWarehouseId || '').trim() === warehouseId;
+    if (!alreadyReserved) {
+        await reserveCenterStock({
+            tenantId: actor.tenantId,
+            warehouseId,
+            materialId,
+            quantity,
+        });
+    }
+    try {
+        const result = await issueFromCenterStock(request, {
+            actor,
+            warehouseId,
+            branchId,
+            jobId,
+            jobCode: String(job.receiptNo || jobId),
+            materialId,
+            quantity,
+            itemName: String(usage.partName || material?.name || materialId),
+            itemCode: String(material?.code || ''),
+            unit: String(material?.baseUnit || material?.unit || 'قطعة'),
+            unitCostSnapshot: roundMoney(materialPurchaseCostPerBaseUnit(material || {})),
+            materialSalePrice: toNumber(material?.defaultSalePrice),
+            materialTraderSalePrice: toNumber(material?.traderSalePrice),
+            customerType,
+            usageId,
+        });
+        if (String(result.status || '') === 'issued' || result.approvalMode === 'direct') {
+            await releaseOrConsumeCenterStock({
+                tenantId: actor.tenantId,
+                warehouseId,
+                materialId,
+                quantity,
+                mode: 'consume',
+            });
+            // Clear reservation markers on the usage row when present.
+            if (alreadyReserved) {
+                const nextParts = parts.map((row) => {
+                    if (String(row.usageId || '').trim() !== usageId)
+                        return row;
+                    const clone = { ...row };
+                    delete clone.reservedQty;
+                    delete clone.reservedWarehouseId;
+                    return clone;
+                });
+                await jobRef.update({ partsUsed: nextParts, updatedAt: toIsoNow() });
+            }
+        }
+        return {
+            issueId: result.issueId,
+            referenceNo: result.referenceNo,
+            status: result.status,
+        };
+    }
+    catch (err) {
+        if (!alreadyReserved) {
+            await releaseOrConsumeCenterStock({
+                tenantId: actor.tenantId,
+                warehouseId,
+                materialId,
+                quantity,
+                mode: 'release',
+            });
+        }
+        throw err;
+    }
 };
 /**
  * After SPR receive: mark linked job usages ready_to_issue, then attempt auto-issue.
@@ -724,6 +829,46 @@ export async function fulfillJobDemandsAfterReplenishmentReceive(input) {
                 usageId: link.usageId,
                 message: err instanceof Error ? err.message : String(err),
             });
+            // Hold center stock until manual issue/cancel when auto-issue fails.
+            try {
+                const jobSnap = await db.collection(JOBS).doc(link.jobId).get();
+                if (!jobSnap.exists)
+                    continue;
+                const job = jobSnap.data();
+                if (String(job.tenantId || '').trim() !== input.tenantId)
+                    continue;
+                const branchSnap = await db.collection(BRANCHES).doc(String(job.branchId || '')).get();
+                const warehouseId = String(branchSnap.data()?.warehouseId || '').trim();
+                const usage = (job.partsUsed || []).find((row) => String(row.usageId || '').trim() === link.usageId);
+                const materialId = String(usage?.materialId || '').trim();
+                if (!warehouseId || !materialId || !(link.quantity > 0))
+                    continue;
+                if (toNumber(usage?.reservedQty) > 0)
+                    continue;
+                await reserveCenterStock({
+                    tenantId: input.tenantId,
+                    warehouseId,
+                    materialId,
+                    quantity: link.quantity,
+                });
+                const nextParts = (job.partsUsed || []).map((row) => {
+                    if (String(row.usageId || '').trim() !== link.usageId)
+                        return row;
+                    return {
+                        ...row,
+                        reservedQty: link.quantity,
+                        reservedWarehouseId: warehouseId,
+                    };
+                });
+                await jobSnap.ref.update({ partsUsed: nextParts, updatedAt: toIsoNow() });
+            }
+            catch (reserveErr) {
+                console.error('repair_job_spare_part.reserve_after_auto_issue_fail failed', {
+                    jobId: link.jobId,
+                    usageId: link.usageId,
+                    message: reserveErr instanceof Error ? reserveErr.message : String(reserveErr),
+                });
+            }
         }
     }
     return { marked, issued, failed };

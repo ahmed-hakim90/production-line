@@ -4,6 +4,11 @@ import type { RepairJob, RepairJobProduct } from '../types';
 const asJob = (value: unknown): RepairJob => value as RepairJob;
 
 export const repairTechnicianService = {
+  async claimFromQr(jobId: string): Promise<{ jobId: string; claimed: boolean }> {
+    const result = await repairTechnicianOpsCallable({ operation: 'claim_qr', jobId });
+    return { jobId: String(result.jobId || jobId), claimed: Boolean(result.claimed) };
+  },
+
   async list(): Promise<RepairJob[]> {
     const result = await repairTechnicianOpsCallable({ operation: 'list' });
     return Array.isArray(result.jobs) ? result.jobs.map(asJob) : [];

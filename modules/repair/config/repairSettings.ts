@@ -37,10 +37,10 @@ const DEFAULT_ACCESSORIES: RepairAccessoryCatalogItem[] = [
 ];
 
 const DEFAULT_SERVICES: RepairServiceCatalogItem[] = [
-  { id: 'diagnosis', name: 'تشخيص', price: 50, enabled: true },
-  { id: 'screen_repair', name: 'إصلاح شاشة', price: 200, enabled: true },
-  { id: 'battery_replace', name: 'تغيير بطارية', price: 150, enabled: true },
-  { id: 'software', name: 'صيانة برمجية', price: 100, enabled: true },
+  { id: 'diagnosis', name: 'تشخيص', price: 50, internalCost: 0, enabled: true },
+  { id: 'screen_repair', name: 'إصلاح شاشة', price: 200, internalCost: 0, enabled: true },
+  { id: 'battery_replace', name: 'تغيير بطارية', price: 150, internalCost: 0, enabled: true },
+  { id: 'software', name: 'صيانة برمجية', price: 100, internalCost: 0, enabled: true },
 ];
 
 const DEFAULT_REPAIR_SETTINGS = {
@@ -110,10 +110,12 @@ function normalizeServiceCatalog(raw: unknown): RepairServiceCatalogItem[] {
       const name = String(item?.name || '').trim();
       if (!name) return null;
       const price = Number(item?.price || 0);
+      const internalCost = Number(item?.internalCost || 0);
       return {
         id,
         name,
         price: Number.isFinite(price) ? Math.max(0, price) : 0,
+        internalCost: Number.isFinite(internalCost) ? Math.max(0, internalCost) : 0,
         enabled: item?.enabled !== false,
       };
     })

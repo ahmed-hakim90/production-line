@@ -52,7 +52,7 @@ const normalizeServices = (value) => {
             throw new HttpsError('invalid-argument', 'معرفات وأسماء الخدمات مطلوبة ويجب ألا تتكرر.');
         }
         ids.add(id);
-        return { id, name, price: money(row.price), enabled: row.enabled !== false };
+        return { id, name, price: money(row.price), internalCost: money(row.internalCost), enabled: row.enabled !== false };
     });
 };
 const legacyCatalog = async (tenantId) => {

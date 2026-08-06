@@ -26,6 +26,7 @@ import {
 } from '../../shared/services/entityCodeSequenceService';
 
 const COLLECTION = 'products';
+const BARCODE_CLAIMS_COLLECTION = 'product_barcode_claims';
 
 export { DUPLICATE_ENTITY_CODE };
 
@@ -39,6 +40,9 @@ async function mergedPlanForCodes() {
 function stripUndefined<T extends Record<string, unknown>>(obj: T): Record<string, unknown> {
   return Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 }
+
+const normalizeBarcode = (value: unknown): string => String(value || '').trim().toUpperCase();
+const barcodeClaimId = (tenantId: string, barcode: string) => `${tenantId}__${encodeURIComponent(barcode)}`;
 
 export const productService = {
   async getAll(): Promise<FirestoreProduct[]> {
@@ -99,6 +103,16 @@ export const productService = {
     });
   },
 
+  async isBarcodeTaken(barcode: string, excludeId?: string): Promise<boolean> {
+    if (!isConfigured) return false;
+    const normalized = normalizeBarcode(barcode);
+    if (!normalized) return false;
+    const tenantId = getCurrentTenantId();
+    const snap = await getDoc(doc(db, BARCODE_CLAIMS_COLLECTION, barcodeClaimId(tenantId, normalized)));
+    if (!snap.exists()) return false;
+    return !excludeId || String(snap.data()?.productId || '') !== excludeId;
+  },
+
   /** Next code preview (not reserved). Uses current plan settings. */
   async peekNextCode(): Promise<string> {
     const { prefix, padding } = await mergedPlanForCodes();
@@ -113,10 +127,16 @@ export const productService = {
       const { prefix, padding } = await mergedPlanForCodes();
       const trimmed = String(data.code ?? '').trim();
       const tenantId = getCurrentTenantId();
+      const barcodeNormalized = normalizeBarcode(data.barcode);
+      if (!barcodeNormalized) throw new Error('باركود عبوة المنتج مطلوب.');
       const basePayload = stripUndefined({
         ...(data as Record<string, unknown>),
+        ...(barcodeNormalized ? { barcode: String(data.barcode || '').trim(), barcodeNormalized } : {}),
         tenantId,
       });
+      if (barcodeNormalized && await productService.isBarcodeTaken(barcodeNormalized)) {
+        throw new Error('باركود المنتج مستخدم مسبقًا.');
+      }
 
       if (trimmed) {
         const upper = trimmed.toUpperCase();
@@ -125,9 +145,15 @@ export const productService = {
           (err as Error & { code?: string }).code = DUPLICATE_ENTITY_CODE;
           throw err;
         }
-        const ref = await addDoc(collection(db, COLLECTION), {
-          ...basePayload,
-          code: upper,
+        const ref = doc(collection(db, COLLECTION));
+        await runTransaction(db, async (transaction) => {
+          if (barcodeNormalized) {
+            const claimRef = doc(db, BARCODE_CLAIMS_COLLECTION, barcodeClaimId(tenantId, barcodeNormalized));
+            const claim = await transaction.get(claimRef);
+            if (claim.exists()) throw new Error('باركود المنتج مستخدم مسبقًا.');
+            transaction.set(claimRef, { tenantId, barcode: barcodeNormalized, productId: ref.id, createdAt: new Date().toISOString() });
+          }
+          transaction.set(ref, { ...basePayload, code: upper });
         });
         return ref.id;
       }
@@ -144,6 +170,12 @@ export const productService = {
           async () => initialMaxSequence,
         );
         const newRef = doc(collection(db, COLLECTION));
+        if (barcodeNormalized) {
+          const claimRef = doc(db, BARCODE_CLAIMS_COLLECTION, barcodeClaimId(tenantId, barcodeNormalized));
+          const claim = await transaction.get(claimRef);
+          if (claim.exists()) throw new Error('باركود المنتج مستخدم مسبقًا.');
+          transaction.set(claimRef, { tenantId, barcode: barcodeNormalized, productId: newRef.id, createdAt: new Date().toISOString() });
+        }
         transaction.set(newRef, {
           ...basePayload,
           code,
@@ -170,7 +202,31 @@ export const productService = {
         if (upper) (data as Partial<FirestoreProduct>).code = upper as any;
       }
       const { id: _id, ...fields } = data as any;
-      await updateDoc(doc(db, COLLECTION, id), stripUndefined(fields as Record<string, unknown>));
+      if (data.barcode !== undefined) {
+        const tenantId = getCurrentTenantId();
+        const normalized = normalizeBarcode(data.barcode);
+        if (!normalized) throw new Error('لا يمكن إزالة باركود المنتج.');
+        await runTransaction(db, async (transaction) => {
+          const productRef = doc(db, COLLECTION, id);
+          const productSnap = await transaction.get(productRef);
+          if (!productSnap.exists()) throw new Error('المنتج غير موجود.');
+          const oldNormalized = normalizeBarcode(productSnap.data().barcodeNormalized || productSnap.data().barcode);
+          if (normalized && normalized !== oldNormalized) {
+            const nextClaimRef = doc(db, BARCODE_CLAIMS_COLLECTION, barcodeClaimId(tenantId, normalized));
+            const nextClaim = await transaction.get(nextClaimRef);
+            if (nextClaim.exists() && String(nextClaim.data()?.productId || '') !== id) {
+              throw new Error('باركود المنتج مستخدم مسبقًا.');
+            }
+            transaction.set(nextClaimRef, { tenantId, barcode: normalized, productId: id, updatedAt: new Date().toISOString() });
+          }
+          if (oldNormalized && oldNormalized !== normalized) {
+            transaction.delete(doc(db, BARCODE_CLAIMS_COLLECTION, barcodeClaimId(tenantId, oldNormalized)));
+          }
+          transaction.update(productRef, stripUndefined({ ...fields, barcode: String(data.barcode || '').trim(), barcodeNormalized: normalized }));
+        });
+      } else {
+        await updateDoc(doc(db, COLLECTION, id), stripUndefined(fields as Record<string, unknown>));
+      }
     } catch (error) {
       console.error('productService.update error:', error);
       throw error;
@@ -186,7 +242,17 @@ export const productService = {
       if (!linkedReports.empty) {
         throw new Error('المنتج مرتبط بتقارير إنتاج ولا يمكن حذفه. احتفظ به أو ادمجه مع المنتج الصحيح.');
       }
-      await deleteDoc(doc(db, COLLECTION, id));
+      const productRef = doc(db, COLLECTION, id);
+      const productSnap = await getDoc(productRef);
+      const barcode = normalizeBarcode(productSnap.data()?.barcodeNormalized || productSnap.data()?.barcode);
+      if (barcode) {
+        await runTransaction(db, async (transaction) => {
+          transaction.delete(productRef);
+          transaction.delete(doc(db, BARCODE_CLAIMS_COLLECTION, barcodeClaimId(getCurrentTenantId(), barcode)));
+        });
+      } else {
+        await deleteDoc(productRef);
+      }
     } catch (error) {
       console.error('productService.delete error:', error);
       throw error;

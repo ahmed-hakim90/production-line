@@ -67,6 +67,7 @@ const DEFAULT_ACCOUNTS = [
     ["412001", "إيراد قطع الغيار", "revenue", "4000", true],
     ["419001", "خصومات المبيعات والصيانة", "contra_revenue", "4000", true],
     ["419002", "إيرادات متنوعة صيانة", "revenue", "4000", true],
+    ["419003", "مسموحات ضمان الصيانة", "contra_revenue", "4000", true],
     ["5000", "تكلفة المبيعات", "expense", "", false],
     ["511001", "تكلفة قطع الغيار المباعة", "expense", "5000", true],
     ["512001", "تكلفة الإنتاج التام المباع", "expense", "5000", true],
@@ -116,6 +117,22 @@ export async function ensureDefaultAccounts(actor) {
         }, { merge: true });
     }
     await batch.commit();
+    const branches = await db.collection('repair_branches').where('tenantId', '==', actor.tenantId).get();
+    const branchBatch = db.batch();
+    let branchUpdates = 0;
+    for (const branch of branches.docs) {
+        const row = branch.data();
+        const map = (row.accountingAccounts || {});
+        if (String(map.warrantyAllowances || '').trim())
+            continue;
+        branchBatch.set(branch.ref, {
+            accountingAccounts: { ...map, warrantyAllowances: DEFAULT_REPAIR_ACCOUNT_MAP.warrantyAllowances },
+            updatedAt: at,
+        }, { merge: true });
+        branchUpdates += 1;
+    }
+    if (branchUpdates > 0)
+        await branchBatch.commit();
     return DEFAULT_ACCOUNTS.length;
 }
 async function seedDefaults(actor) {
@@ -556,6 +573,7 @@ const REPAIR_ACCOUNT_KEYS = [
     "serviceRevenue",
     "partsRevenue",
     "discounts",
+    "warrantyAllowances",
     "partsInventory",
     "partsCogs",
 ];
@@ -568,6 +586,7 @@ const DEFAULT_REPAIR_ACCOUNT_MAP = {
     serviceRevenue: "411001",
     partsRevenue: "412001",
     discounts: "419001",
+    warrantyAllowances: "419003",
     partsInventory: "131001",
     partsCogs: "511001",
 };
@@ -580,6 +599,7 @@ const REPAIR_ACCOUNT_TYPES = {
     serviceRevenue: "revenue",
     partsRevenue: "revenue",
     discounts: "contra_revenue",
+    warrantyAllowances: "contra_revenue",
     partsInventory: "asset",
     partsCogs: "expense",
 };

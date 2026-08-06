@@ -42,7 +42,10 @@ export async function loadManufacturingBundle(): Promise<ManufacturingDataBundle
     }
     if (!materialId) continue;
     const prev = stockByMaterialId.get(materialId) ?? { availableQty: 0, reservedQty: 0 };
-    prev.availableQty += Number(bal.quantity || 0);
+    const quantity = Number(bal.quantity || 0);
+    const reservedQty = Math.max(0, Number(bal.reservedQty || 0));
+    prev.reservedQty += reservedQty;
+    prev.availableQty += Math.max(0, quantity - reservedQty);
     stockByMaterialId.set(materialId, prev);
   }
 

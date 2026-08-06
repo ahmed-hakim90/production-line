@@ -96,11 +96,14 @@ Collections: `customers`, `customer_activities`. See [adr/ADR-004-customers-mast
 
 ## Repair company-wide material sale price
 
-Sale/usage price for repair is stored once on manufacturing `materials.defaultSalePrice` (not per branch). UI: `/repair/parts-pricing` (`repair.pricing.manage`).
+Sale/usage prices for repair are stored on manufacturing materials:
+`defaultSalePrice` (consumer), `traderSalePrice` (wholesale), `purchaseCost`.
+UI: `/manufacturing/materials` (`repair.pricing.manage` for sale fields + Excel).
+Branch catalog `repair_spare_parts.defaultSalePrice` is not a price source.
 
 **One-time backfill from legacy branch catalog**
 
-On the pricing page, use **ترحيل أسعار الفروع**:
+Use planner `planMaterialSalePriceBackfill` then callable `updateRepairPartsPricing`:
 
 - For each active material with `defaultSalePrice` empty/0
 - Take the **max** positive `repair_spare_parts.defaultSalePrice` among parts linked via `materialId` / `rawMaterialId`
@@ -123,3 +126,20 @@ npm --prefix functions run backfill:supervisorAssignments:dry
 ```
 
 Source of truth: `functions/src/scripts/*` → build to `functions/lib/scripts/*`.
+
+## عهدة أجهزة عملاء الصيانة والبورتال
+
+قبل النشر، أضف secret لتشفير PIN في Firebase Functions (قيمة عشوائية طويلة ومختلفة لكل بيئة):
+
+```bash
+firebase functions:secrets:set CUSTOMER_PORTAL_PIN_PEPPER
+```
+
+بعد نشر Functions والقواعد والفهارس، افتح `الصيانة → فروع الصيانة` وشغّل `تهيئة مخازن العهدة` مرة واحدة لكل شركة. العملية قابلة لإعادة التشغيل، وتقوم بـ:
+
+- إنشاء وربط مخزن عهدة ومخزن غير قابل للإصلاح لكل مركز.
+- ترحيل الطلبات المفتوحة إلى العهدة، والطلبات `unrepairable` إلى مخزنها.
+- تجاوز `delivered`، وإظهار عدد `cancelled` للمراجعة اليدوية.
+- إنشاء barcode claims للمنتجات القديمة. العملية تتوقف قبل كتابة claims عند اكتشاف باركود مكرر.
+
+الترحيل يعالج الطلبات على دفعات (2000 طلب لكل callable)، والزر يتابع الدفعات تلقائيًا باستخدام cursor. لا تغيّر حالة `ready` أو `cancelled` الرصيد؛ الخروج يتم فقط من إجراء التسليم الفعلي.

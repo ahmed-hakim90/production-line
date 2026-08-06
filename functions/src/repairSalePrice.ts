@@ -18,17 +18,16 @@ export function roundRepairMoney(value: unknown): number {
 
 /**
  * trader → traderSalePrice when > 0, else consumer.
- * consumer / missing → consumer (defaultSalePrice), then optional legacy fallback.
+ * consumer / missing → consumer (defaultSalePrice) only — no branch catalog fallback.
  */
 export function pickRepairSalePrice(input: {
   customerType?: string | null;
   consumerSalePrice?: unknown;
   traderSalePrice?: unknown;
+  /** @deprecated Ignored — materials master is the only sale-price source. */
   fallbackSalePrice?: unknown;
 }): number {
-  const consumer =
-    normalizeRepairSalePrice(input.consumerSalePrice)
-    || normalizeRepairSalePrice(input.fallbackSalePrice);
+  const consumer = normalizeRepairSalePrice(input.consumerSalePrice);
   if (input.customerType === 'trader') {
     const trader = normalizeRepairSalePrice(input.traderSalePrice);
     if (trader > 0) return trader;

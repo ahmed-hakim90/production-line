@@ -74,10 +74,18 @@ const MENU_KEYS_BY_WAREHOUSE_ROLE: Record<WarehouseRole, readonly string[]> = {
     // Confirm path also lives under الصيانة (repair-parts-recall); inventory key is a backup.
     'inv-spare-parts-recall',
   ],
+  repair_customer_custody: [...SCOPED_SHARED_MENU_KEYS],
+  repair_unrepairable: [...SCOPED_SHARED_MENU_KEYS],
   general: [...SCOPED_SHARED_MENU_KEYS],
 };
 
 const MATERIALS_SCOPE_ROLES: readonly WarehouseRole[] = ['raw_material', 'decomposed'];
+
+/** Spare-parts warehouses (central + maintenance centers) never run factory production flows. */
+const SPARE_PARTS_SCOPE_ROLES: readonly WarehouseRole[] = [
+  'spare_parts_central',
+  'maintenance_center',
+];
 
 export function resolveAccessibleWarehouseRoles(input: {
   warehouseRoles: readonly (WarehouseRole | undefined | null)[];
@@ -121,6 +129,22 @@ export function isInventoryMenuItemVisibleForWarehouseScope(input: {
   if (roles.length === 0) return false;
 
   return allowedMenuKeysForRoles(roles).has(key);
+}
+
+/**
+ * Factory-only production screens (e.g. «تحكم التغليف») are reachable with plain `inventory.view`,
+ * which spare-parts operators also hold. Hide them from spare-parts-scoped warehouses.
+ */
+export function isFactoryProductionMenuVisibleForWarehouseScope(input: {
+  accessibleWarehouseRoles: readonly (WarehouseRole | string)[];
+  warehouseScoped: boolean;
+}): boolean {
+  if (!input.warehouseScoped) return true;
+  const roles = (input.accessibleWarehouseRoles || []).map(
+    (role) => (role || 'general') as WarehouseRole,
+  );
+  if (roles.length === 0) return true;
+  return !roles.every((role) => SPARE_PARTS_SCOPE_ROLES.includes(role));
 }
 
 /**

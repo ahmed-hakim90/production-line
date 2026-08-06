@@ -280,16 +280,12 @@ const resolveSparePartSalePrice = async (t, tenantId, input) => {
     const materialIdDirect = String(input.materialId || '').trim();
     const partId = String(input.partId || '').trim();
     let materialId = materialIdDirect;
-    let partSale = 0;
-    if (partId) {
+    if (partId && !materialId) {
         const snap = await t.get(db.collection(SPARE_PARTS_COLLECTION).doc(partId));
         if (snap.exists) {
             const data = snap.data();
             if (String(data.tenantId || '').trim() === tenantId) {
-                partSale = Number(data.defaultSalePrice || 0);
-                if (!materialId) {
-                    materialId = String(data.materialId || data.rawMaterialId || '').trim();
-                }
+                materialId = String(data.materialId || data.rawMaterialId || '').trim();
             }
         }
     }
@@ -309,7 +305,6 @@ const resolveSparePartSalePrice = async (t, tenantId, input) => {
         customerType: input.customerType,
         consumerSalePrice: consumer,
         traderSalePrice: trader,
-        fallbackSalePrice: partSale,
     });
     return sale > 0 ? roundRepairMoney(sale) : 0;
 };

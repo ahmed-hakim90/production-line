@@ -25,6 +25,8 @@ export type StockSourceModule =
   | 'spare_parts_replenishment'
   | 'repair_spare_issue'
   | 'repair_spare_return'
+  | 'repair_customer_custody'
+  | 'repair_unrepairable'
   | 'legacy';
 
 export type StockAdjustmentReason =
@@ -45,6 +47,8 @@ export type WarehouseRole =
   | 'waste'
   | 'spare_parts_central'
   | 'maintenance_center'
+  | 'repair_customer_custody'
+  | 'repair_unrepairable'
   | 'general';
 
 export interface Warehouse {
@@ -983,4 +987,3 @@ export interface MaintenanceCenterSpareBalanceRow {
   quantity: number;
   minStock: number;
 }
-

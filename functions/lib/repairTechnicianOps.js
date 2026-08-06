@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import { loadProtectedRepairServiceCatalog } from './repairServiceCatalogOps.js';
+import { decideTechnicianQrClaim } from './repairTechnicianClaimPolicy.js';
 const db = getDb();
 const TECH_STATUSES = new Set([
     'received',
@@ -106,6 +107,65 @@ const listAssigned = async (actor) => {
         .map((row) => sanitizeRepairJobForTechnician(row.id, row.data()))
         .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
     return { ok: true, jobs };
+};
+const rejectClaimDecision = (decision) => {
+    if (decision === 'terminal')
+        throw new HttpsError('failed-precondition', 'الطلب مغلق ولا يمكن استلامه للعمل.');
+    if (decision === 'assigned_other')
+        throw new HttpsError('already-exists', 'الطلب مسند بالفعل لفني آخر.');
+};
+const claimJobFromInternalQr = async (actor, data) => {
+    const jobId = String(data.jobId || '').trim();
+    if (!jobId)
+        throw new HttpsError('invalid-argument', 'رقم الطلب مطلوب.');
+    const jobRef = db.collection('repair_jobs').doc(jobId);
+    const jobSnap = await jobRef.get();
+    if (!jobSnap.exists)
+        throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
+    const job = jobSnap.data();
+    if (String(job.tenantId || '') !== actor.tenantId)
+        throw new HttpsError('permission-denied', 'الطلب خارج شركتك.');
+    const branchId = String(job.branchId || '').trim();
+    const employeeSnap = await db.collection('employees').where('userId', '==', actor.uid).limit(20).get();
+    const employeeIds = employeeSnap.docs
+        .filter((doc) => String(doc.data().tenantId || '') === actor.tenantId)
+        .map((doc) => doc.id);
+    const actorIds = new Set([actor.uid, ...employeeIds]);
+    rejectClaimDecision(decideTechnicianQrClaim({ isClosed: job.isClosed === true,
+        status: String(job.status || ''), currentTechnicianId: String(job.technicianId || '').trim(),
+        actorUid: actor.uid, actorIds: Array.from(actorIds) }));
+    const at = new Date().toISOString();
+    let claimed = false;
+    await db.runTransaction(async (tx) => {
+        const fresh = await tx.get(jobRef);
+        if (!fresh.exists)
+            throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
+        const row = fresh.data();
+        const currentTechnicianId = String(row.technicianId || '').trim();
+        const decision = decideTechnicianQrClaim({ isClosed: row.isClosed === true,
+            status: String(row.status || ''), currentTechnicianId, actorUid: actor.uid, actorIds: Array.from(actorIds) });
+        rejectClaimDecision(decision);
+        if (decision === 'claim') {
+            tx.update(jobRef, { technicianId: actor.uid, assignedAt: row.assignedAt || at, updatedAt: at });
+            claimed = true;
+        }
+    });
+    if (claimed) {
+        await Promise.all([
+            jobRef.collection('service_events').doc(`technician-qr-claim__${actor.uid}`).set({
+                tenantId: actor.tenantId, branchId, jobId, at, actorUid: actor.uid, actorName: actor.displayName,
+                action: 'technician_assigned', domainEvent: 'technician.assigned', eventSchemaVersion: 1,
+                payload: { source: 'internal_qr', technicianId: actor.uid },
+            }, { merge: true }),
+            String(job.customerId || '') ? db.collection('customer_service_events').doc(`technician-qr-claim__${jobId}__${actor.uid}`).set({
+                tenantId: actor.tenantId, customerId: String(job.customerId || ''), referenceType: 'repair_job', referenceId: jobId,
+                action: 'job.technician_assigned', title: 'بدأ الفني العمل على الطلب',
+                message: 'تم استلام الطلب وبدأ أحد الفنيين العمل عليه.', branchId,
+                actorUid: actor.uid, actorName: actor.displayName, createdAt: at,
+            }, { merge: true }) : Promise.resolve(),
+        ]);
+    }
+    return { ok: true, jobId, claimed };
 };
 const normalizeProducts = (incoming, existing) => {
     const oldRows = Array.isArray(existing) ? existing : [];
@@ -284,6 +344,8 @@ export const repairTechnicianOpsHandler = async (request) => {
     const operation = String(data.operation || '');
     if (operation === 'list')
         return listAssigned(actor);
+    if (operation === 'claim_qr')
+        return claimJobFromInternalQr(actor, data);
     if (operation === 'get') {
         const jobId = String(data.jobId || '').trim();
         const { job } = await loadAssignedJob(actor, jobId);

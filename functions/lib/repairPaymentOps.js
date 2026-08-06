@@ -4,6 +4,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { getDb } from './adminApp.js';
 import { loadProtectedRepairServiceCatalog } from './repairServiceCatalogOps.js';
 import { loadCustomerType, pickRepairSalePrice, roundRepairMoney } from './repairSalePrice.js';
+import { buildWarrantySettlementTotals } from './repairWarrantyAccountingPolicy.js';
 const db = getDb();
 const WARRANTY_SETTLEMENT = 'warranty';
 const isManufacturerWarrantyJob = (job) => {
@@ -19,6 +20,13 @@ const roundMoney = (value) => {
         return 0;
     return Math.max(0, Math.round(n * 100) / 100);
 };
+const sumPartsActualCost = (rows) => roundMoney((Array.isArray(rows) ? rows : []).reduce((sum, raw) => {
+    const row = raw;
+    const totalSnapshot = Number(row.totalCostSnapshot);
+    if (Number.isFinite(totalSnapshot) && totalSnapshot >= 0)
+        return sum + totalSnapshot;
+    return sum + roundMoney(row.quantity) * roundMoney(row.unitCostSnapshot);
+}, 0));
 const requireAuth = (request) => {
     const uid = String(request.auth?.uid || '').trim();
     if (!uid)
@@ -126,6 +134,8 @@ const computeBreakdown = async (tenantId, job) => {
             name: service.name,
             quantity,
             unitPrice: roundMoney(service.price),
+            unitInternalCost: roundMoney(service.internalCost),
+            internalCostTotal: roundMoney(quantity * service.internalCost),
             lineTotal: roundMoney(quantity * service.price),
         };
     });
@@ -176,8 +186,10 @@ const computeBreakdown = async (tenantId, job) => {
     const fallbackGross = roundMoney(job.finalCostOverride ?? job.finalCost);
     if (serviceGross + partsGross <= 0 && fallbackGross > 0) {
         serviceGross = fallbackGross;
-        serviceLines.push({ id: 'legacy-service', name: 'خدمة صيانة', quantity: 1, unitPrice: fallbackGross, lineTotal: fallbackGross });
+        serviceLines.push({ id: 'legacy-service', name: 'خدمة صيانة', quantity: 1, unitPrice: fallbackGross, unitInternalCost: 0, internalCostTotal: 0, lineTotal: fallbackGross });
     }
+    const warrantyServiceInternalCost = roundMoney(serviceLines.reduce((sum, row) => sum + roundMoney(row.internalCostTotal), 0));
+    const warrantyPartsActualCost = sumPartsActualCost(usages);
     return {
         catalogRevision: protectedCatalog.revision,
         serviceLines,
@@ -185,6 +197,9 @@ const computeBreakdown = async (tenantId, job) => {
         serviceGross: roundMoney(serviceGross),
         partsGross,
         grossAmount: roundMoney(serviceGross + partsGross),
+        warrantyServiceInternalCost,
+        warrantyPartsActualCost,
+        warrantyActualCost: roundMoney(warrantyServiceInternalCost + warrantyPartsActualCost),
     };
 };
 const paymentStatus = (net, paid) => {
@@ -201,13 +216,14 @@ const accountSeeds = (tenantId, configured) => ({
     SERVICE_REVENUE: { code: String(configured?.serviceRevenue || ''), name: 'إيراد خدمات الصيانة', type: 'revenue' },
     PARTS_REVENUE: { code: String(configured?.partsRevenue || ''), name: 'إيراد قطع غيار الصيانة', type: 'revenue' },
     DISCOUNTS: { code: String(configured?.discounts || ''), name: 'خصومات الصيانة', type: 'contra_revenue' },
+    WARRANTY_ALLOWANCES: { code: String(configured?.warrantyAllowances || ''), name: 'مسموحات ضمان الصيانة', type: 'contra_revenue' },
     PARTS_INVENTORY: { code: String(configured?.partsInventory || ''), name: 'مخزون قطع غيار الصيانة', type: 'asset' },
     PARTS_COGS: { code: String(configured?.partsCogs || ''), name: 'تكلفة قطع الغيار المباعة', type: 'expense' },
     tenantId,
 });
 const requireAccountingMap = (value) => {
     const map = value && typeof value === 'object' ? value : {};
-    const keys = ['cash', 'card', 'bankTransfer', 'customerDeposits', 'receivables', 'serviceRevenue', 'partsRevenue', 'discounts', 'partsInventory', 'partsCogs'];
+    const keys = ['cash', 'card', 'bankTransfer', 'customerDeposits', 'receivables', 'serviceRevenue', 'partsRevenue', 'discounts', 'warrantyAllowances', 'partsInventory', 'partsCogs'];
     if (keys.some((key) => !String(map[key] || '').trim())) {
         throw new HttpsError('failed-precondition', 'أكمل ربط حسابات فرع الصيانة قبل تنفيذ العملية.');
     }
@@ -222,12 +238,13 @@ const repairAccountTypes = {
     serviceRevenue: 'revenue',
     partsRevenue: 'revenue',
     discounts: 'contra_revenue',
+    warrantyAllowances: 'contra_revenue',
     partsInventory: 'asset',
     partsCogs: 'expense',
 };
 const assertAccountingMapReady = async (tenantId, value) => {
     const map = requireAccountingMap(value);
-    const keys = ['cash', 'card', 'bankTransfer', 'customerDeposits', 'receivables', 'serviceRevenue', 'partsRevenue', 'discounts', 'partsInventory', 'partsCogs'];
+    const keys = ['cash', 'card', 'bankTransfer', 'customerDeposits', 'receivables', 'serviceRevenue', 'partsRevenue', 'discounts', 'warrantyAllowances', 'partsInventory', 'partsCogs'];
     const snapshots = await db.getAll(...keys.map((key) => db.collection('accounting_accounts').doc(`${tenantId}__${String(map[key] || '').trim()}`)));
     const invalidKey = keys.find((key, index) => {
         const snap = snapshots[index];
@@ -242,6 +259,23 @@ const assertAccountingMapReady = async (tenantId, value) => {
         throw new HttpsError('failed-precondition', `حسابات فرع الصيانة غير مكتملة (حقل: ${invalidKey}). من الحسابات ← إعدادات الحسابات: اختر مركز التكلفة ثم «حفظ الربط بالحسابات الافتراضية».`);
     }
     return map;
+};
+const ensureWarrantyAllowanceMapping = async (actor, branchRef, configured) => {
+    const map = configured && typeof configured === 'object' ? configured : {};
+    if (String(map.warrantyAllowances || '').trim())
+        return map;
+    const code = '419003';
+    const at = new Date().toISOString();
+    const accountRef = db.collection('accounting_accounts').doc(`${actor.tenantId}__${code}`);
+    await Promise.all([
+        accountRef.set({
+            tenantId: actor.tenantId, code, name: 'مسموحات ضمان الصيانة', type: 'contra_revenue',
+            parentCode: '4000', level: 3, allowPosting: true, isActive: true, systemSeed: true,
+            createdAt: at, createdBy: actor.uid, updatedAt: at, updatedBy: actor.uid,
+        }, { merge: true }),
+        branchRef.set({ accountingAccounts: { ...map, warrantyAllowances: code }, updatedAt: at }, { merge: true }),
+    ]);
+    return { ...map, warrantyAllowances: code };
 };
 /**
  * Always prefer the live branch accounting map over snapshots frozen on
@@ -258,7 +292,8 @@ const loadLiveBranchAccounting = async (actor, branchId) => {
     if (!costCenterId) {
         throw new HttpsError('failed-precondition', 'اربط الفرع بمركز تكلفة من الحسابات ← إعدادات الحسابات ثم احفظ الربط.');
     }
-    const accountingAccounts = await assertAccountingMapReady(actor.tenantId, branchSnap.data()?.accountingAccounts);
+    const branchAccounting = await ensureWarrantyAllowanceMapping(actor, branchRef, branchSnap.data()?.accountingAccounts);
+    const accountingAccounts = await assertAccountingMapReady(actor.tenantId, branchAccounting);
     return { branchRef, costCenterId, accountingAccounts };
 };
 const sanitizeJobTechnicalData = (job) => {
@@ -292,7 +327,8 @@ async function prepareAuthorization(actor, data) {
     const costCenterId = String(scoped.branch.costCenterId || '').trim();
     if (!costCenterId)
         throw new HttpsError('failed-precondition', 'اربط الفرع بمركز تكلفة قبل تجهيز إذن الدفع.');
-    const accountingAccounts = await assertAccountingMapReady(actor.tenantId, scoped.branch.accountingAccounts);
+    const branchAccounting = await ensureWarrantyAllowanceMapping(actor, scoped.branchRef, scoped.branch.accountingAccounts);
+    const accountingAccounts = await assertAccountingMapReady(actor.tenantId, branchAccounting);
     const costCenterSnap = await db.collection('cost_centers').doc(costCenterId).get();
     if (!costCenterSnap.exists || String(costCenterSnap.data()?.tenantId || '') !== actor.tenantId || costCenterSnap.data()?.isActive === false) {
         throw new HttpsError('failed-precondition', 'مركز تكلفة الفرع غير صالح أو غير نشط.');
@@ -301,39 +337,14 @@ async function prepareAuthorization(actor, data) {
     const discountRequested = String(data.discountType || 'none') !== 'none'
         && roundMoney(data.discountValue) > 0;
     if (warrantyJob && discountRequested) {
-        throw new HttpsError('failed-precondition', 'طلب ضمان المصنّع يُقفل بدون إيراد. لا يُطبَّق خصم يدوي على مسار الضمان.');
+        throw new HttpsError('failed-precondition', 'طلب ضمان المصنّع يحصل على إعفاء ضمان كامل تلقائيًا. لا يُطبَّق خصم يدوي إضافي.');
     }
-    const breakdown = warrantyJob
-        ? {
-            catalogRevision: 0,
-            serviceLines: [],
-            partLines: [],
-            serviceGross: 0,
-            partsGross: 0,
-            grossAmount: 0,
-        }
-        : await computeBreakdown(actor.tenantId, scoped.job);
+    const breakdown = await computeBreakdown(actor.tenantId, scoped.job);
     if (!warrantyJob && breakdown.grossAmount <= 0) {
         throw new HttpsError('failed-precondition', 'لا يمكن إنشاء إذن دفع بقيمة صفر. اختر خدمة صيانة مسعّرة أو قطعة غيار أولًا ثم أعد تجهيز الإذن.');
     }
-    if (warrantyJob) {
-        // Keep catalog revision stamp when available for audit; ignore pricing.
-        try {
-            const protectedCatalog = await loadProtectedRepairServiceCatalog(actor.tenantId);
-            breakdown.catalogRevision = protectedCatalog.revision;
-        }
-        catch {
-            // Catalog optional for zero-revenue warranty settlement.
-        }
-    }
     const totals = warrantyJob
-        ? {
-            grossAmount: 0,
-            discountType: 'none',
-            discountValue: 0,
-            discountAmount: 0,
-            netAmount: 0,
-        }
+        ? buildWarrantySettlementTotals(breakdown.grossAmount)
         : discountTotals(breakdown.grossAmount, data.discountType, data.discountValue);
     const finRef = db.collection('repair_job_financials').doc(jobId);
     const at = new Date().toISOString();
@@ -381,6 +392,9 @@ async function prepareAuthorization(actor, data) {
             ...totals,
             serviceLines: breakdown.serviceLines,
             partLines: breakdown.partLines,
+            warrantyServiceInternalCost: warrantyJob ? breakdown.warrantyServiceInternalCost : 0,
+            warrantyPartsActualCost: warrantyJob ? breakdown.warrantyPartsActualCost : 0,
+            warrantyActualCost: warrantyJob ? breakdown.warrantyActualCost : 0,
             serviceCatalogRevision: breakdown.catalogRevision,
             taxRate: 0,
             taxAmount: 0,
@@ -490,7 +504,7 @@ async function requestCustomerApproval(actor, data) {
         }
         const auth = authSnap.data();
         if (isWarrantySettlement(auth) || isWarrantySettlement(currentFinSnap.data())) {
-            throw new HttpsError('failed-precondition', 'طلب ضمان المصنّع لا يُرسل لموافقة تسعير العميل (بدون إيراد).');
+            throw new HttpsError('failed-precondition', 'طلب ضمان المصنّع لا يُرسل لموافقة تسعير العميل لأنه يحصل على إعفاء ضمان كامل تلقائيًا.');
         }
         if (String(auth.status || '') === 'void' || String(auth.discountApprovalStatus || 'approved') === 'rejected') {
             throw new HttpsError('failed-precondition', 'إذن الدفع الحالي غير صالح للموافقة.');
@@ -833,7 +847,7 @@ async function deliver(actor, data) {
         }
         if (String(job.status || '') !== 'ready')
             throw new HttpsError('failed-precondition', 'التسليم مسموح بعد حالة جاهز للتسليم فقط.');
-        const hasPendingParts = (Array.isArray(job.partsUsed) ? job.partsUsed : []).some((raw) => ['pending_supply', 'ready_to_issue', 'reserved'].includes(String(raw.fulfillmentStatus || '')));
+        const hasPendingParts = (Array.isArray(job.partsUsed) ? job.partsUsed : []).some((raw) => ['pending_supply', 'ready_to_issue'].includes(String(raw.fulfillmentStatus || '')));
         if (hasPendingParts)
             throw new HttpsError('failed-precondition', 'لا يمكن التسليم قبل صرف كل القطع المعلقة.');
         const fin = finSnap.data();
@@ -859,19 +873,23 @@ async function deliver(actor, data) {
             throw new HttpsError('failed-precondition', 'إذن الدفع الحالي قيمته صفر وغير صالح للتسليم. أضف خدمة مسعّرة أو قطعة غيار ثم أنشئ إصدارًا جديدًا.');
         }
         const costCenterId = liveAccounting.costCenterId;
-        // Manufacturer warranty: no revenue journal — parts COGS already posted on issue.
-        if (!warrantySettlement && !journalSnap.exists) {
-            const debitLines = [
-                ...(paid > 0 ? [{ accountCode: accounts.CUSTOMER_DEPOSITS.code, accountName: accounts.CUSTOMER_DEPOSITS.name, debit: paid, credit: 0, costCenterId }] : []),
-                ...(balance > 0 ? [{ accountCode: accounts.RECEIVABLES.code, accountName: accounts.RECEIVABLES.name, debit: balance, credit: 0, costCenterId }] : []),
-                ...(discount > 0 ? [{ accountCode: accounts.DISCOUNTS.code, accountName: accounts.DISCOUNTS.name, debit: discount, credit: 0, costCenterId }] : []),
-            ];
+        const warrantyPartsActualCost = warrantySettlement ? sumPartsActualCost(job.partsUsed) : 0;
+        const warrantyServiceInternalCost = warrantySettlement ? roundMoney(fin.warrantyServiceInternalCost) : 0;
+        if (!journalSnap.exists && gross > 0) {
+            const debitLines = warrantySettlement
+                ? [{ accountCode: accounts.WARRANTY_ALLOWANCES.code, accountName: accounts.WARRANTY_ALLOWANCES.name, debit: gross, credit: 0, costCenterId }]
+                : [
+                    ...(paid > 0 ? [{ accountCode: accounts.CUSTOMER_DEPOSITS.code, accountName: accounts.CUSTOMER_DEPOSITS.name, debit: paid, credit: 0, costCenterId }] : []),
+                    ...(balance > 0 ? [{ accountCode: accounts.RECEIVABLES.code, accountName: accounts.RECEIVABLES.name, debit: balance, credit: 0, costCenterId }] : []),
+                    ...(discount > 0 ? [{ accountCode: accounts.DISCOUNTS.code, accountName: accounts.DISCOUNTS.name, debit: discount, credit: 0, costCenterId }] : []),
+                ];
             const creditLines = [
                 ...(serviceGross > 0 ? [{ accountCode: accounts.SERVICE_REVENUE.code, accountName: accounts.SERVICE_REVENUE.name, debit: 0, credit: serviceGross, costCenterId }] : []),
                 ...(partsGross > 0 ? [{ accountCode: accounts.PARTS_REVENUE.code, accountName: accounts.PARTS_REVENUE.name, debit: 0, credit: partsGross, costCenterId }] : []),
             ];
             tx.create(journalRef, {
-                tenantId: actor.tenantId, branchId: scoped.branchId, costCenterId, source: 'repair_delivery', sourceId: jobId,
+                tenantId: actor.tenantId, branchId: scoped.branchId, costCenterId,
+                source: warrantySettlement ? 'repair_warranty_delivery' : 'repair_delivery', sourceId: jobId,
                 referenceNo: `DEL-${String(job.receiptNo || jobId)}`, status: 'posted', postedAt: at,
                 createdBy: actor.uid, createdByName: actor.displayName, totalDebit: gross, totalCredit: gross,
                 lines: [...debitLines, ...creditLines],
@@ -896,6 +914,10 @@ async function deliver(actor, data) {
             costCenterId,
             accountingAccounts: liveAccounting.accountingAccounts,
             settlementType: warrantySettlement ? WARRANTY_SETTLEMENT : (String(fin.settlementType || 'standard')),
+            warrantyPartsActualCost,
+            warrantyServiceInternalCost,
+            warrantyActualCost: roundMoney(warrantyPartsActualCost + warrantyServiceInternalCost),
+            settledAt: at,
             updatedAt: at,
         });
         tx.update(authRef, {
@@ -910,7 +932,7 @@ async function deliver(actor, data) {
             eventSchemaVersion: 1,
             statusBefore: String(job.status || ''), statusAfter: 'delivered',
             note: warrantySettlement
-                ? 'تسليم ضمان مصنّع — بدون إيراد (تكلفة القطع عند الصرف فقط)'
+                ? 'تسليم ضمان مصنّع — إعفاء كامل للعميل مع إثبات قيمة الضمان'
                 : 'تم التسليم بواسطة الاستقبال بعد التحقق المالي',
         });
         return { deliveryAuthorizationNo: authorizationNo, duplicated: false, warrantySettlement };

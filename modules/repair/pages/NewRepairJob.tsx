@@ -1,11 +1,11 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Trash2 } from 'lucide-react';
+import { Camera, ScanBarcode, Trash2 } from 'lucide-react';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { PageHeader } from '@/components/PageHeader';
 import { SearchableSelect } from '@/components/UI';
@@ -36,6 +36,7 @@ import {
 import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
+import { findRepairProductByBarcode } from '../lib/repairProductBarcode';
 
 type JobProductRow = {
   itemId: string;
@@ -83,7 +84,7 @@ export const NewRepairJob: React.FC = () => {
       .filter((p) => p.id)
       .map((product) => ({
         value: String(product.id),
-        label: `${product.name}${product.model ? ` - ${product.model}` : ''}${product.code ? ` (${product.code})` : ''}`.trim(),
+        label: `${product.name}${product.model ? ` - ${product.model}` : ''}${product.code ? ` (${product.code})` : ''}${product.barcode ? ` · باركود ${product.barcode}` : ''}`.trim(),
       })),
     [products],
   );
@@ -98,6 +99,9 @@ export const NewRepairJob: React.FC = () => {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [customerId, setCustomerId] = useState('');
   const [jobProducts, setJobProducts] = useState<JobProductRow[]>([createEmptyProductRow()]);
+  const [barcodeInputs, setBarcodeInputs] = useState<Record<string, string>>({});
+  const [scannerRowId, setScannerRowId] = useState<string | null>(null);
+  const productScannerRef = useRef<any>(null);
   const [openBranchJobs, setOpenBranchJobs] = useState<RepairJob[]>([]);
   const [selectedSidebarJob, setSelectedSidebarJob] = useState<RepairJob | null>(null);
   const [showTreasuryCloseModal, setShowTreasuryCloseModal] = useState(false);
@@ -109,6 +113,63 @@ export const NewRepairJob: React.FC = () => {
     customerPhone: '',
     customerAddress: '',
   });
+
+  const selectProductForRow = useCallback((rowId: string, productId: string) => {
+    const selected = products.find((product) => String(product.id) === String(productId));
+    const nextAccessories = accessoriesForProductCategory(
+      repairSettings.accessoriesCatalog,
+      selected?.categoryId,
+    );
+    const allowed = new Set(nextAccessories.map((accessory) => accessory.id));
+    setJobProducts((prev) => prev.map((item) => item.itemId === rowId
+      ? { ...item, productId, accessoryIds: item.accessoryIds.filter((id) => allowed.has(id)) }
+      : item));
+  }, [products, repairSettings.accessoriesCatalog]);
+
+  const applyBarcodeToRow = useCallback((rowId: string, rawBarcode: string) => {
+    const product = findRepairProductByBarcode(products, rawBarcode);
+    if (!product?.id) {
+      toast.error('الباركود غير مسجل على أي منتج.');
+      return false;
+    }
+    selectProductForRow(rowId, String(product.id));
+    setBarcodeInputs((current) => ({ ...current, [rowId]: String(product.barcode || rawBarcode).trim() }));
+    toast.success(`تم اختيار ${product.name}.`);
+    return true;
+  }, [products, selectProductForRow]);
+
+  useEffect(() => {
+    if (!scannerRowId) return;
+    let cancelled = false;
+    void import('html5-qrcode').then(async ({ Html5Qrcode }) => {
+      if (cancelled) return;
+      const scanner = new Html5Qrcode('repair-product-barcode-scanner');
+      productScannerRef.current = scanner;
+      await scanner.start(
+        { facingMode: 'environment' },
+        { fps: 10, qrbox: { width: 280, height: 150 } },
+        async (decodedText) => {
+          await scanner.stop().catch(() => undefined);
+          scanner.clear();
+          productScannerRef.current = null;
+          const targetRow = scannerRowId;
+          setScannerRowId(null);
+          applyBarcodeToRow(targetRow, decodedText);
+        },
+        () => undefined,
+      ).catch(() => {
+        productScannerRef.current = null;
+        setScannerRowId(null);
+        toast.error('تعذر تشغيل الكاميرا. يمكنك استخدام قارئ USB أو كتابة الباركود.');
+      });
+    });
+    return () => {
+      cancelled = true;
+      const scanner = productScannerRef.current;
+      productScannerRef.current = null;
+      if (scanner) void scanner.stop().catch(() => undefined).finally(() => scanner.clear());
+    };
+  }, [scannerRowId, applyBarcodeToRow]);
 
   useEffect(() => {
     void repairBranchService.list().then((rows) => {
@@ -299,7 +360,7 @@ export const NewRepairJob: React.FC = () => {
         userName: String(user?.displayName || user?.email || 'مستخدم'),
       }));
       if (!result.jobId) throw new Error('تعذر إنشاء الطلب.');
-      toast.success('تم تسجيل جهاز الصيانة. يمكنك طباعة كارت القطعة وإيصال العميل.');
+      toast.success('تم تسجيل طلب الصيانة. يمكنك طباعة كارت الطلب وإيصال العميل.');
       if (result.usedFallbackReceipt) {
         toast.info('تم استخدام رقم إيصال بديل تلقائيًا بسبب صلاحيات عداد الإيصالات.');
       }
@@ -401,20 +462,8 @@ export const NewRepairJob: React.FC = () => {
                               <SearchableSelect
                                 options={productOptions}
                                 value={row.productId}
-                                onChange={(value) => {
-                                  const nextAccessories = accessoriesForRow(value);
-                                  const allowed = new Set(nextAccessories.map((a) => a.id));
-                                  setJobProducts((prev) => prev.map((item) => (
-                                    item.itemId === row.itemId
-                                      ? {
-                                          ...item,
-                                          productId: value,
-                                          accessoryIds: item.accessoryIds.filter((id) => allowed.has(id)),
-                                        }
-                                      : item
-                                  )));
-                                }}
-                                placeholder="ابحث واختر المنتج من الأصناف المعرفة"
+                                onChange={(value) => selectProductForRow(row.itemId, value)}
+                                placeholder="ابحث بالاسم أو الكود أو الباركود"
                                 className={!row.productId ? 'border-rose-300' : ''}
                               />
                             </div>
@@ -432,6 +481,37 @@ export const NewRepairJob: React.FC = () => {
                                 }}
                               />
                             </div>
+                          </div>
+                          <div className="space-y-1.5 rounded-md border bg-muted/20 p-2">
+                            <Label className="text-xs">مسح باركود عبوة المنتج</Label>
+                            <div className="flex flex-col gap-2 sm:flex-row">
+                              <Input
+                                dir="ltr"
+                                autoComplete="off"
+                                value={barcodeInputs[row.itemId] || ''}
+                                onChange={(e) => setBarcodeInputs((current) => ({ ...current, [row.itemId]: e.target.value }))}
+                                onKeyDown={(e) => {
+                                  if (e.key !== 'Enter') return;
+                                  e.preventDefault();
+                                  applyBarcodeToRow(row.itemId, barcodeInputs[row.itemId] || '');
+                                }}
+                                placeholder="استخدم قارئ USB ثم Enter أو اكتب الباركود"
+                              />
+                              <Button type="button" variant="outline" onClick={() => applyBarcodeToRow(row.itemId, barcodeInputs[row.itemId] || '')}>
+                                <ScanBarcode className="ms-1 size-4" />
+                                اختيار
+                              </Button>
+                              <Button type="button" variant="outline" onClick={() => setScannerRowId((current) => current === row.itemId ? null : row.itemId)}>
+                                <Camera className="ms-1 size-4" />
+                                كاميرا الموبايل
+                              </Button>
+                            </div>
+                            {scannerRowId === row.itemId ? (
+                              <div className="rounded-md bg-black p-2">
+                                <div id="repair-product-barcode-scanner" className="min-h-56" />
+                              </div>
+                            ) : null}
+                            <p className="text-xs text-muted-foreground">قارئ USB يعمل مباشرة كلوحة مفاتيح؛ وجّه المؤشر للحقل ثم امسح الباركود.</p>
                           </div>
                           <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                             <Input

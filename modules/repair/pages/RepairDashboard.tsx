@@ -212,6 +212,21 @@ const RepairOperationalDashboard: React.FC = () => {
             <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
               <Button variant="outline" size="sm">عرض الطلبات</Button>
             </Link>
+            {(can('repair.customerRequests.view') || can('repair.customerRequests.assign') || can('repair.customerRequests.receive')) && (
+              <Link to={withTenantPath(tenantSlug, '/repair/customer-requests')}>
+                <Button variant="outline" size="sm">طلبات العملاء</Button>
+              </Link>
+            )}
+            {(can('repair.custody.view') || can('repair.custody.handover')) && (
+              <Link to={withTenantPath(tenantSlug, '/repair/custody-stock')}>
+                <Button variant="outline" size="sm">العهدة</Button>
+              </Link>
+            )}
+            {(can('repair.replacements.view') || can('repair.replacements.approve') || can('repair.replacements.deliver')) && (
+              <Link to={withTenantPath(tenantSlug, '/repair/replacements')}>
+                <Button variant="outline" size="sm">الاستبدال</Button>
+              </Link>
+            )}
             <Link to={withTenantPath(tenantSlug, '/repair/parts')}>
               <Button variant="outline" size="sm">قطع الغيار</Button>
             </Link>

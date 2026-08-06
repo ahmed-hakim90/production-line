@@ -12,6 +12,8 @@ export const WAREHOUSE_ROLE_LABELS: Record<WarehouseRole, string> = {
   waste: 'هالك',
   spare_parts_central: 'قطع غيار (مركزي)',
   maintenance_center: 'مخزن مركز صيانة',
+  repair_customer_custody: 'عهدة أجهزة العملاء',
+  repair_unrepairable: 'غير قابل للإصلاح',
 };
 
 export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {
@@ -31,6 +33,8 @@ export const SOURCE_MODULE_LABELS: Record<StockSourceModule, string> = {
   spare_parts_replenishment: 'تموين قطع غيار للمراكز',
   repair_spare_issue: 'صرف قطع غيار صيانة',
   repair_spare_return: 'مرتجع قطع غيار صيانة',
+  repair_customer_custody: 'عهدة أجهزة العملاء',
+  repair_unrepairable: 'غير قابل للإصلاح',
   legacy: 'قديم',
 };
 

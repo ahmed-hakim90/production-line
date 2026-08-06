@@ -85,6 +85,8 @@ export const repairBranchService = {
       createdAt: at,
       updatedAt: at,
     });
+    const { repairCustomerOperationsService } = await import('./repairCustomerOperationsService');
+    await repairCustomerOperationsService.ensureWarehouses(ref.id);
     return ref.id;
   },
 

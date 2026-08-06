@@ -168,10 +168,11 @@ assert.equal(
 }
 
 {
+  // Materials master only — branch catalog partSalePrice is ignored.
   assert.equal(resolveRepairSalePrice({ materialSalePrice: 200, partSalePrice: 90 }), 200);
-  assert.equal(resolveRepairSalePrice({ materialSalePrice: 0, partSalePrice: 90 }), 90);
-  assert.equal(resolveRepairSalePrice({ materialSalePrice: null, partSalePrice: 40 }), 40);
-  assert.equal(resolveRepairSalePrice({ materialSalePrice: -1, partSalePrice: 40 }), 40);
+  assert.equal(resolveRepairSalePrice({ materialSalePrice: 0, partSalePrice: 90 }), 0);
+  assert.equal(resolveRepairSalePrice({ materialSalePrice: null, partSalePrice: 40 }), 0);
+  assert.equal(resolveRepairSalePrice({ materialSalePrice: -1, partSalePrice: 40 }), 0);
   assert.equal(resolveRepairSalePrice({}), 0);
   // Trader prefers traderSalePrice when set; otherwise falls back to consumer.
   assert.equal(
@@ -207,7 +208,7 @@ assert.equal(
       materialTraderSalePrice: 0,
       partSalePrice: 90,
     }),
-    90,
+    0,
   );
 }
 

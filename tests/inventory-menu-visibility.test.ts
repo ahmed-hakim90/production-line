@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import {
+  isFactoryProductionMenuVisibleForWarehouseScope,
   isInventoryMenuItemVisibleForWarehouseScope,
   isRepairCenterPartsMenuVisible,
   isRepairPartsReplenishmentMenuVisible,
@@ -268,6 +269,49 @@ assert.equal(
     warehouseScoped: true,
     userRepairBranchIds: [],
     canViewAllBranches: false,
+  }),
+  true,
+);
+
+assert.equal(
+  isFactoryProductionMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: true,
+  }),
+  false,
+);
+assert.equal(
+  isFactoryProductionMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: ['maintenance_center'],
+    warehouseScoped: true,
+  }),
+  false,
+);
+assert.equal(
+  isFactoryProductionMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: ['finished_staging'],
+    warehouseScoped: true,
+  }),
+  true,
+);
+assert.equal(
+  isFactoryProductionMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: ['spare_parts_central', 'production_wip'],
+    warehouseScoped: true,
+  }),
+  true,
+);
+assert.equal(
+  isFactoryProductionMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: ['spare_parts_central'],
+    warehouseScoped: false,
+  }),
+  true,
+);
+assert.equal(
+  isFactoryProductionMenuVisibleForWarehouseScope({
+    accessibleWarehouseRoles: [],
+    warehouseScoped: true,
   }),
   true,
 );

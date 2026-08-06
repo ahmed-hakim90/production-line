@@ -18,6 +18,7 @@ export interface ParsedProductRow {
   providedFields: {
     name: boolean;
     code: boolean;
+    barcode: boolean;
     model: boolean;
     chineseUnitCost: boolean;
     innerBoxCost: boolean;
@@ -28,6 +29,7 @@ export interface ParsedProductRow {
   };
   name: string;
   code: string;
+  barcode: string;
   model: string;
   chineseUnitCost: number;
   innerBoxCost: number;
@@ -86,6 +88,10 @@ const HEADER_MAP: Record<string, string> = {
   'الكود': 'code',
   'كود': 'code',
   'كود المنتج': 'code',
+  'الباركود': 'barcode',
+  'باركود': 'barcode',
+  'باركود المنتج': 'barcode',
+  'باركود العبوة': 'barcode',
   'الكود الحالي': 'currentCode',
   'كود حالي': 'currentCode',
   'الكود الجديد': 'newCode',
@@ -161,6 +167,7 @@ function buildLookup(products: FirestoreProduct[]): ProductLookup {
 function describeChanges(existing: FirestoreProduct, next: Omit<FirestoreProduct, 'id'>): string[] {
   const changes: string[] = [];
   if (existing.code !== next.code) changes.push(`الكود: ${existing.code} ← ${next.code}`);
+  if ((existing.barcode || '') !== (next.barcode || '')) changes.push(`الباركود`);
   if (existing.name !== next.name) changes.push(`الاسم: ${existing.name} ← ${next.name}`);
   if ((existing.model || '') !== next.model) changes.push(`الفئة`);
   if ((existing.chineseUnitCost || 0) !== next.chineseUnitCost) changes.push(`تكلفة صينية`);
@@ -285,6 +292,7 @@ export function parseProductsExcel(
         const providedFields = {
           name: hasField('name'),
           code: hasField('code') || hasField('newCode'),
+          barcode: hasField('barcode'),
           model: hasField('model'),
           chineseUnitCost: hasField('chineseUnitCost'),
           innerBoxCost: hasField('innerBoxCost'),
@@ -296,6 +304,12 @@ export function parseProductsExcel(
 
         const lookup = buildLookup(existingProducts);
         const seenTargetCodes = new Set<string>();
+        const seenBarcodes = new Set<string>();
+        const existingByBarcode = new Map(
+          existingProducts
+            .filter((product) => String(product.barcode || '').trim())
+            .map((product) => [String(product.barcode).trim().toUpperCase(), product] as const),
+        );
 
         const rows: ParsedProductRow[] = jsonRows.map((row, idx) => {
           const errors: string[] = [];
@@ -330,6 +344,7 @@ export function parseProductsExcel(
           if (targetCode) seenTargetCodes.add(targetCode.toLowerCase());
 
           const model = String(getValue('model') ?? '').trim();
+          const barcode = String(getValue('barcode') ?? '').trim();
           const chineseUnitCost = Number(getValue('chineseUnitCost')) || 0;
           const innerBoxCost = Number(getValue('innerBoxCost')) || 0;
           const outerCartonCost = Number(getValue('outerCartonCost')) || 0;
@@ -358,6 +373,17 @@ export function parseProductsExcel(
             }
           }
 
+          const normalizedBarcode = barcode.toUpperCase();
+          if (action === 'create' && !barcode) errors.push('باركود عبوة المنتج مفقود');
+          if (normalizedBarcode) {
+            if (seenBarcodes.has(normalizedBarcode)) errors.push(`الباركود "${barcode}" مكرر في الملف`);
+            seenBarcodes.add(normalizedBarcode);
+            const barcodeOwner = existingByBarcode.get(normalizedBarcode);
+            if (barcodeOwner && barcodeOwner.id !== matchedId) {
+              errors.push(`الباركود "${barcode}" مستخدم بواسطة منتج آخر`);
+            }
+          }
+
           const parsed: ParsedProductRow = {
             rowIndex: idx + 2,
             action,
@@ -367,6 +393,7 @@ export function parseProductsExcel(
             providedFields,
             name,
             code: targetCode,
+            barcode,
             model,
             chineseUnitCost,
             innerBoxCost,
@@ -485,6 +512,7 @@ export function toProductData(row: ParsedProductRow): Omit<FirestoreProduct, 'id
   const fallback: Omit<FirestoreProduct, 'id'> = {
     name: '',
     code: '',
+    barcode: '',
     model: '',
     openingBalance: 0,
     chineseUnitCost: 0,
@@ -497,6 +525,7 @@ export function toProductData(row: ParsedProductRow): Omit<FirestoreProduct, 'id
   return {
     name: row.providedFields.name ? row.name : base.name,
     code: row.providedFields.code ? row.code : base.code,
+    barcode: row.providedFields.barcode ? row.barcode : base.barcode,
     model: row.providedFields.model ? row.model : base.model,
     openingBalance: 0,
     chineseUnitCost: row.providedFields.chineseUnitCost ? row.chineseUnitCost : base.chineseUnitCost,
@@ -518,6 +547,7 @@ export function toProductDataWithExisting(
   const base: Omit<FirestoreProduct, 'id'> = {
     name: existing.name || '',
     code: existing.code || '',
+    barcode: existing.barcode || '',
     model: existing.model || '',
     openingBalance: Number(existing.openingBalance || 0),
     chineseUnitCost: Number(existing.chineseUnitCost || 0),
@@ -533,6 +563,7 @@ export function toProductDataWithExisting(
   return {
     name: row.providedFields.name ? row.name : base.name,
     code: row.providedFields.code ? row.code : base.code,
+    barcode: row.providedFields.barcode ? row.barcode : base.barcode,
     model: row.providedFields.model ? row.model : base.model,
     openingBalance: base.openingBalance,
     chineseUnitCost: row.providedFields.chineseUnitCost ? row.chineseUnitCost : base.chineseUnitCost,

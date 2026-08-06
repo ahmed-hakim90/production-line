@@ -164,6 +164,15 @@ export const TENANT_SCOPED_COLLECTIONS: readonly string[] = [
   'accounting_sequences',
   'repair_financial_migration_reviews',
   'repair_service_catalog',
+  'repair_parts_pricing_audit',
+  'customer_service_requests',
+  'customer_service_events',
+  'repair_custody_records',
+  'repair_replacement_requests',
+  'customer_portal_credentials',
+  'customer_portal_sessions',
+  'customer_portal_login_limits',
+  'product_barcode_claims',
 
   // Shared registries carrying tenantId
   'entity_code_counters',

@@ -348,6 +348,7 @@ export const exportAllProducts = (
     const bal = d.displayBalances;
     const base: Record<string, any> = {
       'الكود': d.raw.code,
+      'الباركود': d.raw.barcode || '',
       'اسم المنتج': d.raw.name,
       'الفئة': d.raw.model || '—',
       'تارجت المتوقع تقارير (ث)':

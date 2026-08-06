@@ -47,6 +47,14 @@ const MATERIAL_ENTITY_TYPE = 'material';
 const stripUndefined = <T extends Record<string, unknown>>(obj: T) =>
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined));
 
+/** Sale prices must go through updateRepairPartsPricing (audit + permission). */
+const stripClientSalePriceFields = <T extends Record<string, unknown>>(obj: T): T => {
+  const next = { ...obj };
+  delete next.defaultSalePrice;
+  delete next.traderSalePrice;
+  return next;
+};
+
 function normalizeMaterialCode(value: unknown): string {
   return String(value || '').trim().toUpperCase();
 }
@@ -255,7 +263,7 @@ export const materialService = {
         );
         tx.set(
           materialRef,
-          stripUndefined({
+          stripClientSalePriceFields(stripUndefined({
             ...payload,
             ...categoryFields,
             code: allocatedCode,
@@ -267,7 +275,7 @@ export const materialService = {
             linkedCostCenterIds: payload.linkedCostCenterIds ?? [],
             tenantId,
             createdAt: new Date().toISOString(),
-          }),
+          })),
         );
       });
       return materialRef.id;
@@ -295,7 +303,7 @@ export const materialService = {
         });
         tx.set(
           materialRef,
-          stripUndefined({
+          stripClientSalePriceFields(stripUndefined({
             ...payload,
             ...categoryFields,
             code,
@@ -307,7 +315,7 @@ export const materialService = {
             linkedCostCenterIds: payload.linkedCostCenterIds ?? [],
             tenantId,
             createdAt: new Date().toISOString(),
-          }),
+          })),
         );
       });
     } catch (error) {
@@ -360,9 +368,10 @@ export const materialService = {
 
     const { id: _id, tenantId: _t, createdAt: _c, ...rest } = { ...payload, ...extra };
     const materialRef = doc(db, MATERIALS_COLLECTION, id);
+    const sanitizedRest = stripClientSalePriceFields(rest as Record<string, unknown>);
 
     if (payload.code === undefined || nextCode === prevCode) {
-      await updateDoc(materialRef, stripUndefined(rest as Record<string, unknown>));
+      await updateDoc(materialRef, stripUndefined(sanitizedRest));
       // Backfill claim for existing rows that predate the lock collection.
       if (nextCode) {
         const claimRef = materialClaimRef(tenantId, nextCode);
@@ -418,7 +427,7 @@ export const materialService = {
         }
       }
 
-      tx.update(materialRef, stripUndefined(rest as Record<string, unknown>));
+      tx.update(materialRef, stripUndefined(sanitizedRest));
     });
   },
 

@@ -148,28 +148,6 @@ export const repairSalesInvoiceService = {
       paymentMethod: input.paymentMethod || 'cash',
     });
 
-    if (input.customerId) {
-      try {
-        const { customerActivityService } = await import(
-          '@/modules/customers/services/customerActivityService'
-        );
-        await customerActivityService.record({
-          customerId: input.customerId,
-          module: 'repair',
-          action: 'repair.invoice_created',
-          title: 'فاتورة بيع قطع غيار',
-          summary: `فاتورة ${result.invoiceNo} · ${result.total}`,
-          referenceType: 'repair_sales_invoice',
-          referenceId: result.id,
-          referenceLabel: result.invoiceNo,
-          actorUid: input.createdBy,
-          actorName: input.createdByName,
-        });
-      } catch (err) {
-        console.warn('repairSalesInvoiceService.create: customer activity', err);
-      }
-    }
-
     return result.id;
   },
 
@@ -235,26 +213,5 @@ export const repairSalesInvoiceService = {
       cancelReason: input.cancelReason || '',
     });
 
-    if (invoice.customerId) {
-      try {
-        const { customerActivityService } = await import(
-          '@/modules/customers/services/customerActivityService'
-        );
-        await customerActivityService.record({
-          customerId: invoice.customerId,
-          module: 'repair',
-          action: 'repair.invoice_cancelled',
-          title: 'إلغاء فاتورة بيع قطع',
-          summary: input.cancelReason || invoice.invoiceNo || '',
-          referenceType: 'repair_sales_invoice',
-          referenceId: invoice.id,
-          referenceLabel: invoice.invoiceNo || invoice.id,
-          actorUid: input.cancelledBy,
-          actorName: input.cancelledByName,
-        });
-      } catch (err) {
-        console.warn('repairSalesInvoiceService.cancelInvoice: customer activity', err);
-      }
-    }
   },
 };

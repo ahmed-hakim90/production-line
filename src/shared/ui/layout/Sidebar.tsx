@@ -24,6 +24,7 @@ import { warehouseService } from '@/modules/inventory/services/warehouseService'
 import { WAREHOUSE_ROLE_LABELS } from '@/modules/inventory/lib/stockLabels';
 import { useMaterialsWarehouseScope } from '@/modules/inventory/hooks/useMaterialsWarehouseScope';
 import {
+  isFactoryProductionMenuVisibleForWarehouseScope,
   isInventoryMenuItemVisibleForWarehouseScope,
   isRepairCenterPartsMenuVisible,
   isRepairPartsReplenishmentMenuVisible,
@@ -289,6 +290,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                 menuKey: i.key,
                 scoped: warehouseScoped,
                 accessibleWarehouseRoles,
+              })
+            )
+            && (
+              i.key !== 'packaging-control'
+              || isFactoryProductionMenuVisibleForWarehouseScope({
+                accessibleWarehouseRoles,
+                warehouseScoped,
               })
             )
             && (

@@ -91,7 +91,6 @@ export const sparePartsService = {
       Pick<
         RepairSparePart,
         | 'purchaseUnitCost'
-        | 'defaultSalePrice'
         | 'warehouseDiscountPercent'
         | 'minStock'
         | 'unit'
@@ -106,7 +105,7 @@ export const sparePartsService = {
     if (!isConfigured || !partId) return;
     const data: Record<string, unknown> = {};
     if (patch.purchaseUnitCost !== undefined) data.purchaseUnitCost = Number(patch.purchaseUnitCost || 0);
-    if (patch.defaultSalePrice !== undefined) data.defaultSalePrice = Number(patch.defaultSalePrice || 0);
+    // defaultSalePrice is not writable — materials master is the only sale-price source.
     if (patch.warehouseDiscountPercent !== undefined) {
       data.warehouseDiscountPercent = Math.min(100, Math.max(0, Number(patch.warehouseDiscountPercent || 0)));
     }
@@ -187,7 +186,7 @@ export const sparePartsService = {
     // Legacy field kept for older clients / backfill
     if (input.rawMaterialId) partDoc.rawMaterialId = input.rawMaterialId;
     if (input.purchaseUnitCost !== undefined) partDoc.purchaseUnitCost = Number(input.purchaseUnitCost || 0);
-    if (input.defaultSalePrice !== undefined) partDoc.defaultSalePrice = Number(input.defaultSalePrice || 0);
+    // Do not persist catalog sale prices — resolve from materials at read time.
     if (input.warehouseDiscountPercent !== undefined) {
       partDoc.warehouseDiscountPercent = Math.min(100, Math.max(0, Number(input.warehouseDiscountPercent || 0)));
     }
@@ -448,10 +447,10 @@ export const sparePartsService = {
   },
 
   /**
-   * حجز كمية على الطلب — الرصيد الفيزيائي ما يتغيرش، بس «المتاح للحجز الجديد» بينقص.
-   * لو المخزون مش كفاية بعد طرح الحجوزات النشطة، منرفض.
+   * @deprecated Legacy soft-hold on repair_spare_parts_stock.
+   * Inventory reservations use stock_items.reservedQty via Cloud Functions.
    */
-  async reserveForJob(input: {
+  async reserveForJob(_input: {
     branchId: string;
     jobId: string;
     partId: string;
@@ -461,60 +460,9 @@ export const sparePartsService = {
     warehouseName?: string;
     createdBy: string;
   }): Promise<string | null> {
-    if (!isConfigured || !input.jobId || !input.partId) return null;
-    const tenantId = getCurrentTenantId();
-    const qty = Math.max(0, Math.round(Number(input.quantity || 0)));
-    if (qty <= 0) throw new Error('الكمية غير صالحة.');
-    const at = nowIso();
-    const wh = String(input.warehouseId || '').trim();
-    const stockRef = doc(
-      db,
-      REPAIR_SPARE_PARTS_STOCK_COLLECTION,
-      stockId(input.branchId, input.partId, wh || undefined),
+    throw new Error(
+      'حجز قطع الصيانة يتم عبر مخزون الشركة (stock_items.reservedQty) وليس دفتر الفرع القديم.',
     );
-    const stockRow = await getDoc(stockRef);
-    const physical = stockRow.exists() ? Number(stockRow.data().quantity || 0) : 0;
-    const reservedByOthers = await this.sumActiveReservedForPart(input.branchId, input.partId, wh || undefined);
-    const available = physical - reservedByOthers;
-    if (qty > available) {
-      throw new Error('الكمية المتاحة للحجز غير كافية (بعد خصم الحجوزات النشطة).');
-    }
-    await addDoc(collection(db, REPAIR_PART_RESERVATIONS_COLLECTION), {
-      tenantId,
-      branchId: input.branchId,
-      jobId: input.jobId,
-      partId: input.partId,
-      partName: input.partName,
-      quantity: qty,
-      warehouseId: wh,
-      warehouseName: String(input.warehouseName || ''),
-      status: 'active',
-      createdAt: at,
-      updatedAt: at,
-      createdBy: input.createdBy,
-    });
-
-    const jobSnap = await getDoc(doc(db, REPAIR_JOBS_COLLECTION, input.jobId));
-    if (jobSnap.exists()) {
-      const j = jobSnap.data() as Record<string, unknown>;
-      await appendRepairServiceEvent(input.jobId, {
-        tenantId: String(j.tenantId || tenantId),
-        branchId: String(j.branchId || input.branchId),
-        at,
-        actorUid: input.createdBy,
-        actorName: input.createdBy,
-        action: 'parts_reserved',
-        domainEvent: 'part.reserved',
-        eventSchemaVersion: REPAIR_DOMAIN_EVENT_VERSION,
-        payload: {
-          partId: input.partId,
-          partName: input.partName,
-          quantity: qty,
-          warehouseId: wh || null,
-        },
-      });
-    }
-    return 'ok';
   },
 
   async releaseAllActiveForJob(jobId: string, updatedBy: string): Promise<void> {

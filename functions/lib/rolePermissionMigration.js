@@ -80,6 +80,14 @@ const BUILTIN_ROLE_PERMISSION_GRANTS = {
         'repairSpareIssues.create',
         'repairSpareIssues.approve',
         'repairSpareIssues.issue',
+        'repair.customerRequests.view',
+        'repair.customerRequests.receive',
+        'repair.custody.view',
+        'repair.custody.record',
+        'repair.custody.handover',
+        'repair.replacements.view',
+        'repair.replacements.create',
+        'repair.replacements.deliver',
     ],
     repair_reception: [
         'dashboard.view',
@@ -112,6 +120,8 @@ const BUILTIN_ROLE_PERMISSION_GRANTS = {
         'dashboard.view',
         'repair.jobs.technician',
         'repair.parts.request',
+        'repair.custody.view',
+        'repair.custody.record',
     ],
 };
 const normalizeRoleName = (value) => String(value || '')

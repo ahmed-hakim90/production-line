@@ -1,6 +1,7 @@
 import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import { assertActorWarehouseInvolved, resolveBoundInventoryWarehouseId, } from './inventoryWarehouseScope.js';
+import { releaseStockInTx, reserveStockInTx, stockAvailableQty, stockReservedQty, } from './stockReservation.js';
 const db = getDb();
 const USERS = 'users';
 const ROLES = 'roles';
@@ -15,6 +16,21 @@ const MAX_LINES = 40;
 const SOURCE = 'spare_parts_replenishment';
 const CENTRAL_ROLE = 'spare_parts_central';
 const CENTER_ROLE = 'maintenance_center';
+const releaseRequestReservations = async (tenantId, fromWarehouseId, reservedLines) => {
+    const lines = reservedLines || [];
+    if (lines.length === 0)
+        return;
+    await db.runTransaction(async (tx) => {
+        for (const line of lines) {
+            const qty = toNumber(line.reservedQty);
+            if (!(qty > 0))
+                continue;
+            const ref = db.collection(STOCK_ITEMS).doc(balanceDocId(fromWarehouseId, line.itemType || 'material', line.itemId));
+            const snap = await tx.get(ref);
+            releaseStockInTx(tx, ref, { tenantId, qty, label: 'رصيد المخزن المركزي' }, snap.exists ? snap.data() : undefined);
+        }
+    });
+};
 const toNumber = (value) => {
     const n = Number(value);
     return Number.isFinite(n) ? n : 0;
@@ -275,11 +291,50 @@ export const approveSparePartsReplenishmentHandler = async (request) => {
     }
     assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
     const now = toIsoNow();
-    await ref.update({
-        status: 'approved',
-        approvedAt: now,
-        approvedBy: actor.displayName,
-        approvedByUserId: actor.uid,
+    const reservedLines = [];
+    await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        if (!snap.exists)
+            throw new HttpsError('not-found', 'الطلب غير موجود.');
+        const current = snap.data();
+        if (current.status !== 'submitted') {
+            throw new HttpsError('failed-precondition', 'لا يمكن اعتماد الطلب في حالته الحالية.');
+        }
+        if (String(current.tenantId || '').trim() !== actor.tenantId) {
+            throw new HttpsError('permission-denied', 'الطلب خارج شركتك.');
+        }
+        if (current.stockReserved) {
+            throw new HttpsError('failed-precondition', 'تم حجز مخزون هذا الطلب مسبقاً.');
+        }
+        for (const line of current.lines || []) {
+            const qty = toNumber(line.requestedQty);
+            if (!(qty > 0))
+                continue;
+            const balRef = db.collection(STOCK_ITEMS).doc(balanceDocId(current.fromWarehouseId, line.itemType, line.itemId));
+            const balSnap = await tx.get(balRef);
+            const bal = balSnap.exists ? balSnap.data() : undefined;
+            reserveStockInTx(tx, balRef, {
+                tenantId: actor.tenantId,
+                qty,
+                warehouseId: current.fromWarehouseId,
+                itemType: line.itemType,
+                itemId: line.itemId,
+                label: `الصنف ${line.itemName}`,
+            }, bal);
+            reservedLines.push({
+                itemId: line.itemId,
+                itemType: 'material',
+                reservedQty: qty,
+            });
+        }
+        tx.update(ref, {
+            status: 'approved',
+            approvedAt: now,
+            approvedBy: actor.displayName,
+            approvedByUserId: actor.uid,
+            stockReserved: true,
+            reservedLines,
+        });
     });
     await writeActivity(actor, 'spare_parts_replenishment.approve', requestId, {
         referenceNo: data.referenceNo,
@@ -428,10 +483,20 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
                     && String(targetBalSnap.data()?.tenantId || '') !== actor.tenantId)) {
                 throw new HttpsError('permission-denied', 'رصيد المخزن خارج شركتك.');
             }
-            const sourceQty = sourceBalSnap.exists ? toNumber(sourceBalSnap.data()?.quantity) : 0;
+            const sourceBal = sourceBalSnap.exists
+                ? sourceBalSnap.data()
+                : undefined;
+            const sourceQty = toNumber(sourceBal?.quantity);
             const targetQty = targetBalSnap.exists ? toNumber(targetBalSnap.data()?.quantity) : 0;
             if (sourceQty < receivedQty) {
                 throw new HttpsError('failed-precondition', `الرصيد غير كافٍ في مخزن قطع الغيار للصنف ${line.itemName}.`);
+            }
+            const reservedForLine = (current.reservedLines || []).find((row) => String(row.itemId) === String(line.itemId));
+            // Drop this request's entire hold on receive (covers short receipts too).
+            const releaseReserveQty = Math.max(0, toNumber(reservedForLine?.reservedQty));
+            const availableAfterOwnHold = stockAvailableQty(sourceBal) + releaseReserveQty;
+            if (availableAfterOwnHold + 1e-9 < receivedQty) {
+                throw new HttpsError('failed-precondition', `الرصيد المتاح غير كافٍ في مخزن قطع الغيار للصنف ${line.itemName}.`);
             }
             const outTxRef = db.collection(STOCK_TX).doc(`spr_${requestId}_${line.itemId}_out`);
             const inTxRef = db.collection(STOCK_TX).doc(`spr_${requestId}_${line.itemId}_in`);
@@ -489,8 +554,9 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
                 itemName: line.itemName,
                 itemCode: line.itemCode,
                 unit: line.unit,
-                minStock: toNumber(sourceBalSnap.data()?.minStock),
+                minStock: toNumber(sourceBal?.minStock),
                 quantity: sourceQty - receivedQty,
+                reservedQty: Math.max(0, stockReservedQty(sourceBal) - releaseReserveQty),
                 updatedAt: now,
                 tenantId: actor.tenantId,
             }, { merge: true });
@@ -521,6 +587,8 @@ export const receiveSparePartsReplenishmentHandler = async (request) => {
             receivedAt: now,
             receivedBy: actor.displayName,
             receivedByUserId: actor.uid,
+            stockReserved: false,
+            reservedLines: [],
         });
     });
     await writeActivity(actor, 'spare_parts_replenishment.receive', requestId, {
@@ -656,6 +724,9 @@ export const rejectSparePartsReplenishmentHandler = async (request) => {
         throw new HttpsError('failed-precondition', 'لا يمكن رفض الطلب في حالته الحالية.');
     }
     assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
+    if (data.stockReserved) {
+        await releaseRequestReservations(actor.tenantId, data.fromWarehouseId, data.reservedLines);
+    }
     const now = toIsoNow();
     await ref.update(stripUndefined({
         status: 'rejected',
@@ -663,6 +734,8 @@ export const rejectSparePartsReplenishmentHandler = async (request) => {
         rejectedBy: actor.displayName,
         rejectedByUserId: actor.uid,
         rejectionReason: String(payload.reason || '').trim() || undefined,
+        stockReserved: false,
+        reservedLines: [],
     }));
     await writeActivity(actor, 'spare_parts_replenishment.reject', requestId, {
         referenceNo: data.referenceNo,
@@ -687,12 +760,17 @@ export const cancelSparePartsReplenishmentHandler = async (request) => {
         throw new HttpsError('failed-precondition', 'لا يمكن إلغاء الطلب في حالته الحالية.');
     }
     assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
+    if (data.stockReserved) {
+        await releaseRequestReservations(actor.tenantId, data.fromWarehouseId, data.reservedLines);
+    }
     const now = toIsoNow();
     await ref.update({
         status: 'cancelled',
         cancelledAt: now,
         cancelledBy: actor.displayName,
         cancelledByUserId: actor.uid,
+        stockReserved: false,
+        reservedLines: [],
     });
     await writeActivity(actor, 'spare_parts_replenishment.cancel', requestId, {
         referenceNo: data.referenceNo,

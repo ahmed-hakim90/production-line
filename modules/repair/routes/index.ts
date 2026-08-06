@@ -9,6 +9,7 @@ const RepairCallCenter = lazyNamed(() => import('../pages/RepairCallCenter'), 'R
 const NewRepairJob = lazyNamed(() => import('../pages/NewRepairJob'), 'NewRepairJob');
 const RepairJobDetail = lazyNamed(() => import('../pages/RepairJobDetail'), 'RepairJobDetail');
 const RepairJobWorkspace = lazyNamed(() => import('../pages/RepairJobWorkspace'), 'RepairJobWorkspace');
+const RepairJobClaim = lazyNamed(() => import('../pages/RepairJobClaim'), 'RepairJobClaim');
 const SparePartsInventory = lazyNamed(() => import('../pages/SparePartsInventory'), 'SparePartsInventory');
 const RepairPartsPricing = lazyNamed(() => import('../pages/RepairPartsPricing'), 'RepairPartsPricing');
 const RepairPartsReplenishment = lazyNamed(() => import('../pages/RepairPartsReplenishment'), 'RepairPartsReplenishment');
@@ -22,6 +23,9 @@ const RepairSalesInvoice = lazyNamed(() => import('../pages/RepairSalesInvoice')
 const RepairPayments = lazyNamed(() => import('../pages/RepairPayments'), 'RepairPayments');
 const RepairTechnicianHome = lazyNamed(() => import('../pages/RepairTechnicianHome'), 'RepairTechnicianHome');
 const RepairSettings = lazyNamed(() => import('../pages/RepairSettings'), 'RepairSettings');
+const RepairCustomerRequests = lazyNamed(() => import('../pages/RepairCustomerRequests'), 'RepairCustomerRequests');
+const RepairCustodyStock = lazyNamed(() => import('../pages/RepairCustodyStock'), 'RepairCustodyStock');
+const RepairReplacements = lazyNamed(() => import('../pages/RepairReplacements'), 'RepairReplacements');
 const WarehouseWorkspace = lazyNamed(
   () => import('../../inventory/pages/WarehouseWorkspace'),
   'WarehouseWorkspace',
@@ -52,16 +56,38 @@ export const REPAIR_ROUTES: AppRouteDef[] = [
     component: RepairMyJobs,
   },
   { path: '/repair/call-center', permission: 'repair.view', component: RepairCallCenter },
+  {
+    path: '/repair/customer-requests',
+    permissionsAny: ['repair.customerRequests.view', 'repair.customerRequests.assign', 'repair.customerRequests.receive'],
+    component: RepairCustomerRequests,
+  },
+  {
+    path: '/repair/custody-stock',
+    permissionsAny: ['repair.custody.view', 'repair.custody.record', 'repair.custody.handover'],
+    component: RepairCustodyStock,
+  },
+  {
+    path: '/repair/unrepairable-stock',
+    permissionsAny: ['repair.custody.view', 'repair.custody.record', 'repair.custody.handover'],
+    component: RepairCustodyStock,
+  },
+  {
+    path: '/repair/replacements',
+    permissionsAny: ['repair.replacements.view', 'repair.replacements.create', 'repair.replacements.approve', 'repair.replacements.deliver'],
+    component: RepairReplacements,
+  },
   { path: '/repair/payments', permission: 'repair.payments.view', component: RepairPayments },
   { path: '/repair/jobs/new', permission: 'repair.jobs.create', component: NewRepairJob, skeleton: 'form' },
   { path: '/repair/jobs/:jobId', permission: 'repair.view', component: RepairJobDetail },
+  { path: '/repair/jobs/:jobId/claim', permission: 'repair.jobs.technician', component: RepairJobClaim },
   {
     path: '/repair/jobs/:jobId/workspace',
     permissionsAny: ['repair.jobs.technician', 'repair.view'],
     component: RepairJobWorkspace,
   },
   { path: '/repair/parts', permission: 'repair.parts.view', component: SparePartsInventory },
-  { path: '/repair/parts-pricing', permission: 'repair.pricing.manage', component: RepairPartsPricing },
+  // Legacy deep link → redirects to manufacturing materials master.
+  { path: '/repair/parts-pricing', permission: 'materials.view', permissionsAny: ['materials.view', 'repair.pricing.manage'], component: RepairPartsPricing },
   {
     path: '/repair/warehouses/:warehouseId',
     permission: 'repair.parts.view',
@@ -87,5 +113,5 @@ export const REPAIR_ROUTES: AppRouteDef[] = [
   { path: '/repair/settings', permission: 'repair.settings.manage', component: RepairSettings },
   // Keep as report deep-link from treasury page; intentionally hidden from sidebar menu.
   { path: '/repair/treasury-report', permission: 'repair.treasury.view', component: RepairTreasuryMonthlyReport },
-  { path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create', component: RepairSalesInvoice },
+  { path: '/repair/sales-invoice', permissionsAny: ['repair.salesInvoice.create', 'repair.salesInvoice.view'], component: RepairSalesInvoice },
 ];

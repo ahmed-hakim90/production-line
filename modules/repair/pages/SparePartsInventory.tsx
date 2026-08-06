@@ -445,8 +445,8 @@ export const SparePartsInventory: React.FC = () => {
               </Button>
             )}
             {canManagePricing && (
-              <Link to={withTenantPath(tenantSlug, '/repair/parts-pricing')}>
-                <Button variant="secondary" size="sm">تسعير القطع</Button>
+              <Link to={withTenantPath(tenantSlug, '/manufacturing/materials')}>
+                <Button variant="secondary" size="sm">تسعير القطع (الماستر)</Button>
               </Link>
             )}
           </div>

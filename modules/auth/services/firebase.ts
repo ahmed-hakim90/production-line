@@ -121,9 +121,52 @@ if (isConfigured) {
 
 export { db, auth, storage, functionsClient, isConfigured };
 
+/** Firebase SDK default / transport messages — not business copy from our handlers. */
+const isGenericCallableMessage = (message: string): boolean => {
+  const lower = message.toLowerCase();
+  if (!lower) return true;
+  if (lower.includes("failed to fetch") || lower.includes("networkerror")) return true;
+  if (lower.startsWith("functions/")) return true;
+  return [
+    "internal",
+    "not-found",
+    "not found",
+    "unauthenticated",
+    "permission-denied",
+    "permission denied",
+    "failed-precondition",
+    "resource-exhausted",
+    "unavailable",
+    "deadline-exceeded",
+    "invalid-argument",
+    "already-exists",
+    "aborted",
+    "out-of-range",
+    "unimplemented",
+    "data-loss",
+    "unknown",
+    "cancelled",
+    "ok",
+    "not_found",
+    "permission_denied",
+    "failed_precondition",
+    "resource_exhausted",
+    "deadline_exceeded",
+    "invalid_argument",
+    "already_exists",
+    "out_of_range",
+    "data_loss",
+  ].includes(lower);
+};
+
 const normalizeCallableError = (error: any): Error => {
   const code = String(error?.code || "").toLowerCase();
   const message = String(error?.message || "").trim();
+
+  // Prefer Arabic / server business messages from HttpsError over generic code labels.
+  if (message && !isGenericCallableMessage(message)) {
+    return new Error(message);
+  }
 
   if (code.includes("unauthenticated")) {
     return new Error("يجب تسجيل الدخول أولًا ثم إعادة المحاولة.");
@@ -132,10 +175,10 @@ const normalizeCallableError = (error: any): Error => {
     return new Error("ليس لديك صلاحية لتنفيذ هذا الإجراء.");
   }
   if (code.includes("failed-precondition")) {
-    return new Error(message || "لا يمكن تنفيذ العملية في الحالة الحالية.");
+    return new Error("لا يمكن تنفيذ العملية في الحالة الحالية.");
   }
   if (code.includes("resource-exhausted")) {
-    return new Error(message || "العملية تتجاوز الحد المسموح.");
+    return new Error("العملية تتجاوز الحد المسموح.");
   }
   if (code.includes("not-found")) {
     return new Error("الخدمة غير متاحة حاليًا. تأكد من نشر Cloud Functions.");
@@ -480,6 +523,83 @@ export const trackRepairJobPublicCallable = async (input: {
   }
 };
 
+export type CustomerPortalHomeResult = {
+  ok: true;
+  customer: { id: string; code: string; name: string; type: string; phone: string; address: string };
+  requests: Array<Record<string, any>>;
+  jobs: Array<Record<string, any>>;
+  replacements: Array<Record<string, any>>;
+  events: Array<Record<string, any>>;
+};
+
+export const customerPortalLoginCallable = async (input: {
+  tenantSlug: string;
+  customerCode: string;
+  pin: string;
+}): Promise<{ ok: true; sessionToken: string; expiresAtMs: number }> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<typeof input, { ok: true; sessionToken: string; expiresAtMs: number }>(
+    functionsClient,
+    'customerPortalLogin',
+  );
+  try {
+    return (await callable(input)).data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const getCustomerPortalHomeCallable = async (sessionToken: string): Promise<CustomerPortalHomeResult> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<{ sessionToken: string }, CustomerPortalHomeResult>(functionsClient, 'getCustomerPortalHome');
+  try {
+    return (await callable({ sessionToken })).data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const lookupPortalProductCallable = async (input: { sessionToken: string; barcode: string }) => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<typeof input, { ok: true; product: { id: string; name: string; code: string; barcode: string } }>(
+    functionsClient,
+    'lookupPortalProduct',
+  );
+  try {
+    return (await callable(input)).data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const createCustomerServiceRequestCallable = async (input: {
+  sessionToken: string;
+  lines: Array<{ barcode: string; quantity: number; note?: string }>;
+}) => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<typeof input, { ok: true; requestId: string; requestNo: string }>(
+    functionsClient,
+    'createCustomerServiceRequest',
+  );
+  try {
+    return (await callable(input)).data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const mutateRepairCustomerOpsCallable = async <T extends Record<string, unknown> = Record<string, unknown>>(
+  input: Record<string, unknown>,
+): Promise<T & { ok: true }> => {
+  if (!isConfigured || !functionsClient) throw new Error('Firebase not configured');
+  const callable = httpsCallable<Record<string, unknown>, T & { ok: true }>(functionsClient, 'mutateRepairCustomerOps');
+  try {
+    return (await callable(input)).data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
 export type PublicRepairApprovalEstimate = {
   receiptNo: string;
   customerName: string;
@@ -674,7 +794,7 @@ export const mutateRepairTreasuryCallable = async (
 export const mutateRepairServiceCatalogCallable = async (
   input: {
     operation: "get" | "save";
-    services?: Array<{ id: string; name: string; price: number; enabled: boolean }>;
+    services?: Array<{ id: string; name: string; price: number; internalCost: number; enabled: boolean }>;
   },
 ): Promise<Record<string, unknown> & { ok: true }> => {
   if (!isConfigured || !functionsClient) throw new Error("Firebase not configured");
@@ -684,6 +804,28 @@ export const mutateRepairServiceCatalogCallable = async (
   );
   try {
     return (await callable(input)).data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export type RepairPartsPricingUpdateInput = {
+  materialId: string;
+  code: string;
+  current: { consumer: number; trader: number; cost: number };
+  next: { consumer: number; trader: number; cost: number };
+};
+
+export const updateRepairPartsPricingCallable = async (
+  updates: RepairPartsPricingUpdateInput[],
+): Promise<{ ok: true; updatedCount: number }> => {
+  if (!isConfigured || !functionsClient) throw new Error("Firebase not configured");
+  const callable = httpsCallable<
+    { updates: RepairPartsPricingUpdateInput[] },
+    { ok: true; updatedCount: number }
+  >(functionsClient, "updateRepairPartsPricing");
+  try {
+    return (await callable({ updates })).data;
   } catch (error: any) {
     throw normalizeCallableError(error);
   }
@@ -721,7 +863,7 @@ export const mutateAccountingCallable = async (
 };
 
 export type RepairTechnicianOperationInput = {
-  operation: "list" | "get" | "save" | "status" | "add_photo" | "catalog";
+  operation: "list" | "get" | "save" | "status" | "add_photo" | "catalog" | "claim_qr";
   jobId?: string;
   jobProducts?: Array<Record<string, unknown>>;
   isServiceOnly?: boolean;
@@ -795,6 +937,20 @@ export const mutateRepairSalesInvoiceCallable = async (
   try {
     const result = await callable(input);
     return result.data;
+  } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+export const getCustomerFinancialAnalyticsCallable = async <T>(input: {
+  customerId: string;
+  from?: string;
+  to?: string;
+}): Promise<T> => {
+  if (!isConfigured || !functionsClient) throw new Error("Firebase not configured");
+  const callable = httpsCallable<typeof input, T>(functionsClient, "getCustomerFinancialAnalytics");
+  try {
+    return (await callable(input)).data;
   } catch (error: any) {
     throw normalizeCallableError(error);
   }

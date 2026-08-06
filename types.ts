@@ -84,6 +84,8 @@ export interface FirestoreProduct {
   /** Denormalized leaf category name for display. */
   categoryName?: string;
   code: string;
+  /** Unique customer-facing barcode printed on the product box. */
+  barcode?: string;
   openingBalance: number;
   avgDailyProduction?: number;
   imageUrl?: string;
@@ -1640,6 +1642,8 @@ export interface RepairServiceCatalogItem {
   id: string;
   name: string;
   price: number;
+  /** Internal standard cost used for warranty analytics; never exposed to technicians. */
+  internalCost?: number;
   enabled?: boolean;
 }
 

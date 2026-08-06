@@ -33,6 +33,19 @@ export function statusSetsAssignedAt(
   return DEFAULT_STATUSES_THAT_SET_ASSIGNED_AT.has(canonical);
 }
 
+/**
+ * Firestore rejects `undefined` / `NaN`. Only include resolutionMinutes when assignedAt parses.
+ */
+export function buildRepairResolutionFields(
+  assignedAt: string | undefined | null,
+  at: string,
+): { resolutionMinutes: number } | Record<string, never> {
+  const assignedAtMs = Date.parse(String(assignedAt || ''));
+  const atMs = Date.parse(String(at || ''));
+  if (!Number.isFinite(assignedAtMs) || !Number.isFinite(atMs)) return {};
+  return { resolutionMinutes: Math.max(0, Math.round((atMs - assignedAtMs) / 60000)) };
+}
+
 export function isTerminalFromSettings(
   status: string,
   statusMap: Record<string, ResolvedRepairStatus>,

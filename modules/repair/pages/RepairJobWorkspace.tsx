@@ -136,6 +136,7 @@ export const RepairJobWorkspace: React.FC = () => {
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
   const [resQty, setResQty] = useState('1');
   const [saving, setSaving] = useState(false);
+  const [applyingStatus, setApplyingStatus] = useState(false);
   const [requestingPart, setRequestingPart] = useState(false);
   const [issuingUsageId, setIssuingUsageId] = useState<string | null>(null);
   const [headerPanel, setHeaderPanel] = useState<'photo' | 'events' | null>(null);
@@ -199,12 +200,18 @@ export const RepairJobWorkspace: React.FC = () => {
     void repairServiceEventService.listByJob(jobId).then(setEvents);
   }, [jobId, job?.updatedAt]);
 
+  // Status only — do not reset on updatedAt. Saving products first updates the doc while
+  // status is still the old server value; syncing here made the select flash back to «وارد».
   useEffect(() => {
     if (!job) return;
     setStatus(job.status);
+  }, [job?.id, job?.status]);
+
+  useEffect(() => {
+    if (!job) return;
     setJobProducts(inferProducts(job));
     setServiceOnly(Boolean(job.isServiceOnly));
-  }, [job?.id, job?.status, job?.updatedAt, job?.isServiceOnly]);
+  }, [job?.id, job?.updatedAt, job?.isServiceOnly]);
 
   const branch = useMemo(
     () => branches.find((b) => String(b.id) === String(job?.branchId)),
@@ -409,6 +416,7 @@ export const RepairJobWorkspace: React.FC = () => {
       toast.error('تغيير الحالة متاح للفني/مسؤول الورشة فقط.');
       return;
     }
+    if (applyingStatus) return;
     if (isDeliveredStatus(status) || !isWorkshopStatusWithinReadyCap(status, repairSettings.workflow.statuses)) {
       toast.error('الورشة تغيّر الحالة حتى «جاهز للتسليم» فقط. التسليم من الاستقبال.');
       return;
@@ -427,28 +435,34 @@ export const RepairJobWorkspace: React.FC = () => {
       toast.error('اختر خدمة صيانة أو سجّل قطعة غيار قبل تحويل الطلب إلى جاهز للتسليم.');
       return;
     }
+    const nextStatus = status;
+    setApplyingStatus(true);
     try {
       await persistProductsAndPricing();
       if (technicianMode) {
         await repairTechnicianService.changeStatus(
           job.id,
-          status,
-          isUnrepairableStatus(status) ? reason : undefined,
+          nextStatus,
+          isUnrepairableStatus(nextStatus) ? reason : undefined,
         );
       } else {
         await repairJobService.changeStatus({
           jobId: job.id,
-          status,
+          status: nextStatus,
           technicianId: userProfile?.id,
-          reason: isUnrepairableStatus(status) ? reason : undefined,
+          reason: isUnrepairableStatus(nextStatus) ? reason : undefined,
           actorUid: userProfile?.id || '',
           actorName: userProfile?.displayName || userProfile?.email || 'مستخدم',
         });
       }
+      setStatus(nextStatus);
       refetchJob();
       toast.success('تم تحديث الحالة.');
     } catch (e: any) {
+      if (job.status) setStatus(job.status);
       toast.error(e?.message || 'تعذر تحديث الحالة.');
+    } finally {
+      setApplyingStatus(false);
     }
   };
 
@@ -715,7 +729,7 @@ export const RepairJobWorkspace: React.FC = () => {
                 <p className="text-xs text-muted-foreground mt-1">حتى جاهز للتسليم</p>
               </div>
             </div>
-            <Select value={status} onValueChange={setStatus} disabled={!canEditWorkshop}>
+            <Select value={status} onValueChange={setStatus} disabled={!canEditWorkshop || applyingStatus}>
               <SelectTrigger className="min-h-14 w-full text-base"><SelectValue /></SelectTrigger>
               <SelectContent>
                 {allowedStatusOptions.map((s) => (
@@ -730,17 +744,17 @@ export const RepairJobWorkspace: React.FC = () => {
                   className="w-full min-h-28 rounded-md border border-input bg-background px-3 py-3 text-base"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
-                  disabled={!canEditWorkshop}
+                  disabled={!canEditWorkshop || applyingStatus}
                   placeholder="اكتب السبب بالتفصيل"
                 />
               </div>
             ) : null}
             <Button
               className="w-full min-h-14 text-base font-semibold"
-              disabled={!canEditWorkshop}
+              disabled={!canEditWorkshop || applyingStatus}
               onClick={() => void applyStatus()}
             >
-              تطبيق: {selectedStatusLabel}
+              {applyingStatus ? 'جاري تطبيق الحالة…' : `تطبيق: ${selectedStatusLabel}`}
             </Button>
           </section>
 
@@ -973,10 +987,10 @@ export const RepairJobWorkspace: React.FC = () => {
           </Button>
           <Button
             className="min-h-12 flex-[1.35] text-sm font-semibold"
-            disabled={!canEditWorkshop}
+            disabled={!canEditWorkshop || applyingStatus}
             onClick={() => void applyStatus()}
           >
-            تطبيق الحالة
+            {applyingStatus ? 'جاري التطبيق…' : 'تطبيق الحالة'}
           </Button>
         </div>
       </div>

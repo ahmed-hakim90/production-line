@@ -458,6 +458,19 @@ export const RepairAdminDashboard: React.FC = () => {
   const canViewTechKpis = can('repair.technician.view');
   const canManageBranches = can('repair.branches.manage');
   const canViewCustomers = can('customers.view');
+  const canViewCustomerRequests =
+    can('repair.customerRequests.view')
+    || can('repair.customerRequests.assign')
+    || can('repair.customerRequests.receive');
+  const canViewCustody =
+    can('repair.custody.view')
+    || can('repair.custody.record')
+    || can('repair.custody.handover');
+  const canViewReplacements =
+    can('repair.replacements.view')
+    || can('repair.replacements.create')
+    || can('repair.replacements.approve')
+    || can('repair.replacements.deliver');
 
   const path = (suffix: string) => withTenantPath(tenantSlug, suffix);
 
@@ -556,9 +569,29 @@ export const RepairAdminDashboard: React.FC = () => {
                 <Button size="sm" variant="outline">الشكاوى</Button>
               </Link>
             )}
+            {canViewCustomerRequests && (
+              <Link to={path('/repair/customer-requests')}>
+                <Button size="sm" variant="outline">طلبات العملاء</Button>
+              </Link>
+            )}
+            {canViewCustody && (
+              <Link to={path('/repair/custody-stock')}>
+                <Button size="sm" variant="outline">العهدة</Button>
+              </Link>
+            )}
+            {canViewCustody && (
+              <Link to={path('/repair/unrepairable-stock')}>
+                <Button size="sm" variant="outline">غير القابل</Button>
+              </Link>
+            )}
+            {canViewReplacements && (
+              <Link to={path('/repair/replacements')}>
+                <Button size="sm" variant="outline">الاستبدال</Button>
+              </Link>
+            )}
             {canManagePricing && (
-              <Link to={path('/repair/parts-pricing')}>
-                <Button size="sm" variant="outline">التسعير</Button>
+              <Link to={path('/manufacturing/materials')}>
+                <Button size="sm" variant="outline">التسعير (الماستر)</Button>
               </Link>
             )}
             {canManageBranches && (
@@ -742,8 +775,41 @@ export const RepairAdminDashboard: React.FC = () => {
                     </Link>
                   )}
                   {canManagePricing && (
-                    <Link to={path('/repair/parts-pricing')}>
-                      <Button size="sm" variant="outline">التسعير</Button>
+                    <Link to={path('/manufacturing/materials')}>
+                      <Button size="sm" variant="outline">التسعير (الماستر)</Button>
+                    </Link>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">العملاء والعهدة والاستبدال</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-3 text-sm">
+                <p className="text-xs text-muted-foreground">
+                  توزيع طلبات البورتال، متابعة عهدة الأجهزة، ومخزن غير القابل، واعتماد الاستبدال.
+                </p>
+                <div className="flex flex-wrap gap-2">
+                  {canViewCustomerRequests && (
+                    <Link to={path('/repair/customer-requests')}>
+                      <Button size="sm" variant="outline">طلبات العملاء</Button>
+                    </Link>
+                  )}
+                  {canViewCustody && (
+                    <>
+                      <Link to={path('/repair/custody-stock')}>
+                        <Button size="sm" variant="outline">العهدة</Button>
+                      </Link>
+                      <Link to={path('/repair/unrepairable-stock')}>
+                        <Button size="sm" variant="outline">غير القابل</Button>
+                      </Link>
+                    </>
+                  )}
+                  {canViewReplacements && (
+                    <Link to={path('/repair/replacements')}>
+                      <Button size="sm" variant="outline">الاستبدال</Button>
                     </Link>
                   )}
                 </div>

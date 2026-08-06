@@ -37,6 +37,7 @@ import { repairTreasuryService } from '../services/repairTreasuryService';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
 import { repairJobSparePartRequestService } from '../services/repairJobSparePartRequestService';
+import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 import { userService } from '../../../services/userService';
 import { employeeService } from '../../hr/employeeService';
 import { buildRepairApprovalPublicUrl, buildRepairTrackPublicUrl } from '../lib/repairPublicLinks';
@@ -197,6 +198,13 @@ export const RepairJobDetail: React.FC = () => {
   const [collectMethod, setCollectMethod] = useState<RepairPaymentMethod>('cash');
   const [collectAndDeliver, setCollectAndDeliver] = useState(false);
   const [paymentBusy, setPaymentBusy] = useState(false);
+  const [opsDialog, setOpsDialog] = useState<{
+    mode: 'unrepairable' | 'replacement';
+    item: RepairJobProduct;
+  } | null>(null);
+  const [opsQty, setOpsQty] = useState(1);
+  const [opsReason, setOpsReason] = useState('');
+  const [opsBusy, setOpsBusy] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const productCardPrintRef = useRef<HTMLDivElement>(null);
   const deliveryAuthorizationPrintRef = useRef<HTMLDivElement>(null);
@@ -213,7 +221,7 @@ export const RepairJobDetail: React.FC = () => {
   const handlePrintProductCards = useManagedPrint({
     contentRef: productCardPrintRef,
     printSettings: productCardPrintSettings,
-    documentTitle: job ? `كارت-قطعة-${job.receiptNo}` : 'كارت-قطعة',
+    documentTitle: job ? `كارت-صيانة-داخلي-${job.receiptNo}` : 'كارت-صيانة-داخلي',
   });
   const handlePrintDeliveryAuthorization = useManagedPrint({
     contentRef: deliveryAuthorizationPrintRef,
@@ -1038,10 +1046,26 @@ export const RepairJobDetail: React.FC = () => {
     }
     try {
       await repairPaymentService.deliver({ jobId: job.id, warranty });
+      const custodyFailures: string[] = [];
+      for (const item of jobProducts) {
+        const total = Math.max(1, Number(item.receivedQuantity || item.quantity || 1));
+        const unrepairable = Math.max(0, Number(item.unrepairableQuantity || 0));
+        const handed = Math.max(0, Number(item.handedOverQuantity || 0));
+        const quantity = Math.max(0, total - unrepairable - handed);
+        if (!quantity) continue;
+        try {
+          await repairCustomerOperationsService.handover(job.id, item.itemId, quantity, 'custody');
+        } catch {
+          custodyFailures.push(item.productName || item.itemId);
+        }
+      }
       await refreshJobAndPayment(job.id);
+      if (custodyFailures.length) {
+        toast.error(`تم إقفال الطلب، لكن تعذر إخراج عهدة: ${custodyFailures.join('، ')}. أعد المحاولة من صفحة العهدة.`);
+      }
       toast.success(
         isManufacturerWarrantyJob(job) || isWarrantySettlementAuth(paymentAuthorization)
-          ? 'تم تسليم ضمان المصنّع وإقفال الطلب بدون إيراد.'
+          ? 'تم تسليم ضمان المصنّع وإثبات قيمة الإعفاء بدون تحصيل من العميل.'
           : 'تم تسليم المنتج وإقفال الطلب وإثبات القيد المحاسبي.',
       );
       if (opts?.autoPrint) queueDeliveryAuthorizationPrint();
@@ -1101,6 +1125,10 @@ export const RepairJobDetail: React.FC = () => {
       customerPhone: job.customerPhone,
     });
   }, [job, tenantSlug]);
+  const internalWorkUrl = useMemo(() => {
+    if (!job?.id || typeof window === 'undefined') return '';
+    return `${window.location.origin}${withTenantPath(tenantSlug, `/repair/jobs/${job.id}/claim`)}`;
+  }, [job?.id, tenantSlug]);
   const whatsappText = useMemo(() => {
     if (!job) return '';
     return formatRepairWhatsAppMessage(job, trackUrl || undefined);
@@ -1140,6 +1168,63 @@ export const RepairJobDetail: React.FC = () => {
     canCreateJobs: can('repair.jobs.create'),
     canEditJobs: can('repair.jobs.edit'),
   });
+
+  const openUnrepairableDialog = (item: RepairJobProduct) => {
+    const total = Math.max(1, Number(item.receivedQuantity || item.quantity || 1));
+    setOpsDialog({ mode: 'unrepairable', item });
+    setOpsQty(Math.max(0, Number(item.unrepairableQuantity || total)));
+    setOpsReason(String(item.unrepairableReason || ''));
+  };
+
+  const openReplacementDialog = (item: RepairJobProduct) => {
+    const available = Math.max(0, Number(item.unrepairableQuantity || 0));
+    if (!available) {
+      toast.error('سجل كمية غير قابلة للإصلاح أولًا.');
+      return;
+    }
+    setOpsDialog({ mode: 'replacement', item });
+    setOpsQty(Math.min(1, available));
+    setOpsReason('');
+  };
+
+  const submitOpsDialog = async () => {
+    if (!job?.id || !opsDialog) return;
+    const item = opsDialog.item;
+    const total = Math.max(1, Number(item.receivedQuantity || item.quantity || 1));
+    const availableUnrepairable = Math.max(0, Number(item.unrepairableQuantity || 0));
+
+    if (opsDialog.mode === 'unrepairable') {
+      const quantity = Math.max(0, Math.min(total, Math.round(Number(opsQty) || 0)));
+      if (quantity > 0 && !opsReason.trim()) {
+        toast.error('سبب عدم قابلية الإصلاح مطلوب.');
+        return;
+      }
+      setOpsBusy(true);
+      try {
+        await repairCustomerOperationsService.recordUnrepairable(job.id, item.itemId, quantity, opsReason.trim());
+        toast.success('تم تحديث القرار ونقل الكمية مخزنيًا.');
+        setOpsDialog(null);
+        await refreshJobAndPayment(job.id);
+      } catch (e: unknown) {
+        toast.error(e instanceof Error ? e.message : 'تعذر تسجيل غير القابل للإصلاح.');
+      } finally {
+        setOpsBusy(false);
+      }
+      return;
+    }
+
+    const quantity = Math.max(1, Math.min(availableUnrepairable, Math.round(Number(opsQty) || 1)));
+    setOpsBusy(true);
+    try {
+      await repairCustomerOperationsService.createReplacement(job.id, item.itemId, quantity, opsReason.trim() || undefined);
+      toast.success('تم إنشاء طلب الاستبدال وبانتظار اعتماد الإدارة.');
+      setOpsDialog(null);
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'تعذر إنشاء طلب الاستبدال.');
+    } finally {
+      setOpsBusy(false);
+    }
+  };
   const canRequestApprovalLink = Boolean(
     actionState?.canRequestApproval
     && can('repair.jobs.reception')
@@ -1331,7 +1416,7 @@ export const RepairJobDetail: React.FC = () => {
               <>
                 <Button type="button" variant="outline" size="sm" onClick={() => handlePrintProductCards()}>
                   <Printer className="h-4 w-4 ms-1" />
-                  كارت القطعة
+                  كارت الصيانة الداخلي
                 </Button>
                 <Button type="button" variant="outline" size="sm" onClick={() => handlePrintReceipt()}>
                   <Printer className="h-4 w-4 ms-1" />
@@ -1739,7 +1824,7 @@ export const RepairJobDetail: React.FC = () => {
                 ) : null}
                 {paymentAuthorization && isWarrantySettlementAuth(paymentAuthorization) ? (
                   <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
-                    ضمان مصنّع — بدون إيراد ولا تحصيل. تكلفة القطع تُسجَّل عند الصرف فقط.
+                    ضمان مصنّع — إعفاء كامل بدون تحصيل. تُسجَّل قيمة الضمان وتكلفة القطع والخدمات للتحليل.
                   </div>
                 ) : null}
                 {hasInWarrantyProduct && !paymentAuthorization ? (
@@ -1861,6 +1946,19 @@ export const RepairJobDetail: React.FC = () => {
                         <span className="text-muted-foreground">ضمان الجهاز:</span>{' '}
                         {item.inWarranty ? 'داخل الضمان (مصنّع)' : 'خارج الضمان'}
                       </div>
+                      <div><span className="text-muted-foreground">غير قابل للإصلاح:</span> {item.unrepairableQuantity || 0}</div>
+                    </div>
+                    <div className="flex flex-wrap gap-2 border-t pt-2">
+                      {(can('repair.custody.record') || can('repair.jobs.edit')) && !isDeliveredStatus(job.status) ? (
+                        <Button type="button" size="sm" variant="outline" onClick={() => openUnrepairableDialog(item)}>
+                          تسجيل غير قابل للإصلاح
+                        </Button>
+                      ) : null}
+                      {(can('repair.replacements.create') || can('repair.jobs.reception')) && Number(item.unrepairableQuantity || 0) > 0 ? (
+                        <Button type="button" size="sm" variant="outline" onClick={() => openReplacementDialog(item)}>
+                          طلب استبدال
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
                 );
@@ -1869,6 +1967,25 @@ export const RepairJobDetail: React.FC = () => {
                 <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
                   وضع «خدمة فقط» مفعّل — التكلفة من خدمات الكتالوج المختارة.
                 </p>
+              ) : null}
+              {(can('repair.custody.view') || can('repair.replacements.view') || can('repair.replacements.approve')) ? (
+                <div className="flex flex-wrap gap-2">
+                  {can('repair.custody.view') ? (
+                    <Button type="button" size="sm" variant="ghost" asChild>
+                      <Link to={withTenantPath(tenantSlug, '/repair/custody-stock')}>عرض العهدة</Link>
+                    </Button>
+                  ) : null}
+                  {can('repair.custody.view') ? (
+                    <Button type="button" size="sm" variant="ghost" asChild>
+                      <Link to={withTenantPath(tenantSlug, '/repair/unrepairable-stock')}>غير القابل للإصلاح</Link>
+                    </Button>
+                  ) : null}
+                  {(can('repair.replacements.view') || can('repair.replacements.approve')) ? (
+                    <Button type="button" size="sm" variant="ghost" asChild>
+                      <Link to={withTenantPath(tenantSlug, '/repair/replacements')}>طلبات الاستبدال</Link>
+                    </Button>
+                  ) : null}
+                </div>
               ) : null}
               {canManageWorkshopWork && !isDeliveredStatus(job.status) ? (
                 <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
@@ -2144,7 +2261,7 @@ export const RepairJobDetail: React.FC = () => {
           <DialogHeader>
             <DialogTitle>طباعة بعد الاستلام</DialogTitle>
             <DialogDescription>
-              اطبع كارت القطعة للصقه على الجهاز، وإيصال العميل ليوقّع أنه سلّم القطعة للمركز.
+              اطبع كارتًا داخليًا واحدًا للطلب بكل منتجاته مع QR، وإيصال العميل للتوقيع.
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2 sm:flex-row">
@@ -2156,7 +2273,7 @@ export const RepairJobDetail: React.FC = () => {
                 handlePrintProductCards();
               }}
             >
-              طباعة كارت القطعة (A5)
+              طباعة كارت طلب الصيانة الداخلي (A5)
             </Button>
             <Button
               type="button"
@@ -2173,6 +2290,63 @@ export const RepairJobDetail: React.FC = () => {
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setIntakePrintOpen(false)}>
               لاحقاً
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={Boolean(opsDialog)} onOpenChange={(open) => { if (!open && !opsBusy) setOpsDialog(null); }}>
+        <DialogContent dir="rtl" className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {opsDialog?.mode === 'replacement' ? 'إنشاء طلب استبدال' : 'تسجيل غير قابل للإصلاح'}
+            </DialogTitle>
+            <DialogDescription>
+              {opsDialog?.mode === 'replacement'
+                ? 'يُنشأ طلب استبدال بانتظار اعتماد الإدارة، دون خصم المنتج البديل من المخزون.'
+                : 'يُنقل الرصيد من عهدة المركز إلى مخزن غير القابل للإصلاح.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-lg border bg-muted/30 px-3 py-2 text-sm">
+              <div className="font-medium">{opsDialog?.item.productName || '—'}</div>
+              <div className="text-muted-foreground">
+                {opsDialog?.mode === 'replacement'
+                  ? `المتاح للاستبدال: ${Math.max(0, Number(opsDialog?.item.unrepairableQuantity || 0))}`
+                  : `إجمالي المستلم: ${Math.max(1, Number(opsDialog?.item.receivedQuantity || opsDialog?.item.quantity || 1))}`}
+              </div>
+            </div>
+            <div className="space-y-1">
+              <Label>الكمية</Label>
+              <Input
+                type="number"
+                min={opsDialog?.mode === 'unrepairable' ? 0 : 1}
+                max={
+                  opsDialog?.mode === 'replacement'
+                    ? Math.max(0, Number(opsDialog?.item.unrepairableQuantity || 0))
+                    : Math.max(1, Number(opsDialog?.item.receivedQuantity || opsDialog?.item.quantity || 1))
+                }
+                value={opsQty}
+                onChange={(e) => setOpsQty(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+            <div className="space-y-1">
+              <Label>
+                {opsDialog?.mode === 'replacement' ? 'سبب الطلب (اختياري)' : 'سبب عدم قابلية الإصلاح'}
+              </Label>
+              <Input
+                value={opsReason}
+                onChange={(e) => setOpsReason(e.target.value)}
+                placeholder={opsDialog?.mode === 'replacement' ? 'اختياري' : 'مطلوب عند وجود كمية'}
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" disabled={opsBusy} onClick={() => setOpsDialog(null)}>
+              إلغاء
+            </Button>
+            <Button type="button" disabled={opsBusy} onClick={() => void submitOpsDialog()}>
+              {opsBusy ? 'جاري الحفظ...' : opsDialog?.mode === 'replacement' ? 'إنشاء الطلب' : 'حفظ القرار'}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2195,6 +2369,7 @@ export const RepairJobDetail: React.FC = () => {
           branch={branch}
           products={jobProducts}
           printSettings={productCardPrintSettings}
+          workUrl={internalWorkUrl}
           statusMap={repairSettings.statusMap}
         />
         <DeliveryReceiptPDF

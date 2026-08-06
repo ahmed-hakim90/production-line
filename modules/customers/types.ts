@@ -85,6 +85,38 @@ export interface Customer {
   updatedByName?: string;
 }
 
+export type CustomerFinancialSummary = {
+  repairJobs: number;
+  warrantyJobs: number;
+  outOfWarrantyJobs: number;
+  repairGross: number;
+  repairDiscounts: number;
+  warrantyAllowances: number;
+  repairPaid: number;
+  repairBalanceDue: number;
+  warrantyActualCost: number;
+  warrantyPartsCost: number;
+  warrantyServiceCost: number;
+  salesInvoices: number;
+  salesGross: number;
+  salesDiscounts: number;
+  salesNetPaid: number;
+  salesQuantity: number;
+  fullDiscountInvoices: number;
+  totalCustomerPaid: number;
+  legacyIncompleteWarrantyJobs: number;
+};
+
+export type CustomerFinancialAnalytics = {
+  ok: true;
+  customerId: string;
+  period: { from: string; to: string };
+  summary: CustomerFinancialSummary;
+  repairRows: Array<Record<string, unknown>>;
+  invoiceRows: Array<Record<string, unknown>>;
+  paymentRows: Array<Record<string, unknown>>;
+};
+
 export type CustomerActivityModule = 'customers' | 'repair' | (string & {});
 
 export type CustomerActivityAction =

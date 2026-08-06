@@ -923,6 +923,9 @@ service cloud.firestore {
         || pl_hasErpPermission('repair.treasury.manage')
         || pl_hasErpPermission('repair.salesInvoice.create')
         || pl_hasErpPermission('repair.salesInvoice.view')
+        || pl_hasErpPermission('repair.customerRequests.view')
+        || pl_hasErpPermission('repair.custody.view')
+        || pl_hasErpPermission('repair.replacements.view')
       );
       allow create, update: if pl_isRepairBranchAdmin() && pl_sameTenantOrLegacyWrite();
       allow delete: if pl_isRepairBranchAdmin() && pl_sameTenantOrLegacyRead();
@@ -1057,6 +1060,13 @@ service cloud.firestore {
       allow create, update, delete: if false;
     }
 
+    // Written only by updateRepairPartsPricing (Admin SDK). Clients must not
+    // forge or wipe commercial pricing audit history.
+    match /repair_parts_pricing_audit/{id} {
+      allow read: if pl_hasErpPermission('repair.pricing.manage') && pl_sameTenantOrLegacyRead();
+      allow create, update, delete: if false;
+    }
+
     // A technician account receives a sanitized repair catalog through a
     // callable. Firestore cannot hide individual price fields, so direct
     // material reads are denied unless the account also has a commercial or
@@ -1177,6 +1187,82 @@ service cloud.firestore {
       allow create: if pl_hasErpPermission('repair.complaints.manage') && pl_canWriteRepairComplaintScoped();
       allow update: if pl_hasErpPermission('repair.complaints.manage') && pl_canUpdateRepairComplaintScoped();
       allow delete: if false;
+    }
+
+    // Customer portal intake and customer-owned product custody are server-owned.
+    match /customer_service_requests/{id} {
+      allow read: if pl_sameTenantOrLegacyRead()
+        && (
+          pl_hasErpPermission('repair.customerRequests.assign')
+          || pl_hasErpPermission('repair.callCenter.viewAll')
+          || (
+            pl_hasErpPermission('repair.customerRequests.view')
+            && resource.data.get('branchId', '') is string
+            && pl_canAccessRepairBranch(resource.data.get('branchId', ''))
+          )
+        );
+      allow create, update, delete: if false;
+    }
+
+    match /customer_service_events/{id} {
+      allow read: if pl_sameTenantOrLegacyRead()
+        && (
+          pl_hasErpPermission('repair.customerRequests.view')
+          || pl_hasErpPermission('repair.custody.view')
+          || pl_hasErpPermission('repair.replacements.view')
+          || pl_hasErpPermission('repair.view')
+        );
+      allow create, update, delete: if false;
+    }
+
+    match /repair_custody_records/{id} {
+      allow read: if pl_sameTenantOrLegacyRead()
+        && (
+          pl_hasErpPermission('repair.custody.view')
+          || pl_hasErpPermission('repair.custody.record')
+          || pl_hasErpPermission('repair.custody.handover')
+        )
+        && (
+          pl_canViewAllRepairBranches()
+          || pl_canAccessRepairBranch(resource.data.get('branchId', ''))
+        );
+      allow create, update, delete: if false;
+    }
+
+    match /repair_replacement_requests/{id} {
+      allow read: if pl_sameTenantOrLegacyRead()
+        && (
+          pl_hasErpPermission('repair.replacements.view')
+          || pl_hasErpPermission('repair.replacements.create')
+          || pl_hasErpPermission('repair.replacements.approve')
+          || pl_hasErpPermission('repair.replacements.deliver')
+        )
+        && (
+          pl_canViewAllRepairBranches()
+          || pl_hasErpPermission('repair.replacements.approve')
+          || pl_canAccessRepairBranch(resource.data.get('branchId', ''))
+        );
+      allow create, update, delete: if false;
+    }
+
+    match /customer_portal_credentials/{id} {
+      allow read, write: if false;
+    }
+
+    match /customer_portal_sessions/{id} {
+      allow read, write: if false;
+    }
+
+    match /customer_portal_login_limits/{id} {
+      allow read, write: if false;
+    }
+
+    match /product_barcode_claims/{id} {
+      allow read: if pl_isActiveUser() && pl_sameTenantOrLegacyRead()
+        && (pl_hasErpPermission('products.view') || pl_hasErpPermission('products.create') || pl_hasErpPermission('products.edit'));
+      allow create: if pl_hasErpPermission('products.create') && pl_sameTenantOrLegacyWrite();
+      allow update: if pl_hasErpPermission('products.edit') && pl_sameTenantOrLegacyUpdate();
+      allow delete: if pl_hasErpPermission('products.edit') && pl_sameTenantOrLegacyRead();
     }
 
     match /_counters/{id} {

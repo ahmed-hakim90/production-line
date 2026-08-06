@@ -22,7 +22,10 @@ import { mutateRepairTreasuryHandler } from './repairTreasuryOps.js';
 import { repairTechnicianOpsHandler } from './repairTechnicianOps.js';
 import { mutateAccountingHandler } from './accountingOps.js';
 import { mutateRepairServiceCatalogHandler } from './repairServiceCatalogOps.js';
+import { updateRepairPartsPricingHandler } from './repairPartsPricingOps.js';
 import { createInventoryCountSessionHandler } from './inventoryStockCountOps.js';
+import { createCustomerServiceRequestHandler, customerPortalLoginHandler, getCustomerPortalHomeHandler, lookupPortalProductHandler, mutateRepairCustomerOpsHandler, } from './repairCustomerPortalOps.js';
+import { getCustomerFinancialAnalyticsHandler } from './customerFinancialAnalytics.js';
 initializeApp();
 const db = getFirestore();
 const TENANT_SLUGS_COLLECTION = 'tenant_slugs';
@@ -45,6 +48,10 @@ const REPAIR_SALES_INVOICES_COLLECTION = 'repair_sales_invoices';
 const REPAIR_TREASURY_SESSIONS_COLLECTION = 'repair_treasury_sessions';
 const REPAIR_TREASURY_ENTRIES_COLLECTION = 'repair_treasury_entries';
 const REPAIR_PM_PLANS_COLLECTION = 'repair_pm_plans';
+const CUSTOMER_SERVICE_REQUESTS_COLLECTION = 'customer_service_requests';
+const CUSTOMER_SERVICE_EVENTS_COLLECTION = 'customer_service_events';
+const REPAIR_CUSTODY_RECORDS_COLLECTION = 'repair_custody_records';
+const REPAIR_REPLACEMENT_REQUESTS_COLLECTION = 'repair_replacement_requests';
 const STOCK_TRANSACTIONS_COLLECTION = 'stock_transactions';
 const STOCK_ITEMS_COLLECTION = 'stock_items';
 const STOCK_COUNTS_COLLECTION = 'stock_counts';
@@ -1049,9 +1056,17 @@ export const deleteRepairBranchCascade = onCall({
     deletedCounts[REPAIR_SPARE_PARTS_COLLECTION] = await deleteByBranchId(REPAIR_SPARE_PARTS_COLLECTION, branchId);
     deletedCounts[REPAIR_SALES_INVOICES_COLLECTION] = await deleteByBranchId(REPAIR_SALES_INVOICES_COLLECTION, branchId);
     deletedCounts[REPAIR_PM_PLANS_COLLECTION] = await deleteByBranchId(REPAIR_PM_PLANS_COLLECTION, branchId);
+    deletedCounts[CUSTOMER_SERVICE_REQUESTS_COLLECTION] = await deleteByBranchId(CUSTOMER_SERVICE_REQUESTS_COLLECTION, branchId);
+    deletedCounts[CUSTOMER_SERVICE_EVENTS_COLLECTION] = await deleteByBranchId(CUSTOMER_SERVICE_EVENTS_COLLECTION, branchId);
+    deletedCounts[REPAIR_CUSTODY_RECORDS_COLLECTION] = await deleteByBranchId(REPAIR_CUSTODY_RECORDS_COLLECTION, branchId);
+    deletedCounts[REPAIR_REPLACEMENT_REQUESTS_COLLECTION] = await deleteByBranchId(REPAIR_REPLACEMENT_REQUESTS_COLLECTION, branchId);
     deletedCounts[REPAIR_JOBS_COLLECTION] = await deleteByBranchId(REPAIR_JOBS_COLLECTION, branchId);
-    const warehouseId = String(branchData?.warehouseId || '').trim();
-    if (warehouseId) {
+    const branchWarehouseIds = Array.from(new Set([
+        String(branchData?.warehouseId || '').trim(),
+        String(branchData?.custodyWarehouseId || '').trim(),
+        String(branchData?.unrepairableWarehouseId || '').trim(),
+    ].filter(Boolean)));
+    for (const warehouseId of branchWarehouseIds) {
         deletedCounts[STOCK_TRANSACTIONS_COLLECTION] =
             await deleteByField(STOCK_TRANSACTIONS_COLLECTION, 'warehouseId', warehouseId);
         deletedCounts[`${STOCK_TRANSACTIONS_COLLECTION}_toWarehouseId`] =
@@ -1066,10 +1081,10 @@ export const deleteRepairBranchCascade = onCall({
         const warehouseSnap = await warehouseRef.get();
         if (warehouseSnap.exists) {
             await warehouseRef.delete();
-            deletedCounts.warehouses = 1;
+            deletedCounts.warehouses = Number(deletedCounts.warehouses || 0) + 1;
         }
         else {
-            deletedCounts.warehouses = 0;
+            deletedCounts.warehouses = Number(deletedCounts.warehouses || 0);
         }
     }
     await branchRef.delete();
@@ -1819,9 +1834,17 @@ export const mutateRepairTreasury = onCall({ region: 'us-central1', memory: '512
 export const repairTechnicianOps = onCall({ region: 'us-central1', memory: '256MiB' }, repairTechnicianOpsHandler);
 export const mutateAccounting = onCall({ region: 'us-central1', memory: '512MiB' }, mutateAccountingHandler);
 export const mutateRepairServiceCatalog = onCall({ region: 'us-central1', memory: '256MiB' }, mutateRepairServiceCatalogHandler);
+export const updateRepairPartsPricing = onCall({ region: 'us-central1', memory: '512MiB' }, updateRepairPartsPricingHandler);
 export const createInventoryCountSession = onCall({ region: 'us-central1', memory: '512MiB' }, createInventoryCountSessionHandler);
+export const customerPortalLogin = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, customerPortalLoginHandler);
+export const getCustomerPortalHome = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, getCustomerPortalHomeHandler);
+export const lookupPortalProduct = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, lookupPortalProductHandler);
+export const createCustomerServiceRequest = onCall({ region: 'us-central1', memory: '256MiB', cors: true, invoker: 'public' }, createCustomerServiceRequestHandler);
+export const mutateRepairCustomerOps = onCall({ region: 'us-central1', memory: '512MiB', secrets: ['CUSTOMER_PORTAL_PIN_PEPPER'] }, mutateRepairCustomerOpsHandler);
+export const getCustomerFinancialAnalytics = onCall({ region: 'us-central1', memory: '512MiB' }, getCustomerFinancialAnalyticsHandler);
 export { confirmProductionHandoverReceipt } from './productionHandover.js';
 export { issueProductionIssueStock } from './productionIssueStock.js';
 export { applyProductionReportInventory, reverseProductionReportInventory, } from './productionReportInventory.js';
 export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.js';
 export { syncBuiltInRolePermissionGrants } from './rolePermissionMigration.js';
+export { onRepairJobCreatedCustody } from './repairCustomerPortalOps.js';

@@ -17,14 +17,15 @@ Repair branches already map to `maintenance_center` warehouses, and central → 
 5. Approval mode is tenant `planSettings.repairSpareIssueApprovalMode` (`direct` | `required`), snapshotted on each issue.
 6. Primary UX entry is the repair module (`/repair/spare-issues` + job detail consume bridge).
 7. Center operators stay inside `/repair/*`: spare issues, branch parts warehouse (open jobs table + create/receive replenishment). Inventory replenishment page is for central warehouse staff.
-8. Repair UI shows a single company-wide sale/usage price on manufacturing `materials.defaultSalePrice` (managed at `/repair/parts-pricing`) — all centers read the same price; purchase cost remains on materials and is not exposed in center screens. Legacy `repair_spare_parts.defaultSalePrice` is fallback only for unlinked parts.
+8. Repair UI shows company-wide sale prices from manufacturing materials only: `defaultSalePrice` (consumer), `traderSalePrice` (wholesale), and `purchaseCost`. Prices are managed on `/manufacturing/materials` via `repair.pricing.manage` + callable `updateRepairPartsPricing` (audit). Branch `repair_spare_parts.defaultSalePrice` is not a price source and is no longer written.
 9. `repairSpareIssues.*` permissions alias from `repair.parts.*` / `repair.view` only (not inventory transaction/transfer keys). Firestore `repair_branches` read accepts `repairSpareIssues.view|create`.
 
 ## Consequences
 
 - Job consume with linked `materialId` creates/issues an RSI document and appends `partsUsed` with `issueId`.
 - After issue/return, Cloud Functions also sync quantity to `repair_spare_parts_stock` so center inventory UI matches inventory SoT (receive already synced on replenishment).
-- Center inventory table: +/- is stocktake only; sale price is managed on `/repair/parts-pricing` against the material master (`repair.pricing.manage`); part delete is not exposed in the table UI.
+- Center inventory table: +/- is stocktake only; sale price is read-only from the material master; part delete is not exposed in the table UI.
+- Availability for spare-part request/replenishment uses `stock_items.quantity - reservedQty`. Central stock is reserved on replenishment approve and consumed on receive; center stock may be reserved for `ready_to_issue` lines until issued/cancelled.
 - Center replenishment create/receive tracking lives under `/repair/parts-replenishment` (modal create from `/repair/parts`).
 - Legacy parts without `materialId` still use the old repair stock ledger until catalog linking/backfill completes.
 - Inter-center transfers and full stock migration from `repair_spare_parts_stock` remain follow-up work.

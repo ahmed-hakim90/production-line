@@ -26,6 +26,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { toast } from '../../../components/Toast';
 import { repairBranchService } from '../services/repairBranchService';
+import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 import { warehouseService } from '../../inventory/services/warehouseService';
 import type { Warehouse } from '../../inventory/types';
 import { userService } from '../../../services/userService';
@@ -85,6 +86,7 @@ const toUserSafeError = (error: unknown, fallback: string): string => {
 export const RepairBranches: React.FC = () => {
   const { dir } = useAppDirection();
   const { can } = usePermission();
+  const [custodyMigrating, setCustodyMigrating] = useState(false);
   const { openModal } = useGlobalModalManager();
   const canManageWarehouses = can('inventory.warehouses.manage');
   const initialBranchesCache = peekPageDataCache<RepairBranch[]>(BRANCHES_CACHE_KEY);
@@ -637,6 +639,30 @@ export const RepairBranches: React.FC = () => {
           label: 'إضافة فرع',
           icon: 'add',
           onClick: openCreateModal,
+        }}
+        secondaryAction={{
+          label: custodyMigrating ? 'جاري ترحيل العهدة…' : 'تهيئة مخازن العهدة',
+          icon: 'sync',
+          onClick: () => {
+            setCustodyMigrating(true);
+            void (async () => {
+              let cursor = '';
+              let custodyJobs = 0;
+              let cancelledForReview = 0;
+              let branches = 0;
+              for (let page = 0; page < 50; page += 1) {
+                const result = await repairCustomerOperationsService.backfillCustomerCustody(cursor);
+                branches = result.branches;
+                custodyJobs += result.custodyJobs;
+                cancelledForReview += result.cancelledForReview;
+                if (!result.truncated || !result.nextCursor || result.nextCursor === cursor) break;
+                cursor = result.nextCursor;
+              }
+              toast.success(`تمت تهيئة ${branches} مركز ومراجعة ${custodyJobs} طلب. الملغى للمراجعة: ${cancelledForReview}.`);
+            })()
+              .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'تعذر ترحيل العهدة.'))
+              .finally(() => setCustodyMigrating(false));
+          },
         }}
       />
 

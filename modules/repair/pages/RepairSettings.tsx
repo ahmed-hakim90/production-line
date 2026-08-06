@@ -224,10 +224,12 @@ export const RepairSettings: React.FC = () => {
     const normalizedServices = serviceCatalog
       .map((row, index) => {
         const price = Number(row.price);
+        const internalCost = Number(row.internalCost);
         return {
           id: String(row.id || '').trim() || `svc-${index + 1}`,
           name: String(row.name || '').trim(),
           price: Number.isFinite(price) ? Math.max(0, price) : 0,
+          internalCost: Number.isFinite(internalCost) ? Math.max(0, internalCost) : 0,
           enabled: row.enabled !== false,
         };
       })
@@ -583,7 +585,7 @@ export const RepairSettings: React.FC = () => {
         <CardHeader className="space-y-1 pb-2">
           <CardTitle className="text-base font-semibold tracking-tight">خدمات وتكاليف الإصلاح</CardTitle>
           <CardDescription>
-            أنواع الخدمات وأسعارها الافتراضية عند تسجيل أعمال الإصلاح والفوترة.
+            سعر البيع للعميل والتكلفة الداخلية المعيارية المستخدمة في تحليل الضمان فقط.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -594,6 +596,7 @@ export const RepairSettings: React.FC = () => {
                   <TableHead className="w-[140px] font-medium">المعرف</TableHead>
                   <TableHead className="font-medium">الخدمة</TableHead>
                   <TableHead className="w-[120px] font-medium">السعر</TableHead>
+                  <TableHead className="w-[140px] font-medium">التكلفة الداخلية</TableHead>
                   <TableHead className="w-[90px] text-center font-medium">مفعّل</TableHead>
                   <TableHead className="w-[72px]" />
                 </TableRow>
@@ -645,6 +648,25 @@ export const RepairSettings: React.FC = () => {
                         dir="ltr"
                       />
                     </TableCell>
+                    <TableCell className="align-top py-3">
+                      <Input
+                        type="number"
+                        min={0}
+                        inputMode="decimal"
+                        value={String(item.internalCost ?? 0)}
+                        onChange={(e) =>
+                          setServiceCatalog((prev) =>
+                            prev.map((row, i) =>
+                              i === index
+                                ? { ...row, internalCost: Math.max(0, Number(e.target.value) || 0) }
+                                : row,
+                            ),
+                          )
+                        }
+                        className="h-9 bg-background tabular-nums"
+                        dir="ltr"
+                      />
+                    </TableCell>
                     <TableCell className="text-center align-middle py-3">
                       <Checkbox
                         checked={item.enabled !== false}
@@ -679,7 +701,7 @@ export const RepairSettings: React.FC = () => {
             onClick={() =>
               setServiceCatalog((prev) => [
                 ...prev,
-                { id: `svc_${Date.now()}`, name: 'خدمة جديدة', price: 0, enabled: true },
+                { id: `svc_${Date.now()}`, name: 'خدمة جديدة', price: 0, internalCost: 0, enabled: true },
               ])
             }
           >

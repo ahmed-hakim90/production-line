@@ -390,6 +390,26 @@ export const stockService = {
     return direct.exists() ? Number(direct.data().quantity || 0) : 0;
   },
 
+  async getBalanceDetail(
+    warehouseId: string,
+    itemType: InventoryItemType,
+    itemId: string,
+  ): Promise<{ quantity: number; reservedQty: number; availableQty: number }> {
+    if (!isConfigured) return { quantity: 0, reservedQty: 0, availableQty: 0 };
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return { quantity: 0, reservedQty: 0, availableQty: 0 };
+    const balRef = doc(db, BALANCES_COLLECTION, balanceDocId(warehouseId, itemType, itemId));
+    const direct = await getDoc(balRef);
+    if (!direct.exists()) return { quantity: 0, reservedQty: 0, availableQty: 0 };
+    const quantity = Number(direct.data().quantity || 0);
+    const reservedQty = Math.max(0, Number(direct.data().reservedQty || 0));
+    return {
+      quantity,
+      reservedQty,
+      availableQty: Math.max(0, quantity - reservedQty),
+    };
+  },
+
   async createMovement(
     input: CreateStockMovementInput,
     context: { path: InventoryStockMovePath } | { internal: true },

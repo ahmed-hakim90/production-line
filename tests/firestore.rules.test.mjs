@@ -35,6 +35,13 @@ const seed = async () => {
       'repair.jobs.delete': true,
       'repair.parts.view': true,
       'repair.parts.manage': true,
+      'repair.callCenter.viewAll': true,
+      'repair.customerRequests.assign': true,
+      'repair.custody.view': true,
+      'repair.replacements.approve': true,
+      'products.view': true,
+      'products.create': true,
+      'products.edit': true,
       'payroll.accounts.disburse': true,
     },
   });
@@ -59,6 +66,12 @@ const seed = async () => {
       'repair.jobs.reception': true,
       'repair.finance.view': true,
       'repair.payments.view': true,
+      'repair.customerRequests.view': true,
+      'repair.customerRequests.receive': true,
+      'repair.custody.view': true,
+      'repair.custody.handover': true,
+      'repair.replacements.view': true,
+      'repair.replacements.deliver': true,
     },
   });
   await set('roles', 'tenantA-repair-technician-role', {
@@ -374,6 +387,27 @@ const seed = async () => {
     warehouseId: 'whB',
     technicianIds: [],
   });
+  await set('customer_service_requests', 'request_branchA', {
+    tenantId: 'tenantA', branchId: 'branchA', customerId: 'customerA', status: 'assigned',
+  });
+  await set('customer_service_requests', 'request_branchB', {
+    tenantId: 'tenantA', branchId: 'branchB', customerId: 'customerA', status: 'assigned',
+  });
+  await set('repair_custody_records', 'custody_branchA', {
+    tenantId: 'tenantA', branchId: 'branchA', jobId: 'job_branchA', receivedQuantity: 1,
+  });
+  await set('repair_custody_records', 'custody_branchB', {
+    tenantId: 'tenantA', branchId: 'branchB', jobId: 'job_branchB', receivedQuantity: 1,
+  });
+  await set('repair_replacement_requests', 'replacement_branchA', {
+    tenantId: 'tenantA', branchId: 'branchA', jobId: 'job_branchA', status: 'pending_approval',
+  });
+  await set('repair_replacement_requests', 'replacement_branchB', {
+    tenantId: 'tenantA', branchId: 'branchB', jobId: 'job_branchB', status: 'pending_approval',
+  });
+  await set('customer_portal_credentials', 'tenantA__customerA', {
+    tenantId: 'tenantA', customerId: 'customerA', pinHash: 'secret', salt: 'secret',
+  });
   await set('repair_spare_parts', 'part_branchA', {
     tenantId: 'tenantA',
     branchId: 'branchA',
@@ -489,6 +523,26 @@ await seed();
   // Inventory-only bind without repair.parts.view still cannot read spare parts.
   const invOnlyDb = testEnv.authenticatedContext('userAWarehouseBound').firestore();
   await assertFails(invOnlyDb.collection('repair_spare_parts').doc('part_branchA').get());
+}
+
+// 4c) Portal operational records are branch isolated and server-owned; secrets are never client-readable.
+{
+  const adminDb = testEnv.authenticatedContext('userAAdmin').firestore();
+  const receptionDb = testEnv.authenticatedContext('userAReception').firestore();
+  const tenantBDb = testEnv.authenticatedContext('userBAdmin').firestore();
+  const anonDb = testEnv.unauthenticatedContext().firestore();
+
+  await assertSucceeds(adminDb.collection('customer_service_requests').doc('request_branchB').get());
+  await assertSucceeds(receptionDb.collection('customer_service_requests').doc('request_branchA').get());
+  await assertFails(receptionDb.collection('customer_service_requests').doc('request_branchB').get());
+  await assertSucceeds(receptionDb.collection('repair_custody_records').doc('custody_branchA').get());
+  await assertFails(receptionDb.collection('repair_custody_records').doc('custody_branchB').get());
+  await assertSucceeds(receptionDb.collection('repair_replacement_requests').doc('replacement_branchA').get());
+  await assertFails(receptionDb.collection('repair_replacement_requests').doc('replacement_branchB').get());
+  await assertFails(tenantBDb.collection('repair_custody_records').doc('custody_branchA').get());
+  await assertFails(adminDb.collection('repair_custody_records').doc('manual').set({ tenantId: 'tenantA', branchId: 'branchA' }));
+  await assertFails(adminDb.collection('customer_portal_credentials').doc('tenantA__customerA').get());
+  await assertFails(anonDb.collection('customer_portal_credentials').doc('tenantA__customerA').get());
 }
 
 // 5) Production report create transaction may read/write the unique guard doc.

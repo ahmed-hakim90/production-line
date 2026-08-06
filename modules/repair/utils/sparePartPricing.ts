@@ -11,20 +11,19 @@ export function normalizeRepairSalePrice(value: unknown): number {
 }
 
 /**
- * Company-wide sale price by customer type:
+ * Company-wide sale price by customer type from manufacturing materials only:
  * - trader → Material.traderSalePrice when > 0, else consumer price
- * - consumer / missing type → Material.defaultSalePrice (consumer), then legacy part catalog
- * Never falls back to purchase cost.
+ * - consumer / missing type → Material.defaultSalePrice
+ * Never falls back to purchase cost or branch catalog prices.
  */
 export function resolveRepairSalePrice(input: {
   customerType?: CustomerType | string | null;
   materialSalePrice?: number | null;
   materialTraderSalePrice?: number | null;
+  /** @deprecated Ignored — catalog is not a price source. */
   partSalePrice?: number | null;
 }): number {
-  const consumer =
-    normalizeRepairSalePrice(input.materialSalePrice)
-    || normalizeRepairSalePrice(input.partSalePrice);
+  const consumer = normalizeRepairSalePrice(input.materialSalePrice);
   if (input.customerType === 'trader') {
     const trader = normalizeRepairSalePrice(input.materialTraderSalePrice);
     if (trader > 0) return trader;
@@ -33,8 +32,7 @@ export function resolveRepairSalePrice(input: {
 }
 
 /**
- * Legacy helper: part catalog sale only.
- * Prefer resolveRepairSalePrice when a Material price may exist.
+ * @deprecated Branch catalog is not a sale-price source. Prefer resolveRepairSalePrice.
  */
 export function repairSparePartSalePrice(part: Pick<RepairSparePart, 'defaultSalePrice'>): number {
   return normalizeRepairSalePrice(part.defaultSalePrice);

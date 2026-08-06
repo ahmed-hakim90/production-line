@@ -11,7 +11,7 @@ type Actor = {
   isSuperAdmin: boolean;
 };
 
-type ServiceRow = { id: string; name: string; price: number; enabled: boolean };
+type ServiceRow = { id: string; name: string; price: number; internalCost: number; enabled: boolean };
 
 const money = (value: unknown) => {
   const n = Number(value || 0);
@@ -65,7 +65,7 @@ const normalizeServices = (value: unknown): ServiceRow[] => {
       throw new HttpsError('invalid-argument', 'معرفات وأسماء الخدمات مطلوبة ويجب ألا تتكرر.');
     }
     ids.add(id);
-    return { id, name, price: money(row.price), enabled: row.enabled !== false };
+    return { id, name, price: money(row.price), internalCost: money(row.internalCost), enabled: row.enabled !== false };
   });
 };
 

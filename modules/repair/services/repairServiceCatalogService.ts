@@ -17,6 +17,7 @@ export const repairServiceCatalogService = {
         id: service.id,
         name: service.name,
         price: service.price,
+        internalCost: Number(service.internalCost || 0),
         enabled: service.enabled !== false,
       })),
     });

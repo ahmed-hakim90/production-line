@@ -10,6 +10,13 @@ import {
   assertActorWarehouseInvolved,
   resolveBoundInventoryWarehouseId,
 } from './inventoryWarehouseScope.js';
+import {
+  releaseStockInTx,
+  reserveStockInTx,
+  stockAvailableQty,
+  stockReservedQty,
+  type StockBalanceData,
+} from './stockReservation.js';
 
 const db = getDb();
 
@@ -101,7 +108,35 @@ type RequestDoc = {
   cancelledAt?: string;
   cancelledBy?: string;
   cancelledByUserId?: string;
+  /** True after approve reserved central stock via reservedQty. */
+  stockReserved?: boolean;
+  reservedLines?: Array<{ itemId: string; itemType: 'material'; reservedQty: number }>;
   tenantId: string;
+};
+
+const releaseRequestReservations = async (
+  tenantId: string,
+  fromWarehouseId: string,
+  reservedLines: Array<{ itemId: string; itemType: 'material'; reservedQty: number }> | undefined,
+): Promise<void> => {
+  const lines = reservedLines || [];
+  if (lines.length === 0) return;
+  await db.runTransaction(async (tx) => {
+    for (const line of lines) {
+      const qty = toNumber(line.reservedQty);
+      if (!(qty > 0)) continue;
+      const ref = db.collection(STOCK_ITEMS).doc(
+        balanceDocId(fromWarehouseId, line.itemType || 'material', line.itemId),
+      );
+      const snap = await tx.get(ref);
+      releaseStockInTx(
+        tx,
+        ref,
+        { tenantId, qty, label: 'رصيد المخزن المركزي' },
+        snap.exists ? (snap.data() as StockBalanceData) : undefined,
+      );
+    }
+  });
 };
 
 const toNumber = (value: unknown) => {
@@ -446,11 +481,57 @@ export const approveSparePartsReplenishmentHandler = async (request: CallableReq
   assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
 
   const now = toIsoNow();
-  await ref.update({
-    status: 'approved',
-    approvedAt: now,
-    approvedBy: actor.displayName,
-    approvedByUserId: actor.uid,
+  const reservedLines: Array<{ itemId: string; itemType: 'material'; reservedQty: number }> = [];
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new HttpsError('not-found', 'الطلب غير موجود.');
+    const current = snap.data() as RequestDoc;
+    if (current.status !== 'submitted') {
+      throw new HttpsError('failed-precondition', 'لا يمكن اعتماد الطلب في حالته الحالية.');
+    }
+    if (String(current.tenantId || '').trim() !== actor.tenantId) {
+      throw new HttpsError('permission-denied', 'الطلب خارج شركتك.');
+    }
+    if (current.stockReserved) {
+      throw new HttpsError('failed-precondition', 'تم حجز مخزون هذا الطلب مسبقاً.');
+    }
+
+    for (const line of current.lines || []) {
+      const qty = toNumber(line.requestedQty);
+      if (!(qty > 0)) continue;
+      const balRef = db.collection(STOCK_ITEMS).doc(
+        balanceDocId(current.fromWarehouseId, line.itemType, line.itemId),
+      );
+      const balSnap = await tx.get(balRef);
+      const bal = balSnap.exists ? (balSnap.data() as StockBalanceData) : undefined;
+      reserveStockInTx(
+        tx,
+        balRef,
+        {
+          tenantId: actor.tenantId,
+          qty,
+          warehouseId: current.fromWarehouseId,
+          itemType: line.itemType,
+          itemId: line.itemId,
+          label: `الصنف ${line.itemName}`,
+        },
+        bal,
+      );
+      reservedLines.push({
+        itemId: line.itemId,
+        itemType: 'material',
+        reservedQty: qty,
+      });
+    }
+
+    tx.update(ref, {
+      status: 'approved',
+      approvedAt: now,
+      approvedBy: actor.displayName,
+      approvedByUserId: actor.uid,
+      stockReserved: true,
+      reservedLines,
+    });
   });
   await writeActivity(actor, 'spare_parts_replenishment.approve', requestId, {
     referenceNo: data.referenceNo,
@@ -625,12 +706,33 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
       ) {
         throw new HttpsError('permission-denied', 'رصيد المخزن خارج شركتك.');
       }
-      const sourceQty = sourceBalSnap.exists ? toNumber(sourceBalSnap.data()?.quantity) : 0;
+          const sourceBal = sourceBalSnap.exists
+        ? (sourceBalSnap.data() as StockBalanceData & {
+          minStock?: number;
+          itemName?: string;
+          itemCode?: string;
+          unit?: string;
+        })
+        : undefined;
+      const sourceQty = toNumber(sourceBal?.quantity);
       const targetQty = targetBalSnap.exists ? toNumber(targetBalSnap.data()?.quantity) : 0;
       if (sourceQty < receivedQty) {
         throw new HttpsError(
           'failed-precondition',
           `الرصيد غير كافٍ في مخزن قطع الغيار للصنف ${line.itemName}.`,
+        );
+      }
+
+      const reservedForLine = (current.reservedLines || []).find(
+        (row) => String(row.itemId) === String(line.itemId),
+      );
+      // Drop this request's entire hold on receive (covers short receipts too).
+      const releaseReserveQty = Math.max(0, toNumber(reservedForLine?.reservedQty));
+      const availableAfterOwnHold = stockAvailableQty(sourceBal) + releaseReserveQty;
+      if (availableAfterOwnHold + 1e-9 < receivedQty) {
+        throw new HttpsError(
+          'failed-precondition',
+          `الرصيد المتاح غير كافٍ في مخزن قطع الغيار للصنف ${line.itemName}.`,
         );
       }
 
@@ -691,8 +793,9 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
         itemName: line.itemName,
         itemCode: line.itemCode,
         unit: line.unit,
-        minStock: toNumber(sourceBalSnap.data()?.minStock),
+        minStock: toNumber(sourceBal?.minStock),
         quantity: sourceQty - receivedQty,
+        reservedQty: Math.max(0, stockReservedQty(sourceBal) - releaseReserveQty),
         updatedAt: now,
         tenantId: actor.tenantId,
       }, { merge: true });
@@ -727,6 +830,8 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
       receivedAt: now,
       receivedBy: actor.displayName,
       receivedByUserId: actor.uid,
+      stockReserved: false,
+      reservedLines: [],
     });
   });
 
@@ -880,6 +985,10 @@ export const rejectSparePartsReplenishmentHandler = async (request: CallableRequ
   }
   assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
 
+  if (data.stockReserved) {
+    await releaseRequestReservations(actor.tenantId, data.fromWarehouseId, data.reservedLines);
+  }
+
   const now = toIsoNow();
   await ref.update(stripUndefined({
     status: 'rejected',
@@ -887,6 +996,8 @@ export const rejectSparePartsReplenishmentHandler = async (request: CallableRequ
     rejectedBy: actor.displayName,
     rejectedByUserId: actor.uid,
     rejectionReason: String(payload.reason || '').trim() || undefined,
+    stockReserved: false,
+    reservedLines: [],
   }));
   await writeActivity(actor, 'spare_parts_replenishment.reject', requestId, {
     referenceNo: data.referenceNo,
@@ -915,12 +1026,18 @@ export const cancelSparePartsReplenishmentHandler = async (request: CallableRequ
   }
   assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
 
+  if (data.stockReserved) {
+    await releaseRequestReservations(actor.tenantId, data.fromWarehouseId, data.reservedLines);
+  }
+
   const now = toIsoNow();
   await ref.update({
     status: 'cancelled',
     cancelledAt: now,
     cancelledBy: actor.displayName,
     cancelledByUserId: actor.uid,
+    stockReserved: false,
+    reservedLines: [],
   });
   await writeActivity(actor, 'spare_parts_replenishment.cancel', requestId, {
     referenceNo: data.referenceNo,
