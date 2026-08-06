@@ -50,9 +50,18 @@ export const appendRepairServiceEvent = async (
 export const repairServiceEventService = {
   async listByJob(jobId: string): Promise<RepairServiceEvent[]> {
     if (!isConfigured || !jobId) return [];
-    const jobRef = doc(db, REPAIR_JOBS_COLLECTION, jobId);
-    const q = query(collection(jobRef, REPAIR_SERVICE_EVENTS_SUBCOLLECTION), orderBy('at', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairServiceEvent));
+    try {
+      const jobRef = doc(db, REPAIR_JOBS_COLLECTION, jobId);
+      const q = query(collection(jobRef, REPAIR_SERVICE_EVENTS_SUBCOLLECTION), orderBy('at', 'desc'));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairServiceEvent));
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      const message = String((error as { message?: string })?.message || '');
+      if (code.includes('permission-denied') || /missing or insufficient permissions/i.test(message)) {
+        return [];
+      }
+      throw error;
+    }
   },
 };

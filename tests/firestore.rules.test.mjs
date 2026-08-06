@@ -510,6 +510,16 @@ await seed();
   await assertFails(technicianDb.collection('repair_jobs').doc('job_branchA').get());
   await assertFails(technicianDb.collection('repair_job_financials').doc('job_branchA').get());
   await assertFails(technicianDb.collection('repair_payment_authorizations').doc('job_branchA__r1').get());
+  // Assigned technician may list/get workshop service events under their job.
+  await assertSucceeds(
+    technicianDb.collection('repair_jobs').doc('job_branchA').collection('service_events').doc('ev1').get(),
+  );
+  await assertSucceeds(
+    technicianDb.collection('repair_jobs').doc('job_branchA').collection('service_events').orderBy('at', 'desc').get(),
+  );
+  await assertFails(
+    technicianDb.collection('repair_jobs').doc('job_branchB').collection('service_events').doc('ev_branchB').get(),
+  );
   await assertSucceeds(receptionDb.collection('repair_jobs').doc('job_branchA').get());
   await assertSucceeds(receptionDb.collection('repair_job_financials').doc('job_branchA').get());
   await assertSucceeds(receptionDb.collection('repair_payment_authorizations').doc('job_branchA__r1').get());

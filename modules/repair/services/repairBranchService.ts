@@ -39,9 +39,19 @@ const clearOtherMainBranches = async (exceptId?: string | null): Promise<void> =
 export const repairBranchService = {
   async list(): Promise<RepairBranch[]> {
     if (!isConfigured) return [];
-    const q = tenantQuery(db, REPAIR_BRANCHES_COLLECTION, orderBy('createdAt', 'desc'));
-    const snap = await getDocs(q);
-    return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairBranch));
+    try {
+      const q = tenantQuery(db, REPAIR_BRANCHES_COLLECTION, orderBy('createdAt', 'desc'));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairBranch));
+    } catch (error: unknown) {
+      // Technicians and other scoped roles may hit deny on list; callers treat empty as no labels.
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      const message = String((error as { message?: string })?.message || '');
+      if (code.includes('permission-denied') || /missing or insufficient permissions/i.test(message)) {
+        return [];
+      }
+      throw error;
+    }
   },
 
   async create(input: Omit<RepairBranch, 'id' | 'createdAt' | 'tenantId'>): Promise<string | null> {

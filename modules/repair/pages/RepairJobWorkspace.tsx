@@ -197,7 +197,9 @@ export const RepairJobWorkspace: React.FC = () => {
 
   useEffect(() => {
     if (!jobId) return;
-    void repairServiceEventService.listByJob(jobId).then(setEvents);
+    void repairServiceEventService.listByJob(jobId)
+      .then(setEvents)
+      .catch(() => setEvents([]));
   }, [jobId, job?.updatedAt]);
 
   // Status only — do not reset on updatedAt. Saving products first updates the doc while
@@ -417,6 +419,14 @@ export const RepairJobWorkspace: React.FC = () => {
       return;
     }
     if (applyingStatus) return;
+    if (String(status || '') === String(job.status || '')) {
+      toast.error('اختر حالة جديدة من القائمة قبل التطبيق.');
+      return;
+    }
+    if (mapLegacyRepairStatus(status) === 'received') {
+      toast.error('حالة «وارد» للاستقبال فقط. اختر تشخيص / إصلاح / جاهز للتسليم.');
+      return;
+    }
     if (isDeliveredStatus(status) || !isWorkshopStatusWithinReadyCap(status, repairSettings.workflow.statuses)) {
       toast.error('الورشة تغيّر الحالة حتى «جاهز للتسليم» فقط. التسليم من الاستقبال.');
       return;
@@ -577,6 +587,7 @@ export const RepairJobWorkspace: React.FC = () => {
     );
   }
 
+  const statusUnchanged = String(status || '') === String(job?.status || '');
   const selectedStatusLabel = allowedStatusOptions.find((s) => s.id === status)?.label
     || status
     || '—';
@@ -751,7 +762,7 @@ export const RepairJobWorkspace: React.FC = () => {
             ) : null}
             <Button
               className="w-full min-h-14 text-base font-semibold"
-              disabled={!canEditWorkshop || applyingStatus}
+              disabled={!canEditWorkshop || applyingStatus || statusUnchanged}
               onClick={() => void applyStatus()}
             >
               {applyingStatus ? 'جاري تطبيق الحالة…' : `تطبيق: ${selectedStatusLabel}`}
@@ -987,7 +998,7 @@ export const RepairJobWorkspace: React.FC = () => {
           </Button>
           <Button
             className="min-h-12 flex-[1.35] text-sm font-semibold"
-            disabled={!canEditWorkshop || applyingStatus}
+            disabled={!canEditWorkshop || applyingStatus || statusUnchanged}
             onClick={() => void applyStatus()}
           >
             {applyingStatus ? 'جاري التطبيق…' : 'تطبيق الحالة'}

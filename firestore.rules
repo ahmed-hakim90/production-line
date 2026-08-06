@@ -952,24 +952,29 @@ service cloud.firestore {
       allow delete: if pl_hasErpPermission('repair.jobs.delete') && pl_canReadRepairBranchScoped();
     }
 
+    /**
+     * Assigned technician may read events under their job via path scope.
+     * Do not require pl_canReadRepairBranchScoped here: list queries on the
+     * subcollection have no branchId filter and would fail closed incorrectly.
+     */
+    function pl_isAssignedRepairJobTechnician(jobId) {
+      return pl_hasErpPermission('repair.jobs.technician')
+        && exists(/databases/$(database)/documents/repair_jobs/$(jobId))
+        && get(/databases/$(database)/documents/repair_jobs/$(jobId)).data.tenantId == pl_tenantId()
+        && get(/databases/$(database)/documents/repair_jobs/$(jobId)).data.get('technicianId', '') == request.auth.uid;
+    }
+
     match /repair_jobs/{jobId}/service_events/{eventId} {
       allow read: if (
         (
           pl_hasErpPermission('repair.view')
           || pl_hasErpPermission('repair.jobs.reception')
         ) && pl_canReadRepairBranchScoped()
-      ) || (
-        pl_hasErpPermission('repair.jobs.technician')
-        && get(/databases/$(database)/documents/repair_jobs/$(jobId)).data.get('technicianId', '') == request.auth.uid
-        && pl_canReadRepairBranchScoped()
-      );
+      ) || pl_isAssignedRepairJobTechnician(jobId);
       allow create: if (
         pl_hasErpPermission('repair.jobs.create')
         || pl_hasErpPermission('repair.jobs.reception')
-        || (
-          pl_hasErpPermission('repair.jobs.technician')
-          && get(/databases/$(database)/documents/repair_jobs/$(jobId)).data.get('technicianId', '') == request.auth.uid
-        )
+        || pl_isAssignedRepairJobTechnician(jobId)
       ) && pl_canCreateRepairBranchScoped();
       allow update: if pl_hasErpPermission('repair.jobs.edit') && pl_canUpdateRepairBranchScoped();
       allow delete: if pl_hasErpPermission('repair.jobs.delete') && pl_canReadRepairBranchScoped();
