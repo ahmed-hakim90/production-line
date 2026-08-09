@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/select';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
+import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
@@ -36,7 +38,7 @@ import {
   openWhatsApp,
   toRepairOpsUserError,
 } from '../lib/repairCustomerOpsLabels';
-import { repairReplacementStatusChipType } from '../lib/repairSemanticStatus';
+import { repairReplacementStatusChipType, semanticStatusAccent } from '../lib/repairSemanticStatus';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 import {
@@ -77,6 +79,17 @@ export const RepairReplacements: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<RepairReplacementStatus | ''>('');
   const [branchFilter, setBranchFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [boardView, setBoardView] = useListViewMode('repair-replacements', 'kanban');
+
+  const replacementKanbanColumns = useMemo(
+    () =>
+      (Object.keys(REPLACEMENT_STATUS_LABELS) as RepairReplacementStatus[]).map((status) => ({
+        id: status,
+        label: REPLACEMENT_STATUS_LABELS[status],
+        accentColor: semanticStatusAccent(repairReplacementStatusChipType(status)),
+      })),
+    [],
+  );
 
   const [selected, setSelected] = useState<RepairReplacementRequest | null>(null);
   const [approveOpen, setApproveOpen] = useState(false);
@@ -243,10 +256,13 @@ export const RepairReplacements: React.FC = () => {
         subtitle="اعتماد ومتابعة وتسليم البدائل — دون حجز أو خصم من مخزون المنتج الجديد"
         icon="swap_horiz"
         actions={
-          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className="ms-1 size-4" />
-            تحديث
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ListViewToggle value={boardView} onChange={setBoardView} />
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className="ms-1 size-4" />
+              تحديث
+            </Button>
+          </div>
         }
       />
 
@@ -311,8 +327,68 @@ export const RepairReplacements: React.FC = () => {
           }}
         />
 
-        <div className="mt-4 -mx-1 overflow-x-auto rounded-lg border sm:mx-0">
-          <table className="erp-table w-full min-w-[720px] text-right">
+        <div className="mt-4">
+          {boardView === 'kanban' ? (
+            <StatusKanbanBoard
+              columns={replacementKanbanColumns}
+              items={filtered
+                .filter((row) => Boolean(row.id))
+                .map((row) => ({ ...row, id: String(row.id) }))}
+              loading={loading}
+              emptyColumnLabel="لا طلبات"
+              renderCard={(row) => (
+                <>
+                  <Link
+                    className="font-mono text-xs font-semibold text-primary hover:underline"
+                    to={withTenantPath(tenantSlug, `/repair/jobs/${row.jobId}`)}
+                    onPointerDown={(e) => e.stopPropagation()}
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    #{row.receiptNo}
+                  </Link>
+                  <div className="mt-1.5 truncate text-sm font-medium">{row.customerName}</div>
+                  <div className="line-clamp-2 text-xs text-muted-foreground">
+                    {row.originalProductName}
+                    {row.replacementProductName ? ` → ${row.replacementProductName}` : ''}
+                  </div>
+                  <div className="mt-1 text-[11px] text-muted-foreground">{branchName(row.branchId)}</div>
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {row.status === 'pending_approval' && canApprove ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openApprove(row);
+                        }}
+                      >
+                        اعتماد
+                      </Button>
+                    ) : null}
+                    {row.status === 'approved' && canDeliver ? (
+                      <Button
+                        type="button"
+                        size="sm"
+                        className="h-7 px-2 text-xs"
+                        onPointerDown={(e) => e.stopPropagation()}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openNoteAction('deliverReplacement', row);
+                        }}
+                      >
+                        تسليم
+                      </Button>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            />
+          ) : (
+            <>
+              <div className="-mx-1 overflow-x-auto rounded-lg border sm:mx-0">
+                <table className="erp-table w-full min-w-[720px] text-right">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الإيصال</th>
@@ -449,6 +525,9 @@ export const RepairReplacements: React.FC = () => {
           itemLabel="طلب"
           onPageChange={setPage}
         />
+            </>
+          )}
+        </div>
       </Card>
 
       <Dialog

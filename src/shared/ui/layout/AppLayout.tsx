@@ -5,6 +5,8 @@ import { SidebarProvider, useSidebar } from './useSidebar';
 import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { MobileBottomBar } from './MobileBottomBar';
+import { RepairMobileBottomBar } from './RepairMobileBottomBar';
+import { shouldShowRepairBottomBar } from './repairBottomBar';
 import { PageBackProvider } from './PageBackContext';
 import { GlobalBackgroundJobs } from '@/components/background-jobs/GlobalBackgroundJobs';
 import { usePermission } from '@/utils/permissions';
@@ -29,9 +31,12 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
   const { isRTL } = useAppDirection();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { collapsed, toggleCollapse } = useSidebar();
-  const { canViewActivityLog } = usePermission();
+  const { can, canViewActivityLog } = usePermission();
   const location = useLocation();
   const themeSettings = useAppStore((s) => s.systemSettings?.theme ?? DEFAULT_THEME);
+  const roles = useAppStore((s) => s.roles);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const inventoryWarehouseId = useAppStore((s) => s.userProfile?.inventoryWarehouseId);
   const contentMaxWidth = useMemo(
     () => resolveContentMaxWidthForPath(location.pathname, themeSettings),
     [location.pathname, themeSettings],
@@ -40,6 +45,22 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
     const p = stripTenantSegmentFromPathname(location.pathname);
     return p === '/repair' || p.startsWith('/repair/');
   }, [location.pathname]);
+  const workshopFocusMode = useMemo(() => {
+    const p = stripTenantSegmentFromPathname(location.pathname);
+    return /^\/repair\/jobs\/[^/]+\/workspace\/?$/.test(p);
+  }, [location.pathname]);
+  const roleKey = useMemo(
+    () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
+    [roles, userRoleId],
+  );
+  const useRepairBottomBar = useMemo(
+    () => shouldShowRepairBottomBar({
+      can: (permission: string) => can(permission as Parameters<typeof can>[0]),
+      roleKey,
+      inventoryWarehouseId,
+    }),
+    [can, inventoryWarehouseId, roleKey],
+  );
   const online = useOnlineStatus();
 
   // Margin matches sidebar width: collapsed=52px icon bar, expanded=260px
@@ -77,7 +98,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             className={[
               'flex-1',
               online ? 'pt-[52px]' : 'pt-[calc(52px+2.75rem)]',
-              'pb-[72px] lg:pb-0',
+              workshopFocusMode ? 'pb-0' : 'pb-[72px] lg:pb-0',
             ].join(' ')}
             tabIndex={-1}
           >
@@ -96,7 +117,10 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
             </div>
           </main>
 
-          <footer className="mb-[72px] border-t border-[var(--color-border)] bg-[var(--color-card)] lg:mb-0">
+          <footer className={cn(
+            'border-t border-[var(--color-border)] bg-[var(--color-card)]',
+            workshopFocusMode ? 'mb-0 hidden lg:block' : 'mb-[72px] lg:mb-0',
+          )}>
             <div
               className="mx-auto w-full px-4 sm:px-5 py-3 flex flex-col sm:flex-row justify-between items-center gap-3"
               style={{ maxWidth: `min(100%, ${contentMaxWidth})` }}
@@ -134,7 +158,11 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
 
           {/* Global jobs panel/history mounted once for the full app layout */}
           {canViewActivityLog && <GlobalBackgroundJobs />}
-          <MobileBottomBar onMoreClick={() => setSidebarOpen(true)} />
+          {useRepairBottomBar ? (
+            <RepairMobileBottomBar onMoreClick={() => setSidebarOpen(true)} />
+          ) : (
+            <MobileBottomBar onMoreClick={() => setSidebarOpen(true)} />
+          )}
         </PageBackProvider>
       </div>
     </div>

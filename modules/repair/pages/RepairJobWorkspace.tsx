@@ -151,6 +151,8 @@ export const RepairJobWorkspace: React.FC = () => {
   const [requestingPart, setRequestingPart] = useState(false);
   const [issuingUsageId, setIssuingUsageId] = useState<string | null>(null);
   const [headerPanel, setHeaderPanel] = useState<'photo' | 'events' | null>(null);
+  /** Mobile workshop flow: diagnose → parts → finish (desktop shows all). */
+  const [workshopStep, setWorkshopStep] = useState<'diagnose' | 'parts' | 'finish'>('diagnose');
   const photoInputRef = useRef<HTMLInputElement | null>(null);
 
   const toggleHeaderPanel = (panel: 'photo' | 'events') => {

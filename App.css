@@ -2631,26 +2631,39 @@ label[class*="text-[12"] {
 .erp-page-actions {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-wrap: wrap;
-  flex-shrink: 0;
+  flex-shrink: 1;
+  min-width: 0;
+  max-width: 100%;
 }
 
-/* Mobile: title above actions */
-@media (max-width: 640px) {
+/* Visual hierarchy: one primary CTA + secondary + overflow menu */
+.erp-page-actions > .btn,
+.erp-page-actions > button {
+  min-height: 36px;
+}
+
+/* Phone + tablet: stack title above actions so buttons stay on-screen */
+@media (max-width: 1023px) {
   .erp-page-head {
     align-items: flex-start;
-    gap: 8px;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .erp-page-title-block {
+    width: 100%;
   }
   .erp-page-actions {
     width: 100%;
+    max-width: 100%;
     justify-content: flex-start;
-    flex-wrap: nowrap;
-    /* overflow-x: auto; */
+    flex-wrap: wrap;
+    gap: 8px;
   }
-  .erp-page-actions .btn {
+  .erp-page-actions .btn,
+  .erp-page-actions > button {
     white-space: nowrap;
-    flex-shrink: 0;
   }
 }
 
@@ -3078,6 +3091,34 @@ input[type="radio"] {
   display: flex;
   flex-direction: column;
   gap: 0.85rem;
+}
+
+/* Multi-module charts grid on home */
+.ops-module-charts {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+@media (min-width: 768px) {
+  .ops-module-charts {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (min-width: 1280px) {
+  .ops-module-charts {
+    grid-template-columns: 1.35fr 1fr 1fr;
+  }
+}
+
+.ops-module-charts__wide {
+  grid-column: 1 / -1;
+}
+
+.ops-module-charts .ops-dash-panel {
+  min-height: 100%;
 }
 
 /* Repair module — scoped to main content (see AppLayout `erp-repair-theme`).

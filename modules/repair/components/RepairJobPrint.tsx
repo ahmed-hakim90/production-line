@@ -3,7 +3,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import type { PrintTemplateSettings } from '../../../types';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { getPrintThemePalette } from '../../../utils/printTheme';
-import { resolveRepairJobPrintProducts, type RepairPrintStatusMap } from '../lib/repairJobPrint';
+import {
+  formatRepairPrintProductLabel,
+  repairCustomerReceiptAcknowledgment,
+  repairCustomerReceiptTitle,
+  resolveRepairJobPrintProducts,
+  type RepairPrintStatusMap,
+} from '../lib/repairJobPrint';
 import { shouldShowRepairPrintCosts } from '../lib/repairJobIntake';
 import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
 import type { RepairBranch, RepairJob, RepairJobProduct } from '../types';
@@ -24,15 +30,24 @@ const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
 };
 
 const WARRANTY_LABELS: Record<string, string> = {
-  none: 'بدون',
-  '3months': '3 شهور',
-  '6months': '6 شهور',
+  none: 'بدون ضمان مصنّع',
+  '3months': 'ضمان مصنّع 3 شهور',
+  '6months': 'ضمان مصنّع 6 شهور',
 };
 
-const money = (value: number | undefined | null) => {
+const money = (value: number | undefined | null, decimalPlaces = 0) => {
   const n = Number(value || 0);
   if (!Number.isFinite(n) || n <= 0) return '—';
-  return `${n.toLocaleString('ar-EG')} ج.م`;
+  return `${n.toLocaleString('ar-EG', {
+    minimumFractionDigits: decimalPlaces,
+    maximumFractionDigits: decimalPlaces,
+  })} ج.م`;
+};
+
+const formatDateTime = (value?: string) => {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleString('ar-EG');
 };
 
 export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintProps>(
@@ -44,20 +59,49 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
     const paper = PAPER_DIMENSIONS[ps.paperSize] ?? PAPER_DIMENSIONS.a4;
     const isThermal = ps.paperSize === 'thermal';
     const rows = resolveRepairJobPrintProducts(job, products);
-    const createdAt = job.createdAt ? new Date(job.createdAt).toLocaleString('ar-EG') : '—';
+    const createdAt = formatDateTime(job.createdAt);
     const printedAt = new Date().toLocaleString('ar-EG');
     const statusChip = resolveRepairStatusChip(job.status, statusMap);
     const warrantyLabel = WARRANTY_LABELS[job.warranty] || job.warranty || '—';
     const parts = Array.isArray(job.partsUsed) ? job.partsUsed : [];
-    // Repair intake slips always include track QR when a public URL exists.
     const showQr = Boolean(trackUrl);
     const showCosts = ps.showCosts !== false && shouldShowRepairPrintCosts(job, products);
+    const decimalPlaces = Math.max(0, Math.min(3, Number(ps.decimalPlaces ?? 0)));
+    const brandName = String(ps.headerText || '').trim() || 'مركز الصيانة';
+    const documentTitle = repairCustomerReceiptTitle(showCosts);
+    const acknowledgment = repairCustomerReceiptAcknowledgment(showCosts);
+    const branchContact = [branch?.address, branch?.phone].filter(Boolean).join(' — ');
+    const totalQty = rows.reduce((sum, row) => sum + Math.max(1, Number(row.quantity || 1)), 0);
+    const problemText = String(job.problemDescription || '').trim();
+    const showProblemBlock = Boolean(
+      problemText
+      && !rows.some((row) => String(row.diagnosis || '').trim() === problemText),
+    );
 
+    const labelStyle: React.CSSProperties = {
+      margin: 0,
+      color: palette.mutedText,
+      fontSize: isThermal ? '6pt' : '8pt',
+      fontWeight: 700,
+    };
+    const valueStyle: React.CSSProperties = {
+      margin: '0.8mm 0 0',
+      color: palette.text,
+      fontSize: isThermal ? '8pt' : '10.5pt',
+      fontWeight: 800,
+      overflowWrap: 'anywhere',
+    };
+    const sectionTitle: React.CSSProperties = {
+      margin: `0 0 ${isThermal ? '1.5mm' : '2.5mm'}`,
+      color: palette.primary,
+      fontSize: isThermal ? '8.5pt' : '11pt',
+      fontWeight: 900,
+    };
     const thStyle: React.CSSProperties = {
-      border: `1px solid ${ps.primaryColor}`,
+      border: `1px solid ${palette.primary}`,
       padding: isThermal ? '1.5mm 1mm' : '2.5mm 2mm',
-      fontSize: isThermal ? '7pt' : '10pt',
-      background: ps.primaryColor,
+      fontSize: isThermal ? '6.5pt' : '9pt',
+      background: palette.primary,
       color: '#ffffff',
       WebkitPrintColorAdjust: 'exact',
       printColorAdjust: 'exact',
@@ -67,24 +111,26 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
     const tdStyle: React.CSSProperties = {
       border: `1px solid ${palette.border}`,
       padding: isThermal ? '1.5mm 1mm' : '2.5mm 2mm',
-      fontSize: isThermal ? '7pt' : '10pt',
+      fontSize: isThermal ? '6.5pt' : '9.5pt',
       color: palette.text,
+      verticalAlign: 'top',
     };
-    const labelCell: React.CSSProperties = {
-      padding: isThermal ? '1.5mm' : '2.5mm 3mm',
-      width: '22%',
-      borderBottom: `1px solid ${palette.border}`,
-      color: palette.mutedText,
-      fontWeight: 700,
-      background: palette.tableRowAltBg,
-    };
-    const valueCell: React.CSSProperties = {
-      padding: isThermal ? '1.5mm' : '2.5mm 3mm',
-      width: '28%',
-      borderBottom: `1px solid ${palette.border}`,
-      color: palette.text,
-      fontWeight: 700,
-    };
+
+    const customerInfoRows: Array<[string, string]> = [
+      ['اسم العميل', job.customerName || '—'],
+      ['رقم الهاتف', job.customerPhone || '—'],
+      ['العنوان', job.customerAddress || '—'],
+      ['الضمان', warrantyLabel],
+      ['التكلفة', showCosts ? money(job.finalCost, decimalPlaces) : 'تُحدد بعد التشخيص'],
+      ['مركز الخدمة', branch?.name || '—'],
+    ];
+    const infoColumns = isThermal ? 1 : 2;
+
+    const configuredFooter = String(ps.footerText || '').trim();
+    const footerLine =
+      configuredFooter && configuredFooter !== DEFAULT_PRINT_TEMPLATE.footerText
+        ? configuredFooter
+        : `شكرًا لثقتكم بـ ${brandName} — يُرجى الاحتفاظ بهذا الإيصال حتى استلام المنتج.`;
 
     return (
       <div
@@ -100,16 +146,28 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           background: '#fff',
           color: palette.text,
           fontSize: isThermal ? '8pt' : '11pt',
-          lineHeight: 1.55,
+          lineHeight: 1.5,
           boxSizing: 'border-box',
         }}
       >
+        {/* Brand accent bar */}
         <div
           style={{
-            border: `2px solid ${ps.primaryColor}`,
+            height: isThermal ? '1.2mm' : '2mm',
+            background: palette.primary,
+            borderRadius: '1mm',
+            marginBottom: isThermal ? '3mm' : '4mm',
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact',
+          }}
+        />
+
+        <header
+          style={{
+            border: `1.5px solid ${palette.border}`,
             borderRadius: isThermal ? '2mm' : '3mm',
             overflow: 'hidden',
-            marginBottom: isThermal ? '3mm' : '6mm',
+            marginBottom: isThermal ? '3mm' : '5mm',
           }}
         >
           <div
@@ -117,50 +175,100 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
-              gap: '4mm',
+              gap: '3mm',
               padding: isThermal ? '3mm' : '5mm 6mm',
-              borderBottom: `3px solid ${ps.primaryColor}`,
+              borderBottom: `2.5px solid ${palette.primary}`,
+              background: '#fff',
             }}
           >
-            <div style={{ flex: 1, textAlign: 'right' }}>
+            <div style={{ flex: 1.15, textAlign: 'right', minWidth: 0 }}>
               {ps.logoUrl ? (
                 <img
                   src={ps.logoUrl}
                   alt=""
                   style={{
-                    maxHeight: isThermal ? '10mm' : '16mm',
+                    maxHeight: isThermal ? '10mm' : '18mm',
+                    maxWidth: isThermal ? '28mm' : '48mm',
                     objectFit: 'contain',
                     display: 'block',
                     marginBottom: '1.5mm',
                   }}
                 />
               ) : null}
-              <h1 style={{ margin: 0, fontSize: isThermal ? '11pt' : '15pt', fontWeight: 900, color: ps.primaryColor }}>
-                {ps.headerText}
+              <h1
+                style={{
+                  margin: 0,
+                  fontSize: isThermal ? '11pt' : '16pt',
+                  fontWeight: 900,
+                  color: palette.primary,
+                  letterSpacing: '-0.01em',
+                }}
+              >
+                {brandName}
               </h1>
-            </div>
-            <div style={{ flex: 1.2, textAlign: 'center' }}>
-              <p style={{ margin: 0, fontSize: isThermal ? '10pt' : '14pt', fontWeight: 900 }}>
-                {showCosts ? 'طلب صيانة' : 'إيصال استلام قطعة صيانة'}
-              </p>
-              <p style={{ margin: '1mm 0 0', fontSize: isThermal ? '7pt' : '9pt', color: palette.mutedText, fontWeight: 700 }}>
-                {branch?.name || '—'}
+              <p style={{ ...labelStyle, marginTop: '1mm' }}>
+                {branch?.name || 'مركز الصيانة'}
+                {branchContact ? ` · ${branchContact}` : ''}
               </p>
             </div>
+
+            <div style={{ flex: 1.1, textAlign: 'center', minWidth: 0 }}>
+              <p
+                style={{
+                  margin: 0,
+                  display: 'inline-block',
+                  padding: isThermal ? '0.6mm 1.5mm' : '1mm 2.5mm',
+                  borderRadius: '999px',
+                  border: `1px solid ${palette.border}`,
+                  background: palette.tableRowAltBg,
+                  fontSize: isThermal ? '6pt' : '8pt',
+                  fontWeight: 800,
+                  color: palette.mutedText,
+                }}
+              >
+                نسخة العميل
+              </p>
+              <h2
+                style={{
+                  margin: isThermal ? '1.5mm 0 0' : '2mm 0 0',
+                  fontSize: isThermal ? '11pt' : '15pt',
+                  fontWeight: 900,
+                  color: palette.text,
+                }}
+              >
+                {documentTitle}
+              </h2>
+              <p style={{ ...labelStyle, marginTop: '1mm' }}>
+                {showCosts ? 'بيان طلب وصيانة' : 'إثبات استلام قطعة لدى المركز'}
+              </p>
+            </div>
+
             <div style={{ flex: 1, textAlign: 'left' }}>
               <div
                 style={{
                   display: 'inline-block',
-                  padding: isThermal ? '1.5mm 2mm' : '2.5mm 3.5mm',
-                  borderRadius: '2mm',
-                  background: ps.primaryColor,
+                  minWidth: isThermal ? '24mm' : '36mm',
+                  padding: isThermal ? '2mm' : '3mm 3.5mm',
+                  borderRadius: '2.5mm',
+                  background: palette.primary,
                   color: '#fff',
                   textAlign: 'center',
-                  minWidth: isThermal ? '22mm' : '30mm',
+                  WebkitPrintColorAdjust: 'exact',
+                  printColorAdjust: 'exact',
                 }}
               >
-                <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', fontWeight: 700, opacity: 0.9 }}>رقم الطلب</p>
-                <p style={{ margin: '0.5mm 0 0', fontSize: isThermal ? '8pt' : '11pt', fontWeight: 900, fontFamily: 'monospace' }}>
+                <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', fontWeight: 700, opacity: 0.92 }}>
+                  رقم الإيصال
+                </p>
+                <p
+                  style={{
+                    margin: '1mm 0 0',
+                    fontSize: isThermal ? '9pt' : '13pt',
+                    fontWeight: 900,
+                    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                    letterSpacing: '0.02em',
+                  }}
+                >
                   {job.receiptNo}
                 </p>
               </div>
@@ -170,14 +278,14 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
           <div
             style={{
               display: 'grid',
-              gridTemplateColumns: isThermal ? '1fr 1fr' : '1fr 1fr 1fr 1fr',
+              gridTemplateColumns: isThermal ? '1fr 1fr' : 'repeat(4, 1fr)',
               background: palette.tableRowAltBg,
             }}
           >
             {[
-              { label: 'تاريخ الإنشاء', value: createdAt },
-              { label: 'الحالة', value: statusChip.label, emphasize: true },
-              { label: 'عدد المنتجات', value: String(rows.length) },
+              { label: 'تاريخ الاستلام', value: createdAt },
+              { label: 'حالة الطلب', value: statusChip.label },
+              { label: 'عدد القطع', value: String(totalQty) },
               { label: 'تاريخ الطباعة', value: printedAt },
             ].map((cell, idx, arr) => (
               <div
@@ -187,132 +295,129 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                   borderLeft: idx < arr.length - 1 ? `1px solid ${palette.border}` : undefined,
                 }}
               >
-                <p style={{ margin: 0, fontSize: isThermal ? '6pt' : '8pt', fontWeight: 700, color: palette.mutedText }}>
-                  {cell.label}
-                </p>
-                {cell.emphasize ? (
-                  <p
-                    style={{
-                      margin: '1mm 0 0',
-                      display: 'inline-block',
-                      padding: isThermal ? '0.8mm 1.5mm' : '1mm 2.5mm',
-                      borderRadius: '1.5mm',
-                      border: `1.5px solid ${statusChip.style.borderColor}`,
-                      background: statusChip.style.backgroundColor,
-                      color: statusChip.style.color,
-                      fontSize: isThermal ? '8pt' : '10pt',
-                      fontWeight: 900,
-                      WebkitPrintColorAdjust: 'exact',
-                      printColorAdjust: 'exact',
-                    }}
-                  >
-                    {cell.value}
-                  </p>
-                ) : (
-                  <p style={{ margin: '0.5mm 0 0', fontSize: isThermal ? '8pt' : '10pt', fontWeight: 900 }}>
-                    {cell.value}
-                  </p>
-                )}
+                <p style={labelStyle}>{cell.label}</p>
+                <p style={{ ...valueStyle, fontSize: isThermal ? '8pt' : '10pt' }}>{cell.value}</p>
               </div>
             ))}
           </div>
-        </div>
+        </header>
 
-        <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: isThermal ? '3mm' : '5mm' }}>
-          <tbody>
-            <tr>
-              <td style={labelCell}>العميل</td>
-              <td style={valueCell}>{job.customerName || '—'}</td>
-              <td style={labelCell}>الهاتف</td>
-              <td style={valueCell}>{job.customerPhone || '—'}</td>
-            </tr>
-            <tr>
-              <td style={labelCell}>العنوان</td>
-              <td style={valueCell} colSpan={3}>{job.customerAddress || '—'}</td>
-            </tr>
-            <tr>
-              <td style={labelCell}>الضمان</td>
-              <td style={valueCell}>{warrantyLabel}</td>
-              <td style={labelCell}>التكلفة النهائية</td>
-              <td style={valueCell}>{showCosts ? money(job.finalCost) : '—'}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <div style={{ marginBottom: isThermal ? '2mm' : '3mm', fontWeight: 900, fontSize: isThermal ? '9pt' : '11pt' }}>
-          المنتجات والتشخيص
-        </div>
-        <table
+        <section
           style={{
-            width: '100%',
-            borderCollapse: 'collapse',
-            marginBottom: isThermal ? '3mm' : '5mm',
-            border: `1.5px solid ${ps.primaryColor}`,
-          }}
-        >
-          <thead>
-            <tr>
-              <th style={{ ...thStyle, width: '8%' }}>م</th>
-              <th style={{ ...thStyle, width: '24%' }}>المنتج</th>
-              <th style={{ ...thStyle, width: '14%' }}>السيريال</th>
-              <th style={{ ...thStyle, width: '8%' }}>الكمية</th>
-              <th style={{ ...thStyle, width: '16%' }}>الإكسسوارات</th>
-              <th style={{ ...thStyle, width: '18%' }}>وصف العطل</th>
-              {showCosts ? <th style={{ ...thStyle, width: '12%' }}>خدمات</th> : null}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((item, index) => (
-              <tr key={item.itemId || index} style={{ background: index % 2 ? palette.tableRowAltBg : '#fff' }}>
-                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 700 }}>{index + 1}</td>
-                <td style={{ ...tdStyle, fontWeight: 700 }}>
-                  {item.productName || '—'}
-                  {item.inWarranty ? (
-                    <div style={{ fontSize: '8pt', color: palette.mutedText, fontWeight: 700 }}>داخل الضمان</div>
-                  ) : null}
-                </td>
-                <td style={{ ...tdStyle, textAlign: 'center', fontFamily: 'monospace' }}>{item.serialNo || '—'}</td>
-                <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>{Math.max(1, Number(item.quantity || 1))}</td>
-                <td style={tdStyle}>{item.accessories || '—'}</td>
-                <td style={tdStyle}>
-                  {item.diagnosis || '—'}
-                  {item.technicianDiagnosis ? (
-                    <div style={{ marginTop: 4, fontSize: '8pt', color: palette.mutedText }}>
-                      فني: {item.technicianDiagnosis}
-                    </div>
-                  ) : null}
-                </td>
-                {showCosts ? (
-                  <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>
-                    {item.inWarranty ? 'مجاني' : money(item.finalCost)}
-                  </td>
-                ) : null}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-
-        <div
-          style={{
+            display: 'grid',
+            gridTemplateColumns: isThermal ? '1fr' : '1fr 1fr',
             border: `1px solid ${palette.border}`,
-            borderRadius: '2mm',
-            padding: isThermal ? '2mm' : '3mm 4mm',
+            borderRadius: '2.5mm',
+            overflow: 'hidden',
             marginBottom: isThermal ? '3mm' : '5mm',
           }}
         >
-          <div style={{ fontWeight: 900, marginBottom: '1mm' }}>وصف العطل</div>
-          <div style={{ whiteSpace: 'pre-wrap' }}>{job.problemDescription || '—'}</div>
-        </div>
+          {customerInfoRows.map(([label, value], index) => (
+            <div
+              key={label}
+              style={{
+                padding: isThermal ? '2mm' : '3mm 4mm',
+                borderLeft:
+                  !isThermal && index % infoColumns === 0 ? `1px solid ${palette.border}` : undefined,
+                borderBottom:
+                  index < customerInfoRows.length - infoColumns
+                    ? `1px solid ${palette.border}`
+                    : undefined,
+                background: index % 2 === 0 ? palette.tableRowAltBg : '#fff',
+              }}
+            >
+              <p style={labelStyle}>{label}</p>
+              <p style={valueStyle}>{value}</p>
+            </div>
+          ))}
+        </section>
 
-        {parts.length > 0 ? (
-          <>
-            <div style={{ marginBottom: isThermal ? '2mm' : '3mm', fontWeight: 900 }}>قطع الغيار المستخدمة</div>
+        <section style={{ marginBottom: isThermal ? '3mm' : '5mm' }}>
+          <p style={sectionTitle}>المنتجات المستلمة</p>
+          <table
+            style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              tableLayout: 'fixed',
+              border: `1.5px solid ${palette.primary}`,
+              borderRadius: '2mm',
+              overflow: 'hidden',
+            }}
+          >
+            <thead>
+              <tr>
+                <th style={{ ...thStyle, width: '7%' }}>م</th>
+                <th style={{ ...thStyle, width: showCosts ? '22%' : '26%' }}>المنتج</th>
+                <th style={{ ...thStyle, width: '14%' }}>السيريال</th>
+                <th style={{ ...thStyle, width: '8%' }}>الكمية</th>
+                <th style={{ ...thStyle, width: showCosts ? '16%' : '20%' }}>الملحقات</th>
+                <th style={{ ...thStyle, width: showCosts ? '18%' : '25%' }}>وصف العطل</th>
+                {showCosts ? <th style={{ ...thStyle, width: '15%' }}>التكلفة</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((item: RepairJobProduct, index) => (
+                <tr key={item.itemId || index} style={{ background: index % 2 ? palette.tableRowAltBg : '#fff' }}>
+                  <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 800 }}>{index + 1}</td>
+                  <td style={{ ...tdStyle, fontWeight: 800 }}>
+                    {formatRepairPrintProductLabel(item)}
+                    {item.inWarranty ? (
+                      <div style={{ marginTop: '1mm', fontSize: isThermal ? '6pt' : '8pt', color: palette.success, fontWeight: 800 }}>
+                        داخل الضمان
+                      </div>
+                    ) : null}
+                  </td>
+                  <td
+                    style={{
+                      ...tdStyle,
+                      textAlign: 'center',
+                      fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                      fontSize: isThermal ? '6pt' : '8.5pt',
+                    }}
+                  >
+                    {item.serialNo || '—'}
+                  </td>
+                  <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>
+                    {Math.max(1, Number(item.quantity || 1))}
+                  </td>
+                  <td style={tdStyle}>{item.accessories || '—'}</td>
+                  <td style={tdStyle}>{item.diagnosis || problemText || '—'}</td>
+                  {showCosts ? (
+                    <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>
+                      {item.inWarranty ? 'مجاني' : money(item.finalCost, decimalPlaces)}
+                    </td>
+                  ) : null}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        {showProblemBlock ? (
+          <section
+            style={{
+              border: `1px solid ${palette.border}`,
+              borderRadius: '2.5mm',
+              padding: isThermal ? '2.5mm' : '3.5mm 4mm',
+              marginBottom: isThermal ? '3mm' : '5mm',
+              background: palette.tableRowAltBg,
+            }}
+          >
+            <p style={{ ...sectionTitle, marginBottom: '1.5mm' }}>ملاحظات الاستلام</p>
+            <p style={{ margin: 0, whiteSpace: 'pre-wrap', fontSize: isThermal ? '7.5pt' : '10pt', fontWeight: 600 }}>
+              {problemText}
+            </p>
+          </section>
+        ) : null}
+
+        {parts.length > 0 && showCosts ? (
+          <section style={{ marginBottom: isThermal ? '3mm' : '5mm' }}>
+            <p style={sectionTitle}>قطع الغيار المستخدمة</p>
             <table
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
-                marginBottom: isThermal ? '3mm' : '5mm',
-                border: `1.5px solid ${ps.primaryColor}`,
+                border: `1.5px solid ${palette.primary}`,
               }}
             >
               <thead>
@@ -336,53 +441,116 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                 ))}
               </tbody>
             </table>
-          </>
+          </section>
         ) : null}
 
-        <div
+        <section
           style={{
-            display: 'grid',
-            gridTemplateColumns: showQr ? '1fr 1fr 1fr' : '1fr 1fr',
-            gap: '6mm',
-            marginTop: isThermal ? '6mm' : '10mm',
-            alignItems: 'end',
+            border: `1.5px solid ${palette.primary}`,
+            borderRadius: '2.5mm',
+            padding: isThermal ? '2.5mm' : '4mm',
+            marginBottom: isThermal ? '4mm' : '7mm',
+            background: palette.tableRowAltBg,
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact',
           }}
         >
-          <div style={{ borderTop: `1px solid ${palette.border}`, paddingTop: '2mm', textAlign: 'center', fontWeight: 700 }}>
-            توقيع الموظف
+          <p style={{ margin: 0, fontSize: isThermal ? '7pt' : '9pt', fontWeight: 800, lineHeight: 1.7 }}>
+            {acknowledgment}
+          </p>
+          {showQr ? (
+            <p style={{ ...labelStyle, marginTop: '2mm' }}>
+              للمتابعة: امسح رمز QR أو استخدم رقم الإيصال مع رقم الهاتف المسجّل.
+            </p>
+          ) : null}
+        </section>
+
+        <section
+          style={{
+            display: 'grid',
+            gridTemplateColumns: showQr
+              ? (isThermal ? '1fr' : '1.1fr 1.1fr 0.9fr')
+              : (isThermal ? '1fr' : '1fr 1fr'),
+            gap: isThermal ? '6mm' : '8mm',
+            alignItems: 'end',
+            marginTop: isThermal ? '4mm' : '6mm',
+          }}
+        >
+          <div
+            style={{
+              minHeight: isThermal ? '14mm' : '22mm',
+              borderTop: `1px solid ${palette.border}`,
+              paddingTop: '2.5mm',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: isThermal ? '7.5pt' : '9.5pt', fontWeight: 900 }}>توقيع موظف الاستلام</p>
+            <p style={{ ...labelStyle, marginTop: '6mm' }}>الاسم / التوقيع</p>
           </div>
-          <div style={{ borderTop: `1px solid ${palette.border}`, paddingTop: '2mm', textAlign: 'center', fontWeight: 700 }}>
-            <div>توقيع العميل</div>
-            <div style={{ fontSize: isThermal ? '6pt' : '8pt', color: palette.mutedText, fontWeight: 700, marginTop: '1mm' }}>
-              أقرّ باستلام المركز للقطعة بالتفاصيل أعلاه
-            </div>
+          <div
+            style={{
+              minHeight: isThermal ? '14mm' : '22mm',
+              borderTop: `1px solid ${palette.border}`,
+              paddingTop: '2.5mm',
+              textAlign: 'center',
+            }}
+          >
+            <p style={{ margin: 0, fontSize: isThermal ? '7.5pt' : '9.5pt', fontWeight: 900 }}>توقيع العميل</p>
+            <p style={{ ...labelStyle, marginTop: '6mm' }}>أقرّ بالاستلام والبيانات أعلاه</p>
           </div>
           {showQr && trackUrl ? (
             <div style={{ textAlign: 'center' }}>
-              <div style={{ fontSize: '8pt', fontWeight: 700, marginBottom: '2mm', color: palette.mutedText }}>
-                متابعة الطلب
+              <p style={{ ...labelStyle, marginBottom: '2mm' }}>متابعة الطلب</p>
+              <div
+                style={{
+                  display: 'inline-block',
+                  border: `1px solid ${palette.border}`,
+                  borderRadius: '2mm',
+                  padding: '2.5mm',
+                  background: '#fff',
+                }}
+              >
+                <QRCodeSVG value={trackUrl} size={isThermal ? 72 : 96} includeMargin level="M" />
               </div>
-              <div style={{ display: 'inline-block', border: `1px solid ${palette.border}`, padding: '2mm', background: '#fff' }}>
-                <QRCodeSVG value={trackUrl} size={isThermal ? 64 : 88} includeMargin />
-              </div>
+              <p
+                style={{
+                  margin: '2mm 0 0',
+                  fontSize: isThermal ? '6pt' : '7.5pt',
+                  fontWeight: 700,
+                  color: palette.mutedText,
+                  fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                }}
+              >
+                {job.receiptNo}
+              </p>
             </div>
           ) : null}
-        </div>
+        </section>
 
-        {ps.footerText ? (
+        <footer
+          style={{
+            marginTop: isThermal ? '5mm' : '9mm',
+            paddingTop: '2.5mm',
+            borderTop: `1px solid ${palette.border}`,
+            textAlign: 'center',
+          }}
+        >
+          {branchContact ? (
+            <p style={{ margin: 0, fontSize: isThermal ? '6.5pt' : '8pt', fontWeight: 700, color: palette.text }}>
+              {branch?.name ? `${branch.name} · ` : ''}{branchContact}
+            </p>
+          ) : null}
           <p
             style={{
-              marginTop: isThermal ? '4mm' : '8mm',
+              margin: branchContact ? '1.5mm 0 0' : 0,
               fontSize: isThermal ? '6pt' : '8pt',
               color: palette.mutedText,
-              textAlign: 'center',
-              borderTop: `1px solid ${palette.border}`,
-              paddingTop: '2mm',
+              fontWeight: 600,
             }}
           >
-            {ps.footerText}
+            {footerLine}
           </p>
-        ) : null}
+        </footer>
       </div>
     );
   },

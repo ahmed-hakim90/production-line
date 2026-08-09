@@ -122,13 +122,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
     <>
       <header
         className={[
-          'h-[52px] fixed top-0 left-0 right-0 z-40 shrink-0',
+          'h-[52px] fixed top-0 left-0 right-0 z-40 shrink-0 overflow-hidden',
           isRTL
             ? (collapsed ? 'lg:right-[52px]' : 'lg:right-[260px]')
             : (collapsed ? 'lg:left-[52px]' : 'lg:left-[260px]'),
           'bg-[var(--color-card)]',
           'border-b border-[var(--color-border)]',
-          'px-2.5 sm:px-4 py-2 sm:py-0 flex items-center gap-1.5 sm:gap-2',
+          'px-2.5 sm:px-4 py-2 sm:py-0 flex items-center gap-1.5 sm:gap-2 min-w-0',
           scrolled ? 'shadow-sm' : '',
         ].join(' ')}
       >
@@ -166,9 +166,9 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
             </button>
           )}
 
-          {/* Breadcrumb */}
+          {/* Breadcrumb — full path from lg; page title only below */}
           {breadcrumb ? (
-            <nav className="hidden sm:flex items-center gap-1 text-[12.5px] min-w-0">
+            <nav className="hidden lg:flex items-center gap-1 text-[12.5px] min-w-0">
               <button
                 onClick={() => navigate(homePath)}
                 className="flex items-center gap-1 text-[var(--color-text-muted)] hover:text-[var(--color-text)] transition-colors"
@@ -179,13 +179,13 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               <span className="text-[var(--color-border)] shrink-0" aria-hidden="true">›</span>
               <span className="font-semibold text-[var(--color-text)] truncate flex items-center gap-1">
                 {renderTopbarIcon(breadcrumb.pageIcon, 'text-primary shrink-0', 13)}
-                <span>{breadcrumb.page}</span>
+                <span className="truncate max-w-[160px]">{breadcrumb.page}</span>
               </span>
             </nav>
           ) : (
             <button
               onClick={() => navigate(homePath)}
-              className="hidden sm:flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--color-text)] hover:text-primary transition-colors"
+              className="hidden lg:flex items-center gap-1.5 text-[12.5px] font-semibold text-[var(--color-text)] hover:text-primary transition-colors"
             >
               <Home size={15} />
               <span>{t('topbar.home')}</span>
@@ -193,34 +193,34 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           )}
 
           {breadcrumb && (
-            <div className="sm:hidden flex items-center gap-1 min-w-0">
+            <div className="lg:hidden flex items-center gap-1 min-w-0">
               {renderTopbarIcon(breadcrumb.pageIcon, 'text-primary shrink-0', 14)}
               <span className="text-[12px] font-semibold text-[var(--color-text)] truncate">{breadcrumb.page}</span>
             </div>
           )}
         </div>
 
-        {/* ── CENTER: Awesomebar / Global Search ── */}
-        <div className="hidden md:flex shrink-0 flex-1 max-w-[420px] min-w-[180px] mx-2">
+        {/* ── CENTER: Awesomebar — desktop only (tablet uses icon search) ── */}
+        <div className="hidden lg:flex shrink min-w-0 flex-1 max-w-[420px] mx-2">
           <button
             onClick={() => setCmdOpen(true)}
             className="w-full min-w-0 flex items-center gap-2.5 px-4 py-2 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group shadow-sm"
           >
             <Search size={15} className="group-hover:text-primary transition-colors shrink-0" />
             <span className="flex-1 min-w-0 truncate text-start">{t('topbar.globalSearchPlaceholder')}</span>
-            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
+            <kbd className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
               ⌘ K
             </kbd>
           </button>
         </div>
 
         {/* ── RIGHT: actions ── */}
-        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
+        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
 
-          {/* Mobile search icon */}
+          {/* Search icon below lg */}
           <button
             onClick={() => setCmdOpen(true)}
-            className="md:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
+            className="lg:hidden p-1.5 rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
             title={t('topbar.search')}
           >
             <Search size={18} />
@@ -234,7 +234,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
               iconName="download"
               tone="approve"
               solid={false}
-              className="hidden sm:inline-flex !h-auto items-center gap-1 !px-2.5 !py-1.5 !rounded-[var(--border-radius-sm)] !text-[11.5px] font-semibold"
+              className="hidden xl:inline-flex !h-auto items-center gap-1 !px-2.5 !py-1.5 !rounded-[var(--border-radius-sm)] !text-[11.5px] font-semibold"
             >
               {t('topbar.install')}
             </Button>
@@ -251,7 +251,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
 
           {/* Read-only badge */}
           {isReadOnly && (
-            <span className="hidden sm:inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-sm)] text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
+            <span className="hidden xl:inline-flex items-center gap-1 px-2 py-1 rounded-[var(--border-radius-sm)] text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200">
               <Lock size={13} />
               {t('topbar.readOnly')}
             </span>
@@ -285,14 +285,14 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Notifications */}
           <NotificationBell />
 
-          {/* Profile cluster */}
-          <div className="hidden sm:flex items-center gap-2 ps-2 ms-0.5 border-s border-[var(--color-border)]">
+          {/* Profile cluster — avatar from md, name from xl */}
+          <div className="hidden md:flex items-center gap-2 ps-2 ms-0.5 border-s border-[var(--color-border)]">
             <div className="w-8 h-8 rounded-full bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center shrink-0">
               <span className="text-primary font-bold text-xs">
                 {(userDisplayName || userEmail || 'U').charAt(0).toUpperCase()}
               </span>
             </div>
-            <div className="hidden lg:flex flex-col min-w-0 max-w-[140px]">
+            <div className="hidden xl:flex flex-col min-w-0 max-w-[140px]">
               <span className="text-[12px] font-bold text-[var(--color-text)] truncate leading-tight">
                 {userDisplayName || t('sidebar.user')}
               </span>

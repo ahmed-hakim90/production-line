@@ -24,6 +24,8 @@ import {
 } from '@/components/ui/select';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
+import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
@@ -34,7 +36,7 @@ import {
   openWhatsApp,
   toRepairOpsUserError,
 } from '../lib/repairCustomerOpsLabels';
-import { repairCustomerRequestStatusChipType } from '../lib/repairSemanticStatus';
+import { repairCustomerRequestStatusChipType, semanticStatusAccent } from '../lib/repairSemanticStatus';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 import type {
@@ -72,6 +74,17 @@ export const RepairCustomerRequests: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<CustomerServiceRequestStatus | ''>('');
   const [branchFilter, setBranchFilter] = useState('');
   const [page, setPage] = useState(1);
+  const [boardView, setBoardView] = useListViewMode('repair-customer-requests', 'kanban');
+
+  const requestKanbanColumns = useMemo(
+    () =>
+      (Object.keys(CUSTOMER_REQUEST_STATUS_LABELS) as CustomerServiceRequestStatus[]).map((status) => ({
+        id: status,
+        label: CUSTOMER_REQUEST_STATUS_LABELS[status],
+        accentColor: semanticStatusAccent(repairCustomerRequestStatusChipType(status)),
+      })),
+    [],
+  );
 
   const [selected, setSelected] = useState<CustomerServiceRequest | null>(null);
   const [assignBranchId, setAssignBranchId] = useState('');
@@ -224,10 +237,13 @@ export const RepairCustomerRequests: React.FC = () => {
         subtitle="طلبات بوابة العميل قبل توزيعها واستلامها في مراكز الصيانة"
         icon="assignment"
         actions={
-          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void load()} disabled={loading}>
-            <RefreshCw className="ms-1 size-4" />
-            تحديث
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <ListViewToggle value={boardView} onChange={setBoardView} />
+            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void load()} disabled={loading}>
+              <RefreshCw className="ms-1 size-4" />
+              تحديث
+            </Button>
+          </div>
         }
       />
 
@@ -292,115 +308,177 @@ export const RepairCustomerRequests: React.FC = () => {
           }}
         />
 
-        <div className="mt-4 -mx-1 overflow-x-auto rounded-lg border sm:mx-0">
-          <table className="erp-table w-full min-w-[720px] text-right">
-            <thead className="erp-thead">
-              <tr>
-                <th className="erp-th">رقم الطلب</th>
-                <th className="erp-th">العميل</th>
-                <th className="erp-th">الأصناف</th>
-                <th className="erp-th">المركز</th>
-                <th className="erp-th">الحالة</th>
-                <th className="erp-th">التاريخ</th>
-                <th className="erp-th">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
-                    جاري التحميل...
-                  </td>
-                </tr>
-              ) : paged.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
-                    لا توجد طلبات مطابقة.
-                  </td>
-                </tr>
-              ) : (
-                paged.map((request) => {
-                  const lineCount = request.lines?.length || 0;
-                  const qtySum = (request.lines || []).reduce(
-                    (sum, line) => sum + Number(line.receivedQuantity ?? line.requestedQuantity ?? 0),
-                    0,
-                  );
-                  return (
-                    <tr key={request.id} className="border-t border-[var(--color-border)]">
-                      <td className="px-3 py-2 text-sm font-mono font-medium">{request.requestNo}</td>
-                      <td className="px-3 py-2 text-sm">
-                        <div>{request.customerName}</div>
-                        <div className="font-mono text-xs text-muted-foreground">{request.customerPhone}</div>
-                      </td>
-                      <td className="px-3 py-2 text-sm">
-                        <div className="tabular-nums">{lineCount} صنف · {qtySum} وحدة</div>
-                        <div className="line-clamp-1 text-xs text-muted-foreground">
-                          {(request.lines || []).map((l) => l.productName).join('، ') || '—'}
-                        </div>
-                      </td>
-                      <td className="px-3 py-2 text-sm">{request.branchName || '—'}</td>
-                      <td className="px-3 py-2">
-                        <ErpStatusBadge
-                          label={CUSTOMER_REQUEST_STATUS_LABELS[request.status] || request.status}
-                          type={repairCustomerRequestStatusChipType(request.status)}
-                        />
-                        {request.convertedReceiptNo && request.convertedJobId ? (
-                          <div className="mt-1">
-                            <Link
-                              className="text-xs text-primary hover:underline"
-                              to={withTenantPath(tenantSlug, `/repair/jobs/${request.convertedJobId}`)}
-                            >
-                              #{request.convertedReceiptNo}
-                            </Link>
-                          </div>
-                        ) : null}
-                      </td>
-                      <td className="px-3 py-2 whitespace-nowrap text-sm text-muted-foreground">
-                        {formatRepairOpsDate(request.createdAt)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex flex-wrap gap-1.5">
-                          {canAssign && request.status !== 'converted' && request.status !== 'cancelled' ? (
-                            <Button type="button" size="sm" variant="outline" onClick={() => openAssign(request)}>
-                              توزيع
-                            </Button>
-                          ) : null}
-                          {canReceive && request.status === 'assigned' ? (
-                            <Button type="button" size="sm" onClick={() => openReceive(request)}>
-                              استلام
-                            </Button>
-                          ) : null}
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="ghost"
-                            onClick={() =>
-                              openWhatsApp(
-                                request.customerPhone,
-                                `تحديث طلب الصيانة ${request.requestNo}. يمكنك متابعة طلبك من بوابة العميل.`,
-                              )
-                            }
-                          >
-                            <MessageCircle className="ms-1 size-3.5" />
-                            واتساب
-                          </Button>
-                        </div>
-                      </td>
+        <div className="mt-4">
+          {boardView === 'kanban' ? (
+            <StatusKanbanBoard
+              columns={requestKanbanColumns}
+              items={filtered
+                .filter((row) => Boolean(row.id))
+                .map((row) => ({ ...row, id: String(row.id) }))}
+              loading={loading}
+              emptyColumnLabel="لا طلبات"
+              renderCard={(request) => {
+                const lineCount = request.lines?.length || 0;
+                return (
+                  <>
+                    <div className="font-mono text-xs font-semibold text-primary">{request.requestNo}</div>
+                    <div className="mt-1.5 truncate text-sm font-medium">{request.customerName}</div>
+                    <div className="font-mono text-[11px] text-muted-foreground" dir="ltr">
+                      {request.customerPhone || '—'}
+                    </div>
+                    <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                      {(request.lines || []).map((l) => l.productName).join('، ') || `${lineCount} صنف`}
+                    </div>
+                    <div className="mt-1 text-[11px] text-muted-foreground">{request.branchName || 'بدون مركز'}</div>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {canAssign && request.status !== 'converted' && request.status !== 'cancelled' ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="h-7 px-2 text-xs"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openAssign(request);
+                          }}
+                        >
+                          توزيع
+                        </Button>
+                      ) : null}
+                      {canReceive && request.status === 'assigned' ? (
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 px-2 text-xs"
+                          onPointerDown={(e) => e.stopPropagation()}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openReceive(request);
+                          }}
+                        >
+                          استلام
+                        </Button>
+                      ) : null}
+                    </div>
+                  </>
+                );
+              }}
+            />
+          ) : (
+            <>
+              <div className="-mx-1 overflow-x-auto rounded-lg border sm:mx-0">
+                <table className="erp-table w-full min-w-[720px] text-right">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">رقم الطلب</th>
+                      <th className="erp-th">العميل</th>
+                      <th className="erp-th">الأصناف</th>
+                      <th className="erp-th">المركز</th>
+                      <th className="erp-th">الحالة</th>
+                      <th className="erp-th">التاريخ</th>
+                      <th className="erp-th">إجراءات</th>
                     </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                          جاري التحميل...
+                        </td>
+                      </tr>
+                    ) : paged.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-3 py-10 text-center text-muted-foreground">
+                          لا توجد طلبات مطابقة.
+                        </td>
+                      </tr>
+                    ) : (
+                      paged.map((request) => {
+                        const lineCount = request.lines?.length || 0;
+                        const qtySum = (request.lines || []).reduce(
+                          (sum, line) => sum + Number(line.receivedQuantity ?? line.requestedQuantity ?? 0),
+                          0,
+                        );
+                        return (
+                          <tr key={request.id} className="border-t border-[var(--color-border)]">
+                            <td className="px-3 py-2 text-sm font-mono font-medium">{request.requestNo}</td>
+                            <td className="px-3 py-2 text-sm">
+                              <div>{request.customerName}</div>
+                              <div className="font-mono text-xs text-muted-foreground">{request.customerPhone}</div>
+                            </td>
+                            <td className="px-3 py-2 text-sm">
+                              <div className="tabular-nums">{lineCount} صنف · {qtySum} وحدة</div>
+                              <div className="line-clamp-1 text-xs text-muted-foreground">
+                                {(request.lines || []).map((l) => l.productName).join('، ') || '—'}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2 text-sm">{request.branchName || '—'}</td>
+                            <td className="px-3 py-2">
+                              <ErpStatusBadge
+                                label={CUSTOMER_REQUEST_STATUS_LABELS[request.status] || request.status}
+                                type={repairCustomerRequestStatusChipType(request.status)}
+                              />
+                              {request.convertedReceiptNo && request.convertedJobId ? (
+                                <div className="mt-1">
+                                  <Link
+                                    className="text-xs text-primary hover:underline"
+                                    to={withTenantPath(tenantSlug, `/repair/jobs/${request.convertedJobId}`)}
+                                  >
+                                    #{request.convertedReceiptNo}
+                                  </Link>
+                                </div>
+                              ) : null}
+                            </td>
+                            <td className="px-3 py-2 whitespace-nowrap text-sm text-muted-foreground">
+                              {formatRepairOpsDate(request.createdAt)}
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex flex-wrap gap-1.5">
+                                {canAssign && request.status !== 'converted' && request.status !== 'cancelled' ? (
+                                  <Button type="button" size="sm" variant="outline" onClick={() => openAssign(request)}>
+                                    توزيع
+                                  </Button>
+                                ) : null}
+                                {canReceive && request.status === 'assigned' ? (
+                                  <Button type="button" size="sm" onClick={() => openReceive(request)}>
+                                    استلام
+                                  </Button>
+                                ) : null}
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() =>
+                                    openWhatsApp(
+                                      request.customerPhone,
+                                      `تحديث طلب الصيانة ${request.requestNo}. يمكنك متابعة طلبك من بوابة العميل.`,
+                                    )
+                                  }
+                                >
+                                  <MessageCircle className="ms-1 size-3.5" />
+                                  واتساب
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-        <DataPaginationFooter
-          page={safePage}
-          totalPages={totalPages}
-          totalItems={filtered.length}
-          itemLabel="طلب"
-          onPageChange={setPage}
-        />
+              <DataPaginationFooter
+                page={safePage}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                itemLabel="طلب"
+                onPageChange={setPage}
+              />
+            </>
+          )}
+        </div>
       </Card>
 
       <Dialog

@@ -61,3 +61,27 @@ export function buildRepairProductCardFields(
     statusColor: statusChip.color,
   };
 }
+
+/** Customer-facing product label on intake / repair receipts. */
+export function formatRepairPrintProductLabel(product: RepairJobProduct): string {
+  const parts = [product.productName, product.deviceBrand, product.deviceModel]
+    .map((part) => String(part || '').trim())
+    .filter(Boolean);
+  if (parts.length === 0) return '—';
+  // Drop duplicate brand/model when already inside productName.
+  const unique = parts.filter((part, index) => index === 0 || part !== parts[0]);
+  return unique.join(' — ');
+}
+
+/** Document title on the customer copy (intake vs priced job). */
+export function repairCustomerReceiptTitle(showCosts: boolean): string {
+  return showCosts ? 'إيصال صيانة' : 'إيصال استلام للصيانة';
+}
+
+/** Custody acknowledgment shown above the customer signature. */
+export function repairCustomerReceiptAcknowledgment(showCosts: boolean): string {
+  if (showCosts) {
+    return 'أقرّ بصحة بيانات الطلب والتكلفة المدوّنة أعلاه، وأستلم هذا الإيصال كمرجع للمتابعة والتحصيل عند الاستلام.';
+  }
+  return 'أقرّ أنا الموقع أدناه بأنني سلّمت المنتجات والملحقات الموضحة أعلاه لمركز الصيانة، وأن البيانات صحيحة، وأستلم هذا الإيصال كإثبات استلام. التكلفة النهائية تُحدد بعد التشخيص وموافقة العميل.';
+}

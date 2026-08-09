@@ -116,6 +116,7 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
+import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
 import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import {
   averageScheduleAdherence,
@@ -1889,7 +1890,7 @@ export const AdminDashboard: React.FC = () => {
       {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <PageHeader
         title="لوحة مدير النظام"
-        subtitle="قرارات تشغيلية · إنتاج · صرف · تغليف · تكاليف وصحة النظام"
+        subtitle="كروت مؤشرات + رسوم لكل موديول"
         actions={
           isFinalLoading ? (
             <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
@@ -1947,7 +1948,11 @@ export const AdminDashboard: React.FC = () => {
         </div>
       )}
 
-      {/*  */}
+      <ModuleChartsHomeBoard title="" subtitle="" />
+
+      <details className="ops-dash-secondary">
+        <summary>تقارير وتفاصيل إضافية (اختياري)</summary>
+        <div className="ops-dash-secondary__body">
 
       {quickActions.length > 0 && (
         <Card>
@@ -1975,17 +1980,6 @@ export const AdminDashboard: React.FC = () => {
 
       <CustomDashboardWidgets dashboardKey="adminDashboard" systemSettings={systemSettings} />
 
-      {isVisible('decision_queue') && (
-        <OperationalDecisionQueue
-          snapshot={decisionSnapshot}
-          loading={decisionLoading}
-          costToComplete={canViewCosts ? workOrderRisk.costToComplete : null}
-          atRiskWorkOrders={workOrderRisk.atRiskCount}
-          qualityPending={qualityKpis.pendingQuality}
-          laborUtilizationPercent={utilizationMetrics.laborUtilization}
-          performanceProxyPercent={utilizationMetrics.performanceProxy}
-        />
-      )}
 
       {/* â”€â”€ Operational KPIs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('operational_kpis') && (
@@ -3297,6 +3291,9 @@ export const AdminDashboard: React.FC = () => {
           <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
         )}
       </Card>}
+        </div>
+      </details>
+
     </div>
   );
 };

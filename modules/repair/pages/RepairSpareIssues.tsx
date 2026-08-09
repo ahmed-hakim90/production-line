@@ -4,6 +4,8 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
+import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
@@ -22,7 +24,7 @@ import {
   canSubmitRepairSpareIssue,
 } from '../lib/repairSpareIssue';
 import { normalizeRepairSpareIssueAllocations } from '../lib/repairSpareIssueAllocation';
-import { repairSpareIssueStatusChipType } from '../lib/repairSemanticStatus';
+import { repairSpareIssueStatusChipType, semanticStatusAccent } from '../lib/repairSemanticStatus';
 import type { RepairBranch, RepairSpareIssue, RepairSpareIssueStatus } from '../types';
 
 const PAGE_SIZE = 20;
@@ -72,7 +74,18 @@ export const RepairSpareIssues: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState<RepairSpareIssueStatus | ''>('');
   const [listTab, setListTab] = useState<'pending' | 'all'>('pending');
   const [page, setPage] = useState(1);
+  const [boardView, setBoardView] = useListViewMode('repair-spare-issues', 'kanban');
   const [selectedId, setSelectedId] = useState('');
+
+  const spareKanbanColumns = useMemo(
+    () =>
+      (Object.keys(REPAIR_SPARE_ISSUE_STATUS_LABELS) as RepairSpareIssueStatus[]).map((status) => ({
+        id: status,
+        label: REPAIR_SPARE_ISSUE_STATUS_LABELS[status],
+        accentColor: semanticStatusAccent(repairSpareIssueStatusChipType(status)),
+      })),
+    [],
+  );
   const [printIssue, setPrintIssue] = useState<RepairSpareIssue | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const detailPanelRef = useRef<HTMLDivElement>(null);
@@ -211,11 +224,16 @@ export const RepairSpareIssues: React.FC = () => {
         title="سندات صرف قطع الغيار"
         subtitle="تحضير باللوكيشن ثم اعتماد وصرف وطباعة — بنفس أسلوب إذن صرف الإنتاج"
         icon="assignment_turned_in"
-        actions={canCreate ? (
-          <Button type="button" className="w-full sm:w-auto" onClick={() => setShowCreate(true)}>
-            سند صرف جديد
-          </Button>
-        ) : undefined}
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <ListViewToggle value={boardView} onChange={setBoardView} />
+            {canCreate ? (
+              <Button type="button" className="w-full sm:w-auto" onClick={() => setShowCreate(true)}>
+                سند صرف جديد
+              </Button>
+            ) : null}
+          </div>
+        }
       />
 
       <div className="flex flex-col gap-2 rounded-xl border bg-card px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
@@ -240,6 +258,33 @@ export const RepairSpareIssues: React.FC = () => {
       </div>
 
       {/* Physical LTR row: details LEFT, list RIGHT — content stays RTL. */}
+      {boardView === 'kanban' ? (
+        <Card className="!p-3 sm:!p-4">
+          <StatusKanbanBoard
+            columns={spareKanbanColumns}
+            items={filtered
+              .filter((row) => Boolean(row.id))
+              .map((row) => ({ ...row, id: String(row.id) }))}
+            loading={loading}
+            emptyColumnLabel="لا سندات"
+            onCardClick={(row) => selectIssue(String(row.id))}
+            renderCard={(row) => (
+              <>
+                <div className={`text-sm font-bold ${selectedId === row.id ? 'text-primary' : ''}`}>
+                  {row.referenceNo}
+                </div>
+                <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">
+                  {row.branchName} · {row.warehouseName}
+                </div>
+                <div className="mt-2 text-[11px] text-muted-foreground">
+                  {(row.lines || []).length} بند
+                </div>
+              </>
+            )}
+          />
+        </Card>
+      ) : null}
+
       <div className="flex flex-col xl:flex-row gap-4 items-stretch" dir="ltr">
         <div ref={detailPanelRef} className="order-2 xl:order-1 min-w-0 flex-1 w-full" dir="rtl">
         <Card className="!p-0 overflow-hidden h-full">
@@ -401,6 +446,7 @@ export const RepairSpareIssues: React.FC = () => {
         </Card>
         </div>
 
+        {boardView === 'table' ? (
         <div className="order-1 w-full xl:order-2 xl:w-[360px] xl:shrink-0" dir="rtl">
         <Card className="!p-0 overflow-hidden h-full">
           <div className="flex flex-wrap gap-2 border-b px-3 pb-2 pt-3">
@@ -480,6 +526,7 @@ export const RepairSpareIssues: React.FC = () => {
           ) : null}
         </Card>
         </div>
+        ) : null}
       </div>
 
       <div className="hidden">

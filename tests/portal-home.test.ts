@@ -52,8 +52,27 @@ assert.equal(
     roleKey: 'repair_reception',
     inventoryWarehouseId: 'wh-center',
   }),
-  'generic',
-  'reception stays off warehouse portal even when bound to center warehouse + spare-parts perms',
+  'repair',
+  'reception lands on repair ops portal (not warehouse / factory generic)',
+);
+
+assert.equal(
+  resolvePortalKind({
+    can: (p) => p === 'repair.adminDashboard.view' || p === 'dashboard.view',
+  }),
+  'repair',
+  'centers manager with repair.adminDashboard.view lands on repair portal',
+);
+
+assert.equal(
+  resolvePortalKind({
+    can: (p) =>
+      p === 'repair.adminDashboard.view'
+      || p === 'employeeDashboard.view'
+      || p === 'dashboard.view',
+  }),
+  'repair',
+  'repair admin portal beats employeeDashboard.view',
 );
 
 console.log('portal-home.test.ts passed');

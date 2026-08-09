@@ -1,6 +1,9 @@
 import assert from 'node:assert/strict';
 import {
   buildRepairProductCardFields,
+  formatRepairPrintProductLabel,
+  repairCustomerReceiptAcknowledgment,
+  repairCustomerReceiptTitle,
   resolveRepairJobPrintProducts,
 } from '../modules/repair/lib/repairJobPrint';
 import {
@@ -113,5 +116,23 @@ const cardFromSettings = buildRepairProductCardFields(
 );
 assert.equal(cardFromSettings.statusLabel, 'قيد الإصلاح');
 assert.equal(cardFromSettings.statusColor, '#112233');
+
+assert.equal(repairCustomerReceiptTitle(false), 'إيصال استلام للصيانة');
+assert.equal(repairCustomerReceiptTitle(true), 'إيصال صيانة');
+assert.match(repairCustomerReceiptAcknowledgment(false), /سلّمت المنتجات/);
+assert.match(repairCustomerReceiptAcknowledgment(true), /التكلفة/);
+assert.equal(
+  formatRepairPrintProductLabel({
+    itemId: '1',
+    productName: 'خلاط',
+    deviceBrand: 'Sokany',
+    deviceModel: 'SK-1',
+  }),
+  'خلاط — Sokany — SK-1',
+);
+assert.equal(
+  formatRepairPrintProductLabel({ itemId: '2', productName: 'خلاط', deviceBrand: 'خلاط' }),
+  'خلاط',
+);
 
 console.log('repair-job-print.test.ts: ok');

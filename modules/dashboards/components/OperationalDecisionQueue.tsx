@@ -340,8 +340,17 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
   }
 
   const visible = items.filter(canSee);
-  const compactItems = compact ? visible.slice(0, Math.max(1, maxItems)) : visible;
-  const hiddenCount = compact ? Math.max(0, visible.length - compactItems.length) : 0;
+  // Compact board: only items that need attention — never dump every green "ok" card.
+  const attentionItems = visible
+    .filter((item) => item.tone !== 'ok')
+    .sort((a, b) => {
+      const rank = (tone: QueueItem['tone']) => (tone === 'danger' ? 0 : tone === 'warning' ? 1 : 2);
+      return rank(a.tone) - rank(b.tone);
+    });
+  const compactItems = compact
+    ? attentionItems.slice(0, Math.max(1, maxItems))
+    : visible;
+  const hiddenCount = compact ? Math.max(0, attentionItems.length - compactItems.length) : 0;
 
   if (compact) {
     return (
@@ -349,26 +358,24 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
         <div className="flex items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-[var(--color-text)] flex items-center gap-1.5">
             <span className="material-icons-round text-base text-primary">rule</span>
-            {title}
+            يحتاج متابعة
           </h3>
           {hiddenCount > 0 && (
-            <button
-              type="button"
-              onClick={() => navigate('/')}
-              className="text-[11px] font-bold text-primary hover:underline"
-            >
-              +{hiddenCount} أخرى
-            </button>
+            <span className="text-[11px] font-bold text-[var(--color-text-muted)]">
+              +{hiddenCount}
+            </span>
           )}
         </div>
         {loading ? (
           <div className="space-y-2">
-            {Array.from({ length: 4 }).map((_, idx) => (
-              <div key={`cq-skel-${idx}`} className="h-14 rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] animate-pulse" />
+            {Array.from({ length: 3 }).map((_, idx) => (
+              <div key={`cq-skel-${idx}`} className="h-12 rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] animate-pulse" />
             ))}
           </div>
         ) : compactItems.length === 0 ? (
-          <p className="text-xs text-[var(--color-text-muted)] font-medium py-6 text-center">لا قرارات معلّقة حالياً</p>
+          <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/80 px-3 py-6 text-center">
+            <p className="text-xs font-bold text-emerald-700">لا يوجد ما يحتاج متابعة الآن</p>
+          </div>
         ) : (
           <div className="space-y-1.5">
             {compactItems.map((item) => (

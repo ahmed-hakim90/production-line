@@ -22,6 +22,8 @@ import {
 } from '@/components/ui/select';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
+import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { toast } from '../../../components/Toast';
@@ -35,7 +37,7 @@ import {
   repairComplaintService,
   type RepairComplaintJobOption,
 } from '../services/repairComplaintService';
-import { repairComplaintStatusChipType } from '../lib/repairSemanticStatus';
+import { repairComplaintStatusChipType, semanticStatusAccent } from '../lib/repairSemanticStatus';
 import {
   REPAIR_COMPLAINT_STATUS_LABELS,
   REPAIR_JOB_STATUS_LABELS,
@@ -123,6 +125,17 @@ export const RepairComplaints: React.FC = () => {
   const [followUpNote, setFollowUpNote] = useState('');
   const [followUpAt, setFollowUpAt] = useState('');
   const [detailStatus, setDetailStatus] = useState<RepairComplaintStatus>('open');
+  const [boardView, setBoardView] = useListViewMode('repair-complaints', 'kanban');
+
+  const complaintKanbanColumns = useMemo(
+    () =>
+      (Object.keys(REPAIR_COMPLAINT_STATUS_LABELS) as RepairComplaintStatus[]).map((status) => ({
+        id: status,
+        label: REPAIR_COMPLAINT_STATUS_LABELS[status],
+        accentColor: semanticStatusAccent(repairComplaintStatusChipType(status)),
+      })),
+    [],
+  );
 
   const visibleBranches = useMemo(() => {
     if (canViewAllBranches) return branches;
@@ -389,6 +402,28 @@ export const RepairComplaints: React.FC = () => {
     }
   };
 
+  const onComplaintKanbanMove = async (complaintId: string, toStatus: string) => {
+    if (!canManage) {
+      toast.error('لا تملك صلاحية تحديث حالة الشكوى.');
+      return;
+    }
+    const row = rows.find((r) => r.id === complaintId);
+    if (!row || row.status === toStatus) return;
+    setBusy(true);
+    try {
+      await repairComplaintService.updateStatus(complaintId, toStatus as RepairComplaintStatus);
+      toast.success('تم تحديث الحالة.');
+      await load();
+      if (selected?.id === complaintId) {
+        await refreshSelected(complaintId);
+      }
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : 'تعذر تحديث الحالة.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!canView) {
     return (
       <div className="erp-ds-clean space-y-4 p-4 md:p-6">
@@ -407,20 +442,23 @@ export const RepairComplaints: React.FC = () => {
         title="شكاوى الصيانة"
         subtitle="تسجيل ومتابعة شكاوى العملاء المرتبطة بطلبات الصيانة"
         actions={
-          canManage ? (
-            <Button
-              type="button"
-              onClick={() => {
-                setCreateForm((prev) => ({
-                  ...prev,
-                  branchId: prev.branchId || userBranchIds[0] || visibleBranches[0]?.id || '',
-                }));
-                setCreateOpen(true);
-              }}
-            >
-              تسجيل شكوى
-            </Button>
-          ) : undefined
+          <div className="flex flex-wrap items-center gap-2">
+            <ListViewToggle value={boardView} onChange={setBoardView} />
+            {canManage ? (
+              <Button
+                type="button"
+                onClick={() => {
+                  setCreateForm((prev) => ({
+                    ...prev,
+                    branchId: prev.branchId || userBranchIds[0] || visibleBranches[0]?.id || '',
+                  }));
+                  setCreateOpen(true);
+                }}
+              >
+                تسجيل شكوى
+              </Button>
+            ) : null}
+          </div>
         }
       />
 
@@ -465,81 +503,114 @@ export const RepairComplaints: React.FC = () => {
           }
         />
 
-        <div className="mt-4 overflow-x-auto rounded-lg border">
-          <table className="erp-table w-full text-right">
-            <thead className="erp-thead">
-              <tr>
-                <th className="erp-th">الموضوع</th>
-                <th className="erp-th">العميل</th>
-                <th className="erp-th">الفرع</th>
-                <th className="erp-th">الحالة</th>
-                <th className="erp-th">الطلب</th>
-                <th className="erp-th">التاريخ</th>
-                <th className="erp-th">متابعات</th>
-                <th className="erp-th">إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {loading ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
-                    جاري التحميل...
-                  </td>
-                </tr>
-              ) : paged.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
-                    لا توجد شكاوى مطابقة.
-                  </td>
-                </tr>
-              ) : (
-                paged.map((row) => (
-                  <tr key={row.id} className="border-t border-[var(--color-border)]">
-                    <td className="px-3 py-2 text-sm font-medium">{row.subject}</td>
-                    <td className="px-3 py-2 text-sm">
-                      <div>{row.customerName}</div>
-                      <div className="text-xs text-muted-foreground font-mono">{row.customerPhone}</div>
-                    </td>
-                    <td className="px-3 py-2 text-sm">{branchName(row.branchId)}</td>
-                    <td className="px-3 py-2">
-                      <ErpStatusBadge
-                        label={REPAIR_COMPLAINT_STATUS_LABELS[row.status]}
-                        type={repairComplaintStatusChipType(row.status)}
-                      />
-                    </td>
-                    <td className="px-3 py-2 text-sm font-mono">
-                      {row.receiptNo ? `#${row.receiptNo}` : row.jobId ? 'مرتبط' : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-sm whitespace-nowrap text-muted-foreground">
-                      {row.createdAt ? new Date(row.createdAt).toLocaleString('ar-EG') : '—'}
-                    </td>
-                    <td className="px-3 py-2 text-sm tabular-nums">{row.followUps?.length || 0}</td>
-                    <td className="px-3 py-2">
-                      <div className="flex flex-wrap gap-1.5">
-                        <Button type="button" size="sm" variant="outline" onClick={() => openDetail(row)}>
-                          التفاصيل والمتابعة
-                        </Button>
-                        {row.jobId ? (
-                          <Button type="button" size="sm" variant="ghost" asChild>
-                            <Link to={withTenantPath(tenantSlug, `/repair/jobs/${row.jobId}`)}>فتح الطلب</Link>
-                          </Button>
-                        ) : null}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+        <div className="mt-4">
+          {boardView === 'kanban' ? (
+            <StatusKanbanBoard
+              columns={complaintKanbanColumns}
+              items={filtered
+                .filter((row) => Boolean(row.id))
+                .map((row) => ({ ...row, id: String(row.id) }))}
+              loading={loading}
+              draggable={canManage}
+              onMove={onComplaintKanbanMove}
+              onCardClick={(row) => openDetail(row)}
+              emptyColumnLabel="لا شكاوى"
+              renderCard={(row) => (
+                <>
+                  <div className="text-sm font-medium leading-snug line-clamp-2">{row.subject}</div>
+                  <div className="mt-1.5 text-xs text-muted-foreground truncate">{row.customerName}</div>
+                  <div className="mt-0.5 font-mono text-[11px] text-muted-foreground" dir="ltr">
+                    {row.customerPhone || '—'}
+                  </div>
+                  {row.receiptNo ? (
+                    <div className="mt-2 font-mono text-[11px] text-primary">#{row.receiptNo}</div>
+                  ) : null}
+                  <div className="mt-2 text-[11px] text-muted-foreground">
+                    {(row.followUps || []).length} متابعة
+                  </div>
+                </>
               )}
-            </tbody>
-          </table>
-        </div>
+            />
+          ) : (
+            <>
+              <div className="overflow-x-auto rounded-lg border">
+                <table className="erp-table w-full text-right">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th">الموضوع</th>
+                      <th className="erp-th">العميل</th>
+                      <th className="erp-th">الفرع</th>
+                      <th className="erp-th">الحالة</th>
+                      <th className="erp-th">الطلب</th>
+                      <th className="erp-th">التاريخ</th>
+                      <th className="erp-th">متابعات</th>
+                      <th className="erp-th">إجراءات</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {loading ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
+                          جاري التحميل...
+                        </td>
+                      </tr>
+                    ) : paged.length === 0 ? (
+                      <tr>
+                        <td colSpan={8} className="px-3 py-10 text-center text-muted-foreground">
+                          لا توجد شكاوى مطابقة.
+                        </td>
+                      </tr>
+                    ) : (
+                      paged.map((row) => (
+                        <tr key={row.id} className="border-t border-[var(--color-border)]">
+                          <td className="px-3 py-2 text-sm font-medium">{row.subject}</td>
+                          <td className="px-3 py-2 text-sm">
+                            <div>{row.customerName}</div>
+                            <div className="text-xs text-muted-foreground font-mono">{row.customerPhone}</div>
+                          </td>
+                          <td className="px-3 py-2 text-sm">{branchName(row.branchId)}</td>
+                          <td className="px-3 py-2">
+                            <ErpStatusBadge
+                              label={REPAIR_COMPLAINT_STATUS_LABELS[row.status]}
+                              type={repairComplaintStatusChipType(row.status)}
+                            />
+                          </td>
+                          <td className="px-3 py-2 text-sm font-mono">
+                            {row.receiptNo ? `#${row.receiptNo}` : row.jobId ? 'مرتبط' : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-sm whitespace-nowrap text-muted-foreground">
+                            {row.createdAt ? new Date(row.createdAt).toLocaleString('ar-EG') : '—'}
+                          </td>
+                          <td className="px-3 py-2 text-sm tabular-nums">{row.followUps?.length || 0}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex flex-wrap gap-1.5">
+                              <Button type="button" size="sm" variant="outline" onClick={() => openDetail(row)}>
+                                التفاصيل والمتابعة
+                              </Button>
+                              {row.jobId ? (
+                                <Button type="button" size="sm" variant="ghost" asChild>
+                                  <Link to={withTenantPath(tenantSlug, `/repair/jobs/${row.jobId}`)}>فتح الطلب</Link>
+                                </Button>
+                              ) : null}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
-        <DataPaginationFooter
-          page={safePage}
-          totalPages={totalPages}
-          totalItems={filtered.length}
-          itemLabel="شكوى"
-          onPageChange={setPage}
-        />
+              <DataPaginationFooter
+                page={safePage}
+                totalPages={totalPages}
+                totalItems={filtered.length}
+                itemLabel="شكوى"
+                onPageChange={setPage}
+              />
+            </>
+          )}
+        </div>
       </Card>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
@@ -702,50 +773,87 @@ export const RepairComplaints: React.FC = () => {
       <Dialog open={detailOpen} onOpenChange={setDetailOpen}>
         <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>{selected?.subject || 'تفاصيل الشكوى'}</DialogTitle>
+            <div className="flex flex-wrap items-start justify-between gap-2 pe-8">
+              <DialogTitle className="text-right leading-snug">
+                {selected?.subject || 'تفاصيل الشكوى'}
+              </DialogTitle>
+              {selected ? (
+                <ErpStatusBadge
+                  label={REPAIR_COMPLAINT_STATUS_LABELS[selected.status]}
+                  type={repairComplaintStatusChipType(selected.status)}
+                />
+              ) : null}
+            </div>
             <DialogDescription>
-              {selected?.customerName} — {selected?.customerPhone}
+              متابعة الشكوى وتحديث حالتها — الملاحظة الافتتاحية لا تغيّر الحالة تلقائيًا.
             </DialogDescription>
           </DialogHeader>
           {selected ? (
             <div className="space-y-4">
-              <div className="grid gap-2 sm:grid-cols-2 text-sm">
-                <div>
-                  <span className="text-muted-foreground">الفرع: </span>
-                  {branchName(selected.branchId)}
-                </div>
-                <div>
-                  <span className="text-muted-foreground">الحالة: </span>
-                  <ErpStatusBadge
-                    label={REPAIR_COMPLAINT_STATUS_LABELS[selected.status]}
-                    type={repairComplaintStatusChipType(selected.status)}
-                  />
-                </div>
-                {selected.receiptNo || selected.jobId ? (
-                  <div className="sm:col-span-2 flex flex-wrap items-center gap-2">
-                    {selected.receiptNo ? (
-                      <span className="font-mono text-sm">إيصال #{selected.receiptNo}</span>
-                    ) : null}
-                    {selected.jobId ? (
-                      <Link
-                        className="text-primary text-sm underline"
-                        to={withTenantPath(tenantSlug, `/repair/jobs/${selected.jobId}`)}
-                      >
-                        فتح طلب الصيانة
-                      </Link>
-                    ) : null}
+              <div className="rounded-lg border bg-muted/20 p-3 space-y-3">
+                <div className="grid gap-3 sm:grid-cols-2 text-sm">
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">العميل</p>
+                    <p className="font-medium">{selected.customerName || '—'}</p>
                   </div>
-                ) : null}
-                {selected.notes ? (
-                  <div className="sm:col-span-2 rounded-md border bg-muted/30 p-3 text-sm">
-                    {selected.notes}
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">الهاتف</p>
+                    <p className="font-mono tabular-nums" dir="ltr">
+                      {selected.customerPhone || '—'}
+                    </p>
                   </div>
-                ) : null}
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">الفرع</p>
+                    <p>{branchName(selected.branchId)}</p>
+                  </div>
+                  <div className="space-y-0.5">
+                    <p className="text-xs font-medium text-muted-foreground">تاريخ التسجيل</p>
+                    <p className="text-muted-foreground">
+                      {selected.createdAt
+                        ? new Date(selected.createdAt).toLocaleString('ar-EG')
+                        : '—'}
+                    </p>
+                  </div>
+                  {(selected.receiptNo || selected.jobId) ? (
+                    <div className="sm:col-span-2 space-y-1">
+                      <p className="text-xs font-medium text-muted-foreground">طلب الصيانة</p>
+                      <div className="flex flex-wrap items-center gap-2">
+                        {selected.receiptNo ? (
+                          <span className="font-mono text-sm">إيصال #{selected.receiptNo}</span>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">بدون رقم إيصال</span>
+                        )}
+                        {selected.jobId ? (
+                          <Button type="button" size="sm" variant="outline" asChild>
+                            <Link to={withTenantPath(tenantSlug, `/repair/jobs/${selected.jobId}`)}>
+                              فتح طلب الصيانة
+                            </Link>
+                          </Button>
+                        ) : null}
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+                <div className="space-y-1 border-t pt-3">
+                  <p className="text-xs font-medium text-muted-foreground">ملاحظات الشكوى</p>
+                  {selected.notes ? (
+                    <p className="rounded-md border bg-background px-3 py-2 text-sm whitespace-pre-wrap">
+                      {selected.notes}
+                    </p>
+                  ) : (
+                    <p className="text-sm text-muted-foreground">لا توجد ملاحظات مسجّلة.</p>
+                  )}
+                </div>
               </div>
 
               {canManage ? (
                 <div className="rounded-lg border p-3 space-y-2">
-                  <Label>تحديث الحالة</Label>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Label>تحديث الحالة</Label>
+                    <span className="text-xs text-muted-foreground">
+                      الحالية: {REPAIR_COMPLAINT_STATUS_LABELS[selected.status]}
+                    </span>
+                  </div>
                   <div className="flex flex-wrap gap-2">
                     <Select value={detailStatus} onValueChange={(v) => setDetailStatus(v as RepairComplaintStatus)}>
                       <SelectTrigger className="w-[200px]">
@@ -762,7 +870,6 @@ export const RepairComplaints: React.FC = () => {
                     <Button
                       type="button"
                       size="sm"
-                      variant="secondary"
                       disabled={busy || detailStatus === selected.status}
                       onClick={() => void submitStatus()}
                     >
@@ -773,9 +880,16 @@ export const RepairComplaints: React.FC = () => {
               ) : null}
 
               <div className="space-y-2">
-                <h3 className="text-sm font-semibold">سجل المتابعات</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-semibold">سجل المتابعات</h3>
+                  <span className="text-xs tabular-nums text-muted-foreground">
+                    {(selected.followUps || []).length} متابعة
+                  </span>
+                </div>
                 {(selected.followUps || []).length === 0 ? (
-                  <p className="text-sm text-muted-foreground">لا توجد متابعات بعد.</p>
+                  <p className="rounded-md border border-dashed px-3 py-4 text-center text-sm text-muted-foreground">
+                    لا توجد متابعات بعد.
+                  </p>
                 ) : (
                   <div className="space-y-2 max-h-56 overflow-y-auto">
                     {[...(selected.followUps || [])]
@@ -783,7 +897,7 @@ export const RepairComplaints: React.FC = () => {
                       .map((fu) => (
                         <div key={fu.id} className="rounded-md border p-3 text-sm">
                           <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                            <span>{fu.actorName}</span>
+                            <span className="font-medium text-foreground">{fu.actorName || '—'}</span>
                             <span>{fu.at ? new Date(fu.at).toLocaleString('ar-EG') : '—'}</span>
                           </div>
                           <p className="mt-1 whitespace-pre-wrap">{fu.note}</p>
@@ -799,24 +913,36 @@ export const RepairComplaints: React.FC = () => {
               </div>
 
               {canManage ? (
-                <div className="rounded-lg border p-3 space-y-2">
-                  <Label>إضافة متابعة</Label>
-                  <textarea
-                    className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={followUpNote}
-                    onChange={(e) => setFollowUpNote(e.target.value)}
-                    rows={3}
-                    placeholder="ملاحظة المتابعة..."
-                  />
+                <div className="rounded-lg border p-3 space-y-3">
+                  <h3 className="text-sm font-semibold">إضافة متابعة</h3>
                   <div className="space-y-1.5">
-                    <Label className="text-xs text-muted-foreground">موعد متابعة (اختياري)</Label>
+                    <Label htmlFor="complaint-followup-note">ملاحظة المتابعة</Label>
+                    <textarea
+                      id="complaint-followup-note"
+                      className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={followUpNote}
+                      onChange={(e) => setFollowUpNote(e.target.value)}
+                      rows={3}
+                      placeholder="اكتب ما تم مع العميل أو الإجراء التالي..."
+                    />
+                  </div>
+                  <div className="space-y-1.5">
+                    <Label htmlFor="complaint-followup-at" className="text-muted-foreground">
+                      موعد متابعة (اختياري)
+                    </Label>
                     <Input
+                      id="complaint-followup-at"
                       type="datetime-local"
                       value={followUpAt}
                       onChange={(e) => setFollowUpAt(e.target.value)}
                     />
                   </div>
-                  <Button type="button" size="sm" disabled={busy || !followUpNote.trim()} onClick={() => void submitFollowUp()}>
+                  <Button
+                    type="button"
+                    size="sm"
+                    disabled={busy || !followUpNote.trim()}
+                    onClick={() => void submitFollowUp()}
+                  >
                     {busy ? 'جاري الحفظ...' : 'إضافة متابعة'}
                   </Button>
                 </div>

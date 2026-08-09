@@ -1,10 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { DndContext, DragEndEvent, PointerSensor, useDraggable, useDroppable, useSensor, useSensors } from '@dnd-kit/core';
-import { CSS } from '@dnd-kit/utilities';
-import { Headset, LayoutGrid, List, RefreshCw } from 'lucide-react';
+import { Headset, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { cn } from '@/lib/utils';
@@ -27,6 +24,8 @@ import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
+import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
 import { PageHeader } from '@/components/PageHeader';
 
 type JobsFocusFilter = 'all' | 'open' | 'ready' | 'delivered' | 'overdue' | 'today';
@@ -83,7 +82,7 @@ function SummaryMetricChip({
   );
 }
 
-function RepairKanbanCard({
+function RepairJobKanbanCardBody({
   job,
   tenantSlug,
   showWorkshopLink,
@@ -92,21 +91,13 @@ function RepairKanbanCard({
   tenantSlug?: string;
   showWorkshopLink: boolean;
 }) {
-  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({ id: job.id || '' });
-  const style = { transform: CSS.Translate.toString(transform), opacity: isDragging ? 0.55 : 1 };
   const cost = computeRepairJobCost(job);
   const overdue = job.dueAt && Date.parse(String(job.dueAt)) < Date.now();
   const detailPath = withTenantPath(tenantSlug, `/repair/jobs/${job.id}`);
   const workshopPath = withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`);
 
   return (
-    <div
-      ref={setNodeRef}
-      style={style}
-      {...listeners}
-      {...attributes}
-      className="rounded-xl border border-border/80 bg-background p-2.5 shadow-sm touch-none cursor-grab active:cursor-grabbing"
-    >
+    <>
       <Link
         to={detailPath}
         className="inline-block font-mono text-xs font-semibold text-primary hover:underline"
@@ -150,67 +141,7 @@ function RepairKanbanCard({
           </Link>
         )}
       </div>
-    </div>
-  );
-}
-
-function RepairKanbanColumn({
-  statusId,
-  label,
-  jobs,
-  tenantSlug,
-  showWorkshopLink,
-  accentColor,
-}: {
-  statusId: string;
-  label: string;
-  jobs: RepairJob[];
-  tenantSlug?: string;
-  showWorkshopLink: boolean;
-  accentColor?: string;
-}) {
-  const { setNodeRef, isOver } = useDroppable({ id: statusId });
-  const chip = resolveRepairStatusChip(statusId, null);
-  const color = accentColor || chip.color;
-
-  return (
-    <div
-      ref={setNodeRef}
-      className={cn(
-        'min-w-[230px] max-w-[280px] flex-shrink-0 rounded-xl border bg-muted/20 p-2',
-        isOver && 'ring-2 ring-primary/40',
-      )}
-    >
-      <div className="mb-2 flex items-center justify-between gap-1 px-1">
-        <span className="truncate text-sm font-semibold" title={label}>{label}</span>
-        <Badge
-          variant="outline"
-          className="tabular-nums"
-          style={{
-            color,
-            borderColor: `${color}55`,
-            backgroundColor: `${color}18`,
-          }}
-        >
-          {jobs.length}
-        </Badge>
-      </div>
-      <div className="min-h-[120px] space-y-2">
-        {jobs.map((j) => (
-          <RepairKanbanCard
-            key={j.id}
-            job={j}
-            tenantSlug={tenantSlug}
-            showWorkshopLink={showWorkshopLink}
-          />
-        ))}
-        {jobs.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-border/70 px-2 py-6 text-center text-xs text-muted-foreground">
-            لا طلبات
-          </div>
-        ) : null}
-      </div>
-    </div>
+    </>
   );
 }
 
@@ -257,7 +188,7 @@ export const RepairJobs: React.FC = () => {
   const [branchFilter, setBranchFilter] = useState<string>('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
-  const [boardView, setBoardView] = useState<'kanban' | 'table'>('kanban');
+  const [boardView, setBoardView] = useListViewMode('repair-jobs', 'kanban');
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   useEffect(() => {
     void repairBranchService.list().then(setBranches);
@@ -326,29 +257,28 @@ export const RepairJobs: React.FC = () => {
     });
   }, [jobs, statusFilter, branchFilter, fromDate, toDate, focusFilter, openStatusSet]);
 
-  const kanbanGroups = useMemo(() => {
-    const g: Record<string, RepairJob[]> = {};
-    statusColumns.forEach((s) => {
-      g[s.id] = [];
-    });
-    const fallback = statusColumns[0]?.id || 'received';
-    const columnByCanonical = new Map(
-      statusColumns.map((s) => [mapLegacyRepairStatus(s.id), s.id] as const),
-    );
-    visibleJobs.forEach((job) => {
-      const key = columnByCanonical.get(mapLegacyRepairStatus(job.status)) || fallback;
-      if (!g[key]) g[key] = [];
-      g[key].push(job);
-    });
-    return g;
-  }, [visibleJobs, statusColumns]);
+  const kanbanColumns = useMemo(
+    () =>
+      statusColumns.map((col) => {
+        const chip = resolveRepairStatusChip(col.id, repairSettings.statusMap);
+        return {
+          id: col.id,
+          label: col.label || chip.label || REPAIR_JOB_STATUS_LABELS[col.id] || col.id,
+          accentColor: chip.color,
+        };
+      }),
+    [statusColumns, repairSettings.statusMap],
+  );
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+  const kanbanItems = useMemo(
+    () =>
+      visibleJobs
+        .filter((job) => Boolean(job.id))
+        .map((job) => ({ ...job, id: String(job.id), status: mapLegacyRepairStatus(job.status) })),
+    [visibleJobs],
+  );
 
-  const onKanbanDragEnd = async (e: DragEndEvent) => {
-    const jobId = String(e.active.id || '');
-    const overId = e.over?.id != null ? String(e.over.id) : '';
-    if (!jobId || !overId) return;
+  const onKanbanMove = async (jobId: string, overId: string) => {
     if (!canShowWorkshopNav) {
       toast.error('تغيير الحالة يتم من صفحة الورشة فقط.');
       return;
@@ -358,7 +288,7 @@ export const RepairJobs: React.FC = () => {
       return;
     }
     const row = jobs.find((j) => j.id === jobId);
-    if (!row || row.status === overId) return;
+    if (!row || mapLegacyRepairStatus(row.status) === mapLegacyRepairStatus(overId)) return;
     try {
       await repairJobService.changeStatus({
         jobId,
@@ -369,8 +299,8 @@ export const RepairJobs: React.FC = () => {
       });
       await refetch();
       toast.success('تم تحديث حالة الطلب.');
-    } catch (err: any) {
-      toast.error(err?.message || 'تعذر تحديث الحالة.');
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'تعذر تحديث الحالة.');
     }
   };
 
@@ -424,33 +354,12 @@ export const RepairJobs: React.FC = () => {
           onClick: () => navigate(withTenantPath(tenantSlug, '/repair/jobs/new')),
         } : undefined}
         actions={(
-          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" type="button" size="sm" onClick={() => void refetch()} disabled={isFetching}>
               <RefreshCw className={cn('h-3.5 w-3.5 ms-1', isFetching && 'animate-spin')} />
               تحديث
             </Button>
-            <div className="inline-flex rounded-lg border border-border/80 bg-background p-0.5">
-              <Button
-                variant={boardView === 'kanban' ? 'default' : 'ghost'}
-                size="sm"
-                type="button"
-                className="h-8 gap-1"
-                onClick={() => setBoardView('kanban')}
-              >
-                <LayoutGrid className="h-3.5 w-3.5" />
-                كنبان
-              </Button>
-              <Button
-                variant={boardView === 'table' ? 'default' : 'ghost'}
-                size="sm"
-                type="button"
-                className="h-8 gap-1"
-                onClick={() => setBoardView('table')}
-              >
-                <List className="h-3.5 w-3.5" />
-                جدول
-              </Button>
-            </div>
+            <ListViewToggle value={boardView} onChange={setBoardView} />
             <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
               <Button variant="outline" size="sm" type="button">
                 <Headset className="h-3.5 w-3.5 ms-1" />
@@ -574,30 +483,26 @@ export const RepairJobs: React.FC = () => {
             </CardDescription>
           </CardHeader>
           <CardContent className="overflow-x-auto pb-4">
-            {loading ? (
-              <div className="py-10 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                جاري التحميل...
-              </div>
-            ) : (
-              <DndContext sensors={sensors} onDragEnd={(ev) => void onKanbanDragEnd(ev)}>
-                <div className="flex min-h-[320px] items-start gap-3">
-                  {statusColumns.map((col) => {
-                    const chip = resolveRepairStatusChip(col.id, repairSettings.statusMap);
-                    return (
-                      <RepairKanbanColumn
-                        key={col.id}
-                        statusId={col.id}
-                        label={col.label || chip.label || REPAIR_JOB_STATUS_LABELS[col.id] || col.id}
-                        jobs={kanbanGroups[col.id] || []}
-                        tenantSlug={tenantSlug}
-                        showWorkshopLink={canShowWorkshopNav}
-                        accentColor={chip.color}
-                      />
-                    );
-                  })}
-                </div>
-              </DndContext>
-            )}
+            <StatusKanbanBoard
+              columns={kanbanColumns}
+              items={kanbanItems}
+              resolveColumnId={(job) => {
+                const canonical = mapLegacyRepairStatus(job.status);
+                const match = statusColumns.find((col) => mapLegacyRepairStatus(col.id) === canonical);
+                return match?.id || statusColumns[0]?.id || 'received';
+              }}
+              loading={loading}
+              draggable={canShowWorkshopNav && can('repair.jobs.edit')}
+              onMove={onKanbanMove}
+              emptyColumnLabel="لا طلبات"
+              renderCard={(job) => (
+                <RepairJobKanbanCardBody
+                  job={job}
+                  tenantSlug={tenantSlug}
+                  showWorkshopLink={canShowWorkshopNav}
+                />
+              )}
+            />
           </CardContent>
         </Card>
       )}

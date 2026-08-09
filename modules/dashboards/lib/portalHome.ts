@@ -52,11 +52,20 @@ function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
   );
 }
 
+/** Repair ops / centers-manager home — not factory production dashboards. */
+export function isRepairOpsPortal(checker: PortalPermissionChecker): boolean {
+  return checker.can('repair.adminDashboard.view') || checker.can('repair.dashboard.view');
+}
+
 export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind {
   if (checker.can('adminDashboard.view')) return 'admin';
   if (checker.can('factoryDashboard.view')) return 'factory_manager';
 
   if (isWarehouseOperatorPortal(checker)) return 'warehouse_manager';
+
+  // Centers manager (`repair.adminDashboard.view`) and reception (`repair.dashboard.view`)
+  // must not fall through to the generic factory ops board.
+  if (isRepairOpsPortal(checker)) return 'repair';
 
   if (checker.can('employeeDashboard.view')) return 'employee';
 

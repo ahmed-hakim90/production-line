@@ -7,6 +7,15 @@ import type {
 
 export type RepairSemanticStatusType = 'success' | 'warning' | 'danger' | 'info' | 'muted';
 
+/** Accent colors for status kanban column badges (aligned with StatusBadge semantics). */
+export function semanticStatusAccent(type: RepairSemanticStatusType): string {
+  if (type === 'success') return '#059669';
+  if (type === 'warning') return '#d97706';
+  if (type === 'danger') return '#dc2626';
+  if (type === 'info') return '#0284c8';
+  return '#64748b';
+}
+
 export function repairOpenClosedChipType(isOpen: boolean): RepairSemanticStatusType {
   return isOpen ? 'warning' : 'success';
 }

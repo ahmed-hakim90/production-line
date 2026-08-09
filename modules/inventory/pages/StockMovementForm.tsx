@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
-import { Card, Button, SearchableSelect } from '../components/UI';
+import { Button, SearchableSelect } from '../components/UI';
+import { PageHeader } from '@/components/PageHeader';
 import { useAppStore } from '../../../store/useAppStore';
 import { stockService } from '../services/stockService';
 import { createStockMovement } from '../usecases/createStockMovement';
@@ -61,14 +62,22 @@ import {
   resolveComponentStockIdentity,
   type ComponentCatalogOption,
 } from '../lib/componentCatalogOptions';
+import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { WAREHOUSE_ROLE_LABELS } from '../lib/stockLabels';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
 type TransferLine = TransferFormLine;
 const APP_VERSION = __APP_VERSION__;
+const SPARE_WAREHOUSE_ROLES = new Set(['spare_parts_central', 'maintenance_center']);
+
+function isSparePartsWarehouse(warehouse: Warehouse | undefined): boolean {
+  return Boolean(warehouse?.warehouseRole && SPARE_WAREHOUSE_ROLES.has(warehouse.warehouseRole));
+}
 
 export const StockMovementForm: React.FC = () => {
   const location = useLocation();
+  const navigate = useTenantNavigate();
   const isMobilePrint = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
   const { openModal } = useGlobalModalManager();
   const {
@@ -122,6 +131,7 @@ export const StockMovementForm: React.FC = () => {
   );
   const [adjustmentReason, setAdjustmentReason] = useState<StockAdjustmentReason>('manual_correction');
   const [quantity, setQuantity] = useState<number>(0);
+  const [voucherNote, setVoucherNote] = useState('');
   const [transferItems, setTransferItems] = useState<TransferLine[]>([createTransferLine()]);
   const [nextReferenceSeq, setNextReferenceSeq] = useState(1);
   const [saving, setSaving] = useState(false);
@@ -183,6 +193,17 @@ export const StockMovementForm: React.FC = () => {
     }
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, initialSearch, resolveScopedWarehouseId]);
 
+  /** إذن إضافة من قائمة قطع الغيار: افترض المخزن المركزي إن لم يُحدَّد مخزن. */
+  useEffect(() => {
+    if (warehouseId || scopedWarehouseId || scoped) return;
+    if (movementType !== 'IN') return;
+    if (initialSearch.get('warehouseId')) return;
+    const central = warehouses.find((w) => w.warehouseRole === 'spare_parts_central');
+    if (!central?.id) return;
+    setWarehouseId(central.id);
+    setItemType('raw_material');
+  }, [warehouses, warehouseId, scopedWarehouseId, scoped, movementType, initialSearch]);
+
   const sourceWarehouses = useMemo(
     () => filterWarehouses(warehouses),
     [filterWarehouses, warehouses],
@@ -214,6 +235,19 @@ export const StockMovementForm: React.FC = () => {
     [_rawProducts],
   );
 
+  const selectedWarehouseRole = useMemo(
+    () => warehouses.find((w) => w.id === warehouseId),
+    [warehouses, warehouseId],
+  );
+  const isSparePartsContext = isSparePartsWarehouse(selectedWarehouseRole);
+  const usesMultiLineItems = movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER';
+
+  useEffect(() => {
+    if (!isSparePartsContext || scoped) return;
+    if (initialSearch.get('itemType') === 'finished_good') return;
+    setItemType((prev) => (prev === 'raw_material' ? prev : 'raw_material'));
+  }, [isSparePartsContext, scoped, initialSearch]);
+
   const finishedGoodOptions = useMemo((): TransferItemOption[] => products.map((p) => {
     const raw = rawProductMetaById.get(p.id);
     return {
@@ -226,9 +260,17 @@ export const StockMovementForm: React.FC = () => {
     };
   }), [products, rawProductMetaById]);
 
+  const spareEligibleMaterials = useMemo(
+    () =>
+      isSparePartsContext
+        ? materials.filter((m) => m.availableForSpareParts !== false)
+        : materials,
+    [materials, isSparePartsContext],
+  );
+
   const componentOptions = useMemo(
-    () => buildComponentCatalogOptions(materials, rawMaterials),
-    [materials, rawMaterials],
+    () => buildComponentCatalogOptions(spareEligibleMaterials, isSparePartsContext ? [] : rawMaterials),
+    [spareEligibleMaterials, rawMaterials, isSparePartsContext],
   );
 
   const rawMaterialOptions = useMemo(
@@ -409,12 +451,15 @@ export const StockMovementForm: React.FC = () => {
 
   const resetForm = (nextMovementType: MovementType = 'IN') => {
     setItemId('');
-    setWarehouseId('');
+    if (!warehouseSelectLocked && !isSparePartsContext) {
+      setWarehouseId('');
+    }
     setLocationId('');
     setToLocationId('');
     setToWarehouseId('');
     setMovementType(nextMovementType);
     setQuantity(0);
+    setVoucherNote('');
     setTransferItems([createTransferLine()]);
   };
 
@@ -556,16 +601,69 @@ export const StockMovementForm: React.FC = () => {
             createdByUserId: uid || undefined,
           }, { path: INVENTORY_TRANSFER_CREATE_PATHS.movementsForm })).requestId;
         }
+      } else if (movementType === 'IN' || movementType === 'OUT') {
+        const validationError = validateTransferLines(transferItems, itemType, getItemById);
+        if (validationError) {
+          toast.error(validationError);
+          return;
+        }
+        if (itemType === 'raw_material' && locationSelectOptions.length > 0 && !locationId) {
+          toast.error(
+            isSparePartsContext
+              ? 'حدد الرف/اللوكيشن قبل تسجيل إذن الإضافة.'
+              : 'حدد اللوكيشن قبل تسجيل حركة مكون.',
+          );
+          return;
+        }
+
+        let posted = 0;
+        for (const line of transferItems) {
+          const item = getItemById(line.itemId);
+          if (!item) continue;
+          const qty = lineQuantityInPieces(line);
+          const stockIdentity = resolveLineStockIdentity(line.itemId, movementType);
+          if (movementType === 'OUT' && qty > stockIdentity.available) {
+            toast.error(
+              posted > 0
+                ? `تم ترحيل ${posted} صنفًا ثم توقف: الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`
+                : `الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`,
+            );
+            return;
+          }
+          txId = unwrapOrThrow(await createStockMovement({
+            warehouseId: effectiveWarehouseId,
+            locationId: locationId || undefined,
+            locationCode: selectedLocation?.code,
+            toWarehouseId: undefined,
+            itemType: stockIdentity.itemType,
+            itemId: stockIdentity.itemId,
+            itemName: item.name,
+            itemCode: item.code,
+            movementType,
+            quantity: qty,
+            unit: itemType === 'finished_good' ? line.unit : 'unit',
+            requestQuantity: Number(line.quantity || 0),
+            requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
+            unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
+            minStock: item.minStock,
+            referenceNo: resolvedReferenceNo,
+            note: voucherNote.trim() || undefined,
+            sourceModule: 'manual_movement',
+            sourceId: `${resolvedReferenceNo}:${line.id}`,
+            createdBy: userDisplayName || 'Current User',
+          }, { path: INVENTORY_STOCK_MOVE_PATHS.movementsForm })).transactionId;
+          posted += 1;
+        }
+        if (posted === 0) {
+          toast.error('تعذر ترحيل أي صنف.');
+          return;
+        }
       } else {
         if (!selectedItem) {
           toast.error('اختر الصنف أولًا.');
           return;
         }
-        if (movementType !== 'ADJUSTMENT' && quantity <= 0) {
-          toast.error('الكمية يجب أن تكون أكبر من صفر.');
-          return;
-        }
-        if (movementType === 'ADJUSTMENT' && quantity === 0) {
+        if (quantity === 0) {
           toast.error('كمية التسوية لا يمكن أن تساوي صفر.');
           return;
         }
@@ -575,16 +673,10 @@ export const StockMovementForm: React.FC = () => {
         }
         const stockIdentity = resolveLineStockIdentity(selectedItem.id, movementType);
         const available = stockIdentity.available;
-        if (movementType === 'OUT' && quantity > available) {
-          toast.error(`الكمية تتجاوز الرصيد المتاح (${available}).`);
+        const nextBalance = available + Number(quantity || 0);
+        if (nextBalance < 0) {
+          toast.error(`التسوية ستجعل الرصيد سالباً (الحالي ${available}).`);
           return;
-        }
-        if (movementType === 'ADJUSTMENT') {
-          const nextBalance = available + Number(quantity || 0);
-          if (nextBalance < 0) {
-            toast.error(`التسوية ستجعل الرصيد سالباً (الحالي ${available}).`);
-            return;
-          }
         }
         const effectiveQuantity = Number(quantity || 0);
 
@@ -601,8 +693,9 @@ export const StockMovementForm: React.FC = () => {
           quantity: effectiveQuantity,
           minStock: selectedItem.minStock,
           referenceNo: resolvedReferenceNo,
+          note: voucherNote.trim() || undefined,
           sourceModule: 'manual_movement',
-          adjustmentReason: movementType === 'ADJUSTMENT' ? adjustmentReason : undefined,
+          adjustmentReason,
           createdBy: userDisplayName || 'Current User',
         }, { path: INVENTORY_STOCK_MOVE_PATHS.movementsForm })).transactionId;
       }
@@ -610,7 +703,13 @@ export const StockMovementForm: React.FC = () => {
           ? (isShelfTransfer
             ? 'تم نقل الأصناف من رف إلى رف بنجاح.'
             : 'تم إرسال التحويلة للاعتماد. سيتم ترحيل المخزون بعد الموافقة.')
-          : 'تم تسجيل الحركة بنجاح.');
+          : movementType === 'IN'
+            ? (isSparePartsContext
+              ? `تم تسجيل إذن الإضافة (${transferItems.length} صنف) بنجاح.`
+              : `تم تسجيل الوارد (${transferItems.length} صنف) بنجاح.`)
+            : movementType === 'OUT'
+              ? `تم تسجيل المنصرف (${transferItems.length} صنف) بنجاح.`
+              : 'تم تسجيل الحركة بنجاح.');
 
       if (movementType === 'TRANSFER' && !isShelfTransfer && afterSaveAction !== 'none') {
         const payload = buildTransferPrintData(resolvedReferenceNo, txId);
@@ -639,6 +738,7 @@ export const StockMovementForm: React.FC = () => {
         return Math.max(prev + 1, fromUsedRef);
       });
       resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : 'IN');
+      void loadData();
     } catch (error: any) {
       toast.error(error?.message || 'تعذر حفظ الحركة.');
     } finally {
@@ -664,13 +764,36 @@ export const StockMovementForm: React.FC = () => {
       return;
     }
 
-    if (movementType === 'TRANSFER') {
+    if (movementType === 'TRANSFER' || movementType === 'IN' || movementType === 'OUT') {
       const validationError = validateTransferLines(transferItems, itemType, getItemById);
       if (validationError) {
         toast.error(validationError);
         return;
       }
+      if (movementType === 'TRANSFER') {
         setPreviewData(buildTransferPrintData(referenceNo, null));
+      } else {
+        setPreviewData({
+          transferNo: referenceNo,
+          createdAt: new Date().toISOString(),
+          fromWarehouseName: selectedFromWarehouse?.name || effectiveWarehouseId,
+          toWarehouseName: movementType === 'IN' ? 'وارد للمخزن' : 'منصرف من المخزن',
+          items: transferItems.map((line) => {
+            const item = getItemById(line.itemId)!;
+            const isCarton = itemType === 'finished_good' && line.unit === 'carton';
+            const qtyPieces = lineQuantityInPieces(line);
+            return {
+              itemName: item.name,
+              itemCode: item.code,
+              unitLabel: isCarton ? 'كرتونة' : 'قطعة',
+              quantity: Number(line.quantity || 0),
+              quantityPieces: qtyPieces,
+              unitsPerCarton: isCarton ? Number(item.unitsPerCarton || 0) : undefined,
+            };
+          }),
+          createdBy: userDisplayName || 'Current User',
+        });
+      }
       setShowPrintPreview(true);
       return;
     }
@@ -679,11 +802,7 @@ export const StockMovementForm: React.FC = () => {
       toast.error('اختر الصنف أولًا.');
       return;
     }
-    if (movementType !== 'ADJUSTMENT' && quantity <= 0) {
-      toast.error('الكمية يجب أن تكون أكبر من صفر.');
-      return;
-    }
-    if (movementType === 'ADJUSTMENT' && quantity === 0) {
+    if (quantity === 0) {
       toast.error('كمية التسوية لا يمكن أن تساوي صفر.');
       return;
     }
@@ -694,7 +813,7 @@ export const StockMovementForm: React.FC = () => {
       transferNo: referenceNo,
       createdAt: new Date().toISOString(),
       fromWarehouseName: selectedFromWarehouse?.name || effectiveWarehouseId,
-      toWarehouseName: movementType === 'IN' ? 'وارد للمخزن' : movementType === 'OUT' ? 'منصرف من المخزن' : 'تسوية',
+      toWarehouseName: 'تسوية',
       items: [{
         itemName: selectedItem.name,
         itemCode: selectedItem.code,
@@ -708,6 +827,34 @@ export const StockMovementForm: React.FC = () => {
     setShowPrintPreview(true);
   };
 
+  const pageTitle = isSparePartsContext && movementType === 'IN'
+    ? 'إذن إضافة قطع غيار'
+    : movementType === 'IN'
+      ? 'إذن إضافة (وارد)'
+      : movementType === 'OUT'
+        ? 'إذن منصرف'
+        : movementType === 'TRANSFER'
+          ? 'تحويل مخزون'
+          : 'تسوية مخزون';
+  const pageSubtitle = isSparePartsContext && movementType === 'IN'
+    ? 'تسجيل وارد متعدد الأسطر للمخزن المركزي أو مراكز الصيانة'
+    : 'وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة';
+  const linesSectionLabel =
+    movementType === 'TRANSFER'
+      ? 'أصناف التحويلة'
+      : movementType === 'OUT'
+        ? 'أصناف المنصرف'
+        : 'أصناف الإذن';
+  const addLineLabel = itemType === 'finished_good' ? 'إضافة منتج' : 'إضافة صنف';
+  const primarySaveLabel =
+    movementType === 'IN'
+      ? (isSparePartsContext ? 'حفظ إذن الإضافة' : 'حفظ الوارد')
+      : movementType === 'OUT'
+        ? 'حفظ المنصرف'
+        : movementType === 'TRANSFER'
+          ? 'حفظ التحويلة'
+          : 'حفظ التسوية';
+
   /* ── ERPNext field helpers ── */
   const fieldClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f8f9fa] text-[var(--color-text)] outline-none focus:border-[rgb(var(--color-primary))] focus:bg-white focus:ring-2 focus:ring-[rgb(var(--color-primary)/0.12)] transition-all font-medium';
   const fieldDisabledClass = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-[13px] bg-[#f0f2f5] text-[var(--color-text)] font-medium select-none cursor-default';
@@ -716,13 +863,39 @@ export const StockMovementForm: React.FC = () => {
   return (
     <div className="space-y-5">
 
-      {/* ── Page Header ── */}
-      <div className="erp-page-head">
-        <div className="erp-page-title-block">
-          <h2 className="page-title">إدخال حركة مخزون</h2>
-          <p className="page-subtitle">وارد، منصرف، تحويل أو تسوية مباشرة على الأرصدة</p>
-        </div>
-      </div>
+      <PageHeader
+        title={pageTitle}
+        subtitle={pageSubtitle}
+        icon="inventory_2"
+        primaryAction={
+          can('inventory.transactions.create')
+            ? {
+                label: saving ? 'جاري الحفظ...' : primarySaveLabel,
+                icon: 'save',
+                onClick: () => void handleSubmit('none'),
+                disabled: saving,
+              }
+            : undefined
+        }
+        moreActions={[
+          {
+            label: 'استيراد إدخال بالكود',
+            icon: 'upload',
+            onClick: () => openImportInByCodeModal(itemType === 'raw_material' ? 'raw_material' : 'finished_good'),
+            disabled: !can('inventory.transactions.create') || saving,
+          },
+          {
+            label: 'سجل حركات المخازن',
+            icon: 'swap_horiz',
+            onClick: () =>
+              navigate(
+                warehouseId
+                  ? `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}`
+                  : '/inventory/transactions',
+              ),
+          },
+        ]}
+      />
 
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
@@ -736,8 +909,17 @@ export const StockMovementForm: React.FC = () => {
         style={{ boxShadow: 'var(--shadow-card)' }}
       >
         {/* Card header */}
-        <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex items-center justify-between">
-          <span className="text-[13px] font-semibold text-[var(--color-text)]">تسجيل الحركة</span>
+        <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-[13px] font-semibold text-[var(--color-text)]">
+              {isSparePartsContext && movementType === 'IN' ? 'تسجيل إذن الإضافة' : 'تسجيل الحركة'}
+            </span>
+            {isSparePartsContext && selectedWarehouseRole?.warehouseRole ? (
+              <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                {WAREHOUSE_ROLE_LABELS[selectedWarehouseRole.warehouseRole] || 'قطع غيار'}
+              </span>
+            ) : null}
+          </div>
           {/* Reference badge */}
           <div className="flex items-center gap-2">
             <span className="text-[11px] text-[var(--color-text-muted)] font-medium">رقم المرجع</span>
@@ -762,15 +944,20 @@ export const StockMovementForm: React.FC = () => {
             <label className={labelClass}>نوع الحركة</label>
             <div className="erp-date-seg" style={{ width: '100%', display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
               {([
+                { value: 'IN' as MovementType, label: isSparePartsContext ? 'إضافة' : 'وارد', icon: 'south_west' },
+                { value: 'OUT' as MovementType, label: 'منصرف', icon: 'north_east' },
                 { value: 'TRANSFER' as MovementType, label: 'تحويل', icon: 'swap_horiz' },
-                { value: 'IN'       as MovementType, label: 'وارد',  icon: 'south_west' },
-                { value: 'OUT'      as MovementType, label: 'منصرف', icon: 'north_east' },
                 { value: 'ADJUSTMENT' as MovementType, label: 'تسوية', icon: 'tune' },
               ] as const).map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
-                  onClick={() => setMovementType(opt.value)}
+                  onClick={() => {
+                    setMovementType(opt.value);
+                    if (opt.value !== 'ADJUSTMENT' && transferItems.length === 0) {
+                      setTransferItems([createTransferLine()]);
+                    }
+                  }}
                   className={`erp-date-seg-btn${movementType === opt.value ? ' active' : ''}`}
                   style={{ justifyContent: 'center' }}
                 >
@@ -786,7 +973,7 @@ export const StockMovementForm: React.FC = () => {
             <label className={labelClass}>نوع الصنف</label>
               <Select
               value={itemType}
-              disabled={scoped}
+              disabled={scoped || isSparePartsContext}
               onValueChange={(value) => {
                 const nextType = value as ItemType;
                 setItemType(nextType);
@@ -798,12 +985,20 @@ export const StockMovementForm: React.FC = () => {
             >
               <SelectTrigger className={fieldClass}>
                 <SelectValue placeholder="اختر نوع الصنف">
-                  {itemType === 'finished_good' ? 'منتج نهائي' : 'مكونات المنتجات'}
+                  {itemType === 'finished_good'
+                    ? 'منتج نهائي'
+                    : isSparePartsContext
+                      ? 'قطع غيار / مواد'
+                      : 'مكونات المنتجات'}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="finished_good">منتج نهائي</SelectItem>
-                <SelectItem value="raw_material">مكونات المنتجات</SelectItem>
+                {!isSparePartsContext ? (
+                  <SelectItem value="finished_good">منتج نهائي</SelectItem>
+                ) : null}
+                <SelectItem value="raw_material">
+                  {isSparePartsContext ? 'قطع غيار / مواد' : 'مكونات المنتجات'}
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -832,12 +1027,18 @@ export const StockMovementForm: React.FC = () => {
 
           {movementType !== 'TRANSFER' && locationSelectOptions.length > 0 && (
             <div>
-              <label className={labelClass}>اللوكيشن</label>
+              <label className={labelClass}>
+                {isSparePartsContext ? 'الرف / اللوكيشن' : 'اللوكيشن'}
+              </label>
               <SearchableSelect
                 options={locationSelectOptions}
                 value={locationId}
                 onChange={(value) => setLocationId(value)}
-                placeholder="اختياري للمنتجات - مطلوب للمكونات"
+                placeholder={
+                  itemType === 'raw_material'
+                    ? 'مطلوب للمكونات وقطع الغيار'
+                    : 'اختياري للمنتجات'
+                }
               />
             </div>
           )}
@@ -882,71 +1083,79 @@ export const StockMovementForm: React.FC = () => {
             </>
           )}
 
-          {/* Item (non-TRANSFER) */}
-          {movementType !== 'TRANSFER' && (
-            <div>
-              <label className={labelClass}>الصنف</label>
-              <SearchableSelect
-                options={itemSelectOptions}
-                value={itemId}
-                onChange={(value) => setItemId(value)}
-                placeholder="ابحث واختر الصنف"
-              />
-            </div>
-          )}
-
-          {/* Quantity (non-TRANSFER) */}
-          {movementType !== 'TRANSFER' && (
-            <div>
-              <label className={labelClass}>الكمية</label>
-              <input
-                type="number"
-                step="any"
-                className={fieldClass}
-                value={quantity}
-                onChange={(e) => setQuantity(Number(e.target.value))}
-              />
-              {itemId && effectiveWarehouseId && (
-                <StockAvailabilityHint
-                  warehouseId={effectiveWarehouseId}
-                  itemType={
-                    itemType === 'finished_good'
-                      ? 'finished_good'
-                      : (resolveLineStockIdentity(itemId, movementType).itemType)
-                  }
-                  itemId={
-                    itemType === 'finished_good'
-                      ? itemId
-                      : resolveLineStockIdentity(itemId, movementType).itemId
-                  }
-                  className="mt-1.5"
-                />
-              )}
-            </div>
-          )}
-
+          {/* Item + qty (ADJUSTMENT only — single line) */}
           {movementType === 'ADJUSTMENT' && (
-            <div>
-              <label className={labelClass}>سبب التسوية</label>
-              <select
+            <>
+              <div>
+                <label className={labelClass}>الصنف</label>
+                <SearchableSelect
+                  options={itemSelectOptions}
+                  value={itemId}
+                  onChange={(value) => setItemId(value)}
+                  placeholder="ابحث واختر الصنف"
+                />
+              </div>
+              <div>
+                <label className={labelClass}>الكمية (+ زيادة / − نقص)</label>
+                <input
+                  type="number"
+                  step="any"
+                  className={fieldClass}
+                  value={quantity}
+                  onChange={(e) => setQuantity(Number(e.target.value))}
+                />
+                {itemId && effectiveWarehouseId && (
+                  <StockAvailabilityHint
+                    warehouseId={effectiveWarehouseId}
+                    itemType={
+                      itemType === 'finished_good'
+                        ? 'finished_good'
+                        : (resolveLineStockIdentity(itemId, movementType).itemType)
+                    }
+                    itemId={
+                      itemType === 'finished_good'
+                        ? itemId
+                        : resolveLineStockIdentity(itemId, movementType).itemId
+                    }
+                    className="mt-1.5"
+                  />
+                )}
+              </div>
+              <div>
+                <label className={labelClass}>سبب التسوية</label>
+                <select
+                  className={fieldClass}
+                  value={adjustmentReason}
+                  onChange={(e) => setAdjustmentReason(e.target.value as StockAdjustmentReason)}
+                >
+                  <option value="count_correction">تصحيح جرد</option>
+                  <option value="damage">تلف</option>
+                  <option value="missing">نقص</option>
+                  <option value="extra">زيادة</option>
+                  <option value="manual_correction">تصحيح يدوي</option>
+                </select>
+              </div>
+            </>
+          )}
+
+          {(movementType === 'IN' || movementType === 'OUT') && (
+            <div className="md:col-span-2">
+              <label className={labelClass}>ملاحظة الإذن (اختياري)</label>
+              <input
+                type="text"
                 className={fieldClass}
-                value={adjustmentReason}
-                onChange={(e) => setAdjustmentReason(e.target.value as StockAdjustmentReason)}
-              >
-                <option value="count_correction">تصحيح جرد</option>
-                <option value="damage">تلف</option>
-                <option value="missing">نقص</option>
-                <option value="extra">زيادة</option>
-                <option value="manual_correction">تصحيح يدوي</option>
-              </select>
+                value={voucherNote}
+                onChange={(e) => setVoucherNote(e.target.value)}
+                placeholder={isSparePartsContext ? 'مثال: توريد مورد / فاتورة شراء' : 'ملاحظة تظهر على الحركات'}
+              />
             </div>
           )}
 
-          {/* Transfer lines (TRANSFER only) */}
-          {movementType === 'TRANSFER' && (
+          {/* Multi-line items (IN / OUT / TRANSFER) */}
+          {usesMultiLineItems && (
             <div className="md:col-span-2 space-y-3">
               <div className="flex items-center justify-between">
-                <label className={labelClass} style={{ marginBottom: 0 }}>أصناف التحويلة</label>
+                <label className={labelClass} style={{ marginBottom: 0 }}>{linesSectionLabel}</label>
                 <Button
                   type="button"
                   variant="secondary"
@@ -954,7 +1163,7 @@ export const StockMovementForm: React.FC = () => {
                   onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                   disabled={saving}
                 >
-                  إضافة منتج
+                  {addLineLabel}
                 </Button>
               </div>
 
@@ -967,13 +1176,13 @@ export const StockMovementForm: React.FC = () => {
                 <div
                   className="hidden sm:grid gap-0 text-[11px] font-semibold uppercase tracking-wide text-[var(--color-text-muted)] px-3 py-2"
                   style={{
-                    gridTemplateColumns: '1fr 160px 140px 40px',
+                    gridTemplateColumns: itemType === 'finished_good' ? '1fr 160px 140px 40px' : '1fr 140px 40px',
                     borderBottom: '1px solid var(--color-border)',
                     background: '#f8f9fa',
                   }}
                 >
                   <span>الصنف</span>
-                  <span className="text-center">الوحدة</span>
+                  {itemType === 'finished_good' ? <span className="text-center">الوحدة</span> : null}
                   <span className="text-center">الكمية</span>
                   <span />
                 </div>
@@ -986,18 +1195,20 @@ export const StockMovementForm: React.FC = () => {
                     .filter((x) => x.itemId === line.itemId)
                     .reduce((sum, x) => sum + lineQuantityInPieces(x), 0);
                   const remaining = available - requestedForItem;
+                  const showAvailability = movementType === 'OUT' || movementType === 'TRANSFER';
                   return (
                     <div
                       key={line.id}
                       className="px-3 py-2.5"
                       style={{ borderBottom: idx < transferItems.length - 1 ? '1px solid var(--color-border)' : 'none' }}
                     >
-                      {/* ── Desktop: 4-column grid ── */}
+                      {/* ── Desktop grid ── */}
                       <div
                         className="hidden sm:grid gap-0 items-start"
-                        style={{ gridTemplateColumns: '1fr 160px 140px 40px' }}
+                        style={{
+                          gridTemplateColumns: itemType === 'finished_good' ? '1fr 160px 140px 40px' : '1fr 140px 40px',
+                        }}
                       >
-                        {/* Item search */}
                         <div className="pl-3">
                           <SearchableSelect
                             options={itemSelectOptions}
@@ -1009,39 +1220,39 @@ export const StockMovementForm: React.FC = () => {
                             }
                             placeholder="ابحث واختر الصنف"
                           />
-                          {line.itemId && (
+                          {line.itemId && showAvailability && (
                             <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
                               متاح: {available} · متبقي: {remaining}
                             </p>
                           )}
+                          {line.itemId && movementType === 'IN' && (
+                            <p className="text-[11px] font-semibold mt-1 text-[var(--color-text-muted)]">
+                              الرصيد الحالي: {available}
+                            </p>
+                          )}
                         </div>
 
-                        {/* Unit toggle */}
-                        <div className="px-2">
-                          {itemType === 'finished_good' ? (
+                        {itemType === 'finished_good' ? (
+                          <div className="px-2">
                             <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
                               <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
                                 onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)))}>قطعة</button>
                               <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'carton' ? ' active' : ''}`}
                                 onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'carton' } : x)))}>كرتونة</button>
                             </div>
-                          ) : (
-                            <div className={fieldDisabledClass} style={{ textAlign: 'center' }}>وحدة</div>
-                          )}
-                          {itemType === 'finished_good' && line.unit === 'carton' && (
-                            <p className="text-[10.5px] text-[var(--color-text-muted)] mt-1 text-center">
-                              {Number(lineItem?.unitsPerCarton || 0) > 0 ? `${lineItem?.unitsPerCarton} وحدة/كرتونة` : 'لا توجد قيمة'}
-                            </p>
-                          )}
-                        </div>
+                            {line.unit === 'carton' && (
+                              <p className="text-[10.5px] text-[var(--color-text-muted)] mt-1 text-center">
+                                {Number(lineItem?.unitsPerCarton || 0) > 0 ? `${lineItem?.unitsPerCarton} وحدة/كرتونة` : 'لا توجد قيمة'}
+                              </p>
+                            )}
+                          </div>
+                        ) : null}
 
-                        {/* Quantity */}
                         <div className="px-2">
                           <input type="number" step="any" className={fieldClass} placeholder="0" value={line.quantity || ''}
                             onChange={(e) => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, quantity: Number(e.target.value) } : x)))} />
                         </div>
 
-                        {/* Delete */}
                         <div className="flex items-center justify-center pt-0.5">
                           <button type="button" onClick={() => setTransferItems((prev) => (prev.length > 1 ? prev.filter((x) => x.id !== line.id) : prev))}
                             className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:text-rose-600 hover:bg-rose-50 disabled:opacity-30 transition-all"
@@ -1051,9 +1262,8 @@ export const StockMovementForm: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* ── Mobile: stacked layout ── */}
+                      {/* ── Mobile stacked ── */}
                       <div className="sm:hidden space-y-2">
-                        {/* Row 1: item label + delete */}
                         <div className="flex items-center justify-between gap-2">
                           <span className="text-[11px] font-bold text-[var(--color-text-muted)]">الصنف #{idx + 1}</span>
                           <button type="button"
@@ -1064,7 +1274,6 @@ export const StockMovementForm: React.FC = () => {
                           </button>
                         </div>
 
-                        {/* Row 2: item searchable select */}
                         <div>
                           <SearchableSelect
                             options={itemSelectOptions}
@@ -1076,33 +1285,30 @@ export const StockMovementForm: React.FC = () => {
                             }
                             placeholder="ابحث واختر الصنف"
                           />
-                          {line.itemId && (
+                          {line.itemId && showAvailability && (
                             <p className={`text-[11px] font-semibold mt-1 ${remaining < 0 ? 'text-rose-600' : 'text-[var(--color-text-muted)]'}`}>
                               متاح: {available} · متبقي: {remaining}
                             </p>
                           )}
+                          {line.itemId && movementType === 'IN' && (
+                            <p className="text-[11px] font-semibold mt-1 text-[var(--color-text-muted)]">
+                              الرصيد الحالي: {available}
+                            </p>
+                          )}
                         </div>
 
-                        {/* Row 3: unit + quantity side by side */}
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الوحدة</span>
-                            {itemType === 'finished_good' ? (
+                        <div className={`grid gap-2 ${itemType === 'finished_good' ? 'grid-cols-2' : 'grid-cols-1'}`}>
+                          {itemType === 'finished_good' ? (
+                            <div>
+                              <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الوحدة</span>
                               <div className="erp-date-seg" style={{ width: '100%', display: 'flex' }}>
                                 <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'piece' ? ' active' : ''}`}
                                   onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'piece' } : x)))}>قطعة</button>
                                 <button type="button" className={`erp-date-seg-btn flex-1${line.unit === 'carton' ? ' active' : ''}`}
                                   onClick={() => setTransferItems((prev) => prev.map((x) => (x.id === line.id ? { ...x, unit: 'carton' } : x)))}>كرتونة</button>
                               </div>
-                            ) : (
-                              <div className={fieldDisabledClass} style={{ textAlign: 'center' }}>وحدة</div>
-                            )}
-                            {itemType === 'finished_good' && line.unit === 'carton' && (
-                              <p className="text-[10.5px] text-[var(--color-text-muted)] mt-1">
-                                {Number(lineItem?.unitsPerCarton || 0) > 0 ? `${lineItem?.unitsPerCarton} وحدة/كرتونة` : 'لا توجد قيمة'}
-                              </p>
-                            )}
-                          </div>
+                            </div>
+                          ) : null}
                           <div>
                             <span className="text-[11px] font-semibold text-[var(--color-text-muted)] mb-1 block">الكمية</span>
                             <input type="number" step="any" className={fieldClass} placeholder="0" value={line.quantity || ''}
@@ -1115,7 +1321,6 @@ export const StockMovementForm: React.FC = () => {
                 })}
               </div>
 
-              {/* Add row button (mobile) */}
               <Button
                 type="button"
                 variant="secondary"
@@ -1123,7 +1328,7 @@ export const StockMovementForm: React.FC = () => {
                 onClick={() => setTransferItems((prev) => [...prev, createTransferLine()])}
                 disabled={saving}
               >
-                إضافة منتج
+                {addLineLabel}
               </Button>
             </div>
           )}
@@ -1134,6 +1339,17 @@ export const StockMovementForm: React.FC = () => {
           className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse gap-2 sm:flex-row sm:justify-end items-center"
           style={{ background: '#f8f9fa', borderRadius: '0 0 var(--border-radius-lg) var(--border-radius-lg)' }}
         >
+          {(movementType === 'IN' || movementType === 'OUT' || movementType === 'TRANSFER') && (
+            <Button
+              type="button"
+              variant="secondary"
+              className="w-full sm:w-auto"
+              onClick={() => handlePreviewWithoutSave()}
+              disabled={saving}
+            >
+              معاينة
+            </Button>
+          )}
           {movementType === 'TRANSFER' && (
             <Button
               type="button"
@@ -1152,7 +1368,7 @@ export const StockMovementForm: React.FC = () => {
             onClick={() => void handleSubmit('none')}
             disabled={!can('inventory.transactions.create') || saving}
           >
-            {saving ? 'جاري الحفظ...' : 'حفظ الحركة'}
+            {saving ? 'جاري الحفظ...' : primarySaveLabel}
           </Button>
         </div>
       </div>
@@ -1180,11 +1396,12 @@ export const StockMovementForm: React.FC = () => {
             className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-5xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Modal header */}
             <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-[var(--color-text-muted)]" style={{ fontSize: 18 }}>preview</span>
-                <span className="text-[14px] font-semibold">معاينة المرجع التحويلة</span>
+                <span className="text-[14px] font-semibold">
+                  {movementType === 'TRANSFER' ? 'معاينة التحويلة' : 'معاينة الإذن'}
+                </span>
               </div>
               <button
                 onClick={() => setShowPrintPreview(false)}
@@ -1193,13 +1410,11 @@ export const StockMovementForm: React.FC = () => {
                 <span className="material-icons-round" style={{ fontSize: 18 }}>close</span>
               </button>
             </div>
-            {/* Modal body */}
             <div className="p-3 sm:p-5 overflow-auto flex-1" style={{ background: '#f8f9fa' }}>
               <div className="mx-auto w-fit">
                 <StockTransferPrint data={previewData} printSettings={printTemplate} />
               </div>
             </div>
-            {/* Modal footer */}
             <div
               className="px-5 py-3.5 border-t border-[var(--color-border)] flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-2"
               style={{ background: '#f8f9fa' }}

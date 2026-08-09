@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-08
+**Last updated:** 2026-08-09
 
 ## Core / runtime
 
@@ -47,8 +47,9 @@
 | Materials warehouse | Raw/decomposed control, production issues |
 | Spare-parts central | `/inventory/spare-parts-replenishment` (approve/prepare; menu badge) |
 | Inventory admin | `/inventory/warehouses` hub (role/branch filters) |
-| Repair center / reception | `/repair/parts-replenishment` (receive badge), `/repair/spare-issues`, custody |
-| Repair admin | Admin dashboard, branches, settings |
+| Repair center / reception | Home `/` → repair ops; mobile repair bottom bar (طلب جديد); replenishment / custody |
+| Repair admin / centers manager | Home `/` → repair admin; mobile repair bottom bar (طلبات / تموين / أداء) |
+| Repair technician | Home `/` → technician portal; mobile bar (لوحتي / طلباتي) |
 
 ## Repair / spare stock permission keys (workflow)
 

@@ -64,6 +64,7 @@ import { usePageBackSetter } from '@/src/shared/ui/layout/PageBackContext';
 const ICON_MAP: Record<string, LucideIcon> = {
   add: Plus,
   analytics: BarChart,
+  badge: Package,
   bar_chart: BarChart,
   check: Check,
   delete: Trash2,
@@ -72,16 +73,23 @@ const ICON_MAP: Record<string, LucideIcon> = {
   fact_check: Check,
   file_download: FileDown,
   grid_view: LayoutGrid,
+  handyman: Factory,
   inventory_2: Package,
   landmark: Landmark,
   layout_dashboard: LayoutDashboard,
   edit: Pencil,
+  local_shipping: Package,
   more_horiz: MoreHorizontal,
   notifications_active: Bell,
   package: Package,
+  payments: Wallet,
+  picture_as_pdf: FileDown,
   print: Printer,
   receipt_long: FileDown,
   refresh: RefreshCw,
+  report: TriangleAlert,
+  request_quote: Wallet,
+  restart_alt: RefreshCw,
   save: Save,
   search: Search,
   settings: Settings,
@@ -281,7 +289,7 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
           </Button>
         )}
 
-        {/* More actions dropdown */}
+        {/* More actions dropdown — visible label so purpose is clear on all pages */}
         {visibleMoreActions.length > 0 && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -290,11 +298,12 @@ export const PageHeader: React.FC<PageHeaderProps> = ({
                 variant="outline"
                 className="btn btn-secondary"
                 title={t('pageHeader.moreActions')}
+                aria-label={t('pageHeader.moreActions')}
                 iconName="more_horiz"
                 tone="neutral"
                 solid={false}
               >
-                <span className="sr-only">{t('pageHeader.moreActions')}</span>
+                {t('pageHeader.more')}
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" className="min-w-[220px]">

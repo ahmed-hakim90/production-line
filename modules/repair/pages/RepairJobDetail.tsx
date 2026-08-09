@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Download, FileCheck2, Printer, Trash2, Banknote, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,14 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  DetailCollapsibleSection,
+  DetailPageShell,
+  DetailPageStickyHeader,
+  NESTED_TILE,
+  SURFACE_CARD,
+} from '@/src/components/erp/DetailPageChrome';
+import { cn } from '@/lib/utils';
 import {
   Dialog,
   DialogContent,
@@ -23,7 +31,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { SearchableSelect } from '@/components/UI';
 import { exportToPDF } from '../../../utils/reportExport';
 import { useManagedPrint } from '../../../utils/printManager';
 import { withTenantPath } from '@/lib/tenantPaths';
@@ -43,28 +50,13 @@ import { employeeService } from '../../hr/employeeService';
 import { buildRepairApprovalPublicUrl, buildRepairTrackPublicUrl } from '../lib/repairPublicLinks';
 import { resolveRepairJobPaymentCloseState } from '../lib/repairJobPaymentClose';
 import { isManufacturerWarrantyJob, isWarrantySettlementAuth } from '../lib/repairManufacturerWarranty';
-import {
-  formatRepairApprovalRequestMessage,
-  formatRepairIntakeConfirmationMessage,
-  formatRepairReadyMessage,
-  formatRepairWhatsAppMessage,
-} from '../utils/whatsappRepairMessage';
+import { formatRepairApprovalRequestMessage } from '../utils/whatsappRepairMessage';
 import { RepairJobPrint } from '../components/RepairJobPrint';
 import { RepairJobProductCardPrint } from '../components/RepairJobProductCardPrint';
 import { DeliveryReceiptPDF } from '../components/DeliveryReceiptPDF';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
-import {
-  REPAIR_PART_AVAILABILITY_LABELS,
-  REPAIR_PART_FULFILLMENT_LABELS,
-  effectiveFulfillmentStatus,
-  isReadyToIssueUsage,
-} from '../lib/repairPartFulfillment';
-import {
-  repairPartAvailabilityChipType,
-  repairPartFulfillmentChipType,
-} from '../lib/repairSemanticStatus';
+import { isReadyToIssueUsage } from '../lib/repairPartFulfillment';
 import { StatusBadge } from '../components/StatusBadge';
-import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { WhatsAppShare } from '../components/WhatsAppShare';
 import {
   REPAIR_JOB_STATUS_LABELS,
@@ -1128,20 +1120,8 @@ export const RepairJobDetail: React.FC = () => {
     if (!job?.id || typeof window === 'undefined') return '';
     return `${window.location.origin}${withTenantPath(tenantSlug, `/repair/jobs/${job.id}/claim`)}`;
   }, [job?.id, tenantSlug]);
-  const whatsappText = useMemo(() => {
-    if (!job) return '';
-    return formatRepairWhatsAppMessage(job, trackUrl || undefined);
-  }, [job, trackUrl]);
-  const waIntake = useMemo(() => {
-    if (!job) return '';
-    return formatRepairIntakeConfirmationMessage(job, trackUrl || undefined);
-  }, [job, trackUrl]);
-  const waReady = useMemo(() => {
-    if (!job) return '';
-    return formatRepairReadyMessage(job, trackUrl || undefined);
-  }, [job, trackUrl]);
   const waApproval = useMemo(() => {
-    if (!job) return '';
+    if (!job || !approvalUrl) return '';
     return formatRepairApprovalRequestMessage(job, approvalUrl);
   }, [job, approvalUrl]);
   const isAssignedToCurrentTechnician = useMemo(() => {
@@ -1167,14 +1147,6 @@ export const RepairJobDetail: React.FC = () => {
     canCreateJobs: can('repair.jobs.create'),
     canEditJobs: can('repair.jobs.edit'),
   });
-
-  const openUnrepairableDialog = (item: RepairJobProduct) => {
-    const total = Math.max(1, Number(item.receivedQuantity || item.quantity || 1));
-    setOpsDialog({ mode: 'unrepairable', item });
-    setOpsQty(Math.max(0, Number(item.unrepairableQuantity || total)));
-    setOpsReason(String(item.unrepairableReasonNote || ''));
-    setOpsReasonCode(String(item.unrepairableReasonCode || ''));
-  };
 
   const openReplacementDialog = (item: RepairJobProduct) => {
     const available = Math.max(0, Number(item.unrepairableQuantity || 0));
@@ -1343,17 +1315,6 @@ export const RepairJobDetail: React.FC = () => {
     };
   }, [branchTechnicians, canAssignTechnician, job?.id, job?.technicianId, userProfile?.displayName, userProfile?.email, userProfile?.id]);
 
-  const assignedTechnicianLabel = useMemo(() => {
-    const assignedId = String(job?.technicianId || '').trim();
-    if (!assignedId) return 'غير مسند';
-    const fromMap = String(technicianNameById[assignedId] || '').trim();
-    if (fromMap && fromMap !== 'فني غير معرف') return fromMap;
-    const match = branchTechnicians.find(
-      (tech) => tech.id === assignedId || tech.userId === assignedId,
-    );
-    if (match?.name && match.name !== 'فني غير معرف') return match.name;
-    return fromMap || 'فني غير معرف';
-  }, [branchTechnicians, job?.technicianId, technicianNameById]);
   const canViewThisJob = !repairCtx.jobsTechnicianOnly;
   const canDeleteJob = Boolean(job) && !isDeliveredStatus(job?.status || '') && !Boolean(job?.isClosed) && canEditThisJob;
 
@@ -1373,6 +1334,99 @@ export const RepairJobDetail: React.FC = () => {
       toast.error(e?.message || 'تعذر حذف طلب الصيانة.');
     }
   };
+
+  const canOpenWorkshop = Boolean(
+    job
+    && !isDeliveredStatus(job.status)
+    && (
+      can('repair.adminDashboard.view')
+      || can('repair.branches.manage')
+      || canManageWorkshopWork
+    ),
+  );
+
+  const headerPrimaryAction = useMemo(() => {
+    if (!job || !canOpenWorkshop) return undefined;
+    // إقفال الدفع/التسليم يبقى في لوحة الإقفال فقط — الهيدر للورشة
+    return {
+      label: 'فتح الورشة',
+      icon: 'handyman',
+      onClick: () => navigate(withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)),
+    };
+  }, [job, canOpenWorkshop, navigate, tenantSlug]);
+
+  const headerMoreActions = useMemo(() => {
+    if (!job) return [];
+    const items: Array<{
+      label: string;
+      icon?: string;
+      onClick: () => void;
+      disabled?: boolean;
+      group?: string;
+      danger?: boolean;
+    }> = [];
+
+    items.push({
+      label: exportingPdf ? 'جاري التصدير…' : 'تنزيل PDF',
+      icon: 'picture_as_pdf',
+      group: 'طباعة وتصدير',
+      disabled: exportingPdf,
+      onClick: () => { void exportReceipt(); },
+    });
+
+    if (can('repair.complaints.manage')) {
+      items.push({
+        label: 'إنشاء شكوى',
+        icon: 'report',
+        group: 'عمليات',
+        onClick: () => {
+          navigate(withTenantPath(tenantSlug, '/repair/complaints'), {
+            state: {
+              openCreate: true,
+              complaintPrefill: {
+                customerId: job.customerId,
+                customerName: job.customerName,
+                customerPhone: job.customerPhone,
+                jobId: job.id,
+                receiptNo: job.receiptNo,
+                branchId: job.branchId,
+              },
+            },
+          });
+        },
+      });
+    }
+
+    if (isDeliveredStatus(job.status) && canEditThisJob) {
+      items.push({
+        label: showReopenOptions ? 'إخفاء إعادة الإصلاح' : 'إعادة إصلاح',
+        icon: 'restart_alt',
+        group: 'عمليات',
+        onClick: () => setShowReopenOptions((v) => !v),
+      });
+    }
+
+    if (canDeleteJob) {
+      items.push({
+        label: 'حذف الطلب',
+        icon: 'delete',
+        group: 'عمليات',
+        danger: true,
+        onClick: () => { void deleteJob(); },
+      });
+    }
+
+    return items;
+  }, [
+    job,
+    exportingPdf,
+    can,
+    navigate,
+    tenantSlug,
+    canEditThisJob,
+    showReopenOptions,
+    canDeleteJob,
+  ]);
 
   if (!job) {
     return (
@@ -1410,299 +1464,250 @@ export const RepairJobDetail: React.FC = () => {
     : job;
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
-      <PageHeader
-        title={`طلب صيانة #${job.receiptNo}`}
-        subtitle={
-          isDeliveredStatus(job.status)
-            ? 'الطلب مقفل بعد التسليم — اطبع إذن التسليم من الصندوق أدناه أو أعد فتح الإصلاح إن لزم.'
-            : 'شاشة الاستقبال: عرض الطلب والإيصال وإسناد الفني. شغل الورشة من صفحة الفني.'
-        }
-        icon="fact_check"
-        backAction={{ to: withTenantPath(tenantSlug, '/repair/jobs') }}
-        actions={(
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={job.status} size="md" />
-            {can('repair.complaints.manage') ? (
-              <Button type="button" variant="outline" size="sm" asChild>
-                <Link
-                  to={withTenantPath(tenantSlug, '/repair/complaints')}
-                  state={{
-                    openCreate: true,
-                    complaintPrefill: {
-                      customerId: job.customerId,
-                      customerName: job.customerName,
-                      customerPhone: job.customerPhone,
-                      jobId: job.id,
-                      receiptNo: job.receiptNo,
-                      branchId: job.branchId,
-                    },
-                  }}
-                >
-                  إنشاء شكوى
-                </Link>
-              </Button>
-            ) : null}
-            {!isDeliveredStatus(job.status)
-              && (can('repair.adminDashboard.view') || can('repair.branches.manage')) ? (
-              <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
-                <Button type="button" variant="secondary" size="sm">فتح الورشة</Button>
-              </Link>
-            ) : null}
-            {!isDeliveredStatus(job.status) ? (
-              <>
-                <Button type="button" variant="outline" size="sm" onClick={() => handlePrintProductCards()}>
-                  <Printer className="h-4 w-4 ms-1" />
-                  كارت الصيانة الداخلي
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => handlePrintReceipt()}>
-                  <Printer className="h-4 w-4 ms-1" />
-                  إيصال العميل
-                </Button>
-                <Button type="button" variant="outline" size="sm" onClick={() => void exportReceipt()} disabled={exportingPdf}>
-                  <Download className="h-4 w-4 ms-1" />
-                  {exportingPdf ? 'جاري التصدير…' : 'تنزيل PDF'}
-                </Button>
-                <WhatsAppShare text={whatsappText} phone={job.customerPhone} />
-              </>
-            ) : null}
-            {/* طباعة/PDF إذن التسليم تظهر في صندوق الإقفال بعد التسليم لتفادي التكرار */}
-            {isDeliveredStatus(job.status) && !paymentClose.canPrintAction ? (
-              <>
-                <Button type="button" size="sm" onClick={() => handlePrintDeliveryAuthorization()}>
-                  <Printer className="h-4 w-4 ms-1" />
-                  طباعة إذن التسليم
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => void exportDeliveryAuthorization()}
-                  disabled={exportingDeliveryPdf}
-                >
-                  <Download className="h-4 w-4 ms-1" />
-                  {exportingDeliveryPdf ? 'جاري التصدير…' : 'PDF إذن التسليم'}
-                </Button>
-              </>
-            ) : null}
-            {!isDeliveredStatus(job.status) && paymentClose.canPrepareAction ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={preparingPaymentAuth}
-                onClick={() => void preparePaymentAuthorizationFromJob()}
-              >
-                <FileCheck2 className="h-4 w-4 ms-1" />
-                {preparingPaymentAuth
-                  ? 'جاري التجهيز…'
-                  : (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')}
-              </Button>
-            ) : null}
-            {!isDeliveredStatus(job.status) && paymentClose.canCollectAndDeliverAction ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={paymentBusy}
-                onClick={() => openCollectDialog({ deliverAfter: true })}
-              >
-                <Banknote className="h-4 w-4 ms-1" />
-                تحصيل كامل وتسليم
-              </Button>
-            ) : null}
-            {!isDeliveredStatus(job.status) && paymentClose.canDeliverOnlyAction ? (
-              <Button
-                type="button"
-                size="sm"
-                disabled={paymentBusy}
-                onClick={() => void confirmReceptionDelivery({ autoPrint: true })}
-              >
-                {paymentClose.isWarrantySettlement ? 'تسليم ضمان' : 'تأكيد تسليم المنتج'}
-              </Button>
-            ) : null}
-            {isDeliveredStatus(job.status) && canEditThisJob ? (
-              <Button type="button" variant="secondary" size="sm" onClick={() => setShowReopenOptions((v) => !v)}>
-                {showReopenOptions ? 'إخفاء إعادة الإصلاح' : 'إعادة إصلاح'}
-              </Button>
-            ) : null}
-          </div>
-        )}
-      />
-
-      {paymentClose.showPanel ? (
-        <section
-          className={
-            paymentClose.step === 'print'
-              ? 'rounded-xl border border-emerald-200/90 bg-gradient-to-l from-emerald-50 via-white to-white p-4 shadow-sm ring-1 ring-emerald-100'
-              : paymentClose.step === 'blocked'
-                ? 'rounded-xl border border-rose-200 bg-rose-50/60 p-4 shadow-sm'
-                : 'rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50 via-white to-white p-4 shadow-sm ring-1 ring-sky-100'
+    <DetailPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir}>
+      <DetailPageStickyHeader>
+        <PageHeader
+          title={`طلب صيانة #${job.receiptNo}`}
+          subtitle={
+            isDeliveredStatus(job.status)
+              ? 'الطلب مقفل بعد التسليم — اطبع إذن التسليم من صندوق الإقفال أو أعد فتح الإصلاح من المزيد.'
+              : 'استقبال: منتجات · موافقة عميل · طباعة. الإسناد عبر QR — التشخيص من الورشة.'
           }
-        >
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1.5">
-              <div className="flex flex-wrap items-center gap-2">
+          icon="fact_check"
+          backAction={{ to: withTenantPath(tenantSlug, '/repair/jobs') }}
+          actions={(
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={job.status} size="md" />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-9 gap-1.5 font-semibold"
+                iconName="receipt_long"
+                tone="print"
+                solid={false}
+                title="طباعة إيصال العميل"
+                onClick={() => handlePrintReceipt()}
+              >
+                <span className="hidden sm:inline">إيصال العميل</span>
+                <span className="sm:hidden">إيصال</span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="min-h-9 gap-1.5 font-semibold"
+                iconName="badge"
+                tone="print"
+                solid={false}
+                title="طباعة كارت الصيانة الداخلي"
+                onClick={() => handlePrintProductCards()}
+              >
+                <span className="hidden sm:inline">كارت داخلي</span>
+                <span className="sm:hidden">داخلي</span>
+              </Button>
+            </div>
+          )}
+          primaryAction={headerPrimaryAction}
+          moreActions={headerMoreActions}
+        />
+
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {[
+            { label: 'الفرع', value: branch?.name || '—' },
+            { label: 'العميل', value: job.customerName || masterCustomer?.name || '—' },
+            { label: 'الهاتف', value: job.customerPhone || '—', ltr: true },
+            {
+              label: 'صافي المطلوب',
+              value: financial
+                ? `${Number(financial.netAmount || 0).toLocaleString('ar-EG')} ج.م`
+                : 'لم يُجهز',
+            },
+          ].map((tile) => (
+            <div key={tile.label} className={cn(NESTED_TILE, 'px-3 py-2.5')}>
+              <div className="text-[11px] text-muted-foreground">{tile.label}</div>
+              <div
+                className="mt-0.5 truncate text-sm font-semibold text-foreground"
+                dir={tile.ltr ? 'ltr' : undefined}
+                title={tile.value}
+              >
+                {tile.value}
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {paymentClose.showPanel ? (
+          <section
+            className={
+              paymentClose.step === 'print'
+                ? 'rounded-xl border border-emerald-200/90 bg-gradient-to-l from-emerald-50 via-white to-white p-4 shadow-sm ring-1 ring-emerald-100'
+                : paymentClose.step === 'blocked'
+                  ? 'rounded-xl border border-rose-200 bg-rose-50/60 p-4 shadow-sm'
+                  : 'rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50 via-white to-white p-4 shadow-sm ring-1 ring-sky-100'
+            }
+          >
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 space-y-1.5">
+                <div className="flex flex-wrap items-center gap-2">
+                  {paymentClose.step === 'print' ? (
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+                  ) : null}
+                  <h2 className="text-base font-semibold tracking-tight text-foreground">
+                    {paymentClose.step === 'print'
+                      ? (paymentClose.isWarrantySettlement ? 'تسليم ضمان جاهز' : 'إذن التسليم جاهز')
+                      : paymentClose.step === 'collect'
+                        ? 'التحصيل والتسليم'
+                        : paymentClose.step === 'deliver'
+                          ? (paymentClose.isWarrantySettlement ? 'تسليم ضمان مصنّع' : 'جاهز للتسليم')
+                          : paymentClose.step === 'prepare'
+                            ? (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')
+                            : 'إقفال الدفع والتسليم'}
+                  </h2>
+                  {paymentClose.step !== 'print' ? (
+                    <span
+                      className={
+                        paymentClose.step === 'blocked'
+                          ? 'inline-flex items-center rounded-md border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800'
+                          : paymentClose.step === 'collect' || paymentClose.step === 'deliver'
+                            ? 'inline-flex items-center rounded-md border border-emerald-300/70 bg-emerald-100/80 px-2 py-0.5 text-[11px] font-medium text-emerald-900'
+                            : 'inline-flex items-center rounded-md border border-sky-300/70 bg-sky-100/80 px-2 py-0.5 text-[11px] font-medium text-sky-900'
+                      }
+                    >
+                      {paymentClose.step === 'blocked' ? 'موقوف' : paymentClose.stepLabel}
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center rounded-md border border-emerald-300/80 bg-emerald-100/90 px-2 py-0.5 text-[11px] font-medium text-emerald-900">
+                      {paymentClose.isWarrantySettlement
+                        ? 'ضمان — بدون تحصيل'
+                        : (paymentClose.balanceDue <= 0 ? 'مسدد بالكامل' : 'مُسلَّم')}
+                    </span>
+                  )}
+                </div>
                 {paymentClose.step === 'print' ? (
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
-                ) : null}
-                <h2 className="text-base font-semibold tracking-tight text-foreground">
-                  {paymentClose.step === 'print'
-                    ? (paymentClose.isWarrantySettlement ? 'تسليم ضمان جاهز' : 'إذن التسليم جاهز')
-                    : paymentClose.step === 'collect'
-                      ? 'التحصيل والتسليم'
-                      : paymentClose.step === 'deliver'
-                        ? (paymentClose.isWarrantySettlement ? 'تسليم ضمان مصنّع' : 'جاهز للتسليم')
-                        : paymentClose.step === 'prepare'
-                          ? (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')
-                          : 'إقفال الدفع والتسليم'}
-                </h2>
-                {paymentClose.step !== 'print' ? (
-                  <span
-                    className={
-                      paymentClose.step === 'blocked'
-                        ? 'inline-flex items-center rounded-md border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800'
-                        : paymentClose.step === 'collect' || paymentClose.step === 'deliver'
-                          ? 'inline-flex items-center rounded-md border border-emerald-300/70 bg-emerald-100/80 px-2 py-0.5 text-[11px] font-medium text-emerald-900'
-                          : 'inline-flex items-center rounded-md border border-sky-300/70 bg-sky-100/80 px-2 py-0.5 text-[11px] font-medium text-sky-900'
-                    }
-                  >
-                    {paymentClose.step === 'blocked' ? 'موقوف' : paymentClose.stepLabel}
-                  </span>
+                  <p className="text-sm text-emerald-950/80">
+                    رقم الإذن{' '}
+                    <span className="font-mono font-semibold tracking-wide" dir="ltr">
+                      {job.deliveryAuthorizationNo || `DEL-${job.receiptNo}`}
+                    </span>
+                  </p>
                 ) : (
-                  <span className="inline-flex items-center rounded-md border border-emerald-300/80 bg-emerald-100/90 px-2 py-0.5 text-[11px] font-medium text-emerald-900">
-                    {paymentClose.isWarrantySettlement
-                      ? 'ضمان — بدون تحصيل'
-                      : (paymentClose.balanceDue <= 0 ? 'مسدد بالكامل' : 'مُسلَّم')}
-                  </span>
+                  <p className="text-sm text-muted-foreground">
+                    {paymentClose.step === 'blocked'
+                      ? paymentClose.stepLabel
+                      : paymentClose.isWarrantySettlement
+                        ? 'تجهيز إقفال الضمان ← التسليم ← طباعة (بدون تحصيل أو إيراد)'
+                        : 'تجهيز الإذن ← التحصيل ← التسليم ← طباعة إذن التسليم'}
+                  </p>
                 )}
               </div>
-              {paymentClose.step === 'print' ? (
-                <p className="text-sm text-emerald-950/80">
-                  رقم الإذن{' '}
-                  <span className="font-mono font-semibold tracking-wide" dir="ltr">
-                    {job.deliveryAuthorizationNo || `DEL-${job.receiptNo}`}
-                  </span>
-                </p>
-              ) : (
-                <p className="text-sm text-muted-foreground">
-                  {paymentClose.step === 'blocked'
-                    ? paymentClose.stepLabel
-                    : paymentClose.isWarrantySettlement
-                      ? 'تجهيز إقفال الضمان ← التسليم ← طباعة (بدون تحصيل أو إيراد)'
-                      : 'تجهيز الإذن ← التحصيل ← التسليم ← طباعة إذن التسليم'}
-                </p>
-              )}
+              {paymentClose.canPrintAction ? (
+                <div className="flex shrink-0 flex-wrap gap-2">
+                  <Button type="button" onClick={() => handlePrintDeliveryAuthorization()}>
+                    طباعة إذن التسليم
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={exportingDeliveryPdf}
+                    onClick={() => void exportDeliveryAuthorization()}
+                  >
+                    {exportingDeliveryPdf ? 'جاري التصدير…' : 'تصدير PDF'}
+                  </Button>
+                </div>
+              ) : null}
             </div>
-            {paymentClose.canPrintAction ? (
-              <div className="flex shrink-0 flex-wrap gap-2">
-                <Button type="button" onClick={() => handlePrintDeliveryAuthorization()}>
-                  <Printer className="h-4 w-4 ms-1" />
-                  طباعة إذن التسليم
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={exportingDeliveryPdf}
-                  onClick={() => void exportDeliveryAuthorization()}
-                >
-                  <Download className="h-4 w-4 ms-1" />
-                  {exportingDeliveryPdf ? 'جاري التصدير…' : 'تصدير PDF'}
-                </Button>
-              </div>
-            ) : null}
-          </div>
 
-          <div className="mt-4 grid gap-2 sm:grid-cols-3">
-            {[
-              { key: 'net', label: 'الصافي', value: paymentClose.netAmount },
-              { key: 'paid', label: 'المدفوع', value: paymentClose.paidAmount },
-              { key: 'due', label: 'المتبقي', value: paymentClose.balanceDue },
-            ].map((row) => {
-              const settledDue = row.key === 'due' && row.value <= 0 && paymentClose.step === 'print';
-              return (
-                <div
-                  key={row.key}
-                  className={
-                    settledDue
-                      ? 'rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5'
-                      : 'rounded-lg border border-border/70 bg-background/95 px-3 py-2.5'
-                  }
-                >
-                  <div className="text-[11px] text-muted-foreground">{row.label}</div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-3">
+              {[
+                { key: 'net', label: 'الصافي', value: paymentClose.netAmount },
+                { key: 'paid', label: 'المدفوع', value: paymentClose.paidAmount },
+                { key: 'due', label: 'المتبقي', value: paymentClose.balanceDue },
+              ].map((row) => {
+                const settledDue = row.key === 'due' && row.value <= 0 && paymentClose.step === 'print';
+                return (
                   <div
+                    key={row.key}
                     className={
                       settledDue
-                        ? 'mt-0.5 text-base font-semibold tabular-nums tracking-tight text-emerald-800'
-                        : 'mt-0.5 text-base font-semibold tabular-nums tracking-tight'
+                        ? 'rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5'
+                        : 'rounded-lg border border-border/70 bg-background/95 px-3 py-2.5'
                     }
                   >
-                    {row.value.toLocaleString('ar-EG')}
-                    <span className="ms-1 text-xs font-medium text-muted-foreground">ج.م</span>
+                    <div className="text-[11px] text-muted-foreground">{row.label}</div>
+                    <div
+                      className={
+                        settledDue
+                          ? 'mt-0.5 text-base font-semibold tabular-nums tracking-tight text-emerald-800'
+                          : 'mt-0.5 text-base font-semibold tabular-nums tracking-tight'
+                      }
+                    >
+                      {row.value.toLocaleString('ar-EG')}
+                      <span className="ms-1 text-xs font-medium text-muted-foreground">ج.م</span>
+                    </div>
                   </div>
-                </div>
-              );
-            })}
-          </div>
-
-          {!paymentClose.canPrintAction ? (
-            <div className="mt-4 flex flex-wrap gap-2">
-              {paymentClose.canPrepareAction ? (
-                <Button
-                  type="button"
-                  disabled={preparingPaymentAuth || paymentBusy}
-                  onClick={() => void preparePaymentAuthorizationFromJob()}
-                >
-                  <FileCheck2 className="h-4 w-4 ms-1" />
-                  {preparingPaymentAuth
-                    ? 'جاري التجهيز…'
-                    : (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')}
-                </Button>
-              ) : null}
-              {paymentClose.canCollectAndDeliverAction ? (
-                <Button
-                  type="button"
-                  disabled={paymentBusy}
-                  onClick={() => openCollectDialog({ deliverAfter: true })}
-                >
-                  <Banknote className="h-4 w-4 ms-1" />
-                  تحصيل كامل وتسليم
-                </Button>
-              ) : null}
-              {paymentClose.canCollectAction ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  disabled={paymentBusy}
-                  onClick={() => openCollectDialog({ deliverAfter: false })}
-                >
-                  تحصيل جزئي / مبلغ مخصص
-                </Button>
-              ) : null}
-              {paymentClose.canDeliverOnlyAction ? (
-                <Button
-                  type="button"
-                  disabled={paymentBusy}
-                  onClick={() => void confirmReceptionDelivery({ autoPrint: true })}
-                >
-                  <CheckCircle2 className="h-4 w-4 ms-1" />
-                  {paymentClose.isWarrantySettlement
-                    ? 'تسليم ضمان وطباعة الإذن'
-                    : 'تأكيد التسليم وطباعة الإذن'}
-                </Button>
-              ) : null}
-              {paymentClose.step === 'blocked' ? (
-                <Button type="button" variant="outline" asChild>
-                  <Link to={withTenantPath(tenantSlug, '/repair/payments')}>
-                    فتح شاشة التحصيل
-                  </Link>
-                </Button>
-              ) : null}
+                );
+              })}
             </div>
-          ) : null}
-        </section>
-      ) : null}
+
+            {!paymentClose.canPrintAction ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {paymentClose.canPrepareAction ? (
+                  <Button
+                    type="button"
+                    disabled={preparingPaymentAuth || paymentBusy}
+                    onClick={() => void preparePaymentAuthorizationFromJob()}
+                  >
+                    {preparingPaymentAuth
+                      ? 'جاري التجهيز…'
+                      : (paymentClose.isWarrantySettlement ? 'تجهيز إقفال الضمان' : 'تجهيز إذن الدفع')}
+                  </Button>
+                ) : null}
+                {paymentClose.canCollectAndDeliverAction ? (
+                  <Button
+                    type="button"
+                    disabled={paymentBusy}
+                    onClick={() => openCollectDialog({ deliverAfter: true })}
+                  >
+                    تحصيل كامل وتسليم
+                  </Button>
+                ) : null}
+                {paymentClose.canCollectAction ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    disabled={paymentBusy}
+                    onClick={() => openCollectDialog({ deliverAfter: false })}
+                  >
+                    تحصيل جزئي / مبلغ مخصص
+                  </Button>
+                ) : null}
+                {paymentClose.canDeliverOnlyAction ? (
+                  <Button
+                    type="button"
+                    disabled={paymentBusy}
+                    onClick={() => void confirmReceptionDelivery({ autoPrint: true })}
+                  >
+                    {paymentClose.isWarrantySettlement
+                      ? 'تسليم ضمان وطباعة الإذن'
+                      : 'تأكيد التسليم وطباعة الإذن'}
+                  </Button>
+                ) : null}
+                {paymentClose.step === 'blocked' ? (
+                  <Button type="button" variant="outline" asChild>
+                    <Link to={withTenantPath(tenantSlug, '/repair/payments')}>
+                      فتح شاشة التحصيل
+                    </Link>
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+          </section>
+        ) : null}
+      </DetailPageStickyHeader>
 
       {isDeliveredStatus(job.status) && showReopenOptions ? (
-        <Card>
+        <Card className={cn(SURFACE_CARD)}>
           <CardHeader>
             <CardTitle className="text-lg">إعادة إصلاح</CardTitle>
             <CardDescription>إنشاء طلب جديد مرتبط بالطلب الحالي.</CardDescription>
@@ -1725,7 +1730,7 @@ export const RepairJobDetail: React.FC = () => {
                   const itemId = String(item.itemId || '');
                   const checked = selectedReopenProductIds.includes(itemId);
                   return (
-                    <label key={itemId || idx} className="inline-flex items-center gap-2 text-sm w-full">
+                    <label key={itemId || idx} className="inline-flex w-full items-center gap-2 text-sm">
                       <input
                         type="checkbox"
                         checked={checked}
@@ -1752,15 +1757,108 @@ export const RepairJobDetail: React.FC = () => {
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
-        <aside className="space-y-4 lg:col-span-1 lg:order-2 lg:sticky lg:top-4">
+        {/* Main first for mobile readability */}
+        <div className="order-1 space-y-4 lg:col-span-2">
+          <Card className={cn(SURFACE_CARD)}>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base">المنتجات المستلمة</CardTitle>
+              <CardDescription>
+                عرض الاستلام — التشخيص والخدمات من الورشة.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {jobProducts.map((item, idx) => {
+                const serviceNames = (item.serviceIds || [])
+                  .map((id) => enabledServices.find((service) => service.id === id)?.name || id)
+                  .filter(Boolean);
+                return (
+                  <div key={item.itemId} className={cn(NESTED_TILE, 'space-y-2 p-3 text-sm')}>
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 font-semibold text-foreground">
+                        <span className="text-muted-foreground font-medium">#{idx + 1}</span>{' '}
+                        {item.productName || '—'}
+                      </div>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge variant="secondary" className="tabular-nums">×{item.quantity || 1}</Badge>
+                        {item.inWarranty ? (
+                          <Badge variant="outline" className="border-sky-300 bg-sky-50 text-sky-800">ضمان مصنّع</Badge>
+                        ) : null}
+                        {Number(item.unrepairableQuantity || 0) > 0 ? (
+                          <Badge variant="outline" className="border-rose-300 bg-rose-50 text-rose-800">
+                            غير قابل {item.unrepairableQuantity}
+                          </Badge>
+                        ) : null}
+                      </div>
+                    </div>
+                    <div className="grid gap-1 text-[13px] sm:grid-cols-2">
+                      <div><span className="text-muted-foreground">سيريال:</span> {item.serialNo || '—'}</div>
+                      <div><span className="text-muted-foreground">إكسسوارات:</span> {item.accessories || '—'}</div>
+                      <div className="sm:col-span-2"><span className="text-muted-foreground">عطل العميل:</span> {item.diagnosis || '—'}</div>
+                      <div className="sm:col-span-2"><span className="text-muted-foreground">تشخيص الفني:</span> {item.technicianDiagnosis || 'لم يُسجَّل بعد'}</div>
+                      <div className="sm:col-span-2">
+                        <span className="text-muted-foreground">خدمات:</span>{' '}
+                        {serviceNames.length > 0 ? serviceNames.join('، ') : 'لم تُحدد بعد'}
+                      </div>
+                    </div>
+                    {(can('repair.replacements.create') || can('repair.jobs.reception'))
+                      && Number(item.unrepairableQuantity || 0) > 0 ? (
+                      <div className="flex flex-wrap gap-2 border-t border-border/60 pt-2">
+                        <Button type="button" size="sm" variant="outline" onClick={() => openReplacementDialog(item)}>
+                          طلب استبدال
+                        </Button>
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+              {job.isServiceOnly ? (
+                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
+                  وضع «خدمة فقط» — التكلفة من خدمات الكتالوج.
+                </p>
+              ) : null}
+            </CardContent>
+          </Card>
+
+          <DetailCollapsibleSection title="سجل الحالة" defaultOpen={false}>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between gap-2 rounded border px-3 py-2">
+                <span className="text-sm text-muted-foreground">الحالة الحالية</span>
+                <StatusBadge status={job.status} />
+              </div>
+              {Array.isArray(job.statusHistory) && job.statusHistory.length > 0 ? (
+                <div className="space-y-2">
+                  {[...job.statusHistory].reverse().map((entry, idx) => (
+                    <div key={`${entry.at}-${idx}`} className="rounded border px-2 py-1.5 text-sm">
+                      <div className="flex items-center justify-between gap-2">
+                        <StatusBadge status={entry.status} />
+                        <span className="text-xs tabular-nums text-muted-foreground">
+                          {new Date(entry.at).toLocaleString('ar-EG')}
+                        </span>
+                      </div>
+                      {entry.reason ? (
+                        <div className="mt-1 text-xs text-muted-foreground">السبب: {entry.reason}</div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground">لا يوجد سجل حالات بعد.</p>
+              )}
+            </div>
+          </DetailCollapsibleSection>
+        </div>
+
+        <aside className="order-2 space-y-4 lg:col-span-1 lg:sticky lg:top-[4.5rem]">
           {!isDeliveredStatus(job.status) ? (
-            <Card>
+            <Card className={cn(SURFACE_CARD)}>
               <CardHeader className="pb-3">
-                <CardTitle className="text-base">متابعة العميل (واتساب)</CardTitle>
-                <CardDescription>مراسلة العميل بسرعة من الاستقبال — استلام، موافقة، وجاهزية.</CardDescription>
+                <CardTitle className="text-base">موافقة العميل</CardTitle>
+                <CardDescription>
+                  أنشئ الرابط ثم أرسله واتساب بعد الجاهزية.
+                </CardDescription>
               </CardHeader>
               <CardContent className="space-y-2">
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-2">
                   <Button
                     type="button"
                     variant="secondary"
@@ -1772,23 +1870,9 @@ export const RepairJobDetail: React.FC = () => {
                   </Button>
                   <WhatsAppShare
                     phone={job.customerPhone}
-                    text={waIntake}
-                    label="واتساب استلام"
-                    className="min-h-11 w-full"
-                    size="default"
-                  />
-                  <WhatsAppShare
-                    phone={job.customerPhone}
                     text={waApproval}
-                    label="واتساب موافقة"
+                    label="إرسال رابط الموافقة"
                     disabled={!approvalUrl}
-                    className="min-h-11 w-full"
-                    size="default"
-                  />
-                  <WhatsAppShare
-                    phone={job.customerPhone}
-                    text={waReady}
-                    label="جاهز للاستلام"
                     className="min-h-11 w-full"
                     size="default"
                   />
@@ -1796,23 +1880,23 @@ export const RepairJobDetail: React.FC = () => {
                 {approvalUrl ? (
                   <Input
                     readOnly
-                    className="min-h-10 text-xs font-mono"
+                    className="min-h-10 font-mono text-xs"
                     value={approvalUrl}
                     onFocus={(e) => e.target.select()}
                   />
                 ) : (
                   <p className="text-[11px] text-muted-foreground">
-                    أنشئ رابط الموافقة قبل إرسال تقدير واتساب.
+                    زر واتساب يتفعّل بعد إنشاء الرابط.
                   </p>
                 )}
               </CardContent>
             </Card>
           ) : null}
 
-          <Card>
+          <Card className={cn(SURFACE_CARD)}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">ملخص الطلب</CardTitle>
-              <CardDescription>بيانات التشغيل — الطباعة من زر الصفحة تستخدم قالب النظام.</CardDescription>
+              <CardDescription>{jobProducts.length} سطر · {productsQtyTotal} قطعة · ضمان ورشة {workshopWarrantyLabel}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <dl className="grid grid-cols-1 gap-2">
@@ -1820,69 +1904,43 @@ export const RepairJobDetail: React.FC = () => {
                   <dt className="text-muted-foreground">التاريخ</dt>
                   <dd className="font-medium tabular-nums">{new Date(job.createdAt).toLocaleString('ar-EG')}</dd>
                 </div>
-                <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
-                  <dt className="text-muted-foreground">الفرع</dt>
-                  <dd className="font-medium text-end">{branch?.name || '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
-                  <dt className="text-muted-foreground">العميل</dt>
-                  <dd className="font-medium text-end">
-                    {masterCustomer ? (
+                {masterCustomer ? (
+                  <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
+                    <dt className="text-muted-foreground">كود العميل</dt>
+                    <dd className="font-medium text-end">
                       <Link className="text-primary hover:underline" to={withTenantPath(tenantSlug, `/customers/${masterCustomer.id}`)}>
-                        {masterCustomer.code} — {job.customerName || masterCustomer.name}
+                        {masterCustomer.code}
                       </Link>
-                    ) : (job.customerName || '—')}
-                  </dd>
-                </div>
+                    </dd>
+                  </div>
+                ) : null}
                 {masterCustomer ? (
                   <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
                     <dt className="text-muted-foreground">نوع العميل</dt>
                     <dd className="font-medium">{CUSTOMER_TYPE_LABELS[masterCustomer.type]}</dd>
                   </div>
                 ) : null}
-                <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
-                  <dt className="text-muted-foreground">الهاتف</dt>
-                  <dd className="font-medium tabular-nums" dir="ltr">{job.customerPhone || '—'}</dd>
-                </div>
-                <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
-                  <dt className="text-muted-foreground">المنتجات</dt>
-                  <dd className="font-medium tabular-nums">{jobProducts.length} سطر / {productsQtyTotal} قطعة</dd>
-                </div>
-                <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
-                  <dt className="text-muted-foreground">صافي المطلوب</dt>
-                  <dd className="font-medium tabular-nums">
-                    {financial ? `${Number(financial.netAmount || 0).toLocaleString('ar-EG')} ج.م` : 'لم يُجهز إذن الدفع'}
-                  </dd>
-                </div>
-                {paymentAuthorization && Number(paymentAuthorization.grossAmount || 0) <= 0 && !isWarrantySettlementAuth(paymentAuthorization) ? (
-                  <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-950">
-                    إذن الدفع الحالي قيمته صفر وغير صالح للتحصيل أو التسليم. اختر خدمة مسعّرة أو قطعة غيار ثم جهّز إصدارًا جديدًا.
-                  </div>
-                ) : null}
-                {paymentAuthorization && isWarrantySettlementAuth(paymentAuthorization) ? (
-                  <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
-                    ضمان مصنّع — إعفاء كامل بدون تحصيل. تُسجَّل قيمة الضمان وتكلفة القطع والخدمات للتحليل.
-                  </div>
-                ) : null}
-                {hasInWarrantyProduct && !paymentAuthorization ? (
-                  <div className="rounded-md border border-sky-200 bg-sky-50/70 p-2 text-xs text-sky-950">
-                    الطلب معلّم كضمان مصنّع: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.
-                  </div>
-                ) : null}
-                {isStatusRole(job.status, 'ready_delivery', repairSettings.workflow.statuses) || job.status === 'ready' ? (
-                  <p className="rounded-md border border-dashed px-2 py-1.5 text-xs text-muted-foreground">
-                    إقفال الدفع والتسليم من اللوحة أعلى الصفحة (تجهيز → تحصيل → تسليم → طباعة).
-                  </p>
-                ) : null}
-                <div className="flex justify-between gap-2">
-                  <dt className="text-muted-foreground">ضمان الورشة</dt>
-                  <dd className="font-medium">{workshopWarrantyLabel}</dd>
-                </div>
               </dl>
+
+              {paymentAuthorization && Number(paymentAuthorization.grossAmount || 0) <= 0 && !isWarrantySettlementAuth(paymentAuthorization) ? (
+                <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-950">
+                  إذن الدفع قيمته صفر — اختر خدمة مسعّرة أو قطعة ثم جهّز إصدارًا جديدًا.
+                </div>
+              ) : null}
+              {paymentAuthorization && isWarrantySettlementAuth(paymentAuthorization) ? (
+                <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
+                  ضمان مصنّع — إعفاء كامل بدون تحصيل.
+                </div>
+              ) : null}
+              {hasInWarrantyProduct && !paymentAuthorization ? (
+                <div className="rounded-md border border-sky-200 bg-sky-50/70 p-2 text-xs text-sky-950">
+                  معلّم كضمان مصنّع: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.
+                </div>
+              ) : null}
 
               {!job.customerId && can('repair.jobs.edit') ? (
                 <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-2">
-                  <Badge variant="outline" className="text-amber-900 border-amber-300 bg-amber-50">
+                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">
                     غير مربوط بماستر العملاء
                   </Badge>
                   <div className="flex flex-wrap gap-2">
@@ -1917,34 +1975,23 @@ export const RepairJobDetail: React.FC = () => {
                 </Button>
               ) : null}
 
-              <div className="rounded-md border bg-muted/20 p-2.5 space-y-1.5">
-                <div><span className="text-muted-foreground">الجهاز:</span> {job.deviceType || '—'} · {job.deviceBrand} {job.deviceModel}</div>
-                <div><span className="text-muted-foreground">اللون:</span> {job.deviceColor || '—'}</div>
-                <div><span className="text-muted-foreground">الإكسسوارات:</span> {accessoriesSummary}</div>
-                <div><span className="text-muted-foreground">العنوان:</span> {job.customerAddress || '—'}</div>
-                <div><span className="text-muted-foreground">وصف العطل:</span> {job.problemDescription || '—'}</div>
-              </div>
-
-              {Array.isArray(job.partsUsed) && job.partsUsed.length > 0 ? (
-                <div className="space-y-1">
-                  <p className="text-xs font-medium text-muted-foreground">قطع مستخدمة</p>
-                  {job.partsUsed.map((part, idx) => (
-                    <div key={`${part.partId}-${idx}`} className="flex justify-between gap-2 rounded border px-2 py-1">
-                      <span>{part.partName}</span>
-                      <span className="tabular-nums text-muted-foreground">
-                        ×{part.quantity}
-                      </span>
-                    </div>
-                  ))}
+              <details className="rounded-md border bg-muted/10 open:bg-background">
+                <summary className="cursor-pointer px-3 py-2 text-sm font-medium">الجهاز والعطل</summary>
+                <div className="space-y-1.5 border-t px-3 py-2 text-sm">
+                  <div><span className="text-muted-foreground">الجهاز:</span> {job.deviceType || '—'} · {job.deviceBrand} {job.deviceModel}</div>
+                  <div><span className="text-muted-foreground">اللون:</span> {job.deviceColor || '—'}</div>
+                  <div><span className="text-muted-foreground">الإكسسوارات:</span> {accessoriesSummary}</div>
+                  <div><span className="text-muted-foreground">العنوان:</span> {job.customerAddress || '—'}</div>
+                  <div><span className="text-muted-foreground">وصف العطل:</span> {job.problemDescription || '—'}</div>
                 </div>
-              ) : null}
+              </details>
 
               {trackUrl ? (
                 <div className="flex items-center gap-3 rounded-md border p-2">
                   <div className="rounded border bg-white p-1">
                     <QRCodeSVG value={trackUrl} size={72} includeMargin />
                   </div>
-                  <div className="text-xs text-muted-foreground leading-relaxed">
+                  <div className="text-xs leading-relaxed text-muted-foreground">
                     امسح الرمز لمتابعة الطلب من صفحة التتبع العامة.
                   </div>
                 </div>
@@ -1952,239 +1999,6 @@ export const RepairJobDetail: React.FC = () => {
             </CardContent>
           </Card>
         </aside>
-
-        <div className="space-y-4 lg:col-span-2 lg:order-1">
-          <Card>
-            <CardHeader>
-              <CardTitle className="text-base">المنتجات المستلمة</CardTitle>
-              <CardDescription>
-                بيانات الاستلام للعرض. الخدمات والتشخيص النهائي والحالة تُحدَّث من صفحة الورشة.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {jobProducts.map((item, idx) => {
-                const serviceNames = (item.serviceIds || [])
-                  .map((id) => enabledServices.find((service) => service.id === id)?.name || id)
-                  .filter(Boolean);
-                return (
-                  <div key={item.itemId} className="rounded-md border p-3 space-y-2 text-sm">
-                    <div className="font-medium">منتج {idx + 1}: {item.productName || '—'}</div>
-                    <div className="grid gap-1 sm:grid-cols-2">
-                      <div><span className="text-muted-foreground">الكمية:</span> {item.quantity || 1}</div>
-                      <div><span className="text-muted-foreground">السيريال:</span> {item.serialNo || '—'}</div>
-                      <div className="sm:col-span-2"><span className="text-muted-foreground">الإكسسوارات:</span> {item.accessories || '—'}</div>
-                      <div className="sm:col-span-2"><span className="text-muted-foreground">وصف العطل (عميل):</span> {item.diagnosis || '—'}</div>
-                      <div className="sm:col-span-2"><span className="text-muted-foreground">تشخيص الفني:</span> {item.technicianDiagnosis || 'لم يُسجَّل بعد'}</div>
-                      <div className="sm:col-span-2">
-                        <span className="text-muted-foreground">الخدمات:</span>{' '}
-                        {serviceNames.length > 0 ? serviceNames.join('، ') : 'لم تُحدد بعد من الورشة'}
-                      </div>
-                      <div>
-                        <span className="text-muted-foreground">ضمان الجهاز:</span>{' '}
-                        {item.inWarranty ? 'داخل الضمان (مصنّع)' : 'خارج الضمان'}
-                      </div>
-                      <div><span className="text-muted-foreground">غير قابل للإصلاح:</span> {item.unrepairableQuantity || 0}</div>
-                    </div>
-                    <div className="flex flex-wrap gap-2 border-t pt-2">
-                      {(can('repair.custody.record') || can('repair.jobs.edit')) && !isDeliveredStatus(job.status) ? (
-                        <Button type="button" size="sm" variant="outline" onClick={() => openUnrepairableDialog(item)}>
-                          تسجيل غير قابل للإصلاح
-                        </Button>
-                      ) : null}
-                      {(can('repair.replacements.create') || can('repair.jobs.reception')) && Number(item.unrepairableQuantity || 0) > 0 ? (
-                        <Button type="button" size="sm" variant="outline" onClick={() => openReplacementDialog(item)}>
-                          طلب استبدال
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                );
-              })}
-              {job.isServiceOnly ? (
-                <p className="rounded-md border border-dashed px-3 py-2 text-xs text-muted-foreground">
-                  وضع «خدمة فقط» مفعّل — التكلفة من خدمات الكتالوج المختارة.
-                </p>
-              ) : null}
-              {(can('repair.custody.view') || can('repair.replacements.view') || can('repair.replacements.approve')) ? (
-                <div className="flex flex-wrap gap-2">
-                  {can('repair.custody.view') ? (
-                    <Button type="button" size="sm" variant="ghost" asChild>
-                      <Link to={withTenantPath(tenantSlug, '/repair/custody-stock')}>عرض العهدة</Link>
-                    </Button>
-                  ) : null}
-                  {can('repair.custody.view') ? (
-                    <Button type="button" size="sm" variant="ghost" asChild>
-                      <Link to={withTenantPath(tenantSlug, '/repair/custody-stock?stockType=unrepairable')}>غير القابل للإصلاح</Link>
-                    </Button>
-                  ) : null}
-                  {(can('repair.replacements.view') || can('repair.replacements.approve')) ? (
-                    <Button type="button" size="sm" variant="ghost" asChild>
-                      <Link to={withTenantPath(tenantSlug, '/repair/replacements')}>طلبات الاستبدال</Link>
-                    </Button>
-                  ) : null}
-                </div>
-              ) : null}
-              {canManageWorkshopWork && !isDeliveredStatus(job.status) ? (
-                <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
-                  <Button type="button" variant="outline" className="w-full sm:w-auto">
-                    تعديل الخدمات والتشخيص من الورشة
-                  </Button>
-                </Link>
-              ) : !isDeliveredStatus(job.status) ? (
-                <p className="text-xs text-muted-foreground">
-                  الاستقبال يعرض التغييرات فقط. الفني يحدّث الخدمات والحالة من صفحة الورشة.
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
-
-          <div className="grid gap-4 md:grid-cols-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">الحالة الحالية</CardTitle>
-                <CardDescription>عرض فقط — تغيير الحالة وأسبابها من الورشة.</CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="flex items-center justify-between gap-2 rounded border px-3 py-2">
-                  <span className="text-sm text-muted-foreground">الحالة</span>
-                  <StatusBadge status={job.status} />
-                </div>
-                {Array.isArray(job.statusHistory) && job.statusHistory.length > 0 ? (
-                  <div className="space-y-2 border-t pt-3">
-                    <p className="text-sm font-medium">سجل الحالة</p>
-                    {[...job.statusHistory].reverse().map((entry, idx) => (
-                      <div key={`${entry.at}-${idx}`} className="rounded border px-2 py-1.5 text-sm">
-                        <div className="flex items-center justify-between gap-2">
-                          <StatusBadge status={entry.status} />
-                          <span className="text-xs text-muted-foreground tabular-nums">
-                            {new Date(entry.at).toLocaleString('ar-EG')}
-                          </span>
-                        </div>
-                        {entry.reason ? (
-                          <div className="mt-1 text-xs text-muted-foreground">السبب: {entry.reason}</div>
-                        ) : null}
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground">لا يوجد سجل حالات بعد.</p>
-                )}
-                {canManageWorkshopWork && !isDeliveredStatus(job.status) ? (
-                  <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
-                    <Button type="button" variant="secondary" className="w-full">تغيير الحالة من الورشة</Button>
-                  </Link>
-                ) : null}
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-base">إسناد الفني وقطع الغيار</CardTitle>
-                <CardDescription>
-                  الاستقبال يسند الفني فقط. صرف القطع من الورشة.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                <div className="rounded-md border bg-muted/20 px-3 py-2 text-sm">
-                  <span className="text-muted-foreground">الفني الحالي: </span>
-                  <strong>{assignedTechnicianLabel}</strong>
-                </div>
-                {canAssignTechnician && !isDeliveredStatus(job.status) && selectedTechnicianId && !branchTechnicians.find((t) => t.id === selectedTechnicianId)?.userId ? (
-                  <p className="text-xs text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
-                    الموظف المختار غير مربوط بحساب مستخدم — اربطه من إدارة المستخدمين قبل الإسناد حتى يظهر الطلب في «طلباتي».
-                  </p>
-                ) : null}
-                {!isDeliveredStatus(job.status) ? (
-                  <div className="space-y-2 border-t pt-3">
-                    <div className="space-y-1">
-                      <Label>إسناد لموظف من الفرع</Label>
-                      {isFixedTechnicianAssignment && branchTechnicians.length === 1 ? (
-                        <div className="min-h-10 rounded-md border bg-muted/30 px-3 py-2 text-sm flex items-center">
-                          {branchTechnicians[0].name}
-                          <span className="ms-2 text-xs text-muted-foreground">(ثابت — الموظف الوحيد بالفرع)</span>
-                        </div>
-                      ) : (
-                        <Select
-                          value={selectedTechnicianId}
-                          onValueChange={setSelectedTechnicianId}
-                          disabled={!canAssignTechnician || branchTechnicians.length === 0}
-                        >
-                          <SelectTrigger>
-                            <SelectValue placeholder="لا يوجد موظفون مربوطون بالفرع" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {branchTechnicians.map((technician) => (
-                              <SelectItem key={technician.id} value={technician.id}>
-                                {technician.name}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      )}
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      <Button
-                        onClick={assignToBranchTechnician}
-                        disabled={!canAssignTechnician || !selectedTechnicianId || branchTechnicians.length === 0}
-                      >
-                        إسناد للموظف
-                      </Button>
-                      {canManageWorkshopWork ? (
-                        <Button variant="secondary" onClick={assignToMe} disabled={!canAssignTechnician}>
-                          إسناد لي
-                        </Button>
-                      ) : null}
-                    </div>
-                  </div>
-                ) : null}
-
-                {Array.isArray(job.partsUsed) && job.partsUsed.length > 0 ? (
-                  <div className="space-y-1 border-t pt-3">
-                    <p className="text-sm font-medium">قطع الغيار المستخدمة (عرض)</p>
-                    {job.partsUsed.map((part: RepairPartUsage, idx) => {
-                      const fulfillment = effectiveFulfillmentStatus(part);
-                      const usageId = String(part.usageId || '');
-                      return (
-                        <div key={usageId || `${part.partId}-${idx}`} className="flex flex-wrap items-center justify-between gap-2 rounded border px-2 py-1.5 text-sm">
-                          <div className="min-w-0 space-y-1">
-                            <div>
-                              <span>{part.partName}</span>
-                              {part.scope === 'product' ? (
-                                <span className="ms-1 text-xs text-muted-foreground">
-                                  ({part.productName || 'منتج محدد'})
-                                </span>
-                              ) : null}
-                            </div>
-                            <div className="flex flex-wrap gap-1">
-                              <ErpStatusBadge
-                                label={REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}
-                                type={repairPartFulfillmentChipType(fulfillment)}
-                              />
-                              {part.availabilityAtRequest ? (
-                                <ErpStatusBadge
-                                  label={REPAIR_PART_AVAILABILITY_LABELS[part.availabilityAtRequest]}
-                                  type={repairPartAvailabilityChipType(part.availabilityAtRequest)}
-                                />
-                              ) : null}
-                            </div>
-                          </div>
-                          <Badge variant="secondary">× {part.quantity}</Badge>
-                        </div>
-                      );
-                    })}
-                    {canManageWorkshopWork && !isDeliveredStatus(job.status) ? (
-                      <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)} className="inline-block pt-1">
-                        <Button type="button" variant="outline" size="sm">إدارة القطع من الورشة</Button>
-                      </Link>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p className="text-xs text-muted-foreground border-t pt-3">لا توجد قطع مسجّلة على الطلب بعد.</p>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </div>
       </div>
 
       <Dialog
@@ -2431,8 +2245,6 @@ export const RepairJobDetail: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
-    </div>
+    </DetailPageShell>
   );
-};
-
-export default RepairJobDetail;
+}

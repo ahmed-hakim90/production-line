@@ -37,12 +37,13 @@ export function SectionSkeleton({ rows = 4, height = 16 }: { rows?: number; heig
 export function DetailPageShell({
   children,
   className,
+  ...props
 }: {
   children: React.ReactNode;
   className?: string;
-}) {
+} & React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn("min-h-screen space-y-4 p-4 md:p-6", PAGE_BG, className)}>
+    <div className={cn("min-h-screen space-y-4 p-4 md:p-6", PAGE_BG, className)} {...props}>
       {children}
     </div>
   );

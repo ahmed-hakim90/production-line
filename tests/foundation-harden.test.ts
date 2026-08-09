@@ -130,8 +130,8 @@ async function main() {
     resolvePortalKind({
       can: (p) => p === 'repair.jobs.technician' || p === 'repair.dashboard.view',
     }),
-    'generic',
-    'ops dashboard permission keeps manager off technician self-home',
+    'repair',
+    'ops dashboard permission keeps manager on repair portal (not technician self-home)',
   );
   assert.equal(
     resolvePortalKind({
@@ -139,6 +139,13 @@ async function main() {
     }),
     'generic',
     'manager KPI permission keeps manager off technician self-home',
+  );
+  assert.equal(
+    resolvePortalKind({
+      can: (p) => p === 'repair.adminDashboard.view',
+    }),
+    'repair',
+    'centers manager admin dashboard permission lands on repair portal',
   );
   assert.equal(
     resolvePortalKind({
