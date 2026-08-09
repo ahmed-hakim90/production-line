@@ -1,7 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { QueryDocumentSnapshot, DocumentData } from 'firebase/firestore';
 import { activityLogService } from '../services/activityLogService';
-import { Card, Badge, Button, LoadingSkeleton, SearchableSelect } from '../components/UI';
+import { Badge, Button, LoadingSkeleton, SearchableSelect } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
 import type {
   ActivityLog as ActivityLogType,
@@ -376,27 +378,21 @@ export const ActivityLogPage: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="erp-page-head">
-        <div className="erp-page-title-block">
-          <h1 className="page-title">سجل النشاط</h1>
-          <p className="page-subtitle">
-            تتبع الأحداث والعمليات؛ يُعرض {PAGE_SIZE} سجلًا في كل دفعة (تحميل المزيد). أحداث تقارير الإنتاج (إنشاء/تعديل/حذف) غير معروضة هنا.
-          </p>
-        </div>
-        <div className="erp-page-actions">
-          <Button
-            variant="secondary"
-            onClick={() => void reloadLogs()}
-            title="تحديث"
-          >
-            تحديث
-          </Button>
-        </div>
-      </div>
-
+    <ModuleOpsPageShell
+      eyebrow="سجل النشاط"
+      rangeLabel={`تتبع الأحداث والعمليات؛ يُعرض ${PAGE_SIZE} سجلًا في كل دفعة (تحميل المزيد). أحداث تقارير الإنتاج (إنشاء/تعديل/حذف) غير معروضة هنا.`}
+      actions={(
+        <Button
+          variant="secondary"
+          onClick={() => void reloadLogs()}
+          title="تحديث"
+        >
+          تحديث
+        </Button>
+      )}
+    >
       {canBroadcast && (
-        <Card title="إرسال إشعار يدوي">
+        <OpsDashPanel title="إرسال إشعار يدوي" accent="hr">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <div>
               <label className="text-xs font-bold text-[var(--color-text-muted)]">نوع الاستهداف</label>
@@ -515,10 +511,10 @@ export const ActivityLogPage: React.FC = () => {
               {sending ? 'جاري الإرسال...' : 'إرسال الإشعار'}
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      <Card title="المستخدمون المتصلون الآن">
+      <OpsDashPanel title="المستخدمون المتصلون الآن" accent="hr">
         {activeRows.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)] text-sm">
             لا يوجد مستخدمون متصلون حاليًا.
@@ -549,12 +545,12 @@ export const ActivityLogPage: React.FC = () => {
             })}
           </div>
         )}
-      </Card>
+      </OpsDashPanel>
 
       {loading ? (
         <LoadingSkeleton rows={8} type="table" />
       ) : (
-        <Card>
+        <OpsDashPanel title="سجل الأحداث" accent="hr">
           <div className="space-y-5">
             {groupedVisibleLogs.map((dayGroup) => (
               <section key={dayGroup.dayKey} className="space-y-3">
@@ -660,13 +656,13 @@ export const ActivityLogPage: React.FC = () => {
               </Button>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Summary */}
       <div className="text-xs text-[var(--color-text-muted)] font-medium text-center">
         عرض {visibleLogs.length} نشاط {hasMore ? '(يوجد المزيد)' : '(نهاية السجل)'}
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

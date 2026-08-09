@@ -551,7 +551,7 @@ export const Categories: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

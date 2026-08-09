@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../../shared/components/SelectableTable';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import type { FirestoreEmployee, FirestoreUser, EmploymentType } from '../../../types';
@@ -955,45 +955,44 @@ export const Employees: React.FC = () => {
         { key: 'pending', label: 'في انتظار الموافقة', value: summaryKpis.pending },
       ]}
       actions={(
-        <div className="flex flex-wrap items-center gap-2">
-          {can('employees.create') ? (
-            <Button type="button" onClick={openCreate} data-modal-key={MODAL_KEYS.EMPLOYEES_CREATE}>
-              إضافة موظف
-            </Button>
-          ) : null}
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-            <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: 'تصدير Excel',
-                  icon: 'download',
-                  group: 'تصدير',
-                  hidden: !canExportFromPage || (tenantEmployeeCount ?? 0) === 0,
-                  onClick: () => {
-                    void (async () => {
-                      const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
-                      const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
-                      const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
-                      const all = await employeeService.getAll();
-                      exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
-                        getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
-                        getManagerName: getEffectiveManagerName,
-                      });
-                    })();
-                  },
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            primaryAction={can('employees.create') ? {
+              label: 'إضافة موظف',
+              icon: 'add',
+              onClick: openCreate,
+              dataModalKey: MODAL_KEYS.EMPLOYEES_CREATE,
+            } : undefined}
+            moreActions={[
+              {
+                label: 'تصدير Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: !canExportFromPage || (tenantEmployeeCount ?? 0) === 0,
+                onClick: () => {
+                  void (async () => {
+                    const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
+                    const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
+                    const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
+                    const all = await employeeService.getAll();
+                    exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
+                      getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
+                      getManagerName: getEffectiveManagerName,
+                    });
+                  })();
                 },
-                {
-                  label: 'استيراد Excel',
-                  icon: 'upload_file',
-                  group: 'استيراد',
-                  hidden: !canImportFromPage,
-                  onClick: () => navigate('/hr/employees/import'),
-                },
-              ]}
-            />
-          </div>
+              },
+              {
+                label: 'استيراد Excel',
+                icon: 'upload_file',
+                group: 'استيراد',
+                hidden: !canImportFromPage,
+                onClick: () => navigate('/hr/employees/import'),
+              },
+            ]}
+          />
         </div>
       )}
     >
