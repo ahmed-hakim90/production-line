@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,6 +13,7 @@ import html2canvas from 'html2canvas';
 import jsPDF from 'jspdf';
 import { SearchableSelect } from '@/components/UI';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { repairInvoiceActiveChipType } from '../lib/repairSemanticStatus';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
@@ -38,9 +38,9 @@ import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
-import { KPICard } from '@/src/components/erp/KPICard';
 import { RepairSalesInvoicePrint } from '../components/RepairSalesInvoicePrint';
 import { useManagedPrint } from '../../../utils/printManager';
 
@@ -816,77 +816,73 @@ export const RepairSalesInvoicePage: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5 p-4 md:p-6" dir={dir}>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض فواتير بيع قطع الغيار.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="فاتورة بيع قطع غيار" dir={dir}>
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض فواتير بيع قطع الغيار.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-5 p-4 md:p-6 repair-invoice-page" dir={dir}>
-      <div className="no-print">
-        <PageHeader
-          title="فاتورة بيع قطع غيار"
-          subtitle={editingInvoiceId ? 'تعديل مسودة بإصدار جديد قبل الترحيل' : 'مسودة ثم اعتماد الخصم ثم ترحيل ذري للمخزون والخزينة والحسابات'}
-          icon="receipt_long"
-          primaryAction={canCreate ? {
-            label: 'فاتورة جديدة',
-            icon: 'add',
-            onClick: handleCreateNewInvoice,
-          } : undefined}
-          moreActions={[
-            {
-              label: 'طباعة A4',
-              icon: 'print',
-              group: 'تصدير',
-              hidden: !printableInvoice,
-              onClick: () => handlePrint(),
-            },
-            {
-              label: isExportingPdf ? 'جارٍ تصدير PDF...' : 'تصدير PDF',
-              icon: 'file_download',
-              group: 'تصدير',
-              hidden: !printableInvoice,
-              disabled: isExportingPdf,
-              onClick: () => { void exportPrintableInvoicePdf(); },
-            },
-            {
-              label: 'واتساب (نص)',
-              icon: 'notifications_active',
-              group: 'مشاركة',
-              hidden: !printableInvoice,
-              onClick: handleShareWhatsAppText,
-            },
-            {
-              label: 'واتساب + PDF',
-              icon: 'download',
-              group: 'مشاركة',
-              hidden: !printableInvoice,
-              disabled: isExportingPdf,
-              onClick: () => { void handleShareWhatsAppWithPdfHint(); },
-            },
-            {
-              label: 'تصدير Excel',
-              icon: 'download',
-              group: 'تصدير',
-              hidden: filteredInvoices.length === 0,
-              onClick: handleExportInvoicesExcel,
-            },
-          ]}
-        />
-      </div>
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4 no-print">
-        <KPICard label="نتائج الفلتر" value={fmt(listStats.count)} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="فواتير نشطة" value={fmt(listStats.active)} iconType="metric" color="green" loading={loading} />
-        <KPICard label="ملغاة" value={fmt(listStats.cancelled)} iconType="metric" color="red" loading={loading} />
-        <KPICard label="إجمالي المرحّل" value={fmt(listStats.sum)} unit="ج.م" iconType="money" color="amber" loading={loading} />
-      </div>
-
+    <RepairOpsPageShell
+      eyebrow="فاتورة بيع قطع غيار"
+      dir={dir}
+      className="repair-invoice-page"
+      hero={[
+        { key: 'count', label: 'نتائج الفلتر', value: fmt(listStats.count) },
+        { key: 'active', label: 'فواتير نشطة', value: fmt(listStats.active), toneClassName: 'ops-dash-kpi-card--tone-emerald' },
+        {
+          key: 'cancelled',
+          label: 'ملغاة',
+          value: fmt(listStats.cancelled),
+          toneClassName: listStats.cancelled > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined,
+        },
+        { key: 'sum', label: 'إجمالي المرحّل', value: fmt(listStats.sum), meta: 'ج.م' },
+      ]}
+      actions={(
+        <div className="flex flex-wrap gap-2 no-print">
+          {canCreate ? (
+            <Button type="button" size="sm" onClick={handleCreateNewInvoice}>
+              فاتورة جديدة
+            </Button>
+          ) : null}
+          {printableInvoice ? (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={() => handlePrint()}>
+                طباعة A4
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isExportingPdf}
+                onClick={() => { void exportPrintableInvoicePdf(); }}
+              >
+                {isExportingPdf ? 'جارٍ تصدير PDF...' : 'تصدير PDF'}
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={handleShareWhatsAppText}>
+                واتساب (نص)
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={isExportingPdf}
+                onClick={() => { void handleShareWhatsAppWithPdfHint(); }}
+              >
+                واتساب + PDF
+              </Button>
+            </>
+          ) : null}
+          {filteredInvoices.length > 0 ? (
+            <Button type="button" variant="outline" size="sm" onClick={handleExportInvoicesExcel}>
+              تصدير Excel
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
       <div className="grid gap-4 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-7 no-print">
           {editingInvoiceId && (
@@ -1463,7 +1459,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

@@ -517,13 +517,14 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="!p-0 overflow-hidden">
-        <div className="border-b px-4 py-3">
-          <h2 className="text-base font-semibold">ملخص الفروع</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">إيراد {fmt(totals.income)} — مصروف {fmt(totals.expense)}</p>
-        </div>
+      <OpsDashPanel
+        title="ملخص الفروع"
+        accent="repair"
+        bodyClassName="p-0"
+        action={<span className="text-xs text-muted-foreground">إيراد {fmt(totals.income)} — مصروف {fmt(totals.expense)}</span>}
+      >
         <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[800px] text-right border-collapse">
             <thead className="erp-thead">
@@ -617,12 +618,9 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="!p-0 overflow-hidden">
-        <div className="border-b px-4 py-3">
-          <h2 className="text-base font-semibold">التفصيل اليومي</h2>
-        </div>
+      <OpsDashPanel title="التفصيل اليومي" accent="repair" bodyClassName="p-0">
         <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[800px] text-right border-collapse">
             <thead className="erp-thead">
@@ -670,13 +668,14 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
           onPageChange={setDailyPage}
           itemLabel="يوم"
         />
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="!p-0 overflow-hidden">
-        <div className="border-b px-4 py-3">
-          <h2 className="text-base font-semibold">تفاصيل الجلسات</h2>
-          <p className="text-xs text-muted-foreground mt-0.5">{filteredSessions.length} جلسة مطابقة</p>
-        </div>
+      <OpsDashPanel
+        title="تفاصيل الجلسات"
+        accent="repair"
+        bodyClassName="p-0"
+        action={<span className="text-xs text-muted-foreground">{filteredSessions.length} جلسة مطابقة</span>}
+      >
         <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[900px] text-right border-collapse">
             <thead className="erp-thead">
@@ -776,7 +775,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
           onPageChange={setSessionsPage}
           itemLabel="جلسة"
         />
-      </Card>
+      </OpsDashPanel>
 
       <Dialog
         open={Boolean(reopenTargetBranchId)}
@@ -811,7 +810,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

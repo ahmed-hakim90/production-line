@@ -21,8 +21,8 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
-import { PageHeader } from '@/components/PageHeader';
 import { SearchableSelect } from '@/components/UI';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import {
@@ -368,18 +368,15 @@ export const RepairSettings: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-4 p-3 sm:p-4 md:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6">
-      <PageHeader
-        title="إعدادات الصيانة"
-        subtitle="تحكم في سير العمل، الصلاحيات، الافتراضيات، وسياسة خزينة الصيانة."
-        icon="settings"
-        actions={
-          <Button onClick={onSave} disabled={saving} className="hidden sm:inline-flex shrink-0 min-h-11 touch-manipulation">
-            {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
-          </Button>
-        }
-      />
-
+    <RepairOpsPageShell
+      eyebrow="إعدادات الصيانة"
+      className="pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6"
+      actions={(
+        <Button onClick={onSave} disabled={saving} size="sm" className="hidden sm:inline-flex shrink-0 min-h-11 touch-manipulation">
+          {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
+        </Button>
+      )}
+    >
       <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <CardHeader className="space-y-1 pb-2">
           <CardTitle className="text-base font-semibold tracking-tight">صلاحية مدير الصيانة (النطاق)</CardTitle>
@@ -1219,7 +1216,7 @@ export const RepairSettings: React.FC = () => {
           {saving ? 'جاري الحفظ...' : 'حفظ إعدادات الصيانة'}
         </Button>
       </div>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 
