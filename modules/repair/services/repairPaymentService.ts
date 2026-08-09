@@ -129,6 +129,26 @@ export const repairPaymentService = {
     );
   },
 
+  /** Sidebar badge: financial discount/credit approvals awaiting decision. */
+  async countPendingApprovals(): Promise<number> {
+    if (!isConfigured) return 0;
+    try {
+      const { resolveCurrentUserRepairBranchIdsForBadge } = await import(
+        '../lib/resolveCurrentUserRepairBranchIdsForBadge'
+      );
+      const branchIds = await resolveCurrentUserRepairBranchIdsForBadge();
+      const rows = await this.listApprovals(branchIds.length > 0 ? branchIds : undefined);
+      return rows.filter((row) => row.status === 'pending').length;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return 0;
+      console.error('repairPayment.countPendingApprovals failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return 0;
+    }
+  },
+
   async listPayments(jobId?: string, branchIds?: string[]): Promise<RepairPayment[]> {
     if (!isConfigured) return [];
     if (jobId) {

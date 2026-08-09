@@ -71,6 +71,10 @@ export const StockCounts: React.FC = () => {
   const sessions = data?.sessions ?? [];
   const warehouses = data?.warehouses ?? [];
   const balances = data?.balances ?? [];
+  const awaitingApprovalCount = useMemo(
+    () => sessions.filter((s) => s.status === 'counted').length,
+    [sessions],
+  );
 
   const [warehouseId, setWarehouseId] = useState(
     () => queryWarehouseId || scopedWarehouseId || '',
@@ -205,6 +209,7 @@ export const StockCounts: React.FC = () => {
       <div>
         <h2 className="page-title">جرد ومطابقة المخزون</h2>
         <p className="page-subtitle">
+          {awaitingApprovalCount > 0 ? `بانتظار الاعتماد: ${awaitingApprovalCount}. ` : ''}
           فتح جرد → إدخال الكميات الفعلية → مطابقة واعتماد الفروقات كتسويات مخزنية.
         </p>
       </div>

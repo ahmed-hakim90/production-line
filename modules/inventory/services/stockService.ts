@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   orderBy,
@@ -12,6 +13,7 @@ import {
   writeBatch,
   startAfter,
   QueryDocumentSnapshot,
+  type QueryConstraint,
 } from 'firebase/firestore';
 import { createInventoryCountSessionCallable, db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -1231,6 +1233,30 @@ export const stockService = {
     );
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as StockCountSession));
+  },
+
+  /** Sidebar badge: stock count sessions counted and waiting for approval. */
+  async countAwaitingApproval(warehouseId?: string): Promise<number> {
+    if (!isConfigured) return 0;
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return 0;
+    const constraints: QueryConstraint[] = [where('status', '==', 'counted')];
+    if (scope.warehouseId) constraints.push(where('warehouseId', '==', scope.warehouseId));
+    try {
+      const snap = await getCountFromServer(tenantQuery(db, COUNTS_COLLECTION, ...constraints));
+      return snap.data().count;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return 0;
+      console.error('stockService.countAwaitingApproval failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      try {
+        return (await this.getCountSessions(warehouseId)).filter((row) => row.status === 'counted').length;
+      } catch {
+        return 0;
+      }
+    }
   },
 
   async saveCountLines(sessionId: string, lines: StockCountLine[]): Promise<void> {

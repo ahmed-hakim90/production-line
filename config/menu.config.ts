@@ -118,6 +118,20 @@ const badgeSources = {
     );
     return countPendingProductionInventoryApprovals();
   },
+  pendingStockCountApprovals: async (): Promise<number> => {
+    const { stockService } = await import('../modules/inventory/services/stockService');
+    return stockService.countAwaitingApproval();
+  },
+  pendingRepairPaymentApprovals: async (): Promise<number> => {
+    const { repairPaymentService } = await import('../modules/repair/services/repairPaymentService');
+    return repairPaymentService.countPendingApprovals();
+  },
+  pendingRepairReplacementApprovals: async (): Promise<number> => {
+    const { repairCustomerOperationsService } = await import(
+      '../modules/repair/services/repairCustomerOperationsService'
+    );
+    return repairCustomerOperationsService.countPendingApprovals();
+  },
 };
 
 // ─── Menu Groups ────────────────────────────────────────────────────────────
@@ -364,7 +378,14 @@ export const MENU_CONFIG: MenuGroup[] = [
         permission: 'inventory.view',
         badgeSource: badgeSources.pendingTransferApprovals,
       },
-      { key: 'inv-counts', label: 'جرد المخازن', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
+      {
+        key: 'inv-counts',
+        label: 'جرد المخازن',
+        icon: 'fact_check',
+        path: '/inventory/counts',
+        permission: 'inventory.counts.manage',
+        badgeSource: badgeSources.pendingStockCountApprovals,
+      },
       // إنتاج ↔ مخازن
       { key: 'inv-production-issues', label: 'صرف للإنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view', badgeSource: badgeSources.pendingProductionIssueRequests },
       {
@@ -487,7 +508,14 @@ export const MENU_CONFIG: MenuGroup[] = [
       },
       { key: 'repair-new-job', label: 'تسجيل طلب جديد', icon: 'add_circle', path: '/repair/jobs/new', permission: 'repair.jobs.create' },
       { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
-      { key: 'repair-payments', label: 'التحصيل والتسليم', icon: 'payments', path: '/repair/payments', permission: 'repair.payments.view' },
+      {
+        key: 'repair-payments',
+        label: 'التحصيل والتسليم',
+        icon: 'payments',
+        path: '/repair/payments',
+        permission: 'repair.payments.view',
+        badgeSource: badgeSources.pendingRepairPaymentApprovals,
+      },
       { key: 'repair-call-center', label: 'مركز الاتصال', icon: 'call', path: '/repair/call-center', permission: 'repair.view' },
       { key: 'repair-customer-requests', label: 'طلبات العملاء', icon: 'assignment', path: '/repair/customer-requests', permission: 'repair.customerRequests.view', anyOfPermissions: ['repair.customerRequests.view', 'repair.customerRequests.assign', 'repair.customerRequests.receive'] },
       {
@@ -501,7 +529,20 @@ export const MENU_CONFIG: MenuGroup[] = [
         excludeRoleKeys: ['repair_technician'],
         activePatterns: ['/repair/custody-stock', '/repair/unrepairable-stock'],
       },
-      { key: 'repair-replacements', label: 'طلبات الاستبدال', icon: 'swap_horiz', path: '/repair/replacements', permission: 'repair.replacements.view', anyOfPermissions: ['repair.replacements.view', 'repair.replacements.create', 'repair.replacements.approve', 'repair.replacements.deliver'] },
+      {
+        key: 'repair-replacements',
+        label: 'طلبات الاستبدال',
+        icon: 'swap_horiz',
+        path: '/repair/replacements',
+        permission: 'repair.replacements.view',
+        anyOfPermissions: [
+          'repair.replacements.view',
+          'repair.replacements.create',
+          'repair.replacements.approve',
+          'repair.replacements.deliver',
+        ],
+        badgeSource: badgeSources.pendingRepairReplacementApprovals,
+      },
       { key: 'repair-technician-home', label: 'لوحة الفني', icon: 'engineering', path: '/repair/technician', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
       { key: 'repair-my-jobs', label: 'طلباتي (فني)', icon: 'engineering', path: '/repair/my-jobs', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
       { key: 'repair-parts', label: 'قطع غيار المراكز', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
