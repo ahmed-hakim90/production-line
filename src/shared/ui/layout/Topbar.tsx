@@ -63,6 +63,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
 
   const uid = useAppStore((s) => s.uid);
   const userProfile = useAppStore((s) => s.userProfile);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const userEmail = useAppStore((s) => s.userEmail);
 
   const { isInstalled, canPromptInstall, promptInstall } = usePwaInstall();
   const [refreshing, setRefreshing] = useState(false);
@@ -199,21 +201,21 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
         </div>
 
         {/* ── CENTER: Awesomebar / Global Search ── */}
-        <div className="hidden md:flex shrink-0 w-[min(100%,280px)] max-w-[320px] min-w-[160px] mx-1">
+        <div className="hidden md:flex shrink-0 flex-1 max-w-[420px] min-w-[180px] mx-2">
           <button
             onClick={() => setCmdOpen(true)}
-            className="w-full min-w-0 flex items-center gap-2 px-3 py-1.5 rounded-[var(--border-radius-base)] bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group"
+            className="w-full min-w-0 flex items-center gap-2.5 px-4 py-2 rounded-full bg-[var(--color-surface-hover)] border border-[var(--color-border)] text-[var(--color-text-muted)] text-[12.5px] hover:border-primary/40 hover:bg-primary/5 transition-all group shadow-sm"
           >
-            <Search size={15} className="group-hover:text-primary transition-colors" />
+            <Search size={15} className="group-hover:text-primary transition-colors shrink-0" />
             <span className="flex-1 min-w-0 truncate text-start">{t('topbar.globalSearchPlaceholder')}</span>
-            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
-              Ctrl K
+            <kbd className="hidden lg:inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded-md text-[10px] font-mono bg-[var(--color-card)] border border-[var(--color-border)]">
+              ⌘ K
             </kbd>
           </button>
         </div>
 
         {/* ── RIGHT: actions ── */}
-        <div className="flex items-center gap-0.5 shrink-0">
+        <div className="flex items-center gap-1 sm:gap-1.5 shrink-0">
 
           {/* Mobile search icon */}
           <button
@@ -283,16 +285,21 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           {/* Notifications */}
           <NotificationBell />
 
-          {/* Date chip — desktop only */}
-          <div className="hidden xl:flex flex-col items-end px-2.5 py-1 rounded-[var(--border-radius-sm)] bg-[var(--color-surface-hover)] border border-[var(--color-border)]">
-            <span className="text-[9px] font-semibold text-[var(--color-text-muted)] uppercase tracking-wider leading-none">{t('topbar.today')}</span>
-            <span className="text-[11px] font-bold text-[var(--color-text)] leading-tight mt-0.5">
-              {new Date().toLocaleDateString(i18n.language?.startsWith('en') ? 'en-US' : 'ar-EG', {
-                weekday: 'short',
-                day: 'numeric',
-                month: 'short',
-              })}
-            </span>
+          {/* Profile cluster */}
+          <div className="hidden sm:flex items-center gap-2 ps-2 ms-0.5 border-s border-[var(--color-border)]">
+            <div className="w-8 h-8 rounded-full bg-primary/10 ring-1 ring-primary/20 flex items-center justify-center shrink-0">
+              <span className="text-primary font-bold text-xs">
+                {(userDisplayName || userEmail || 'U').charAt(0).toUpperCase()}
+              </span>
+            </div>
+            <div className="hidden lg:flex flex-col min-w-0 max-w-[140px]">
+              <span className="text-[12px] font-bold text-[var(--color-text)] truncate leading-tight">
+                {userDisplayName || t('sidebar.user')}
+              </span>
+              <span className="text-[10px] text-[var(--color-text-muted)] truncate leading-tight font-mono" dir="ltr">
+                {userEmail || ''}
+              </span>
+            </div>
           </div>
         </div>
       </header>

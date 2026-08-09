@@ -423,7 +423,7 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
                     ? `${issues.openCount} طلب مفتوح · ${formatNumber(issues.openRequestedQty)} وحدة`
                     : 'لا طابور مفتوح'
                 }
-                trendUp={issues.fulfillmentPercent >= 80}
+                trendUp={issues.fulfilmentPercent >= 80}
               />
               <KPICard
                 label="تحقيق الخطة (موزون)"

@@ -32,11 +32,15 @@ type PortalLine = {
   name: string;
   code: string;
   barcode: string;
-  quantity: number;
+  /** Editable draft; normalize with `parsePortalLineQuantity` before submit/scan-merge. */
+  quantity: string;
   note: string;
 };
 
 const sessionKey = (slug: string) => `customer_portal_session_${slug}`;
+
+const parsePortalLineQuantity = (value: string): number =>
+  Math.max(1, Math.round(Number(String(value).trim()) || 1));
 
 const portalStatusMeta = (kind: string, status: string): { label: string; type: 'success' | 'warning' | 'danger' | 'info' | 'muted' } => {
   if (kind === 'طلب عميل') {
@@ -130,14 +134,21 @@ export const CustomerPortal: React.FC = () => {
     if (!token || !raw) return;
     try {
       const result = await lookupPortalProductCallable({ sessionToken: token, barcode: raw });
-      setLines((current) =>
-        mergePortalScannedLine(current, {
-          productId: result.product.id,
-          name: result.product.name,
-          code: result.product.code,
-          barcode: result.product.barcode,
-        }),
-      );
+      setLines((current) => {
+        const merged = mergePortalScannedLine(
+          current.map((line) => ({
+            ...line,
+            quantity: parsePortalLineQuantity(line.quantity),
+          })),
+          {
+            productId: result.product.id,
+            name: result.product.name,
+            code: result.product.code,
+            barcode: result.product.barcode,
+          },
+        );
+        return merged.map((line) => ({ ...line, quantity: String(line.quantity) }));
+      });
       setBarcode('');
       toast.success(`تمت إضافة ${result.product.name}.`);
     } catch (e: unknown) {
@@ -180,7 +191,11 @@ export const CustomerPortal: React.FC = () => {
     try {
       const result = await createCustomerServiceRequestCallable({
         sessionToken: token,
-        lines: lines.map((line) => ({ barcode: line.barcode, quantity: line.quantity, note: line.note })),
+        lines: lines.map((line) => ({
+          barcode: line.barcode,
+          quantity: parsePortalLineQuantity(line.quantity),
+          note: line.note,
+        })),
       });
       toast.success(`تم إنشاء الطلب ${result.requestNo}.`);
       setLines([]);
@@ -233,7 +248,7 @@ export const CustomerPortal: React.FC = () => {
   }, [home]);
 
   const requestUnitsCount = useMemo(
-    () => lines.reduce((total, line) => total + Math.max(1, Number(line.quantity) || 1), 0),
+    () => lines.reduce((total, line) => total + parsePortalLineQuantity(line.quantity), 0),
     [lines],
   );
 
@@ -363,41 +378,59 @@ export const CustomerPortal: React.FC = () => {
                   {lines.map((line) => (
                     <div
                       key={line.productId}
-                      className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_120px_2fr_auto] md:items-center"
+                      className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_120px_2fr_auto] md:items-end"
                     >
                       <div>
                         <div className="font-medium">{line.name}</div>
                         <div className="text-xs text-muted-foreground" dir="ltr">{line.barcode}</div>
                       </div>
-                      <Input
-                        type="number"
-                        min={1}
-                        value={line.quantity}
-                        onChange={(e) =>
-                          setLines((rows) =>
-                            rows.map((r) =>
-                              r.productId === line.productId
-                                ? { ...r, quantity: Math.max(1, Number(e.target.value) || 1) }
-                                : r,
-                            ),
-                          )
-                        }
-                      />
-                      <Input
-                        value={line.note}
-                        onChange={(e) =>
-                          setLines((rows) =>
-                            rows.map((r) =>
-                              r.productId === line.productId ? { ...r, note: e.target.value } : r,
-                            ),
-                          )
-                        }
-                        placeholder="ملاحظة المنتج أو وصف العطل"
-                      />
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">الكمية</Label>
+                        <Input
+                          type="number"
+                          min={1}
+                          step={1}
+                          inputMode="numeric"
+                          dir="ltr"
+                          value={line.quantity}
+                          onChange={(e) => {
+                            const value = e.target.value;
+                            setLines((rows) =>
+                              rows.map((r) =>
+                                r.productId === line.productId ? { ...r, quantity: value } : r,
+                              ),
+                            );
+                          }}
+                          onBlur={() => {
+                            setLines((rows) =>
+                              rows.map((r) =>
+                                r.productId === line.productId
+                                  ? { ...r, quantity: String(parsePortalLineQuantity(r.quantity)) }
+                                  : r,
+                              ),
+                            );
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1.5">
+                        <Label className="text-xs">ملاحظة</Label>
+                        <Input
+                          value={line.note}
+                          onChange={(e) =>
+                            setLines((rows) =>
+                              rows.map((r) =>
+                                r.productId === line.productId ? { ...r, note: e.target.value } : r,
+                              ),
+                            )
+                          }
+                          placeholder="وصف العطل"
+                        />
+                      </div>
                       <Button
                         type="button"
                         variant="ghost"
                         size="icon"
+                        aria-label="حذف المنتج"
                         onClick={() => setLines((rows) => rows.filter((r) => r.productId !== line.productId))}
                       >
                         <Trash2 className="size-4 text-rose-600" />

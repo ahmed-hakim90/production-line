@@ -3,13 +3,11 @@ import React, { useState, useMemo, useEffect } from 'react';
 import {
   AlertTriangle,
   BarChart3,
-  CalendarDays,
   CheckCircle2,
   Factory,
   Flag,
   Hammer,
   Info,
-  Layers,
   Lightbulb,
   Loader2,
   Sparkles,
@@ -18,14 +16,14 @@ import {
   X,
   type LucideIcon,
 } from 'lucide-react';
-import { PageHeader } from '@/src/components/erp/PageHeader';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
-import { KPIBox, Card, Badge, Button } from '../components/UI';
+import { Badge, Button } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
-import { OrderedDashboardWidgets } from '../../../components/OrderedDashboardWidgets';
 import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
+import { OperationsDashboardBoard, OpsDashPanel } from '../components/OperationsDashboardBoard';
+import { DashboardProgressGauge } from '../components/DashboardProgressGauge';
 import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import {
@@ -55,7 +53,7 @@ import { usePermission } from '../../../utils/permissions';
 import {
   getKPIThreshold,
   getKPIColor,
-  KPI_COLOR_CLASSES,
+  isWidgetVisible,
 } from '../../../utils/dashboardConfig';
 import {
   ComposedChart,
@@ -66,7 +64,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend,
 } from 'recharts';
 import {
   Select,
@@ -108,7 +105,6 @@ const DailyChartTooltip: React.FC<any> = ({ active, payload }) => {
 const DASHBOARD_ICON_MAP: Record<string, LucideIcon> = {
   inventory: Factory,
   price_check: WalletCards,
-  clear_all: Layers,
   close: X,
   info: Info,
   insights: TrendingUp,
@@ -590,602 +586,329 @@ export const Dashboard: React.FC = () => {
     return <PageContentSkeleton variant="dashboard" kpiCount={6} />;
   }
 
+  const show = (widgetId: string) => isWidgetVisible(systemSettings, 'dashboard', widgetId);
+  const idleLines = productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length;
+  const maintLines = productionLines.filter((l) => l.status === ProductionLineStatus.MAINTENANCE).length;
+
   return (
-    <div className="erp-dashboard-theme space-y-6 sm:space-y-8">
-      <PageHeader
-        title="لوحة التشغيل"
-        subtitle="طابور قرارات · إنتاج يومي · خطوط · تكاليف"
-        icon={<CalendarDays className="h-4 w-4" strokeWidth={2} />}
-        actions={
-          <span
-            className="inline-flex max-w-[min(100%,280px)] items-center gap-2 truncate rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-xs font-semibold text-[var(--color-text-muted)] shadow-[var(--shadow-desk-header)]"
-            title={deskTodayLabel}
-          >
-            <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500 shadow-[0_0_0_3px_rgba(16,185,129,0.25)]" aria-hidden />
-            {deskTodayLabel}
-          </span>
-        }
-      />
-
-      <OrderedDashboardWidgets
-        dashboardKey="dashboard"
-        systemSettings={systemSettings}
-        renderBuiltin={(widgetId) => {
-          switch (widgetId) {
-            case 'decision_queue':
-              return (
-                <OperationalDecisionQueue
-                  snapshot={decisionSnapshot}
-                  loading={decisionLoading}
-                />
-              );
-            case 'kpi_row':
-              return (
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 sm:gap-6">
-        {/* Production Card — Daily & Monthly */}
-        <div className="bg-[var(--color-card)] p-4 sm:p-6 rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 sm:col-span-2 md:col-span-1 shadow-[var(--shadow-card)]">
-          <div className="flex items-center gap-3 sm:gap-4 mb-4 sm:mb-5">
-            <div className="w-12 h-12 sm:w-14 sm:h-14 bg-blue-50 text-blue-600 dark:bg-blue-900/20 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0 shadow-inner">
-              <DashboardIcon name="inventory" className="text-2xl sm:text-3xl" />
+    <div className="erp-dashboard-theme">
+      <OperationsDashboardBoard
+        header={(
+          <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
+            <div className="min-w-0">
+              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">لوحة التشغيل</h1>
+              <p className="text-xs sm:text-sm text-[var(--color-text-muted)] font-medium mt-1">
+                نظرة كثيفة: قرارات · إنتاج · خطوط · تخطيط
+              </p>
             </div>
-            <p className="text-[var(--color-text-muted)] text-sm font-bold">إجمالي الإنتاج</p>
-          </div>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4">
-            <div className="bg-blue-50/60 dark:bg-blue-900/10 rounded-[var(--border-radius-lg)] p-3 sm:p-4 text-center border border-blue-100 dark:border-blue-900/20">
-              <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1.5">إنتاج اليوم</p>
-              <h3 className="text-xl sm:text-2xl font-bold text-blue-600">{formatNumber(kpis.todayProduction)}</h3>
-              <span className="text-[10px] font-medium text-slate-400">وحدة</span>
-            </div>
-            <div className="bg-indigo-50/60 dark:bg-indigo-900/10 rounded-[var(--border-radius-lg)] p-3 sm:p-4 text-center border border-indigo-100 dark:border-indigo-900/20">
-              <p className="text-[11px] font-bold text-[var(--color-text-muted)] mb-1.5">إنتاج الشهر</p>
-              <h3 className="text-xl sm:text-2xl font-bold text-indigo-600 dark:text-indigo-400">{formatNumber(kpis.monthlyProduction)}</h3>
-              <span className="text-[10px] font-medium text-slate-400">وحدة</span>
-            </div>
-          </div>
-        </div>
-        {(() => {
-          const effColor = getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false);
-          return <KPIBox label="معدل الكفاءة" value={`${kpis.efficiency}%`} icon="bolt" trend="" trendUp={true} colorClass={KPI_COLOR_CLASSES[effColor]} />;
-        })()}
-        {(() => {
-          const wasteColor = getKPIColor(kpis.wasteRatio, getKPIThreshold(systemSettings, 'wasteRatio'), true);
-          return <KPIBox label="نسبة الهالك" value={`${kpis.wasteRatio}%`} icon="delete_sweep" trend="" trendUp={wasteColor === 'good'} colorClass={KPI_COLOR_CLASSES[wasteColor]} />;
-        })()}
-      </div>
-              );
-            case 'product_cost_analysis':
-              if (!canViewCosts) return null;
-              return (
-        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 overflow-hidden shadow-[var(--shadow-card)]">
-          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] bg-[var(--color-surface-hover)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-violet-50 dark:bg-violet-900/20 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0 ring-1 ring-violet-500/10">
-                <DashboardIcon name="price_check" className="text-violet-600 dark:text-violet-400" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-[var(--color-text)]">تحليل تكلفة المنتجات</h3>
-                <p className="text-[11px] text-[var(--color-text-muted)] font-medium">اختر منتج أو أكثر لمقارنة متوسط التكلفة الشهرية</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto">
-              <Select
-                value={costProductCandidate || 'none'}
-                onValueChange={(value) => {
-                  setCostProductCandidate(value === 'none' ? '' : value);
-                  if (value !== 'none' && !costProductIds.includes(value)) {
-                    setCostProductIds([...costProductIds, value]);
-                    setCostProductCandidate('');
-                  }
-                }}
+            <div className="flex flex-wrap items-center gap-2">
+              <span
+                className="inline-flex max-w-[min(100%,280px)] items-center gap-2 truncate rounded-full border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-1.5 text-[11px] font-semibold text-[var(--color-text-muted)]"
+                title={deskTodayLabel}
               >
-                <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[200px]">
-                  <SelectValue placeholder="إضافة منتج..." />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="none">إضافة منتج...</SelectItem>
-                  {products.filter((p) => !costProductIds.includes(p.id)).map((p) => (
-                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              {costProductIds.length > 0 && (
-                <button
-                  onClick={() => setCostProductIds([])}
-                  className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all"
-                  title="مسح الكل"
-                >
-                  <DashboardIcon name="clear_all" className="text-sm" />
-                </button>
-              )}
+                <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-emerald-500" aria-hidden />
+                {deskTodayLabel}
+              </span>
+              <Button variant="primary" className="!h-9 !text-xs !px-3" onClick={() => navigate('/production-plans')}>
+                + خطة إنتاج
+              </Button>
+              <Button variant="outline" className="!h-9 !text-xs !px-3" onClick={() => navigate('/lines')}>
+                خطوط الإنتاج
+              </Button>
             </div>
           </div>
-
-          {costProductIds.length > 0 && (
-            <div className="px-5 sm:px-6 pt-4 flex flex-wrap gap-2">
-              {costProductIds.map((pid) => {
-                const p = products.find((pr) => pr.id === pid);
-                return (
-                  <span key={pid} className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-violet-50 dark:bg-violet-900/20 text-violet-700 dark:text-violet-300 text-xs font-bold border border-violet-200 dark:border-violet-800">
-                    {p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}
-                    <button
-                      onClick={() => setCostProductIds(costProductIds.filter((id) => id !== pid))}
-                      className="hover:text-rose-500 transition-colors"
-                    >
-                      <DashboardIcon name="close" className="text-sm" />
-                    </button>
-                  </span>
-                );
-              })}
+        )}
+        kpi={show('kpi_row') ? (
+          <div className="ops-dash-kpi-grid">
+            <div className="ops-dash-kpi-card ops-dash-kpi-card--accent">
+              <p className="ops-dash-kpi-card__label">إنتاج اليوم</p>
+              <p className="ops-dash-kpi-card__value">{formatNumber(kpis.todayProduction)}</p>
+              <p className="ops-dash-kpi-card__meta">الشهر: {formatNumber(kpis.monthlyProduction)} وحدة</p>
             </div>
-          )}
-
-          {Object.keys(costAnalysisMap).length > 0 ? (
-            <div className="p-5 sm:p-6">
-              <div className="md:hidden space-y-2.5">
-                {costProductIds.map((pid) => {
-                  const data = costAnalysisMap[pid];
-                  const p = products.find((pr) => pr.id === pid);
-                  if (!data) {
-                    return (
-                      <div key={pid} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-xs text-[var(--color-text-muted)]">
-                        <p className="font-bold text-[var(--color-text)] mb-1.5">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</p>
-                        لا توجد بيانات
-                      </div>
-                    );
-                  }
-                  return (
-                    <div key={pid} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-3 space-y-2.5">
-                      <p className="text-sm font-bold text-primary">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</p>
-                      <div className="grid grid-cols-2 gap-2 text-xs">
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
-                          <p className="text-[var(--color-text-muted)] mb-0.5">تكلفة الوحدة</p>
-                          <p className="font-bold text-violet-600">{formatCost(data.costPerUnit)} ج.م</p>
-                        </div>
-                        <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] p-2">
-                          <p className="text-[var(--color-text-muted)] mb-0.5">الإنتاج</p>
-                          <p className="font-bold text-emerald-600">{formatNumber(data.quantityProduced)} وحدة</p>
-                        </div>
-                      </div>
-                      <div className="text-xs text-[var(--color-text-muted)] space-y-1">
-                        <p><span className="font-bold">العمالة:</span> {formatCost(data.laborCost)} ج.م</p>
-                        <p><span className="font-bold">غير مباشرة:</span> {formatCost(data.indirectCost)} ج.م</p>
-                        <p><span className="font-bold">الإجمالي:</span> <span className="text-primary font-bold">{formatCost(data.totalCost)} ج.م</span></p>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-              <div className="hidden md:block overflow-x-auto">
-                <table className="erp-table w-full text-right border-collapse">
-                  <thead className="erp-thead">
-                    <tr>
-                      <th className="erp-th">المنتج</th>
-                      <th className="erp-th text-center">تكلفة الوحدة</th>
-                      <th className="erp-th text-center">تكلفة العمالة</th>
-                      <th className="erp-th text-center">غير مباشرة</th>
-                      <th className="erp-th text-center">إجمالي التكلفة</th>
-                      <th className="erp-th text-center">الإنتاج</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[var(--color-border)]">
-                    {costProductIds.map((pid) => {
-                      const data = costAnalysisMap[pid];
-                      const p = products.find((pr) => pr.id === pid);
-                      if (!data) return (
-                        <tr key={pid} className="text-[var(--color-text-muted)]">
-                          <td className="px-4 py-3 text-sm font-bold">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</td>
-                          <td colSpan={5} className="px-4 py-3 text-center text-xs">لا توجد بيانات</td>
-                        </tr>
-                      );
-                      return (
-                        <tr key={pid} onClick={() => navigate(`/products/${pid}`)} className="hover:bg-[#f8f9fa]/50 transition-colors cursor-pointer">
-                          <td className="px-4 py-3 text-sm font-bold text-primary">{p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap)}</td>
-                          <td className="px-4 py-3 text-center">
-                            <span className="px-2.5 py-1 rounded-[var(--border-radius-base)] bg-violet-50 dark:bg-violet-900/20 text-violet-600 text-sm font-bold ring-1 ring-violet-500/20">
-                              {formatCost(data.costPerUnit)} ج.م
-                            </span>
-                          </td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(data.laborCost)} ج.م</td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(data.indirectCost)} ج.م</td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-primary">{formatCost(data.totalCost)} ج.م</td>
-                          <td className="px-4 py-3 text-center text-sm font-bold text-emerald-600">{formatNumber(data.quantityProduced)} وحدة</td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                  {Object.keys(costAnalysisMap).length > 1 && (
-                    <tfoot>
-                      <tr className="bg-[#f8f9fa]/50 border-t-2 border-[var(--color-border)]">
-                        <td className="px-4 py-3 text-sm font-bold text-[var(--color-text)]">الإجمالي</td>
-                        {(() => {
-                          const vals = Object.values(costAnalysisMap) as ProductCostData[];
-                          const sumLabor = vals.reduce((s, v) => s + v.laborCost, 0);
-                          const sumIndirect = vals.reduce((s, v) => s + v.indirectCost, 0);
-                          const sumTotal = vals.reduce((s, v) => s + v.totalCost, 0);
-                          const sumQty = vals.reduce((s, v) => s + v.quantityProduced, 0);
-                          const avgCPU = sumQty > 0 ? sumTotal / sumQty : 0;
-                          return (
-                            <>
-                              <td className="px-4 py-3 text-center text-sm font-bold text-violet-600">{avgCPU > 0 ? `${formatCost(avgCPU)} ج.م` : '—'}</td>
-                              <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(sumLabor)} ج.م</td>
-                              <td className="px-4 py-3 text-center text-sm font-bold text-[var(--color-text-muted)]">{formatCost(sumIndirect)} ج.م</td>
-                              <td className="px-4 py-3 text-center text-sm font-bold text-primary">{formatCost(sumTotal)} ج.م</td>
-                              <td className="px-4 py-3 text-center text-sm font-bold text-emerald-600">{formatNumber(sumQty)} وحدة</td>
-                            </>
-                          );
-                        })()}
-                      </tr>
-                    </tfoot>
-                  )}
-                </table>
-              </div>
+            <div className="ops-dash-kpi-card">
+              <p className="ops-dash-kpi-card__label">معدل الكفاءة</p>
+              <p className="ops-dash-kpi-card__value">{kpis.efficiency}%</p>
+              <p className="ops-dash-kpi-card__meta">
+                {getKPIColor(kpis.efficiency, getKPIThreshold(systemSettings, 'efficiency'), false) === 'good' ? 'ضمن الهدف' : 'يحتاج متابعة'}
+              </p>
             </div>
-          ) : costProductIds.length > 0 ? (
-            <div className="p-8 text-center text-slate-400">
-              <DashboardIcon name="info" className="text-3xl mb-2 block opacity-30" />
-              <p className="text-sm font-bold">لا توجد بيانات تكلفة للمنتجات المختارة في الشهر الحالي</p>
+            <div className="ops-dash-kpi-card">
+              <p className="ops-dash-kpi-card__label">نسبة الهالك</p>
+              <p className="ops-dash-kpi-card__value">{kpis.wasteRatio}%</p>
+              <p className="ops-dash-kpi-card__meta">من إنتاج اليوم/الشهر</p>
             </div>
-          ) : null}
-        </div>
-              );
-            case 'daily_cost_chart':
-              if (!canViewCosts) return null;
-              return (
-        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] ring-1 ring-slate-900/[0.04] dark:ring-white/10 overflow-hidden shadow-[var(--shadow-card)]">
-          <div className="px-5 sm:px-6 py-4 border-b border-[var(--color-border)] bg-[var(--color-surface-hover)] flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 bg-blue-50 dark:bg-blue-900/20 rounded-[var(--border-radius-lg)] flex items-center justify-center shrink-0 ring-1 ring-blue-500/10">
-                <DashboardIcon name="insights" className="text-blue-600" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-[var(--color-text)]">الإنتاج اليومي مقابل التكلفة</h3>
-                <p className="text-[11px] text-[var(--color-text-muted)] font-medium">تحليل يومي للإنتاج والتكاليف خلال الشهر المحدد</p>
-              </div>
+            <div className="ops-dash-kpi-card">
+              <p className="ops-dash-kpi-card__label">خطوط نشطة</p>
+              <p className="ops-dash-kpi-card__value">
+                {productionLines.filter((l) => l.status === ProductionLineStatus.ACTIVE).length}
+              </p>
+              <p className="ops-dash-kpi-card__meta">من {productionLines.length} خط</p>
             </div>
           </div>
-
-          <div className="px-5 sm:px-6 pt-4 flex flex-wrap gap-3">
-            <Select value={chartProductId || 'all'} onValueChange={(value) => setChartProductId(value === 'all' ? '' : value)}>
-              <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[160px]">
-                <SelectValue placeholder="كل المنتجات" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كل المنتجات</SelectItem>
-                {products.map((p) => (
-                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={chartLineId || 'all'} onValueChange={(value) => setChartLineId(value === 'all' ? '' : value)}>
-              <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[160px]">
-                <SelectValue placeholder="كل الخطوط" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">كل الخطوط</SelectItem>
-                {_rawLines.map((l) => (
-                  <SelectItem key={l.id} value={l.id!}>{l.name}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={chartMonth} onValueChange={setChartMonth}>
-              <SelectTrigger className="w-full sm:w-auto border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm py-2.5 px-4 font-medium sm:min-w-[160px]">
-                <SelectValue placeholder="اختر الشهر" />
-              </SelectTrigger>
-              <SelectContent>
-                {monthOptions.map((opt) => (
-                  <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="p-5 sm:p-6">
-            {chartLoading ? (
-              <div className="flex items-center justify-center py-12 text-slate-400">
-                <DashboardIcon name="refresh" className="animate-spin text-2xl" />
-                <span className="mr-2 text-sm font-bold">جاري تحميل البيانات...</span>
-              </div>
-            ) : dailyChartData.length > 0 ? (
-              <div style={{ width: '100%', height: 380 }} dir="ltr">
-                <ResponsiveContainer>
-                  <ComposedChart data={dailyChartData} margin={{ top: 10, right: 16, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
-                    <XAxis
-                      dataKey="day"
-                      tick={{ fontSize: 11, fill: '#94a3b8', fontWeight: 600 }}
-                      axisLine={{ stroke: '#e2e8f0' }}
-                      tickLine={false}
-                    />
-                    <YAxis
-                      yAxisId="production"
-                      orientation="left"
-                      tick={{ fontSize: 11, fill: '#3b82f6', fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                      label={{ value: 'الإنتاج', angle: -90, position: 'insideLeft', offset: 10, style: { fontSize: 11, fill: '#3b82f6', fontWeight: 700 } }}
-                    />
-                    <YAxis
-                      yAxisId="cost"
-                      orientation="right"
-                      tick={{ fontSize: 11, fill: '#8b5cf6', fontWeight: 600 }}
-                      axisLine={false}
-                      tickLine={false}
-                      label={{ value: 'تكلفة الوحدة', angle: 90, position: 'insideRight', offset: 10, style: { fontSize: 11, fill: '#8b5cf6', fontWeight: 700 } }}
-                    />
-                    <Tooltip content={<DailyChartTooltip />} />
-                    <Legend
-                      verticalAlign="top"
-                      height={36}
-                      iconType="square"
-                      formatter={(value: string) => <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>{value}</span>}
-                    />
-                    <Bar
-                      yAxisId="production"
-                      dataKey="production"
-                      name="الإنتاج اليومي"
-                      fill="#3b82f6"
-                      radius={[4, 4, 0, 0]}
-                      barSize={22}
-                      opacity={0.85}
-                    />
-                    <Line
-                      yAxisId="cost"
-                      type="monotone"
-                      dataKey="costPerUnit"
-                      name="تكلفة الوحدة"
-                      stroke="#8b5cf6"
-                      strokeWidth={2.5}
-                      dot={{ r: 3.5, fill: '#8b5cf6', strokeWidth: 0 }}
-                      activeDot={{ r: 6, stroke: '#8b5cf6', strokeWidth: 2, fill: '#fff' }}
-                    />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            ) : (
-              <div className="text-center py-12 text-slate-400">
-                <DashboardIcon name="bar_chart" className="text-3xl mb-2 block opacity-30" />
-                <p className="text-sm font-bold">لا توجد بيانات للشهر المحدد</p>
-                <p className="text-xs mt-1">اختر شهر يحتوي على تقارير إنتاج لعرض الرسم البياني</p>
-              </div>
-            )}
-          </div>
-        </div>
-              );
-            case 'production_lines':
-              return (
-          <>
-          <div className="flex items-center justify-between px-2 gap-3">
-            <h3 className="text-lg sm:text-xl font-bold flex items-center gap-3">
-              <span className="w-2 h-7 bg-primary rounded-full shrink-0"></span>
-              مراقبة خطوط الإنتاج
-            </h3>
-            <Button variant="outline" className="text-xs py-1.5 h-auto shrink-0" onClick={() => navigate('/lines')}>عرض الكل</Button>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-            {productionLines.length === 0 && !loading && (
-              <div className="col-span-2 text-center py-12 text-slate-400">
-                <DashboardIcon name="precision_manufacturing" className="text-5xl mb-3 block opacity-30" />
-                <p className="font-bold">لا توجد خطوط إنتاج بعد</p>
-                <p className="text-sm mt-1">أضف خطوط الإنتاج من صفحة "خطوط الإنتاج"</p>
-              </div>
-            )}
-            {productionLines.map((line) => (
-              <Card key={line.id} className="transition-all hover:ring-2 hover:ring-primary/10">
-                <div className="cursor-pointer" onClick={() => navigate(`/lines/${line.id}`)}>
-                  <div className="flex justify-between items-start mb-5">
-                    <div>
-                      <h4 className="font-bold text-lg text-[var(--color-text)]">{line.name}</h4>
-                      <span className="text-xs text-[var(--color-text-muted)] font-bold uppercase tracking-wider">{line.employeeName}</span>
-                    </div>
-                    <Badge variant={getVariant(line.status)} pulse={line.status === ProductionLineStatus.ACTIVE}>
-                      {getStatusLabel(line.status)}
-                    </Badge>
-                  </div>
-
-                  <div className="mb-6">
-                    <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1 uppercase tracking-tight">المنتج الحالي</p>
-                    <p className="text-base font-bold text-[var(--color-text)]">{line.currentProduct}</p>
-                  </div>
-
-                  <div className="space-y-3">
-                    <div className="flex justify-between text-xs font-bold">
-                      <span className="text-[var(--color-text-muted)]">الإنتاج: {formatNumber(line.achievement)} / {formatNumber(line.target)}</span>
-                      <span className={`${line.efficiency > 80 ? 'text-emerald-600' : 'text-amber-600'}`}>{line.efficiency}%</span>
-                    </div>
-                    {line.target > 0 && (
-                      <p className="text-[11px] font-bold text-slate-400">المتبقي: {formatNumber(Math.max(line.target - line.achievement, 0))}</p>
-                    )}
-                    <div className="w-full h-2.5 bg-[#f0f2f5] rounded-full overflow-hidden shadow-inner">
-                      <div 
-                        className={`h-full rounded-full transition-all duration-1000 ${line.status === ProductionLineStatus.WARNING ? 'bg-amber-500' : 'bg-primary shadow-[0_0_10px_rgba(19,146,236,0.3)]'}`} 
-                        style={{ width: `${Math.min(line.efficiency, 100)}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {canViewCosts && lineCosts[line.id] && (lineCosts[line.id].laborCost > 0 || lineCosts[line.id].indirectCost > 0) && (
-                    <div className="mt-4 pt-4 border-t border-[var(--color-border)] grid grid-cols-2 gap-3">
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400">تكلفة العمالة</p>
-                        <p className="text-xs font-bold text-[var(--color-text)]">{formatCost(lineCosts[line.id].laborCost)} ج.م</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400">تكلفة غير مباشرة</p>
-                        <p className="text-xs font-bold text-[var(--color-text)]">{formatCost(lineCosts[line.id].indirectCost)} ج.م</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400">إجمالي التكلفة</p>
-                        <p className="text-xs font-bold text-primary">{formatCost(lineCosts[line.id].totalCost)} ج.م</p>
-                      </div>
-                      <div>
-                        <p className="text-[10px] font-bold text-slate-400">تكلفة الوحدة (المنتج)</p>
-                        <p className="text-xs font-bold text-emerald-600">
-                          {line.currentProductId && productCosts[line.currentProductId]?.costPerUnit > 0
-                            ? `${formatCost(productCosts[line.currentProductId].costPerUnit)} ج.م`
-                            : '—'}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-                {can("lineStatus.edit") && (
-                  <button
-                    onClick={(e) => { e.stopPropagation(); openTargetModal(line.id, line.name); }}
-                    className="mt-4 w-full flex items-center justify-center gap-2 py-2 text-xs font-bold text-primary bg-primary/5 hover:bg-primary/10 border border-primary/20 rounded-[var(--border-radius-base)] transition-all"
-                  >
-                    <DashboardIcon name="flag" className="text-sm" />
-                    {line.target > 0 ? 'تعديل الهدف' : 'تعيين الهدف'}
-                  </button>
-                )}
-              </Card>
-            ))}
-          </div>
-          </>
-              );
-            case 'smart_planning':
-              return (
-          <Card className="lg:sticky lg:top-24 border-primary/20 shadow-primary/5" title="الملخص الذكي">
-            <form className="space-y-6" onSubmit={(e) => e.preventDefault()}>
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">اختر المنتج</label>
-                <Select value={selectedProductId || 'none'} onValueChange={(value) => setSelectedProductId(value === 'none' ? '' : value)}>
-                  <SelectTrigger className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 font-medium">
-                    <SelectValue placeholder="اختر المنتج..." />
+        ) : null}
+        chart={show('daily_cost_chart') && canViewCosts ? (
+          <OpsDashPanel
+            title="تحليل الإنتاج والتكلفة"
+            action={(
+              <div className="flex flex-wrap gap-1.5">
+                <Select value={chartMonth} onValueChange={setChartMonth}>
+                  <SelectTrigger className="h-8 w-[120px] text-[11px]">
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="none">اختر المنتج...</SelectItem>
-                    {products.map((p) => (
-                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    {monthOptions.map((opt) => (
+                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
               </div>
-
-              <div className="space-y-2">
-                <label className="block text-sm font-bold text-[var(--color-text-muted)]">الكمية المخططة</label>
-                <input 
-                  className="w-full border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-primary/20 p-3.5 outline-none font-medium transition-all" 
-                  placeholder="أدخل الكمية..." 
-                  type="number"
-                  min={0}
-                  value={planQuantity || ''}
-                  onChange={(e) => setPlanQuantity(Number(e.target.value))}
-                />
+            )}
+          >
+            {chartLoading ? (
+              <div className="flex items-center justify-center h-[220px] text-[var(--color-text-muted)] text-xs font-bold gap-2">
+                <DashboardIcon name="refresh" className="animate-spin h-4 w-4" />
+                جاري التحميل...
               </div>
-
-              <div className="p-5 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
+            ) : dailyChartData.length > 0 ? (
+              <div className="h-[220px] w-full" dir="ltr">
+                <ResponsiveContainer>
+                  <ComposedChart data={dailyChartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+                    <XAxis dataKey="day" tick={{ fontSize: 10, fill: '#94a3b8' }} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="production" tick={{ fontSize: 10, fill: '#3b82f6' }} axisLine={false} tickLine={false} width={36} />
+                    <YAxis yAxisId="cost" orientation="right" tick={{ fontSize: 10, fill: '#8b5cf6' }} axisLine={false} tickLine={false} width={36} />
+                    <Tooltip content={<DailyChartTooltip />} />
+                    <Bar yAxisId="production" dataKey="production" name="الإنتاج" fill="rgb(var(--color-primary))" radius={[4, 4, 0, 0]} barSize={16} opacity={0.9} />
+                    <Line yAxisId="cost" type="monotone" dataKey="costPerUnit" name="تكلفة الوحدة" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            ) : (
+              <div className="h-[220px] flex items-center justify-center text-xs text-[var(--color-text-muted)] font-bold">
+                لا توجد بيانات للشهر المحدد
+              </div>
+            )}
+          </OpsDashPanel>
+        ) : null}
+        queue={show('decision_queue') ? (
+          <OpsDashPanel>
+            <OperationalDecisionQueue
+              snapshot={decisionSnapshot}
+              loading={decisionLoading}
+              compact
+              maxItems={6}
+            />
+          </OpsDashPanel>
+        ) : null}
+        list={show('production_lines') ? (
+          <OpsDashPanel
+            title="قائمة الخطوط"
+            action={(
+              <button type="button" className="text-[11px] font-bold text-primary" onClick={() => navigate('/lines')}>
+                + جديد
+              </button>
+            )}
+          >
+            {productionLines.length === 0 ? (
+              <p className="text-xs text-[var(--color-text-muted)] text-center py-8">لا توجد خطوط بعد</p>
+            ) : (
+              <ul className="space-y-2">
+                {productionLines.slice(0, 8).map((line) => (
+                  <li key={line.id}>
+                    <button
+                      type="button"
+                      onClick={() => navigate(`/lines/${line.id}`)}
+                      className="w-full text-right rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-2.5 py-2 hover:bg-[var(--color-surface-hover)] transition-colors"
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-[var(--color-text)] truncate">{line.name}</p>
+                          <p className="text-[10px] text-[var(--color-text-muted)] truncate mt-0.5">{line.currentProduct || '—'}</p>
+                        </div>
+                        <div className="text-end shrink-0">
+                          <p className="text-xs font-bold tabular-nums text-primary">{line.efficiency}%</p>
+                          <Badge variant={getVariant(line.status)}>
+                            {getStatusLabel(line.status)}
+                          </Badge>
+                        </div>
+                      </div>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </OpsDashPanel>
+        ) : null}
+        team={show('production_lines') ? (
+          <OpsDashPanel title="حالة الخطوط">
+            <ul className="space-y-2">
+              {productionLines.slice(0, 6).map((line) => (
+                <li key={`team-${line.id}`} className="flex items-center justify-between gap-2 border-b border-[var(--color-border)] pb-2 last:border-0">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold truncate">{line.name}</p>
+                    <p className="text-[10px] text-[var(--color-text-muted)] truncate">{line.employeeName || '—'}</p>
+                  </div>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full ${
+                    line.status === ProductionLineStatus.ACTIVE
+                      ? 'bg-emerald-50 text-emerald-700'
+                      : line.status === ProductionLineStatus.WARNING
+                        ? 'bg-amber-50 text-amber-700'
+                        : 'bg-slate-100 text-slate-600'
+                  }`}>
+                    {getStatusLabel(line.status)}
+                  </span>
+                </li>
+              ))}
+              {productionLines.length === 0 && (
+                <li className="text-xs text-[var(--color-text-muted)] text-center py-6">لا بيانات</li>
+              )}
+            </ul>
+          </OpsDashPanel>
+        ) : null}
+        gauge={show('kpi_row') ? (
+          <OpsDashPanel title="تقدم التشغيل">
+            <DashboardProgressGauge
+              value={kpis.efficiency}
+              label="كفاءة الإنتاج"
+              sublabel={`هالك ${kpis.wasteRatio}% · إنتاج اليوم ${formatNumber(kpis.todayProduction)}`}
+              legend={[
+                { label: 'مكتمل/جيد', color: 'rgb(var(--color-success))' },
+                { label: 'متابعة', color: 'rgb(var(--color-warning))' },
+                { label: 'حرج', color: 'rgb(var(--color-danger))' },
+              ]}
+            />
+          </OpsDashPanel>
+        ) : null}
+        focus={show('smart_planning') ? (
+          <OpsDashPanel tone="primary" title="التخطيط الذكي">
+            <form className="space-y-3" onSubmit={(e) => e.preventDefault()}>
+              <Select value={selectedProductId || 'none'} onValueChange={(value) => setSelectedProductId(value === 'none' ? '' : value)}>
+                <SelectTrigger className="w-full h-9 text-xs bg-white/10 border-white/20 text-white">
+                  <SelectValue placeholder="اختر المنتج..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">اختر المنتج...</SelectItem>
+                  {products.map((p) => (
+                    <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <input
+                className="w-full h-9 rounded-[var(--border-radius-lg)] border border-white/20 bg-white/10 text-white text-xs px-3 outline-none placeholder:text-white/60"
+                placeholder="الكمية المخططة"
+                type="number"
+                min={0}
+                value={planQuantity || ''}
+                onChange={(e) => setPlanQuantity(Number(e.target.value))}
+              />
+              <div className="rounded-[var(--border-radius-lg)] bg-black/15 px-3 py-2.5 space-y-1.5 text-xs">
                 {planResults ? (
                   <>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">متوسط وقت التجميع</span>
-                      <span className="text-sm font-bold text-primary">{planResults.avgAssemblyTime} دقيقة/وحدة</span>
+                    <div className="flex justify-between gap-2">
+                      <span className="opacity-80">قدرة يومية</span>
+                      <span className="font-bold">{formatNumber(planResults.totalDailyCapacity)} وحدة</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">الأهداف اليومية لكل خط</span>
-                      <span className="text-sm font-bold text-primary">{formatNumber(planResults.dailyCapacityPerLine)} وحدة</span>
+                    <div className="flex justify-between gap-2">
+                      <span className="opacity-80">أيام مقدّرة</span>
+                      <span className="font-bold">{planResults.estimatedDays > 0 ? `${planResults.estimatedDays} يوم` : '—'}</span>
                     </div>
-                    <div className="flex justify-between items-center">
-                      <span className="text-xs font-bold text-slate-500">إجمالي الأهداف اليومية</span>
-                      <span className="text-sm font-bold text-primary">
-                        {formatNumber(planResults.totalDailyCapacity)} وحدة ({planResults.activeLinesCount} خط)
-                      </span>
-                    </div>
-                    <div className="flex justify-between items-center pt-3 border-t border-[var(--color-border)]">
-                      <span className="text-xs font-bold text-slate-500">الأيام المقدرة للإنجاز</span>
-                      <span className="text-sm font-bold text-emerald-600">
-                        {planResults.estimatedDays > 0 ? `${planResults.estimatedDays} يوم` : '—'}
-                      </span>
-                    </div>
-                    {selectedProductCost && planQuantity > 0 && (
-                      <div className="flex justify-between items-center pt-3 border-t border-[var(--color-border)]">
-                        <span className="text-xs font-bold text-slate-500">التكلفة المتوقعة</span>
-                        <span className="text-sm font-bold text-primary">
-                          {formatCost(selectedProductCost.costPerUnit * planQuantity)} ج.م
-                        </span>
-                      </div>
-                    )}
                   </>
                 ) : (
-                  <div className="text-center text-[var(--color-text-muted)] py-2">
-                    <DashboardIcon name="calculate" className="text-2xl mb-1 block opacity-40" />
-                    <p className="text-xs font-bold">اختر منتج وأدخل الكمية لعرض التقديرات</p>
-                  </div>
+                  <p className="opacity-80 text-center py-2">اختر منتجاً وكمية للتقدير</p>
                 )}
               </div>
-            </form>
-
-            {selectedProductId && planQuantity > 0 && can('plans.create') && (
-              <div className="mt-6">
+              {selectedProductId && planQuantity > 0 && can('plans.create') && (
                 <Button
-                  variant="primary"
-                  className="w-full"
+                  variant="outline"
+                  className="w-full !h-9 !text-xs !bg-white !text-[rgb(var(--color-primary))] !border-0"
                   onClick={() => navigate(`/production-plans?productId=${selectedProductId}&quantity=${planQuantity}`)}
                 >
-                  <DashboardIcon name="add_task" className="text-sm" />
-                  إنشاء خطط رسمية
+                  إنشاء خطة
                 </Button>
+              )}
+              <p className="text-[10px] opacity-80 leading-relaxed">
+                {idleLines > 0
+                  ? `${idleLines} خط في وضع الاستعداد — يمكن تشغيلها لزيادة القدرة.`
+                  : maintLines > 0
+                    ? `${maintLines} خط تحت الصيانة.`
+                    : 'الخطوط تعمل بشكل طبيعي.'}
+              </p>
+            </form>
+          </OpsDashPanel>
+        ) : null}
+        secondary={show('product_cost_analysis') && canViewCosts ? (
+          <details>
+            <summary>تحليل تكلفة المنتجات والمزيد</summary>
+            <div className="ops-dash-secondary__body">
+              <div className="flex flex-wrap items-center gap-2">
+                <Select
+                  value={costProductCandidate || 'none'}
+                  onValueChange={(value) => {
+                    setCostProductCandidate(value === 'none' ? '' : value);
+                    if (value !== 'none' && !costProductIds.includes(value)) {
+                      setCostProductIds([...costProductIds, value]);
+                      setCostProductCandidate('');
+                    }
+                  }}
+                >
+                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[200px] text-sm">
+                    <SelectValue placeholder="إضافة منتج..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">إضافة منتج...</SelectItem>
+                    {products.filter((p) => !costProductIds.includes(p.id)).map((p) => (
+                      <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {costProductIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setCostProductIds([])}
+                    className="text-xs font-bold text-rose-600"
+                  >
+                    مسح الكل
+                  </button>
+                )}
               </div>
-            )}
-
-            {canViewCosts && selectedProductCost && (
-              <div className="mt-6 p-4 bg-violet-50 dark:bg-violet-900/10 rounded-[var(--border-radius-lg)] border border-violet-200 dark:border-violet-800 space-y-3">
-                <div className="flex items-center gap-2 mb-2">
-                  <DashboardIcon name="price_check" className="text-violet-600 text-sm" />
-                  <h4 className="text-xs font-bold text-violet-600">تحليل تكلفة المنتج (متوسط الشهر)</h4>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-500">متوسط تكلفة الوحدة</span>
-                  <span className="text-sm font-bold text-violet-600">{formatCost(selectedProductCost.costPerUnit)} ج.م</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-500">تكلفة العمالة</span>
-                  <span className="text-sm font-bold text-[var(--color-text)]">{formatCost(selectedProductCost.laborCost)} ج.م</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-xs font-bold text-slate-500">تكلفة غير مباشرة</span>
-                  <span className="text-sm font-bold text-[var(--color-text)]">{formatCost(selectedProductCost.indirectCost)} ج.م</span>
-                </div>
-                <div className="flex justify-between items-center pt-2 border-t border-violet-200 dark:border-violet-700">
-                  <span className="text-xs font-bold text-slate-500">إجمالي الإنتاج</span>
-                  <span className="text-sm font-bold text-[var(--color-text)]">{formatNumber(selectedProductCost.quantityProduced)} وحدة</span>
-                </div>
-              </div>
-            )}
-
-            <div className="mt-8 pt-6 border-t border-[var(--color-border)]">
-              <h4 className="text-[10px] font-bold text-[var(--color-text-muted)] uppercase tracking-[0.2em] mb-4">أهم تنبيهات اليوم</h4>
-              {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length > 0 ? (
-                <div className="flex items-start gap-3 bg-amber-50 dark:bg-amber-900/10 p-3 rounded-[var(--border-radius-base)] border border-amber-100 dark:border-amber-900/20">
-                  <DashboardIcon name="info" className="text-amber-500 text-sm mt-0.5" />
-                  <p className="text-xs text-[var(--color-text-muted)] dark:text-amber-200/80 leading-relaxed font-medium">
-                    يوجد {productionLines.filter((l) => l.status === ProductionLineStatus.IDLE).length} خط إنتاج في وضع الاستعداد. يمكن تشغيلها لزيادة الطاقة الإنتاجية.
-                  </p>
-                </div>
-              ) : productionLines.filter((l) => l.status === ProductionLineStatus.MAINTENANCE).length > 0 ? (
-                <div className="flex items-start gap-3 bg-[#f8f9fa] p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-                  <DashboardIcon name="build" className="text-[var(--color-text-muted)] text-sm mt-0.5" />
-                  <p className="text-xs text-[var(--color-text-muted)] leading-relaxed font-medium">
-                    يوجد {productionLines.filter((l) => l.status === ProductionLineStatus.MAINTENANCE).length} خط في وضع الصيانة.
-                  </p>
-                </div>
+              {costProductIds.length === 0 ? (
+                <p className="text-xs text-[var(--color-text-muted)]">أضف منتجات لمقارنة متوسط التكلفة الشهرية.</p>
+              ) : Object.keys(costAnalysisMap).length === 0 ? (
+                <p className="text-xs text-[var(--color-text-muted)]">لا توجد بيانات تكلفة للمنتجات المختارة.</p>
               ) : (
-                <div className="flex items-start gap-3 bg-emerald-50 dark:bg-emerald-900/10 p-3 rounded-[var(--border-radius-base)] border border-emerald-100 dark:border-emerald-900/20">
-                  <DashboardIcon name="check_circle" className="text-emerald-500 text-sm mt-0.5" />
-                  <p className="text-xs text-[var(--color-text-muted)] dark:text-emerald-200/80 leading-relaxed font-medium">
-                    جميع الخطوط تعمل بشكل طبيعي.
-                  </p>
+                <div className="overflow-x-auto">
+                  <table className="erp-table w-full text-right">
+                    <thead className="erp-thead">
+                      <tr>
+                        <th className="erp-th">المنتج</th>
+                        <th className="erp-th text-center">تكلفة الوحدة</th>
+                        <th className="erp-th text-center">الإنتاج</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {costProductIds.map((pid) => {
+                        const data = costAnalysisMap[pid];
+                        const p = products.find((pr) => pr.id === pid);
+                        const name = p?.name?.trim() ? p.name : resolveManufacturingItemName(pid, manufacturingNameMap);
+                        return (
+                          <tr key={pid} className="border-b border-[var(--color-border)]">
+                            <td className="px-3 py-2 text-sm font-bold text-primary">{name}</td>
+                            <td className="px-3 py-2 text-center text-sm font-bold">
+                              {data ? `${formatCost(data.costPerUnit)} ج.م` : '—'}
+                            </td>
+                            <td className="px-3 py-2 text-center text-sm font-bold">
+                              {data ? formatNumber(data.quantityProduced) : '—'}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
-          </Card>
-              );
-            default:
-              return null;
-          }
-        }}
+          </details>
+        ) : null}
       />
 
       {/* â”€â”€ Set Target Modal â”€â”€ */}

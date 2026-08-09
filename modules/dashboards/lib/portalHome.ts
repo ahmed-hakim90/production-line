@@ -8,6 +8,7 @@ export type PortalKind =
   | 'factory_manager'
   | 'employee'
   | 'warehouse_manager'
+  | 'repair'
   | 'repair_technician'
   | 'generic';
 

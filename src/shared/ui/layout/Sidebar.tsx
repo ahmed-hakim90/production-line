@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import {
   ChevronDown,
   ChevronLeft,
+  Download,
   Eye,
   Factory,
   PanelLeftClose,
@@ -19,6 +20,7 @@ import { resolveMenuIcon } from './menuIconMap';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { Button } from '@/components/ui/button';
 import { useAppDirection } from './useAppDirection';
+import { usePwaInstall } from '@/hooks/usePwaInstall';
 import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
 import { warehouseService } from '@/modules/inventory/services/warehouseService';
 import { WAREHOUSE_ROLE_LABELS } from '@/modules/inventory/lib/stockLabels';
@@ -149,6 +151,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
 
   const { collapsed, toggleCollapse } = useSidebar();
   const badgeCounts   = useSidebarBadges();
+  const { isInstalled, canPromptInstall, promptInstall } = usePwaInstall();
   const { isActiveItem, isActiveGroup: isActiveGroupFromConfig, activeGroupKey: configActiveGroupKey } = useSidebarActiveRoute();
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
@@ -241,6 +244,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
    * يجب أن يعرض الأسماء دائمًا — وإلا يبقى collapsed=true من localStorage فيُخفى النص.
    */
   const navCollapsed = collapsed && !open;
+  const showInstallCta = !navCollapsed && !isInstalled && canPromptInstall;
 
   const visibleGroups = useMemo(
     () =>
@@ -421,7 +425,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             onClick={collapsed ? toggleCollapse : undefined}
             title={collapsed ? t('sidebar.expand') : undefined}
             className={[
-              'w-8 h-8 bg-primary rounded-[var(--border-radius-base)] flex items-center justify-center text-white shrink-0',
+              'w-9 h-9 bg-primary rounded-full flex items-center justify-center text-white shrink-0 shadow-sm shadow-primary/25',
               collapsed ? 'hover:opacity-90 cursor-pointer' : 'cursor-default',
             ].join(' ')}
           >
@@ -518,16 +522,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                         key={item.key}
                         to={withTenantPath(tenantSlug, item.path)}
                         className={[
-                          'relative flex items-center gap-2 px-2 py-2 rounded-[var(--border-radius-sm)] text-[13px] transition-colors select-none text-start',
+                          'relative flex items-center gap-2.5 px-2.5 py-2 rounded-xl text-[13px] transition-colors select-none text-start',
                           itemActive
-                            ? `${activeBg} ${iconColor} font-semibold`
+                            ? 'bg-primary/10 text-primary font-semibold'
                             : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] font-medium',
                         ].join(' ')}
                       >
                         {itemActive && (
-                          <span className={`absolute ${activeIndicatorClass} top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current`} />
+                          <span className={`absolute ${activeIndicatorClass} top-1/2 -translate-y-1/2 w-1 h-5 bg-primary`} />
                         )}
-                        <span className={`shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
+                        <span className={`shrink-0 ${itemActive ? 'text-primary' : 'text-[var(--color-text-muted)]'}`}>
                           {renderSidebarIcon(item.icon, undefined, 17)}
                         </span>
                         <span className="flex-1 truncate">{item.label}</span>
@@ -624,17 +628,16 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
                             key={item.path}
                             to={withTenantPath(tenantSlug, item.path)}
                             className={[
-                              `relative flex items-center gap-2 ${nestedItemPaddingClass} py-1.5 rounded-[var(--border-radius-sm)] text-[12.5px] transition-colors`,
+                              `relative flex items-center gap-2 ${nestedItemPaddingClass} py-1.5 rounded-xl text-[12.5px] transition-colors`,
                               itemActive
-                                ? `${activeBg} ${iconColor} font-semibold`
+                                ? 'bg-primary/10 text-primary font-semibold'
                                 : 'text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)] font-medium',
                             ].join(' ')}
                           >
-                            {/* Active right-border indicator */}
                             {itemActive && (
-                              <span className={`absolute ${activeIndicatorClass} top-1/2 -translate-y-1/2 w-0.5 h-4 bg-current`} />
+                              <span className={`absolute ${activeIndicatorClass} top-1/2 -translate-y-1/2 w-1 h-4 bg-primary`} />
                             )}
-                            <span className={`shrink-0 ${itemActive ? iconColor : 'text-[var(--color-text-muted)]'}`}>
+                            <span className={`shrink-0 ${itemActive ? 'text-primary' : 'text-[var(--color-text-muted)]'}`}>
                               {renderSidebarIcon(item.icon, undefined, 15)}
                             </span>
                             <span className="flex-1 truncate">{item.label}</span>
@@ -653,6 +656,25 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
             );
           })}
         </nav>
+
+        {showInstallCta && (
+          <div className="shrink-0 px-2.5 pb-2">
+            <div className="rounded-2xl bg-primary text-white p-3.5 shadow-md shadow-primary/20">
+              <p className="text-[12px] font-bold leading-snug">{t('topbar.install')}</p>
+              <p className="text-[10px] text-white/75 mt-1 leading-relaxed">
+                ثبّت التطبيق للوصول السريع من الشاشة الرئيسية
+              </p>
+              <button
+                type="button"
+                onClick={() => { void promptInstall(); }}
+                className="mt-3 inline-flex w-full items-center justify-center gap-1.5 rounded-xl bg-white px-3 py-2 text-[12px] font-bold text-primary"
+              >
+                <Download size={14} />
+                {t('topbar.install')}
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* ── Profile ──────────────────────────────────────────────── */}
         <div
