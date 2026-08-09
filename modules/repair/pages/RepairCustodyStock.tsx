@@ -2,9 +2,9 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { MessageCircle, RefreshCw, RotateCcw } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import {
   Dialog,
   DialogContent,
@@ -321,48 +321,45 @@ export const RepairCustodyStock: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5" dir="rtl">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">
-              {unrepairableMode
-                ? 'ليس لديك صلاحية عرض مخزن غير القابل للإصلاح.'
-                : 'ليس لديك صلاحية عرض عهدة أجهزة العملاء.'}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="عهدة أجهزة العملاء" dir="rtl">
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">
+            {unrepairableMode
+              ? 'ليس لديك صلاحية عرض مخزن غير القابل للإصلاح.'
+              : 'ليس لديك صلاحية عرض عهدة أجهزة العملاء.'}
+          </p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 px-1 sm:space-y-5 sm:px-0" dir="rtl">
-      <PageHeader
-        title="عهدة أجهزة العملاء"
-        subtitle="عهدة المراكز وغير القابل للإصلاح في صفحة واحدة — التسليم يخرج الكمية من المخزن المناسب"
-        icon="warehouse"
-        actions={
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <Button type="button" variant="outline" className="min-w-0 flex-1 sm:flex-none" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className="ms-1 size-4" />
-              تحديث
-            </Button>
-            {canSyncCustody && (
-              <Button
-                type="button"
-                variant="outline"
-                className="min-w-0 flex-1 sm:flex-none"
-                onClick={() => void syncExistingJobs()}
-                disabled={syncing || loading}
-              >
-                <RefreshCw className={`ms-1 size-4 ${syncing ? 'animate-spin' : ''}`} />
-                {syncing ? 'جاري المزامنة…' : 'مزامنة الطلبات القديمة'}
-              </Button>
-            )}
-          </div>
-        }
-      />
-
+    <RepairOpsPageShell
+      eyebrow={unrepairableMode ? 'غير القابل للإصلاح' : 'عهدة أجهزة العملاء'}
+      dir="rtl"
+      hero={[
+        { key: 'units', label: 'إجمالي الوحدات', value: totalUnits, onClick: () => setAgeFilter('all'), active: ageFilter === 'all' },
+        { key: 'rows', label: 'السجلات الظاهرة', value: filtered.length },
+        { key: 'age7', label: 'أقدم من 7 أيام', value: aging7, onClick: () => setAgeFilter('7'), active: ageFilter === '7' },
+        { key: 'age14', label: 'أقدم من 14 يومًا', value: aging14, onClick: () => setAgeFilter('14'), active: ageFilter === '14', toneClassName: aging14 > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined },
+      ]}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={
+        canSyncCustody ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => void syncExistingJobs()}
+            disabled={syncing || loading}
+          >
+            <RefreshCw className={`ms-1 size-4 ${syncing ? 'animate-spin' : ''}`} />
+            {syncing ? 'جاري المزامنة…' : 'مزامنة الطلبات القديمة'}
+          </Button>
+        ) : null
+      }
+    >
       <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap" role="tablist" aria-label="نوع الرصيد">
         <Button
           type="button"
@@ -394,48 +391,11 @@ export const RepairCustodyStock: React.FC = () => {
         </Button>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-        <button
-          type="button"
-          className={`rounded-lg border px-3 py-2 text-right transition-colors ${
-            ageFilter === 'all' ? 'border-primary bg-primary/5' : 'bg-card hover:bg-muted/40'
-          }`}
-          onClick={() => setAgeFilter('all')}
-        >
-          <div className="text-xs text-muted-foreground">إجمالي الوحدات</div>
-          <div className="text-lg font-semibold tabular-nums">{totalUnits}</div>
-        </button>
-        <button
-          type="button"
-          className="rounded-lg border bg-card px-3 py-2 text-right"
-          onClick={() => setAgeFilter('all')}
-        >
-          <div className="text-xs text-muted-foreground">السجلات الظاهرة</div>
-          <div className="text-lg font-semibold tabular-nums">{filtered.length}</div>
-        </button>
-        <button
-          type="button"
-          className={`rounded-lg border px-3 py-2 text-right transition-colors ${
-            ageFilter === '7' ? 'border-primary bg-primary/5' : 'bg-card hover:bg-muted/40'
-          }`}
-          onClick={() => setAgeFilter('7')}
-        >
-          <div className="text-xs text-muted-foreground">أقدم من 7 أيام</div>
-          <div className="text-lg font-semibold tabular-nums">{aging7}</div>
-        </button>
-        <button
-          type="button"
-          className={`rounded-lg border px-3 py-2 text-right transition-colors ${
-            ageFilter === '14' ? 'border-primary bg-primary/5' : 'bg-card hover:bg-muted/40'
-          }`}
-          onClick={() => setAgeFilter('14')}
-        >
-          <div className="text-xs text-muted-foreground">أقدم من 14 يومًا</div>
-          <div className="text-lg font-semibold tabular-nums">{aging14}</div>
-        </button>
-      </div>
-
-      <Card className="!p-3 sm:!p-4">
+      <OpsDashPanel
+        title={unrepairableMode ? 'مخزن غير القابل للإصلاح' : 'أرصدة العهدة'}
+        accent="repair"
+        bodyClassName="p-0"
+      >
         <SmartFilterBar
           pageId={unrepairableMode ? 'repair-unrepairable-stock-list' : 'repair-custody-stock-list'}
           searchPlaceholder="بحث بالمنتج، العميل، رقم الإيصال، المركز..."
@@ -467,9 +427,10 @@ export const RepairCustodyStock: React.FC = () => {
             if (key === 'branchId') setBranchFilter(value);
             if (key === 'age') setAgeFilter((value as 'all' | '7' | '14') || 'all');
           }}
+          className="mb-0 border-0 rounded-none"
         />
 
-        <div className="erp-table-wrap mt-4 -mx-1 overflow-x-auto rounded-lg border sm:mx-0">
+        <div className="erp-table-wrap overflow-x-auto border-t">
           <table className="erp-table w-full min-w-[720px] text-right">
             <thead className="erp-thead">
               <tr>
@@ -574,7 +535,7 @@ export const RepairCustodyStock: React.FC = () => {
           itemLabel="سجل"
           onPageChange={setPage}
         />
-      </Card>
+      </OpsDashPanel>
 
       <Dialog open={Boolean(selected)} onOpenChange={(open) => { if (!open) setSelected(null); }}>
         <DialogContent dir="rtl" className="max-w-md">
@@ -715,7 +676,7 @@ export const RepairCustodyStock: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

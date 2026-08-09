@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -14,7 +13,8 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { PageHeader } from '@/components/PageHeader';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
@@ -389,88 +389,79 @@ export const SparePartsInventory: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-4 px-1 sm:space-y-5 sm:px-0" dir={dir}>
-      <PageHeader
-        title="مخزون قطع الغيار"
-        subtitle="إدارة أصناف الفرع مرتبطة بماستر داتا المنتجات والمكونات المشتركة في المشروع."
-        icon="inventory_2"
-        actions={(
-          <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto">
-            {(canManageAllBranches || branchOptions.length > 1) && (
-              <div className="w-full sm:w-[220px]">
-                <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder="اختر الفرع" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {branchOptions.map((branch) => (
-                      <SelectItem key={branch.id} value={branch.id || ''}>
-                        {branch.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-            <Link to={withTenantPath(tenantSlug, '/repair')}>
-              <Button variant="outline" size="sm">لوحة الصيانة</Button>
+    <RepairOpsPageShell
+      eyebrow="مخزون قطع الغيار"
+      dir={dir}
+      hero={[
+        { key: 'items', label: 'عدد الأصناف', value: stats.totalItems },
+        { key: 'stock', label: 'إجمالي الكمية', value: stats.totalStock },
+        {
+          key: 'low',
+          label: 'منخفضة المخزون',
+          value: stats.lowStockCount,
+          toneClassName: stats.lowStockCount > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined,
+        },
+      ]}
+      onRefresh={() => void load({ force: true })}
+      actions={(
+        <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto">
+          {(canManageAllBranches || branchOptions.length > 1) && (
+            <div className="w-full sm:w-[220px]">
+              <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
+                <SelectTrigger>
+                  <SelectValue placeholder="اختر الفرع" />
+                </SelectTrigger>
+                <SelectContent>
+                  {branchOptions.map((branch) => (
+                    <SelectItem key={branch.id} value={branch.id || ''}>
+                      {branch.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
+          <Link to={withTenantPath(tenantSlug, '/repair')}>
+            <Button variant="outline" size="sm">لوحة الصيانة</Button>
+          </Link>
+          {activeWarehouseId ? (
+            <Link
+              to={withTenantPath(
+                tenantSlug,
+                `/repair/warehouses/${encodeURIComponent(activeWarehouseId)}`,
+              )}
+            >
+              <Button variant="outline" size="sm">مساحة مخزن المركز</Button>
             </Link>
-            {activeWarehouseId ? (
-              <Link
-                to={withTenantPath(
-                  tenantSlug,
-                  `/repair/warehouses/${encodeURIComponent(activeWarehouseId)}`,
-                )}
-              >
-                <Button variant="outline" size="sm">مساحة مخزن المركز</Button>
-              </Link>
-            ) : null}
-            {can('repairSpareIssues.view') && (
-              <Link to={withTenantPath(tenantSlug, '/repair/spare-issues')}>
-                <Button variant="outline" size="sm">سندات الصرف</Button>
-              </Link>
-            )}
-            {canViewReplenishment && (
-              <Link to={withTenantPath(tenantSlug, '/repair/parts-replenishment')}>
-                <Button variant="outline" size="sm">متابعة التموين</Button>
-              </Link>
-            )}
-            {canCreateReplenishment && (
-              <Button
-                type="button"
-                size="sm"
-                onClick={() => setReplenishModalOpen(true)}
-                disabled={!activeWarehouseId}
-              >
-                طلب تموين
-              </Button>
-            )}
-            {canManagePricing && (
-              <Link to={withTenantPath(tenantSlug, '/manufacturing/materials')}>
-                <Button variant="secondary" size="sm">تسعير القطع (الماستر)</Button>
-              </Link>
-            )}
-          </div>
-        )}
-      />
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">عدد الأصناف</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold sm:text-3xl">{stats.totalItems}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">إجمالي الكمية بالمخزون</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-bold sm:text-3xl">{stats.totalStock}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">أصناف منخفضة المخزون</CardTitle></CardHeader>
-          <CardContent>
-            <p className={`text-2xl font-bold sm:text-3xl ${stats.lowStockCount > 0 ? 'text-amber-600' : ''}`}>{stats.lowStockCount}</p>
-          </CardContent>
-        </Card>
-      </div>
-
+          ) : null}
+          {can('repairSpareIssues.view') && (
+            <Link to={withTenantPath(tenantSlug, '/repair/spare-issues')}>
+              <Button variant="outline" size="sm">سندات الصرف</Button>
+            </Link>
+          )}
+          {canViewReplenishment && (
+            <Link to={withTenantPath(tenantSlug, '/repair/parts-replenishment')}>
+              <Button variant="outline" size="sm">متابعة التموين</Button>
+            </Link>
+          )}
+          {canCreateReplenishment && (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setReplenishModalOpen(true)}
+              disabled={!activeWarehouseId}
+            >
+              طلب تموين
+            </Button>
+          )}
+          {canManagePricing && (
+            <Link to={withTenantPath(tenantSlug, '/manufacturing/materials')}>
+              <Button variant="secondary" size="sm">تسعير القطع (الماستر)</Button>
+            </Link>
+          )}
+        </div>
+      )}
+    >
       {!branchId && (
         <div className="rounded border border-amber-300 bg-amber-50 p-3 text-amber-900 text-sm">
           {canManageAllBranches
@@ -483,7 +474,42 @@ export const SparePartsInventory: React.FC = () => {
           هذا الفرع لا يملك مخزنًا مرتبطًا بعد. أنشئ فرعًا جديدًا أو اربط مخزنًا يدويًا للفرع الحالي.
         </div>
       )}
-      <Card>
+      <OpsDashPanel
+        title="جدول المخزون"
+        accent="repair"
+        bodyClassName="p-0"
+        action={
+          canManageParts ? (
+            <div className="flex items-center gap-2 flex-wrap">
+              {unlinkedPartsCount > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={linkingCatalog || !branchId}
+                  onClick={() => void linkUnlinkedPartsToCatalog()}
+                >
+                  {linkingCatalog ? 'جاري الربط...' : `ربط بالماستر داتا (${unlinkedPartsCount})`}
+                </Button>
+              )}
+              <Button
+                size="sm"
+                disabled={!branchId || !activeWarehouseId}
+                onClick={() => setIsCreatePartModalOpen(true)}
+              >
+                إضافة صنف
+              </Button>
+              <CreateRepairSparePartModal
+                open={isCreatePartModalOpen}
+                onOpenChange={setIsCreatePartModalOpen}
+                branchId={branchId}
+                existingParts={parts}
+                defaultMinStock={repairSettings.defaults.defaultMinStock}
+                onCreated={() => load({ force: true })}
+              />
+            </div>
+          ) : undefined
+        }
+      >
         <SmartFilterBar
           pageId="spare-parts-inventory"
           searchPlaceholder="ابحث بالاسم أو الكود أو التصنيف..."
@@ -512,49 +538,7 @@ export const SparePartsInventory: React.FC = () => {
           }
           className="mb-0 border-0 rounded-none"
         />
-      </Card>
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0 flex-wrap">
-          <div>
-            <CardTitle>جدول المخزون</CardTitle>
-            <CardDescription>
-              {canManageParts
-                ? 'للإدارة: إضافة صنف، زيادة/نقص الجرد، وحذف الصنف عند رصيد صفر. الرصيد ينقص مع الصرف ويزيد باستلام التموين.'
-                : 'عرض الأرصدة فقط. الرصيد ينقص مع صرف الطلبات ويزيد عند استلام التموين من المركزي.'}
-            </CardDescription>
-          </div>
-          {canManageParts && (
-            <div className="flex items-center gap-2 flex-wrap">
-              {unlinkedPartsCount > 0 && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={linkingCatalog || !branchId}
-                  onClick={() => void linkUnlinkedPartsToCatalog()}
-                >
-                  {linkingCatalog ? 'جاري الربط...' : `ربط بالماستر داتا (${unlinkedPartsCount})`}
-                </Button>
-              )}
-              <Button
-                size="sm"
-                disabled={!branchId || !activeWarehouseId}
-                onClick={() => setIsCreatePartModalOpen(true)}
-              >
-                إضافة صنف
-              </Button>
-              <CreateRepairSparePartModal
-                open={isCreatePartModalOpen}
-                onOpenChange={setIsCreatePartModalOpen}
-                branchId={branchId}
-                existingParts={parts}
-                defaultMinStock={repairSettings.defaults.defaultMinStock}
-                onCreated={() => load({ force: true })}
-              />
-            </div>
-          )}
-        </CardHeader>
-        <CardContent>
-          <div className="erp-table-wrap -mx-1 overflow-x-auto rounded border sm:mx-0">
+          <div className="erp-table-wrap overflow-x-auto border-t">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-muted">
                 <tr>
@@ -689,22 +673,17 @@ export const SparePartsInventory: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
       {canViewJobs && (
-        <Card>
-          <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-            <div>
-              <CardTitle className="text-base">طلبات الصيانة للفرع</CardTitle>
-              <CardDescription>
-                الأوامر المفتوحة على فرع المخزن الحالي — افتح الأمر للصرف من داخل الصيانة.
-              </CardDescription>
-            </div>
+        <OpsDashPanel
+          title="طلبات الصيانة للفرع"
+          accent="repair"
+          action={(
             <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
               <Button variant="outline" size="sm">كل الطلبات</Button>
             </Link>
-          </CardHeader>
-          <CardContent>
+          )}
+        >
             {!branchId ? (
               <p className="text-sm text-muted-foreground">اختر فرعًا لعرض الطلبات.</p>
             ) : jobsLoading ? (
@@ -749,8 +728,7 @@ export const SparePartsInventory: React.FC = () => {
                 </table>
               </div>
             )}
-          </CardContent>
-        </Card>
+        </OpsDashPanel>
       )}
 
       <CreateRepairReplenishmentModal
@@ -761,7 +739,7 @@ export const SparePartsInventory: React.FC = () => {
         onCreated={() => void load({ force: true })}
       />
       <LowStockAlert open={lowStock.isOpen} onOpenChange={(open) => { if (!open) lowStock.dismiss(); }} entries={lowStock.lowStockEntries} />
-    </div>
+    </RepairOpsPageShell>
   );
 };
 
