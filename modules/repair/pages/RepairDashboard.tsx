@@ -35,7 +35,8 @@ import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { useRepairJobs } from '../hooks/useRepairJobs';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
-import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
+import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
+import { isRepairJobOpenStatus } from '../lib/repairTechnicianHomeMetrics';
 import { StatusBadge } from '../components/StatusBadge';
 import { PageHeader } from '@/components/PageHeader';
 import { RepairAdminDashboard } from './RepairAdminDashboard';
@@ -99,8 +100,9 @@ const RepairOperationalDashboard: React.FC = () => {
   });
 
   const kpis = useMemo(() => {
-    const openJobs = jobs.filter((j) => repairSettings.workflow.openStatusIds.includes(j.status)).length;
-    const pendingDelivery = jobs.filter((j) => j.status === 'ready').length;
+    const openIds = repairSettings.workflow.openStatusIds;
+    const openJobs = jobs.filter((j) => isRepairJobOpenStatus(j.status, openIds)).length;
+    const pendingDelivery = jobs.filter((j) => mapLegacyRepairStatus(j.status) === 'ready').length;
     const all = jobs.length || 1;
     const successRate = (jobs.filter((j) => isDeliveredStatus(j.status)).length / all) * 100;
     return { openJobs, pendingDelivery, successRate };
@@ -110,11 +112,14 @@ const RepairOperationalDashboard: React.FC = () => {
     () =>
       (repairSettings.workflow.statuses.map((s) => s.id).length > 0
         ? repairSettings.workflow.statuses.map((s) => s.id)
-        : REPAIR_JOB_STATUSES).map((status) => ({
-        key: status,
-        name: repairSettings.statusMap[status]?.label || REPAIR_JOB_STATUS_LABELS[status] || status,
-        value: jobs.filter((job) => job.status === status).length,
-      })).filter((row) => row.value > 0),
+        : REPAIR_JOB_STATUSES).map((status) => {
+        const canonical = mapLegacyRepairStatus(status);
+        return {
+          key: canonical,
+          name: repairSettings.statusMap[canonical]?.label || REPAIR_JOB_STATUS_LABELS[canonical] || canonical,
+          value: jobs.filter((job) => mapLegacyRepairStatus(job.status) === canonical).length,
+        };
+      }).filter((row) => row.value > 0),
     [jobs, repairSettings.workflow.statuses, repairSettings.statusMap],
   );
   const dailyTrendData = useMemo(() => {
@@ -135,9 +140,10 @@ const RepairOperationalDashboard: React.FC = () => {
 
   const delayedCount = useMemo(() => {
     const now = Date.now();
+    const openIds = repairSettings.workflow.openStatusIds;
     return jobs.filter(
       (j) =>
-        repairSettings.workflow.openStatusIds.includes(j.status)
+        isRepairJobOpenStatus(j.status, openIds)
         && j.dueAt
         && Date.parse(String(j.dueAt)) < now,
     ).length;
@@ -145,8 +151,9 @@ const RepairOperationalDashboard: React.FC = () => {
 
   const workloadRows = useMemo(() => {
     const m = new Map<string, number>();
+    const openIds = repairSettings.workflow.openStatusIds;
     jobs.forEach((j) => {
-      if (!repairSettings.workflow.openStatusIds.includes(j.status)) return;
+      if (!isRepairJobOpenStatus(j.status, openIds)) return;
       const key = String(j.technicianId || '').trim() || 'غير_مسند';
       m.set(key, (m.get(key) || 0) + 1);
     });

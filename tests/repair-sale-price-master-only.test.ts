@@ -26,10 +26,15 @@ describe('repair sale price is materials-master only', () => {
     }), 0);
   });
 
-  it('shows spare pricing fields only for active MAT raw materials', () => {
+  it('shows spare pricing fields for active raw materials with any category code', () => {
     assert.equal(materialShowsSparePartsPricing({
       type: 'raw_material',
       code: 'MAT-100',
+      isActive: true,
+    }), true);
+    assert.equal(materialShowsSparePartsPricing({
+      type: 'raw_material',
+      code: 'SP-0001',
       isActive: true,
     }), true);
     assert.equal(materialShowsSparePartsPricing({
@@ -38,7 +43,8 @@ describe('repair sale price is materials-master only', () => {
     }), false);
     assert.equal(materialShowsSparePartsPricing({
       type: 'raw_material',
-      code: 'RM-100',
+      code: 'SP-0001',
+      availableForSpareParts: false,
     }), false);
   });
 });

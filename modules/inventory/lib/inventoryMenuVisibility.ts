@@ -9,6 +9,7 @@ import type { WarehouseRole } from '../types';
  */
 const SCOPED_SHARED_MENU_KEYS = [
   'inv-dashboard',
+  'inv-warehouses',
   'inv-balances',
   'inv-item-card',
   'inv-transactions',
@@ -71,7 +72,6 @@ const MENU_KEYS_BY_WAREHOUSE_ROLE: Record<WarehouseRole, readonly string[]> = {
   ],
   maintenance_center: [
     ...SCOPED_SHARED_MENU_KEYS,
-    // Confirm path also lives under الصيانة (repair-parts-recall); inventory key is a backup.
     'inv-spare-parts-recall',
   ],
   repair_customer_custody: [...SCOPED_SHARED_MENU_KEYS],

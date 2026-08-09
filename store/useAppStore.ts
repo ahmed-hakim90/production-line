@@ -50,12 +50,12 @@ import {
   signOut,
   createUserWithEmail,
   registerWithEmail,
-  syncBuiltInRolePermissionGrants,
   resetPassword,
   auth,
   db as firestoreDb,
   isConfigured as isFirebaseConfigured,
   runAssetDepreciationCallable,
+  syncBuiltInRolePermissionGrants,
 } from '../services/firebase';
 import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
 import {
@@ -1402,6 +1402,8 @@ interface AppState {
 
   // Roles management (admin CRUD)
   fetchRoles: () => Promise<void>;
+  /** Manual only: create missing default roles + additive grants. Never auto on login. */
+  seedDefaultRolesCatalog: () => Promise<{ rolesCreatedOrPatched: boolean; serverGrantedKeys: number }>;
   createRole: (data: Omit<FirestoreRole, 'id'>) => Promise<string | null>;
   updateRole: (id: string, data: Partial<Omit<FirestoreRole, 'id'>>) => Promise<void>;
   deleteRole: (id: string) => Promise<void>;
@@ -1827,7 +1829,7 @@ export const useAppStore = create<AppState>((set, get) => ({
 
   _applyRole: (role: FirestoreRole) => {
     // Grants come from Firestore roles.permissions only (DB source of truth).
-    // Stale admin role docs are repaired by roleService.ensureAdminRoleCatalogPermissions.
+    // Default catalog seed/heal runs only via Roles Management button (or company Setup).
     set({
       userRoleId: role.id!,
       userRoleName: role.name,
@@ -2073,37 +2075,10 @@ export const useAppStore = create<AppState>((set, get) => ({
         return;
       }
 
-      let roles = await roleService.getAll();
-      let role = roles.find((r) => r.id === userDoc.roleId);
-      const canMigrateDefaultRoles =
-        userDoc.isSuperAdmin === true
-        || role?.permissions?.['roles.manage'] === true;
-      if (canMigrateDefaultRoles) {
-        roles = await roleService.migrateDefaultRoles();
-        role = roles.find((r) => r.id === userDoc.roleId);
-      }
-
-      // Self-heal built-in factory ops grants in DB when missing (Admin SDK, additive only).
-      const roleKey = String(role?.roleKey || '').trim();
-      const roleName = String(role?.name || '').trim();
-      const isFactoryManagerRole =
-        roleKey === 'factory_manager' || roleName === 'مدير المصنع';
-      const missingFactoryOpsGrant =
-        isFactoryManagerRole
-        && (
-          role?.permissions?.['reports.create'] !== true
-          || role?.permissions?.['products.create'] !== true
-          || role?.permissions?.['products.edit'] !== true
-        );
-      if (missingFactoryOpsGrant) {
-        try {
-          await syncBuiltInRolePermissionGrants();
-          roles = await roleService.getAll();
-          role = roles.find((r) => r.id === userDoc.roleId);
-        } catch (syncError) {
-          console.warn('syncBuiltInRolePermissionGrants failed:', syncError);
-        }
-      }
+      // Role templates / grants run only from Roles Management button (or company Setup).
+      // Do not auto-migrate or re-grant on every admin login.
+      const roles = await roleService.getAll();
+      const role = roles.find((r) => r.id === userDoc.roleId);
 
       set({ roles });
       if (!role) throw new Error('دور المستخدم غير موجود. تواصل مع مدير النظام.');
@@ -2441,6 +2416,23 @@ export const useAppStore = create<AppState>((set, get) => ({
     } catch (error) {
       set({ error: (error as Error).message });
     }
+  },
+
+  seedDefaultRolesCatalog: async () => {
+    const roles = await roleService.migrateDefaultRoles();
+    set({ roles });
+    let serverGrantedKeys = 0;
+    try {
+      const syncResult = await syncBuiltInRolePermissionGrants();
+      serverGrantedKeys = Number(syncResult?.grantedKeys || 0);
+      if (serverGrantedKeys > 0) {
+        const refreshed = await roleService.getAll();
+        set({ roles: refreshed });
+      }
+    } catch (syncError) {
+      console.warn('syncBuiltInRolePermissionGrants (manual) failed:', syncError);
+    }
+    return { rolesCreatedOrPatched: true, serverGrantedKeys };
   },
 
   createRole: async (data) => {

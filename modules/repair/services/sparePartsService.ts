@@ -50,10 +50,9 @@ export const sparePartsService = {
   async listPartsForBranches(branchIds: string[]): Promise<RepairSparePart[]> {
     const ids = Array.from(new Set(branchIds.map((id) => String(id || '').trim()).filter(Boolean)));
     if (!isConfigured || ids.length === 0) return [];
-    const chunks: RepairSparePart[][] = [];
-    for (const branchId of ids) {
-      chunks.push(await sparePartsService.listParts(branchId));
-    }
+    if (ids.length === 1) return sparePartsService.listParts(ids[0]);
+    // Parallel per-branch queries (existing indexes) — avoid sequential await-in-loop.
+    const chunks = await Promise.all(ids.map((branchId) => sparePartsService.listParts(branchId)));
     return chunks.flat().sort((a, b) => String(a.name || '').localeCompare(String(b.name || ''), 'ar'));
   },
 
@@ -115,7 +114,18 @@ export const sparePartsService = {
     if (patch.name !== undefined) data.name = String(patch.name || '');
     if (patch.materialId !== undefined) {
       const materialId = String(patch.materialId || '').trim();
-      if (materialId) data.materialId = materialId;
+      if (materialId) {
+        const { materialService } = await import('../../manufacturing/services/materialService');
+        const {
+          isMaterialAvailableForSpareParts,
+          MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR,
+        } = await import('../../manufacturing/utils/isMaterialAvailableForSpareParts');
+        const material = await materialService.getById(materialId);
+        if (material && !isMaterialAvailableForSpareParts(material)) {
+          throw new Error(MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR);
+        }
+        data.materialId = materialId;
+      }
     }
     if (patch.sourceProductId !== undefined) {
       const sourceProductId = String(patch.sourceProductId || '').trim();
@@ -144,6 +154,15 @@ export const sparePartsService = {
       if (!material && !isLegacyRaw) {
         throw new Error('المكون غير موجود في ماستر داتا المواد.');
       }
+      if (material) {
+        const {
+          isMaterialAvailableForSpareParts,
+          MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR,
+        } = await import('../../manufacturing/utils/isMaterialAvailableForSpareParts');
+        if (!isMaterialAvailableForSpareParts(material)) {
+          throw new Error(MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR);
+        }
+      }
       await sparePartsService.updatePartCatalog(partId, {
         materialId,
         ...(isLegacyRaw || !material ? { rawMaterialId: materialId } : {}),
@@ -160,11 +179,18 @@ export const sparePartsService = {
     if (materialId) {
       // Prefer manufacturing materials; allow legacy raw ids only when explicitly set as rawMaterialId
       const { materialService } = await import('../../manufacturing/services/materialService');
+      const {
+        isMaterialAvailableForSpareParts,
+        MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR,
+      } = await import('../../manufacturing/utils/isMaterialAvailableForSpareParts');
       const material = await materialService.getById(materialId);
       const isLegacyRawLink =
         !material && String(input.rawMaterialId || '').trim() === materialId;
       if (!material && !isLegacyRawLink) {
         throw new Error('المكون غير موجود في ماستر داتا المواد.');
+      }
+      if (material && !isMaterialAvailableForSpareParts(material)) {
+        throw new Error(MATERIAL_NOT_AVAILABLE_FOR_SPARE_PARTS_ERROR);
       }
     }
     const partRef = doc(collection(db, REPAIR_SPARE_PARTS_COLLECTION));

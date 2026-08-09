@@ -20,7 +20,7 @@ export const REPAIR_JOB_STATUSES = [
 export type RepairJobStatus = string;
 export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
   received: 'وارد',
-  diagnosing: 'تشخيص',
+  diagnosing: 'فحص',
   estimate_ready: 'التقدير جاهز لمراجعة الاستقبال',
   waiting_approval: 'بانتظار موافقة العميل',
   waiting_parts: 'بانتظار قطع الغيار',
@@ -281,6 +281,14 @@ export type RepairSpareIssueStatus =
   | 'rejected'
   | 'cancelled';
 
+export interface RepairSpareIssueAllocation {
+  locationId: string;
+  locationCode: string;
+  rack?: string;
+  shelf?: string;
+  quantity: number;
+}
+
 export interface RepairSpareIssueLine {
   lineId?: string;
   itemType: 'material';
@@ -289,8 +297,12 @@ export interface RepairSpareIssueLine {
   itemCode: string;
   unit: string;
   quantity: number;
+  /** Legacy / display: first allocation location when shelves are used. */
   locationId?: string;
   locationCode?: string;
+  allocations?: RepairSpareIssueAllocation[];
+  availableQty?: number;
+  shortageQty?: number;
   unitCostSnapshot?: number;
   totalCostSnapshot?: number;
   returnedQty?: number;
@@ -377,6 +389,11 @@ export interface RepairJobProduct {
   /** Quantity transferred from custody to the unrepairable warehouse. */
   unrepairableQuantity?: number;
   unrepairableReason?: string;
+  unrepairableReasonCode?: string;
+  unrepairableReasonLabel?: string;
+  unrepairableReasonNote?: string;
+  unrepairableDecisionQuantity?: number;
+  reopenedFromUnrepairableQuantity?: number;
   unrepairableRecordedAt?: string;
   unrepairableRecordedBy?: string;
   unrepairableRecordedByName?: string;
@@ -572,9 +589,15 @@ export interface RepairCustodyRecord {
   jobProductItemId: string;
   customerId?: string;
   customerName: string;
+  customerPhone?: string;
   productId: string;
   productName: string;
   productCode?: string;
+  productBarcode?: string;
+  unrepairableReasonCode?: string;
+  unrepairableReasonLabel?: string;
+  jobStatus?: RepairJobStatus;
+  deliveryAuthorizationNo?: string;
   receivedQuantity: number;
   unrepairableQuantity: number;
   handedOverQuantity: number;

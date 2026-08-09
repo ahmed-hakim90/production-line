@@ -80,6 +80,7 @@ const emptyForm: Omit<FirestoreProduct, 'id'> = {
   sellingPrice: 0,
   autoDeductComponentScrapFromDecomposed: false,
   assemblyMode: 'individual',
+  isManufactured: true,
 };
 
 export const GlobalCreateProductModal: React.FC = () => {
@@ -182,6 +183,7 @@ export const GlobalCreateProductModal: React.FC = () => {
       sellingPrice: editingRaw.sellingPrice ?? 0,
       autoDeductComponentScrapFromDecomposed: editingRaw.autoDeductComponentScrapFromDecomposed === true,
       assemblyMode: editingRaw.assemblyMode === 'team' ? 'team' : 'individual',
+      isManufactured: editingRaw.isManufactured !== false,
       routingTargetUnitSeconds:
         editingRaw.routingTargetUnitSeconds != null && Number(editingRaw.routingTargetUnitSeconds) > 0
           ? Math.round(Number(editingRaw.routingTargetUnitSeconds))
@@ -551,6 +553,27 @@ export const GlobalCreateProductModal: React.FC = () => {
                     <p className="mt-1 text-xs text-muted-foreground">
                       {t('modalManager.createProduct.operationsHelp')}
                     </p>
+                  </div>
+
+                  <div className="flex items-start gap-2 rounded-md bg-muted/50 px-3 py-3">
+                    <Checkbox
+                      id="product-is-manufactured"
+                      checked={form.isManufactured !== false}
+                      onCheckedChange={(checked) =>
+                        setForm((current) => ({
+                          ...current,
+                          isManufactured: checked === true,
+                        }))
+                      }
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="product-is-manufactured">
+                        {t('modalManager.createProduct.isManufactured')}
+                      </Label>
+                      <p className="text-xs text-muted-foreground">
+                        {t('modalManager.createProduct.isManufacturedHelp')}
+                      </p>
+                    </div>
                   </div>
 
                   <div className="grid gap-3 sm:grid-cols-2">

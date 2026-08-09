@@ -57,6 +57,8 @@ import {
   toMaterialUpdateData,
   type MaterialImportResult,
 } from '@/utils/importMaterials';
+import { decideMaterialImportSave } from '@/utils/importSaveDecision';
+import { useJobsStore, isBackgroundJobCancelled } from '@/components/background-jobs/useJobsStore';
 import { ArrowDown, ArrowUp, ChevronsUpDown, Loader2, Pencil, Trash2, X } from 'lucide-react';
 import { toast } from 'sonner';
 import {
@@ -93,6 +95,7 @@ const EMPTY_FORM = {
   traderSalePrice: 0,
   wastePercent: 0,
   isManufacturedInternally: false,
+  availableForSpareParts: true,
   isActive: true,
 };
 
@@ -125,6 +128,14 @@ export const Materials: React.FC = () => {
   const exportImportSettings = useAppStore((s) => s.systemSettings.exportImport);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const rawProducts = useAppStore((s) => s._rawProducts);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
+  const setPanelHidden = useJobsStore((s) => s.setPanelHidden);
+  const setPanelMinimized = useJobsStore((s) => s.setPanelMinimized);
   const pageControl = useMemo(
     () => getExportImportPageControl(exportImportSettings, 'manufacturingMaterials'),
     [exportImportSettings],
@@ -191,6 +202,8 @@ export const Materials: React.FC = () => {
   const [importParsing, setImportParsing] = useState(false);
   const [importSaving, setImportSaving] = useState(false);
   const [importFileName, setImportFileName] = useState('');
+  /** When true, existing codes are left as-is; only missing materials are created. */
+  const [importSkipUpdates, setImportSkipUpdates] = useState(true);
   const effectivePurchaseUnit = form.purchaseUnit || form.baseUnit;
   const usesWeightPerPiece =
     form.baseUnit === 'piece' && isWeightMaterialUnit(effectivePurchaseUnit);
@@ -295,6 +308,7 @@ export const Materials: React.FC = () => {
       traderSalePrice: normalizeRepairSalePrice(row.traderSalePrice),
       wastePercent: Number(row.wastePercent ?? 0),
       isManufacturedInternally: Boolean(row.isManufacturedInternally),
+      availableForSpareParts: row.availableForSpareParts !== false,
       isActive: row.isActive !== false,
     });
     setGeneratedCode(row.code);
@@ -446,6 +460,7 @@ export const Materials: React.FC = () => {
         type: form.type,
         code: codeForPricing,
         isActive: form.isActive,
+        availableForSpareParts: form.availableForSpareParts,
         defaultSalePrice: editing?.defaultSalePrice,
         traderSalePrice: editing?.traderSalePrice,
         purchaseCost: editing?.purchaseCost ?? payload.purchaseCost,
@@ -560,6 +575,7 @@ export const Materials: React.FC = () => {
         manufacturedProductCode: r.manufacturedProductId
           ? productCodeById.get(r.manufacturedProductId) || ''
           : '',
+        availableForSpareParts: r.availableForSpareParts !== false,
         isActive: r.isActive !== false,
       })),
     );
@@ -610,52 +626,121 @@ export const Materials: React.FC = () => {
       toast.error('مسار إنشاء المواد بالاستيراد متوقف من إعدادات النظام.');
       return;
     }
-    if (validRows.some((row) => row.action === 'update') && !materialImportUpdateEnabled) {
+    if (
+      !importSkipUpdates &&
+      validRows.some((row) => decideMaterialImportSave(row) === 'update') &&
+      !materialImportUpdateEnabled
+    ) {
       toast.error('مسار تحديث المواد بالاستيراد متوقف من إعدادات النظام.');
       return;
     }
+
+    let orderedRows;
+    try {
+      orderedRows = orderMaterialImportRowsForSave(validRows, rows);
+    } catch {
+      toast.error('تعذر ترتيب تحديثات الأكواد. راجع أخطاء الملف وأعد المحاولة.');
+      return;
+    }
+
+    const materialsSnapshot = [...rows];
+    const skipUpdates = importSkipUpdates;
+    // Skip rows are counted up front — job progress only tracks writes (create/update).
+    const writeRows = orderedRows.filter(
+      (row) => decideMaterialImportSave(row, { skipUpdates }) !== 'skip',
+    );
+    const skippedUpFront = orderedRows.length - writeRows.length;
+    const fileLabel = importFileName || 'materials.xlsx';
+    const jobId = addJob({
+      fileName: fileLabel,
+      jobType: 'Materials Import',
+      totalRows: writeRows.length,
+      startedBy: userDisplayName || 'Current User',
+    });
+
     setImportSaving(true);
+    setPanelHidden(false);
+    setPanelMinimized(false);
+    startJob(
+      jobId,
+      skipUpdates
+        ? `إنشاء الجديد فقط (${writeRows.length}) — تخطي ${skippedUpFront} موجود`
+        : 'جاري الحفظ...',
+    );
+    setShowImportModal(false);
+    setImportResult(null);
+    setImportFileName('');
+
     let created = 0;
     let updated = 0;
+    let skipped = skippedUpFront;
     let failed = 0;
-    try {
-      const orderedRows = orderMaterialImportRowsForSave(validRows, rows);
-      for (const row of orderedRows) {
-        try {
-          if (row.action === 'update' && row.matchedId) {
-            const existing = rows.find((m) => m.id === row.matchedId);
-            if (!existing) {
-              failed += 1;
-              continue;
-            }
+    let done = 0;
+
+    for (const row of writeRows) {
+      if (isBackgroundJobCancelled(jobId)) {
+        failJob(jobId, 'Cancelled by user', 'Cancelled');
+        toast.error(
+          `تم الإلغاء بعد: ${created} جديد، ${updated} تحديث، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}.`,
+        );
+        await refetch();
+        setImportSaving(false);
+        return;
+      }
+      try {
+        const decision = decideMaterialImportSave(row, { skipUpdates });
+        if (decision === 'update' && row.matchedId) {
+          const existing = materialsSnapshot.find((m) => m.id === row.matchedId);
+          if (!existing) {
+            failed += 1;
+          } else {
             await update.mutateAsync({
               id: row.matchedId,
               data: toMaterialUpdateData(row, existing),
               path: MATERIAL_UPDATE_PATHS.materialsImport,
             });
             updated += 1;
-          } else {
-            await create.mutateAsync({
-              data: toMaterialCreateData(row),
-              path: MATERIAL_CREATE_PATHS.materialsImport,
-            });
-            created += 1;
           }
-        } catch {
-          failed += 1;
+        } else if (decision === 'create') {
+          await create.mutateAsync({
+            data: toMaterialCreateData(row),
+            path: MATERIAL_CREATE_PATHS.materialsImport,
+          });
+          created += 1;
+        } else {
+          skipped += 1;
         }
+      } catch {
+        failed += 1;
       }
-      setShowImportModal(false);
-      setImportResult(null);
-      toast.success(
-        `تم الاستيراد: ${created} جديد، ${updated} تحديث${failed ? `، ${failed} فشل` : ''}.`,
-      );
-      await refetch();
-    } catch {
-      toast.error('تعذر ترتيب تحديثات الأكواد. راجع أخطاء الملف وأعد المحاولة.');
-    } finally {
-      setImportSaving(false);
+      done += 1;
+      setJobProgress(jobId, {
+        processedRows: done,
+        totalRows: writeRows.length,
+        statusText: skipUpdates
+          ? `إنشاء جديد ${done}/${writeRows.length}`
+          : 'جاري الحفظ...',
+        status: 'processing',
+      });
     }
+
+    const addedRows = created + updated;
+    if (addedRows === 0 && failed > 0 && skipped === 0) {
+      failJob(jobId, 'All rows failed during save', 'Failed');
+      toast.error('فشل استيراد المواد.');
+    } else {
+      completeJob(jobId, {
+        addedRows,
+        failedRows: failed,
+        skippedRows: skipped,
+        statusText: `اكتمل: ${created} جديد، ${updated} تحديث، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}`,
+      });
+      toast.success(
+        `تم الاستيراد: ${created} جديد، ${updated} تحديث، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}.`,
+      );
+    }
+    await refetch();
+    setImportSaving(false);
   };
 
   if (!canView) {
@@ -669,35 +754,36 @@ export const Materials: React.FC = () => {
     type: form.type,
     code: formPricingCode,
     isActive: form.isActive,
+    availableForSpareParts: form.availableForSpareParts,
   });
 
   return (
     <div className="erp-ds-clean space-y-5 p-4 md:p-6">
       <PageHeader
         title="المواد التصنيعية"
-        subtitle="إدارة المواد الخام، نصف المصنع، المستهلكات، والتعبئة — تسعير قطع الغيار (MAT) من هنا"
+        subtitle="الخطوة 1 من الاستيراد — ثم المنتجات — ثم المكونات. تسعير قطع الغيار (المكونات) من هنا"
         primaryAction={
           canManage ? { label: 'إضافة مادة', onClick: openCreate, icon: 'add' } : undefined
         }
         moreActions={[
           {
-            label: 'تصدير المواد (Excel)',
+            label: 'تصدير بيانات المواد (للاستيراد)',
             icon: 'download',
-            group: 'تصدير',
+            group: 'بيانات أساسية',
             hidden: !canExportFromPage || sorted.length === 0,
             onClick: handleExportExcel,
           },
           {
-            label: 'تحميل قالب المواد',
+            label: 'تحميل قالب بيانات المواد',
             icon: 'file_download',
-            group: 'استيراد',
+            group: 'بيانات أساسية',
             hidden: !canImportFromPage,
             onClick: () => downloadMaterialsTemplate(),
           },
           {
-            label: 'رفع/تحديث المواد (Excel)',
+            label: 'رفع/تحديث بيانات المواد',
             icon: 'upload',
-            group: 'استيراد',
+            group: 'بيانات أساسية',
             hidden: !canImportFromPage,
             onClick: () => importInputRef.current?.click(),
           },
@@ -714,7 +800,7 @@ export const Materials: React.FC = () => {
 
       {canManagePricing ? (
         <div className="rounded-xl border border-border bg-card p-3">
-          <div className="mb-2 text-sm font-semibold">تسعير قطع الغيار (ماستر MAT)</div>
+          <div className="mb-2 text-sm font-semibold">تسعير قطع الغيار (ماستر المكونات)</div>
           <p className="mb-3 text-xs text-muted-foreground">
             سعر المستهلك والجملة والتكلفة تُحفظ على المكوّن فقط — لا تسعير من شاشات الصيانة.
           </p>
@@ -1245,7 +1331,25 @@ export const Materials: React.FC = () => {
             </section>
             )}
 
-            <div className="border-t pt-4">
+            <div className="space-y-3 border-t pt-4">
+              <div className="flex items-start gap-2">
+                <Checkbox
+                  id="material-available-for-spare-parts"
+                  checked={form.availableForSpareParts !== false}
+                  onCheckedChange={(checked) =>
+                    setForm((current) => ({
+                      ...current,
+                      availableForSpareParts: checked === true,
+                    }))
+                  }
+                />
+                <div className="space-y-1">
+                  <Label htmlFor="material-available-for-spare-parts">تظهر في قطع الغيار / الصيانة</Label>
+                  <p className="text-xs text-muted-foreground">
+                    عطّلها لمنع ربط المادة كقطعة غيار (يُفرض من السيرفر، مش الواجهة فقط).
+                  </p>
+                </div>
+              </div>
               <div className="flex items-start gap-2">
                 <Checkbox
                   id="material-active"
@@ -1300,7 +1404,10 @@ export const Materials: React.FC = () => {
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-card shadow-lg">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <div>
-                <h3 className="text-lg font-bold">رفع/تحديث المواد التصنيعية</h3>
+                <h3 className="text-lg font-bold">رفع/تحديث بيانات المواد</h3>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  ماستر المواد فقط — الربط بالمنتجات من شاشة المنتجات ← مكونات
+                </p>
                 {importFileName && (
                   <p className="text-xs text-muted-foreground">{importFileName}</p>
                 )}
@@ -1344,12 +1451,31 @@ export const Materials: React.FC = () => {
                       <span className="text-emerald-600">جديد: {importResult.newCount}</span>
                     )}
                     {importResult.updateCount > 0 && (
-                      <span className="text-blue-600">تحديث: {importResult.updateCount}</span>
+                      <span className={importSkipUpdates ? 'text-muted-foreground' : 'text-blue-600'}>
+                        {importSkipUpdates
+                          ? `تخطي تحديث: ${importResult.updateCount}`
+                          : `تحديث: ${importResult.updateCount}`}
+                      </span>
                     )}
                     {importResult.errorCount > 0 && (
                       <span className="text-destructive">أخطاء: {importResult.errorCount}</span>
                     )}
                   </div>
+                  <label className="flex items-start gap-2 rounded border px-3 py-2 text-sm cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="mt-0.5"
+                      checked={importSkipUpdates}
+                      onChange={(e) => setImportSkipUpdates(e.target.checked)}
+                      disabled={importSaving}
+                    />
+                    <span>
+                      <span className="font-medium">تخطي التحديث — إنشاء الجديد فقط</span>
+                      <span className="block text-xs text-muted-foreground mt-0.5">
+                        المواد الموجودة بكودها تُترك كما هي، ويتسجّل فقط ما ليس في النظام.
+                      </span>
+                    </span>
+                  </label>
                   {importResult.fileErrors && importResult.fileErrors.length > 0 && (
                     <ul className="rounded border border-destructive/30 bg-destructive/5 px-3 py-2 text-xs text-destructive">
                       {importResult.fileErrors.map((err, i) => (
@@ -1373,7 +1499,11 @@ export const Materials: React.FC = () => {
                           <tr key={row.rowIndex} className={row.errors.length ? 'bg-destructive/5' : ''}>
                             <td className="px-2 py-1.5 tabular-nums">{row.rowIndex}</td>
                             <td className="px-2 py-1.5">
-                              {row.action === 'create' ? 'جديد' : 'تحديث'}
+                              {row.action === 'create'
+                                ? 'جديد'
+                                : importSkipUpdates
+                                  ? 'تخطي'
+                                  : 'تحديث'}
                             </td>
                             <td className="px-2 py-1.5 font-mono">{row.code || '—'}</td>
                             <td className="px-2 py-1.5">{row.name || '—'}</td>
@@ -1390,7 +1520,7 @@ export const Materials: React.FC = () => {
                     </table>
                   </div>
                   <p className="text-[11px] text-muted-foreground">
-                    لتحديث الكود: اترك «الكود الحالي» كما هو وعدّل «الكود الجديد». باقي الأعمدة الفاضية لا تمس القيم الأصلية.
+                    عمود «كود المادة» للمطابقة فقط ولا يُغيَّر عبر الاستيراد. الأعمدة الفاضية لا تمس القيم الأصلية.
                   </p>
                 </div>
               )}
@@ -1412,6 +1542,10 @@ export const Materials: React.FC = () => {
                 <Button type="button" disabled={importSaving} onClick={() => void handleConfirmImport()}>
                   {importSaving ? (
                     <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : importSkipUpdates ? (
+                    `حفظ ${importResult.newCount} جديد${
+                      importResult.updateCount > 0 ? ` (تخطي ${importResult.updateCount})` : ''
+                    }`
                   ) : (
                     `حفظ ${
                       importResult.newCount > 0 && importResult.updateCount > 0

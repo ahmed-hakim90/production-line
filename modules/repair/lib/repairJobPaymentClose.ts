@@ -1,5 +1,6 @@
 import type { RepairPaymentAuthorization } from '../types';
 import { isWarrantySettlementAuth } from './repairManufacturerWarranty';
+import { isStatusRole, type RepairStatusRoleRow } from './repairStatusAdvance';
 import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
 
 export type RepairJobPaymentCloseStep =
@@ -53,8 +54,12 @@ export function resolveRepairJobPaymentCloseState(input: {
   canDeliver: boolean;
   /** Job-level manufacturer warranty (before/after prepare). */
   isManufacturerWarrantyJob?: boolean;
+  /** Optional workflow statuses for role-aware «جاهز للتسليم» checks. */
+  workflowStatuses?: RepairStatusRoleRow[];
 }): RepairJobPaymentCloseState {
   const status = String(input.jobStatus || '');
+  const isReadyForClose = isStatusRole(status, 'ready_delivery', input.workflowStatuses)
+    || status === 'ready';
   const auth = input.authorization || null;
   const warranty = isWarrantySettlementAuth(auth) || Boolean(input.isManufacturerWarrantyJob);
   const settlementAuth = isWarrantySettlementAuth(auth);
@@ -96,7 +101,7 @@ export function resolveRepairJobPaymentCloseState(input: {
     };
   }
 
-  if (status !== 'ready') {
+  if (!isReadyForClose) {
     return {
       showPanel: false,
       step: 'hidden',

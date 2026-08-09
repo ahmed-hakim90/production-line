@@ -8,6 +8,7 @@ import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
 import { getReportDuplicateMessage } from '../../../modules/production/utils/reportDuplicateError';
 import { resolveReportType, workOrderMatchesReportType } from '../../../modules/production/utils/reportTypes';
+import { filterProductionProducts } from '../../../modules/production/utils/isProductionProduct';
 import { canonicalPackagingLine } from '../../../modules/production/utils/packagingLine';
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
@@ -251,7 +252,7 @@ export const GlobalCreateReportModal: React.FC = () => {
     () => (
       form.reportType === 'component_injection'
         ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
-        : products.map((p) => ({ value: p.id!, label: p.name }))
+        : filterProductionProducts(products).map((p) => ({ value: p.id!, label: p.name }))
     ),
     [form.reportType, injectionRawMaterialOptions, products],
   );

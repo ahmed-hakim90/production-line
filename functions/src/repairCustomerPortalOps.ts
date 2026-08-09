@@ -10,6 +10,7 @@ import {
   nextPortalCredentialVersion,
   portalSessionMatchesCredential,
 } from './customerPortalCredentialPolicy.js';
+import { resolveUnrepairableReason } from './repairUnrepairableReasonPolicy.js';
 
 const db = getDb();
 const JOBS = 'repair_jobs';
@@ -21,6 +22,8 @@ const CUSTODY = 'repair_custody_records';
 const REQUESTS = 'customer_service_requests';
 const EVENTS = 'customer_service_events';
 const REPLACEMENTS = 'repair_replacement_requests';
+const COMPLAINTS = 'repair_complaints';
+const FOLLOWUPS = 'repair_followups';
 const CREDENTIALS = 'customer_portal_credentials';
 const SESSIONS = 'customer_portal_sessions';
 const LOGIN_LIMITS = 'customer_portal_login_limits';
@@ -228,6 +231,7 @@ async function postJobCustody(jobId: string): Promise<{ posted: number }> {
     productId: text(row.productId, 128),
     productName: text(row.productName, 200) || 'منتج',
     productCode: text(row.productCode || row.productId, 80),
+    productBarcode: text(row.productBarcode || row.barcode, 120),
     quantity: Math.max(1, Math.round(Number(row.receivedQuantity || row.quantity || 1))),
   })).filter((row) => row.productId);
   if (!lines.length) {
@@ -250,7 +254,9 @@ async function postJobCustody(jobId: string): Promise<{ posted: number }> {
       tx.set(recordRef, {
         tenantId, branchId, jobId, receiptNo: text(job.receiptNo, 80), jobProductItemId: line.itemId,
         customerId: text(job.customerId, 128), customerName: text(job.customerName, 160),
+        customerPhone: text(job.customerPhone, 40), jobStatus: text(job.status, 40) || 'received',
         productId: line.productId, productName: line.productName, productCode: line.productCode,
+        productBarcode: line.productBarcode,
         receivedQuantity: line.quantity, unrepairableQuantity: 0, handedOverQuantity: 0,
         custodyWarehouseId: warehouses.custodyWarehouseId,
         unrepairableWarehouseId: warehouses.unrepairableWarehouseId,
@@ -289,6 +295,7 @@ async function createDirectRepairJob(actor: Actor, data: Json) {
       productId,
       productName: text(row.productName, 160) || 'منتج',
       productCode: text(row.productCode || productId, 80),
+      productBarcode: text(row.productBarcode || row.barcode, 120),
       quantity,
       receivedQuantity: quantity,
       unrepairableQuantity: 0,
@@ -302,6 +309,7 @@ async function createDirectRepairJob(actor: Actor, data: Json) {
     }
     products[index].productName = text(snap.data()?.name, 160) || products[index].productName;
     products[index].productCode = text(snap.data()?.code, 80) || products[index].productCode;
+    products[index].productBarcode = text(snap.data()?.barcode, 120);
   });
   const jobRef = db.collection(JOBS).doc(jobId);
   const at = nowIso();
@@ -327,7 +335,9 @@ async function createDirectRepairJob(actor: Actor, data: Json) {
       tx.set(db.collection(CUSTODY).doc(custodyId(jobId, line.itemId)), {
         tenantId: actor.tenantId, branchId, jobId, receiptNo, jobProductItemId: line.itemId,
         customerId: text(incoming.customerId, 128), customerName: text(incoming.customerName, 160),
+        customerPhone: text(incoming.customerPhone, 40), jobStatus: 'received',
         productId: line.productId, productName: line.productName, productCode: line.productCode,
+        productBarcode: text(line.productBarcode, 120),
         receivedQuantity: line.quantity, unrepairableQuantity: 0, handedOverQuantity: 0,
         custodyWarehouseId: warehouses.custodyWarehouseId, unrepairableWarehouseId: warehouses.unrepairableWarehouseId,
         createdAt: at, updatedAt: at,
@@ -675,7 +685,9 @@ async function receiveRequest(actor: Actor, data: Json) {
       tx.set(db.collection(CUSTODY).doc(custodyId(jobRef.id, itemId)), {
         tenantId: actor.tenantId, branchId, jobId: jobRef.id, receiptNo, jobProductItemId: itemId,
         customerId: text(requestRow.customerId, 128), customerName: text(requestRow.customerName, 160),
-        productId, productName, productCode, receivedQuantity: qty, unrepairableQuantity: 0, handedOverQuantity: 0,
+        customerPhone: text(requestRow.customerPhone, 40), jobStatus: 'received',
+        productId, productName, productCode, productBarcode: text(line.barcode, 120),
+        receivedQuantity: qty, unrepairableQuantity: 0, handedOverQuantity: 0,
         custodyWarehouseId: warehouses.custodyWarehouseId, unrepairableWarehouseId: warehouses.unrepairableWarehouseId,
         createdAt: at, updatedAt: at,
       });
@@ -706,20 +718,28 @@ async function receiveRequest(actor: Actor, data: Json) {
   return { ok: true as const, jobId: jobRef.id, receiptNo };
 }
 
-async function recordUnrepairable(actor: Actor, data: Json) {
+async function recordUnrepairable(actor: Actor, data: Json, options: {
+  allowCrossBranch?: boolean;
+  allowNegativeCorrection?: boolean;
+  allowLegacyReason?: boolean;
+} = {}) {
   requirePermission(actor, ['repair.custody.record', 'repair.jobs.technician', 'repair.jobs.edit'], 'لا تملك صلاحية تسجيل غير القابل للإصلاح.');
   const jobId = text(data.jobId, 128);
   const itemId = text(data.itemId, 100);
   const nextQty = nonNegativeInt(data.quantity);
-  const reason = text(data.reason, 1000);
-  if (nextQty > 0 && !reason) throw new HttpsError('invalid-argument', 'سبب عدم قابلية الإصلاح مطلوب.');
+  const reasonNote = text(data.reasonNote || data.reason, 1000);
+  const reasonCode = text(data.reasonCode, 80);
   await postJobCustody(jobId);
   const jobRef = db.collection(JOBS).doc(jobId);
   const jobSnap = await jobRef.get();
   if (!jobSnap.exists || text(jobSnap.data()?.tenantId, 128) !== actor.tenantId) throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
   const job = jobSnap.data() as Json;
   const branchId = text(job.branchId, 128);
-  requireBranch(actor, branchId, actor.permissions['repair.custody.correct'] === true);
+  requireBranch(
+    actor,
+    branchId,
+    options.allowCrossBranch === true || actor.permissions['repair.custody.correct'] === true,
+  );
   const warehouses = await ensureRepairCustomerWarehouses(actor.tenantId, branchId);
   const products = (Array.isArray(job.jobProducts) ? job.jobProducts : []) as Json[];
   const index = products.findIndex((row) => text(row.itemId, 100) === itemId);
@@ -732,9 +752,32 @@ async function recordUnrepairable(actor: Actor, data: Json) {
   if (!recordBefore.exists) throw new HttpsError('failed-precondition', 'سجل عهدة المنتج غير موجود.');
   const oldQty = nonNegativeInt(recordBefore.data()?.unrepairableQuantity || 0);
   const delta = nextQty - oldQty;
-  if (delta < 0 && !actor.isSuperAdmin && actor.permissions['repair.custody.correct'] !== true) {
+  if (delta < 0 && !options.allowNegativeCorrection && !actor.isSuperAdmin && actor.permissions['repair.custody.correct'] !== true) {
     throw new HttpsError('permission-denied', 'تصحيح الكمية يحتاج صلاحية مستقلة.');
   }
+  let reasonLabel = text(line.unrepairableReasonLabel || line.unrepairableReason, 200);
+  let normalizedReasonCode = text(line.unrepairableReasonCode, 80);
+  if (delta > 0) {
+    if (reasonCode) {
+      const settingsSnap = await db.collection('system_settings').doc(actor.tenantId).get();
+      const settings = settingsSnap.data() as Json | undefined;
+      const repairSettings = (settings?.repairSettings && typeof settings.repairSettings === 'object'
+        ? settings.repairSettings : {}) as Json;
+      const selectedReason = resolveUnrepairableReason(repairSettings.unrepairableReasons, reasonCode);
+      if (!selectedReason) throw new HttpsError('invalid-argument', 'اختر سببًا معتمدًا لعدم قابلية الإصلاح.');
+      normalizedReasonCode = selectedReason.id;
+      reasonLabel = selectedReason.label;
+    } else if (options.allowLegacyReason) {
+      normalizedReasonCode = normalizedReasonCode || 'legacy_unclassified';
+      reasonLabel = reasonLabel || reasonNote || 'بيانات تاريخية غير مصنفة';
+    } else {
+      throw new HttpsError('invalid-argument', 'اختر سبب عدم قابلية الإصلاح من القائمة المعتمدة.');
+    }
+    if (normalizedReasonCode === 'other' && !reasonNote) {
+      throw new HttpsError('invalid-argument', 'اكتب تفاصيل السبب الآخر.');
+    }
+  }
+  const reason = [reasonLabel, reasonNote].filter(Boolean).join(' — ');
   if (delta !== 0) {
     const custodyBalRef = db.collection(STOCK).doc(balanceId(warehouses.custodyWarehouseId, text(line.productId, 128)));
     const unrepairableBalRef = db.collection(STOCK).doc(balanceId(warehouses.unrepairableWarehouseId, text(line.productId, 128)));
@@ -764,12 +807,40 @@ async function recordUnrepairable(actor: Actor, data: Json) {
         tenantId: actor.tenantId, warehouseId: warehouses.unrepairableWarehouseId, warehouseRole: 'repair_unrepairable',
         itemType: 'finished_good', itemId: text(line.productId, 128), itemName: text(line.productName, 160), itemCode: text(line.productCode, 80),
       });
-      freshProducts[freshIndex] = { ...freshProducts[freshIndex], unrepairableQuantity: nextQty, unrepairableReason: reason,
-        unrepairableRecordedAt: nowIso(), unrepairableRecordedBy: actor.uid, unrepairableRecordedByName: actor.displayName };
+      const previousDecisionQuantity = Math.max(
+        Number(freshProducts[freshIndex].unrepairableDecisionQuantity || 0),
+        freshOld,
+      );
+      freshProducts[freshIndex] = {
+        ...freshProducts[freshIndex],
+        unrepairableQuantity: nextQty,
+        unrepairableDecisionQuantity: delta > 0 ? Math.max(previousDecisionQuantity, nextQty) : previousDecisionQuantity,
+        ...(delta > 0 ? {
+          unrepairableReason: reason,
+          unrepairableReasonCode: normalizedReasonCode,
+          unrepairableReasonLabel: reasonLabel,
+          unrepairableReasonNote: reasonNote,
+          unrepairableRecordedAt: nowIso(),
+          unrepairableRecordedBy: actor.uid,
+          unrepairableRecordedByName: actor.displayName,
+        } : {
+          unrepairableCorrectedAt: nowIso(),
+          unrepairableCorrectedBy: actor.uid,
+        }),
+      };
       const allUnrepairable = freshProducts.every((row) => Number(row.unrepairableQuantity || 0) >= Number(row.receivedQuantity || row.quantity || 1));
       tx.set(jobRef, { jobProducts: freshProducts, ...(allUnrepairable ? { status: 'unrepairable', isClosed: true,
         closedAt: nowIso(), resolvedAt: nowIso(), closedReason: reason } : {}), updatedAt: nowIso() }, { merge: true });
-      tx.set(recordRef, { unrepairableQuantity: nextQty, updatedAt: nowIso() }, { merge: true });
+      tx.set(recordRef, {
+        unrepairableQuantity: nextQty,
+        ...(allUnrepairable ? { jobStatus: 'unrepairable' } : {}),
+        ...(delta > 0 ? {
+          unrepairableReasonCode: normalizedReasonCode,
+          unrepairableReasonLabel: reasonLabel,
+          unrepairableReasonNote: reasonNote,
+        } : {}),
+        updatedAt: nowIso(),
+      }, { merge: true });
       const outRef = db.collection(STOCK_TX).doc();
       const inRef = db.collection(STOCK_TX).doc();
       tx.set(outRef, movementPayload({ tenantId: actor.tenantId, warehouseId: fromId, toWarehouseId: toId,
@@ -790,6 +861,139 @@ async function recordUnrepairable(actor: Actor, data: Json) {
   return { ok: true as const };
 }
 
+/**
+ * The technician's whole-job decision must use the same audited custody transfer
+ * as the line-level reception action. The caller has already verified that the
+ * job is assigned to this technician, so cross-branch work is intentionally allowed.
+ */
+export async function recordAssignedJobFullyUnrepairable(input: {
+  uid: string;
+  tenantId: string;
+  displayName: string;
+  permissions: Record<string, boolean>;
+  isSuperAdmin: boolean;
+  jobId: string;
+  reasonCode: string;
+  reasonNote?: string;
+}) {
+  const jobSnap = await db.collection(JOBS).doc(input.jobId).get();
+  if (!jobSnap.exists || text(jobSnap.data()?.tenantId, 128) !== input.tenantId) {
+    throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
+  }
+  const products = (Array.isArray(jobSnap.data()?.jobProducts) ? jobSnap.data()?.jobProducts : []) as Json[];
+  if (products.length === 0) {
+    throw new HttpsError('failed-precondition', 'لا توجد منتجات في الطلب لتسجيلها كغير قابلة للإصلاح.');
+  }
+  const actor: Actor = {
+    uid: input.uid,
+    tenantId: input.tenantId,
+    displayName: input.displayName,
+    permissions: { ...input.permissions, 'repair.jobs.technician': true },
+    isSuperAdmin: input.isSuperAdmin,
+    branchIds: [],
+  };
+  for (let index = 0; index < products.length; index += 1) {
+    const line = products[index];
+    await recordUnrepairable(actor, {
+      jobId: input.jobId,
+      itemId: text(line.itemId || `item-${index + 1}`, 100),
+      quantity: Math.max(1, Number(line.receivedQuantity || line.quantity || 1)),
+      reasonCode: input.reasonCode,
+      reasonNote: input.reasonNote,
+    }, { allowCrossBranch: true });
+  }
+  return { productLines: products.length };
+}
+
+async function reopenUnrepairable(actor: Actor, data: Json) {
+  requirePermission(actor, ['repair.custody.correct', 'repair.jobs.edit'], 'لا تملك صلاحية إعادة فتح الطلب للصيانة.');
+  const jobId = text(data.jobId, 128);
+  const itemId = text(data.itemId, 100);
+  const quantity = positiveInt(data.quantity);
+  const note = text(data.note, 1000) || 'أصبحت قطع الغيار متوفرة';
+  const jobRef = db.collection(JOBS).doc(jobId);
+  const [jobSnap, activeReplacementSnap] = await Promise.all([
+    jobRef.get(),
+    db.collection(REPLACEMENTS).where('jobId', '==', jobId).limit(100).get(),
+  ]);
+  if (!jobSnap.exists || text(jobSnap.data()?.tenantId, 128) !== actor.tenantId) {
+    throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
+  }
+  const job = jobSnap.data() as Json;
+  const branchId = text(job.branchId, 128);
+  requireBranch(actor, branchId, actor.permissions['repair.custody.correct'] === true);
+  const blockingReplacement = activeReplacementSnap.docs.some((doc) => {
+    const row = doc.data() as Json;
+    return text(row.tenantId, 128) === actor.tenantId
+      && text(row.jobProductItemId, 100) === itemId
+      && ['pending_approval', 'approved', 'delivered'].includes(text(row.status, 40));
+  });
+  if (blockingReplacement) {
+    throw new HttpsError('failed-precondition', 'يوجد طلب استبدال نشط أو مُسلّم لهذا المنتج. ألغِه أولًا قبل إعادة فتح الإصلاح.');
+  }
+  const recordRef = db.collection(CUSTODY).doc(custodyId(jobId, itemId));
+  const recordSnap = await recordRef.get();
+  if (!recordSnap.exists) throw new HttpsError('failed-precondition', 'سجل مخزن غير القابل للإصلاح غير موجود.');
+  const record = recordSnap.data() as Json;
+  const currentUnrepairable = nonNegativeInt(record.unrepairableQuantity || 0);
+  const handed = nonNegativeInt(record.unrepairableHandedOverQuantity || 0);
+  if (quantity > currentUnrepairable - handed) {
+    throw new HttpsError('failed-precondition', 'الكمية المطلوب إعادتها أكبر من الرصيد المتاح.');
+  }
+  await recordUnrepairable(actor, {
+    jobId,
+    itemId,
+    quantity: currentUnrepairable - quantity,
+    reasonNote: note,
+  }, { allowCrossBranch: true, allowNegativeCorrection: true });
+  const fresh = await jobRef.get();
+  const products = (Array.isArray(fresh.data()?.jobProducts) ? fresh.data()?.jobProducts : []) as Json[];
+  const index = products.findIndex((row) => text(row.itemId, 100) === itemId);
+  if (index >= 0) {
+    products[index] = {
+      ...products[index],
+      reopenedFromUnrepairableQuantity: Number(products[index].reopenedFromUnrepairableQuantity || 0) + quantity,
+      lastReopenedAt: nowIso(),
+      lastReopenedBy: actor.uid,
+      lastReopenReason: note,
+    };
+  }
+  const statusHistory = Array.isArray(fresh.data()?.statusHistory) ? [...fresh.data()?.statusHistory as Json[]] : [];
+  statusHistory.push({ status: 'repairing', at: nowIso(), actorUid: actor.uid, reason: note, source: 'unrepairable_reopen' });
+  await jobRef.set({
+    jobProducts: products,
+    status: 'repairing',
+    isClosed: false,
+    statusHistory,
+    reopenedAt: nowIso(),
+    reopenedBy: actor.uid,
+    reopenedByName: actor.displayName,
+    reopenReason: note,
+    reopenCount: Number(fresh.data()?.reopenCount || 0) + 1,
+    closedAt: FieldValue.delete(),
+    closedReason: FieldValue.delete(),
+    updatedAt: nowIso(),
+  }, { merge: true });
+  await recordRef.set({
+    jobStatus: 'repairing',
+    reopenedQuantity: Number(record.reopenedQuantity || 0) + quantity,
+    lastReopenedAt: nowIso(),
+    updatedAt: nowIso(),
+  }, { merge: true });
+  await addEvent({
+    tenantId: actor.tenantId,
+    customerId: text(job.customerId, 128),
+    referenceType: 'repair_job',
+    referenceId: jobId,
+    action: 'job.reopened',
+    title: 'تمت إعادة فتح طلب الصيانة',
+    message: `أُعيدت ${quantity} وحدة للورشة بعد توفر قطع الغيار.`,
+    branchId,
+    actor,
+  });
+  return { ok: true as const, status: 'repairing', quantity };
+}
+
 async function handover(actor: Actor, data: Json) {
   requirePermission(actor, ['repair.custody.handover', 'repair.jobs.reception'], 'لا تملك صلاحية تسليم أجهزة العملاء.');
   const jobId = text(data.jobId, 128);
@@ -801,6 +1005,16 @@ async function handover(actor: Actor, data: Json) {
   const jobSnap = await jobRef.get();
   if (!jobSnap.exists || text(jobSnap.data()?.tenantId, 128) !== actor.tenantId) throw new HttpsError('not-found', 'الطلب غير موجود.');
   const job = jobSnap.data() as Json;
+  const jobStatus = text(job.status, 40);
+  const allowed = source === 'unrepairable'
+    ? true
+    : ['delivered', 'cancelled'].includes(jobStatus);
+  if (!allowed) {
+    throw new HttpsError(
+      'failed-precondition',
+      'خروج الجهاز من العهدة متاح بعد التسليم المالي المعتمد أو إلغاء الطلب فقط.',
+    );
+  }
   const branchId = text(job.branchId, 128);
   requireBranch(actor, branchId);
   const warehouses = await ensureRepairCustomerWarehouses(actor.tenantId, branchId);
@@ -825,7 +1039,7 @@ async function handover(actor: Actor, data: Json) {
       tenantId: actor.tenantId, warehouseId, warehouseRole: source === 'unrepairable' ? 'repair_unrepairable' : 'repair_customer_custody',
       itemType: 'finished_good', itemId: text(line.productId, 128), itemName: text(line.productName, 160), itemCode: text(line.productCode, 80),
     });
-    tx.set(recordRef, { handedOverQuantity: handed + quantity,
+    tx.set(recordRef, { handedOverQuantity: handed + quantity, jobStatus,
       ...(source === 'unrepairable' ? { unrepairableHandedOverQuantity: sourceHanded + quantity } : { custodyHandedOverQuantity: sourceHanded + quantity }),
       updatedAt: nowIso() }, { merge: true });
     products[index] = { ...line, handedOverQuantity: Number(line.handedOverQuantity || 0) + quantity };
@@ -838,6 +1052,212 @@ async function handover(actor: Actor, data: Json) {
   await addEvent({ tenantId: actor.tenantId, customerId: text(job.customerId, 128), referenceType: 'repair_job', referenceId: jobId,
     action: 'job.handed_over', title: 'تم تسليم المنتج', message: `تم تأكيد تسليم ${quantity} وحدة للعميل.`, branchId, actor });
   return { ok: true as const };
+}
+
+async function listComplaintJobOptions(actor: Actor) {
+  requirePermission(actor, ['repair.complaints.manage'], 'لا تملك صلاحية إدارة شكاوى الصيانة.');
+  const snap = await db.collection(JOBS).where('tenantId', '==', actor.tenantId).limit(1000).get();
+  const jobs = snap.docs.map((doc) => {
+    const row = doc.data() as Json;
+    const products = (Array.isArray(row.jobProducts) ? row.jobProducts : []) as Json[];
+    return {
+      id: doc.id,
+      receiptNo: text(row.receiptNo, 80),
+      branchId: text(row.branchId, 128),
+      customerId: text(row.customerId, 128),
+      customerName: text(row.customerName, 160),
+      customerPhone: text(row.customerPhone, 40),
+      productName: text(row.productName || products[0]?.productName, 160),
+      status: text(row.status, 40),
+      createdAt: text(row.createdAt, 40),
+      jobProducts: products.slice(0, 20).map((line) => ({ productName: text(line.productName, 160) })),
+    };
+  }).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  return { ok: true as const, jobs };
+}
+
+async function createRepairComplaint(actor: Actor, data: Json) {
+  requirePermission(actor, ['repair.complaints.manage'], 'لا تملك صلاحية إنشاء شكاوى الصيانة.');
+  const jobId = text(data.jobId, 128);
+  const subject = text(data.subject, 240);
+  const notes = text(data.notes, 2000);
+  if (!jobId) throw new HttpsError('invalid-argument', 'اختر طلب الصيانة المرتبط بالشكوى.');
+  if (!subject) throw new HttpsError('invalid-argument', 'أدخل موضوع الشكوى.');
+  const jobRef = db.collection(JOBS).doc(jobId);
+  const jobSnap = await jobRef.get();
+  if (!jobSnap.exists || text(jobSnap.data()?.tenantId, 128) !== actor.tenantId) {
+    throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
+  }
+  const job = jobSnap.data() as Json;
+  const branchId = text(job.branchId, 128);
+  const ref = db.collection(COMPLAINTS).doc();
+  const at = nowIso();
+  const batch = db.batch();
+  batch.set(ref, {
+    tenantId: actor.tenantId,
+    branchId,
+    customerId: text(job.customerId, 128) || null,
+    customerName: text(job.customerName, 160),
+    customerPhone: text(job.customerPhone, 40),
+    jobId,
+    receiptNo: text(job.receiptNo, 80),
+    subject,
+    notes: notes || null,
+    status: 'open',
+    followUps: [],
+    createdAt: at,
+    updatedAt: at,
+    createdByUid: actor.uid,
+    createdByName: actor.displayName,
+  });
+  batch.set(jobRef, {
+    complaintCount: Number(job.complaintCount || 0) + 1,
+    lastComplaintId: ref.id,
+    lastComplaintAt: at,
+    updatedAt: at,
+  }, { merge: true });
+  await batch.commit();
+  await addEvent({
+    tenantId: actor.tenantId,
+    customerId: text(job.customerId, 128),
+    referenceType: 'repair_complaint',
+    referenceId: ref.id,
+    action: 'complaint.created',
+    title: 'تم تسجيل شكوى على طلب الصيانة',
+    message: `تم تسجيل الشكوى «${subject}» على الطلب ${text(job.receiptNo, 80)} وجارٍ متابعتها.`,
+    branchId,
+    actor,
+  });
+  return { ok: true as const, complaintId: ref.id };
+}
+
+function callCenterJobPayload(id: string, row: Json) {
+  const products = (Array.isArray(row.jobProducts) ? row.jobProducts : []) as Json[];
+  return {
+    id,
+    tenantId: text(row.tenantId, 128),
+    receiptNo: text(row.receiptNo, 80),
+    branchId: text(row.branchId, 128),
+    customerId: text(row.customerId, 128),
+    customerName: text(row.customerName, 160),
+    customerPhone: text(row.customerPhone, 40),
+    customerAddress: text(row.customerAddress, 300),
+    productId: text(row.productId, 128),
+    productName: text(row.productName, 160),
+    deviceType: text(row.deviceType, 160),
+    deviceBrand: text(row.deviceBrand, 160),
+    deviceModel: text(row.deviceModel, 160),
+    deviceSerial: text(row.deviceSerial, 160),
+    problemDescription: text(row.problemDescription, 2000),
+    accessories: text(row.accessories, 1000),
+    status: text(row.status, 40),
+    priority: text(row.priority, 40),
+    dueAt: text(row.dueAt, 40),
+    createdAt: text(row.createdAt, 40),
+    updatedAt: text(row.updatedAt, 40),
+    statusHistory: (Array.isArray(row.statusHistory) ? row.statusHistory : []).slice(-30),
+    jobProducts: products.slice(0, 50).map((line, index) => ({
+      itemId: text(line.itemId || `item-${index + 1}`, 100),
+      productId: text(line.productId, 128),
+      productName: text(line.productName, 160),
+      productCode: text(line.productCode, 80),
+      quantity: Math.max(1, Number(line.quantity || line.receivedQuantity || 1)),
+      deviceBrand: text(line.deviceBrand, 160),
+      deviceModel: text(line.deviceModel, 160),
+      serialNo: text(line.serialNo, 160),
+      diagnosis: text(line.diagnosis, 1000),
+    })),
+  };
+}
+
+async function listCallCenterJobs(actor: Actor, data: Json) {
+  requirePermission(actor, ['repair.callCenter.viewAll', 'repair.branches.manage'], 'لا تملك صلاحية عرض كل طلبات مركز الاتصال.');
+  const queryText = text(data.query, 200).toLowerCase();
+  if (queryText.length < 3) return { ok: true as const, jobs: [] };
+  const queryDigits = queryText.replace(/\D/g, '');
+  const snap = await db.collection(JOBS).where('tenantId', '==', actor.tenantId).limit(5000).get();
+  const jobs = snap.docs
+    .filter((doc) => {
+      const row = doc.data() as Json;
+      const phoneDigits = text(row.customerPhone, 40).replace(/\D/g, '');
+      const haystack = [row.receiptNo, row.customerName].map((value) => text(value, 200).toLowerCase());
+      return haystack.some((value) => value.includes(queryText))
+        || (queryDigits.length >= 3 && phoneDigits.includes(queryDigits));
+    })
+    .map((doc) => callCenterJobPayload(doc.id, doc.data() as Json))
+    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
+    .slice(0, 500);
+  return { ok: true as const, jobs };
+}
+
+async function listRepairFollowUps(actor: Actor, data: Json) {
+  requirePermission(actor, ['repair.callCenter.viewAll', 'repair.jobs.reception', 'repair.view'], 'لا تملك صلاحية عرض متابعات الطلب.');
+  const jobId = text(data.jobId, 128);
+  const jobSnap = await db.collection(JOBS).doc(jobId).get();
+  if (!jobSnap.exists || text(jobSnap.data()?.tenantId, 128) !== actor.tenantId) {
+    throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
+  }
+  const branchId = text(jobSnap.data()?.branchId, 128);
+  requireBranch(actor, branchId, actor.permissions['repair.callCenter.viewAll'] === true);
+  const snap = await db.collection(FOLLOWUPS)
+    .where('tenantId', '==', actor.tenantId)
+    .where('jobId', '==', jobId)
+    .limit(500)
+    .get();
+  const followUps = snap.docs
+    .map((doc) => ({ id: doc.id, ...doc.data() } as { id: string; createdAt?: unknown }))
+    .sort((a, b) => text(b.createdAt, 40).localeCompare(text(a.createdAt, 40)));
+  return { ok: true as const, followUps };
+}
+
+async function createRepairFollowUp(actor: Actor, data: Json) {
+  requirePermission(actor, ['repair.callCenter.viewAll', 'repair.jobs.reception'], 'لا تملك صلاحية إضافة متابعة على الطلب.');
+  const jobId = text(data.jobId, 128);
+  const note = text(data.note, 2000);
+  const followUpAt = text(data.followUpAt, 40);
+  if (!note) throw new HttpsError('invalid-argument', 'اكتب ملاحظة المتابعة.');
+  const jobRef = db.collection(JOBS).doc(jobId);
+  const jobSnap = await jobRef.get();
+  if (!jobSnap.exists || text(jobSnap.data()?.tenantId, 128) !== actor.tenantId) {
+    throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
+  }
+  const job = jobSnap.data() as Json;
+  const branchId = text(job.branchId, 128);
+  requireBranch(actor, branchId, actor.permissions['repair.callCenter.viewAll'] === true);
+  const at = nowIso();
+  const followUpRef = db.collection(FOLLOWUPS).doc();
+  const eventRef = jobRef.collection('service_events').doc();
+  const batch = db.batch();
+  batch.set(followUpRef, {
+    tenantId: actor.tenantId,
+    branchId,
+    jobId,
+    note,
+    ...(followUpAt ? { followUpAt } : {}),
+    actorUid: actor.uid,
+    actorName: actor.displayName,
+    createdAt: at,
+  });
+  batch.set(eventRef, {
+    tenantId: actor.tenantId,
+    branchId,
+    jobId,
+    at,
+    actorUid: actor.uid,
+    actorName: actor.displayName,
+    action: 'note',
+    note: `متابعة مركز الاتصال: ${note}`,
+    source: 'call_center',
+  });
+  batch.set(jobRef, {
+    followUpCount: Number(job.followUpCount || 0) + 1,
+    lastFollowUpAt: at,
+    lastFollowUpNote: note,
+    lastFollowUpActorName: actor.displayName,
+    updatedAt: at,
+  }, { merge: true });
+  await batch.commit();
+  return { ok: true as const, followUpId: followUpRef.id };
 }
 
 async function mutateReplacement(actor: Actor, data: Json) {
@@ -950,6 +1370,7 @@ export async function mutateRepairCustomerOpsHandler(request: CallableRequest) {
       jobsQuery.get(),
       db.collection('products').where('tenantId', '==', actor.tenantId).limit(5000).get(),
     ]);
+    const productCatalogById = new Map(productsSnap.docs.map((product) => [product.id, product.data() as Json]));
     for (const branch of branchesSnap.docs) await ensureRepairCustomerWarehouses(actor.tenantId, branch.id);
     let custodyJobs = 0;
     let unrepairableJobs = 0;
@@ -959,9 +1380,41 @@ export async function mutateRepairCustomerOpsHandler(request: CallableRequest) {
       const status = text(job.status, 60);
       if (status === 'delivered') continue;
       if (status === 'cancelled') { cancelledForReview += 1; continue; }
-      const openStatuses = new Set(['received', 'assigned', 'diagnosing', 'estimate_ready', 'waiting_customer_approval', 'waiting_parts', 'in_progress', 'quality_check', 'ready', 'unrepairable']);
+      const openStatuses = new Set([
+        'received',
+        'assigned',
+        'diagnosing',
+        'inspection',
+        'estimate_ready',
+        'waiting_customer_approval',
+        'waiting_approval',
+        'waiting_parts',
+        'in_progress',
+        'repairing',
+        'repair',
+        'quality_check',
+        'testing',
+        'ready',
+        'unrepairable',
+      ]);
       if (!openStatuses.has(status)) continue;
       await postJobCustody(jobDoc.id);
+      const jobProducts = (Array.isArray(job.jobProducts) ? job.jobProducts : []) as Json[];
+      for (let index = 0; index < jobProducts.length; index += 1) {
+        const line = jobProducts[index];
+        const productId = text(line.productId, 128);
+        const catalog = productCatalogById.get(productId);
+        if (!catalog) continue;
+        const itemId = text(line.itemId || `item-${index + 1}`, 100);
+        await db.collection(CUSTODY).doc(custodyId(jobDoc.id, itemId)).set({
+          productName: text(catalog.name, 160) || text(line.productName, 160),
+          productCode: text(catalog.code, 80),
+          productBarcode: text(catalog.barcode, 120),
+          customerPhone: text(job.customerPhone, 40),
+          jobStatus: status,
+          updatedAt: nowIso(),
+        }, { merge: true });
+      }
       custodyJobs += 1;
       if (status === 'unrepairable') {
         const migrationActor: Actor = { ...actor, isSuperAdmin: true };
@@ -971,7 +1424,8 @@ export async function mutateRepairCustomerOpsHandler(request: CallableRequest) {
           const itemId = text(line.itemId || `item-${index + 1}`, 100);
           const qty = Math.max(1, Number(line.receivedQuantity || line.quantity || 1));
           await recordUnrepairable(migrationActor, { jobId: jobDoc.id, itemId, quantity: qty,
-            reason: text(job.closedReason, 1000) || 'ترحيل طلب قديم غير قابل للإصلاح' });
+            reasonNote: text(job.closedReason, 1000) || 'ترحيل طلب قديم غير قابل للإصلاح' },
+          { allowLegacyReason: true });
         }
         unrepairableJobs += 1;
       }
@@ -1027,7 +1481,13 @@ export async function mutateRepairCustomerOpsHandler(request: CallableRequest) {
   if (action === 'assignRequest') return assignRequest(actor, data);
   if (action === 'receiveRequest') return receiveRequest(actor, data);
   if (action === 'recordUnrepairable') return recordUnrepairable(actor, data);
+  if (action === 'reopenUnrepairable') return reopenUnrepairable(actor, data);
   if (action === 'handover') return handover(actor, data);
+  if (action === 'listComplaintJobOptions') return listComplaintJobOptions(actor);
+  if (action === 'createRepairComplaint') return createRepairComplaint(actor, data);
+  if (action === 'listCallCenterJobs') return listCallCenterJobs(actor, data);
+  if (action === 'listRepairFollowUps') return listRepairFollowUps(actor, data);
+  if (action === 'createRepairFollowUp') return createRepairFollowUp(actor, data);
   if (action.includes('Replacement')) return mutateReplacement(actor, data);
   throw new HttpsError('invalid-argument', 'العملية المطلوبة غير معروفة.');
 }

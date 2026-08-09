@@ -15,6 +15,7 @@ import { formatRepairWhatsAppMessage } from '../utils/whatsappRepairMessage';
 import { WhatsAppShare } from './WhatsAppShare';
 import { StatusBadge } from './StatusBadge';
 import { computeRepairJobCost } from '../utils/repairBusinessLogic';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 type RepairJobQuickDrawerProps = {
   open: boolean;
@@ -53,7 +54,7 @@ const printJobSummary = (job: RepairJob, branchName?: string, technicianName?: s
           <tr><th>العميل</th><td>${job.customerName || '-'}</td></tr>
           <tr><th>الهاتف</th><td>${job.customerPhone || '-'}</td></tr>
           <tr><th>الفرع</th><td>${branchName || '-'}</td></tr>
-          <tr><th>الحالة</th><td>${REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</td></tr>
+          <tr><th>الحالة</th><td>${REPAIR_JOB_STATUS_LABELS[mapLegacyRepairStatus(job.status)] || REPAIR_JOB_STATUS_LABELS[job.status] || job.status}</td></tr>
           <tr><th>الفني المسند</th><td>${technicianName || (job.technicianId ? `ID: ${job.technicianId}` : 'غير مسند')}</td></tr>
           <tr><th>الجهاز</th><td>${`${job.deviceBrand || ''} ${job.deviceModel || ''}`.trim() || '-'}</td></tr>
           <tr><th>التكلفة النهائية</th><td>${Number(job.finalCostOverride ?? job.finalCost ?? 0).toLocaleString('ar-EG')}</td></tr>

@@ -869,6 +869,7 @@ export type RepairTechnicianOperationInput = {
   isServiceOnly?: boolean;
   status?: string;
   reason?: string;
+  reasonCode?: string;
   url?: string;
 };
 
@@ -1092,6 +1093,40 @@ export const deleteRepairBranchCascadeCallable = async (
     const result = await callable({ branchId: branchId.trim() });
     return result.data;
   } catch (error: any) {
+    throw normalizeCallableError(error);
+  }
+};
+
+/** Test-data wipe: purge repair jobs + related ops; keep branches/parts/customers/stock balances. */
+export const purgeRepairOperationalDataCallable = async (input: {
+  tenantId: string;
+  confirmPhrase: string;
+}): Promise<{
+  ok: boolean;
+  tenantId: string;
+  deletedFirestoreDocs: number;
+  deletedCounts: Record<string, number>;
+  kept: string[];
+}> => {
+  if (!isConfigured || !functionsClient)
+    throw new Error("Firebase not configured");
+  const callable = httpsCallable<
+    { tenantId: string; confirmPhrase: string },
+    {
+      ok: boolean;
+      tenantId: string;
+      deletedFirestoreDocs: number;
+      deletedCounts: Record<string, number>;
+      kept: string[];
+    }
+  >(functionsClient, "purgeRepairOperationalData");
+  try {
+    const result = await callable({
+      tenantId: String(input.tenantId || "").trim(),
+      confirmPhrase: String(input.confirmPhrase || "").trim(),
+    });
+    return result.data;
+  } catch (error: unknown) {
     throw normalizeCallableError(error);
   }
 };

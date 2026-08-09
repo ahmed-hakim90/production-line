@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
 import { KPIBox, Card, Badge, Button } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
@@ -1213,7 +1214,7 @@ export const Dashboard: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">اختر المنتج...</SelectItem>
-                    {_rawProducts.map((p) => (
+                    {filterProductionProducts(_rawProducts).map((p) => (
                       <SelectItem key={p.id} value={p.id!}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>

@@ -1,9 +1,11 @@
 import {
+  getCountFromServer,
   getDocs,
   orderBy,
   where,
   limit,
   startAfter,
+  type QueryConstraint,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -16,6 +18,8 @@ import type {
 } from '../types';
 import { REPAIR_SPARE_ISSUES_COLLECTION } from '../lib/repairSpareIssue';
 import { resolveInventoryWarehouseReadScope } from '../../inventory/services/inventoryWarehouseScopeService';
+
+const PENDING_ISSUE_STATUSES: RepairSpareIssueStatus[] = ['draft', 'submitted', 'approved'];
 
 const COLLECTION = REPAIR_SPARE_ISSUES_COLLECTION;
 const MAX_PAGE = 50;
@@ -33,6 +37,13 @@ type CallableCreateInput = {
     quantity: number;
     locationId?: string;
     locationCode?: string;
+    allocations?: Array<{
+      locationId: string;
+      locationCode: string;
+      rack?: string;
+      shelf?: string;
+      quantity: number;
+    }>;
   }>;
   jobPartUsage?: {
     partId: string;
@@ -123,6 +134,30 @@ export const repairSpareIssueService = {
     const items = snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairSpareIssue));
     const nextCursor = snap.docs.length > 0 ? snap.docs[snap.docs.length - 1] : null;
     return { items, nextCursor, hasMore: snap.docs.length === pageSize };
+  },
+
+  /** Open vouchers awaiting submit / approve / issue — warehouse-scoped when bound. */
+  async countPending(): Promise<number> {
+    if (!isConfigured) return 0;
+    try {
+      const scope = await resolveInventoryWarehouseReadScope();
+      if (scope.denied) return 0;
+      const constraints: QueryConstraint[] = [
+        where('status', 'in', PENDING_ISSUE_STATUSES),
+      ];
+      if (scope.warehouseId) {
+        constraints.push(where('warehouseId', '==', scope.warehouseId));
+      }
+      const snap = await getCountFromServer(tenantQuery(db, COLLECTION, ...constraints));
+      return snap.data().count;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return 0;
+      console.error('repairSpareIssue.countPending failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      return 0;
+    }
   },
 
   async create(input: CallableCreateInput): Promise<{

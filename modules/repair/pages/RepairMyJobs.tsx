@@ -15,6 +15,7 @@ import type { FirestoreUserWithRepair, RepairBranch, RepairJobStatus } from '../
 import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 const PAGE_SIZE = 20;
 
@@ -69,7 +70,8 @@ export const RepairMyJobs: React.FC = () => {
 
   const visibleJobs = useMemo(() => {
     if (statusFilter === 'all') return jobs;
-    return jobs.filter((job) => job.status === statusFilter);
+    const wanted = mapLegacyRepairStatus(statusFilter);
+    return jobs.filter((job) => mapLegacyRepairStatus(job.status) === wanted);
   }, [jobs, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(visibleJobs.length / PAGE_SIZE));
@@ -102,7 +104,7 @@ export const RepairMyJobs: React.FC = () => {
     <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
       <PageHeader
         title="طلباتي (فني)"
-        subtitle="الطلبات المسندة إليك فقط — متابعة سريعة للحالة والورشة"
+        subtitle="كل الطلبات المسندة إليك، بما فيها المفتوحة والمنتهية وغير القابلة للإصلاح"
         primaryAction={{
           label: 'تحديث',
           icon: 'refresh',
@@ -165,7 +167,9 @@ export const RepairMyJobs: React.FC = () => {
                         className="text-primary underline text-xs"
                         to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
                       >
-                        فتح الورشة
+                        {['delivered', 'unrepairable', 'cancelled'].includes(String(job.status || ''))
+                          ? 'عرض الطلب'
+                          : 'فتح الورشة'}
                       </Link>
                     </td>
                   </tr>

@@ -95,7 +95,10 @@ function job(partial: Partial<RepairTechnicianHomeJob> & { status: string }): Re
 
   assert.equal(m.requestsCount, 5, 'created in August (req, fixed-delivered, delayed, no-due, unrep)');
   assert.equal(m.fixedCount, 2);
+  assert.equal(m.unrepairableCount, 1);
+  assert.equal(m.completedOutcomesCount, 2);
   assert.deepEqual(m.fixedJobs.map((j) => j.id), ['fixed-delivered', 'fixed-ready']);
+  assert.deepEqual(m.unrepairableJobs.map((j) => j.id), ['unrep']);
   assert.equal(m.delayedCount, 1);
   assert.equal(m.delayedJobs[0]?.id, 'delayed');
   assert.equal(m.openCount, 4, 'req + fixed-ready + delayed + no-due (ready is open in settings)');

@@ -19,6 +19,7 @@ import {
 } from '../types';
 import { StatusBadge } from './StatusBadge';
 import { repairFollowUpService } from '../services/repairFollowUpService';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 type RepairCallCenterJobPanelProps = {
   open: boolean;
@@ -193,7 +194,11 @@ export const RepairCallCenterJobPanel: React.FC<RepairCallCenterJobPanelProps> =
               <div className="font-medium">سجل الحالات</div>
               {[...job.statusHistory].reverse().slice(0, 12).map((entry, idx) => (
                 <div key={`${entry.status}-${entry.at}-${idx}`} className="flex justify-between gap-2 text-xs">
-                  <span>{REPAIR_JOB_STATUS_LABELS[entry.status] || entry.status}</span>
+                  <span>
+                    {REPAIR_JOB_STATUS_LABELS[mapLegacyRepairStatus(entry.status)]
+                      || REPAIR_JOB_STATUS_LABELS[entry.status]
+                      || entry.status}
+                  </span>
                   <span className="text-muted-foreground whitespace-nowrap">{formatDateTime(entry.at)}</span>
                 </div>
               ))}

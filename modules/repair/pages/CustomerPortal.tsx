@@ -25,6 +25,7 @@ import {
   repairReplacementStatusChipType,
 } from '../lib/repairSemanticStatus';
 import { REPAIR_JOB_STATUS_LABELS } from '../types';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 type PortalLine = {
   productId: string;
@@ -52,12 +53,17 @@ const portalStatusMeta = (kind: string, status: string): { label: string; type: 
       type: repairReplacementStatusChipType(status),
     };
   }
-  const jobLabel = (REPAIR_JOB_STATUS_LABELS as Record<string, string>)[status];
-  if (status === 'ready' || status === 'delivered' || status === 'converted') return { label: jobLabel || status, type: 'success' };
-  if (status === 'waiting_approval' || status === 'waiting_parts' || status === 'pending_approval') {
+  const canonical = mapLegacyRepairStatus(status);
+  const jobLabel =
+    (REPAIR_JOB_STATUS_LABELS as Record<string, string>)[canonical]
+    || (REPAIR_JOB_STATUS_LABELS as Record<string, string>)[status];
+  if (canonical === 'ready' || canonical === 'delivered' || status === 'converted') {
+    return { label: jobLabel || status, type: 'success' };
+  }
+  if (canonical === 'waiting_approval' || canonical === 'waiting_parts' || status === 'pending_approval') {
     return { label: jobLabel || status, type: 'warning' };
   }
-  if (status === 'unrepairable' || status === 'cancelled' || status === 'rejected') {
+  if (canonical === 'unrepairable' || canonical === 'cancelled' || status === 'rejected') {
     return { label: jobLabel || status, type: 'danger' };
   }
   return { label: jobLabel || status || '—', type: 'info' };

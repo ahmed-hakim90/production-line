@@ -50,6 +50,8 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'sparePartsReplenishment.view',
     'sparePartsReplenishment.approve',
     'sparePartsReplenishment.responsibleApprove',
+    'sparePartsReplenishment.reject',
+    'sparePartsReplenishment.cancel',
   ],
   hall_supervisor: [
     'reports.create',
@@ -70,6 +72,8 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'sparePartsReplenishment.prepare',
     'sparePartsReplenishment.responsibleApprove',
     'sparePartsReplenishment.receive',
+    'sparePartsReplenishment.cancel',
+    'sparePartsReplenishment.reject',
   ],
   inventory_viewer: [
     'sparePartsReplenishment.view',
@@ -83,11 +87,14 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'sparePartsReplenishment.approve',
     'sparePartsReplenishment.prepare',
     'sparePartsReplenishment.responsibleApprove',
+    'sparePartsReplenishment.reject',
+    'sparePartsReplenishment.cancel',
   ],
   maintenance_center_warehouse: [
     'sparePartsReplenishment.view',
     'sparePartsReplenishment.create',
     'sparePartsReplenishment.receive',
+    'sparePartsReplenishment.cancel',
     'sparePartsRecall.view',
     'sparePartsRecall.confirm',
     'repair.view',
@@ -96,6 +103,9 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'repairSpareIssues.create',
     'repairSpareIssues.approve',
     'repairSpareIssues.issue',
+    'repairSpareIssues.print',
+    'repairSpareIssues.cancel',
+    'repairSpareIssues.reject',
     'repair.customerRequests.view',
     'repair.customerRequests.receive',
     'repair.custody.view',
@@ -122,22 +132,25 @@ const BUILTIN_ROLE_PERMISSION_GRANTS: Record<string, readonly string[]> = {
     'repairSpareIssues.create',
     'repairSpareIssues.approve',
     'repairSpareIssues.issue',
+    'repairSpareIssues.print',
+    'repairSpareIssues.cancel',
+    'repairSpareIssues.reject',
     'sparePartsReplenishment.view',
     'sparePartsReplenishment.create',
     'sparePartsReplenishment.receive',
+    'sparePartsReplenishment.cancel',
     'sparePartsRecall.view',
     'sparePartsRecall.confirm',
     'inventory.view',
     'customers.view',
     'customers.create',
+    'repair.complaints.view',
     'print',
   ],
   repair_technician: [
     'dashboard.view',
     'repair.jobs.technician',
     'repair.parts.request',
-    'repair.custody.view',
-    'repair.custody.record',
   ],
 };
 
@@ -166,7 +179,8 @@ const resolveRoleKey = (role: RoleDoc): string => {
 
 /**
  * Idempotent additive sync of built-in role permission grants for the caller tenant.
- * Safe for any active tenant user: only adds allowlisted keys, never elevates to admin.
+ * Safe for any active tenant user: only adds missing allowlisted keys.
+ * Never re-opens a permission an admin explicitly set to false. Never elevates to admin.
  */
 export const syncBuiltInRolePermissionGrants = onCall(
   {
@@ -205,11 +219,11 @@ export const syncBuiltInRolePermissionGrants = onCall(
       const current = { ...(role.permissions || {}) };
       let changed = false;
       for (const perm of toGrant) {
-        if (current[perm] !== true) {
-          current[perm] = true;
-          changed = true;
-          grantedKeys += 1;
-        }
+        // Respect explicit admin revoke (false). Only fill missing/undefined keys.
+        if (current[perm] === true || current[perm] === false) continue;
+        current[perm] = true;
+        changed = true;
+        grantedKeys += 1;
       }
       if (!changed) continue;
 

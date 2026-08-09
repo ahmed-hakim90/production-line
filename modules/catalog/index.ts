@@ -15,4 +15,6 @@ export {
   loadProductMaterials,
   loadProductMaterialsByProductIds,
   loadAllCatalogMaterials,
+  loadSparePartsCatalogMaterials,
+  filterCatalogComponentsForSpareParts,
 } from './lib/productComponents';

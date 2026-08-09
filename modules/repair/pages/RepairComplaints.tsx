@@ -31,10 +31,14 @@ import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
 import { repairBranchService } from '../services/repairBranchService';
-import { repairComplaintService } from '../services/repairComplaintService';
+import {
+  repairComplaintService,
+  type RepairComplaintJobOption,
+} from '../services/repairComplaintService';
 import { repairComplaintStatusChipType } from '../lib/repairSemanticStatus';
 import {
   REPAIR_COMPLAINT_STATUS_LABELS,
+  REPAIR_JOB_STATUS_LABELS,
   resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
@@ -78,7 +82,9 @@ export const RepairComplaints: React.FC = () => {
     [userProfile, userRoleName, systemSettings, userPermissions],
   );
 
-  const canViewAllBranches = repairCtx.canViewAllBranches || can('repair.callCenter.viewAll');
+  const canViewAllBranches = repairCtx.canViewAllBranches
+    || can('repair.callCenter.viewAll')
+    || can('repair.complaints.manage');
 
   const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const userBranchIds = useMemo(() => {
@@ -91,6 +97,8 @@ export const RepairComplaints: React.FC = () => {
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [rows, setRows] = useState<RepairComplaint[]>([]);
   const [customers, setCustomers] = useState<Customer[]>([]);
+  const [jobs, setJobs] = useState<RepairComplaintJobOption[]>([]);
+  const [jobSearch, setJobSearch] = useState('');
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<RepairComplaintStatus | ''>('');
@@ -167,6 +175,21 @@ export const RepairComplaints: React.FC = () => {
   }, [canManage]);
 
   useEffect(() => {
+    if (!canManage) {
+      setJobs([]);
+      return;
+    }
+    const loadJobs = async () => {
+      try {
+        setJobs(await repairComplaintService.listJobOptions());
+      } catch {
+        setJobs([]);
+      }
+    };
+    void loadJobs();
+  }, [canManage]);
+
+  useEffect(() => {
     if (can('repair.branches.manage') || !userProfile?.id) {
       setAssignedBranchIds([]);
       return;
@@ -232,6 +255,31 @@ export const RepairComplaints: React.FC = () => {
     });
   }, [rows, search, statusFilter]);
 
+  const matchingJobs = useMemo(() => {
+    const q = jobSearch.trim().toLowerCase();
+    if (!q) return jobs.slice(0, 8);
+    return jobs.filter((job) => [
+      job.receiptNo,
+      job.customerName,
+      job.customerPhone,
+      job.productName,
+      ...(job.jobProducts || []).map((item) => item.productName),
+    ].filter(Boolean).join(' ').toLowerCase().includes(q)).slice(0, 12);
+  }, [jobSearch, jobs]);
+
+  const selectJob = (job: RepairComplaintJobOption) => {
+    setCreateForm((prev) => ({
+      ...prev,
+      branchId: job.branchId,
+      customerId: job.customerId || '',
+      customerName: job.customerName || '',
+      customerPhone: job.customerPhone || '',
+      jobId: job.id || '',
+      receiptNo: job.receiptNo || '',
+    }));
+    setJobSearch('');
+  };
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -262,6 +310,10 @@ export const RepairComplaints: React.FC = () => {
 
   const submitCreate = async () => {
     if (!canManage) return;
+    if (!createForm.jobId) {
+      toast.error('اختر طلب الصيانة المرتبط بالشكوى.');
+      return;
+    }
     setBusy(true);
     try {
       const id = await repairComplaintService.create({
@@ -288,6 +340,7 @@ export const RepairComplaints: React.FC = () => {
         subject: '',
         notes: '',
       });
+      setJobSearch('');
       await load();
       const created = await repairComplaintService.getById(id);
       if (created) openDetail(created);
@@ -462,9 +515,16 @@ export const RepairComplaints: React.FC = () => {
                     </td>
                     <td className="px-3 py-2 text-sm tabular-nums">{row.followUps?.length || 0}</td>
                     <td className="px-3 py-2">
-                      <Button type="button" size="sm" variant="outline" onClick={() => openDetail(row)}>
-                        التفاصيل
-                      </Button>
+                      <div className="flex flex-wrap gap-1.5">
+                        <Button type="button" size="sm" variant="outline" onClick={() => openDetail(row)}>
+                          التفاصيل والمتابعة
+                        </Button>
+                        {row.jobId ? (
+                          <Button type="button" size="sm" variant="ghost" asChild>
+                            <Link to={withTenantPath(tenantSlug, `/repair/jobs/${row.jobId}`)}>فتح الطلب</Link>
+                          </Button>
+                        ) : null}
+                      </div>
                     </td>
                   </tr>
                 ))
@@ -485,15 +545,68 @@ export const RepairComplaints: React.FC = () => {
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>تسجيل شكوى</DialogTitle>
-            <DialogDescription>سجّل شكوى عميل مع ربط اختياري بطلب صيانة.</DialogDescription>
+            <DialogTitle>تسجيل شكوى على طلب صيانة</DialogTitle>
+            <DialogDescription>ابحث عن الطلب؛ سيُحدد العميل والمركز تلقائيًا وتظهر الشكوى للمركز المختص.</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
+            <div className="space-y-1.5 rounded-lg border p-3">
+              <Label>طلب الصيانة</Label>
+              {createForm.jobId ? (
+                <div className="flex items-center justify-between gap-2 rounded-md bg-muted/40 px-3 py-2 text-sm">
+                  <div>
+                    <div className="font-medium">#{createForm.receiptNo} · {createForm.customerName}</div>
+                    <div className="text-xs text-muted-foreground">{branchName(createForm.branchId)}</div>
+                  </div>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="ghost"
+                    onClick={() => setCreateForm((prev) => ({
+                      ...prev,
+                      branchId: '', customerId: '', customerName: '', customerPhone: '', jobId: '', receiptNo: '',
+                    }))}
+                  >
+                    تغيير
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Input
+                    value={jobSearch}
+                    onChange={(event) => setJobSearch(event.target.value)}
+                    placeholder="رقم الإيصال، اسم العميل، الهاتف أو المنتج..."
+                  />
+                  <div className="mt-2 max-h-48 space-y-1 overflow-y-auto">
+                    {matchingJobs.length === 0 ? (
+                      <p className="px-2 py-3 text-center text-sm text-muted-foreground">
+                        لا توجد طلبات مطابقة أو لا توجد صلاحية لعرض طلبات الصيانة.
+                      </p>
+                    ) : matchingJobs.map((job) => (
+                      <button
+                        key={job.id}
+                        type="button"
+                        className="flex w-full items-center justify-between gap-3 rounded-md border px-3 py-2 text-right text-sm hover:bg-muted/40"
+                        onClick={() => selectJob(job)}
+                      >
+                        <span>
+                          <span className="block font-medium">#{job.receiptNo} · {job.customerName}</span>
+                          <span className="block text-xs text-muted-foreground">{job.productName || 'طلب صيانة'}</span>
+                        </span>
+                        <span className="shrink-0 text-xs text-muted-foreground">
+                          {REPAIR_JOB_STATUS_LABELS[job.status] || job.status}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
             <div className="space-y-1.5">
               <Label>الفرع</Label>
               <Select
                 value={createForm.branchId}
                 onValueChange={(v) => setCreateForm((p) => ({ ...p, branchId: v }))}
+                disabled={Boolean(createForm.jobId)}
               >
                 <SelectTrigger>
                   <SelectValue placeholder="اختر الفرع" />
@@ -509,29 +622,35 @@ export const RepairComplaints: React.FC = () => {
             </div>
             <div className="space-y-1.5">
               <Label>العميل</Label>
-              <CustomerPicker
-                customers={customers}
-                valueId={createForm.customerId || undefined}
-                onSelect={(customer) => {
-                  setCreateForm((p) => ({
-                    ...p,
-                    customerId: customer?.id || '',
-                    customerName: customer?.name || p.customerName,
-                    customerPhone: customer?.phone || p.customerPhone,
-                  }));
-                }}
-                onCreated={(customer) => {
-                  setCustomers((prev) => [customer, ...prev]);
-                  setCreateForm((p) => ({
-                    ...p,
-                    customerId: customer.id || '',
-                    customerName: customer.name,
-                    customerPhone: customer.phone,
-                  }));
-                }}
-                canCreate={canManage}
-                actor={{ userId: userProfile?.id, userName: userProfile?.displayName || userProfile?.email }}
-              />
+              {createForm.jobId ? (
+                <div className="rounded-md border bg-muted/30 px-3 py-2 text-sm">
+                  {createForm.customerName} · <span className="font-mono">{createForm.customerPhone}</span>
+                </div>
+              ) : (
+                <CustomerPicker
+                  customers={customers}
+                  valueId={createForm.customerId || undefined}
+                  onSelect={(customer) => {
+                    setCreateForm((p) => ({
+                      ...p,
+                      customerId: customer?.id || '',
+                      customerName: customer?.name || p.customerName,
+                      customerPhone: customer?.phone || p.customerPhone,
+                    }));
+                  }}
+                  onCreated={(customer) => {
+                    setCustomers((prev) => [customer, ...prev]);
+                    setCreateForm((p) => ({
+                      ...p,
+                      customerId: customer.id || '',
+                      customerName: customer.name,
+                      customerPhone: customer.phone,
+                    }));
+                  }}
+                  canCreate={canManage}
+                  actor={{ userId: userProfile?.id, userName: userProfile?.displayName || userProfile?.email }}
+                />
+              )}
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div className="space-y-1.5">
@@ -539,6 +658,7 @@ export const RepairComplaints: React.FC = () => {
                 <Input
                   value={createForm.customerName}
                   onChange={(e) => setCreateForm((p) => ({ ...p, customerName: e.target.value }))}
+                  readOnly={Boolean(createForm.jobId)}
                 />
               </div>
               <div className="space-y-1.5">
@@ -547,6 +667,7 @@ export const RepairComplaints: React.FC = () => {
                   value={createForm.customerPhone}
                   onChange={(e) => setCreateForm((p) => ({ ...p, customerPhone: e.target.value }))}
                   className="font-mono"
+                  readOnly={Boolean(createForm.jobId)}
                 />
               </div>
             </div>
@@ -556,22 +677,6 @@ export const RepairComplaints: React.FC = () => {
                 value={createForm.subject}
                 onChange={(e) => setCreateForm((p) => ({ ...p, subject: e.target.value }))}
               />
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <div className="space-y-1.5">
-                <Label>رقم الإيصال (اختياري)</Label>
-                <Input
-                  value={createForm.receiptNo}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, receiptNo: e.target.value }))}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label>معرّف الطلب (اختياري)</Label>
-                <Input
-                  value={createForm.jobId}
-                  onChange={(e) => setCreateForm((p) => ({ ...p, jobId: e.target.value }))}
-                />
-              </div>
             </div>
             <div className="space-y-1.5">
               <Label>ملاحظات</Label>

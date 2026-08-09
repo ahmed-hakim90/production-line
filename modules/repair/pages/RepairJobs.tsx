@@ -25,7 +25,7 @@ import { computeRepairJobCost, summarizeRepairJobs } from '../utils/repairBusine
 import { canManageRepairWorkshopWork } from '../lib/repairJobIntake';
 import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
-import { isDeliveredStatus } from '../utils/repairWorkflowNormalize';
+import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { PageHeader } from '@/components/PageHeader';
 
@@ -296,26 +296,30 @@ export const RepairJobs: React.FC = () => {
     [repairSettings.workflow.statuses],
   );
   const openStatusIds = repairSettings.workflow.openStatusIds;
-  const openStatusSet = useMemo(() => new Set(openStatusIds), [openStatusIds]);
+  const openStatusSet = useMemo(
+    () => new Set(openStatusIds.map((id) => mapLegacyRepairStatus(id))),
+    [openStatusIds],
+  );
 
   const visibleJobs = useMemo(() => {
     const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
     const to = toDate ? new Date(`${toDate}T23:59:59`).getTime() : Number.POSITIVE_INFINITY;
     const today = new Date().toISOString().slice(0, 10);
     return jobs.filter((job) => {
-      if (statusFilter !== 'all' && job.status !== statusFilter) return false;
+      const jobStatus = mapLegacyRepairStatus(job.status);
+      if (statusFilter !== 'all' && jobStatus !== mapLegacyRepairStatus(statusFilter)) return false;
       if (branchFilter !== 'all' && String(job.branchId || '') !== branchFilter) return false;
       const created = Date.parse(String(job.createdAt || ''));
       if (Number.isFinite(created) && (created < from || created > to)) return false;
 
-      if (focusFilter === 'open' && !openStatusSet.has(job.status)) return false;
-      if (focusFilter === 'ready' && job.status !== 'ready') return false;
-      if (focusFilter === 'delivered' && !isDeliveredStatus(job.status)) return false;
+      if (focusFilter === 'open' && !openStatusSet.has(jobStatus)) return false;
+      if (focusFilter === 'ready' && jobStatus !== 'ready') return false;
+      if (focusFilter === 'delivered' && !isDeliveredStatus(jobStatus)) return false;
       if (focusFilter === 'today' && job.createdAt?.slice(0, 10) !== today) return false;
       if (focusFilter === 'overdue') {
         const isOverdue = Boolean(job.dueAt)
           && Date.parse(String(job.dueAt)) < Date.now()
-          && openStatusSet.has(job.status);
+          && openStatusSet.has(jobStatus);
         if (!isOverdue) return false;
       }
       return true;
@@ -328,8 +332,11 @@ export const RepairJobs: React.FC = () => {
       g[s.id] = [];
     });
     const fallback = statusColumns[0]?.id || 'received';
+    const columnByCanonical = new Map(
+      statusColumns.map((s) => [mapLegacyRepairStatus(s.id), s.id] as const),
+    );
     visibleJobs.forEach((job) => {
-      const key = statusColumns.some((s) => s.id === job.status) ? job.status : fallback;
+      const key = columnByCanonical.get(mapLegacyRepairStatus(job.status)) || fallback;
       if (!g[key]) g[key] = [];
       g[key].push(job);
     });
@@ -376,7 +383,10 @@ export const RepairJobs: React.FC = () => {
     const from = fromDate ? new Date(`${fromDate}T00:00:00`).getTime() : 0;
     const to = toDate ? new Date(`${toDate}T23:59:59`).getTime() : Number.POSITIVE_INFINITY;
     const scoped = jobs.filter((job) => {
-      if (statusFilter !== 'all' && job.status !== statusFilter) return false;
+      if (
+        statusFilter !== 'all'
+        && mapLegacyRepairStatus(job.status) !== mapLegacyRepairStatus(statusFilter)
+      ) return false;
       if (branchFilter !== 'all' && String(job.branchId || '') !== branchFilter) return false;
       const created = Date.parse(String(job.createdAt || ''));
       if (Number.isFinite(created) && (created < from || created > to)) return false;
@@ -624,7 +634,7 @@ export const RepairJobs: React.FC = () => {
                     const cost = computeRepairJobCost(job);
                     const overdue = job.dueAt
                       && Date.parse(String(job.dueAt)) < Date.now()
-                      && openStatusIds.includes(job.status);
+                      && openStatusSet.has(mapLegacyRepairStatus(job.status));
                     return (
                       <tr
                         key={job.id}

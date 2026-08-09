@@ -114,21 +114,23 @@ export const repairTreasuryService = {
       const month = normalizeTreasuryMonth(input.month);
       const { startIso, endIso } = getMonthRange(month);
       const sessionStatus = input.sessionStatus || 'all';
-      const groupedSessions = await Promise.all(targetBranchIds.map((branchId) => this.listSessions(branchId)));
-      const groupedEntries = await Promise.all(targetBranchIds.map((branchId) => this.listEntries(branchId)));
-      const monthCloses = await this.listMonthCloses(targetBranchIds, month);
+      const [branchSessions, branchEntries, monthCloses] = await Promise.all([
+        this.listSessionsForBranches(targetBranchIds),
+        this.listEntriesForBranches(targetBranchIds),
+        this.listMonthCloses(targetBranchIds, month),
+      ]);
       const monthCloseByBranchId: Record<string, RepairTreasuryMonthClose | null> = {};
       targetBranchIds.forEach((branchId) => {
         monthCloseByBranchId[branchId] = monthCloses.find((row) => row.branchId === branchId) || null;
       });
-      const allSessions = groupedSessions.flat().filter((session) => {
+      const allSessions = branchSessions.filter((session) => {
         const openedAt = String(session.openedAt || '');
         if (!openedAt || openedAt < startIso || openedAt > endIso) return false;
         if (sessionStatus !== 'all' && session.status !== sessionStatus) return false;
         return true;
       });
       const entriesBySessionId = new Map<string, RepairTreasuryEntry[]>();
-      groupedEntries.flat().forEach((entry) => {
+      branchEntries.forEach((entry) => {
         const sid = String(entry.sessionId || '');
         if (!sid) return;
         const list = entriesBySessionId.get(sid) || [];
@@ -225,7 +227,7 @@ export const repairTreasuryService = {
       });
 
       const visibleSessionIds = new Set(allSessions.map((session) => String(session.id || '')).filter(Boolean));
-      const visibleEntries = groupedEntries.flat().filter((entry) => visibleSessionIds.has(String(entry.sessionId || '')));
+      const visibleEntries = branchEntries.filter((entry) => visibleSessionIds.has(String(entry.sessionId || '')));
       const paymentGroups = new Map<string, RepairTreasuryMonthlyReportData['paymentMethodSummaries'][number]>();
       visibleEntries.forEach((entry) => {
         if (!['INCOME', 'EXPENSE'].includes(entry.entryType)) return;
@@ -452,15 +454,36 @@ export const repairTreasuryService = {
   },
 
   /**
-   * List sessions for many branches with per-branch queries.
+   * List sessions for many branches via chunked `in` queries (max 10 ids each).
    * Prefer this over `listSessions()` without branchId: security rules require
    * branch scope for non–branch-admins, and missing composite indexes fail closed.
    */
   async listSessionsForBranches(branchIds: string[]): Promise<RepairTreasurySession[]> {
     const ids = Array.from(new Set((branchIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
     if (!ids.length) return [];
-    const grouped = await Promise.all(ids.map((branchId) => this.listSessions(branchId)));
-    return grouped.flat();
+    if (ids.length === 1) return this.listSessions(ids[0]);
+    try {
+      const IN_CHUNK = 10;
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += IN_CHUNK) chunks.push(ids.slice(i, i + IN_CHUNK));
+      const snaps = await Promise.all(
+        chunks.map((chunk) =>
+          getDocs(
+            tenantQuery(
+              db,
+              REPAIR_TREASURY_SESSIONS_COLLECTION,
+              where('branchId', 'in', chunk),
+              orderBy('openedAt', 'desc'),
+            ),
+          ),
+        ),
+      );
+      return snaps.flatMap((snap) =>
+        snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairTreasurySession)),
+      );
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر تحميل جلسات الخزينة.');
+    }
   },
 
   async listEntries(branchId?: string): Promise<RepairTreasuryEntry[]> {
@@ -471,6 +494,34 @@ export const repairTreasuryService = {
       const q = tenantQuery(db, REPAIR_TREASURY_ENTRIES_COLLECTION, ...constraints);
       const snap = await getDocs(q);
       return snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairTreasuryEntry));
+    } catch (error: any) {
+      throw normalizeTreasuryError(error, 'تعذر تحميل حركات الخزينة.');
+    }
+  },
+
+  async listEntriesForBranches(branchIds: string[]): Promise<RepairTreasuryEntry[]> {
+    const ids = Array.from(new Set((branchIds || []).map((id) => String(id || '').trim()).filter(Boolean)));
+    if (!ids.length) return [];
+    if (ids.length === 1) return this.listEntries(ids[0]);
+    try {
+      const IN_CHUNK = 10;
+      const chunks: string[][] = [];
+      for (let i = 0; i < ids.length; i += IN_CHUNK) chunks.push(ids.slice(i, i + IN_CHUNK));
+      const snaps = await Promise.all(
+        chunks.map((chunk) =>
+          getDocs(
+            tenantQuery(
+              db,
+              REPAIR_TREASURY_ENTRIES_COLLECTION,
+              where('branchId', 'in', chunk),
+              orderBy('createdAt', 'desc'),
+            ),
+          ),
+        ),
+      );
+      return snaps.flatMap((snap) =>
+        snap.docs.map((d) => ({ id: d.id, ...d.data() } as RepairTreasuryEntry)),
+      );
     } catch (error: any) {
       throw normalizeTreasuryError(error, 'تعذر تحميل حركات الخزينة.');
     }

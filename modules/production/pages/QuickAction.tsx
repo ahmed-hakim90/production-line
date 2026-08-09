@@ -32,6 +32,7 @@ import {
 } from '../../../utils/productionReportStandardVariance';
 import type { LineWorkerAssignment, LineWorkerLaborRole, PackagingReportLine, ProductionReport, ProductionReportShift, ProductionReportWorkerOutput, ReportComponentScrapItem } from '../../../types';
 import { resolveReportType, workOrderMatchesReportType } from '../utils/reportTypes';
+import { filterProductionProducts } from '../utils/isProductionProduct';
 import {
   INJECTION_SHIFT_OPTIONS,
   isInjectionShiftSelected,
@@ -595,7 +596,7 @@ export const QuickAction: React.FC = () => {
   const selectableProducts = useMemo(() => (
     reportType === 'component_injection'
       ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
-      : _rawProducts.map((p) => ({ value: p.id!, label: p.name }))
+      : filterProductionProducts(_rawProducts).map((p) => ({ value: p.id!, label: p.name }))
   ), [reportType, injectionRawMaterialOptions, _rawProducts]);
 
   useEffect(() => {

@@ -24,6 +24,7 @@ import { repairBranchService } from '../services/repairBranchService';
 import { sparePartsService } from '../services/sparePartsService';
 import { repairSalesInvoiceService } from '../services/repairSalesInvoiceService';
 import { materialService } from '../../manufacturing/services/materialService';
+import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import type { Material } from '../../manufacturing/types';
 import { stockService } from '../../inventory/services/stockService';
 import {
@@ -140,7 +141,9 @@ export const RepairSalesInvoicePage: React.FC = () => {
 
   useEffect(() => {
     void materialService.getAll()
-      .then((rows) => setMaterials(rows.filter((m) => m.isActive !== false && m.id)))
+      .then((rows) => setMaterials(rows.filter(
+        (m) => m.isActive !== false && m.id && isMaterialAvailableForSpareParts(m),
+      )))
       .catch(() => setMaterials([]));
   }, []);
 

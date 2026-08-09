@@ -15,6 +15,7 @@ import { db, isConfigured } from '../../auth/services/firebase';
 import { ProductionPlan } from '../../../types';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
+import { assertProductionProductId } from '../utils/assertProductionProductId';
 
 const COLLECTION = 'production_plans';
 
@@ -61,6 +62,7 @@ export const productionPlanService = {
   async create(data: Omit<ProductionPlan, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
     try {
+      await assertProductionProductId(String(data.productId || ''));
       const ref = await addDoc(collection(db, COLLECTION), {
         ...data,
         createdAt: serverTimestamp(),
@@ -77,6 +79,9 @@ export const productionPlanService = {
     if (!isConfigured) return;
     try {
       const { id: _id, createdAt: _ts, ...fields } = data as any;
+      if (fields.productId !== undefined) {
+        await assertProductionProductId(String(fields.productId || ''));
+      }
       await updateDoc(doc(db, COLLECTION, id), fields);
     } catch (error) {
       console.error('productionPlanService.update error:', error);

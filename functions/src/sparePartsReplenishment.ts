@@ -27,6 +27,8 @@ const MATERIALS = 'materials';
 const REQUESTS = 'spare_parts_replenishment_requests';
 const STOCK_ITEMS = 'stock_items';
 const STOCK_TX = 'stock_transactions';
+const STOCK_LOCATION_BALANCES = 'stock_location_balances';
+const WAREHOUSE_LOCATIONS = 'warehouse_locations';
 const COUNTERS = 'inventory_counters';
 const ACTIVITY = 'activity_logs';
 
@@ -57,6 +59,14 @@ type DraftLineInput = { itemId?: string; quantity?: number };
 type PreparedLineInput = { lineId?: string; itemId?: string; preparedQty?: number };
 type ReceiveLineInput = { lineId?: string; itemId?: string; receivedQty?: number };
 
+type ResolvedAllocation = {
+  locationId: string;
+  locationCode: string;
+  rack?: string;
+  shelf?: string;
+  quantity: number;
+};
+
 type ResolvedLine = {
   lineId: string;
   itemType: 'material';
@@ -69,6 +79,11 @@ type ResolvedLine = {
   receivedQty?: number;
   unitCostSnapshot: number;
   totalCostSnapshot: number;
+  locationId?: string;
+  locationCode?: string;
+  allocations?: ResolvedAllocation[];
+  availableQty?: number;
+  shortageQty?: number;
   sourceJobIds?: string[];
   demandLinks?: Array<{ jobId: string; usageId: string; quantity: number }>;
   availabilityAtRequest?: 'central' | 'none';
@@ -154,6 +169,201 @@ const toIsoNow = () => new Date().toISOString();
 
 const balanceDocId = (warehouseId: string, itemType: string, itemId: string) =>
   `${warehouseId}__${itemType}__${itemId}`;
+
+const locationBalanceDocId = (warehouseId: string, locationId: string, itemId: string) =>
+  `${warehouseId}__${locationId}__material__${itemId}`;
+
+const allocateFromLocationBalances = (
+  balances: Array<{
+    locationId: string;
+    locationCode?: string;
+    rack?: string;
+    shelf?: string;
+    quantity?: number;
+    lastMovementAt?: string;
+    updatedAt?: string;
+  }>,
+  requiredQty: number,
+  preferredLocationId?: string,
+): { allocations: ResolvedAllocation[]; availableQty: number; shortageQty: number } => {
+  let remaining = requiredQty;
+  const allocations: ResolvedAllocation[] = [];
+  const sorted = balances
+    .filter((row) => toNumber(row.quantity) > 0 && String(row.locationId || '').trim())
+    .sort((a, b) => {
+      if (preferredLocationId) {
+        if (a.locationId === preferredLocationId && b.locationId !== preferredLocationId) return -1;
+        if (b.locationId === preferredLocationId && a.locationId !== preferredLocationId) return 1;
+      }
+      return String(a.lastMovementAt || a.updatedAt || '').localeCompare(
+        String(b.lastMovementAt || b.updatedAt || ''),
+      );
+    });
+  const availableQty = sorted.reduce((sum, row) => sum + toNumber(row.quantity), 0);
+  for (const row of sorted) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, toNumber(row.quantity));
+    allocations.push({
+      locationId: String(row.locationId),
+      locationCode: String(row.locationCode || row.locationId),
+      ...(row.rack ? { rack: String(row.rack) } : {}),
+      ...(row.shelf ? { shelf: String(row.shelf) } : {}),
+      quantity: take,
+    });
+    remaining -= take;
+  }
+  return {
+    allocations,
+    availableQty,
+    shortageQty: Math.max(0, requiredQty - availableQty),
+  };
+};
+
+const normalizeLineAllocations = (line: {
+  preparedQty?: number;
+  requestedQty?: number;
+  locationId?: string;
+  locationCode?: string;
+  allocations?: ResolvedAllocation[];
+}): ResolvedAllocation[] => {
+  if (Array.isArray(line.allocations) && line.allocations.length > 0) {
+    return line.allocations
+      .map((row) => ({
+        locationId: String(row.locationId || '').trim(),
+        locationCode: String(row.locationCode || row.locationId || '').trim(),
+        ...(row.rack ? { rack: String(row.rack) } : {}),
+        ...(row.shelf ? { shelf: String(row.shelf) } : {}),
+        quantity: toNumber(row.quantity),
+      }))
+      .filter((row) => row.locationId && row.quantity > 0);
+  }
+  const locationId = String(line.locationId || '').trim();
+  if (!locationId) return [];
+  const qty = toNumber(line.preparedQty) > 0
+    ? toNumber(line.preparedQty)
+    : toNumber(line.requestedQty);
+  if (!(qty > 0)) return [];
+  return [{
+    locationId,
+    locationCode: String(line.locationCode || locationId).trim(),
+    quantity: qty,
+  }];
+};
+
+const scaleAllocations = (
+  allocations: ResolvedAllocation[],
+  targetQty: number,
+): ResolvedAllocation[] => {
+  let remaining = toNumber(targetQty);
+  if (!(remaining > 0)) return [];
+  const out: ResolvedAllocation[] = [];
+  for (const row of allocations) {
+    if (remaining <= 0) break;
+    const take = Math.min(toNumber(row.quantity), remaining);
+    if (!(take > 0)) continue;
+    out.push({ ...row, quantity: take });
+    remaining -= take;
+  }
+  return out;
+};
+
+const activeLocationsForWarehouse = async (tenantId: string, warehouseId: string) => {
+  const snap = await db
+    .collection(WAREHOUSE_LOCATIONS)
+    .where('tenantId', '==', tenantId)
+    .where('warehouseId', '==', warehouseId)
+    .get();
+  return snap.docs
+    .map((d) => ({ id: d.id, ...(d.data() as { code?: string; isActive?: boolean }) }))
+    .filter((loc) => loc.isActive !== false);
+};
+
+const loadItemLocationBalances = async (params: {
+  tenantId: string;
+  warehouseId: string;
+  itemId: string;
+  locationById: Map<string, { id: string; code?: string }>;
+}) => {
+  const balSnap = await db
+    .collection(STOCK_LOCATION_BALANCES)
+    .where('tenantId', '==', params.tenantId)
+    .where('warehouseId', '==', params.warehouseId)
+    .where('itemType', '==', 'material')
+    .where('itemId', '==', params.itemId)
+    .get();
+  return balSnap.docs
+    .map((docSnap) => {
+      const data = docSnap.data() as {
+        locationId?: string;
+        locationCode?: string;
+        rack?: string;
+        shelf?: string;
+        quantity?: number;
+        lastMovementAt?: string;
+        updatedAt?: string;
+      };
+      return {
+        locationId: String(data.locationId || ''),
+        locationCode: String(data.locationCode || data.locationId || ''),
+        rack: data.rack,
+        shelf: data.shelf,
+        quantity: toNumber(data.quantity),
+        lastMovementAt: data.lastMovementAt,
+        updatedAt: data.updatedAt,
+      };
+    })
+    .filter((row) => params.locationById.has(row.locationId));
+};
+
+/** When central warehouse uses shelves, allocate FIFO pick plan for the given qty. */
+const allocateLineForCentralWarehouse = async (params: {
+  tenantId: string;
+  warehouseId: string;
+  itemId: string;
+  itemName: string;
+  requiredQty: number;
+  preferredLocationId?: string;
+  locationsRequired: boolean;
+  locationById: Map<string, { id: string; code?: string }>;
+}): Promise<{
+  allocations: ResolvedAllocation[];
+  availableQty?: number;
+  shortageQty?: number;
+  locationId?: string;
+  locationCode?: string;
+}> => {
+  if (!params.locationsRequired) {
+    return { allocations: [] };
+  }
+  const balances = await loadItemLocationBalances({
+    tenantId: params.tenantId,
+    warehouseId: params.warehouseId,
+    itemId: params.itemId,
+    locationById: params.locationById,
+  });
+  const preferred = String(params.preferredLocationId || '').trim() || undefined;
+  const allocated = allocateFromLocationBalances(balances, params.requiredQty, preferred);
+  if (allocated.allocations.length === 0) {
+    throw new HttpsError(
+      'failed-precondition',
+      `لا يوجد رصيد على الأرفف للصنف ${params.itemName}. راجع أرصدة الرفوف أولاً.`,
+    );
+  }
+  if (allocated.shortageQty > 0.000001) {
+    throw new HttpsError(
+      'failed-precondition',
+      `رصيد الأرفف غير كافٍ للصنف ${params.itemName}. المتاح ${allocated.availableQty} والمطلوب ${params.requiredQty}.`,
+    );
+  }
+  const first = allocated.allocations[0];
+  return {
+    allocations: allocated.allocations,
+    availableQty: allocated.availableQty,
+    shortageQty: allocated.shortageQty,
+    locationId: first?.locationId,
+    locationCode: first?.locationCode,
+  };
+};
 
 const materialPurchaseCostPerBaseUnit = (material: {
   purchaseCost?: number;
@@ -570,18 +780,50 @@ export const prepareSparePartsReplenishmentHandler = async (request: CallableReq
     prepMap.set(key, qty);
   }
 
-  const lines = (data.lines || []).map((line) => {
+  const locations = await activeLocationsForWarehouse(actor.tenantId, data.fromWarehouseId);
+  const locationsRequired = locations.length > 0;
+  const locationById = new Map(locations.map((loc) => [loc.id, loc]));
+
+  const lines: ResolvedLine[] = [];
+  for (const line of data.lines || []) {
     const preparedQty = prepMap.has(line.lineId)
       ? (prepMap.get(line.lineId) as number)
       : toNumber(line.preparedQty) > 0
         ? toNumber(line.preparedQty)
         : toNumber(line.requestedQty);
-    return {
-      ...line,
+    const preferred = String(line.locationId || '').trim() || undefined;
+    const allocated = await allocateLineForCentralWarehouse({
+      tenantId: actor.tenantId,
+      warehouseId: data.fromWarehouseId,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      requiredQty: preparedQty,
+      preferredLocationId: preferred,
+      locationsRequired,
+      locationById,
+    });
+    const {
+      locationId: _oldLocId,
+      locationCode: _oldLocCode,
+      allocations: _oldAlloc,
+      availableQty: _oldAvail,
+      shortageQty: _oldShortage,
+      ...baseLine
+    } = line;
+    const nextLine: ResolvedLine = {
+      ...baseLine,
       preparedQty,
       totalCostSnapshot: roundMoney(toNumber(line.unitCostSnapshot) * preparedQty),
+      allocations: allocated.allocations,
     };
-  });
+    if (allocated.allocations.length > 0) {
+      nextLine.locationId = allocated.locationId;
+      nextLine.locationCode = allocated.locationCode;
+      nextLine.availableQty = allocated.availableQty;
+      nextLine.shortageQty = allocated.shortageQty;
+    }
+    lines.push(nextLine);
+  }
   const totalCostSnapshot = roundMoney(
     lines.reduce((sum, line) => sum + toNumber(line.totalCostSnapshot), 0),
   );
@@ -617,9 +859,47 @@ export const responsibleApproveSparePartsReplenishmentHandler = async (
   }
   assertActorWarehouseInvolved(actor.boundWarehouseId, [data.fromWarehouseId, data.toWarehouseId]);
 
+  // Backfill pick locations for legacy prepared requests that predate shelf allocation.
+  const locations = await activeLocationsForWarehouse(actor.tenantId, data.fromWarehouseId);
+  const locationsRequired = locations.length > 0;
+  const locationById = new Map(locations.map((loc) => [loc.id, loc]));
+  const lines: ResolvedLine[] = [];
+  for (const line of data.lines || []) {
+    const existing = normalizeLineAllocations(line);
+    if (existing.length > 0 || !locationsRequired) {
+      lines.push({
+        ...line,
+        ...(existing.length > 0 ? { allocations: existing } : {}),
+      });
+      continue;
+    }
+    const preparedQty = toNumber(line.preparedQty) > 0
+      ? toNumber(line.preparedQty)
+      : toNumber(line.requestedQty);
+    const allocated = await allocateLineForCentralWarehouse({
+      tenantId: actor.tenantId,
+      warehouseId: data.fromWarehouseId,
+      itemId: line.itemId,
+      itemName: line.itemName,
+      requiredQty: preparedQty,
+      preferredLocationId: String(line.locationId || '').trim() || undefined,
+      locationsRequired,
+      locationById,
+    });
+    lines.push({
+      ...line,
+      allocations: allocated.allocations,
+      locationId: allocated.locationId,
+      locationCode: allocated.locationCode,
+      availableQty: allocated.availableQty,
+      shortageQty: allocated.shortageQty,
+    });
+  }
+
   const now = toIsoNow();
   await ref.update({
     status: 'responsible_approved',
+    lines,
     responsibleApprovedAt: now,
     responsibleApprovedBy: actor.displayName,
     responsibleApprovedByUserId: actor.uid,
@@ -664,6 +944,48 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
     recvMap.set(key, qty);
   }
 
+  // Ensure shelf pick plan exists before deducting location balances (legacy docs).
+  const centralLocations = await activeLocationsForWarehouse(actor.tenantId, data.fromWarehouseId);
+  const centralLocationsRequired = centralLocations.length > 0;
+  const centralLocationById = new Map(centralLocations.map((loc) => [loc.id, loc]));
+  if (centralLocationsRequired) {
+    let needsPersist = false;
+    const backfilledLines: ResolvedLine[] = [];
+    for (const line of data.lines || []) {
+      const existing = normalizeLineAllocations(line);
+      if (existing.length > 0) {
+        backfilledLines.push({ ...line, allocations: existing });
+        continue;
+      }
+      needsPersist = true;
+      const preparedQty = toNumber(line.preparedQty) > 0
+        ? toNumber(line.preparedQty)
+        : toNumber(line.requestedQty);
+      const allocated = await allocateLineForCentralWarehouse({
+        tenantId: actor.tenantId,
+        warehouseId: data.fromWarehouseId,
+        itemId: line.itemId,
+        itemName: line.itemName,
+        requiredQty: preparedQty,
+        preferredLocationId: String(line.locationId || '').trim() || undefined,
+        locationsRequired: true,
+        locationById: centralLocationById,
+      });
+      backfilledLines.push({
+        ...line,
+        allocations: allocated.allocations,
+        locationId: allocated.locationId,
+        locationCode: allocated.locationCode,
+        availableQty: allocated.availableQty,
+        shortageQty: allocated.shortageQty,
+      });
+    }
+    if (needsPersist) {
+      await ref.update({ lines: backfilledLines });
+      data.lines = backfilledLines;
+    }
+  }
+
   const now = toIsoNow();
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -676,7 +998,21 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
       throw new HttpsError('permission-denied', 'الطلب خارج شركتك.');
     }
 
-    const nextLines: ResolvedLine[] = [];
+    type PlannedLine = {
+      line: ResolvedLine;
+      prepared: number;
+      receivedQty: number;
+      allocations: ResolvedAllocation[];
+      sourceBalRef: DocumentReference;
+      targetBalRef: DocumentReference;
+      locationRefs: Array<{
+        allocation: ResolvedAllocation;
+        locRef: DocumentReference;
+      }>;
+    };
+
+    const planned: PlannedLine[] = [];
+    const balanceRefs: DocumentReference[] = [];
     for (const line of current.lines || []) {
       const prepared = toNumber(line.preparedQty) > 0
         ? toNumber(line.preparedQty)
@@ -687,26 +1023,47 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
       if (!(receivedQty > 0)) {
         throw new HttpsError('invalid-argument', `كمية استلام غير صالحة للصنف ${line.itemName}.`);
       }
-
+      const allocations = scaleAllocations(normalizeLineAllocations(line), receivedQty);
       const sourceBalRef = db.collection(STOCK_ITEMS).doc(
         balanceDocId(current.fromWarehouseId, line.itemType, line.itemId),
       );
       const targetBalRef = db.collection(STOCK_ITEMS).doc(
         balanceDocId(current.toWarehouseId, line.itemType, line.itemId),
       );
-      const [sourceBalSnap, targetBalSnap] = await Promise.all([
-        tx.get(sourceBalRef),
-        tx.get(targetBalRef),
-      ]);
+      const locationRefs = allocations.map((allocation) => ({
+        allocation,
+        locRef: db.collection(STOCK_LOCATION_BALANCES).doc(
+          locationBalanceDocId(current.fromWarehouseId, allocation.locationId, line.itemId),
+        ),
+      }));
+      planned.push({
+        line,
+        prepared,
+        receivedQty,
+        allocations,
+        sourceBalRef,
+        targetBalRef,
+        locationRefs,
+      });
+      balanceRefs.push(sourceBalRef, targetBalRef, ...locationRefs.map((r) => r.locRef));
+    }
+
+    const balanceSnaps = balanceRefs.length > 0 ? await tx.getAll(...balanceRefs) : [];
+    const balanceSnapByPath = new Map(balanceSnaps.map((s) => [s.ref.path, s]));
+
+    const nextLines: ResolvedLine[] = [];
+    for (const row of planned) {
+      const sourceBalSnap = balanceSnapByPath.get(row.sourceBalRef.path);
+      const targetBalSnap = balanceSnapByPath.get(row.targetBalRef.path);
       if (
-        (sourceBalSnap.exists
+        (sourceBalSnap?.exists
           && String(sourceBalSnap.data()?.tenantId || '') !== actor.tenantId)
-        || (targetBalSnap.exists
+        || (targetBalSnap?.exists
           && String(targetBalSnap.data()?.tenantId || '') !== actor.tenantId)
       ) {
         throw new HttpsError('permission-denied', 'رصيد المخزن خارج شركتك.');
       }
-          const sourceBal = sourceBalSnap.exists
+      const sourceBal = sourceBalSnap?.exists
         ? (sourceBalSnap.data() as StockBalanceData & {
           minStock?: number;
           itemName?: string;
@@ -715,70 +1072,88 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
         })
         : undefined;
       const sourceQty = toNumber(sourceBal?.quantity);
-      const targetQty = targetBalSnap.exists ? toNumber(targetBalSnap.data()?.quantity) : 0;
-      if (sourceQty < receivedQty) {
+      const targetQty = targetBalSnap?.exists ? toNumber(targetBalSnap.data()?.quantity) : 0;
+      if (sourceQty < row.receivedQty) {
         throw new HttpsError(
           'failed-precondition',
-          `الرصيد غير كافٍ في مخزن قطع الغيار للصنف ${line.itemName}.`,
+          `الرصيد غير كافٍ في مخزن قطع الغيار للصنف ${row.line.itemName}.`,
         );
       }
 
       const reservedForLine = (current.reservedLines || []).find(
-        (row) => String(row.itemId) === String(line.itemId),
+        (r) => String(r.itemId) === String(row.line.itemId),
       );
       // Drop this request's entire hold on receive (covers short receipts too).
       const releaseReserveQty = Math.max(0, toNumber(reservedForLine?.reservedQty));
       const availableAfterOwnHold = stockAvailableQty(sourceBal) + releaseReserveQty;
-      if (availableAfterOwnHold + 1e-9 < receivedQty) {
+      if (availableAfterOwnHold + 1e-9 < row.receivedQty) {
         throw new HttpsError(
           'failed-precondition',
-          `الرصيد المتاح غير كافٍ في مخزن قطع الغيار للصنف ${line.itemName}.`,
+          `الرصيد المتاح غير كافٍ في مخزن قطع الغيار للصنف ${row.line.itemName}.`,
         );
       }
 
-      const outTxRef = db.collection(STOCK_TX).doc(`spr_${requestId}_${line.itemId}_out`);
-      const inTxRef = db.collection(STOCK_TX).doc(`spr_${requestId}_${line.itemId}_in`);
+      for (const locRow of row.locationRefs) {
+        const locSnap = balanceSnapByPath.get(locRow.locRef.path);
+        if (locSnap?.exists && String(locSnap.data()?.tenantId || '') !== actor.tenantId) {
+          throw new HttpsError('permission-denied', 'رصيد الرف خارج شركتك.');
+        }
+        const locQty = locSnap?.exists ? toNumber(locSnap.data()?.quantity) : 0;
+        if (locQty - toNumber(locRow.allocation.quantity) < -0.000001) {
+          throw new HttpsError(
+            'failed-precondition',
+            `رصيد الرف غير كافٍ للصنف ${row.line.itemName}.`,
+          );
+        }
+      }
+
+      const outTxRef = db.collection(STOCK_TX).doc(`spr_${requestId}_${row.line.itemId}_out`);
+      const inTxRef = db.collection(STOCK_TX).doc(`spr_${requestId}_${row.line.itemId}_in`);
       const referenceNo = `${current.referenceNo}-R`;
+      const firstLoc = row.allocations[0];
 
       tx.set(outTxRef, {
         warehouseId: current.fromWarehouseId,
         toWarehouseId: current.toWarehouseId,
-        itemType: line.itemType,
-        itemId: line.itemId,
-        itemName: line.itemName,
-        itemCode: line.itemCode,
-        unit: line.unit,
+        itemType: row.line.itemType,
+        itemId: row.line.itemId,
+        itemName: row.line.itemName,
+        itemCode: row.line.itemCode,
+        unit: row.line.unit,
         movementType: 'TRANSFER',
-        quantity: receivedQty,
+        quantity: row.receivedQty,
         transferDirection: 'OUT',
         relatedTransactionId: inTxRef.id,
         referenceNo,
         note: `تموين قطع غيار ${current.referenceNo}`,
-        unitCost: line.unitCostSnapshot,
-        totalCost: roundMoney(line.unitCostSnapshot * receivedQty),
+        unitCost: row.line.unitCostSnapshot,
+        totalCost: roundMoney(row.line.unitCostSnapshot * row.receivedQty),
         sourceModule: SOURCE,
         sourceId: requestId,
         createdBy: actor.displayName,
         createdByUserId: actor.uid,
         createdAt: now,
         tenantId: actor.tenantId,
+        ...(firstLoc
+          ? { locationId: firstLoc.locationId, locationCode: firstLoc.locationCode }
+          : {}),
       });
       tx.set(inTxRef, {
         warehouseId: current.toWarehouseId,
         toWarehouseId: current.fromWarehouseId,
-        itemType: line.itemType,
-        itemId: line.itemId,
-        itemName: line.itemName,
-        itemCode: line.itemCode,
-        unit: line.unit,
+        itemType: row.line.itemType,
+        itemId: row.line.itemId,
+        itemName: row.line.itemName,
+        itemCode: row.line.itemCode,
+        unit: row.line.unit,
         movementType: 'TRANSFER',
-        quantity: receivedQty,
+        quantity: row.receivedQty,
         transferDirection: 'IN',
         relatedTransactionId: outTxRef.id,
         referenceNo,
         note: `تموين قطع غيار ${current.referenceNo}`,
-        unitCost: line.unitCostSnapshot,
-        totalCost: roundMoney(line.unitCostSnapshot * receivedQty),
+        unitCost: row.line.unitCostSnapshot,
+        totalCost: roundMoney(row.line.unitCostSnapshot * row.receivedQty),
         sourceModule: SOURCE,
         sourceId: requestId,
         createdBy: actor.displayName,
@@ -786,37 +1161,82 @@ export const receiveSparePartsReplenishmentHandler = async (request: CallableReq
         createdAt: now,
         tenantId: actor.tenantId,
       });
-      tx.set(sourceBalRef, {
+      tx.set(row.sourceBalRef, {
         warehouseId: current.fromWarehouseId,
-        itemType: line.itemType,
-        itemId: line.itemId,
-        itemName: line.itemName,
-        itemCode: line.itemCode,
-        unit: line.unit,
+        itemType: row.line.itemType,
+        itemId: row.line.itemId,
+        itemName: row.line.itemName,
+        itemCode: row.line.itemCode,
+        unit: row.line.unit,
         minStock: toNumber(sourceBal?.minStock),
-        quantity: sourceQty - receivedQty,
+        quantity: sourceQty - row.receivedQty,
         reservedQty: Math.max(0, stockReservedQty(sourceBal) - releaseReserveQty),
         updatedAt: now,
         tenantId: actor.tenantId,
       }, { merge: true });
-      tx.set(targetBalRef, {
+      tx.set(row.targetBalRef, {
         warehouseId: current.toWarehouseId,
-        itemType: line.itemType,
-        itemId: line.itemId,
-        itemName: line.itemName,
-        itemCode: line.itemCode,
-        unit: line.unit,
-        minStock: toNumber(targetBalSnap.data()?.minStock),
-        quantity: targetQty + receivedQty,
+        itemType: row.line.itemType,
+        itemId: row.line.itemId,
+        itemName: row.line.itemName,
+        itemCode: row.line.itemCode,
+        unit: row.line.unit,
+        minStock: toNumber(targetBalSnap?.data()?.minStock),
+        quantity: targetQty + row.receivedQty,
         updatedAt: now,
         tenantId: actor.tenantId,
       }, { merge: true });
 
+      for (const locRow of row.locationRefs) {
+        const locSnap = balanceSnapByPath.get(locRow.locRef.path);
+        const locData = locSnap?.exists
+          ? (locSnap.data() as {
+            quantity?: number;
+            locationCode?: string;
+            rack?: string;
+            shelf?: string;
+            itemName?: string;
+            itemCode?: string;
+            unit?: string;
+          })
+          : undefined;
+        const locQty = toNumber(locData?.quantity);
+        tx.set(locRow.locRef, {
+          warehouseId: current.fromWarehouseId,
+          locationId: locRow.allocation.locationId,
+          locationCode: String(
+            locRow.allocation.locationCode || locData?.locationCode || locRow.allocation.locationId,
+          ),
+          ...(locRow.allocation.rack || locData?.rack
+            ? { rack: locRow.allocation.rack || locData?.rack }
+            : {}),
+          ...(locRow.allocation.shelf || locData?.shelf
+            ? { shelf: locRow.allocation.shelf || locData?.shelf }
+            : {}),
+          itemType: 'material',
+          itemId: row.line.itemId,
+          itemName: row.line.itemName || locData?.itemName || row.line.itemId,
+          itemCode: row.line.itemCode || locData?.itemCode || '',
+          unit: row.line.unit || locData?.unit || 'piece',
+          quantity: locQty - toNumber(locRow.allocation.quantity),
+          updatedAt: now,
+          lastMovementAt: now,
+          tenantId: actor.tenantId,
+        }, { merge: true });
+      }
+
       nextLines.push({
-        ...line,
-        preparedQty: prepared,
-        receivedQty,
-        totalCostSnapshot: roundMoney(toNumber(line.unitCostSnapshot) * receivedQty),
+        ...row.line,
+        preparedQty: row.prepared,
+        receivedQty: row.receivedQty,
+        totalCostSnapshot: roundMoney(toNumber(row.line.unitCostSnapshot) * row.receivedQty),
+        ...(row.allocations.length > 0
+          ? {
+            allocations: row.allocations,
+            locationId: row.allocations[0]?.locationId,
+            locationCode: row.allocations[0]?.locationCode,
+          }
+          : {}),
       });
     }
 
@@ -922,6 +1342,13 @@ async function syncReceivedQtyToRepairBranchStock(input: {
 
     let partId = existingParts.empty ? '' : existingParts.docs[0].id;
     if (!partId) {
+      const materialSnap = await db.collection('materials').doc(materialId).get();
+      if (materialSnap.exists && materialSnap.data()?.availableForSpareParts === false) {
+        throw new HttpsError(
+          'failed-precondition',
+          'هذه المادة غير مفعّلة لقطع الغيار. فعّلها من شاشة المواد التصنيعية أولاً.',
+        );
+      }
       const partRef = db.collection('repair_spare_parts').doc();
       await partRef.set({
         tenantId: input.tenantId,
@@ -974,7 +1401,10 @@ async function syncReceivedQtyToRepairBranchStock(input: {
 export const rejectSparePartsReplenishmentHandler = async (request: CallableRequest) => {
   const uid = requireAuth(request);
   const actor = await loadActor(uid);
-  assertPerm(actor, 'sparePartsReplenishment.approve', ['inventory.transfers.approve']);
+  assertPerm(actor, 'sparePartsReplenishment.reject', [
+    'sparePartsReplenishment.approve',
+    'inventory.transfers.approve',
+  ]);
   const payload = (request.data || {}) as { requestId?: string; reason?: string };
   const requestId = String(payload.requestId || '').trim();
   if (!requestId) throw new HttpsError('invalid-argument', 'requestId مطلوب.');
@@ -1008,7 +1438,8 @@ export const rejectSparePartsReplenishmentHandler = async (request: CallableRequ
 export const cancelSparePartsReplenishmentHandler = async (request: CallableRequest) => {
   const uid = requireAuth(request);
   const actor = await loadActor(uid);
-  assertPerm(actor, 'sparePartsReplenishment.create', [
+  assertPerm(actor, 'sparePartsReplenishment.cancel', [
+    'sparePartsReplenishment.create',
     'inventory.transactions.create',
     'inventory.transfers.approve',
   ]);

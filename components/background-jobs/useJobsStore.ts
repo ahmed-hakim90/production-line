@@ -17,6 +17,8 @@ export interface BackgroundJob {
   startedBy: string;
   addedRows: number;
   failedRows: number;
+  /** Rows skipped because nothing changed (or already existed). */
+  skippedRows: number;
   errorMessage?: string;
   /** User clicked cancel — runners should stop between steps. */
   cancelled?: boolean;
@@ -40,7 +42,7 @@ interface JobsStore {
   updateJob: (id: string, patch: Partial<BackgroundJob>) => void;
   startJob: (id: string, statusText?: string) => void;
   setJobProgress: (id: string, input: { processedRows: number; totalRows?: number; statusText?: string; status?: BackgroundJobStatus }) => void;
-  completeJob: (id: string, input: { addedRows: number; failedRows: number; statusText?: string }) => void;
+  completeJob: (id: string, input: { addedRows: number; failedRows: number; skippedRows?: number; statusText?: string }) => void;
   failJob: (id: string, errorMessage: string, statusText?: string) => void;
   setJobStatus: (id: string, status: BackgroundJobStatus, statusText?: string) => void;
   cancelJob: (id: string) => void;
@@ -86,6 +88,7 @@ export const useJobsStore = create<JobsStore>()(
           startedBy: input.startedBy || 'Current User',
           addedRows: 0,
           failedRows: 0,
+          skippedRows: 0,
         };
         set((state) => ({
           jobs: [created, ...state.jobs].slice(0, 120),
@@ -155,6 +158,7 @@ export const useJobsStore = create<JobsStore>()(
                   processedRows: job.totalRows,
                   addedRows: input.addedRows,
                   failedRows: input.failedRows,
+                  skippedRows: Math.max(0, input.skippedRows ?? 0),
                   errorMessage: '',
                   updatedAt: now(),
                 }
@@ -224,6 +228,7 @@ export const useJobsStore = create<JobsStore>()(
                   processedRows: 0,
                   addedRows: 0,
                   failedRows: 0,
+                  skippedRows: 0,
                   errorMessage: '',
                   cancelled: false,
                   updatedAt: now(),

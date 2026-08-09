@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { toast } from 'sonner';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button } from '../components/UI';
 import {
@@ -28,12 +29,14 @@ export const RolesManagement: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug: string }>();
   const roles = useAppStore((s) => s.roles);
   const deleteRole = useAppStore((s) => s.deleteRole);
+  const seedDefaultRolesCatalog = useAppStore((s) => s.seedDefaultRolesCatalog);
   const userRoleId = useAppStore((s) => s.userRoleId);
   const { can } = usePermission();
   const { openModal } = useGlobalModalManager();
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
+  const [seedBusy, setSeedBusy] = useState(false);
   const initialCounts = peekPageDataCache<Record<string, number>>(ROLES_USER_COUNTS_CACHE_KEY);
   const [userCountByRoleId, setUserCountByRoleId] = useState<Record<string, number>>(initialCounts ?? {});
   const [userCountsLoading, setUserCountsLoading] = useState(() => initialCounts == null);
@@ -133,6 +136,32 @@ export const RolesManagement: React.FC = () => {
 
   const enabledCount = (perms: Record<string, boolean>) => Object.values(perms).filter(Boolean).length;
 
+  const runSeedDefaultRolesCatalog = async () => {
+    if (seedBusy) return;
+    const ok = window.confirm(
+      'تهيئة الأدوار الافتراضية؟\n\n'
+      + '• ينشئ الأدوار الناقصة فقط (مثل فني صيانة / استقبال)\n'
+      + '• يضيف صلاحيات جديدة ناقصة دون إعادة فتح صلاحية أغلقتها يدويًا\n'
+      + '• لا يعمل تلقائيًا عند تسجيل الدخول — هذا الزر فقط\n\n'
+      + 'هل تريد المتابعة؟',
+    );
+    if (!ok) return;
+    setSeedBusy(true);
+    try {
+      const result = await seedDefaultRolesCatalog();
+      toast.success(
+        result.serverGrantedKeys > 0
+          ? `تمت التهيئة. مفاتيح مضافة من الخادم: ${result.serverGrantedKeys}.`
+          : 'تمت تهيئة الأدوار الافتراضية (إن وُجد ناقص).',
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'تعذر تهيئة الأدوار.';
+      toast.error(msg);
+    } finally {
+      setSeedBusy(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* ── Header ── */}
@@ -144,7 +173,14 @@ export const RolesManagement: React.FC = () => {
           </p>
         </div>
         {can('roles.manage') && (
-          <div className="erp-page-actions">
+          <div className="erp-page-actions flex flex-wrap gap-2">
+            <Button
+              variant="outline"
+              disabled={seedBusy}
+              onClick={() => void runSeedDefaultRolesCatalog()}
+            >
+              {seedBusy ? 'جاري التهيئة…' : 'تهيئة الأدوار الافتراضية'}
+            </Button>
             <Button
               onClick={() => openModal(MODAL_KEYS.SYSTEM_ROLES_CREATE)}
               data-modal-key={MODAL_KEYS.SYSTEM_ROLES_CREATE}

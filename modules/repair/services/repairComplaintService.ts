@@ -1,7 +1,5 @@
 import {
-  addDoc,
   arrayUnion,
-  collection,
   doc,
   getDoc,
   getDocs,
@@ -10,7 +8,7 @@ import {
   updateDoc,
   where,
 } from 'firebase/firestore';
-import { db, isConfigured } from '../../auth/services/firebase';
+import { db, isConfigured, mutateRepairCustomerOpsCallable } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import { REPAIR_COMPLAINTS_COLLECTION } from '../collections';
@@ -18,6 +16,7 @@ import type {
   RepairComplaint,
   RepairComplaintFollowUp,
   RepairComplaintStatus,
+  RepairJob,
 } from '../types';
 
 const COLLECTION = REPAIR_COMPLAINTS_COLLECTION;
@@ -42,6 +41,11 @@ export type RepairComplaintCreateInput = Omit<
 > & {
   status?: RepairComplaintStatus;
 };
+
+export type RepairComplaintJobOption = Pick<
+  RepairJob,
+  'id' | 'receiptNo' | 'branchId' | 'customerId' | 'customerName' | 'customerPhone' | 'productName' | 'status' | 'createdAt'
+> & { jobProducts?: Array<{ productName?: string }> };
 
 export const repairComplaintService = {
   async list(branchIds?: string[]): Promise<RepairComplaint[]> {
@@ -81,36 +85,25 @@ export const repairComplaintService = {
     return row;
   },
 
-  async create(input: RepairComplaintCreateInput): Promise<string> {
-    const tenantId = requireTenantId();
-    const branchId = String(input.branchId || '').trim();
-    const subject = String(input.subject || '').trim();
-    const customerName = String(input.customerName || '').trim();
-    const customerPhone = String(input.customerPhone || '').trim();
-    if (!branchId) throw new Error('اختر الفرع.');
-    if (!subject) throw new Error('أدخل موضوع الشكوى.');
-    if (!customerName) throw new Error('أدخل اسم العميل.');
-    if (!customerPhone) throw new Error('أدخل هاتف العميل.');
-
-    const ts = nowIso();
-    const ref = await addDoc(collection(db, COLLECTION), {
-      tenantId,
-      branchId,
-      customerId: input.customerId || null,
-      customerName,
-      customerPhone,
-      jobId: input.jobId || null,
-      receiptNo: input.receiptNo || null,
-      subject,
-      notes: input.notes || null,
-      status: input.status || 'open',
-      followUps: [],
-      createdAt: ts,
-      updatedAt: ts,
-      createdByUid: input.createdByUid || null,
-      createdByName: input.createdByName || null,
+  async listJobOptions(): Promise<RepairComplaintJobOption[]> {
+    const result = await mutateRepairCustomerOpsCallable<{ jobs: RepairComplaintJobOption[] }>({
+      action: 'listComplaintJobOptions',
     });
-    return ref.id;
+    return Array.isArray(result.jobs) ? result.jobs : [];
+  },
+
+  async create(input: RepairComplaintCreateInput): Promise<string> {
+    const jobId = String(input.jobId || '').trim();
+    const subject = String(input.subject || '').trim();
+    if (!jobId) throw new Error('اختر طلب الصيانة المرتبط بالشكوى.');
+    if (!subject) throw new Error('أدخل موضوع الشكوى.');
+    const result = await mutateRepairCustomerOpsCallable<{ complaintId: string }>({
+      action: 'createRepairComplaint',
+      jobId,
+      subject,
+      notes: input.notes || undefined,
+    });
+    return result.complaintId;
   },
 
   async addFollowUp(

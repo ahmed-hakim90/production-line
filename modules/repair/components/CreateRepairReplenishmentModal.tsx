@@ -14,6 +14,7 @@ import { SearchableSelect } from '@/components/UI';
 import { toast } from '../../../components/Toast';
 import { sparePartsReplenishmentService } from '../../inventory/services/sparePartsReplenishmentService';
 import { materialService } from '../../manufacturing/services/materialService';
+import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import type { Material } from '../../manufacturing/types';
 import { usePermission } from '../../../utils/permissions';
 import type { RepairSparePart } from '../types';
@@ -48,16 +49,21 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
   useEffect(() => {
     if (!open) return;
     void materialService.getAll()
-      .then((rows) => setMaterials(rows.filter((m) => m.isActive !== false && m.id)))
+      .then((rows) => setMaterials(rows.filter(
+        (m) => m.isActive !== false && m.id && isMaterialAvailableForSpareParts(m),
+      )))
       .catch(() => setMaterials([]));
   }, [open]);
 
   const itemOptions = useMemo(() => {
     const seen = new Set<string>();
+    const eligibleIds = new Set(materials.map((m) => String(m.id || '').trim()).filter(Boolean));
     const out: Array<{ value: string; label: string }> = [];
     for (const part of parts) {
       const itemId = String(part.materialId || part.rawMaterialId || '').trim();
       if (!itemId || seen.has(itemId)) continue;
+      // Hide catalog rows whose material is marked not available for spare parts.
+      if (eligibleIds.size > 0 && !eligibleIds.has(itemId)) continue;
       seen.add(itemId);
       out.push({
         value: itemId,
@@ -127,7 +133,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
         onOpenChange(next);
       }}
     >
-      <DialogContent className="max-w-lg" dir="rtl">
+      <DialogContent className="max-h-[90vh] w-[calc(100vw-1.5rem)] max-w-lg overflow-y-auto" dir="rtl">
         <DialogHeader>
           <DialogTitle>طلب تموين من المخزن الرئيسي</DialogTitle>
           <DialogDescription>
@@ -152,8 +158,8 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
               />
             </div>
             {draftLines.map((line, index) => (
-              <div key={line.key} className="flex flex-wrap gap-2 items-end">
-                <div className="flex-1 min-w-[180px] space-y-1">
+              <div key={line.key} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-end">
+                <div className="min-w-0 flex-1 space-y-1 sm:min-w-[180px]">
                   <Label>القطعة</Label>
                   <SearchableSelect
                     options={itemOptions}
@@ -166,7 +172,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
                     placeholder="ابحث واختر قطعة"
                   />
                 </div>
-                <div className="w-28">
+                <div className="w-full sm:w-28">
                   <Label>الكمية</Label>
                   <Input
                     type="number"
@@ -185,6 +191,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
                   type="button"
                   variant="outline"
                   size="sm"
+                  className="w-full sm:w-auto"
                   onClick={() =>
                     setDraftLines((prev) =>
                       prev.length <= 1
@@ -201,6 +208,7 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
               type="button"
               variant="outline"
               size="sm"
+              className="w-full sm:w-auto"
               onClick={() =>
                 setDraftLines((prev) => [
                   ...prev,
@@ -213,12 +221,13 @@ export const CreateRepairReplenishmentModal: React.FC<Props> = ({
           </div>
         )}
 
-        <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={busy}>
+        <DialogFooter className="flex-col-reverse gap-2 sm:flex-row">
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => onOpenChange(false)} disabled={busy}>
             إلغاء
           </Button>
           <Button
             type="button"
+            className="w-full sm:w-auto"
             onClick={() => void submitCreate()}
             disabled={busy || !canCreate || !toWarehouseId || itemOptions.length === 0}
           >

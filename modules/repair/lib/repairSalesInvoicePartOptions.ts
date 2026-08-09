@@ -121,7 +121,9 @@ export function buildRepairSalesInvoicePartOptions(
   };
 
   // Prefer catalog-linked materials first (stable names from branch parts).
+  // Skip rows whose material is not in the eligible materials list (e.g. not for spare parts).
   for (const [materialId, part] of partByMaterialId.entries()) {
+    if (!saleByMaterialId.has(materialId)) continue;
     pushMaterial(
       materialId,
       String(part.name || materialId),

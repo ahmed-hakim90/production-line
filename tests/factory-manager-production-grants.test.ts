@@ -26,6 +26,13 @@ test('factory_manager seed and migration include reports/products create', () =>
   assert.match(migrationBlock, /'products\.edit'/);
 });
 
+test('login bootstrap does not auto-run role catalog migrate/sync', () => {
+  const src = readFileSync(join(root, 'store/useAppStore.ts'), 'utf8');
+  assert.doesNotMatch(src, /canMigrateDefaultRoles/);
+  assert.doesNotMatch(src, /missingFactoryOpsGrant/);
+  assert.match(src, /seedDefaultRolesCatalog/);
+});
+
 test('Cloud Function allowlist includes factory_manager production grants', () => {
   const src = readFileSync(join(root, 'functions/src/rolePermissionMigration.ts'), 'utf8');
   assert.match(src, /factory_manager:\s*\[/);

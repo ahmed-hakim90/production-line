@@ -100,6 +100,7 @@ export const JobCard: React.FC<JobCardProps> = ({ job, onCancel, onRetry, onView
           {job.status === 'completed' && (
             <div className="mt-3 rounded-[var(--border-radius-sm)] bg-emerald-50 border border-emerald-200 p-2.5 space-y-0.5">
               <p className="text-[11.5px] font-semibold text-emerald-700">✔ {t('jobs.addedRows', { count: job.addedRows.toLocaleString('ar-EG') })}</p>
+              <p className="text-[11.5px] font-semibold text-slate-600">→ {t('jobs.skippedRows', { count: (job.skippedRows ?? 0).toLocaleString('ar-EG') })}</p>
               <p className="text-[11.5px] font-semibold text-amber-700">⚠ {t('jobs.failedRows', { count: job.failedRows.toLocaleString('ar-EG') })}</p>
             </div>
           )}

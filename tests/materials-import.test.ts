@@ -2,11 +2,11 @@ import { describe, expect, it } from './assertHarness.ts';
 import * as XLSX from 'xlsx';
 import type { Material } from '../modules/manufacturing/types';
 import {
-  orderMaterialImportRowsForSave,
   parseMaterialsFromBuffer,
   toMaterialCreateData,
   toMaterialUpdateData,
 } from '../utils/importMaterials';
+import { decideMaterialImportSave } from '../utils/importSaveDecision';
 
 function makeBuffer(rows: (string | number)[][]): Uint8Array {
   const wb = XLSX.utils.book_new();
@@ -38,10 +38,10 @@ const existing: Material[] = [
 ];
 
 describe('parseMaterialsFromBuffer', () => {
-  it('updates existing by الكود الحالي and keeps identity fields out of patch', () => {
+  it('updates existing by كود المادة and keeps identity fields out of patch', () => {
     const data = makeBuffer([
-      ['الكود الحالي', 'الكود الجديد', 'اسم المادة', 'تكلفة الشراء', 'هالك %'],
-      ['MAT-001', '', 'موتور نحاس محدّث', 22, 3],
+      ['كود المادة', 'اسم المادة', 'تكلفة الشراء', 'هالك %'],
+      ['MAT-001', 'موتور نحاس محدّث', 22, 3],
     ]);
     const result = parseMaterialsFromBuffer(data, existing);
     expect(result.validCount).toBe(1);
@@ -57,62 +57,24 @@ describe('parseMaterialsFromBuffer', () => {
     expect(patch.name).toBe('موتور نحاس محدّث');
     expect(patch.purchaseCost).toBe(22);
     expect(patch.wastePercent).toBe(3);
+    expect(patch.code).toBeUndefined();
     expect(patch.type).toBeUndefined();
     expect(patch.linkedCostCenterIds).toBeUndefined();
     expect(patch.legacyRawMaterialId).toBeUndefined();
     expect(Object.prototype.hasOwnProperty.call(patch, 'id')).toBe(false);
   });
 
-  it('renames code via الكود الجديد without creating a duplicate', () => {
+  it('rejects rename attempts via الكود الحالي/الجديد', () => {
     const data = makeBuffer([
       ['الكود الحالي', 'الكود الجديد', 'اسم المادة'],
       ['MAT-001', 'MAT-001B', 'موتور نحاس'],
     ]);
     const result = parseMaterialsFromBuffer(data, existing);
-    expect(result.updateCount).toBe(1);
-    expect(result.rows[0].matchedId).toBe('m1');
-    expect(result.rows[0].code).toBe('MAT-001B');
-    const patch = toMaterialUpdateData(result.rows[0], existing[0]);
-    expect(patch.code).toBe('MAT-001B');
+    expect(result.errorCount).toBe(1);
+    expect(result.rows[0].errors.some((e) => /تغيير كود المادة/.test(e))).toBe(true);
   });
 
-  it('accepts and orders a sequential code shift when current owners move in the same file', () => {
-    const chainedExisting: Material[] = [
-      { ...existing[0], id: 'm7', code: 'INJ-0007', name: 'مكون 7' },
-      { ...existing[0], id: 'm8', code: 'INJ-0008', name: 'مكون 8' },
-      { ...existing[0], id: 'm9', code: 'INJ-0009', name: 'مكون 9' },
-    ];
-    const data = makeBuffer([
-      ['مصدر المادة', 'الكود الحالي', 'الكود الجديد', 'اسم المادة'],
-      ['تُصنع داخلياً', 'INJ-0007', 'INJ-0008', 'مكون 7'],
-      ['تُصنع داخلياً', 'INJ-0008', 'INJ-0009', 'مكون 8'],
-      ['تُصنع داخلياً', 'INJ-0009', 'INJ-0010', 'مكون 9'],
-    ]);
-    const result = parseMaterialsFromBuffer(data, chainedExisting);
-    expect(result.errorCount).toBe(0);
-
-    const ordered = orderMaterialImportRowsForSave(result.rows, chainedExisting);
-    expect(ordered.map((row) => row.currentCode).join(',')).toBe(
-      'INJ-0009,INJ-0008,INJ-0007',
-    );
-  });
-
-  it('rejects a circular code swap that cannot be saved sequentially', () => {
-    const swapExisting: Material[] = [
-      { ...existing[0], id: 'm1', code: 'MAT-001' },
-      { ...existing[0], id: 'm2', code: 'MAT-002' },
-    ];
-    const data = makeBuffer([
-      ['مصدر المادة', 'الكود الحالي', 'الكود الجديد', 'اسم المادة'],
-      ['شراء خارجي', 'MAT-001', 'MAT-002', 'مادة 1'],
-      ['شراء خارجي', 'MAT-002', 'MAT-001', 'مادة 2'],
-    ]);
-    const result = parseMaterialsFromBuffer(data, swapExisting);
-    expect(result.errorCount).toBe(2);
-    expect(result.rows.every((row) => row.errors.some((error) => /دائري/.test(error)))).toBe(true);
-  });
-
-  it('keeps same code when الكود الجديد equals الكود الحالي (export round-trip)', () => {
+  it('accepts legacy current=new columns as a stable round-trip', () => {
     const data = makeBuffer([
       ['الكود الحالي', 'الكود الجديد', 'تكلفة الشراء'],
       ['MAT-001', 'MAT-001', 19],
@@ -122,13 +84,13 @@ describe('parseMaterialsFromBuffer', () => {
     expect(result.rows[0].matchedId).toBe('m1');
     expect(result.rows[0].code).toBe('MAT-001');
     const patch = toMaterialUpdateData(result.rows[0], existing[0]);
-    expect(patch.code).toBe('MAT-001');
+    expect(patch.code).toBeUndefined();
     expect(patch.purchaseCost).toBe(19);
   });
 
   it('creates new material when code is unknown', () => {
     const data = makeBuffer([
-      ['مصدر المادة', 'الكود', 'اسم المادة', 'النوع', 'الوحدة الأساسية'],
+      ['مصدر المادة', 'كود المادة', 'اسم المادة', 'النوع', 'الوحدة الأساسية'],
       ['شراء خارجي', 'MAT-999', 'مادة جديدة', 'نصف مصنع', 'كجم'],
     ]);
     const result = parseMaterialsFromBuffer(data, existing);
@@ -139,7 +101,7 @@ describe('parseMaterialsFromBuffer', () => {
 
   it('requires an explicit source when creating a material', () => {
     const data = makeBuffer([
-      ['الكود', 'اسم المادة', 'النوع', 'الوحدة الأساسية'],
+      ['كود المادة', 'اسم المادة', 'النوع', 'الوحدة الأساسية'],
       ['MAT-998', 'مادة بلا مصدر', 'مادة خام', 'كجم'],
     ]);
     const result = parseMaterialsFromBuffer(data, existing);
@@ -151,7 +113,7 @@ describe('parseMaterialsFromBuffer', () => {
     const data = makeBuffer([
       [
         'مصدر المادة',
-        'الكود',
+        'كود المادة',
         'اسم المادة',
         'النوع',
         'الوحدة الأساسية',
@@ -175,7 +137,7 @@ describe('parseMaterialsFromBuffer', () => {
 
   it('omitted columns do not overwrite on merge', () => {
     const data = makeBuffer([
-      ['الكود الحالي', 'تكلفة الشراء'],
+      ['كود المادة', 'تكلفة الشراء'],
       ['MAT-001', 30],
     ]);
     const result = parseMaterialsFromBuffer(data, existing);
@@ -184,9 +146,22 @@ describe('parseMaterialsFromBuffer', () => {
     expect(patch.name).toBeUndefined();
     expect(patch.isManufacturedInternally).toBeUndefined();
     expect(patch.isActive).toBeUndefined();
+    expect(patch.availableForSpareParts).toBeUndefined();
   });
 
-  it('rejects unknown current code', () => {
+  it('imports تظهر في قطع الغيار and patches only when provided', () => {
+    const data = makeBuffer([
+      ['كود المادة', 'تظهر في قطع الغيار'],
+      ['MAT-001', 'لا'],
+    ]);
+    const result = parseMaterialsFromBuffer(data, existing);
+    expect(result.validCount).toBe(1);
+    expect(result.rows[0].availableForSpareParts).toBe(false);
+    const patch = toMaterialUpdateData(result.rows[0], existing[0]);
+    expect(patch.availableForSpareParts).toBe(false);
+  });
+
+  it('rejects unknown material code when using legacy current-code column alone', () => {
     const data = makeBuffer([
       ['الكود الحالي', 'اسم المادة'],
       ['NOPE', 'x'],
@@ -194,5 +169,17 @@ describe('parseMaterialsFromBuffer', () => {
     const result = parseMaterialsFromBuffer(data, existing);
     expect(result.errorCount).toBe(1);
     expect(result.rows[0].errors.some((e) => /غير موجود/.test(e))).toBe(true);
+  });
+
+  it('marks identical re-upload rows as skip (no write)', () => {
+    const data = makeBuffer([
+      ['كود المادة', 'اسم المادة', 'تكلفة الشراء', 'هالك %'],
+      ['MAT-001', 'موتور نحاس', 18, 2],
+    ]);
+    const result = parseMaterialsFromBuffer(data, existing);
+    expect(result.validCount).toBe(1);
+    expect(result.rows[0].action).toBe('update');
+    expect(result.rows[0].changes || []).toEqual([]);
+    expect(decideMaterialImportSave(result.rows[0])).toBe('skip');
   });
 });

@@ -30,8 +30,8 @@ export const repairTechnicianService = {
     return result.job ? asJob(result.job) : null;
   },
 
-  async changeStatus(jobId: string, status: string, reason?: string): Promise<void> {
-    await repairTechnicianOpsCallable({ operation: 'status', jobId, status, reason });
+  async changeStatus(jobId: string, status: string, reason?: string, reasonCode?: string): Promise<void> {
+    await repairTechnicianOpsCallable({ operation: 'status', jobId, status, reason, reasonCode });
   },
 
   async addPhoto(jobId: string, url: string): Promise<void> {

@@ -49,7 +49,7 @@ export const PRODUCTION_ROUTES: AppRouteDef[] = [
   {
     path: '/production/packaging/control',
     permission: 'reports.view',
-    permissionsAny: ['reports.view', 'reports.packaging.create', 'inventory.view'],
+    permissionsAny: ['reports.view', 'reports.packaging.create'],
     component: PackagingControl,
     skeleton: 'dashboard',
   },

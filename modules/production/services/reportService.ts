@@ -26,6 +26,7 @@ import { normalizeInjectionShift } from '../utils/injectionReportShift';
 import { resolveReportType } from '../utils/reportTypes';
 import { productionAttendanceService } from './productionAttendanceService';
 import { REPORT_LIST_MAX_PAGES } from '../lib/reportListLimits';
+import { assertProductionProductId } from '../utils/assertProductionProductId';
 
 const COLLECTION = 'production_reports';
 const UNIQUE_COLLECTION = 'production_report_uniques';
@@ -324,6 +325,16 @@ export const reportService = {
     for (const field of required) {
       if (data[field] === undefined || data[field] === null || data[field] === '') {
         throw new Error(`Missing required field: ${field}`);
+      }
+    }
+
+    const reportType = resolveReportType(data.reportType);
+    if (reportType !== 'component_injection') {
+      await assertProductionProductId(String(data.productId || ''));
+      const packagingLines = Array.isArray(data.packagingLines) ? data.packagingLines : [];
+      for (const line of packagingLines) {
+        const lineProductId = String(line?.productId || '').trim();
+        if (lineProductId) await assertProductionProductId(lineProductId);
       }
     }
 

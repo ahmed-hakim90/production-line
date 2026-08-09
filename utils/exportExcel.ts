@@ -335,6 +335,124 @@ export interface ProductExportFileMeta {
   fileBaseName: string;
 }
 
+/**
+ * Round-trip master export for products — same columns as import template (بيانات أساسية).
+ * Suitable for edit → re-upload via رفع المنتجات.
+ */
+export type ProductBasicMasterExportRow = {
+  code: string;
+  name: string;
+  barcode?: string;
+  model?: string;
+  isManufactured?: boolean;
+  chineseUnitCost?: number;
+  innerBoxCost?: number;
+  outerCartonCost?: number;
+  unitsPerCarton?: number;
+  sellingPrice?: number;
+  routingTargetUnitSeconds?: number;
+};
+
+export const exportProductsBasicMaster = (
+  rows: ProductBasicMasterExportRow[],
+  options?: {
+    includeCosts?: boolean;
+    includeSellingPrice?: boolean;
+    fileName?: string;
+  },
+) => {
+  if (!rows.length) return;
+  const includeCosts = options?.includeCosts !== false;
+  const includeSellingPrice = options?.includeSellingPrice !== false;
+  const date = new Date().toISOString().slice(0, 10);
+  const excelRows = rows.map((r) => {
+    const row: Record<string, string | number> = {
+      'اسم المنتج': r.name || '',
+      'كود المنتج': r.code || '',
+      'باركود العبوة': r.barcode || '',
+      'الفئة': r.model || '',
+      'منتج تصنيعي': r.isManufactured === false ? 'لا' : 'نعم',
+    };
+    if (includeCosts) {
+      row['تكلفة الوحدة الصينية'] = Number(r.chineseUnitCost || 0) || '';
+      row['تكلفة العلبة الداخلية'] = Number(r.innerBoxCost || 0) || '';
+      row['تكلفة الكرتونة الخارجية'] = Number(r.outerCartonCost || 0) || '';
+      row['عدد الوحدات في الكرتونة'] = Number(r.unitsPerCarton || 0) || '';
+    }
+    if (includeSellingPrice) {
+      row['سعر البيع'] = Number(r.sellingPrice || 0) || '';
+    }
+    row['تارجت المتوقع تقارير (ث)'] =
+      r.routingTargetUnitSeconds != null && Number(r.routingTargetUnitSeconds) > 0
+        ? Math.round(Number(r.routingTargetUnitSeconds))
+        : '';
+    return row;
+  });
+
+  const guideRows = [
+    {
+      العمود: 'ترتيب العمل',
+      'إلزامي؟': '—',
+      ملاحظات: 'مواد تصنيعية ← بيانات المنتجات ← مكونات (هذا الملف = بيانات المنتجات فقط)',
+    },
+    {
+      العمود: 'اسم المنتج',
+      'إلزامي؟': 'للإنشاء',
+      ملاحظات: 'عند التحديث: عمود فاضي = لا تغيّر الاسم',
+    },
+    {
+      العمود: 'كود المنتج',
+      'إلزامي؟': 'نعم',
+      ملاحظات: 'مفتاح المطابقة — لا يُغيَّر عبر الاستيراد',
+    },
+    {
+      العمود: 'باركود العبوة',
+      'إلزامي؟': 'للإنشاء',
+      ملاحظات: 'باركود فريد داخل الشركة',
+    },
+    {
+      العمود: 'الفئة',
+      'إلزامي؟': 'لا',
+      ملاحظات: 'اسم الفئة / الموديل',
+    },
+    {
+      العمود: 'منتج تصنيعي',
+      'إلزامي؟': 'لا',
+      ملاحظات: 'نعم = يظهر في الإنتاج؛ لا = قطع غيار/صيانة فقط',
+    },
+    {
+      العمود: 'تكلفة الوحدة الصينية / علبة / كرتونة / وحدات',
+      'إلزامي؟': 'لا',
+      ملاحظات: 'تظهر فقط لمن لديه صلاحية التكاليف',
+    },
+    {
+      العمود: 'سعر البيع',
+      'إلزامي؟': 'لا',
+      ملاحظات: 'حسب صلاحية عرض سعر البيع',
+    },
+    {
+      العمود: 'تارجت المتوقع تقارير (ث)',
+      'إلزامي؟': 'لا',
+      ملاحظات: 'ثانية لكل وحدة عند غياب مسار تشغيل',
+    },
+  ];
+
+  const wb = XLSX.utils.book_new();
+  const dataSheet = XLSX.utils.json_to_sheet(excelRows);
+  if (!dataSheet['!views']) dataSheet['!views'] = [];
+  (dataSheet['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, dataSheet, 'المنتجات');
+  const guideSheet = XLSX.utils.json_to_sheet(guideRows);
+  if (!guideSheet['!views']) guideSheet['!views'] = [];
+  (guideSheet['!views'] as any[]).push({ rightToLeft: true });
+  XLSX.utils.book_append_sheet(wb, guideSheet, 'تعليمات');
+  const buffer = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([buffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+  saveAs(blob, `${options?.fileName || `منتجات-بيانات-اساسية-${date}`}.xlsx`);
+};
+
 export const exportAllProducts = (
   data: ProductExportData[],
   includeCosts: boolean,
@@ -351,6 +469,7 @@ export const exportAllProducts = (
       'الباركود': d.raw.barcode || '',
       'اسم المنتج': d.raw.name,
       'الفئة': d.raw.model || '—',
+      'منتج تصنيعي': d.raw.isManufactured === false ? 'لا' : 'نعم',
       'تارجت المتوقع تقارير (ث)':
         d.raw.routingTargetUnitSeconds != null && Number(d.raw.routingTargetUnitSeconds) > 0
           ? Math.round(Number(d.raw.routingTargetUnitSeconds))
@@ -458,6 +577,7 @@ export const exportSingleProduct = (data: SingleProductExportData, includeCosts:
     'الكود': data.raw.code,
     'اسم المنتج': data.raw.name,
     'الفئة': data.raw.model || '—',
+    'منتج تصنيعي': data.raw.isManufactured === false ? 'لا' : 'نعم',
     'تارجت المتوقع تقارير (ث)':
       data.raw.routingTargetUnitSeconds != null && Number(data.raw.routingTargetUnitSeconds) > 0
         ? Math.round(Number(data.raw.routingTargetUnitSeconds))
@@ -1006,12 +1126,13 @@ export type ManufacturingMaterialExportRow = {
   minStock?: number;
   isManufacturedInternally?: boolean;
   manufacturedProductCode?: string;
+  availableForSpareParts?: boolean;
   isActive?: boolean;
 };
 
 /**
  * Round-trip export for manufacturing materials master.
- * Headers match importMaterials parser (الكود الحالي + الكود الجديد).
+ * Headers match importMaterials parser (كود المادة — ثابت، بدون إعادة تسمية).
  */
 export const exportManufacturingMaterials = (
   rows: ManufacturingMaterialExportRow[],
@@ -1023,9 +1144,7 @@ export const exportManufacturingMaterials = (
     const isInternal = r.isManufacturedInternally === true;
     return {
       'مصدر المادة': isInternal ? 'تُصنع داخلياً' : 'شراء خارجي',
-      'الكود الحالي': r.code,
-      // Pre-filled with current code so the user can edit this cell to rename on re-upload.
-      'الكود الجديد': r.code,
+      'كود المادة': r.code,
       'اسم المادة': r.name,
       'الفئة': r.categoryName || '',
       'النوع': r.type,
@@ -1036,6 +1155,7 @@ export const exportManufacturingMaterials = (
       'هالك %': isInternal ? '' : Number(r.wastePercent ?? 0),
       'الحد الأدنى للمخزون': Number(r.minStock ?? 0),
       'كود المنتج المرتبط': r.manufacturedProductCode || '',
+      'تظهر في قطع الغيار': r.availableForSpareParts === false ? 'لا' : 'نعم',
       'الحالة': r.isActive === false ? 'موقوف' : 'نشط',
     };
   });

@@ -1001,63 +1001,13 @@ export const ProductionIssues: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 xl:grid-cols-[360px_1fr] gap-4">
-        <Card className="!p-0 overflow-hidden" title="أوامر الصرف">
-          <div className="flex gap-2 px-3 pt-3">
-            {([
-              ['requests', `طلبات من الإنتاج (${orders.filter((o) => o.status === 'requested').length})`],
-              ['all', 'أوامر المستودع'],
-            ] as const).map(([key, label]) => (
-              <button
-                key={key}
-                type="button"
-                onClick={() => {
-                  setListTab(key);
-                  setOrdersPage(1);
-                }}
-                className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
-                  listTab === key ? 'bg-primary text-white border-primary' : 'bg-white border-slate-200 text-slate-600'
-                }`}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-          {listOrders.length === 0 ? (
-            <p className="px-4 py-8 text-center text-sm text-slate-400">
-              {listTab === 'requests' ? 'لا توجد طلبات إنتاج معلّقة.' : 'لا توجد أوامر صرف بعد.'}
-            </p>
-          ) : (
-            <>
-              {pagedOrders.map((order) => (
-                <button
-                  key={order.id}
-                  className={`block w-full text-start border-b px-4 py-3 ${selectedOrder?.id === order.id ? 'bg-primary/10' : ''}`}
-                  onClick={() => {
-                    setSelectedOrderId(order.id || '');
-                    setApproveQty(String(order.quantity || ''));
-                  }}
-                >
-                  <p className="font-bold">{order.referenceNo}</p>
-                  <p className="text-xs text-slate-500">{order.productName} - {statusLabel(order.status)}</p>
-                  <p className="text-xs text-slate-500 mt-1">
-                    {order.status === 'requested' ? 'كمية الطلب' : 'كمية الصرف'}: {formatQty(order.quantity, 3)}
-                    {order.requestedBy ? ` · من ${order.requestedBy}` : ''}
-                  </p>
-                </button>
-              ))}
-              <DataPaginationFooter
-                page={safeOrdersPage}
-                totalPages={ordersTotalPages}
-                totalItems={listOrders.length}
-                onPageChange={setOrdersPage}
-                itemLabel="أمر"
-              />
-            </>
-          )}
-        </Card>
-
-        <Card className="!p-0 overflow-hidden" title={selectedOrder ? `تفاصيل ${selectedOrder.referenceNo}` : 'التفاصيل'}>
+      {/* Physical LTR row: details LEFT, list RIGHT — content stays RTL. */}
+      <div className="flex flex-col xl:flex-row gap-4 items-stretch" dir="ltr">
+        <div className="order-2 xl:order-1 min-w-0 flex-1 w-full" dir="rtl">
+        <Card
+          className="!p-0 overflow-hidden h-full"
+          title={selectedOrder ? `تفاصيل ${selectedOrder.referenceNo}` : 'التفاصيل'}
+        >
           {selectedOrder && (
             <>
               <div className="flex flex-wrap gap-2 p-4 border-b">
@@ -1268,6 +1218,67 @@ export const ProductionIssues: React.FC = () => {
             </>
           )}
         </Card>
+        </div>
+
+        <div className="order-1 xl:order-2 w-full xl:w-[360px] xl:shrink-0" dir="rtl">
+        <Card
+          className="!p-0 overflow-hidden h-full"
+          title="أوامر الصرف"
+        >
+          <div className="flex gap-2 px-3 pt-3">
+            {([
+              ['requests', `طلبات من الإنتاج (${orders.filter((o) => o.status === 'requested').length})`],
+              ['all', 'أوامر المستودع'],
+            ] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                onClick={() => {
+                  setListTab(key);
+                  setOrdersPage(1);
+                }}
+                className={`px-3 py-1.5 rounded-lg text-xs font-bold border ${
+                  listTab === key ? 'bg-primary text-white border-primary' : 'bg-white border-slate-200 text-slate-600'
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {listOrders.length === 0 ? (
+            <p className="px-4 py-8 text-center text-sm text-slate-400">
+              {listTab === 'requests' ? 'لا توجد طلبات إنتاج معلّقة.' : 'لا توجد أوامر صرف بعد.'}
+            </p>
+          ) : (
+            <>
+              {pagedOrders.map((order) => (
+                <button
+                  key={order.id}
+                  className={`block w-full text-start border-b px-4 py-3 ${selectedOrder?.id === order.id ? 'bg-primary/10' : ''}`}
+                  onClick={() => {
+                    setSelectedOrderId(order.id || '');
+                    setApproveQty(String(order.quantity || ''));
+                  }}
+                >
+                  <p className="font-bold">{order.referenceNo}</p>
+                  <p className="text-xs text-slate-500">{order.productName} - {statusLabel(order.status)}</p>
+                  <p className="text-xs text-slate-500 mt-1">
+                    {order.status === 'requested' ? 'كمية الطلب' : 'كمية الصرف'}: {formatQty(order.quantity, 3)}
+                    {order.requestedBy ? ` · من ${order.requestedBy}` : ''}
+                  </p>
+                </button>
+              ))}
+              <DataPaginationFooter
+                page={safeOrdersPage}
+                totalPages={ordersTotalPages}
+                totalItems={listOrders.length}
+                onPageChange={setOrdersPage}
+                itemLabel="أمر"
+              />
+            </>
+          )}
+        </Card>
+        </div>
       </div>
       <div
         style={{

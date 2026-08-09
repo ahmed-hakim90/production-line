@@ -1,12 +1,13 @@
-import { getDocs, limit, where } from 'firebase/firestore';
+import { documentId, getDocs, limit, where } from 'firebase/firestore';
 import { db, isConfigured, mutateRepairCustomerOpsCallable } from '../../auth/services/firebase';
 import { tenantQuery } from '../../../lib/tenantFirestore';
 import {
   CUSTOMER_SERVICE_REQUESTS_COLLECTION,
   REPAIR_CUSTODY_RECORDS_COLLECTION,
+  REPAIR_JOBS_COLLECTION,
   REPAIR_REPLACEMENT_REQUESTS_COLLECTION,
 } from '../collections';
-import type { CustomerServiceRequest, RepairCustodyRecord, RepairReplacementRequest } from '../types';
+import type { CustomerServiceRequest, RepairCustodyRecord, RepairJob, RepairReplacementRequest } from '../types';
 
 const sortNewest = <T extends { createdAt?: string; updatedAt?: string }>(rows: T[]) =>
   rows.sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
@@ -30,6 +31,14 @@ async function listByBranches<T extends { id?: string; branchId?: string; create
 }
 
 export const repairCustomerOperationsService = {
+  async listCallCenterJobs(query: string): Promise<RepairJob[]> {
+    const result = await mutateRepairCustomerOpsCallable<{ jobs: RepairJob[] }>({
+      action: 'listCallCenterJobs',
+      query,
+    });
+    return Array.isArray(result.jobs) ? result.jobs : [];
+  },
+
   async listCustomerRequests(branchIds?: string[]): Promise<CustomerServiceRequest[]> {
     if (!isConfigured) return [];
     return listByBranches<CustomerServiceRequest>(CUSTOMER_SERVICE_REQUESTS_COLLECTION, branchIds, 1000);
@@ -37,7 +46,26 @@ export const repairCustomerOperationsService = {
 
   async listCustody(branchIds?: string[]): Promise<RepairCustodyRecord[]> {
     if (!isConfigured) return [];
-    return listByBranches<RepairCustodyRecord>(REPAIR_CUSTODY_RECORDS_COLLECTION, branchIds, 1500);
+    const rows = await listByBranches<RepairCustodyRecord>(REPAIR_CUSTODY_RECORDS_COLLECTION, branchIds, 1500);
+    const jobIds = Array.from(new Set(rows.map((row) => String(row.jobId || '').trim()).filter(Boolean)));
+    const statuses = new Map<string, Pick<RepairCustodyRecord, 'jobStatus' | 'deliveryAuthorizationNo' | 'customerPhone'>>();
+    try {
+      for (let index = 0; index < jobIds.length; index += 30) {
+        const chunk = jobIds.slice(index, index + 30);
+        const snap = await getDocs(tenantQuery(db, REPAIR_JOBS_COLLECTION, where(documentId(), 'in', chunk)));
+        snap.docs.forEach((item) => {
+          const data = item.data();
+          statuses.set(item.id, {
+            jobStatus: data.status,
+            deliveryAuthorizationNo: data.deliveryAuthorizationNo,
+            customerPhone: data.customerPhone,
+          });
+        });
+      }
+    } catch {
+      // Custody rows remain usable without job enrichment when repair.view is missing.
+    }
+    return rows.map((row) => ({ ...row, ...statuses.get(row.jobId) }));
   },
 
   async listReplacements(branchIds?: string[]): Promise<RepairReplacementRequest[]> {
@@ -94,8 +122,16 @@ export const repairCustomerOperationsService = {
     return mutateRepairCustomerOpsCallable<{ jobId: string; receiptNo: string }>({ action: 'receiveRequest', requestId, lines });
   },
 
-  recordUnrepairable(jobId: string, itemId: string, quantity: number, reason: string) {
-    return mutateRepairCustomerOpsCallable({ action: 'recordUnrepairable', jobId, itemId, quantity, reason });
+  recordUnrepairable(jobId: string, itemId: string, quantity: number, reasonCode: string, reasonNote?: string) {
+    return mutateRepairCustomerOpsCallable({
+      action: 'recordUnrepairable', jobId, itemId, quantity, reasonCode, reasonNote,
+    });
+  },
+
+  reopenUnrepairable(jobId: string, itemId: string, quantity: number, note?: string) {
+    return mutateRepairCustomerOpsCallable<{ status: string; quantity: number }>({
+      action: 'reopenUnrepairable', jobId, itemId, quantity, note,
+    });
   },
 
   handover(jobId: string, itemId: string, quantity: number, source: 'custody' | 'unrepairable') {

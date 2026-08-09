@@ -72,6 +72,7 @@ import type { FirestoreUserWithRepair, RepairBranch, RepairJob, RepairJobStatus 
 import { REPAIR_JOB_STATUS_LABELS, resolveUserRepairBranchIds } from '../types';
 import { computeRepairJobCost } from '../utils/repairBusinessLogic';
 import { downloadUtf8Csv } from '../utils/csvExport';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 const PAGE_SIZE = 20;
 
@@ -441,7 +442,13 @@ export const RepairTechnicianKPIs: React.FC = () => {
       selectedRow
         ? buildCountBars(
             selectedRow.statusBreakdown,
-            (key) => repairSettings.statusMap[key]?.label || REPAIR_JOB_STATUS_LABELS[key] || key,
+            (key) => {
+              const canon = mapLegacyRepairStatus(key);
+              return repairSettings.statusMap[canon]?.label
+                || REPAIR_JOB_STATUS_LABELS[canon]
+                || REPAIR_JOB_STATUS_LABELS[key]
+                || key;
+            },
           )
         : [],
     [selectedRow, repairSettings.statusMap],
@@ -510,7 +517,13 @@ export const RepairTechnicianKPIs: React.FC = () => {
         resolveTechLabel(technicianKeyOf(job)),
         job.technicianId || '',
         formatRepairTechDeviceLabel(job),
-        repairSettings.statusMap[job.status]?.label || REPAIR_JOB_STATUS_LABELS[job.status] || job.status,
+        (() => {
+          const canon = mapLegacyRepairStatus(job.status);
+          return repairSettings.statusMap[canon]?.label
+            || REPAIR_JOB_STATUS_LABELS[canon]
+            || REPAIR_JOB_STATUS_LABELS[job.status]
+            || job.status;
+        })(),
         job.dueAt || '',
         Number(job.overdueDays.toFixed(2)),
         job.id || '',

@@ -2881,6 +2881,205 @@ input[type="radio"] {
   letter-spacing: -0.02em;
 }
 
+/* ── Dense operations board (single-composition home) ───── */
+.ops-dash-board {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.ops-dash-header {
+  min-width: 0;
+}
+
+.ops-dash-kpi {
+  min-width: 0;
+}
+
+.ops-dash-mid,
+.ops-dash-bot {
+  display: grid;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.ops-dash-mid,
+.ops-dash-bot {
+  grid-template-columns: 1fr;
+}
+
+@media (min-width: 1024px) {
+  .ops-dash-mid--2 { grid-template-columns: 1.4fr 1fr; }
+  .ops-dash-mid--3 { grid-template-columns: 1.45fr 1fr 0.95fr; }
+  .ops-dash-bot--2 { grid-template-columns: 1.2fr 1fr; }
+  .ops-dash-bot--3 { grid-template-columns: 1.25fr 0.95fr 0.95fr; }
+  .ops-dash-mid--1,
+  .ops-dash-bot--1 { grid-template-columns: 1fr; }
+}
+
+.ops-dash-slot {
+  min-width: 0;
+  min-height: 0;
+}
+
+.ops-dash-scroll {
+  max-height: min(320px, 42vh);
+  overflow: auto;
+}
+
+.ops-dash-chart.ops-dash-scroll {
+  max-height: min(340px, 46vh);
+}
+
+.ops-dash-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  border-radius: var(--border-radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: var(--shadow-desk-card, 0 4px 16px rgba(15, 23, 42, 0.07));
+  overflow: hidden;
+}
+
+.ops-dash-panel--primary {
+  background: rgb(var(--color-primary));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 8px 24px rgb(var(--color-primary) / 0.28);
+}
+
+.ops-dash-panel__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.65rem 0.85rem;
+  border-bottom: 1px solid var(--color-border);
+  background: color-mix(in srgb, var(--color-card) 88%, var(--color-bg) 12%);
+}
+
+.ops-dash-panel--primary .ops-dash-panel__head {
+  border-bottom-color: rgb(255 255 255 / 0.14);
+  background: transparent;
+}
+
+.ops-dash-panel__title {
+  margin: 0;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  letter-spacing: -0.01em;
+}
+
+.ops-dash-panel--primary .ops-dash-panel__title {
+  color: #fff;
+}
+
+.ops-dash-panel__body {
+  flex: 1;
+  min-height: 0;
+  padding: 0.75rem 0.85rem;
+}
+
+.ops-dash-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.65rem;
+}
+
+@media (min-width: 768px) {
+  .ops-dash-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+.ops-dash-kpi-card {
+  border-radius: var(--border-radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  padding: 0.85rem 1rem;
+  box-shadow: var(--shadow-desk-card, 0 4px 16px rgba(15, 23, 42, 0.07));
+  min-height: 96px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.ops-dash-kpi-card--accent {
+  background: rgb(var(--color-primary));
+  border-color: transparent;
+  color: #fff;
+  box-shadow: 0 8px 22px rgb(var(--color-primary) / 0.28);
+}
+
+.ops-dash-kpi-card__label {
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+}
+
+.ops-dash-kpi-card--accent .ops-dash-kpi-card__label {
+  color: rgb(255 255 255 / 0.78);
+}
+
+.ops-dash-kpi-card__value {
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text);
+}
+
+.ops-dash-kpi-card--accent .ops-dash-kpi-card__value {
+  color: #fff;
+}
+
+.ops-dash-kpi-card__meta {
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: var(--color-text-muted);
+  margin-top: 0.35rem;
+}
+
+.ops-dash-kpi-card--accent .ops-dash-kpi-card__meta {
+  color: rgb(255 255 255 / 0.72);
+}
+
+.ops-dash-secondary details {
+  border-radius: var(--border-radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  overflow: hidden;
+}
+
+.ops-dash-secondary summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: var(--color-text);
+  background: color-mix(in srgb, var(--color-card) 88%, var(--color-bg) 12%);
+}
+
+.ops-dash-secondary summary::-webkit-details-marker {
+  display: none;
+}
+
+.ops-dash-secondary details[open] summary {
+  border-bottom: 1px solid var(--color-border);
+}
+
+.ops-dash-secondary .ops-dash-secondary__body {
+  padding: 0.85rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
 /* Repair module — scoped to main content (see AppLayout `erp-repair-theme`).
    Stripe-like: airy padding, hairline borders, soft elevation, warm accent. */
 .erp-repair-theme {

@@ -87,9 +87,16 @@ const normalizeJob = (job: RepairJob): RepairJob => {
       }];
   const lead = normalizedProducts[0];
   const mappedStatus = mapLegacyRepairStatus(job.status);
+  const statusHistory = Array.isArray(job.statusHistory)
+    ? job.statusHistory.map((entry) => ({
+        ...entry,
+        status: mapLegacyRepairStatus(entry?.status),
+      }))
+    : job.statusHistory;
   const normalizedJob = {
     ...job,
     status: mappedStatus,
+    statusHistory,
     jobProducts: normalizedProducts,
     productId: lead?.productId || job.productId,
     productName: lead?.productName || job.productName,
@@ -844,10 +851,20 @@ export const repairJobService = {
     );
     if (normalized.length === 0) return [];
     if (normalized.length === 1) return this.listByTechnician(normalized[0]);
-    const chunks = await Promise.all(normalized.map((tid) => this.listByTechnician(tid)));
+    const IN_CHUNK = 10;
+    const idChunks: string[][] = [];
+    for (let i = 0; i < normalized.length; i += IN_CHUNK) {
+      idChunks.push(normalized.slice(i, i + IN_CHUNK));
+    }
+    const snaps = await Promise.all(
+      idChunks.map((chunk) =>
+        getDocs(tenantQuery(db, REPAIR_JOBS_COLLECTION, where('technicianId', 'in', chunk))),
+      ),
+    );
     const byId = new Map<string, RepairJob>();
-    chunks.flat().forEach((j) => {
-      if (j.id) byId.set(j.id, j);
+    snaps.flatMap((snap) => snap.docs).forEach((d) => {
+      const job = normalizeJob({ id: d.id, ...d.data() } as RepairJob);
+      if (job.id) byId.set(job.id, job);
     });
     return Array.from(byId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   },

@@ -39,9 +39,8 @@ function workbookBuffer(rows: Array<Record<string, unknown>>): ArrayBuffer {
 }
 
 describe('repair parts pricing Excel import', () => {
-  it('matches by stable id, preserves blank prices, and accepts zero', () => {
+  it('matches by business code without requiring material uid', () => {
     const result = parseRepairPartsPricingBuffer(workbookBuffer([{
-      'معرف المادة': 'material-1',
       الكود: 'mat-001',
       'سعر المستهلك': 125.5,
       'سعر التاجر': '',
@@ -50,19 +49,30 @@ describe('repair parts pricing Excel import', () => {
 
     assert.deepEqual(result.errors, []);
     assert.equal(result.changes.length, 1);
+    assert.equal(result.changes[0].materialId, 'material-1');
     assert.deepEqual(result.changes[0].current, { consumer: 100, trader: 80, cost: 50 });
     assert.deepEqual(result.changes[0].next, { consumer: 125.5, trader: 80, cost: 0 });
+  });
+
+  it('still accepts legacy sheets that include معرف المادة', () => {
+    const result = parseRepairPartsPricingBuffer(workbookBuffer([{
+      'معرف المادة': 'material-1',
+      الكود: 'MAT-001',
+      'سعر المستهلك': 110,
+    }]), materials);
+
+    assert.deepEqual(result.errors, []);
+    assert.equal(result.changes.length, 1);
+    assert.equal(result.changes[0].next.consumer, 110);
   });
 
   it('rejects duplicate rows and invalid prices', () => {
     const result = parseRepairPartsPricingBuffer(workbookBuffer([
       {
-        'معرف المادة': 'material-2',
         الكود: 'MAT-002',
         'سعر المستهلك': -1,
       },
       {
-        'معرف المادة': 'material-2',
         الكود: 'MAT-002',
         'سعر المستهلك': 30,
       },
@@ -74,7 +84,7 @@ describe('repair parts pricing Excel import', () => {
     assert.match(result.errors[1], /مكررة/);
   });
 
-  it('rejects mismatched identifiers and unknown parts', () => {
+  it('rejects unknown codes and legacy id/code mismatches', () => {
     const result = parseRepairPartsPricingBuffer(workbookBuffer([
       {
         'معرف المادة': 'material-1',
@@ -82,7 +92,6 @@ describe('repair parts pricing Excel import', () => {
         'سعر المستهلك': 30,
       },
       {
-        'معرف المادة': 'unknown',
         الكود: 'MAT-999',
         'سعر المستهلك': 30,
       },
@@ -90,7 +99,7 @@ describe('repair parts pricing Excel import', () => {
 
     assert.equal(result.changes.length, 0);
     assert.equal(result.errors.length, 2);
-    assert.match(result.errors[0], /الكود لا يطابق/);
+    assert.match(result.errors[0], /معرف المادة لا يطابق|الكود لا يطابق/);
     assert.match(result.errors[1], /لم يتم العثور/);
   });
 });

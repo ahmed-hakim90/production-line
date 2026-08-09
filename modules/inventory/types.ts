@@ -870,6 +870,15 @@ export interface SparePartsReplenishmentDemandLink {
   quantity: number;
 }
 
+/** Pick locations on the central spare-parts warehouse (same shape as production issue). */
+export interface SparePartsReplenishmentAllocation {
+  locationId: string;
+  locationCode: string;
+  rack?: string;
+  shelf?: string;
+  quantity: number;
+}
+
 export interface SparePartsReplenishmentLine {
   lineId: string;
   itemType: 'material';
@@ -886,6 +895,13 @@ export interface SparePartsReplenishmentLine {
   /** تكلفة الوحدة من ماستر المكونات (مركزي) — لا يُسعّر من المركز */
   unitCostSnapshot: number;
   totalCostSnapshot: number;
+  /** Primary pick location (first allocation) for compact UI / legacy. */
+  locationId?: string;
+  locationCode?: string;
+  /** Multi-shelf pick plan from central warehouse. */
+  allocations?: SparePartsReplenishmentAllocation[];
+  availableQty?: number;
+  shortageQty?: number;
   /** Repair jobs that demanded this line (open basket from job picker). */
   sourceJobIds?: string[];
   demandLinks?: SparePartsReplenishmentDemandLink[];

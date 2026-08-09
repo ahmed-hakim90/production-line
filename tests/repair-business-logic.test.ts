@@ -166,6 +166,36 @@ const defaultStatuses: ResolvedRepairStatus[] = [
   });
   assert.equal(workshopFromReady.includes('delivered'), false);
   assert.equal(workshopFromReady.includes('cancelled'), false);
+
+  // Tenant still on legacy ids (inspection/repair) — must appear in workshop targets.
+  const legacyStatuses = [
+    { id: 'received', label: 'وارد', color: '#64748b', order: 1, isTerminal: false, isEnabled: true },
+    { id: 'inspection', label: 'فحص', color: '#f59e0b', order: 2, isTerminal: false, isEnabled: true },
+    { id: 'estimate_ready', label: 'التقدير جاهز لمراجعة الاستقبال', color: '#0284c7', order: 3, isTerminal: false, isEnabled: true },
+    { id: 'repair', label: 'إصلاح', color: '#0ea5e9', order: 4, isTerminal: false, isEnabled: true },
+    { id: 'ready', label: 'جاهز للتسليم', color: '#22c55e', order: 5, isTerminal: false, isEnabled: true },
+    { id: 'delivered', label: 'تم التسليم', color: '#16a34a', order: 6, isTerminal: true, isEnabled: true },
+    { id: 'unrepairable', label: 'غير قابل للإصلاح', color: '#ef4444', order: 7, isTerminal: true, isEnabled: true },
+  ];
+  assertRepairStatusTransition({
+    fromStatus: 'received',
+    toStatus: 'inspection',
+    statuses: legacyStatuses,
+  });
+  assertRepairStatusTransition({
+    fromStatus: 'inspection',
+    toStatus: 'repair',
+    statuses: legacyStatuses,
+  });
+  const workshopFromReceivedLegacy = listAllowedWorkshopStatusTargets({
+    fromStatus: 'received',
+    statuses: legacyStatuses,
+  });
+  assert.ok(workshopFromReceivedLegacy.includes('inspection'));
+  assert.ok(workshopFromReceivedLegacy.includes('estimate_ready'));
+  assert.ok(workshopFromReceivedLegacy.includes('unrepairable'));
+  assert.equal(isWorkshopStatusWithinReadyCap('inspection', legacyStatuses), true);
+  assert.equal(isWorkshopStatusWithinReadyCap('repair', legacyStatuses), true);
 }
 
 {

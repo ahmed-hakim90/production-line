@@ -29,8 +29,8 @@ function num(value: number): string {
   return new Intl.NumberFormat('ar-EG').format(value);
 }
 
-function formatPct(value: number): string {
-  if (!Number.isFinite(value) || value <= 0) return '—';
+function formatPct(value: number, hasOutcomes: boolean): string {
+  if (!hasOutcomes || !Number.isFinite(value)) return '—';
   return `${new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 0 }).format(value)}%`;
 }
 
@@ -134,7 +134,7 @@ export const RepairTechnicianHome: React.FC = () => {
         )}
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm text-muted-foreground">الطلبات ({periodLabel(period)})</CardTitle>
@@ -150,6 +150,16 @@ export const RepairTechnicianHome: React.FC = () => {
           <CardContent>
             <p className="text-3xl font-bold tabular-nums text-emerald-600">
               {loading ? '…' : num(metrics.fixedCount)}
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="border-rose-200 bg-rose-50/50 dark:border-rose-900/40 dark:bg-rose-950/20">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm text-rose-900 dark:text-rose-200">غير قابل للإصلاح</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-3xl font-bold tabular-nums text-rose-700 dark:text-rose-300">
+              {loading ? '…' : num(metrics.unrepairableCount)}
             </p>
           </CardContent>
         </Card>
@@ -176,12 +186,14 @@ export const RepairTechnicianHome: React.FC = () => {
             <CardTitle className="text-sm text-muted-foreground">نسبة النجاح</CardTitle>
           </CardHeader>
           <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{loading ? '…' : formatPct(metrics.successRate)}</p>
+            <p className="text-3xl font-bold tabular-nums">
+              {loading ? '…' : formatPct(metrics.successRate, metrics.completedOutcomesCount > 0)}
+            </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">ما تم إصلاحه — {periodLabel(period)}</CardTitle>
@@ -228,6 +240,65 @@ export const RepairTechnicianHome: React.FC = () => {
                             to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
                           >
                             الورشة
+                          </Link>
+                        ) : '—'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="border-rose-200/80 dark:border-rose-900/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base text-rose-900 dark:text-rose-200">
+              غير قابل للإصلاح — {periodLabel(period)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="table erp-table w-full text-sm">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th text-right">الإيصال</th>
+                    <th className="erp-th text-right">الجهاز</th>
+                    <th className="erp-th text-right">الحالة</th>
+                    <th className="erp-th text-right">التاريخ</th>
+                    <th className="erp-th text-right">فتح</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {loading ? (
+                    <tr>
+                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                        <span role="status" aria-live="polite">جاري التحميل...</span>
+                      </td>
+                    </tr>
+                  ) : metrics.unrepairableJobs.length === 0 ? (
+                    <tr>
+                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                        لا توجد طلبات غير قابلة للإصلاح في هذه الفترة.
+                      </td>
+                    </tr>
+                  ) : metrics.unrepairableJobs.map((row) => (
+                    <tr key={row.id || row.receiptNo} className="border-t hover:bg-muted/40">
+                      <td className="p-2 font-mono">{row.receiptNo || '—'}</td>
+                      <td className="p-2 text-muted-foreground">{formatRepairTechnicianDeviceLabel(row)}</td>
+                      <td className="p-2">
+                        <StatusBadge status={row.status as RepairJobStatus} />
+                      </td>
+                      <td className="p-2 tabular-nums">
+                        {formatDate(row.resolvedAt || row.closedAt || row.updatedAt)}
+                      </td>
+                      <td className="p-2">
+                        {row.id ? (
+                          <Link
+                            className="text-xs text-primary underline"
+                            to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
+                          >
+                            عرض
                           </Link>
                         ) : '—'}
                       </td>

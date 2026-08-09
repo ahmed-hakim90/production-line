@@ -14,6 +14,7 @@ import { useGlobalModalManager } from '../../../components/modal-manager/GlobalM
 import { PageHeader } from '../../../components/PageHeader';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { filterProductionProducts } from '../utils/isProductionProduct';
 import {
   Select,
   SelectContent,
@@ -602,7 +603,7 @@ export const Lines: React.FC = () => {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="none">اختر المنتج...</SelectItem>
-                    {_rawProducts.map((p) => (
+                    {filterProductionProducts(_rawProducts).map((p) => (
                       <SelectItem key={p.id} value={p.id!}>{p.name}</SelectItem>
                     ))}
                   </SelectContent>

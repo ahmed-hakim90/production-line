@@ -43,6 +43,49 @@ describe('repair parts pricing backend security', () => {
     );
   });
 
+  it('accepts category-prefixed component codes such as SP-', () => {
+    const spUpdate = normalizeRepairPartsPricingUpdates([{
+      materialId: 'material-sp',
+      code: 'SP-0001',
+      current: { consumer: 100, trader: 80, cost: 50 },
+      next: { consumer: 120, trader: 90, cost: 55 },
+    }])[0];
+    const prices = validateRepairPartsPricingMaterial({
+      tenantId: 'tenant-a',
+      code: 'SP-0001',
+      type: 'raw_material',
+      isActive: true,
+      defaultSalePrice: 100,
+      traderSalePrice: 80,
+      purchaseCost: 50,
+    }, spUpdate, 'tenant-a');
+    assert.deepEqual(prices, { consumer: 100, trader: 80, cost: 50 });
+  });
+
+  it('rejects materials marked unavailable for spare parts', () => {
+    assert.throws(
+      () => validateRepairPartsPricingMaterial({
+        tenantId: 'tenant-a',
+        code: 'SP-0001',
+        type: 'raw_material',
+        isActive: true,
+        availableForSpareParts: false,
+        defaultSalePrice: 100,
+        traderSalePrice: 80,
+        purchaseCost: 50,
+      }, {
+        ...update,
+        code: 'SP-0001',
+      }, 'tenant-a'),
+      (error: unknown) => (
+        typeof error === 'object'
+        && error !== null
+        && 'code' in error
+        && error.code === 'failed-precondition'
+      ),
+    );
+  });
+
   it('rejects unexpected input fields and stale prices', () => {
     assert.throws(() => normalizeRepairPartsPricingUpdates([{
       materialId: 'material-1',

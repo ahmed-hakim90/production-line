@@ -1,8 +1,32 @@
 /** Semantic chip types aligned with `@/src/components/erp/StatusBadge`. */
+
+import type {
+  RepairPartAvailabilityAtRequest,
+  RepairPartFulfillmentStatus,
+} from '../types';
+
 export type RepairSemanticStatusType = 'success' | 'warning' | 'danger' | 'info' | 'muted';
 
 export function repairOpenClosedChipType(isOpen: boolean): RepairSemanticStatusType {
   return isOpen ? 'warning' : 'success';
+}
+
+/** Availability at request: green = center, blue = central, red = none. */
+export function repairPartAvailabilityChipType(
+  availability: RepairPartAvailabilityAtRequest,
+): RepairSemanticStatusType {
+  if (availability === 'center') return 'success';
+  if (availability === 'central') return 'info';
+  return 'danger';
+}
+
+export function repairPartFulfillmentChipType(
+  status: RepairPartFulfillmentStatus,
+): RepairSemanticStatusType {
+  if (status === 'issued') return 'success';
+  if (status === 'ready_to_issue') return 'info';
+  if (status === 'pending_supply') return 'warning';
+  return 'muted';
 }
 
 export function repairMonthCloseChipType(monthClosed: boolean): RepairSemanticStatusType {

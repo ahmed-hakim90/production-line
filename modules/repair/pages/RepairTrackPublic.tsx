@@ -11,6 +11,7 @@ import type { RepairJobStatus } from '../types';
 import { REPAIR_JOB_STATUS_LABELS } from '../types';
 import { StatusBadge } from '../components/StatusBadge';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 const PUBLIC_TRACK_PROGRESS_STEPS: RepairJobStatus[] = [
   'received',
@@ -26,9 +27,10 @@ const PUBLIC_TRACK_PROGRESS_STEPS: RepairJobStatus[] = [
 type TrackResult = Extract<PublicRepairTrackResult, { found: true }>['job'];
 
 const resolveStepIndex = (status: string): number => {
-  const idx = PUBLIC_TRACK_PROGRESS_STEPS.indexOf(status as RepairJobStatus);
+  const canonical = mapLegacyRepairStatus(status);
+  const idx = PUBLIC_TRACK_PROGRESS_STEPS.indexOf(canonical as RepairJobStatus);
   if (idx >= 0) return idx;
-  if (status === 'cancelled' || status === 'unrepairable') return -2;
+  if (canonical === 'cancelled' || canonical === 'unrepairable') return -2;
   return -1;
 };
 

@@ -64,6 +64,7 @@ import {
   type ProductImportResult,
   type ProductImportMaterialCatalogItem,
 } from '../../../utils/importProducts';
+import { decideProductImportSave } from '../../../utils/importSaveDecision';
 import { downloadProductsTemplate, downloadProductComponentsTemplate } from '../../../utils/downloadTemplates';
 import {
   applySkipExistingProductComponents,
@@ -73,7 +74,11 @@ import {
   stockExistKeyForWarehouse,
   type ProductComponentsImportResult,
 } from '../../../utils/importProductComponents';
-import { exportAllProducts, exportProductBomExcel } from '../../../utils/exportExcel';
+import {
+  exportAllProducts,
+  exportProductBomExcel,
+  exportProductsBasicMaster,
+} from '../../../utils/exportExcel';
 import type { ProductExportOptions, ProductBomExportRow } from '../../../utils/exportExcel';
 import { calculateProductCostBreakdown, type ProductCostBreakdown } from '../../../utils/productCostBreakdown';
 import type { ProductMaterial } from '../../../types';
@@ -219,7 +224,7 @@ function buildProductExportColumnOrder(
   viewSellingPrice: boolean,
   extras: { rawMaterials: boolean; productionOverhead: boolean; calculatedUnit: boolean },
 ): string[] {
-  const labels: string[] = ['الكود', 'اسم المنتج', 'الفئة', 'تارجت المتوقع تقارير (ث)'];
+  const labels: string[] = ['الكود', 'اسم المنتج', 'الفئة', 'منتج تصنيعي', 'تارجت المتوقع تقارير (ث)'];
   if (hasWarehouse) {
     labels.push('المخزن', 'رصيد المخزن');
   }
@@ -417,6 +422,7 @@ export const Products: React.FC = () => {
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('');
   const [stockFilter, setStockFilter] = useState('');
+  const [manufacturedFilter, setManufacturedFilter] = useState('');
   const [categoryFilterOptions, setCategoryFilterOptions] = useState<
     Array<{ value: string; label: string; leafName: string }>
   >([]);
@@ -595,9 +601,13 @@ export const Products: React.FC = () => {
         return p.category === categoryFilter;
       })();
       const matchStock = !stockFilter || p.stockStatus === stockFilter;
-      return matchSearch && matchCategory && matchStock;
+      const matchManufactured =
+        !manufacturedFilter
+        || (manufacturedFilter === 'yes' && p.isManufactured !== false)
+        || (manufacturedFilter === 'no' && p.isManufactured === false);
+      return matchSearch && matchCategory && matchStock && matchManufactured;
     });
-  }, [productsForTable, search, categoryFilter, stockFilter, categoryFilterOptions]);
+  }, [productsForTable, search, categoryFilter, stockFilter, manufacturedFilter, categoryFilterOptions]);
 
   const todayReports = todayReportsScoped.length > 0 ? todayReportsScoped : storeTodayReports;
   const monthlyReports = monthlyReportsScoped.length > 0 ? monthlyReportsScoped : storeMonthlyReports;
@@ -623,7 +633,7 @@ export const Products: React.FC = () => {
     return next;
   }, [exportMonthReports]);
 
-  useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [search, categoryFilter, stockFilter]);
+  useEffect(() => { setCurrentPage(1); setSelectedIds(new Set()); }, [search, categoryFilter, stockFilter, manufacturedFilter]);
 
   useEffect(() => {
     if (!showWarehouseExportModal) return;
@@ -1173,10 +1183,22 @@ export const Products: React.FC = () => {
 
     let done = 0;
     let failed = 0;
+    let skipped = 0;
+    let written = 0;
     for (const row of validRows) {
       try {
-        let productId: string | null = null;
-        if (row.action === 'update' && row.matchedId) {
+        const decision = decideProductImportSave({
+          action: row.action,
+          changes: row.changes,
+          materialsLength: row.materials.length,
+        });
+
+        if (decision === 'skip') {
+          skipped += 1;
+        } else if (decision === 'bomOnly' && row.matchedId) {
+          await saveImportedBomItems(row.matchedId, row);
+          written += 1;
+        } else if (row.action === 'update' && row.matchedId) {
           const existingProduct = _rawProducts.find((p) => p.id === row.matchedId);
           if (!existingProduct) {
             throw new Error('Existing product not found for update');
@@ -1186,15 +1208,17 @@ export const Products: React.FC = () => {
             toProductDataWithExisting(row, existingProduct),
             { path: PRODUCT_UPDATE_PATHS.productsImport },
           );
-          productId = row.matchedId;
+          await saveImportedBomItems(row.matchedId, row);
+          written += 1;
         } else {
-          productId = await createProduct(
+          const productId = await createProduct(
             toProductData(row),
             { path: PRODUCT_CREATE_PATHS.productsImport },
           );
-        }
-        if (productId) {
-          await saveImportedBomItems(productId, row);
+          if (productId) {
+            await saveImportedBomItems(productId, row);
+          }
+          written += 1;
         }
       } catch (error) {
         failed++;
@@ -1214,14 +1238,17 @@ export const Products: React.FC = () => {
       });
     }
 
-    const addedRows = Math.max(0, done - failed);
-    if (addedRows === 0 && failed > 0) {
+    if (written === 0 && failed > 0 && skipped === 0) {
       failJob(jobId, 'All rows failed during save', 'Failed');
     } else {
       completeJob(jobId, {
-        addedRows,
+        addedRows: written,
         failedRows: failed,
-        statusText: 'Completed',
+        skippedRows: skipped,
+        statusText:
+          skipped > 0
+            ? `Completed (${skipped} skipped)`
+            : 'Completed',
       });
     }
     setImportSaving(false);
@@ -1333,15 +1360,20 @@ export const Products: React.FC = () => {
         ];
       }
 
-      setComponentsImportResult(
-        applySkipExistingProductComponents(result, { bomKeys, stockQtyByKey }),
-      );
+      const annotated = applySkipExistingProductComponents(result, { bomKeys, stockQtyByKey });
+      setComponentsImportResult(annotated);
+      if (annotated.missingQuantityCount > 0) {
+        toast.warning(
+          `تم قبول ${annotated.missingQuantityCount} مكون بدون كمية استخدام — كتالوج قطع للصيانة فقط (لن تُستهلك في الإنتاج).`,
+        );
+      }
     } catch {
       setComponentsImportResult({
         rows: [],
         totalRows: 0,
         validCount: 0,
         errorCount: 0,
+        missingQuantityCount: 0,
         bomGroupCount: 0,
         stockMovementCount: 0,
         newMaterialCount: 0,
@@ -1895,7 +1927,7 @@ export const Products: React.FC = () => {
         type: 'success',
         text: `تم تصدير ${exportRows.length} صف مكونات`
           + (categoryLabel ? ` (فئة: ${categoryLabel})` : '')
-          + '. عدّل الشيت ثم ارفعه من «رفع/تحديث مكونات المنتجات».',
+          + '. عدّل الشيت ثم ارفعه من قائمة «مكونات» → رفع/تحديث مكونات المنتجات.',
       });
     } catch (error) {
       console.error('[products] BOM export failed', error);
@@ -2177,7 +2209,7 @@ export const Products: React.FC = () => {
       {/* â”€â”€ Page Header â”€â”€ */}
       <PageHeader
         title="إدارة المنتجات"
-        subtitle="قائمة تفصيلية بكافة الأصناف والمخزون وحالة الإنتاج"
+        subtitle="ترتيب الاستيراد: مواد تصنيعية ← بيانات المنتجات ← مكونات (BOM/قطع صيانة)"
         icon="inventory_2"
         primaryAction={canCreateProductModal ? {
           label: 'منتج جديد',
@@ -2187,9 +2219,79 @@ export const Products: React.FC = () => {
         } : undefined}
         moreActions={[
           {
-            label: 'تصدير المنتجات (Excel)',
+            label: 'تصدير بيانات المنتجات (للاستيراد)',
             icon: 'table_chart',
-            group: 'تصدير',
+            group: 'بيانات أساسية',
+            hidden: !canExportFromPage || _rawProducts.length === 0,
+            onClick: () => {
+              const rows = _rawProducts
+                .filter((p) => p.id && p.code)
+                .map((p) => ({
+                  code: p.code,
+                  name: p.name,
+                  barcode: p.barcode || '',
+                  model: p.model || p.categoryName || '',
+                  isManufactured: p.isManufactured !== false,
+                  chineseUnitCost: canViewCosts ? Number(p.chineseUnitCost || 0) : undefined,
+                  innerBoxCost: canViewCosts ? Number(p.innerBoxCost || 0) : undefined,
+                  outerCartonCost: canViewCosts ? Number(p.outerCartonCost || 0) : undefined,
+                  unitsPerCarton: canViewCosts ? Number(p.unitsPerCarton || 0) : undefined,
+                  sellingPrice: canViewSellingPrice ? Number(p.sellingPrice || 0) : undefined,
+                  routingTargetUnitSeconds:
+                    p.routingTargetUnitSeconds != null && Number(p.routingTargetUnitSeconds) > 0
+                      ? Math.round(Number(p.routingTargetUnitSeconds))
+                      : undefined,
+                }));
+              if (rows.length === 0) {
+                toast.error('لا توجد منتجات للتصدير.');
+                return;
+              }
+              exportProductsBasicMaster(rows, {
+                includeCosts: canViewCosts,
+                includeSellingPrice: canViewSellingPrice,
+              });
+              toast.success(`تم تصدير ${rows.length} منتج (بيانات أساسية للاستيراد).`);
+            },
+          },
+          {
+            label: 'تحميل قالب بيانات المنتجات',
+            icon: 'file_download',
+            group: 'بيانات أساسية',
+            hidden: !canImportFromPage,
+            onClick: downloadProductsTemplate,
+          },
+          {
+            label: 'رفع/تحديث بيانات المنتجات',
+            icon: 'upload_file',
+            group: 'بيانات أساسية',
+            hidden: !canImportProducts,
+            onClick: () => fileInputRef.current?.click(),
+          },
+          {
+            label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير مكونات المنتجات (للاستيراد)',
+            icon: 'table_chart',
+            group: 'مكونات',
+            hidden: !canExportFromPage || _rawProducts.length === 0,
+            onClick: openBomExportModal,
+          },
+          {
+            label: 'تحميل قالب المكونات',
+            icon: 'file_download',
+            group: 'مكونات',
+            hidden: !canImportFromPage,
+            onClick: downloadProductComponentsTemplate,
+          },
+          {
+            label: 'رفع/تحديث مكونات المنتجات',
+            icon: 'upload_file',
+            group: 'مكونات',
+            hidden: !canImportFromPage,
+            onClick: () => componentsFileInputRef.current?.click(),
+          },
+          {
+            label: 'تصدير تقرير المنتجات (Excel)',
+            icon: 'table_chart',
+            group: 'تقارير',
             hidden: !canExportFromPage || products.length === 0,
             onClick: () => {
               setExportScope('all');
@@ -2199,9 +2301,9 @@ export const Products: React.FC = () => {
             },
           },
           {
-            label: 'تصدير منتجات بإنتاج الشهر',
+            label: 'تصدير تقرير المنتجات بإنتاج الشهر',
             icon: 'table_chart',
-            group: 'تصدير',
+            group: 'تقارير',
             hidden: !canExportFromPage || products.length === 0,
             onClick: () => {
               setExportScope('current_month');
@@ -2211,46 +2313,11 @@ export const Products: React.FC = () => {
             },
           },
           {
-            label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير المنتجات بالمكونات (BOM)',
-            icon: 'table_chart',
-            group: 'تصدير',
-            hidden: !canExportFromPage || _rawProducts.length === 0,
-            onClick: openBomExportModal,
-          },
-          {
             label: 'إدارة الأعمدة الظاهرة',
             icon: 'view_column',
-            group: 'تصدير',
+            group: 'عرض',
             hidden: !canExportFromPage || layoutMode !== 'table',
             onClick: () => setShowColumnsModal(true),
-          },
-          {
-            label: 'تحميل قالب المنتجات',
-            icon: 'file_download',
-            group: 'استيراد',
-            hidden: !canImportFromPage,
-            onClick: downloadProductsTemplate,
-          },
-          {
-            label: 'رفع المنتجات (Excel)',
-            icon: 'upload_file',
-            group: 'استيراد',
-            hidden: !canImportProducts,
-            onClick: () => fileInputRef.current?.click(),
-          },
-          {
-            label: 'تحميل قالب المكونات',
-            icon: 'file_download',
-            group: 'استيراد',
-            hidden: !canImportFromPage,
-            onClick: downloadProductComponentsTemplate,
-          },
-          {
-            label: 'رفع/تحديث مكونات المنتجات',
-            icon: 'upload_file',
-            group: 'استيراد',
-            hidden: !canImportFromPage,
-            onClick: () => componentsFileInputRef.current?.click(),
           },
         ]}
       />
@@ -2287,9 +2354,21 @@ export const Products: React.FC = () => {
               { value: 'out', label: 'نفد' },
             ],
           },
+          {
+            key: 'manufactured',
+            placeholder: 'تاج المصنع',
+            options: [
+              { value: 'yes', label: 'تصنيعي' },
+              { value: 'no', label: 'غير تصنيعي' },
+            ],
+          },
         ]}
-        quickFilterValues={{ stock: stockFilter || 'all' }}
-        onQuickFilterChange={(_, value) => setStockFilter(value === 'all' ? '' : value)}
+        quickFilterValues={{ stock: stockFilter || 'all', manufactured: manufacturedFilter || 'all' }}
+        onQuickFilterChange={(key, value) => {
+          const next = value === 'all' ? '' : value;
+          if (key === 'stock') setStockFilter(next);
+          if (key === 'manufactured') setManufacturedFilter(next);
+        }}
         advancedFilters={[
           {
             key: 'category',
@@ -2505,6 +2584,7 @@ export const Products: React.FC = () => {
                   <input type="checkbox" checked={allPageSelected} ref={(el) => { if (el) el.indeterminate = somePageSelected; }} onChange={toggleSelectAll} className="cursor-pointer" />
                 </th>
                 <th className="erp-th cursor-pointer select-none" onClick={() => handleSort('name')}>المنتج <SortIcon col="name" /></th>
+                <th className="erp-th text-center">تاج المصنع</th>
                 <th className="erp-th text-center">نمط التجميع</th>
                 {visibleColumns.openingStock && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('openingStock')}>رصيد مفكك <SortIcon col="openingStock" /></th>}
                 {visibleColumns.totalProduction && <th className="erp-th text-center cursor-pointer select-none" onClick={() => handleSort('totalProduction')}>ما تم إنتاجه <SortIcon col="totalProduction" /></th>}
@@ -2555,7 +2635,7 @@ export const Products: React.FC = () => {
                 <tr>
                   <td colSpan={99} className="px-6 py-16 text-center text-slate-400">
                     <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30" />
-                    <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter ? ' مطابقة للبحث' : ' بعد'}</p>
+                    <p className="font-bold text-lg">لا توجد منتجات{search || categoryFilter || stockFilter || manufacturedFilter ? ' مطابقة للبحث' : ' بعد'}</p>
                     <p className="text-sm mt-1">
                       {canCreateProductModal
                         ? 'اضغط "إضافة منتج جديد" لإضافة أول منتج'
@@ -2602,6 +2682,17 @@ export const Products: React.FC = () => {
                         </div>
                       </div>
                     </div>
+                  </td>
+                  <td className="px-4 py-4 text-center">
+                    <span
+                      className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-bold ${
+                        product.isManufactured === false
+                          ? 'bg-amber-50 text-amber-700'
+                          : 'bg-sky-50 text-sky-700'
+                      }`}
+                    >
+                      {product.isManufactured === false ? 'غير تصنيعي' : 'تصنيعي'}
+                    </span>
                   </td>
                   <td className="px-4 py-4 text-center">
                     <span
@@ -2812,6 +2903,15 @@ export const Products: React.FC = () => {
                           <p className="font-mono text-[11px] text-slate-400 mt-0.5">{product.code}</p>
                           <div className="flex flex-wrap items-center gap-1.5 mt-2">
                             {product.category ? <Badge variant="neutral">{product.category}</Badge> : null}
+                            <span
+                              className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
+                                product.isManufactured === false
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-sky-50 text-sky-700'
+                              }`}
+                            >
+                              {product.isManufactured === false ? 'غير تصنيعي' : 'تصنيعي'}
+                            </span>
                             <span
                               className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold ${
                                 product.assemblyMode === 'team'
@@ -3152,10 +3252,10 @@ export const Products: React.FC = () => {
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-4">
                   <ProductIcon name="drag_indicator" className="text-[var(--color-text-muted)] cursor-move select-none" aria-hidden="true" />
-                  <h3 className="text-lg font-bold">رفع المنتجات (Excel)</h3>
+                  <h3 className="text-lg font-bold">رفع/تحديث بيانات المنتجات</h3>
                 </div>
                 <Button variant="ghost" onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-xs font-bold flex items-center gap-1 underline h-auto p-0">
-                  تحميل قالب المنتجات
+                  تحميل قالب بيانات المنتجات
                 </Button>
               </div>
                 <button onClick={() => { setShowImportModal(false); setImportResult(null); }} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">
@@ -3175,9 +3275,11 @@ export const Products: React.FC = () => {
                 <div className="text-center py-12">
                   <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
-                  <p className="text-sm text-[var(--color-text-muted)] mt-1">تأكد من وجود شيت المنتجات (اسم المنتج، الكود...) ويمكن إضافة شيت المواد الخام اختياريًا</p>
+                  <p className="text-sm text-[var(--color-text-muted)] mt-1">
+                    هذا الملف لبيانات المنتج فقط (اسم، كود، باركود، منتج تصنيعي…). الربط بالمواد يكون من «رفع/تحديث مكونات المنتجات» بعد رفع المواد من شاشة المواد التصنيعية.
+                  </p>
                   <Button variant="ghost" onClick={downloadProductsTemplate} className="text-primary hover:text-primary/80 text-sm font-bold flex items-center gap-1 underline mt-3 mx-auto h-auto p-0">
-                    تحميل قالب المنتجات
+                    تحميل قالب بيانات المنتجات
                   </Button>
                 </div>
               )}
@@ -3209,12 +3311,17 @@ export const Products: React.FC = () => {
 
                   {importResult.fileErrors && importResult.fileErrors.length > 0 && (
                     <div className="rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-4 py-3 text-xs font-bold text-amber-700">
-                      <p className="mb-1">ملاحظات على شيت المواد الخام:</p>
+                      <p className="mb-1">ملاحظات على الملف:</p>
                       <ul className="space-y-0.5">
                         {importResult.fileErrors.map((err, i) => <li key={i}>• {err}</li>)}
                       </ul>
                     </div>
                   )}
+
+                  <div className="rounded-[var(--border-radius-lg)] border border-sky-200 bg-sky-50 px-4 py-3 text-xs font-bold text-sky-900 space-y-1">
+                    <p>الترتيب الصحيح: مواد تصنيعية ← بيانات المنتجات ← مكونات.</p>
+                    <p>بعد حفظ المنتجات ارفع المكونات من «رفع/تحديث مكونات المنتجات» (كود المنتج + كود المادة).</p>
+                  </div>
 
                   <div className="overflow-x-auto rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
                     <table className="erp-table w-full text-right text-sm border-collapse">
@@ -3359,8 +3466,8 @@ export const Products: React.FC = () => {
                   <ProductIcon name="warning" className="text-5xl text-[var(--color-text-muted)] mb-3 block" />
                   <p className="font-bold text-slate-600">لم يتم العثور على بيانات في الملف</p>
                   <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                    صدّر المكونات أولاً أو حمّل القالب. الأعمدة: كود المنتج، كود/اسم المادة، الكمية المستخدمة.
-                    رصيد المكون اختياري = الكمية الفعلية (جرد). كود اللوكيشن السابق = للنقل وتصفير اللوكيشن القديم.
+                    يُفضّل أن تكون المواد والمنتجات موجودة مسبقاً. كل صف = كود منتج + كود/اسم مادة.
+                    الكمية المستخدمة اختيارية (فاضي/صفر = قطعة صيانة بدون استهلاك تصنيع). الرصيد واللوكيشن اختياريان للجرد.
                   </p>
                   <Button
                     variant="ghost"
@@ -3400,6 +3507,11 @@ export const Products: React.FC = () => {
                     {componentsImportResult.errorCount > 0 && (
                       <div className="bg-rose-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-rose-500">
                         أخطاء: {componentsImportResult.errorCount}
+                      </div>
+                    )}
+                    {componentsImportResult.missingQuantityCount > 0 && (
+                      <div className="bg-amber-50 rounded-[var(--border-radius-lg)] px-4 py-2 text-sm font-bold text-amber-700">
+                        بدون كمية استخدام: {componentsImportResult.missingQuantityCount}
                       </div>
                     )}
                   </div>
@@ -3680,7 +3792,7 @@ export const Products: React.FC = () => {
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ProductIcon name="call_split" className="text-primary" />
-                <h3 className="text-lg font-bold">تصدير المنتجات بالمكونات</h3>
+                <h3 className="text-lg font-bold">تصدير مكونات المنتجات (للاستيراد)</h3>
               </div>
               <button
                 type="button"
@@ -3711,7 +3823,7 @@ export const Products: React.FC = () => {
                   </SelectContent>
                 </Select>
                 <p className="text-xs text-[var(--color-text-muted)]">
-                  اختر فئة معيّنة لتصدير منتجاتها ومكوناتها فقط، أو اترك «كل الفئات».
+                  للتعديل ثم الرفع من «رفع/تحديث مكونات المنتجات». اختر فئة معيّنة أو اترك «كل الفئات».
                 </p>
               </div>
             </div>
@@ -3745,8 +3857,8 @@ export const Products: React.FC = () => {
                 <ProductIcon name="warehouse" className="text-primary" />
                 <h3 className="text-lg font-bold">
                   {exportScope === 'current_month'
-                    ? 'تصدير منتجات بإنتاج الشهر'
-                    : 'تصدير المنتجات (Excel)'}
+                    ? 'تصدير تقرير المنتجات بإنتاج الشهر'
+                    : 'تصدير تقرير المنتجات (Excel)'}
                 </h3>
               </div>
               <button type="button" onClick={() => setShowWarehouseExportModal(false)} className="text-[var(--color-text-muted)] hover:text-slate-600 transition-colors">

@@ -4,6 +4,7 @@ import {
   isCancelledStatus,
   isDeliveredStatus,
   isUnrepairableStatus,
+  mapLegacyRepairStatus,
 } from './repairWorkflowNormalize';
 
 export type RepairPaymentStatus = 'unpaid' | 'partial' | 'paid';
@@ -126,16 +127,17 @@ export function resolveRepairJobActionState(input: {
 }
 
 export function summarizeRepairJobs(jobs: RepairJob[], openStatusIds: string[]) {
-  const openSet = new Set(openStatusIds);
+  const openSet = new Set(openStatusIds.map((id) => mapLegacyRepairStatus(id)));
   const today = new Date().toISOString().slice(0, 10);
   return jobs.reduce(
     (acc, job) => {
+      const status = mapLegacyRepairStatus(job.status);
       acc.total += 1;
-      if (openSet.has(job.status)) acc.open += 1;
-      if (job.status === 'ready') acc.ready += 1;
-      if (isDeliveredStatus(job.status)) acc.delivered += 1;
+      if (openSet.has(status)) acc.open += 1;
+      if (status === 'ready') acc.ready += 1;
+      if (isDeliveredStatus(status)) acc.delivered += 1;
       if (job.createdAt?.slice(0, 10) === today) acc.createdToday += 1;
-      if (job.dueAt && Date.parse(String(job.dueAt)) < Date.now() && openSet.has(job.status)) acc.overdue += 1;
+      if (job.dueAt && Date.parse(String(job.dueAt)) < Date.now() && openSet.has(status)) acc.overdue += 1;
       acc.revenue += computeRepairJobCost(job).finalCost;
       return acc;
     },

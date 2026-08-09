@@ -23,6 +23,9 @@ export const REPAIR_RECEPTION_PERMISSIONS: readonly Permission[] = [
   'repairSpareIssues.create',
   'repairSpareIssues.approve',
   'repairSpareIssues.issue',
+  'repairSpareIssues.print',
+  'repairSpareIssues.cancel',
+  'repairSpareIssues.reject',
   'repair.customerRequests.view',
   'repair.customerRequests.receive',
   'repair.custody.view',
@@ -31,9 +34,11 @@ export const REPAIR_RECEPTION_PERMISSIONS: readonly Permission[] = [
   'repair.replacements.view',
   'repair.replacements.create',
   'repair.replacements.deliver',
+  'repair.complaints.view',
   'sparePartsReplenishment.view',
   'sparePartsReplenishment.create',
   'sparePartsReplenishment.receive',
+  'sparePartsReplenishment.cancel',
   'sparePartsRecall.view',
   'sparePartsRecall.confirm',
   'inventory.view',
@@ -44,35 +49,47 @@ export const REPAIR_RECEPTION_PERMISSIONS: readonly Permission[] = [
 
 /**
  * Built-in repair technician role — assigned jobs + workshop, still branch-scoped.
- * Technical-only permissions. Financial/reception access is intentionally absent.
+ * Technical-only permissions. Financial/reception/custody-warehouse access is intentionally absent.
+ * Marking a job unrepairable uses `repair.jobs.technician` (not custody warehouse menus).
  */
 export const REPAIR_TECHNICIAN_PERMISSIONS: readonly Permission[] = [
   'dashboard.view',
   'repair.jobs.technician',
   'repair.parts.request',
-  'repair.custody.view',
-  'repair.custody.record',
 ] as const;
 
-/** Permissions that must never appear on reception/technician presets (cross-center / admin). */
+/**
+ * Cross-center / admin capabilities — never on reception or technician.
+ * Do not include front-desk finance keys (payments/collect) that reception legitimately has.
+ */
 export const REPAIR_CENTER_ISOLATION_FORBIDDEN_PERMISSIONS: readonly Permission[] = [
   'repair.branches.manage',
   'repair.callCenter.viewAll',
   'repair.adminDashboard.view',
   'repair.settings.manage',
   'repair.treasury.manage',
-  'repair.finance.view',
-  'repair.payments.view',
-  'repair.payments.collect',
   'repair.payments.reverse',
-  'repair.discounts.request',
   'repair.discounts.approve',
-  'repair.credit.request',
   'repair.credit.approve',
   'repair.accounting.manage',
   'repair.pricing.manage',
   'roles.manage',
   'users.manage',
+] as const;
+
+/** Manufacturing master catalog — not part of repair front-desk / workshop roles. */
+export const REPAIR_FRONTLINE_FORBIDDEN_PERMISSIONS: readonly Permission[] = [
+  'materials.view',
+  'materials.manage',
+] as const;
+
+/** Custody warehouse screens belong to reception/store — not the technician workshop role. */
+export const REPAIR_TECHNICIAN_FORBIDDEN_PERMISSIONS: readonly Permission[] = [
+  'repair.custody.view',
+  'repair.custody.record',
+  'repair.custody.handover',
+  'repair.custody.correct',
+  ...REPAIR_FRONTLINE_FORBIDDEN_PERMISSIONS,
 ] as const;
 
 export type RepairBuiltinRoleKey = 'repair_reception' | 'repair_technician';
@@ -101,4 +118,40 @@ export function assertRepairBuiltinRoleIsIsolated(
   permissions: Record<string, boolean>,
 ): string[] {
   return REPAIR_CENTER_ISOLATION_FORBIDDEN_PERMISSIONS.filter((key) => permissions[key] === true);
+}
+
+/**
+ * Existing built-in repair roles keep admin edits.
+ * Login migration must not re-open permissions an admin turned off.
+ * Strip cross-center / admin isolation forbids for all repair builtins,
+ * strip manufacturing-materials master from frontline roles,
+ * and strip custody-warehouse keys from the technician role.
+ */
+export function reconcileExistingRepairBuiltinPermissions(
+  current: Record<string, boolean> | null | undefined,
+  roleKey?: RepairBuiltinRoleKey,
+): { permissions: Record<string, boolean>; changed: boolean } {
+  const permissions = { ...(current || {}) };
+  let changed = false;
+  for (const key of REPAIR_CENTER_ISOLATION_FORBIDDEN_PERMISSIONS) {
+    if (permissions[key] === true) {
+      permissions[key] = false;
+      changed = true;
+    }
+  }
+  for (const key of REPAIR_FRONTLINE_FORBIDDEN_PERMISSIONS) {
+    if (permissions[key] === true) {
+      permissions[key] = false;
+      changed = true;
+    }
+  }
+  if (roleKey === 'repair_technician') {
+    for (const key of REPAIR_TECHNICIAN_FORBIDDEN_PERMISSIONS) {
+      if (permissions[key] === true) {
+        permissions[key] = false;
+        changed = true;
+      }
+    }
+  }
+  return { permissions, changed };
 }

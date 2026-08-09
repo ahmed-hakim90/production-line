@@ -1,15 +1,11 @@
 import type { ResolvedRepairStatus } from '../config/repairSettings';
+import {
+  LEGACY_REPAIR_STATUS_MAP,
+  mapLegacyRepairStatus,
+} from './repairStatusIds';
 
-/** خريطة الحالات القديمة في الداتا — بنعرّض للموظف الاسم الجديد من غير ما نلمس المستندات القديمة فورًا */
-export const LEGACY_REPAIR_STATUS_MAP: Record<string, string> = {
-  inspection: 'diagnosing',
-  repair: 'repairing',
-};
-
-export function mapLegacyRepairStatus(status: string | undefined | null): string {
-  const s = String(status || '').trim();
-  return LEGACY_REPAIR_STATUS_MAP[s] || s;
-}
+export { LEGACY_REPAIR_STATUS_MAP, mapLegacyRepairStatus };
+export { isSameRepairStatus } from './repairStatusIds';
 
 /**
  * الحالات اللي نعتبرها «شغل ورشة فعلي» عشان نسجّل assignedAt — waiting_approval لسه العميل ما وافقش،
@@ -28,7 +24,7 @@ export function statusSetsAssignedAt(
 ): boolean {
   const canonical = mapLegacyRepairStatus(status);
   if (Array.isArray(assignmentTriggerStatusIds) && assignmentTriggerStatusIds.length > 0) {
-    return assignmentTriggerStatusIds.includes(canonical);
+    return assignmentTriggerStatusIds.some((id) => mapLegacyRepairStatus(id) === canonical);
   }
   return DEFAULT_STATUSES_THAT_SET_ASSIGNED_AT.has(canonical);
 }
@@ -51,7 +47,9 @@ export function isTerminalFromSettings(
   statusMap: Record<string, ResolvedRepairStatus>,
 ): boolean {
   const canonical = mapLegacyRepairStatus(status);
-  const row = statusMap[canonical];
+  const row = statusMap[canonical] || statusMap[status] || Object.values(statusMap).find(
+    (item) => mapLegacyRepairStatus(item.id) === canonical,
+  );
   return Boolean(row?.isTerminal);
 }
 

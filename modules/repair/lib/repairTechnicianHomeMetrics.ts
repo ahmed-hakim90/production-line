@@ -30,10 +30,13 @@ export type RepairTechnicianHomeRange = {
 export type RepairTechnicianHomeMetrics = {
   requestsCount: number;
   fixedCount: number;
+  unrepairableCount: number;
+  completedOutcomesCount: number;
   openCount: number;
   delayedCount: number;
   successRate: number;
   fixedJobs: RepairTechnicianHomeJob[];
+  unrepairableJobs: RepairTechnicianHomeJob[];
   delayedJobs: RepairTechnicianHomeJob[];
 };
 
@@ -91,7 +94,9 @@ export function isRepairJobOpenStatus(
   openStatusIds: readonly string[],
 ): boolean {
   const canonical = mapLegacyRepairStatus(status);
-  if (openStatusIds.length > 0) return openStatusIds.includes(canonical);
+  if (openStatusIds.length > 0) {
+    return openStatusIds.some((id) => mapLegacyRepairStatus(id) === canonical);
+  }
   return !isDeliveredStatus(canonical)
     && !isUnrepairableStatus(canonical)
     && canonical !== 'cancelled';
@@ -149,6 +154,7 @@ export function summarizeRepairTechnicianHome(
   let openCount = 0;
 
   const fixedJobs: RepairTechnicianHomeJob[] = [];
+  const unrepairableJobs: RepairTechnicianHomeJob[] = [];
   const delayedJobs: RepairTechnicianHomeJob[] = [];
 
   for (const job of jobs) {
@@ -171,6 +177,7 @@ export function summarizeRepairTechnicianHome(
     }
     if (isUnrepairableStatus(canonical) && isInRange(outcomeMs, range)) {
       unrepairableInPeriod += 1;
+      unrepairableJobs.push(job);
     }
 
     if (isRepairJobOpenStatus(job.status, openStatusIds)) {
@@ -194,16 +201,25 @@ export function summarizeRepairTechnicianHome(
     return aMs - bMs;
   });
 
+  unrepairableJobs.sort((a, b) => {
+    const aMs = parseTime(a.resolvedAt) ?? parseTime(a.closedAt) ?? parseTime(a.updatedAt) ?? 0;
+    const bMs = parseTime(b.resolvedAt) ?? parseTime(b.closedAt) ?? parseTime(b.updatedAt) ?? 0;
+    return bMs - aMs;
+  });
+
   const successDenom = deliveredInPeriod + unrepairableInPeriod;
   const successRate = successDenom > 0 ? (deliveredInPeriod / successDenom) * 100 : 0;
 
   return {
     requestsCount,
     fixedCount: fixedJobs.length,
+    unrepairableCount: unrepairableJobs.length,
+    completedOutcomesCount: successDenom,
     openCount,
     delayedCount: delayedJobs.length,
     successRate,
     fixedJobs,
+    unrepairableJobs,
     delayedJobs,
   };
 }

@@ -26,6 +26,7 @@ import type { FirestoreUserWithRepair } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
+import { isOpenRepairJob } from '../lib/repairAdminDashboardMetrics';
 import { PageHeader } from '@/components/PageHeader';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { Link, useParams } from 'react-router-dom';
@@ -43,7 +44,7 @@ const getWorkDaysElapsed = (createdAt?: string): number => {
   return Math.max(0, Math.floor(diffMs / (1000 * 60 * 60 * 24)));
 };
 
-const isOpenJob = (job: RepairJob, openStatuses: string[]) => openStatuses.includes(String(job.status || ''));
+const isOpenJob = (job: RepairJob, openStatuses: string[]) => isOpenRepairJob(job, openStatuses);
 const canDeleteRepairJob = (job: RepairJob) => {
   const normalizedStatus = String(job.status || '').trim().toLowerCase();
   return normalizedStatus !== 'delivered' && !Boolean(job.isClosed);

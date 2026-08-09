@@ -1,9 +1,11 @@
 import {
+  getCountFromServer,
   getDocs,
   orderBy,
   where,
   limit,
   startAfter,
+  type QueryConstraint,
   type QueryDocumentSnapshot,
 } from 'firebase/firestore';
 import { httpsCallable } from 'firebase/functions';
@@ -18,6 +20,13 @@ import { resolveInventoryWarehouseReadScope } from './inventoryWarehouseScopeSer
 
 const COLLECTION = SPARE_PARTS_REPLENISHMENT_COLLECTION;
 const MAX_PAGE = 50;
+
+/** Central warehouse work queue: approve / prepare / responsible-approve. */
+const CENTRAL_PENDING_STATUSES: SparePartsReplenishmentStatus[] = [
+  'submitted',
+  'approved',
+  'prepared',
+];
 
 type FirestoreCursor = QueryDocumentSnapshot | null;
 
@@ -44,6 +53,19 @@ const isPermissionDenied = (error: unknown): boolean => {
     || message.includes('missing or insufficient permissions')
     || message.includes('permission-denied')
   );
+};
+
+const countWithConstraints = async (constraints: QueryConstraint[]): Promise<number> => {
+  try {
+    const snap = await getCountFromServer(tenantQuery(db, COLLECTION, ...constraints));
+    return snap.data().count;
+  } catch (error: unknown) {
+    if (isPermissionDenied(error)) return 0;
+    console.error('sparePartsReplenishment.count failed', {
+      message: error instanceof Error ? error.message : String(error),
+    });
+    return 0;
+  }
 };
 
 const toUserSafeError = (error: unknown, fallback: string): Error => {
@@ -124,6 +146,40 @@ export const sparePartsReplenishmentService = {
   async listRecent(max = 100): Promise<SparePartsReplenishmentRequest[]> {
     const { items } = await this.listPaged({ limit: Math.min(max, 100) });
     return items;
+  },
+
+  /**
+   * Pending work for central spare-parts warehouse (approve / prepare / responsible).
+   * Scoped by actor warehouse when bound.
+   */
+  async countCentralPending(): Promise<number> {
+    if (!isConfigured) return 0;
+    const scope = await resolveInventoryWarehouseReadScope();
+    if (scope.denied) return 0;
+    const constraints: QueryConstraint[] = [
+      where('status', 'in', CENTRAL_PENDING_STATUSES),
+    ];
+    if (scope.warehouseId) {
+      constraints.push(where('fromWarehouseId', '==', scope.warehouseId));
+    }
+    return countWithConstraints(constraints);
+  },
+
+  /**
+   * Requests ready for center receive (responsible_approved).
+   * Scoped by destination warehouse when actor is bound to a center warehouse.
+   */
+  async countAwaitingReceive(): Promise<number> {
+    if (!isConfigured) return 0;
+    const scope = await resolveInventoryWarehouseReadScope();
+    if (scope.denied) return 0;
+    const constraints: QueryConstraint[] = [
+      where('status', '==', 'responsible_approved'),
+    ];
+    if (scope.warehouseId) {
+      constraints.push(where('toWarehouseId', '==', scope.warehouseId));
+    }
+    return countWithConstraints(constraints);
   },
 
   async create(input: CreateInput): Promise<{ id: string; referenceNo: string; status: string }> {

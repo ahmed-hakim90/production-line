@@ -71,12 +71,32 @@ assert.throws(
   () => validateRepairSpareDraftLines([{ itemId: 'm1', quantity: 1 }], { locationsRequired: true }),
   /رف المصدر/,
 );
+validateRepairSpareDraftLines([{ itemId: 'm1', quantity: 1 }], {
+  locationsRequired: true,
+  allowServerAutoAllocate: true,
+});
 assert.throws(
   () => validateRepairSpareDraftLines([
     { itemId: 'm1', quantity: 1, locationId: 'l1' },
-    { itemId: 'm1', quantity: 2, locationId: 'l1' },
+    { itemId: 'm1', quantity: 2, locationId: 'l2' },
   ]),
   /تكرار/,
+);
+validateRepairSpareDraftLines([{
+  itemId: 'm1',
+  quantity: 5,
+  allocations: [
+    { locationId: 'l1', locationCode: 'A-1', quantity: 3 },
+    { locationId: 'l2', locationCode: 'A-2', quantity: 2 },
+  ],
+}]);
+assert.throws(
+  () => validateRepairSpareDraftLines([{
+    itemId: 'm1',
+    quantity: 5,
+    allocations: [{ locationId: 'l1', locationCode: 'A-1', quantity: 2 }],
+  }]),
+  /مجموع توزيع/,
 );
 
 const issue: RepairSpareIssue = {

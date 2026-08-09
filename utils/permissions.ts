@@ -34,9 +34,9 @@ export type Permission =
   | 'lines.view' | 'lines.create' | 'lines.edit' | 'lines.delete'
   | 'inventory.view' | 'inventory.analytics.view' | 'inventory.exceptions.view' | 'inventory.transactions.create' | 'inventory.transactions.edit' | 'inventory.transactions.print' | 'inventory.transactions.export' | 'inventory.transactions.delete' | 'inventory.counts.manage' | 'inventory.warehouses.manage' | 'inventory.locations.manage' | 'inventory.items.manage' | 'inventory.transfers.approve' | 'inventory.finishedStock.allowNegativeApprove' | 'inventory.disassembly.manage'
   | 'departmentConsumables.view' | 'departmentConsumables.create' | 'departmentConsumables.approve' | 'departmentConsumables.issue' | 'departmentConsumables.export'
-  | 'sparePartsReplenishment.view' | 'sparePartsReplenishment.create' | 'sparePartsReplenishment.approve' | 'sparePartsReplenishment.prepare' | 'sparePartsReplenishment.responsibleApprove' | 'sparePartsReplenishment.receive'
+  | 'sparePartsReplenishment.view' | 'sparePartsReplenishment.create' | 'sparePartsReplenishment.approve' | 'sparePartsReplenishment.prepare' | 'sparePartsReplenishment.responsibleApprove' | 'sparePartsReplenishment.receive' | 'sparePartsReplenishment.cancel' | 'sparePartsReplenishment.reject'
   | 'sparePartsRecall.view' | 'sparePartsRecall.create' | 'sparePartsRecall.confirm' | 'sparePartsRecall.cancel'
-  | 'repairSpareIssues.view' | 'repairSpareIssues.create' | 'repairSpareIssues.approve' | 'repairSpareIssues.issue'
+  | 'repairSpareIssues.view' | 'repairSpareIssues.create' | 'repairSpareIssues.approve' | 'repairSpareIssues.issue' | 'repairSpareIssues.print' | 'repairSpareIssues.cancel' | 'repairSpareIssues.reject'
   | 'productionIssue.create' | 'productionIssue.request' | 'productionIssue.approve' | 'productionIssue.print' | 'productionIssue.return' | 'productionIssue.compensate'
   | 'productionHandover.approve'
   | 'employees.view' | 'employees.viewDetails' | 'employees.create' | 'employees.edit' | 'employees.delete'
@@ -257,6 +257,8 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'sparePartsReplenishment.prepare', label: 'تجهيز طلب تموين قطع الغيار' },
       { key: 'sparePartsReplenishment.responsibleApprove', label: 'موافقة المسؤول على تموين قطع الغيار' },
       { key: 'sparePartsReplenishment.receive', label: 'تأكيد استلام تموين قطع الغيار بالمركز' },
+      { key: 'sparePartsReplenishment.cancel', label: 'إلغاء طلب تموين قطع الغيار' },
+      { key: 'sparePartsReplenishment.reject', label: 'رفض طلب تموين قطع الغيار' },
       { key: 'sparePartsRecall.view', label: 'عرض سحب قطع الغيار من المراكز' },
       { key: 'sparePartsRecall.create', label: 'إنشاء طلب سحب من مركز إلى الرئيسي' },
       { key: 'sparePartsRecall.confirm', label: 'تأكيد تسليم سحب قطع الغيار من المركز' },
@@ -365,6 +367,9 @@ const PERMISSION_GROUPS_RAW: PermissionGroup[] = [
       { key: 'repairSpareIssues.create', label: 'إنشاء سند صرف قطع غيار' },
       { key: 'repairSpareIssues.approve', label: 'اعتماد سند صرف قطع غيار' },
       { key: 'repairSpareIssues.issue', label: 'تنفيذ/مرتجع صرف قطع الغيار' },
+      { key: 'repairSpareIssues.print', label: 'طباعة سند صرف قطع غيار' },
+      { key: 'repairSpareIssues.cancel', label: 'إلغاء سند صرف قطع غيار' },
+      { key: 'repairSpareIssues.reject', label: 'رفض سند صرف قطع غيار' },
       { key: 'repair.branches.manage', label: 'إدارة فروع الصيانة' },
       { key: 'repair.technician.view', label: 'عرض أداء الفنيين' },
       { key: 'repair.treasury.view', label: 'عرض خزينة الصيانة' },
@@ -590,6 +595,19 @@ export function checkPermission(
       || permissions['inventory.transfers.approve'] === true
     );
   }
+  if (permission === 'sparePartsReplenishment.cancel') {
+    return (
+      permissions['sparePartsReplenishment.create'] === true
+      || permissions['inventory.transactions.create'] === true
+      || permissions['inventory.transfers.approve'] === true
+    );
+  }
+  if (permission === 'sparePartsReplenishment.reject') {
+    return (
+      permissions['sparePartsReplenishment.approve'] === true
+      || permissions['inventory.transfers.approve'] === true
+    );
+  }
   if (permission === 'sparePartsRecall.view') {
     return (
       permissions['sparePartsReplenishment.view'] === true
@@ -627,6 +645,26 @@ export function checkPermission(
   }
   if (permission === 'repairSpareIssues.issue') {
     return permissions['repair.parts.manage'] === true;
+  }
+  if (permission === 'repairSpareIssues.print') {
+    return (
+      permissions['repairSpareIssues.view'] === true
+      || permissions['repair.parts.view'] === true
+      || permissions['repair.view'] === true
+      || permissions['repair.parts.manage'] === true
+    );
+  }
+  if (permission === 'repairSpareIssues.cancel') {
+    return (
+      permissions['repairSpareIssues.create'] === true
+      || permissions['repair.parts.manage'] === true
+    );
+  }
+  if (permission === 'repairSpareIssues.reject') {
+    return (
+      permissions['repairSpareIssues.approve'] === true
+      || permissions['repair.parts.manage'] === true
+    );
   }
   // New permission — older role docs (including admin) may omit the key entirely.
   if (permission === 'productionIssue.request') {

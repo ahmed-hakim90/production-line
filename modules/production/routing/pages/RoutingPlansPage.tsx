@@ -22,6 +22,7 @@ import { formatDurationSeconds } from '../domain/calculations';
 import { formatRoutingFirestoreInstant } from '../domain/formatFirestore';
 import type { ProductionRoutingPlan } from '../types';
 import { cn } from '@/lib/utils';
+import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
 
 export const RoutingPlansPage: React.FC = () => {
   const navigate = useTenantNavigate();
@@ -93,8 +94,10 @@ export const RoutingPlansPage: React.FC = () => {
   );
 
   const productOptions = useMemo(
-    () => products.map((p) => ({ value: p.id, label: p.name })),
-    [products],
+    () => filterProductionProducts(_rawProducts)
+      .filter((p) => Boolean(p.id))
+      .map((p) => ({ value: p.id!, label: p.name })),
+    [_rawProducts],
   );
 
   const planActions = (plan: ProductionRoutingPlan, layout: 'mobile' | 'table') => (

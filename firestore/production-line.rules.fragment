@@ -10,6 +10,10 @@
       return get(/databases/$(database)/documents/users/$(request.auth.uid));
     }
 
+    function pl_tenantId() {
+      return pl_currentUserDoc().data.tenantId;
+    }
+
     function pl_currentUserPath() {
       return /databases/$(database)/documents/users/$(request.auth.uid);
     }
@@ -159,6 +163,8 @@
     function pl_canReadRepairComplaintScoped() {
       return pl_sameTenantOrLegacyRead()
         && (
+          pl_hasErpPermission('repair.complaints.manage')
+          ||
           pl_canViewAllRepairBranches()
           || (
             'branchId' in resource.data
@@ -170,6 +176,8 @@
     function pl_canWriteRepairComplaintScoped() {
       return pl_sameTenantOrLegacyWrite()
         && (
+          pl_hasErpPermission('repair.complaints.manage')
+          ||
           pl_canViewAllRepairBranches()
           || (
             'branchId' in request.resource.data
@@ -181,6 +189,8 @@
     function pl_canUpdateRepairComplaintScoped() {
       return pl_sameTenantOrLegacyUpdate()
         && (
+          pl_hasErpPermission('repair.complaints.manage')
+          ||
           pl_canViewAllRepairBranches()
           || (
             'branchId' in resource.data
@@ -231,6 +241,29 @@
             && pl_canAccessRepairBranch(request.resource.data.branchId)
           )
         );
+    }
+
+    /** Missing availableForSpareParts = allowed (backward compatible). */
+    function pl_materialAvailableForSpareParts(materialId) {
+      return materialId is string
+        && materialId != ''
+        && exists(/databases/$(database)/documents/materials/$(materialId))
+        && (
+          !('availableForSpareParts' in get(/databases/$(database)/documents/materials/$(materialId)).data)
+          || get(/databases/$(database)/documents/materials/$(materialId)).data.availableForSpareParts != false
+        );
+    }
+
+    function pl_repairSparePartMaterialLinkOk() {
+      return !('materialId' in request.resource.data)
+        || !(request.resource.data.materialId is string)
+        || request.resource.data.materialId == ''
+        || (
+          request.method == 'update'
+          && 'materialId' in resource.data
+          && resource.data.materialId == request.resource.data.materialId
+        )
+        || pl_materialAvailableForSpareParts(request.resource.data.materialId);
     }
 
     /** Single-warehouse bind on users.inventoryWarehouseId (UI + rules). Empty = all warehouses. */
@@ -1042,7 +1075,9 @@
 
     match /repair_spare_parts/{id} {
       allow read: if pl_hasErpPermission('repair.parts.view') && pl_canReadRepairBranchScoped();
-      allow create, update: if pl_hasErpPermission('repair.parts.manage') && pl_canCreateRepairBranchScoped();
+      allow create, update: if pl_hasErpPermission('repair.parts.manage')
+        && pl_canCreateRepairBranchScoped()
+        && pl_repairSparePartMaterialLinkOk();
       allow delete: if pl_hasErpPermission('repair.parts.manage') && pl_canReadRepairBranchScoped();
     }
 

@@ -46,6 +46,7 @@ export interface ParsedMaterialRow {
     minStock: boolean;
     isManufacturedInternally: boolean;
     manufacturedProductCode: boolean;
+    availableForSpareParts: boolean;
     isActive: boolean;
   };
   name: string;
@@ -62,6 +63,7 @@ export interface ParsedMaterialRow {
   isManufacturedInternally: boolean;
   manufacturedProductId: string | null;
   manufacturedProductCode: string;
+  availableForSpareParts: boolean;
   isActive: boolean;
   errors: string[];
   changes?: string[];
@@ -119,6 +121,9 @@ const HEADER_MAP: Record<string, string> = {
   'التصنيع': 'isManufacturedInternally',
   'كود المنتج المرتبط': 'manufacturedProductCode',
   'منتج مرتبط': 'manufacturedProductCode',
+  'تظهر في قطع الغيار': 'availableForSpareParts',
+  'قطع الغيار': 'availableForSpareParts',
+  'متاحة لقطع الغيار': 'availableForSpareParts',
   'الحالة': 'isActive',
   'نشط': 'isActive',
 };
@@ -188,6 +193,15 @@ function parseActive(v: unknown): boolean | null {
   return b;
 }
 
+/** Yes/no for spare-parts visibility (not conflated with موقوف). */
+function parseSparePartsVisibility(v: unknown): boolean | null {
+  const s = normalizeCategoryName(cellStr(v));
+  if (!s) return null;
+  if (['1', 'true', 'yes', 'y', 'نعم', 'ايوه', 'أيوه', 'يظهر', 'تظهر'].includes(s)) return true;
+  if (['0', 'false', 'no', 'n', 'لا', 'لا يظهر', 'لا تظهر', 'مخفي'].includes(s)) return false;
+  return null;
+}
+
 function parseType(v: unknown): MaterialType | null {
   const raw = cellStr(v);
   if (!raw) return null;
@@ -236,9 +250,6 @@ function resolveCategory(
 
 function describeChanges(existing: Material, next: ParsedMaterialRow): string[] {
   const changes: string[] = [];
-  if (normalizeCode(existing.code) !== normalizeCode(next.code)) {
-    changes.push(`الكود: ${existing.code} ← ${next.code}`);
-  }
   if (next.providedFields.name && (existing.name || '') !== next.name) changes.push('الاسم');
   if (next.providedFields.category && (existing.categoryId || null) !== next.categoryId) changes.push('الفئة');
   if (next.providedFields.type && existing.type !== next.type) changes.push('النوع');
@@ -272,6 +283,12 @@ function describeChanges(existing: Material, next: ParsedMaterialRow): string[] 
     (existing.manufacturedProductId || null) !== next.manufacturedProductId
   ) {
     changes.push('المنتج المرتبط');
+  }
+  if (
+    next.providedFields.availableForSpareParts &&
+    (existing.availableForSpareParts !== false) !== next.availableForSpareParts
+  ) {
+    changes.push('قطع الغيار');
   }
   if (next.providedFields.isActive && (existing.isActive !== false) !== next.isActive) {
     changes.push('الحالة');
@@ -327,7 +344,7 @@ export function parseMaterialsFromBuffer(
 
   const hasField = (field: string) => rawHeaders.some((h) => headerMapping[h] === field);
   if (!hasField('code') && !hasField('currentCode') && !hasField('newCode')) {
-    fileErrors.push('عمود الكود مفقود (الكود / الكود الحالي / الكود الجديد)');
+    fileErrors.push('عمود كود المادة مفقود');
   }
 
   const get = (row: Record<string, unknown>, field: string): unknown => {
@@ -362,41 +379,36 @@ export function parseMaterialsFromBuffer(
       isManufacturedInternally:
         hasField('isManufacturedInternally') && cellStr(get(raw, 'isManufacturedInternally')) !== '',
       manufacturedProductCode: hasField('manufacturedProductCode'),
+      availableForSpareParts:
+        hasField('availableForSpareParts') && cellStr(get(raw, 'availableForSpareParts')) !== '',
       isActive: hasField('isActive') && cellStr(get(raw, 'isActive')) !== '',
     };
 
-    const currentCode = normalizeCode(get(raw, 'currentCode') ?? (hasField('currentCode') ? '' : get(raw, 'code')));
-    const newCode = normalizeCode(get(raw, 'newCode'));
     const plainCode = normalizeCode(get(raw, 'code'));
+    const currentCode = normalizeCode(get(raw, 'currentCode'));
+    const newCode = normalizeCode(get(raw, 'newCode'));
 
-    let matched: Material | undefined;
-    if (currentCode) matched = lookup.byCode.get(currentCode);
-    else if (plainCode && !hasField('currentCode') && !hasField('newCode')) {
-      matched = lookup.byCode.get(plainCode);
+    if (currentCode && newCode && currentCode !== newCode) {
+      errors.push('تغيير كود المادة عبر الاستيراد غير مدعوم — استخدم عمود «كود المادة» فقط');
     }
 
-    const targetCode = newCode || currentCode || plainCode;
+    // Identity key only — never renamed via import.
+    const targetCode = plainCode || currentCode || newCode;
     providedFields.code = Boolean(targetCode);
 
-    if (!targetCode) errors.push('الكود مفقود');
+    let matched: Material | undefined = targetCode ? lookup.byCode.get(targetCode) : undefined;
+
+    if (!targetCode) errors.push('كود المادة مفقود');
     if (targetCode) {
       if (targetCodesInFile.has(targetCode)) {
-        errors.push(`الكود النهائي "${targetCode}" مكرر في الملف`);
+        errors.push(`كود المادة "${targetCode}" مكرر في الملف`);
       } else {
         targetCodesInFile.add(targetCode);
       }
     }
 
-    if (hasField('currentCode') && currentCode && !matched) {
-      errors.push(`الكود الحالي "${currentCode}" غير موجود`);
-    }
-
-    if (targetCode) {
-      const owner = lookup.byCode.get(targetCode);
-      if (!matched?.id && owner) {
-        // Plain code match without currentCode column → update existing
-        matched = owner;
-      }
+    if (hasField('currentCode') && currentCode && !matched && !plainCode) {
+      errors.push(`كود المادة "${currentCode}" غير موجود`);
     }
 
     const name = cellStr(get(raw, 'name'));
@@ -483,6 +495,15 @@ export function parseMaterialsFromBuffer(
       else isActive = a;
     }
 
+    let availableForSpareParts = true;
+    if (providedFields.availableForSpareParts) {
+      const visible = parseSparePartsVisibility(get(raw, 'availableForSpareParts'));
+      if (visible == null) errors.push('عمود «تظهر في قطع الغيار» غير صالح (نعم/لا)');
+      else availableForSpareParts = visible;
+    } else if (matched) {
+      availableForSpareParts = matched.availableForSpareParts !== false;
+    }
+
     const action: MaterialImportAction = matched?.id ? 'update' : 'create';
     if (action === 'create' && !providedFields.isManufacturedInternally) {
       errors.push('مصدر المادة مطلوب للإنشاء (شراء خارجي أو تُصنع داخلياً)');
@@ -494,8 +515,8 @@ export function parseMaterialsFromBuffer(
       rowIndex: idx + 2,
       action,
       matchedId: matched?.id,
-      currentCode: currentCode || undefined,
-      newCode: newCode || undefined,
+      currentCode: undefined,
+      newCode: undefined,
       providedFields,
       name: name || matched?.name || '',
       code: targetCode,
@@ -529,6 +550,9 @@ export function parseMaterialsFromBuffer(
         ? manufacturedProductId
         : matched?.manufacturedProductId ?? null,
       manufacturedProductCode,
+      availableForSpareParts: providedFields.availableForSpareParts
+        ? availableForSpareParts
+        : matched?.availableForSpareParts !== false,
       isActive: providedFields.isActive ? isActive : matched?.isActive !== false,
       errors,
       changes: matched ? undefined : undefined,
@@ -563,7 +587,7 @@ export function parseMaterialsFromBuffer(
         && ownerImportRow.errors.length === 0
         && normalizeCode(ownerImportRow.code) !== normalizeCode(row.code);
       if (!ownerVacatesCode) {
-        row.errors.push(`الكود الجديد "${row.code}" مستخدم بواسطة مادة أخرى`);
+        row.errors.push(`كود المادة "${row.code}" مستخدم بواسطة مادة أخرى`);
         addedDependencyError = true;
       }
     }
@@ -669,6 +693,7 @@ export function toMaterialCreateData(
     minStock: row.minStock,
     isManufacturedInternally: row.isManufacturedInternally,
     manufacturedProductId: row.manufacturedProductId || undefined,
+    availableForSpareParts: row.availableForSpareParts,
     linkedCostCenterIds: [],
     isActive: row.isActive,
   };
@@ -684,7 +709,7 @@ export function toMaterialUpdateData(
   existing: Material,
 ): Partial<Material> {
   const patch: Partial<Material> = {};
-  if (row.providedFields.code) patch.code = row.code;
+  // Code is identity/match key only — never rewritten on update.
   if (row.providedFields.name) patch.name = row.name;
   if (row.providedFields.category) {
     patch.categoryId = row.categoryId;
@@ -703,12 +728,10 @@ export function toMaterialUpdateData(
   if (row.providedFields.manufacturedProductCode) {
     patch.manufacturedProductId = row.manufacturedProductId || undefined;
   }
-  if (row.providedFields.isActive) patch.isActive = row.isActive;
-
-  // Ensure code always present when renaming via newCode
-  if (!patch.code && row.code && normalizeCode(existing.code) !== normalizeCode(row.code)) {
-    patch.code = row.code;
+  if (row.providedFields.availableForSpareParts) {
+    patch.availableForSpareParts = row.availableForSpareParts;
   }
+  if (row.providedFields.isActive) patch.isActive = row.isActive;
 
   return patch;
 }

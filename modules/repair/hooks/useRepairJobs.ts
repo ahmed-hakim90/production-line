@@ -5,6 +5,7 @@ import { repairJobService } from '../services/repairJobService';
 import { customerPhonesMatch, normalizeCustomerPhoneDigits } from '../utils/customerPhone';
 import { canLoadRepairJobList } from '../utils/repairJobListScope';
 import { repairTechnicianService } from '../services/repairTechnicianService';
+import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 
 const searchFields = (job: RepairJob): string =>
   [
@@ -32,6 +33,8 @@ export function useRepairJobs(params: {
   fetchEnabled?: boolean;
   technicianOnly?: boolean;
   technicianIds?: string[];
+  /** بحث خادمي آمن لموظف مركز الاتصال عبر كل المراكز. */
+  callCenterGlobal?: boolean;
 }) {
   const [debouncedSearch, setDebouncedSearch] = useState(params.searchText || '');
 
@@ -93,6 +96,7 @@ export function useRepairJobs(params: {
       technicianIdsKey.join('|'),
       params.minPhoneDigitsForQuery ?? '',
       phoneFilterRaw,
+      params.callCenterGlobal ? debouncedSearch : '',
     ],
     queryFn: async (): Promise<RepairJob[]> => {
       if (
@@ -108,6 +112,9 @@ export function useRepairJobs(params: {
       }
       if (params.technicianOnly) {
         return repairTechnicianService.list();
+      }
+      if (params.callCenterGlobal) {
+        return repairCustomerOperationsService.listCallCenterJobs(debouncedSearch);
       }
       if (params.canViewAllBranches) {
         return repairJobService.listAllBranches();

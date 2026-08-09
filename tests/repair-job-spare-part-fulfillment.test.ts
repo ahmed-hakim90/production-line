@@ -9,10 +9,15 @@ import {
 import {
   effectiveFulfillmentStatus,
   formatDurationArabic,
+  formatPartAvailabilityPickerHint,
   replenishmentDurationMs,
   resolvePartAvailabilityAtRequest,
   resolvePartAvailabilityBadge,
 } from '../modules/repair/lib/repairPartFulfillment.ts';
+import {
+  repairPartAvailabilityChipType,
+  repairPartFulfillmentChipType,
+} from '../modules/repair/lib/repairSemanticStatus.ts';
 
 assert.equal(resolvePartAvailabilityAtRequest(5, 0, 3), 'center');
 assert.equal(resolvePartAvailabilityAtRequest(1, 10, 3), 'central');
@@ -22,6 +27,17 @@ assert.equal(resolvePartAvailabilityAtRequest(2, 5, 2), 'center');
 assert.equal(resolvePartAvailabilityBadge(1, 0), 'center');
 assert.equal(resolvePartAvailabilityBadge(0, 2), 'central');
 assert.equal(resolvePartAvailabilityBadge(0, 0), 'none');
+
+assert.equal(formatPartAvailabilityPickerHint('center', 4, 0), 'مخزن المركز · 4');
+assert.equal(formatPartAvailabilityPickerHint('central', 0, 3), 'المركزي · 3');
+assert.equal(formatPartAvailabilityPickerHint('none', 0, 0), 'غير متاح');
+
+assert.equal(repairPartAvailabilityChipType('center'), 'success');
+assert.equal(repairPartAvailabilityChipType('central'), 'info');
+assert.equal(repairPartAvailabilityChipType('none'), 'danger');
+assert.equal(repairPartFulfillmentChipType('pending_supply'), 'warning');
+assert.equal(repairPartFulfillmentChipType('ready_to_issue'), 'info');
+assert.equal(repairPartFulfillmentChipType('issued'), 'success');
 
 assert.equal(effectiveFulfillmentStatus({ fulfillmentStatus: 'pending_supply' }), 'pending_supply');
 assert.equal(effectiveFulfillmentStatus({ issueId: 'rsi-1' }), 'issued');

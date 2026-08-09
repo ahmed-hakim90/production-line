@@ -25,6 +25,7 @@ import { calculateOperationalPeriodDailyTarget } from '../lib/operationalPeriod'
 import { usePermission } from '../../../utils/permissions';
 import { reportService } from '@/modules/production/services/reportService';
 import { productionPlanService } from '../services/productionPlanService';
+import { filterProductionProducts } from '../utils/isProductionProduct';
 import { materialRequirementService } from '@/modules/manufacturing/services/materialRequirementService';
 import { computeLivePlanCostFromLines } from '@/modules/manufacturing/services/planLiveCostService';
 import type { ProductionPlanMaterialRequirements } from '@/modules/manufacturing/types';
@@ -278,10 +279,10 @@ export const ProductionPlans: React.FC = () => {
   );
 
   const formProductSelectOptions = useMemo(
-    () => products
+    () => filterProductionProducts(_rawProducts)
       .filter((p) => Boolean(p.id))
       .map((p) => ({ value: p.id!, label: getProductOptionLabel(p) })),
-    [products],
+    [_rawProducts],
   );
 
   // â”€â”€ Dynamic calculations â”€â”€

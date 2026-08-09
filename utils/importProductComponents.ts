@@ -98,6 +98,8 @@ export interface ProductComponentsImportResult {
   totalRows: number;
   validCount: number;
   errorCount: number;
+  /** Valid rows with quantityUsed <= 0 (spare-catalog lines without BOM consumption qty). */
+  missingQuantityCount: number;
   bomGroupCount: number;
   stockMovementCount: number;
   newMaterialCount: number;
@@ -173,6 +175,10 @@ export function applySkipExistingProductComponents(
       (row.willCreateMaterial && row.matchedMaterialCode
         ? pendingMaterialRef(row.matchedMaterialCode)
         : '');
+
+    if (!(Number(row.quantityUsed) > 0)) {
+      skipNotes.push('بدون كمية استخدام — كتالوج قطع للصيانة فقط');
+    }
 
     if (materialRef && !materialRef.startsWith('pending:') && row.productId) {
       if (existing.bomKeys.has(bomExistKey(row.productId, materialRef))) {
@@ -367,6 +373,7 @@ export function applySkipExistingProductComponents(
   return {
     ...result,
     rows,
+    missingQuantityCount: actionable.filter((r) => !(Number(r.quantityUsed) > 0)).length,
     bomGroupCount: bomGroups.length,
     stockMovementCount: stockMovements.length,
     newMaterialCount: materialsToCreate.length,
@@ -537,6 +544,7 @@ export function parseProductComponentsFromBuffer(
       totalRows: 0,
       validCount: 0,
       errorCount: 0,
+      missingQuantityCount: 0,
       bomGroupCount: 0,
       stockMovementCount: 0,
       newMaterialCount: 0,
@@ -560,6 +568,7 @@ export function parseProductComponentsFromBuffer(
       totalRows: 0,
       validCount: 0,
       errorCount: 0,
+      missingQuantityCount: 0,
       bomGroupCount: 0,
       stockMovementCount: 0,
       newMaterialCount: 0,
@@ -587,9 +596,14 @@ export function parseProductComponentsFromBuffer(
   const hasQty = Object.values(headerMapping).includes('quantityUsed');
   const hasBalance = Object.values(headerMapping).includes('balanceQty');
   const fileErrors: string[] = [];
-  if (!hasProductCode || !hasMaterial || !hasQty) {
+  if (!hasProductCode || !hasMaterial) {
     fileErrors.push(
-      'القالب غير صحيح. الأعمدة المطلوبة: كود المنتج + كود/اسم المادة + الكمية المستخدمة.',
+      'القالب غير صحيح. الأعمدة المطلوبة: كود المنتج + كود/اسم المادة. الكمية المستخدمة اختيارية (فاضي = كتالوج قطع بدون استهلاك تصنيع).',
+    );
+  }
+  if (!hasQty) {
+    fileErrors.push(
+      'ملاحظة: لم يُعثر على عمود «الكمية المستخدمة» — ستُحفظ المكونات بدون كمية استخدام (مناسبة لقطع الصيانة).',
     );
   }
   if (!hasBalance) {
@@ -640,7 +654,9 @@ export function parseProductComponentsFromBuffer(
     const productCode = String(get('productCode') ?? '').trim();
     const materialCode = String(get('materialCode') ?? '').trim();
     const materialName = String(get('materialName') ?? '').trim();
-    const quantityUsed = parseNumericCell(get('quantityUsed'));
+    const quantityRaw = get('quantityUsed');
+    const quantityEmpty = quantityRaw === undefined || String(quantityRaw).trim() === '';
+    let quantityUsed = quantityEmpty ? 0 : parseNumericCell(quantityRaw);
     const unitCostRaw = get('unitCost');
     const unitCost =
       unitCostRaw === undefined || String(unitCostRaw).trim() === ''
@@ -688,8 +704,12 @@ export function parseProductComponentsFromBuffer(
       }
     }
 
-    if (!Number.isFinite(quantityUsed) || quantityUsed <= 0) {
-      errors.push('الكمية المستخدمة يجب أن تكون أكبر من صفر.');
+    // Empty/zero qty is allowed for spare-parts catalog lines (non-consuming BOM).
+    if (!quantityEmpty && (!Number.isFinite(quantityUsed) || quantityUsed < 0)) {
+      errors.push('الكمية المستخدمة غير صالحة.');
+      quantityUsed = 0;
+    } else if (!Number.isFinite(quantityUsed) || quantityUsed < 0) {
+      quantityUsed = 0;
     }
     if (!Number.isFinite(unitCost) || unitCost < 0) {
       errors.push('تكلفة الوحدة لا تقل عن صفر.');
@@ -899,11 +919,14 @@ export function parseProductComponentsFromBuffer(
   const materialsToCreate = Array.from(materialsToCreateMap.values());
   const needsFallbackWarehouse = stockMovements.some((m) => !m.locationId);
 
+  const missingQuantityCount = validRows.filter((r) => !(Number(r.quantityUsed) > 0)).length;
+
   return {
     rows,
     totalRows: rows.length,
     validCount: validRows.length,
     errorCount: rows.length - validRows.length,
+    missingQuantityCount,
     bomGroupCount: bomMap.size,
     stockMovementCount: stockMovements.length,
     newMaterialCount: materialsToCreate.length,

@@ -1,15 +1,21 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { KPICard } from '@/src/components/erp/KPICard';
 import { GhostButton } from '@/src/components/erp/ActionButton';
 import { formatNumber } from '../../../utils/calculations';
 import type { OperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import { usePermission } from '../../../utils/permissions';
+import { sparePartsReplenishmentService } from '../../inventory/services/sparePartsReplenishmentService';
+import { repairSpareIssueService } from '../../repair/services/repairSpareIssueService';
 
 type Props = {
   snapshot: OperationalDecisionSnapshot;
   loading?: boolean;
   title?: string;
+  /** Dense list for single-viewport boards — hides the wide KPI strip. */
+  compact?: boolean;
+  /** Max actionable queue rows in compact mode (default 6). */
+  maxItems?: number;
   /** Extra absence risk from production worker snapshot (factory). */
   absentWorkersToday?: number;
   /** Sum of remaining × expected unit cost for active work orders. */
@@ -48,6 +54,8 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
   snapshot,
   loading,
   title = 'طابور القرارات التشغيلية',
+  compact = false,
+  maxItems = 6,
   absentWorkersToday,
   costToComplete,
   atRiskWorkOrders,
@@ -69,6 +77,49 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
     scheduleAdherence,
     behindScheduleCount,
   } = snapshot;
+
+  const canSeeRepairReplenishment =
+    can('sparePartsReplenishment.view')
+    || can('sparePartsReplenishment.approve')
+    || can('sparePartsReplenishment.prepare')
+    || can('sparePartsReplenishment.receive');
+  const canSeeRepairSpareIssues = can('repairSpareIssues.view');
+  const [repairCounts, setRepairCounts] = useState({
+    centralPending: 0,
+    awaitingReceive: 0,
+    spareIssuesPending: 0,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadRepairQueues = async () => {
+      if (!canSeeRepairReplenishment && !canSeeRepairSpareIssues) return;
+      try {
+        const [centralPending, awaitingReceive, spareIssuesPending] = await Promise.all([
+          canSeeRepairReplenishment
+            ? sparePartsReplenishmentService.countCentralPending()
+            : Promise.resolve(0),
+          canSeeRepairReplenishment
+            ? sparePartsReplenishmentService.countAwaitingReceive()
+            : Promise.resolve(0),
+          canSeeRepairSpareIssues
+            ? repairSpareIssueService.countPending()
+            : Promise.resolve(0),
+        ]);
+        if (!cancelled) {
+          setRepairCounts({ centralPending, awaitingReceive, spareIssuesPending });
+        }
+      } catch {
+        if (!cancelled) {
+          setRepairCounts({ centralPending: 0, awaitingReceive: 0, spareIssuesPending: 0 });
+        }
+      }
+    };
+    void loadRepairQueues();
+    return () => {
+      cancelled = true;
+    };
+  }, [canSeeRepairReplenishment, canSeeRepairSpareIssues]);
 
   const canSee = (item: QueueItem): boolean => {
     if (item.anyOf?.length) return item.anyOf.some((p) => can(p as any));
@@ -102,7 +153,7 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
           ? 'warning'
           : 'ok',
       path: '/production/packaging/control',
-      anyOf: ['reports.view', 'reports.packaging.create', 'inventory.view', 'productionHandover.approve'],
+      anyOf: ['reports.view', 'reports.packaging.create', 'productionHandover.approve'],
     },
     {
       id: 'fg-entry',
@@ -202,6 +253,51 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
         'inventory.view',
       ],
     },
+    {
+      id: 'spare-replenishment-central',
+      label: 'تموين مراكز معلّق',
+      value: String(repairCounts.centralPending),
+      detail:
+        repairCounts.centralPending > 0
+          ? 'طلبات بانتظار اعتماد / تجهيز / موافقة المسؤول'
+          : 'لا طابور تموين في المخزن المركزي',
+      tone: repairCounts.centralPending > 0 ? 'warning' : 'ok',
+      path: '/inventory/spare-parts-replenishment',
+      anyOf: [
+        'sparePartsReplenishment.view',
+        'sparePartsReplenishment.approve',
+        'sparePartsReplenishment.prepare',
+        'inventory.view',
+      ],
+    },
+    {
+      id: 'spare-replenishment-receive',
+      label: 'تموين بانتظار استلام المركز',
+      value: String(repairCounts.awaitingReceive),
+      detail:
+        repairCounts.awaitingReceive > 0
+          ? 'طلبات معتمدة جاهزة لتأكيد الاستلام في المركز'
+          : 'لا استلام معلّق',
+      tone: repairCounts.awaitingReceive > 0 ? 'warning' : 'ok',
+      path: '/repair/parts-replenishment',
+      anyOf: [
+        'sparePartsReplenishment.view',
+        'sparePartsReplenishment.receive',
+        'sparePartsReplenishment.create',
+      ],
+    },
+    {
+      id: 'repair-spare-issues',
+      label: 'سندات صرف قطع غيار معلّقة',
+      value: String(repairCounts.spareIssuesPending),
+      detail:
+        repairCounts.spareIssuesPending > 0
+          ? 'مسودات / مقدّمة / معتمدة بانتظار الصرف'
+          : 'لا سندات صرف مفتوحة',
+      tone: repairCounts.spareIssuesPending > 0 ? 'warning' : 'ok',
+      path: '/repair/spare-issues',
+      anyOf: ['repairSpareIssues.view', 'repair.parts.view', 'repair.view'],
+    },
   ];
 
   if (typeof absentWorkersToday === 'number') {
@@ -244,6 +340,58 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
   }
 
   const visible = items.filter(canSee);
+  const compactItems = compact ? visible.slice(0, Math.max(1, maxItems)) : visible;
+  const hiddenCount = compact ? Math.max(0, visible.length - compactItems.length) : 0;
+
+  if (compact) {
+    return (
+      <div className="space-y-2 h-full">
+        <div className="flex items-center justify-between gap-2">
+          <h3 className="text-sm font-bold text-[var(--color-text)] flex items-center gap-1.5">
+            <span className="material-icons-round text-base text-primary">rule</span>
+            {title}
+          </h3>
+          {hiddenCount > 0 && (
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="text-[11px] font-bold text-primary hover:underline"
+            >
+              +{hiddenCount} أخرى
+            </button>
+          )}
+        </div>
+        {loading ? (
+          <div className="space-y-2">
+            {Array.from({ length: 4 }).map((_, idx) => (
+              <div key={`cq-skel-${idx}`} className="h-14 rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] animate-pulse" />
+            ))}
+          </div>
+        ) : compactItems.length === 0 ? (
+          <p className="text-xs text-[var(--color-text-muted)] font-medium py-6 text-center">لا قرارات معلّقة حالياً</p>
+        ) : (
+          <div className="space-y-1.5">
+            {compactItems.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => navigate(item.path)}
+                className={`w-full text-right rounded-[var(--border-radius-lg)] border px-3 py-2.5 transition hover:shadow-sm ${toneClass(item.tone)}`}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-[11px] font-bold opacity-80 truncate">{item.label}</p>
+                    <p className="text-[10px] mt-0.5 opacity-75 truncate">{item.detail}</p>
+                  </div>
+                  <span className="text-lg font-black tabular-nums shrink-0">{item.value}</span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-3">
@@ -253,7 +401,7 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
           {title}
         </h3>
         <p className="text-xs text-[var(--color-text-muted)] sm:mr-auto">
-          داتا حية من صرف · تغليف · اعتمادات · مخزون · إيصالات · التزام الخطط
+          داتا حية من صرف · تغليف · تموين مراكز · سندات قطع · اعتمادات · مخزون · إيصالات · التزام الخطط
         </p>
       </div>
 
@@ -275,7 +423,7 @@ export const OperationalDecisionQueue: React.FC<Props> = ({
                     ? `${issues.openCount} طلب مفتوح · ${formatNumber(issues.openRequestedQty)} وحدة`
                     : 'لا طابور مفتوح'
                 }
-                trendUp={issues.fulfilmentPercent >= 80}
+                trendUp={issues.fulfillmentPercent >= 80}
               />
               <KPICard
                 label="تحقيق الخطة (موزون)"

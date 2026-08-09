@@ -1727,6 +1727,8 @@ export const submitRepairApprovalPublic = onCall({
         requirePending: true,
     });
     const { tenantId, jobId, jobRef } = ctx;
+    const { loadTenantWorkflowStatuses, resolveNextStatusForAction, isStatusRole, } = await import('./repairStatusAdvance.js');
+    const workflowStatuses = await loadTenantWorkflowStatuses(db, tenantId);
     const expectedHash = createHash('sha256')
         .update(String(data.token || '').trim(), 'utf8')
         .digest('hex');
@@ -1763,9 +1765,16 @@ export const submitRepairApprovalPublic = onCall({
         const parts = Array.isArray(job.partsUsed) ? job.partsUsed : [];
         const waitsForParts = parts.some((row) => ['pending_supply', 'ready_to_issue']
             .includes(String(row.fulfillmentStatus || '')));
-        const nextStatus = decision === 'approved' && prevStatus === 'waiting_approval'
-            ? (waitsForParts ? 'waiting_parts' : 'repairing')
-            : prevStatus;
+        let nextStatus = prevStatus;
+        if (decision === 'approved'
+            && (isStatusRole(prevStatus, 'awaiting_customer', workflowStatuses) || prevStatus === 'waiting_approval')) {
+            nextStatus = resolveNextStatusForAction({
+                action: 'customer_approved',
+                currentStatus: prevStatus,
+                statuses: workflowStatuses,
+                waitsForParts,
+            }) || (waitsForParts ? 'waiting_parts' : 'repairing');
+        }
         tx.update(jobRef, {
             approvalResolvedAt: at,
             approvalNote: note,
@@ -1848,3 +1857,4 @@ export { applyProductionReportInventory, reverseProductionReportInventory, } fro
 export { adminCreateUser, bootstrapTenantAdmin } from './adminUserProvisioning.js';
 export { syncBuiltInRolePermissionGrants } from './rolePermissionMigration.js';
 export { onRepairJobCreatedCustody } from './repairCustomerPortalOps.js';
+export { purgeRepairOperationalData } from './purgeRepairOperationalData.js';

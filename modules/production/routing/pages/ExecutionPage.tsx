@@ -29,6 +29,7 @@ import {
   type ShareResult,
 } from '@/utils/reportExport';
 import { formatRoutingExecutionShareCaption } from '../utils/routingExecutionShareCaption';
+import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
 
 type Phase = 'pick' | 'preview' | 'run' | 'done';
 
@@ -254,8 +255,10 @@ export const ExecutionPage: React.FC = () => {
   }, [actualWorkers, completeMut, execSteps, execution, executionId, isNew, qc, stepIndex, stepNotes, stopAndCaptureSeconds]);
 
   const productOptions = useMemo(
-    () => products.map((p) => ({ value: p.id, label: p.name })),
-    [products],
+    () => filterProductionProducts(_rawProducts)
+      .filter((p) => Boolean(p.id))
+      .map((p) => ({ value: p.id!, label: p.name })),
+    [_rawProducts],
   );
 
   const pickedProductLabel = useMemo(() => {

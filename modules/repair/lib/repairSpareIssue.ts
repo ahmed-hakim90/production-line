@@ -1,10 +1,12 @@
 import type {
   RepairSpareApprovalMode,
   RepairSpareIssue,
+  RepairSpareIssueAllocation,
   RepairSpareIssueLine,
   RepairSpareIssueStatus,
   RepairSpareReturnLine,
 } from '../types';
+import { normalizeRepairSpareIssueAllocations } from './repairSpareIssueAllocation';
 
 export const REPAIR_SPARE_ISSUES_COLLECTION = 'repair_spare_issues';
 export const MAX_REPAIR_SPARE_ISSUE_LINES = 40;
@@ -43,6 +45,7 @@ export type RepairSpareDraftLineInput = {
   quantity: number;
   locationId?: string;
   locationCode?: string;
+  allocations?: RepairSpareIssueAllocation[];
 };
 
 export function repairSpareLineId(itemId: string, locationId?: string): string {
@@ -61,7 +64,7 @@ export function repairSpareLineKey(
 
 export function validateRepairSpareDraftLines(
   lines: RepairSpareDraftLineInput[],
-  options?: { locationsRequired?: boolean },
+  options?: { locationsRequired?: boolean; allowServerAutoAllocate?: boolean },
 ): void {
   if (!Array.isArray(lines) || lines.length === 0) {
     throw new Error('أضف بند قطعة غيار واحد على الأقل.');
@@ -75,15 +78,19 @@ export function validateRepairSpareDraftLines(
     if (!itemId) throw new Error('حدد الصنف لكل بند.');
     const qty = toNumber(line.quantity);
     if (!(qty > 0)) throw new Error('كمية كل بند يجب أن تكون أكبر من صفر.');
-    const locationId = String(line.locationId || '').trim();
-    if (options?.locationsRequired && !locationId) {
+    const allocations = normalizeRepairSpareIssueAllocations(line);
+    if (allocations.length > 0) {
+      const allocated = allocations.reduce((sum, row) => sum + toNumber(row.quantity), 0);
+      if (Math.abs(allocated - qty) > 0.000001) {
+        throw new Error('مجموع توزيع الرفوف يجب أن يساوي كمية البند.');
+      }
+    } else if (options?.locationsRequired && !options.allowServerAutoAllocate) {
       throw new Error('حدد رف المصدر لكل بند.');
     }
-    const key = `${itemId}__${locationId || '_'}`;
-    if (seen.has(key)) {
-      throw new Error('لا يمكن تكرار نفس الصنف والرف في نفس السند.');
+    if (seen.has(itemId)) {
+      throw new Error('لا يمكن تكرار نفس الصنف في نفس السند.');
     }
-    seen.add(key);
+    seen.add(itemId);
   }
 }
 
@@ -127,20 +134,26 @@ export function canReturnRepairSpareIssue(status: RepairSpareIssueStatus): boole
 export function sanitizeRepairSpareIssueLines(
   lines: RepairSpareIssueLine[],
 ): RepairSpareIssueLine[] {
-  return lines.map((line) => ({
-    lineId: repairSpareLineKey(line),
-    itemType: 'material',
-    itemId: String(line.itemId || '').trim(),
-    itemName: String(line.itemName || '').trim(),
-    itemCode: String(line.itemCode || '').trim(),
-    unit: String(line.unit || 'piece').trim() || 'piece',
-    quantity: toNumber(line.quantity),
-    ...(line.locationId ? { locationId: String(line.locationId).trim() } : {}),
-    ...(line.locationCode ? { locationCode: String(line.locationCode).trim() } : {}),
-    ...(line.unitCostSnapshot != null ? { unitCostSnapshot: roundMoney(line.unitCostSnapshot) } : {}),
-    ...(line.totalCostSnapshot != null ? { totalCostSnapshot: roundMoney(line.totalCostSnapshot) } : {}),
-    ...(line.returnedQty != null ? { returnedQty: toNumber(line.returnedQty) } : {}),
-  }));
+  return lines.map((line) => {
+    const allocations = normalizeRepairSpareIssueAllocations(line);
+    const first = allocations[0];
+    return {
+      lineId: repairSpareLineKey(line),
+      itemType: 'material' as const,
+      itemId: String(line.itemId || '').trim(),
+      itemName: String(line.itemName || '').trim(),
+      itemCode: String(line.itemCode || '').trim(),
+      unit: String(line.unit || 'piece').trim() || 'piece',
+      quantity: toNumber(line.quantity),
+      ...(first ? { locationId: first.locationId, locationCode: first.locationCode } : {}),
+      ...(allocations.length > 0 ? { allocations } : {}),
+      ...(line.availableQty != null ? { availableQty: toNumber(line.availableQty) } : {}),
+      ...(line.shortageQty != null ? { shortageQty: toNumber(line.shortageQty) } : {}),
+      ...(line.unitCostSnapshot != null ? { unitCostSnapshot: roundMoney(line.unitCostSnapshot) } : {}),
+      ...(line.totalCostSnapshot != null ? { totalCostSnapshot: roundMoney(line.totalCostSnapshot) } : {}),
+      ...(line.returnedQty != null ? { returnedQty: toNumber(line.returnedQty) } : {}),
+    };
+  });
 }
 
 export function validateRepairSpareReturnLines(
@@ -167,11 +180,15 @@ export function validateRepairSpareReturnLines(
     const source = byLine.get(lineId);
     if (!source) throw new Error('بند الصنف والرف غير موجود في سند الصرف.');
     if (source.itemId !== itemId) throw new Error('الصنف لا يطابق بند المرتجع.');
-    if (
-      row.locationId
-      && String(row.locationId).trim() !== String(source.locationId || '').trim()
-    ) {
-      throw new Error('الرف لا يطابق بند المرتجع.');
+    if (row.locationId) {
+      const returnLoc = String(row.locationId).trim();
+      const sourceAllocations = normalizeRepairSpareIssueAllocations(source);
+      const allowed = sourceAllocations.length > 0
+        ? sourceAllocations.some((a) => a.locationId === returnLoc)
+        : returnLoc === String(source.locationId || '').trim();
+      if (!allowed) {
+        throw new Error('الرف لا يطابق بند المرتجع.');
+      }
     }
     const already = toNumber(source.returnedQty);
     const remaining = toNumber(source.quantity) - already;

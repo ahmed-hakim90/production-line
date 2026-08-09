@@ -101,9 +101,10 @@ export const validateRepairPartsPricingMaterial = (material, update, tenantId) =
     }
     const storedCode = String(material.code || '').trim().toUpperCase();
     if (storedCode !== update.code
+        || !storedCode
         || material.type !== 'raw_material'
         || material.isActive === false
-        || !storedCode.startsWith('MAT')) {
+        || material.availableForSpareParts === false) {
         throw new HttpsError('failed-precondition', `المادة ${update.code} غير صالحة لشاشة تسعير قطع الغيار.`);
     }
     const storedPrices = pricesFromMaterial(material);

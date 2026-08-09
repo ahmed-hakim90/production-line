@@ -39,7 +39,7 @@ import { CreateRepairReplenishmentModal } from '../components/CreateRepairReplen
 import { CreateRepairSparePartModal } from '../components/CreateRepairSparePartModal';
 import { toUserSafeFirestoreError } from '../lib/repairFirestoreErrors';
 import {
-  loadAllCatalogMaterials,
+  loadSparePartsCatalogMaterials,
   type CatalogComponent,
 } from '../../catalog/lib/productComponents';
 import { planSparePartCatalogLinks } from '../utils/sparePartCatalogBackfill';
@@ -194,7 +194,7 @@ export const SparePartsInventory: React.FC = () => {
   }, [branchId, canViewJobs]);
 
   useEffect(() => {
-    void loadAllCatalogMaterials()
+    void loadSparePartsCatalogMaterials()
       .then(setCatalogComponents)
       .catch(() => setCatalogComponents([]));
     void materialService.getAll()
@@ -206,13 +206,14 @@ export const SparePartsInventory: React.FC = () => {
           map.set(id, {
             consumer: Number(row.defaultSalePrice || 0),
             trader: Number(row.traderSalePrice || 0),
-            cost: Number(row.purchaseCost || 0),
+            // Purchase cost stays off the wire for non-pricing roles.
+            cost: canManagePricing ? Number(row.purchaseCost || 0) : 0,
           });
         }
         setMaterialSaleById(map);
       })
       .catch(() => setMaterialSaleById(new Map()));
-  }, []);
+  }, [canManagePricing]);
   useEffect(() => {
     void repairBranchService.list()
       .then((rows) => {
@@ -360,7 +361,7 @@ export const SparePartsInventory: React.FC = () => {
     setLinkingCatalog(true);
     try {
       const components =
-        catalogComponents.length > 0 ? catalogComponents : await loadAllCatalogMaterials();
+        catalogComponents.length > 0 ? catalogComponents : await loadSparePartsCatalogMaterials();
       if (catalogComponents.length === 0) setCatalogComponents(components);
       const plans = planSparePartCatalogLinks(parts, components);
       if (plans.length === 0) {
@@ -388,15 +389,15 @@ export const SparePartsInventory: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
+    <div className="erp-ds-clean space-y-4 px-1 sm:space-y-5 sm:px-0" dir={dir}>
       <PageHeader
         title="مخزون قطع الغيار"
         subtitle="إدارة أصناف الفرع مرتبطة بماستر داتا المنتجات والمكونات المشتركة في المشروع."
         icon="inventory_2"
         actions={(
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex w-full max-w-full flex-wrap items-center gap-2 sm:w-auto">
             {(canManageAllBranches || branchOptions.length > 1) && (
-              <div className="w-[220px]">
+              <div className="w-full sm:w-[220px]">
                 <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
                   <SelectTrigger>
                     <SelectValue placeholder="اختر الفرع" />
@@ -453,19 +454,19 @@ export const SparePartsInventory: React.FC = () => {
         )}
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">عدد الأصناف</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{stats.totalItems}</p></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">عدد الأصناف</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-bold sm:text-3xl">{stats.totalItems}</p></CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">إجمالي الكمية بالمخزون</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{stats.totalStock}</p></CardContent>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">إجمالي الكمية بالمخزون</CardTitle></CardHeader>
+          <CardContent><p className="text-2xl font-bold sm:text-3xl">{stats.totalStock}</p></CardContent>
         </Card>
         <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">أصناف منخفضة المخزون</CardTitle></CardHeader>
+          <CardHeader className="pb-2"><CardTitle className="text-sm text-muted-foreground">أصناف منخفضة المخزون</CardTitle></CardHeader>
           <CardContent>
-            <p className={`text-3xl font-bold ${stats.lowStockCount > 0 ? 'text-amber-600' : ''}`}>{stats.lowStockCount}</p>
+            <p className={`text-2xl font-bold sm:text-3xl ${stats.lowStockCount > 0 ? 'text-amber-600' : ''}`}>{stats.lowStockCount}</p>
           </CardContent>
         </Card>
       </div>
@@ -553,20 +554,20 @@ export const SparePartsInventory: React.FC = () => {
           )}
         </CardHeader>
         <CardContent>
-          <div className="rounded border overflow-x-auto">
-            <table className="w-full text-sm">
+          <div className="-mx-1 overflow-x-auto rounded border sm:mx-0">
+            <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-muted">
                 <tr>
                   <th className="p-2 text-right">القطعة</th>
                   <th className="p-2 text-right">الكود</th>
-                  {viewMode === 'dense' && <th className="p-2 text-right">التصنيف</th>}
-                  {viewMode === 'dense' && <th className="p-2 text-right">الوحدة</th>}
-                  {viewMode === 'dense' && <th className="p-2 text-right">الكتالوج</th>}
+                  {viewMode === 'dense' && <th className="hidden p-2 text-right md:table-cell">التصنيف</th>}
+                  {viewMode === 'dense' && <th className="hidden p-2 text-right md:table-cell">الوحدة</th>}
+                  {viewMode === 'dense' && <th className="hidden p-2 text-right lg:table-cell">الكتالوج</th>}
                   <th className="p-2 text-right">الرصيد</th>
                   <th className="p-2 text-right">الحد الأدنى</th>
-                  {viewMode === 'dense' && <th className="p-2 text-right">مستهلك</th>}
-                  {viewMode === 'dense' && <th className="p-2 text-right">تاجر</th>}
-                  {viewMode === 'dense' && <th className="p-2 text-right">تكلفة</th>}
+                  {viewMode === 'dense' && <th className="hidden p-2 text-right lg:table-cell">مستهلك</th>}
+                  {viewMode === 'dense' && <th className="hidden p-2 text-right lg:table-cell">تاجر</th>}
+                  {viewMode === 'dense' && canManagePricing && <th className="hidden p-2 text-right xl:table-cell">تكلفة</th>}
                   <th className="p-2 text-right">الحالة</th>
                   <th className="p-2 text-right">الإجراءات</th>
                 </tr>
@@ -590,34 +591,34 @@ export const SparePartsInventory: React.FC = () => {
                     materialTraderSalePrice: prices?.trader,
                     partSalePrice: part.defaultSalePrice,
                   });
-                  const costPrice = Number(prices?.cost || 0);
+                  const costPrice = canManagePricing ? Number(prices?.cost || 0) : 0;
                   return (
                     <tr key={part.id} className="border-t">
                       <td className="p-2">{part.name}</td>
                       <td className="p-2">{part.code}</td>
-                      {viewMode === 'dense' && <td className="p-2">{part.category || '—'}</td>}
-                      {viewMode === 'dense' && <td className="p-2">{part.unit || '—'}</td>}
+                      {viewMode === 'dense' && <td className="hidden p-2 md:table-cell">{part.category || '—'}</td>}
+                      {viewMode === 'dense' && <td className="hidden p-2 md:table-cell">{part.unit || '—'}</td>}
                       {viewMode === 'dense' && (
-                        <td className="p-2">
+                        <td className="hidden p-2 lg:table-cell">
                           <Badge variant={isLinked ? 'secondary' : 'outline'}>
                             {isLinked ? 'مرتبط' : 'غير مرتبط'}
                           </Badge>
                         </td>
                       )}
-                      <td className="p-2 font-mono">{qty}</td>
-                      <td className="p-2 font-mono">{part.minStock}</td>
+                      <td className="p-2 font-mono tabular-nums">{qty}</td>
+                      <td className="p-2 font-mono tabular-nums">{part.minStock}</td>
                       {viewMode === 'dense' && (
-                        <td className="p-2 font-mono">
+                        <td className="hidden p-2 font-mono tabular-nums lg:table-cell">
                           {consumerPrice > 0 ? consumerPrice.toFixed(2) : '—'}
                         </td>
                       )}
                       {viewMode === 'dense' && (
-                        <td className="p-2 font-mono">
+                        <td className="hidden p-2 font-mono tabular-nums lg:table-cell">
                           {traderPrice > 0 ? traderPrice.toFixed(2) : '—'}
                         </td>
                       )}
-                      {viewMode === 'dense' && (
-                        <td className="p-2 font-mono">
+                      {viewMode === 'dense' && canManagePricing && (
+                        <td className="hidden p-2 font-mono tabular-nums xl:table-cell">
                           {costPrice > 0 ? costPrice.toFixed(2) : '—'}
                         </td>
                       )}
@@ -629,7 +630,7 @@ export const SparePartsInventory: React.FC = () => {
                       </td>
                       <td className="p-2">
                         {canManageParts ? (
-                          <div className="flex items-center gap-2 flex-wrap">
+                          <div className="flex flex-wrap items-center gap-1.5">
                             <Button
                               variant="outline"
                               size="sm"
@@ -639,7 +640,7 @@ export const SparePartsInventory: React.FC = () => {
                               disabled={Boolean(adjustingPartId) || Boolean(deletingPartId)}
                               title="زيادة الرصيد (جرد يدوي)"
                             >
-                              زيادة +{Math.max(1, Number(increaseQty || 1))}
+                              +{Math.max(1, Number(increaseQty || 1))}
                             </Button>
                             <Button
                               variant="outline"
@@ -650,7 +651,7 @@ export const SparePartsInventory: React.FC = () => {
                               disabled={Boolean(adjustingPartId) || Boolean(deletingPartId) || qty <= 0}
                               title="نقص الرصيد (جرد يدوي)"
                             >
-                              نقص -{Math.max(1, Number(increaseQty || 1))}
+                              -{Math.max(1, Number(increaseQty || 1))}
                             </Button>
                             <Button
                               variant="outline"
@@ -661,7 +662,7 @@ export const SparePartsInventory: React.FC = () => {
                               disabled={Boolean(deletingPartId) || Boolean(adjustingPartId)}
                               title="حذف الصنف من مخزون الفرع (حتى لو كان تجربة أو مربوطًا بالغلط)"
                             >
-                              {deletingPartId === part.id ? 'جاري الحذف...' : 'حذف'}
+                              {deletingPartId === part.id ? '…' : 'حذف'}
                             </Button>
                           </div>
                         ) : (
@@ -673,7 +674,14 @@ export const SparePartsInventory: React.FC = () => {
                 })}
                 {visibleParts.length === 0 && (
                   <tr>
-                    <td className="p-3 text-center text-muted-foreground" colSpan={viewMode === 'dense' ? 9 : 6}>
+                    <td
+                      className="p-3 text-center text-muted-foreground"
+                      colSpan={
+                        viewMode === 'dense'
+                          ? (canManagePricing ? 12 : 11)
+                          : 6
+                      }
+                    >
                       لا توجد قطع مطابقة.
                     </td>
                   </tr>
@@ -704,7 +712,7 @@ export const SparePartsInventory: React.FC = () => {
             ) : branchJobs.length === 0 ? (
               <p className="text-sm text-muted-foreground">لا توجد طلبات صيانة مفتوحة لهذا الفرع.</p>
             ) : (
-              <div className="rounded border overflow-x-auto">
+              <div className="overflow-x-auto rounded border">
                 <table className="w-full text-sm">
                   <thead className="bg-muted">
                     <tr>

@@ -46,6 +46,7 @@ import {
   summarizeMonthCloses,
 } from '../lib/repairAdminDashboardMetrics';
 import { normalizeTreasuryMonth } from '../lib/repairTreasuryMonthlyClose';
+import { summarizeRepairUnrepairableReasons } from '../lib/repairUnrepairableAnalytics';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -444,6 +445,12 @@ export const RepairAdminDashboard: React.FC = () => {
     () => summarizeMonthCloses(allowedBranchIds, monthCloses),
     [allowedBranchIds, monthCloses],
   );
+  const unrepairableAnalytics = useMemo(
+    () => summarizeRepairUnrepairableReasons(
+      jobs.filter((job) => allowedBranchIds.includes(String(job.branchId || ''))),
+    ),
+    [jobs, allowedBranchIds],
+  );
 
   const canViewJobs = can('repair.view') || can('repair.adminDashboard.view');
   const canViewReplenishment =
@@ -462,10 +469,7 @@ export const RepairAdminDashboard: React.FC = () => {
     can('repair.customerRequests.view')
     || can('repair.customerRequests.assign')
     || can('repair.customerRequests.receive');
-  const canViewCustody =
-    can('repair.custody.view')
-    || can('repair.custody.record')
-    || can('repair.custody.handover');
+  const canViewCustody = can('repair.custody.view') || can('repair.custody.handover');
   const canViewReplacements =
     can('repair.replacements.view')
     || can('repair.replacements.create')
@@ -580,7 +584,7 @@ export const RepairAdminDashboard: React.FC = () => {
               </Link>
             )}
             {canViewCustody && (
-              <Link to={path('/repair/unrepairable-stock')}>
+              <Link to={path('/repair/custody-stock?stockType=unrepairable')}>
                 <Button size="sm" variant="outline">غير القابل</Button>
               </Link>
             )}
@@ -732,6 +736,62 @@ export const RepairAdminDashboard: React.FC = () => {
             </CardContent>
           </Card>
 
+          <Card className="shadow-sm">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-base">تحليل أسباب عدم قابلية الإصلاح وإعادة الفتح</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 md:grid-cols-4 text-sm">
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">طلبات متأثرة</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums">{fmt(unrepairableAnalytics.affectedJobs)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">إجمالي قرارات الوحدات</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-rose-600">{fmt(unrepairableAnalytics.decisionQuantity)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">الرصيد الحالي غير القابل</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-amber-700">{fmt(unrepairableAnalytics.currentStockQuantity)}</p>
+                </div>
+                <div className="rounded-lg border p-3">
+                  <p className="text-xs text-muted-foreground">أُعيد فتحها للصيانة</p>
+                  <p className="mt-1 text-xl font-bold tabular-nums text-emerald-700">{fmt(unrepairableAnalytics.reopenedQuantity)}</p>
+                </div>
+              </div>
+              {unrepairableAnalytics.reasons.length === 0 ? (
+                <p className="rounded-lg border px-3 py-6 text-center text-sm text-muted-foreground">
+                  لا توجد قرارات غير قابلة للإصلاح مصنفة بعد.
+                </p>
+              ) : (
+                <div className="overflow-x-auto rounded-lg border">
+                  <table className="w-full text-sm">
+                    <thead className="border-b bg-muted/30 text-muted-foreground">
+                      <tr>
+                        <th className="px-3 py-2 text-right font-medium">السبب</th>
+                        <th className="px-3 py-2 text-right font-medium">الطلبات</th>
+                        <th className="px-3 py-2 text-right font-medium">الوحدات المسجلة</th>
+                        <th className="px-3 py-2 text-right font-medium">الموجود حاليًا</th>
+                        <th className="px-3 py-2 text-right font-medium">أُعيد للصيانة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {unrepairableAnalytics.reasons.map((row) => (
+                        <tr key={row.code} className="border-b last:border-b-0">
+                          <td className="px-3 py-2 font-medium">{row.label}</td>
+                          <td className="px-3 py-2 tabular-nums">{fmt(row.jobs)}</td>
+                          <td className="px-3 py-2 tabular-nums">{fmt(row.decisionQuantity)}</td>
+                          <td className="px-3 py-2 tabular-nums text-amber-700">{fmt(row.currentStockQuantity)}</td>
+                          <td className="px-3 py-2 tabular-nums text-emerald-700">{fmt(row.reopenedQuantity)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
           <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
             <Card className="shadow-sm">
               <CardHeader className="pb-2">
@@ -802,7 +862,7 @@ export const RepairAdminDashboard: React.FC = () => {
                       <Link to={path('/repair/custody-stock')}>
                         <Button size="sm" variant="outline">العهدة</Button>
                       </Link>
-                      <Link to={path('/repair/unrepairable-stock')}>
+                      <Link to={path('/repair/custody-stock?stockType=unrepairable')}>
                         <Button size="sm" variant="outline">غير القابل</Button>
                       </Link>
                     </>

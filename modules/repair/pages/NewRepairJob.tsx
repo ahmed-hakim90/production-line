@@ -37,6 +37,7 @@ import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
 import { findRepairProductByBarcode } from '../lib/repairProductBarcode';
+import { isRepairJobOpenStatus } from '../lib/repairTechnicianHomeMetrics';
 
 type JobProductRow = {
   itemId: string;
@@ -256,9 +257,9 @@ export const NewRepairJob: React.FC = () => {
       setOpenBranchJobs([]);
       return;
     }
-    const openStatuses = new Set(repairSettings.workflow.openStatusIds);
+    const openIds = repairSettings.workflow.openStatusIds;
     const unsubscribe = repairJobService.subscribeByBranch(form.branchId, (rows) => {
-      const filtered = rows.filter((job) => openStatuses.has(String(job.status || '')));
+      const filtered = rows.filter((job) => isRepairJobOpenStatus(String(job.status || ''), openIds));
       setOpenBranchJobs(filtered);
     });
     return () => {

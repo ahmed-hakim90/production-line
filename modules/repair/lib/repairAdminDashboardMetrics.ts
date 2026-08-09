@@ -16,6 +16,7 @@ import {
   isReadyToIssueUsage,
 } from './repairPartFulfillment';
 import { isRepairTreasuryMonthClosedStatus } from './repairTreasuryMonthlyClose';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 export const REPAIR_ADMIN_OVERDUE_DAYS = 7;
 
@@ -45,7 +46,9 @@ export function getWorkDaysElapsed(
 }
 
 export function isOpenRepairJob(job: Pick<RepairJob, 'status'>, openStatusIds: string[]): boolean {
-  return openStatusIds.includes(String(job.status || ''));
+  const canonical = mapLegacyRepairStatus(job.status);
+  if (!canonical) return false;
+  return openStatusIds.some((id) => mapLegacyRepairStatus(id) === canonical);
 }
 
 export function jobHasPendingSupplyParts(

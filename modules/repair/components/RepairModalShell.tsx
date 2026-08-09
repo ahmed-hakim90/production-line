@@ -18,26 +18,26 @@ export const RepairModalShell: React.FC<ModalShellProps> = ({
   maxWidthClassName = 'max-w-2xl',
 }) => (
   <div
-    className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4"
+    className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
     onClick={onClose}
     role="presentation"
   >
     <div
-      className={`bg-[var(--color-card)] rounded-xl shadow-2xl w-full ${maxWidthClassName} border border-[var(--color-border)] max-h-[90vh] flex flex-col overflow-hidden`}
+      className={`flex max-h-[92vh] w-full flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-xl ${maxWidthClassName}`}
       onClick={(e) => e.stopPropagation()}
       role="dialog"
       aria-modal="true"
       aria-label={title}
     >
-      <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--color-border)]">
-        <h3 className="font-bold text-[var(--color-text)]">{title}</h3>
+      <div className="flex items-center justify-between gap-3 border-b border-[var(--color-border)] px-3 py-3 sm:px-4">
+        <h3 className="min-w-0 truncate font-bold text-[var(--color-text)]">{title}</h3>
         <Button type="button" variant="secondary" size="sm" onClick={onClose} aria-label="إغلاق">
           <X size={16} />
         </Button>
       </div>
-      <div className="p-4 overflow-y-auto flex-1 space-y-3 text-[var(--color-text)]">{children}</div>
+      <div className="flex-1 space-y-3 overflow-y-auto p-3 text-[var(--color-text)] sm:p-4">{children}</div>
       {footer ? (
-        <div className="px-4 py-3 border-t border-[var(--color-border)] flex flex-wrap gap-2 justify-end">
+        <div className="flex flex-col-reverse flex-wrap gap-2 border-t border-[var(--color-border)] px-3 py-3 sm:flex-row sm:justify-end sm:px-4">
           {footer}
         </div>
       ) : null}

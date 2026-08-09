@@ -40,6 +40,23 @@ import {
 }
 
 {
+  // Linked catalog part whose material is omitted (e.g. availableForSpareParts=false) must not appear.
+  const options = buildRepairSalesInvoicePartOptions({
+    parts: [
+      { id: 'p-hidden', name: 'استرتش', code: 'CNS', materialId: 'm-hidden', defaultSalePrice: 3 },
+      { id: 'p1', name: 'مقاومة', code: 'R1', materialId: 'm1', defaultSalePrice: 10 },
+    ],
+    materials: [
+      { id: 'm1', name: 'مقاومة', code: 'MAT-1', defaultSalePrice: 12, isActive: true },
+    ],
+    warehouseQtyByMaterialId: { m1: 2, 'm-hidden': 9 },
+    legacyQtyByPartId: {},
+  });
+  assert.equal(options.some((o) => o.materialId === 'm-hidden'), false);
+  assert.ok(options.some((o) => o.materialId === 'm1'));
+}
+
+{
   const traderOptions = buildRepairSalesInvoicePartOptions({
     parts: [{ id: 'p1', name: 'مقاومة', code: 'R1', materialId: 'm1', defaultSalePrice: 10 }],
     materials: [

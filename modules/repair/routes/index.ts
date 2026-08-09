@@ -63,13 +63,12 @@ export const REPAIR_ROUTES: AppRouteDef[] = [
   },
   {
     path: '/repair/custody-stock',
-    permissionsAny: ['repair.custody.view', 'repair.custody.record', 'repair.custody.handover'],
+    permissionsAny: ['repair.custody.view', 'repair.custody.handover'],
     component: RepairCustodyStock,
   },
   {
     path: '/repair/unrepairable-stock',
-    permissionsAny: ['repair.custody.view', 'repair.custody.record', 'repair.custody.handover'],
-    component: RepairCustodyStock,
+    redirectTo: '/repair/custody-stock?stockType=unrepairable',
   },
   {
     path: '/repair/replacements',

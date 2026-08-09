@@ -30,6 +30,13 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import { resolveRepairSettings, type ResolvedRepairStatus } from '../config/repairSettings';
+import {
+  REPAIR_STATUS_ROLE_LABELS,
+  REPAIR_STATUS_ROLES,
+  validateMandatoryStatusRoles,
+  type RepairStatusRole,
+} from '../lib/repairStatusAdvance';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 import { repairBranchService } from '../services/repairBranchService';
 import { employeeService } from '../../hr/employeeService';
 import type { RepairBranch } from '../types';
@@ -37,10 +44,13 @@ import type {
   FirestoreEmployee,
   RepairAccessoryCatalogItem,
   RepairServiceCatalogItem,
+  RepairUnrepairableReason,
 } from '../../../types';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { cn } from '@/lib/utils';
 import { repairServiceCatalogService } from '../services/repairServiceCatalogService';
+import { usePermission } from '@/utils/permissions';
+import { purgeRepairOperationalDataCallable } from '../../auth/services/firebase';
 
 function repairSettingsFingerprint(settings: ReturnType<typeof useAppStore.getState>['systemSettings']): string {
   try {
@@ -52,11 +62,18 @@ function repairSettingsFingerprint(settings: ReturnType<typeof useAppStore.getSt
 
 export const RepairSettings: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const { can } = usePermission();
   const systemSettings = useAppStore((s) => s.systemSettings);
   const updateSystemSettings = useAppStore((s) => s.updateSystemSettings);
+  const userProfile = useAppStore((s) => s.userProfile);
   const productCategories = useAppStore((s) => s._productCategories);
   const resolved = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const fp = useMemo(() => repairSettingsFingerprint(systemSettings), [systemSettings]);
+  const tenantId = String(userProfile?.tenantId || '').trim();
+  const purgeConfirmExpected = tenantId ? `PURGE_REPAIR_OPS_${tenantId}` : '';
+  const canPurgeOps = can('repair.settings.manage') || can('roles.manage');
+  const [purgeConfirm, setPurgeConfirm] = useState('');
+  const [purging, setPurging] = useState(false);
 
   const categoryOptions = useMemo(
     () =>
@@ -86,6 +103,9 @@ export const RepairSettings: React.FC = () => {
   );
   const [serviceCatalog, setServiceCatalog] = useState<RepairServiceCatalogItem[]>(
     () => resolved.serviceCatalog,
+  );
+  const [unrepairableReasons, setUnrepairableReasons] = useState<RepairUnrepairableReason[]>(
+    () => resolved.unrepairableReasons,
   );
 
   type RepairSettingsManagersData = {
@@ -191,6 +211,7 @@ export const RepairSettings: React.FC = () => {
     setAllowPartialCollection(Boolean(r.payments.allowPartialCollection));
     setAccessoriesCatalog(r.accessoriesCatalog);
     setServiceCatalog(r.serviceCatalog);
+    setUnrepairableReasons(r.unrepairableReasons);
   }, [fp]);
 
   useEffect(() => {
@@ -234,6 +255,18 @@ export const RepairSettings: React.FC = () => {
         };
       })
       .filter((row) => row.name.length > 0);
+    const normalizedUnrepairableReasons = unrepairableReasons
+      .map((row, index) => ({
+        id: String(row.id || '').trim() || `reason-${index + 1}`,
+        label: String(row.label || '').trim(),
+        enabled: row.enabled !== false,
+      }))
+      .filter((row) => row.label.length > 0);
+    const roleErrors = validateMandatoryStatusRoles(statuses);
+    if (roleErrors.length > 0) {
+      toast.error(roleErrors[0]);
+      return;
+    }
     setSaving(true);
     try {
       let branchManagersUpdated = false;
@@ -274,9 +307,13 @@ export const RepairSettings: React.FC = () => {
             managerScope,
           },
           workflow: {
-            statuses: statuses.map((status, idx) => ({ ...status, order: idx + 1 })),
-            initialStatusId,
-            openStatusIds,
+            statuses: statuses.map((status, idx) => ({
+              ...status,
+              id: mapLegacyRepairStatus(status.id),
+              order: idx + 1,
+            })),
+            initialStatusId: mapLegacyRepairStatus(initialStatusId),
+            openStatusIds: Array.from(new Set(openStatusIds.map((id) => mapLegacyRepairStatus(id)))),
           },
           defaults: {
             ...(systemSettings.repairSettings?.defaults || {}),
@@ -297,6 +334,7 @@ export const RepairSettings: React.FC = () => {
             allowPartialCollection,
           },
           accessoriesCatalog: normalizedAccessories,
+          unrepairableReasons: normalizedUnrepairableReasons,
           // Names remain available to operational screens; real prices live only
           // in repair_service_catalog and are never readable by technicians.
           serviceCatalog: normalizedServices.map(({ id, name, enabled }) => ({
@@ -785,18 +823,21 @@ export const RepairSettings: React.FC = () => {
       <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <CardHeader className="space-y-1 pb-2">
           <CardTitle className="text-base font-semibold tracking-tight">حالات الطلب وسير العمل</CardTitle>
-          <CardDescription>عرّف الحالات والألوان والحالة الابتدائية والحالات المعتبرة «مفتوحة».</CardDescription>
+          <CardDescription>
+            عرّف الحالات والألوان والدور في المسار. الحالة تتقدم تلقائياً حسب الأكشن (تشخيص / قطعة / موافقة / تم الإصلاح) عبر الدور المعيّن.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-hidden">
+          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
-                  <TableHead className="w-[120px] font-medium">المعرف</TableHead>
+                  <TableHead className="w-[110px] font-medium">المعرف</TableHead>
                   <TableHead className="font-medium">الاسم</TableHead>
+                  <TableHead className="min-w-[180px] font-medium">الدور في المسار</TableHead>
                   <TableHead className="w-[100px] font-medium">اللون</TableHead>
-                  <TableHead className="w-[90px] text-center font-medium">نهائية</TableHead>
-                  <TableHead className="w-[90px] text-center font-medium">مفعّلة</TableHead>
+                  <TableHead className="w-[80px] text-center font-medium">نهائية</TableHead>
+                  <TableHead className="w-[80px] text-center font-medium">مفعّلة</TableHead>
                   <TableHead className="w-[72px]" />
                 </TableRow>
               </TableHeader>
@@ -824,6 +865,27 @@ export const RepairSettings: React.FC = () => {
                         }
                         className="h-9 bg-background"
                       />
+                    </TableCell>
+                    <TableCell className="align-top py-3">
+                      <Select
+                        value={status.role || 'none'}
+                        onValueChange={(value) =>
+                          setStatuses((prev) =>
+                            prev.map((s, i) => (i === index ? { ...s, role: value as RepairStatusRole } : s)),
+                          )
+                        }
+                      >
+                        <SelectTrigger className="h-9 bg-background text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {REPAIR_STATUS_ROLES.map((role) => (
+                            <SelectItem key={role} value={role}>
+                              {REPAIR_STATUS_ROLE_LABELS[role]}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </TableCell>
                     <TableCell className="align-top py-3">
                       <div className="flex gap-2">
@@ -897,6 +959,7 @@ export const RepairSettings: React.FC = () => {
                   order: prev.length + 1,
                   isTerminal: false,
                   isEnabled: true,
+                  role: 'none',
                 },
               ])
             }
@@ -951,6 +1014,82 @@ export const RepairSettings: React.FC = () => {
 
       <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
         <CardHeader className="space-y-1 pb-2">
+          <CardTitle className="text-base font-semibold tracking-tight">أسباب عدم قابلية الإصلاح</CardTitle>
+          <CardDescription>
+            قائمة ثابتة يختار منها الفني. تُحفظ ككود واسم وتظهر في تحليل أسباب عدم الإصلاح وإعادة الفتح.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="rounded-lg border border-[var(--color-border)]/70 overflow-hidden">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead className="w-[180px]">الكود</TableHead>
+                  <TableHead>السبب</TableHead>
+                  <TableHead className="w-[80px] text-center">مفعّل</TableHead>
+                  <TableHead className="w-[70px]" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {unrepairableReasons.map((reason, index) => (
+                  <TableRow key={`${reason.id}-${index}`}>
+                    <TableCell>
+                      <Input
+                        dir="ltr"
+                        className="font-mono text-xs"
+                        value={reason.id}
+                        onChange={(e) => setUnrepairableReasons((rows) => rows.map((row, i) =>
+                          i === index ? { ...row, id: e.target.value.replace(/[^a-zA-Z0-9_-]/g, '_') } : row,
+                        ))}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Input
+                        value={reason.label}
+                        onChange={(e) => setUnrepairableReasons((rows) => rows.map((row, i) =>
+                          i === index ? { ...row, label: e.target.value } : row,
+                        ))}
+                      />
+                    </TableCell>
+                    <TableCell className="text-center">
+                      <Checkbox
+                        checked={reason.enabled !== false}
+                        onCheckedChange={(checked) => setUnrepairableReasons((rows) => rows.map((row, i) =>
+                          i === index ? { ...row, enabled: Boolean(checked) } : row,
+                        ))}
+                      />
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="ghost"
+                        className="text-destructive"
+                        onClick={() => setUnrepairableReasons((rows) => rows.filter((_, i) => i !== index))}
+                      >
+                        حذف
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setUnrepairableReasons((rows) => [
+              ...rows,
+              { id: `reason_${Date.now()}`, label: 'سبب جديد', enabled: true },
+            ])}
+          >
+            إضافة سبب
+          </Button>
+        </CardContent>
+      </Card>
+
+      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <CardHeader className="space-y-1 pb-2">
           <CardTitle className="text-base font-semibold tracking-tight">سياسة الخزينة</CardTitle>
           <CardDescription>الإغلاق التلقائي والتحقق من خزينة اليوم السابق.</CardDescription>
         </CardHeader>
@@ -992,6 +1131,64 @@ export const RepairSettings: React.FC = () => {
           </div>
         </CardContent>
       </Card>
+
+      {canPurgeOps && tenantId ? (
+        <Card className="border-destructive/40">
+          <CardHeader>
+            <CardTitle className="text-destructive">منطقة خطر — مسح بيانات تشغيل تجريبية</CardTitle>
+            <CardDescription>
+              يمسح كل طلبات الصيانة والعهدة وسندات الصرف وطلبات العملاء والاستبدال والتحصيل المرتبط،
+              مع الإبقاء على الفروع والقطع والعملاء وأرصدة المخزون الحالية.
+              لا يُستخدم إلا على بيانات تجريبية.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm space-y-1">
+              <p>سيُحذف: الطلبات · العهدة · غير القابل للإصلاح · سندات الصرف · طلبات العملاء · الاستبدال · الماليات/الخزينة المرتبطة.</p>
+              <p>سيبقى: الفروع · كتالوج القطع · أرصدة قطع المراكز · العملاء · stock_items.</p>
+            </div>
+            <div className="max-w-xl space-y-2">
+              <Label htmlFor="purge-confirm">
+                للتأكيد اكتب: <span className="font-mono text-xs" dir="ltr">{purgeConfirmExpected}</span>
+              </Label>
+              <Input
+                id="purge-confirm"
+                value={purgeConfirm}
+                onChange={(e) => setPurgeConfirm(e.target.value)}
+                className="font-mono text-sm"
+                dir="ltr"
+                autoComplete="off"
+                placeholder={purgeConfirmExpected}
+              />
+            </div>
+            <Button
+              variant="destructive"
+              disabled={purging || purgeConfirm.trim() !== purgeConfirmExpected}
+              onClick={async () => {
+                const ok = window.confirm(
+                  'تأكيد نهائي: مسح كل بيانات تشغيل الصيانة التجريبية لهذه الشركة؟ لا يمكن التراجع.',
+                );
+                if (!ok) return;
+                setPurging(true);
+                try {
+                  const result = await purgeRepairOperationalDataCallable({
+                    tenantId,
+                    confirmPhrase: purgeConfirm.trim(),
+                  });
+                  setPurgeConfirm('');
+                  toast.success(`تم المسح: ${result.deletedFirestoreDocs} مستند.`);
+                } catch (e: unknown) {
+                  toast.error(e instanceof Error ? e.message : 'تعذر مسح بيانات الصيانة.');
+                } finally {
+                  setPurging(false);
+                }
+              }}
+            >
+              {purging ? 'جارٍ المسح...' : 'مسح بيانات تشغيل الصيانة'}
+            </Button>
+          </CardContent>
+        </Card>
+      ) : null}
 
       <div className="flex justify-end border-t border-[var(--color-border)]/60 pt-6">
         <Button onClick={onSave} disabled={saving} size="lg">

@@ -7,6 +7,7 @@ import type { CustomerType } from '../../customers/types';
 import { stockService } from '../../inventory/services/stockService';
 import { warehouseLocationService } from '../../inventory/services/warehouseLocationService';
 import { materialService } from '../../manufacturing/services/materialService';
+import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import { MATERIAL_UNIT_LABELS, type Material, type MaterialUnit } from '../../manufacturing/types';
 import { repairJobService } from '../services/repairJobService';
 import { repairSpareIssueService } from '../services/repairSpareIssueService';
@@ -122,7 +123,9 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
   useEffect(() => {
     if (!open) return;
     void materialService.getAll()
-      .then((rows) => setMaterials(rows.filter((m) => m.isActive !== false && m.id)))
+      .then((rows) => setMaterials(rows.filter(
+        (m) => m.isActive !== false && m.id && isMaterialAvailableForSpareParts(m),
+      )))
       .catch(() => setMaterials([]));
   }, [open]);
 
@@ -191,9 +194,11 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
 
     const linked: PartOption[] = [];
     const seen = new Set<string>();
+    const eligibleIds = new Set(materials.map((m) => String(m.id || '').trim()).filter(Boolean));
     for (const part of parts) {
       const materialId = String(part.materialId || part.rawMaterialId || '').trim();
       if (!materialId || seen.has(materialId)) continue;
+      if (eligibleIds.size > 0 && !eligibleIds.has(materialId)) continue;
       seen.add(materialId);
       const prices = saleByMaterialId.get(materialId);
       linked.push({
@@ -245,6 +250,7 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
         return {
           itemId: line.itemId,
           quantity: Number(line.quantity),
+          // Optional preferred shelf — server auto-allocates across balances when omitted.
           ...(line.locationId
             ? { locationId: line.locationId, locationCode: loc?.code || line.locationId }
             : {}),
@@ -252,10 +258,6 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       });
     if (!payloadLines.length) {
       toast.error('أضف بند قطعة غيار واحداً على الأقل.');
-      return;
-    }
-    if (locationsRequired && payloadLines.some((line) => !line.locationId)) {
-      toast.error('حدد رف المصدر لكل بند.');
       return;
     }
 
@@ -302,8 +304,8 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
       maxWidthClassName="max-w-3xl"
       footer={(
         <>
-          <Button type="button" variant="secondary" onClick={onClose}>إلغاء</Button>
-          <Button type="button" onClick={() => void handleCreate()} disabled={saving || loadingMeta}>
+          <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={onClose}>إلغاء</Button>
+          <Button type="button" className="w-full sm:w-auto" onClick={() => void handleCreate()} disabled={saving || loadingMeta}>
             {saving ? 'جاري الحفظ...' : 'حفظ السند'}
           </Button>
         </>
@@ -373,10 +375,10 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
         return (
           <div
             key={line.key}
-            className="flex flex-wrap md:flex-nowrap items-start gap-2 border border-[var(--color-border)] rounded-lg p-3"
+            className="grid grid-cols-1 gap-2 rounded-lg border border-[var(--color-border)] p-3 sm:grid-cols-[minmax(0,1fr)_7.5rem_auto] md:grid-cols-[minmax(0,1fr)_7.5rem_10rem_auto] md:items-start"
           >
-            <div className="flex-1 min-w-[160px] space-y-1">
-              <p className="text-xs font-bold h-4">القطعة</p>
+            <div className="min-w-0 space-y-1">
+              <p className="h-4 text-xs font-bold">القطعة</p>
               <SearchableSelect
                 options={itemOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
                 value={line.itemId}
@@ -394,7 +396,7 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
                 }}
                 placeholder="ابحث واختر قطعة غيار"
               />
-              <p className="text-[11px] text-muted-foreground h-4">
+              <p className="h-4 text-[11px] text-muted-foreground">
                 {line.itemId
                   ? (salePrice > 0
                     ? `سعر ${jobCustomerType === 'trader' ? 'التاجر' : 'المستهلك'}: ${fmt(salePrice)}`
@@ -402,13 +404,13 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
                   : '\u00a0'}
               </p>
             </div>
-            <div className="w-[7.5rem] shrink-0 space-y-1">
-              <p className="text-xs font-bold h-4">الكمية {unitLabel ? `(${unitLabel})` : ''}</p>
+            <div className="space-y-1">
+              <p className="h-4 text-xs font-bold">الكمية {unitLabel ? `(${unitLabel})` : ''}</p>
               <input
                 type="number"
                 min={0}
                 step="any"
-                className="w-full h-10 border border-[var(--color-border)] rounded-lg px-3 py-2"
+                className="h-10 w-full rounded-lg border border-[var(--color-border)] px-3 py-2"
                 value={line.quantity || ''}
                 onChange={(e) => {
                   const quantity = Number(e.target.value);
@@ -417,45 +419,48 @@ export const CreateRepairSpareIssueModal: React.FC<Props> = ({
                   )));
                 }}
               />
-              <p className="text-[11px] text-muted-foreground h-4">
+              <p className="h-4 text-[11px] text-muted-foreground">
                 {line.itemId ? `المتاح: ${fmt(available)}` : '\u00a0'}
               </p>
             </div>
-            {locationsRequired && (
-              <div className="w-[10rem] shrink-0 space-y-1">
-                <p className="text-xs font-bold h-4">الرف</p>
+            {locationsRequired ? (
+              <div className="min-w-0 space-y-1 sm:col-span-2 md:col-span-1">
+                <p className="h-4 text-xs font-bold">رف مفضّل</p>
                 <SearchableSelect
-                  options={locations.map((loc) => ({ value: loc.id, label: loc.code }))}
+                  options={[
+                    { value: '', label: 'تلقائي من الأرصدة' },
+                    ...locations.map((loc) => ({ value: loc.id, label: loc.code })),
+                  ]}
                   value={line.locationId}
                   onChange={(value) => {
                     setLines((prev) => prev.map((row, i) => (
                       i === index ? { ...row, locationId: value } : row
                     )));
                   }}
-                  placeholder="ابحث واختر رف"
+                  placeholder="تلقائي من الأرصدة"
                 />
-                <p className="text-[11px] h-4">{'\u00a0'}</p>
+                <p className="h-4 text-[11px] text-muted-foreground">يُحضَّر مثل صرف الإنتاج</p>
               </div>
-            )}
-            <div className="shrink-0 space-y-1">
-              <p className="text-xs font-bold h-4">{'\u00a0'}</p>
+            ) : null}
+            <div className="space-y-1">
+              <p className="hidden h-4 text-xs font-bold md:block">{'\u00a0'}</p>
               <Button
                 type="button"
                 variant="destructive"
-                className="h-10"
+                className="h-10 w-full md:w-auto"
                 onClick={() => setLines((prev) => (
                   prev.length <= 1 ? [emptyDraftLine()] : prev.filter((_, i) => i !== index)
                 ))}
               >
                 حذف
               </Button>
-              <p className="text-[11px] h-4">{'\u00a0'}</p>
+              <p className="hidden h-4 text-[11px] md:block">{'\u00a0'}</p>
             </div>
           </div>
         );
       })}
 
-      <Button type="button" variant="secondary" onClick={() => setLines((prev) => [...prev, emptyDraftLine()])}>
+      <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={() => setLines((prev) => [...prev, emptyDraftLine()])}>
         إضافة بند
       </Button>
     </RepairModalShell>

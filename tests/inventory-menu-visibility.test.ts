@@ -44,7 +44,7 @@ assert.equal(
     menuKey: 'inv-warehouses',
     ...materialsScoped,
   }),
-  false,
+  true,
 );
 assert.equal(
   isInventoryMenuItemVisibleForWarehouseScope({

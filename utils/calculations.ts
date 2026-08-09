@@ -342,6 +342,7 @@ export const buildProducts = (
       wasteUnits: totalWaste,
       avgAssemblyTime: standardMin,
       assemblyMode: p.assemblyMode === 'team' ? 'team' : 'individual',
+      isManufactured: p.isManufactured !== false,
     };
   });
 };

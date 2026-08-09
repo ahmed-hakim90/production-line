@@ -96,6 +96,7 @@ import {
 } from '../utils/lineAssignmentWorkersCount';
 import { getPresenceLabel, summarizeWorkerPresenceDays, summarizeWorkerPresenceRows } from '../utils/workerPresence';
 import { reportService, type FirestoreCursor, REPORT_LIST_MAX_PAGES } from '@/modules/production/services/reportService';
+import { filterProductionProducts } from '@/modules/production/utils/isProductionProduct';
 import { supplyCycleService } from '@/modules/production/services/supplyCycleService';
 import {
   DAILY_WORKER_ASSIGNMENT_PATHS,
@@ -2468,7 +2469,7 @@ export const Reports: React.FC = () => {
     () => (
       form.reportType === 'component_injection'
         ? injectionRawMaterialOptions.map((m) => ({ value: m.id, label: m.code ? `${m.name} (${m.code})` : m.name }))
-        : _rawProducts.map((p) => ({ value: p.id!, label: p.name }))
+        : filterProductionProducts(_rawProducts).map((p) => ({ value: p.id!, label: p.name }))
     ),
     [form.reportType, injectionRawMaterialOptions, _rawProducts],
   );

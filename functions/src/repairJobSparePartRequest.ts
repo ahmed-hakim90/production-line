@@ -15,6 +15,12 @@ import {
   reserveStockInTx,
   type StockBalanceData,
 } from './stockReservation.js';
+import { mapLegacyRepairStatus } from './repairStatusIds.js';
+import {
+  loadTenantWorkflowStatuses,
+  partsAwaitingFulfillment,
+  resolveNextStatusForAction,
+} from './repairStatusAdvance.js';
 
 const db = getDb();
 
@@ -103,6 +109,41 @@ const stripUndefined = <T extends Record<string, unknown>>(obj: T): Partial<T> =
   Object.fromEntries(Object.entries(obj).filter(([, v]) => v !== undefined)) as Partial<T>;
 
 const toIsoNow = () => new Date().toISOString();
+
+type JobDocRef = { update: (data: Record<string, unknown>) => Promise<unknown> };
+
+async function maybeAdvanceJobAfterPartLinked(
+  tenantId: string,
+  jobRef: JobDocRef,
+  job: { status?: string; partsUsed?: Array<Record<string, unknown>> },
+  waitsForParts: boolean,
+): Promise<void> {
+  const statuses = await loadTenantWorkflowStatuses(db, tenantId);
+  const nextStatus = resolveNextStatusForAction({
+    action: 'part_or_service_linked',
+    currentStatus: String(job.status || ''),
+    statuses,
+    waitsForParts,
+  });
+  if (!nextStatus || nextStatus === mapLegacyRepairStatus(String(job.status || ''))) return;
+  await jobRef.update({ status: nextStatus, updatedAt: toIsoNow() });
+}
+
+async function maybeAdvanceJobAfterPartsReady(
+  tenantId: string,
+  jobRef: JobDocRef,
+  job: { status?: string; partsUsed?: Array<Record<string, unknown>> },
+): Promise<void> {
+  if (partsAwaitingFulfillment(job.partsUsed)) return;
+  const statuses = await loadTenantWorkflowStatuses(db, tenantId);
+  const nextStatus = resolveNextStatusForAction({
+    action: 'parts_ready',
+    currentStatus: String(job.status || ''),
+    statuses,
+  });
+  if (!nextStatus || nextStatus === mapLegacyRepairStatus(String(job.status || ''))) return;
+  await jobRef.update({ status: nextStatus, updatedAt: toIsoNow() });
+}
 
 const balanceDocId = (warehouseId: string, itemType: string, itemId: string) =>
   `${warehouseId}__${itemType}__${itemId}`;
@@ -683,6 +724,7 @@ export const requestRepairJobSparePartHandler = async (request: CallableRequest)
     purchaseCost?: number;
     conversionRate?: number;
     isActive?: boolean;
+    availableForSpareParts?: boolean | null;
     tenantId?: string;
     defaultSalePrice?: number;
     traderSalePrice?: number;
@@ -692,6 +734,12 @@ export const requestRepairJobSparePartHandler = async (request: CallableRequest)
   }
   if (material.isActive === false) {
     throw new HttpsError('failed-precondition', 'المكوّن غير نشط.');
+  }
+  if (material.availableForSpareParts === false) {
+    throw new HttpsError(
+      'failed-precondition',
+      'هذه المادة غير مفعّلة لقطع الغيار. فعّلها من شاشة المواد التصنيعية أولاً.',
+    );
   }
 
   const itemName = String(material.name || materialId).trim();
@@ -747,6 +795,8 @@ export const requestRepairJobSparePartHandler = async (request: CallableRequest)
         issueId: result.issueId,
         referenceNo: result.referenceNo,
       });
+      const waitsForParts = String(result.status || '') !== 'issued' && result.approvalMode !== 'direct';
+      await maybeAdvanceJobAfterPartLinked(actor.tenantId, jobRef, job, waitsForParts);
       return {
         path: 'center' as const,
         availability,
@@ -872,13 +922,19 @@ export const requestRepairJobSparePartHandler = async (request: CallableRequest)
     replenishmentReferenceNo,
   }));
 
+  const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+  const nextStatus = resolveNextStatusForAction({
+    action: 'part_or_service_linked',
+    currentStatus: String(job.status || ''),
+    statuses,
+    waitsForParts: true,
+  });
   const jobUpdate: Record<string, unknown> = {
     partsUsed: prevParts,
     updatedAt: toIsoNow(),
   };
-  // Soft-nudge workflow when waiting on parts (do not force illegal transitions).
-  if (String(job.status || '') === 'repairing' || String(job.status || '') === 'diagnosing') {
-    jobUpdate.status = 'waiting_parts';
+  if (nextStatus && nextStatus !== mapLegacyRepairStatus(String(job.status || ''))) {
+    jobUpdate.status = nextStatus;
   }
 
   await jobRef.update(jobUpdate);
@@ -924,6 +980,7 @@ export const issuePendingRepairPartUsageHandler = async (request: CallableReques
     branchId?: string;
     receiptNo?: string;
     customerId?: string;
+    status?: string;
     partsUsed?: Array<Record<string, unknown>>;
   };
   if (String(job.tenantId || '').trim() !== actor.tenantId) {
@@ -1014,17 +1071,18 @@ export const issuePendingRepairPartUsageHandler = async (request: CallableReques
         quantity,
         mode: 'consume',
       });
-      // Clear reservation markers on the usage row when present.
-      if (alreadyReserved) {
-        const nextParts = parts.map((row) => {
-          if (String(row.usageId || '').trim() !== usageId) return row;
-          const clone = { ...row };
-          delete clone.reservedQty;
-          delete clone.reservedWarehouseId;
-          return clone;
-        });
-        await jobRef.update({ partsUsed: nextParts, updatedAt: toIsoNow() });
-      }
+      const nextParts = parts.map((row) => {
+        if (String(row.usageId || '').trim() !== usageId) return row;
+        const clone: Record<string, unknown> = { ...row, fulfillmentStatus: 'issued' };
+        delete clone.reservedQty;
+        delete clone.reservedWarehouseId;
+        return clone;
+      });
+      await jobRef.update({ partsUsed: nextParts, updatedAt: toIsoNow() });
+      await maybeAdvanceJobAfterPartsReady(actor.tenantId, jobRef, {
+        status: job.status,
+        partsUsed: nextParts,
+      });
     }
 
     return {

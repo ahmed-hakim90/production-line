@@ -59,7 +59,12 @@ import {
   effectiveFulfillmentStatus,
   isReadyToIssueUsage,
 } from '../lib/repairPartFulfillment';
+import {
+  repairPartAvailabilityChipType,
+  repairPartFulfillmentChipType,
+} from '../lib/repairSemanticStatus';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { WhatsAppShare } from '../components/WhatsAppShare';
 import {
   REPAIR_JOB_STATUS_LABELS,
@@ -81,12 +86,13 @@ import { canManageRepairWorkshopWork, isSingleBranchTechnician } from '../lib/re
 import { resolveTechnicianIdForJobAssignment } from '../lib/repairTechnicianAssignment';
 import { repairSparePartSalePrice } from '../utils/sparePartPricing';
 import { resolveRepairSettings, sumServiceCatalogPrices, accessoryLabelsFromIds } from '../config/repairSettings';
-import { listAllowedRepairStatusTargets } from '../utils/repairStatusTransitions';
+import { isStatusRole } from '../lib/repairStatusAdvance';
 import { computeRepairJobCost, resolveRepairJobActionState } from '../utils/repairBusinessLogic';
 import {
   isCancelledStatus,
   isDeliveredStatus,
   isUnrepairableStatus,
+  mapLegacyRepairStatus,
 } from '../utils/repairWorkflowNormalize';
 import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
@@ -204,6 +210,7 @@ export const RepairJobDetail: React.FC = () => {
   } | null>(null);
   const [opsQty, setOpsQty] = useState(1);
   const [opsReason, setOpsReason] = useState('');
+  const [opsReasonCode, setOpsReasonCode] = useState('');
   const [opsBusy, setOpsBusy] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
   const productCardPrintRef = useRef<HTMLDivElement>(null);
@@ -321,17 +328,6 @@ export const RepairJobDetail: React.FC = () => {
       })),
     [parts],
   );
-  const allowedStatusOptions = useMemo(() => {
-    const current = String(job?.status || status || '');
-    const allowed = new Set([
-      current,
-      ...listAllowedRepairStatusTargets({
-        fromStatus: current,
-        statuses: repairSettings.workflow.statuses,
-      }),
-    ]);
-    return repairSettings.workflow.statuses.filter((s) => s.isEnabled !== false && allowed.has(s.id));
-  }, [job?.status, status, repairSettings.workflow.statuses]);
   const productsServiceTotal = useMemo(() => sumProductFinalCosts(jobProducts), [jobProducts]);
   const productsQtyTotal = useMemo(
     () => jobProducts.reduce((sum, item) => sum + Math.max(1, Math.round(Number(item.quantity || 1))), 0),
@@ -986,7 +982,10 @@ export const RepairJobDetail: React.FC = () => {
       toast.error('ليس لديك صلاحية تجهيز إذن الدفع.');
       return;
     }
-    if (job.status !== 'ready') {
+    if (
+      !isStatusRole(job.status, 'ready_delivery', repairSettings.workflow.statuses)
+      && job.status !== 'ready'
+    ) {
       toast.error('تجهيز إذن الدفع متاح بعد وصول الطلب لحالة جاهز للتسليم.');
       return;
     }
@@ -1173,7 +1172,8 @@ export const RepairJobDetail: React.FC = () => {
     const total = Math.max(1, Number(item.receivedQuantity || item.quantity || 1));
     setOpsDialog({ mode: 'unrepairable', item });
     setOpsQty(Math.max(0, Number(item.unrepairableQuantity || total)));
-    setOpsReason(String(item.unrepairableReason || ''));
+    setOpsReason(String(item.unrepairableReasonNote || ''));
+    setOpsReasonCode(String(item.unrepairableReasonCode || ''));
   };
 
   const openReplacementDialog = (item: RepairJobProduct) => {
@@ -1185,6 +1185,7 @@ export const RepairJobDetail: React.FC = () => {
     setOpsDialog({ mode: 'replacement', item });
     setOpsQty(Math.min(1, available));
     setOpsReason('');
+    setOpsReasonCode('');
   };
 
   const submitOpsDialog = async () => {
@@ -1195,13 +1196,23 @@ export const RepairJobDetail: React.FC = () => {
 
     if (opsDialog.mode === 'unrepairable') {
       const quantity = Math.max(0, Math.min(total, Math.round(Number(opsQty) || 0)));
-      if (quantity > 0 && !opsReason.trim()) {
-        toast.error('سبب عدم قابلية الإصلاح مطلوب.');
+      if (quantity > 0 && !opsReasonCode) {
+        toast.error('اختر سبب عدم قابلية الإصلاح.');
+        return;
+      }
+      if (quantity > 0 && opsReasonCode === 'other' && !opsReason.trim()) {
+        toast.error('اكتب تفاصيل السبب الآخر.');
         return;
       }
       setOpsBusy(true);
       try {
-        await repairCustomerOperationsService.recordUnrepairable(job.id, item.itemId, quantity, opsReason.trim());
+        await repairCustomerOperationsService.recordUnrepairable(
+          job.id,
+          item.itemId,
+          quantity,
+          opsReasonCode,
+          opsReason.trim() || undefined,
+        );
         toast.success('تم تحديث القرار ونقل الكمية مخزنيًا.');
         setOpsDialog(null);
         await refreshJobAndPayment(job.id);
@@ -1228,7 +1239,12 @@ export const RepairJobDetail: React.FC = () => {
   const canRequestApprovalLink = Boolean(
     actionState?.canRequestApproval
     && can('repair.jobs.reception')
-    && (job?.status === 'estimate_ready' || job?.status === 'waiting_approval'),
+    && (
+      isStatusRole(job?.status, 'estimate_review', repairSettings.workflow.statuses)
+      || isStatusRole(job?.status, 'awaiting_customer', repairSettings.workflow.statuses)
+      || job?.status === 'estimate_ready'
+      || job?.status === 'waiting_approval'
+    ),
   );
   const canPreparePaymentAuth = can('repair.payments.collect') || can('repair.discounts.request');
   const paymentClose = useMemo(
@@ -1240,8 +1256,9 @@ export const RepairJobDetail: React.FC = () => {
       allowPartialCollection: repairSettings.payments.allowPartialCollection !== false,
       canDeliver: can('repair.jobs.reception'),
       isManufacturerWarrantyJob: job ? isManufacturerWarrantyJob(job) : false,
+      workflowStatuses: repairSettings.workflow.statuses,
     }),
-    [job, paymentAuthorization, canPreparePaymentAuth, can, repairSettings.payments.allowPartialCollection],
+    [job, paymentAuthorization, canPreparePaymentAuth, can, repairSettings.payments.allowPartialCollection, repairSettings.workflow.statuses],
   );
 
   const generateApprovalLink = async () => {
@@ -1406,6 +1423,26 @@ export const RepairJobDetail: React.FC = () => {
         actions={(
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={job.status} size="md" />
+            {can('repair.complaints.manage') ? (
+              <Button type="button" variant="outline" size="sm" asChild>
+                <Link
+                  to={withTenantPath(tenantSlug, '/repair/complaints')}
+                  state={{
+                    openCreate: true,
+                    complaintPrefill: {
+                      customerId: job.customerId,
+                      customerName: job.customerName,
+                      customerPhone: job.customerPhone,
+                      jobId: job.id,
+                      receiptNo: job.receiptNo,
+                      branchId: job.branchId,
+                    },
+                  }}
+                >
+                  إنشاء شكوى
+                </Link>
+              </Button>
+            ) : null}
             {!isDeliveredStatus(job.status)
               && (can('repair.adminDashboard.view') || can('repair.branches.manage')) ? (
               <Link to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}>
@@ -1832,7 +1869,7 @@ export const RepairJobDetail: React.FC = () => {
                     الطلب معلّم كضمان مصنّع: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.
                   </div>
                 ) : null}
-                {job.status === 'ready' ? (
+                {isStatusRole(job.status, 'ready_delivery', repairSettings.workflow.statuses) || job.status === 'ready' ? (
                   <p className="rounded-md border border-dashed px-2 py-1.5 text-xs text-muted-foreground">
                     إقفال الدفع والتسليم من اللوحة أعلى الصفحة (تجهيز → تحصيل → تسليم → طباعة).
                   </p>
@@ -1977,7 +2014,7 @@ export const RepairJobDetail: React.FC = () => {
                   ) : null}
                   {can('repair.custody.view') ? (
                     <Button type="button" size="sm" variant="ghost" asChild>
-                      <Link to={withTenantPath(tenantSlug, '/repair/unrepairable-stock')}>غير القابل للإصلاح</Link>
+                      <Link to={withTenantPath(tenantSlug, '/repair/custody-stock?stockType=unrepairable')}>غير القابل للإصلاح</Link>
                     </Button>
                   ) : null}
                   {(can('repair.replacements.view') || can('repair.replacements.approve')) ? (
@@ -2119,11 +2156,15 @@ export const RepairJobDetail: React.FC = () => {
                               ) : null}
                             </div>
                             <div className="flex flex-wrap gap-1">
-                              <Badge variant="outline">{REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}</Badge>
+                              <ErpStatusBadge
+                                label={REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}
+                                type={repairPartFulfillmentChipType(fulfillment)}
+                              />
                               {part.availabilityAtRequest ? (
-                                <Badge variant="secondary">
-                                  {REPAIR_PART_AVAILABILITY_LABELS[part.availabilityAtRequest]}
-                                </Badge>
+                                <ErpStatusBadge
+                                  label={REPAIR_PART_AVAILABILITY_LABELS[part.availabilityAtRequest]}
+                                  type={repairPartAvailabilityChipType(part.availabilityAtRequest)}
+                                />
                               ) : null}
                             </div>
                           </div>
@@ -2334,10 +2375,20 @@ export const RepairJobDetail: React.FC = () => {
               <Label>
                 {opsDialog?.mode === 'replacement' ? 'سبب الطلب (اختياري)' : 'سبب عدم قابلية الإصلاح'}
               </Label>
+              {opsDialog?.mode === 'unrepairable' ? (
+                <Select value={opsReasonCode} onValueChange={setOpsReasonCode}>
+                  <SelectTrigger><SelectValue placeholder="اختر السبب" /></SelectTrigger>
+                  <SelectContent>
+                    {repairSettings.unrepairableReasons.filter((item) => item.enabled !== false).map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
               <Input
                 value={opsReason}
                 onChange={(e) => setOpsReason(e.target.value)}
-                placeholder={opsDialog?.mode === 'replacement' ? 'اختياري' : 'مطلوب عند وجود كمية'}
+                placeholder={opsDialog?.mode === 'replacement' ? 'اختياري' : 'تفاصيل إضافية (مطلوبة عند سبب آخر)'}
               />
             </div>
           </div>

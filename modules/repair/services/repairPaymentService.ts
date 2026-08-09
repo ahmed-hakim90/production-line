@@ -66,57 +66,40 @@ export const repairPaymentService = {
   async listAuthorizations(branchIds?: string[]): Promise<RepairPaymentAuthorization[]> {
     if (!isConfigured) return [];
     const tenantId = getCurrentTenantId();
-    const allowed = Array.from(new Set((branchIds || []).filter(Boolean)));
-    // Keep the operational screen independent from a newly deployed composite index.
-    // Tenant filtering uses the built-in single-field index; ordering is deterministic client-side.
-    const snaps = allowed.length > 0
-      ? await Promise.all(allowed.map((branchId) => getDocs(query(
-          collection(db, REPAIR_PAYMENT_AUTHORIZATIONS_COLLECTION),
-          where('tenantId', '==', tenantId),
-          where('branchId', '==', branchId),
-        ))))
-      : [await getDocs(query(
-          collection(db, REPAIR_PAYMENT_AUTHORIZATIONS_COLLECTION),
-          where('tenantId', '==', tenantId),
-        ))];
-    return snaps.flatMap((snap) => tenantRows<RepairPaymentAuthorization>(snap))
+    const allowed = new Set((branchIds || []).filter(Boolean));
+    // One tenant query (single-field index) + client branch filter — avoids N branch round-trips.
+    const snap = await getDocs(query(
+      collection(db, REPAIR_PAYMENT_AUTHORIZATIONS_COLLECTION),
+      where('tenantId', '==', tenantId),
+    ));
+    return tenantRows<RepairPaymentAuthorization>(snap)
+      .filter((row) => allowed.size === 0 || allowed.has(row.branchId))
       .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
   },
 
   async listApprovals(branchIds?: string[]): Promise<RepairFinancialApproval[]> {
     if (!isConfigured) return [];
     const tenantId = getCurrentTenantId();
-    const allowed = Array.from(new Set((branchIds || []).filter(Boolean)));
-    const snaps = allowed.length > 0
-      ? await Promise.all(allowed.map((branchId) => getDocs(query(
-          collection(db, REPAIR_FINANCIAL_APPROVALS_COLLECTION),
-          where('tenantId', '==', tenantId),
-          where('branchId', '==', branchId),
-        ))))
-      : [await getDocs(query(
-          collection(db, REPAIR_FINANCIAL_APPROVALS_COLLECTION),
-          where('tenantId', '==', tenantId),
-        ))];
-    return snaps.flatMap((snap) => tenantRows<RepairFinancialApproval>(snap))
+    const allowed = new Set((branchIds || []).filter(Boolean));
+    const snap = await getDocs(query(
+      collection(db, REPAIR_FINANCIAL_APPROVALS_COLLECTION),
+      where('tenantId', '==', tenantId),
+    ));
+    return tenantRows<RepairFinancialApproval>(snap)
+      .filter((row) => allowed.size === 0 || allowed.has(row.branchId))
       .sort((a, b) => String(b.requestedAt || '').localeCompare(String(a.requestedAt || '')));
   },
 
   async listPayments(jobId?: string, branchIds?: string[]): Promise<RepairPayment[]> {
     if (!isConfigured) return [];
     const tenantId = getCurrentTenantId();
-    const allowed = Array.from(new Set((branchIds || []).filter(Boolean)));
-    const snaps = allowed.length > 0
-      ? await Promise.all(allowed.map((branchId) => getDocs(query(
-          collection(db, REPAIR_PAYMENTS_COLLECTION),
-          where('tenantId', '==', tenantId),
-          where('branchId', '==', branchId),
-        ))))
-      : [await getDocs(query(
-          collection(db, REPAIR_PAYMENTS_COLLECTION),
-          where('tenantId', '==', tenantId),
-        ))];
-    return snaps.flatMap((snap) => tenantRows<RepairPayment>(snap))
-      .filter((row) => !jobId || row.jobId === jobId)
+    const allowed = new Set((branchIds || []).filter(Boolean));
+    const snap = await getDocs(query(
+      collection(db, REPAIR_PAYMENTS_COLLECTION),
+      where('tenantId', '==', tenantId),
+    ));
+    return tenantRows<RepairPayment>(snap)
+      .filter((row) => (allowed.size === 0 || allowed.has(row.branchId)) && (!jobId || row.jobId === jobId))
       .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
   },
 

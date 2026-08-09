@@ -207,7 +207,7 @@ export const RepairCustomerRequests: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir="rtl">
+      <div className="erp-ds-clean space-y-5" dir="rtl">
         <Card>
           <CardContent className="p-4">
             <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلبات العملاء.</p>
@@ -218,20 +218,20 @@ export const RepairCustomerRequests: React.FC = () => {
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir="rtl">
+    <div className="erp-ds-clean space-y-4 px-1 sm:space-y-5 sm:px-0" dir="rtl">
       <PageHeader
         title="طلبات العملاء"
         subtitle="طلبات بوابة العميل قبل توزيعها واستلامها في مراكز الصيانة"
         icon="assignment"
         actions={
-          <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
+          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void load()} disabled={loading}>
             <RefreshCw className="ms-1 size-4" />
             تحديث
           </Button>
         }
       />
 
-      <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
         {(
           [
             { key: 'submitted' as const, label: 'غير موزع', value: counts.submitted },
@@ -256,7 +256,7 @@ export const RepairCustomerRequests: React.FC = () => {
         ))}
       </div>
 
-      <Card className="!p-4">
+      <Card className="!p-3 sm:!p-4">
         <SmartFilterBar
           pageId="repair-customer-requests-list"
           searchPlaceholder="بحث برقم الطلب، العميل، الهاتف، المنتج..."
@@ -292,8 +292,8 @@ export const RepairCustomerRequests: React.FC = () => {
           }}
         />
 
-        <div className="mt-4 overflow-x-auto rounded-lg border">
-          <table className="erp-table w-full text-right">
+        <div className="mt-4 -mx-1 overflow-x-auto rounded-lg border sm:mx-0">
+          <table className="erp-table w-full min-w-[720px] text-right">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">رقم الطلب</th>

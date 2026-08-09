@@ -209,6 +209,8 @@ export const RepairCallCenter: React.FC = () => {
     technicianOnly: repairCtx.jobsTechnicianOnly,
     technicianIds,
     fetchEnabled: searchReady,
+    searchText: debouncedSearch,
+    callCenterGlobal: canViewAllCallCenter,
   });
 
   const customerJobs = useMemo(

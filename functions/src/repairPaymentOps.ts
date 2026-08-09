@@ -5,6 +5,12 @@ import { getDb } from './adminApp.js';
 import { loadProtectedRepairServiceCatalog } from './repairServiceCatalogOps.js';
 import { loadCustomerType, pickRepairSalePrice, roundRepairMoney } from './repairSalePrice.js';
 import { buildWarrantySettlementTotals } from './repairWarrantyAccountingPolicy.js';
+import {
+  isStatusRole,
+  loadTenantWorkflowStatuses,
+  resolveNextStatusForAction,
+  statusIdForRole,
+} from './repairStatusAdvance.js';
 
 const db = getDb();
 
@@ -370,8 +376,13 @@ async function prepareAuthorization(actor: Actor, data: Record<string, unknown>)
   const jobId = String(data.jobId || '').trim();
   const scoped = await loadScopedJob(actor, jobId);
   const status = String(scoped.job.status || '');
-  const allowedStatuses = new Set(['estimate_ready', 'waiting_approval', 'ready']);
-  if (!allowedStatuses.has(status)) {
+  const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+  const estimatePhase = isStatusRole(status, 'estimate_review', statuses)
+    || isStatusRole(status, 'awaiting_customer', statuses)
+    || status === 'estimate_ready'
+    || status === 'waiting_approval';
+  const readyPhase = isStatusRole(status, 'ready_delivery', statuses) || status === 'ready';
+  if (!estimatePhase && !readyPhase) {
     throw new HttpsError(
       'failed-precondition',
       'يُجهز إذن الدفع بعد اكتمال التقدير الفني، ولا يُحصّل إلا بعد الجاهزية الفنية.',
@@ -379,7 +390,6 @@ async function prepareAuthorization(actor: Actor, data: Record<string, unknown>)
   }
   // Reception may prepare estimate authorizations for customer approval;
   // collect/discount roles cover ready-for-payment authorizations.
-  const estimatePhase = status === 'estimate_ready' || status === 'waiting_approval';
   requirePermission(
     actor,
     estimatePhase
@@ -419,8 +429,16 @@ async function prepareAuthorization(actor: Actor, data: Record<string, unknown>)
   const result = await db.runTransaction(async (tx) => {
     const [jobSnap, finSnap] = await Promise.all([tx.get(scoped.jobRef), tx.get(finRef)]);
     if (!jobSnap.exists) throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
-    if (!allowedStatuses.has(String(jobSnap.data()?.status || ''))) {
-      throw new HttpsError('failed-precondition', 'تغيرت حالة الطلب ولم يعد جاهزًا لإصدار إذن دفع.');
+    {
+      const liveStatus = String(jobSnap.data()?.status || '');
+      const liveEstimate = isStatusRole(liveStatus, 'estimate_review', statuses)
+        || isStatusRole(liveStatus, 'awaiting_customer', statuses)
+        || liveStatus === 'estimate_ready'
+        || liveStatus === 'waiting_approval';
+      const liveReady = isStatusRole(liveStatus, 'ready_delivery', statuses) || liveStatus === 'ready';
+      if (!liveEstimate && !liveReady) {
+        throw new HttpsError('failed-precondition', 'تغيرت حالة الطلب ولم يعد جاهزًا لإصدار إذن دفع.');
+      }
     }
     const liveJob = jobSnap.data() as Record<string, unknown>;
     if (warrantyJob !== isManufacturerWarrantyJob(liveJob)) {
@@ -546,9 +564,19 @@ async function requestCustomerApproval(actor: Actor, data: Record<string, unknow
   requirePermission(actor, ['repair.jobs.reception'], 'طلب موافقة العميل متاح للاستقبال أو الإدارة فقط.');
   const jobId = String(data.jobId || '').trim();
   const scoped = await loadScopedJob(actor, jobId);
-  if (!['estimate_ready', 'waiting_approval'].includes(String(scoped.job.status || ''))) {
+  const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+  const st = String(scoped.job.status || '');
+  const ok = isStatusRole(st, 'estimate_review', statuses)
+    || isStatusRole(st, 'awaiting_customer', statuses)
+    || ['estimate_ready', 'waiting_approval'].includes(st);
+  if (!ok) {
     throw new HttpsError('failed-precondition', 'أكمل التقدير الفني قبل إرسال موافقة العميل.');
   }
+  const nextApprovalStatus = resolveNextStatusForAction({
+    action: 'estimate_sent',
+    currentStatus: st,
+    statuses,
+  }) || statusIdForRole('awaiting_customer', statuses) || 'waiting_approval';
   const finRef = db.collection('repair_job_financials').doc(jobId);
   const finSnap = await finRef.get();
   const authorizationId = String(finSnap.data()?.currentAuthorizationId || '');
@@ -581,7 +609,7 @@ async function requestCustomerApproval(actor: Actor, data: Record<string, unknow
     const revision = Math.max(1, Number(auth.revision || 1));
     tx.update(scoped.jobRef, {
       approvalStatus: 'pending',
-      status: 'waiting_approval',
+      status: nextApprovalStatus,
       approvalRequestedAt: at,
       approvalTokenHash: tokenHash,
       approvalTokenExpiresAt: expiresAt,

@@ -2,6 +2,7 @@ import {
   REPAIR_JOB_STATUS_COLORS,
   REPAIR_JOB_STATUS_LABELS,
 } from '../types';
+import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 const HEX_RE = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
 
@@ -48,16 +49,19 @@ export function resolveRepairStatusChip(
   status: string,
   statusMap?: Record<string, { label?: string; color?: string } | undefined> | null,
 ): RepairStatusChipResolved {
-  const key = String(status || '').trim();
-  const fromMap = statusMap?.[key];
+  const raw = String(status || '').trim();
+  const key = mapLegacyRepairStatus(raw);
+  const fromMap = statusMap?.[key] || statusMap?.[raw];
   const label =
     String(fromMap?.label || '').trim() ||
     REPAIR_JOB_STATUS_LABELS[key] ||
+    REPAIR_JOB_STATUS_LABELS[raw] ||
     key ||
     '—';
   const color =
     normalizeRepairStatusHex(fromMap?.color) ||
     normalizeRepairStatusHex(REPAIR_JOB_STATUS_COLORS[key]) ||
+    normalizeRepairStatusHex(REPAIR_JOB_STATUS_COLORS[raw]) ||
     '#64748b';
   return { label, color, style: repairStatusChipStyle(color) };
 }

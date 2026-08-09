@@ -21,13 +21,16 @@ import { repairJobService } from '../services/repairJobService';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairJobSparePartRequestService } from '../services/repairJobSparePartRequestService';
 import { repairTechnicianService } from '../services/repairTechnicianService';
+import { repairCustomerOperationsService } from '../services/repairCustomerOperationsService';
 import { appendRepairServiceEvent, repairServiceEventService } from '../services/repairServiceEventService';
 import { materialService } from '@/modules/manufacturing/services/materialService';
+import { isMaterialAvailableForSpareParts } from '@/modules/manufacturing/utils/isMaterialAvailableForSpareParts';
 import { stockService } from '@/modules/inventory/services/stockService';
 import { warehouseService } from '@/modules/inventory/services/warehouseService';
 import type { Material } from '@/modules/manufacturing/types';
 import { REPAIR_DOMAIN_EVENT_VERSION } from '../utils/repairDomainEvents';
 import { StatusBadge } from '../components/StatusBadge';
+import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { PageHeader } from '@/components/PageHeader';
 import type {
   FirestoreUserWithRepair,
@@ -41,20 +44,27 @@ import {
   REPAIR_PART_AVAILABILITY_LABELS,
   REPAIR_PART_FULFILLMENT_LABELS,
   effectiveFulfillmentStatus,
+  formatPartAvailabilityPickerHint,
   isReadyToIssueUsage,
   resolvePartAvailabilityBadge,
 } from '../lib/repairPartFulfillment';
+import {
+  repairPartAvailabilityChipType,
+  repairPartFulfillmentChipType,
+} from '../lib/repairSemanticStatus';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { canManageRepairWorkshopWork } from '../lib/repairJobIntake';
 import { resolveRepairSettings, accessoryLabelsFromIds } from '../config/repairSettings';
-import { isWorkshopStatusWithinReadyCap, listAllowedWorkshopStatusTargets } from '../utils/repairStatusTransitions';
+import {
+  resolveNextStatusForAction,
+  resolveStatusRole,
+  statusIdForRole,
+} from '../lib/repairStatusAdvance';
 import { useRepairJobDoc } from '../hooks/useRepairJobDoc';
 import { uploadRepairJobPhoto } from '../utils/repairPhotoStorage';
 import {
-  isCancelledStatus,
-  isDeliveredStatus,
   isUnrepairableStatus,
   mapLegacyRepairStatus,
 } from '../utils/repairWorkflowNormalize';
@@ -131,6 +141,7 @@ export const RepairJobWorkspace: React.FC = () => {
   const [events, setEvents] = useState<RepairServiceEvent[]>([]);
   const [status, setStatus] = useState<string>('');
   const [reason, setReason] = useState('');
+  const [reasonCode, setReasonCode] = useState('');
   const [jobProducts, setJobProducts] = useState<RepairJobProduct[]>([]);
   const [serviceOnly, setServiceOnly] = useState(false);
   const [selectedMaterialId, setSelectedMaterialId] = useState('');
@@ -191,7 +202,9 @@ export const RepairJobWorkspace: React.FC = () => {
       return;
     }
     void materialService.getAll()
-      .then((rows) => setMaterials(rows.filter((m) => m.isActive !== false && m.id)))
+      .then((rows) => setMaterials(rows.filter(
+        (m) => m.isActive !== false && m.id && isMaterialAvailableForSpareParts(m),
+      )))
       .catch(() => setMaterials([]));
   }, [jobId, technicianMode]);
 
@@ -219,24 +232,24 @@ export const RepairJobWorkspace: React.FC = () => {
     () => branches.find((b) => String(b.id) === String(job?.branchId)),
     [branches, job?.branchId],
   );
-  const allowedStatusOptions = useMemo(() => {
-    const current = String(job?.status || status || '');
-    const allowed = new Set([
-      current,
-      ...listAllowedWorkshopStatusTargets({
-        fromStatus: current,
-        statuses: repairSettings.workflow.statuses,
-      }),
-    ]);
-    return repairSettings.workflow.statuses.filter(
-      (s) => s.isEnabled !== false
-        && allowed.has(s.id)
-        && (
-          s.id === current
-          || isWorkshopStatusWithinReadyCap(s.id, repairSettings.workflow.statuses)
-        ),
-    );
-  }, [job?.status, status, repairSettings.workflow.statuses]);
+  const currentStatusLabel = useMemo(() => {
+    const id = mapLegacyRepairStatus(job?.status || status || '');
+    return repairSettings.statusMap[id]?.label
+      || repairSettings.workflow.statuses.find((s) => mapLegacyRepairStatus(s.id) === id)?.label
+      || id
+      || '—';
+  }, [job?.status, status, repairSettings]);
+  const currentRole = useMemo(
+    () => resolveStatusRole(job?.status || status, repairSettings.workflow.statuses),
+    [job?.status, status, repairSettings.workflow.statuses],
+  );
+  const canMarkRepaired = currentRole === 'in_repair'
+    || (currentRole === 'awaiting_parts' && !(job?.partsUsed || []).some((row) =>
+      ['pending_supply', 'ready_to_issue'].includes(String(row.fulfillmentStatus || '')),
+    ))
+    || currentRole === 'none';
+  const readyStatusId = statusIdForRole('ready_delivery', repairSettings.workflow.statuses) || 'ready';
+  const unrepairableStatusId = statusIdForRole('unrepairable', repairSettings.workflow.statuses) || 'unrepairable';
   const branchWarehouseId = String(branch?.warehouseId || '').trim();
   const hasBranchWarehouse = technicianMode || Boolean(branchWarehouseId);
 
@@ -316,16 +329,12 @@ export const RepairJobWorkspace: React.FC = () => {
       const centerQty = Number(centerBalances.get(id) || 0);
       const centralQty = Number(centralBalances.get(id) || 0);
       const availability = resolvePartAvailabilityBadge(centerQty, centralQty);
-      const badge =
-        availability === 'center'
-          ? `[مركز: ${centerQty}] ${REPAIR_PART_AVAILABILITY_LABELS.center}`
-          : availability === 'central'
-            ? `[مركزي: ${centralQty}] ${REPAIR_PART_AVAILABILITY_LABELS.central}`
-            : `[غير متاح] ${REPAIR_PART_AVAILABILITY_LABELS.none}`;
       const code = material.code ? ` (${material.code})` : '';
       return {
         value: id,
-        label: `${material.name}${code} — ${badge}`,
+        label: `${material.name}${code}`,
+        hint: formatPartAvailabilityPickerHint(availability, centerQty, centralQty),
+        hintType: repairPartAvailabilityChipType(availability),
         availability,
       };
     });
@@ -385,10 +394,29 @@ export const RepairJobWorkspace: React.FC = () => {
         ? 'manufacturer' as const
         : 'none' as const,
     };
+    const hasDiagnosis = normalizedProducts.some((item) => String(item.technicianDiagnosis || '').trim());
+    const hasService = normalizedProducts.some((item) => (item.serviceIds || []).some((id) => String(id || '').trim()));
+    const hasPart = (job.partsUsed || []).some((item) => Number(item.quantity || 0) > 0);
+    const nextStatus = resolveNextStatusForAction({
+      action: 'diagnosis_saved',
+      currentStatus: String(job.status || ''),
+      statuses: repairSettings.workflow.statuses,
+      hasDiagnosis,
+      hasServiceOrPartSignal: hasService || hasPart,
+    });
     if (technicianMode) {
       await repairTechnicianService.save(job.id, normalizedProducts, serviceOnly);
     } else {
       await repairJobService.update(job.id, technicalPatch);
+      if (nextStatus && nextStatus !== mapLegacyRepairStatus(job.status)) {
+        await repairJobService.changeStatus({
+          jobId: job.id,
+          status: nextStatus,
+          technicianId: userProfile?.id,
+          actorUid: userProfile?.id || '',
+          actorName: userProfile?.displayName || userProfile?.email || 'مستخدم',
+        });
+      }
     }
   };
 
@@ -413,27 +441,22 @@ export const RepairJobWorkspace: React.FC = () => {
     }
   };
 
-  const applyStatus = async () => {
+  const applyWorkshopAction = async (action: 'repair_done' | 'unrepairable') => {
     if (!job?.id || !canEditWorkshop) {
       toast.error('تغيير الحالة متاح للفني/مسؤول الورشة فقط.');
       return;
     }
     if (applyingStatus) return;
-    if (String(status || '') === String(job.status || '')) {
-      toast.error('اختر حالة جديدة من القائمة قبل التطبيق.');
-      return;
-    }
-    if (mapLegacyRepairStatus(status) === 'received') {
-      toast.error('حالة «وارد» للاستقبال فقط. اختر تشخيص / إصلاح / جاهز للتسليم.');
-      return;
-    }
-    if (isDeliveredStatus(status) || !isWorkshopStatusWithinReadyCap(status, repairSettings.workflow.statuses)) {
-      toast.error('الورشة تغيّر الحالة حتى «جاهز للتسليم» فقط. التسليم من الاستقبال.');
-      return;
-    }
-    if ((isUnrepairableStatus(status) || isCancelledStatus(status)) && !String(reason || '').trim()) {
-      toast.error('اكتب سبب الحالة قبل الحفظ.');
-      return;
+    const nextStatus = action === 'unrepairable' ? unrepairableStatusId : readyStatusId;
+    if (action === 'unrepairable') {
+      if (!reasonCode) {
+        toast.error('اختر سبب عدم قابلية الإصلاح.');
+        return;
+      }
+      if (reasonCode === 'other' && !String(reason || '').trim()) {
+        toast.error('اكتب تفاصيل السبب الآخر.');
+        return;
+      }
     }
     const hasSelectedServices = jobProducts.some((item) => (item.serviceIds || []).length > 0);
     if (serviceOnly && !hasSelectedServices) {
@@ -441,11 +464,14 @@ export const RepairJobWorkspace: React.FC = () => {
       return;
     }
     const hasUsedParts = (job.partsUsed || []).some((item) => Number(item.quantity || 0) > 0);
-    if (mapLegacyRepairStatus(status) === 'ready' && !hasSelectedServices && !hasUsedParts) {
+    if (action === 'repair_done' && !hasSelectedServices && !hasUsedParts) {
       toast.error('اختر خدمة صيانة أو سجّل قطعة غيار قبل تحويل الطلب إلى جاهز للتسليم.');
       return;
     }
-    const nextStatus = status;
+    if (action === 'repair_done' && !canMarkRepaired) {
+      toast.error('علّم «تم الإصلاح» بعد موافقة العميل ومرحلة الإصلاح.');
+      return;
+    }
     setApplyingStatus(true);
     try {
       await persistProductsAndPricing();
@@ -453,21 +479,32 @@ export const RepairJobWorkspace: React.FC = () => {
         await repairTechnicianService.changeStatus(
           job.id,
           nextStatus,
-          isUnrepairableStatus(nextStatus) ? reason : undefined,
+          action === 'unrepairable' ? reason : undefined,
+          action === 'unrepairable' ? reasonCode : undefined,
         );
+      } else if (action === 'unrepairable') {
+        for (const item of jobProducts) {
+          const quantity = Math.max(1, Number(item.receivedQuantity || item.quantity || 1));
+          await repairCustomerOperationsService.recordUnrepairable(
+            job.id,
+            item.itemId,
+            quantity,
+            reasonCode,
+            reason || undefined,
+          );
+        }
       } else {
         await repairJobService.changeStatus({
           jobId: job.id,
           status: nextStatus,
           technicianId: userProfile?.id,
-          reason: isUnrepairableStatus(nextStatus) ? reason : undefined,
           actorUid: userProfile?.id || '',
           actorName: userProfile?.displayName || userProfile?.email || 'مستخدم',
         });
       }
       setStatus(nextStatus);
       refetchJob();
-      toast.success('تم تحديث الحالة.');
+      toast.success(action === 'unrepairable' ? 'تم تسجيل غير قابل للإصلاح.' : 'تم تعليم الطلب كجاهز للتسليم.');
     } catch (e: any) {
       if (job.status) setStatus(job.status);
       toast.error(e?.message || 'تعذر تحديث الحالة.');
@@ -587,16 +624,12 @@ export const RepairJobWorkspace: React.FC = () => {
     );
   }
 
-  const statusUnchanged = String(status || '') === String(job?.status || '');
-  const selectedStatusLabel = allowedStatusOptions.find((s) => s.id === status)?.label
-    || status
-    || '—';
   const deviceSummary = [
     job.deviceBrand,
     job.deviceModel,
     job.deviceType,
   ].filter(Boolean).join(' · ') || '—';
-  const needsStatusReason = isUnrepairableStatus(status) || isCancelledStatus(status);
+  const showUnrepairableForm = isUnrepairableStatus(status) || Boolean(reasonCode);
 
   return (
     <div
@@ -737,36 +770,62 @@ export const RepairJobWorkspace: React.FC = () => {
               <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">1</span>
               <div>
                 <h2 className="text-base font-semibold leading-none">الحالة</h2>
-                <p className="text-xs text-muted-foreground mt-1">حتى جاهز للتسليم</p>
+                <p className="text-xs text-muted-foreground mt-1">تتقدم تلقائياً مع التشخيص والقطع والموافقة</p>
               </div>
             </div>
-            <Select value={status} onValueChange={setStatus} disabled={!canEditWorkshop || applyingStatus}>
-              <SelectTrigger className="min-h-14 w-full text-base"><SelectValue /></SelectTrigger>
-              <SelectContent>
-                {allowedStatusOptions.map((s) => (
-                  <SelectItem key={s.id} value={s.id} className="text-base py-3">{s.label}</SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            {needsStatusReason ? (
-              <div className="space-y-1.5">
-                <Label>سبب الحالة <span className="text-rose-600">*</span></Label>
+            <div className="flex flex-wrap items-center gap-2">
+              <StatusBadge status={job.status} />
+              <span className="text-sm text-muted-foreground">{currentStatusLabel}</span>
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
+              <Button
+                className="min-h-12 text-base font-semibold"
+                disabled={!canEditWorkshop || applyingStatus || !canMarkRepaired}
+                onClick={() => void applyWorkshopAction('repair_done')}
+              >
+                {applyingStatus ? 'جاري التطبيق…' : 'تم الإصلاح'}
+              </Button>
+              <Button
+                className="min-h-12 text-base"
+                variant="outline"
+                disabled={!canEditWorkshop || applyingStatus}
+                onClick={() => {
+                  setStatus(unrepairableStatusId);
+                  if (!reasonCode) setReasonCode('');
+                }}
+              >
+                غير قابل للإصلاح
+              </Button>
+            </div>
+            {showUnrepairableForm ? (
+              <div className="space-y-1.5 rounded-md border border-rose-200 bg-rose-50/40 p-3">
+                <Label>سبب عدم قابلية الإصلاح <span className="text-rose-600">*</span></Label>
+                <Select value={reasonCode} onValueChange={setReasonCode} disabled={!canEditWorkshop || applyingStatus}>
+                  <SelectTrigger className="min-h-12 bg-background"><SelectValue placeholder="اختر السبب" /></SelectTrigger>
+                  <SelectContent>
+                    {repairSettings.unrepairableReasons.filter((item) => item.enabled !== false).map((item) => (
+                      <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Label>تفاصيل إضافية (مطلوبة عند «سبب آخر»)</Label>
                 <textarea
-                  className="w-full min-h-28 rounded-md border border-input bg-background px-3 py-3 text-base"
+                  className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-3 text-base"
                   value={reason}
                   onChange={(e) => setReason(e.target.value)}
                   disabled={!canEditWorkshop || applyingStatus}
-                  placeholder="اكتب السبب بالتفصيل"
+                  placeholder="ملاحظة اختيارية عن الفحص"
                 />
+                <Button
+                  className="w-full min-h-12"
+                  variant="destructive"
+                  disabled={!canEditWorkshop || applyingStatus || !reasonCode}
+                  onClick={() => void applyWorkshopAction('unrepairable')}
+                >
+                  تأكيد غير قابل للإصلاح
+                </Button>
               </div>
             ) : null}
-            <Button
-              className="w-full min-h-14 text-base font-semibold"
-              disabled={!canEditWorkshop || applyingStatus || statusUnchanged}
-              onClick={() => void applyStatus()}
-            >
-              {applyingStatus ? 'جاري تطبيق الحالة…' : `تطبيق: ${selectedStatusLabel}`}
-            </Button>
           </section>
 
           <section className="rounded-xl border bg-card p-3 space-y-3 shadow-sm">
@@ -798,7 +857,12 @@ export const RepairJobWorkspace: React.FC = () => {
                   <div className="space-y-1 min-w-0">
                     <Label>القطعة</Label>
                     <SearchableSelect
-                      options={materialOptions.map((opt) => ({ value: opt.value, label: opt.label }))}
+                      options={materialOptions.map((opt) => ({
+                        value: opt.value,
+                        label: opt.label,
+                        hint: opt.hint,
+                        hintType: opt.hintType,
+                      }))}
                       value={selectedMaterialId}
                       onChange={setSelectedMaterialId}
                       placeholder="ابحث واختر قطعة"
@@ -855,11 +919,15 @@ export const RepairJobWorkspace: React.FC = () => {
                         </span>
                       </div>
                       <div className="flex flex-wrap gap-1">
-                        <Badge variant="outline">{REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}</Badge>
+                        <ErpStatusBadge
+                          label={REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}
+                          type={repairPartFulfillmentChipType(fulfillment)}
+                        />
                         {row.availabilityAtRequest ? (
-                          <Badge variant="secondary">
-                            {REPAIR_PART_AVAILABILITY_LABELS[row.availabilityAtRequest]}
-                          </Badge>
+                          <ErpStatusBadge
+                            label={REPAIR_PART_AVAILABILITY_LABELS[row.availabilityAtRequest]}
+                            type={repairPartAvailabilityChipType(row.availabilityAtRequest)}
+                          />
                         ) : null}
                       </div>
                           {canIssueParts && isReadyToIssueUsage(row) && usageId ? (
@@ -998,10 +1066,10 @@ export const RepairJobWorkspace: React.FC = () => {
           </Button>
           <Button
             className="min-h-12 flex-[1.35] text-sm font-semibold"
-            disabled={!canEditWorkshop || applyingStatus || statusUnchanged}
-            onClick={() => void applyStatus()}
+            disabled={!canEditWorkshop || applyingStatus || !canMarkRepaired}
+            onClick={() => void applyWorkshopAction('repair_done')}
           >
-            {applyingStatus ? 'جاري التطبيق…' : 'تطبيق الحالة'}
+            {applyingStatus ? 'جاري التطبيق…' : 'تم الإصلاح'}
           </Button>
         </div>
       </div>

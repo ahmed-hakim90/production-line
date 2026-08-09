@@ -23,6 +23,7 @@ const resultText = (job: BackgroundJob, t: (key: string, opts?: Record<string, u
   if (job.errorMessage) return job.errorMessage;
   return t('jobs.resultSummary', {
     added: job.addedRows.toLocaleString(),
+    skipped: (job.skippedRows ?? 0).toLocaleString(),
     failed: job.failedRows.toLocaleString(),
   });
 };

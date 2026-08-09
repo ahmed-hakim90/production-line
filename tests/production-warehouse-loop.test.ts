@@ -52,7 +52,12 @@ function testPackagingMenuAndMaterialsRoleFilter() {
   const packaging = productionGroup?.children.find((c) => c.key === 'packaging-control');
   assert.ok(packaging);
   assert.equal(packaging?.path, '/production/packaging/control');
-  assert.deepEqual(packaging?.excludeRoleKeys, ['materials_warehouse']);
+  assert.deepEqual(packaging?.excludeRoleKeys, [
+    'materials_warehouse',
+    'repair_reception',
+    'repair_technician',
+  ]);
+  assert.deepEqual(packaging?.anyOfPermissions, ['reports.view', 'reports.packaging.create']);
 
   const inventoryGroup = MENU_CONFIG.find((g) => g.key === 'inventory');
   assert.equal(
@@ -63,7 +68,13 @@ function testPackagingMenuAndMaterialsRoleFilter() {
   const allowAll = () => true;
   assert.equal(canAccessMenuItem(allowAll, packaging!, null), true);
   assert.equal(canAccessMenuItem(allowAll, packaging!, 'materials_warehouse'), false);
+  assert.equal(canAccessMenuItem(allowAll, packaging!, 'repair_reception'), false);
   assert.equal(canAccessMenuItem(allowAll, packaging!, 'factory_manager'), true);
+  assert.equal(
+    canAccessMenuItem((p) => p === 'inventory.view', packaging!, 'repair_reception'),
+    false,
+    'inventory.view alone must not open packaging control',
+  );
 
   const productionApprovals = inventoryGroup?.children.find((c) => c.key === 'inv-production-approvals');
   assert.ok(productionApprovals?.excludeRoleKeys?.includes('materials_warehouse'));

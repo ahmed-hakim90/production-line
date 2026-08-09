@@ -27,6 +27,21 @@ const toNumber = (value: unknown): number => {
   return Number.isFinite(n) ? n : 0;
 };
 
+/** Compact availability text for spare-part pickers (qty included when stock exists). */
+export function formatPartAvailabilityPickerHint(
+  availability: RepairPartAvailabilityAtRequest,
+  centerQty: number,
+  centralQty: number,
+): string {
+  if (availability === 'center') {
+    return `مخزن المركز · ${toNumber(centerQty)}`;
+  }
+  if (availability === 'central') {
+    return `المركزي · ${toNumber(centralQty)}`;
+  }
+  return 'غير متاح';
+}
+
 /**
  * Resolve where the needed qty can be fulfilled.
  * Center stock wins when it covers the full quantity; otherwise central if any; else none.

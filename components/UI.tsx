@@ -251,10 +251,23 @@ export const Button: React.FC<LegacyButtonProps> = ({
 
 // ─── Searchable Select ────────────────────────────────────────────────────
 
+export type SelectOptionHintType = 'success' | 'warning' | 'danger' | 'info' | 'muted';
+
 export interface SelectOption {
   value: string;
   label: string;
+  /** Optional trailing chip (e.g. stock availability) rendered beside the label. */
+  hint?: string;
+  hintType?: SelectOptionHintType;
 }
+
+const SELECT_OPTION_HINT_STYLES: Record<SelectOptionHintType, string> = {
+  success: 'border-[#059669]/30 bg-[#059669]/10 text-[#059669]',
+  warning: 'border-[#D97706]/30 bg-[#D97706]/10 text-[#D97706]',
+  danger: 'border-[#DC2626]/30 bg-[#DC2626]/10 text-[#DC2626]',
+  info: 'border-[#2563EB]/30 bg-[#2563EB]/10 text-[#2563EB]',
+  muted: 'border-[#E2E8F0] bg-[#F8FAFC] text-[#64748B]',
+};
 
 interface SearchableSelectProps {
   options: SelectOption[];
@@ -348,11 +361,21 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 <CommandItem
                   key={opt.value || `opt-${idx}`}
                   // cmdk filters by `value`; include id so items stay unique when labels repeat (e.g. product names).
-                  value={`${opt.label} ${opt.value}`}
+                  value={`${opt.label} ${opt.hint || ''} ${opt.value}`}
                   onSelect={() => handleSelect(opt.value)}
                 >
-                  <Check className={cn('mr-2 h-4 w-4', value === opt.value ? 'opacity-100' : 'opacity-0')} />
-                  <span className="truncate">{opt.label}</span>
+                  <Check className={cn('mr-2 h-4 w-4 shrink-0', value === opt.value ? 'opacity-100' : 'opacity-0')} />
+                  <span className="min-w-0 flex-1 truncate">{opt.label}</span>
+                  {opt.hint ? (
+                    <span
+                      className={cn(
+                        'ms-2 shrink-0 rounded-md border px-1.5 py-0.5 text-[10px] font-semibold leading-none',
+                        SELECT_OPTION_HINT_STYLES[opt.hintType || 'muted'],
+                      )}
+                    >
+                      {opt.hint}
+                    </span>
+                  ) : null}
                 </CommandItem>
               ))}
             </CommandGroup>

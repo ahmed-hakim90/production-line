@@ -56,11 +56,28 @@ type ActorContext = {
   boundWarehouseId: string | null;
 };
 
+type DraftAllocationInput = {
+  locationId?: string;
+  locationCode?: string;
+  rack?: string;
+  shelf?: string;
+  quantity?: number;
+};
+
 type DraftLineInput = {
   itemId?: string;
   quantity?: number;
   locationId?: string;
   locationCode?: string;
+  allocations?: DraftAllocationInput[];
+};
+
+type ResolvedAllocation = {
+  locationId: string;
+  locationCode: string;
+  rack?: string;
+  shelf?: string;
+  quantity: number;
 };
 
 type ResolvedLine = {
@@ -73,6 +90,9 @@ type ResolvedLine = {
   quantity: number;
   locationId?: string;
   locationCode?: string;
+  allocations?: ResolvedAllocation[];
+  availableQty?: number;
+  shortageQty?: number;
   unitCostSnapshot: number;
   totalCostSnapshot: number;
   returnedQty?: number;
@@ -157,8 +177,83 @@ const locationBalanceDocId = (warehouseId: string, locationId: string, itemId: s
 const issueLineId = (itemId: string, locationId?: string) =>
   JSON.stringify([String(itemId || '').trim(), String(locationId || '').trim()]);
 
+/** Prefer item-keyed line ids when multi-location allocations are used. */
+const issueLineIdForItem = (itemId: string) => issueLineId(itemId, '');
+
 const formatRsiReference = (seq: number) =>
   `RSI-${String(Math.max(1, Math.floor(seq))).padStart(4, '0')}`;
+
+const allocateFromLocationBalances = (
+  balances: Array<{
+    locationId: string;
+    locationCode?: string;
+    rack?: string;
+    shelf?: string;
+    quantity?: number;
+    lastMovementAt?: string;
+    updatedAt?: string;
+  }>,
+  requiredQty: number,
+  preferredLocationId?: string,
+): { allocations: ResolvedAllocation[]; availableQty: number; shortageQty: number } => {
+  let remaining = requiredQty;
+  const allocations: ResolvedAllocation[] = [];
+  const sorted = balances
+    .filter((row) => toNumber(row.quantity) > 0 && String(row.locationId || '').trim())
+    .sort((a, b) => {
+      if (preferredLocationId) {
+        if (a.locationId === preferredLocationId && b.locationId !== preferredLocationId) return -1;
+        if (b.locationId === preferredLocationId && a.locationId !== preferredLocationId) return 1;
+      }
+      return String(a.lastMovementAt || a.updatedAt || '').localeCompare(
+        String(b.lastMovementAt || b.updatedAt || ''),
+      );
+    });
+  const availableQty = sorted.reduce((sum, row) => sum + toNumber(row.quantity), 0);
+  for (const row of sorted) {
+    if (remaining <= 0) break;
+    const take = Math.min(remaining, toNumber(row.quantity));
+    allocations.push({
+      locationId: String(row.locationId),
+      locationCode: String(row.locationCode || row.locationId),
+      ...(row.rack ? { rack: String(row.rack) } : {}),
+      ...(row.shelf ? { shelf: String(row.shelf) } : {}),
+      quantity: take,
+    });
+    remaining -= take;
+  }
+  return {
+    allocations,
+    availableQty,
+    shortageQty: Math.max(0, requiredQty - availableQty),
+  };
+};
+
+const normalizeLineAllocations = (line: {
+  quantity: number;
+  locationId?: string;
+  locationCode?: string;
+  allocations?: ResolvedAllocation[] | DraftAllocationInput[];
+}): ResolvedAllocation[] => {
+  if (Array.isArray(line.allocations) && line.allocations.length > 0) {
+    return line.allocations
+      .map((row) => ({
+        locationId: String(row.locationId || '').trim(),
+        locationCode: String(row.locationCode || row.locationId || '').trim(),
+        ...(row.rack ? { rack: String(row.rack) } : {}),
+        ...(row.shelf ? { shelf: String(row.shelf) } : {}),
+        quantity: toNumber(row.quantity),
+      }))
+      .filter((row) => row.locationId && row.quantity > 0);
+  }
+  const locationId = String(line.locationId || '').trim();
+  if (!locationId) return [];
+  return [{
+    locationId,
+    locationCode: String(line.locationCode || locationId).trim(),
+    quantity: toNumber(line.quantity),
+  }];
+};
 
 const formatInvReference = (seq: number) =>
   `INV-${String(Math.max(1, Math.floor(seq))).padStart(3, '0')}`;
@@ -347,23 +442,93 @@ const resolveLines = async (params: {
   for (const line of rawLines) {
     const itemId = String(line.itemId || '').trim();
     const quantity = toNumber(line.quantity);
-    const locationId = String(line.locationId || '').trim();
     if (!itemId) throw new HttpsError('invalid-argument', 'حدد الصنف لكل بند.');
     if (!(quantity > 0)) {
       throw new HttpsError('invalid-argument', 'كمية كل بند يجب أن تكون أكبر من صفر.');
     }
-    if (locationsRequired && !locationId) {
-      throw new HttpsError('invalid-argument', 'حدد رف المصدر لكل بند.');
+    if (seen.has(itemId)) {
+      throw new HttpsError('invalid-argument', 'لا يمكن تكرار نفس الصنف في نفس السند.');
     }
-    if (locationId) {
-      const loc = locationById.get(locationId);
-      if (!loc) throw new HttpsError('failed-precondition', 'الرف غير نشط أو غير تابع للمخزن.');
+    seen.add(itemId);
+
+    let allocations = normalizeLineAllocations({
+      quantity,
+      locationId: line.locationId,
+      locationCode: line.locationCode,
+      allocations: line.allocations,
+    });
+    let availableQty: number | undefined;
+    let shortageQty: number | undefined;
+
+    if (locationsRequired) {
+      if (allocations.length === 0) {
+        const balSnap = await db
+          .collection(STOCK_LOCATION_BALANCES_COLLECTION)
+          .where('tenantId', '==', params.tenantId)
+          .where('warehouseId', '==', params.warehouseId)
+          .where('itemType', '==', 'material')
+          .where('itemId', '==', itemId)
+          .get();
+        const balances = balSnap.docs.map((docSnap) => {
+          const data = docSnap.data() as {
+            locationId?: string;
+            locationCode?: string;
+            rack?: string;
+            shelf?: string;
+            quantity?: number;
+            lastMovementAt?: string;
+            updatedAt?: string;
+          };
+          return {
+            locationId: String(data.locationId || ''),
+            locationCode: String(data.locationCode || data.locationId || ''),
+            rack: data.rack,
+            shelf: data.shelf,
+            quantity: toNumber(data.quantity),
+            lastMovementAt: data.lastMovementAt,
+            updatedAt: data.updatedAt,
+          };
+        }).filter((row) => locationById.has(row.locationId));
+        const preferred = String(line.locationId || '').trim() || undefined;
+        const allocated = allocateFromLocationBalances(balances, quantity, preferred);
+        allocations = allocated.allocations;
+        availableQty = allocated.availableQty;
+        shortageQty = allocated.shortageQty;
+        if (allocations.length === 0) {
+          throw new HttpsError(
+            'failed-precondition',
+            'لا يوجد رصيد على الأرفف لتحضير هذا الصنف. راجع أرصدة الرفوف أولاً.',
+          );
+        }
+        if (shortageQty > 0.000001) {
+          throw new HttpsError(
+            'failed-precondition',
+            `رصيد الأرفف غير كافٍ للصنف. المتاح ${availableQty} والمطلوب ${quantity}.`,
+          );
+        }
+      } else {
+        const allocatedQty = allocations.reduce((sum, row) => sum + toNumber(row.quantity), 0);
+        if (Math.abs(allocatedQty - quantity) > 0.000001) {
+          throw new HttpsError(
+            'invalid-argument',
+            'مجموع توزيع الرفوف يجب أن يساوي كمية البند.',
+          );
+        }
+        for (const allocation of allocations) {
+          if (!locationById.has(allocation.locationId)) {
+            throw new HttpsError('failed-precondition', 'الرف غير نشط أو غير تابع للمخزن.');
+          }
+          allocation.locationCode = String(
+            allocation.locationCode || locationById.get(allocation.locationId)?.code || allocation.locationId,
+          );
+        }
+      }
+    } else if (allocations.length > 0) {
+      throw new HttpsError(
+        'failed-precondition',
+        'هذا المخزن لا يستخدم مواقع أرفف — أزل توزيع الرفوف.',
+      );
     }
-    const key = `${itemId}__${locationId || '_'}`;
-    if (seen.has(key)) {
-      throw new HttpsError('invalid-argument', 'لا يمكن تكرار نفس الصنف والرف في نفس السند.');
-    }
-    seen.add(key);
 
     const materialSnap = await db.collection(MATERIALS_COLLECTION).doc(itemId).get();
     if (!materialSnap.exists) throw new HttpsError('not-found', 'المادة غير موجودة.');
@@ -382,18 +547,19 @@ const resolveLines = async (params: {
       throw new HttpsError('failed-precondition', 'المادة غير نشطة.');
     }
     const unitCost = roundMoney(materialPurchaseCostPerBaseUnit(material));
-    const locationCode = locationId
-      ? String(line.locationCode || locationById.get(locationId)?.code || locationId)
-      : undefined;
+    const first = allocations[0];
     resolved.push({
-      lineId: issueLineId(itemId, locationId),
+      lineId: issueLineIdForItem(itemId),
       itemType: 'material',
       itemId,
       itemName: String(material.name || itemId),
       itemCode: String(material.code || ''),
       unit: String(material.baseUnit || 'piece'),
       quantity,
-      ...(locationId ? { locationId, locationCode } : {}),
+      ...(first ? { locationId: first.locationId, locationCode: first.locationCode } : {}),
+      ...(allocations.length > 0 ? { allocations } : {}),
+      ...(availableQty != null ? { availableQty } : {}),
+      ...(shortageQty != null ? { shortageQty } : {}),
       unitCostSnapshot: unitCost,
       totalCostSnapshot: roundMoney(unitCost * quantity),
       returnedQty: 0,
@@ -633,7 +799,6 @@ async function postIssueMovements(params: {
     const counterSnap = await t.get(counterRef);
     let nextInv = Math.max(1, Math.floor(toNumber(counterSnap.data()?.lastInvSeq) + 1));
     const now = toIsoNow();
-    const movementRefs = lines.map(() => db.collection(STOCK_TRANSACTIONS_COLLECTION).doc());
 
     const stockByItem = new Map<string, {
       line: ResolvedLine;
@@ -642,9 +807,27 @@ async function postIssueMovements(params: {
     }>();
     const locationRows: Array<{
       line: ResolvedLine;
+      allocation: ResolvedAllocation;
       locRef: DocumentReference;
     }> = [];
+    const movementLegs: Array<{
+      line: ResolvedLine;
+      quantity: number;
+      locationId?: string;
+      locationCode?: string;
+    }> = [];
+
     for (const line of lines) {
+      const allocations = normalizeLineAllocations(line);
+      if (allocations.length > 0) {
+        const allocatedQty = allocations.reduce((sum, row) => sum + toNumber(row.quantity), 0);
+        if (Math.abs(allocatedQty - toNumber(line.quantity)) > 0.000001) {
+          throw new HttpsError(
+            'failed-precondition',
+            `يجب أن يطابق مجموع التوزيع الكمية للصنف ${line.itemName}.`,
+          );
+        }
+      }
       const existing = stockByItem.get(line.itemId);
       if (existing) {
         existing.quantity += line.quantity;
@@ -657,16 +840,28 @@ async function postIssueMovements(params: {
           ),
         });
       }
-      if (line.locationId) {
-        locationRows.push({
-          line,
-          locRef: db.collection(STOCK_LOCATION_BALANCES_COLLECTION).doc(
-            locationBalanceDocId(current.warehouseId, line.locationId, line.itemId),
-          ),
-        });
+      if (allocations.length > 0) {
+        for (const allocation of allocations) {
+          locationRows.push({
+            line,
+            allocation,
+            locRef: db.collection(STOCK_LOCATION_BALANCES_COLLECTION).doc(
+              locationBalanceDocId(current.warehouseId, allocation.locationId, line.itemId),
+            ),
+          });
+          movementLegs.push({
+            line,
+            quantity: allocation.quantity,
+            locationId: allocation.locationId,
+            locationCode: allocation.locationCode,
+          });
+        }
+      } else {
+        movementLegs.push({ line, quantity: line.quantity });
       }
     }
 
+    const movementRefs = movementLegs.map(() => db.collection(STOCK_TRANSACTIONS_COLLECTION).doc());
     const stockRows = Array.from(stockByItem.values());
     const balanceRefs = [
       ...stockRows.map((row) => row.balRef),
@@ -690,7 +885,7 @@ async function postIssueMovements(params: {
     for (const row of locationRows) {
       const locSnap = balanceSnapByPath.get(row.locRef.path);
       const locQty = locSnap?.exists ? toNumber(locSnap.data()?.quantity) : 0;
-      if (locQty - row.line.quantity < -0.000001) {
+      if (locQty - toNumber(row.allocation.quantity) < -0.000001) {
         throw new HttpsError(
           'failed-precondition',
           `رصيد الرف غير كافٍ للصنف ${row.line.itemName}.`,
@@ -767,14 +962,14 @@ async function postIssueMovements(params: {
         stripUndefined({
           warehouseId: current.warehouseId,
           warehouseName: current.warehouseName,
-          locationId: row.line.locationId,
-          locationCode: row.line.locationCode || row.line.locationId,
+          locationId: row.allocation.locationId,
+          locationCode: row.allocation.locationCode || row.allocation.locationId,
           itemType: 'material',
           itemId: row.line.itemId,
           itemName: row.line.itemName,
           itemCode: row.line.itemCode,
           unit: row.line.unit,
-          quantity: locQty - row.line.quantity,
+          quantity: locQty - toNumber(row.allocation.quantity),
           minStock: toNumber(locSnap?.data()?.minStock),
           updatedAt: now,
           lastMovementAt: now,
@@ -784,23 +979,25 @@ async function postIssueMovements(params: {
       );
     }
 
-    for (let i = 0; i < lines.length; i += 1) {
-      const line = lines[i];
+    for (let i = 0; i < movementLegs.length; i += 1) {
+      const leg = movementLegs[i];
+      const line = leg.line;
       const invRef = formatInvReference(nextInv);
       nextInv += 1;
+      const unitCost = toNumber(line.unitCostSnapshot);
       t.set(
         movementRefs[i],
         stripUndefined({
           warehouseId: current.warehouseId,
           warehouseName: current.warehouseName,
-          locationId: line.locationId,
-          locationCode: line.locationCode,
+          locationId: leg.locationId,
+          locationCode: leg.locationCode,
           itemType: 'material',
           itemId: line.itemId,
           itemName: line.itemName,
           itemCode: line.itemCode,
           movementType: 'OUT',
-          quantity: line.quantity,
+          quantity: leg.quantity,
           unit: line.unit,
           note: `صرف قطع غيار ${current.referenceNo} — ${current.branchName}`,
           referenceNo: invRef,
@@ -808,9 +1005,9 @@ async function postIssueMovements(params: {
           sourceId: issueId,
           branchId: current.branchId,
           branchName: current.branchName,
-          sourceLineId: line.lineId || issueLineId(line.itemId, line.locationId),
-          unitCostSnapshot: line.unitCostSnapshot,
-          totalCostSnapshot: line.totalCostSnapshot,
+          sourceLineId: line.lineId || issueLineIdForItem(line.itemId),
+          unitCostSnapshot: unitCost,
+          totalCostSnapshot: roundMoney(unitCost * leg.quantity),
           createdAt: now,
           createdBy: actor.displayName,
           createdByUserId: actor.uid,
@@ -1125,7 +1322,7 @@ export async function rejectRepairSpareIssueHandler(
     const actor = await loadActor(uid);
     requirePermission(
       actor,
-      ['repairSpareIssues.approve', 'repair.parts.manage'],
+      ['repairSpareIssues.reject', 'repairSpareIssues.approve', 'repair.parts.manage'],
       'لا تملك صلاحية رفض سند الصرف.',
     );
     const payload = (request.data || {}) as { issueId?: string; reason?: string };
@@ -1224,7 +1421,7 @@ export async function cancelRepairSpareIssueHandler(
     const actor = await loadActor(uid);
     requirePermission(
       actor,
-      ['repairSpareIssues.create', 'repair.parts.manage'],
+      ['repairSpareIssues.cancel', 'repairSpareIssues.create', 'repair.parts.manage'],
       'لا تملك صلاحية إلغاء سند الصرف.',
     );
     const issueId = String((request.data as { issueId?: string })?.issueId || '').trim();
@@ -1328,8 +1525,28 @@ export async function returnRepairSpareIssueHandler(
         if ((!requestedLineId && !itemId) || !(quantity > 0)) {
           throw new HttpsError('invalid-argument', 'بيانات المرتجع غير صالحة.');
         }
-        const targetLineId = requestedLineId || issueLineId(itemId, locationId);
-        const idx = indexByLineId.get(targetLineId);
+        const candidates = [
+          requestedLineId,
+          itemId ? issueLineId(itemId, locationId) : '',
+          itemId ? issueLineIdForItem(itemId) : '',
+        ].filter(Boolean);
+        let idx: number | undefined;
+        let targetLineId = '';
+        for (const candidate of candidates) {
+          const found = indexByLineId.get(candidate);
+          if (found != null) {
+            idx = found;
+            targetLineId = candidate;
+            break;
+          }
+        }
+        if (idx == null && itemId) {
+          const byItem = nextLines.findIndex((line) => line.itemId === itemId);
+          if (byItem >= 0) {
+            idx = byItem;
+            targetLineId = nextLines[byItem].lineId || issueLineIdForItem(itemId);
+          }
+        }
         if (idx == null) {
           throw new HttpsError(
             'failed-precondition',
@@ -1344,8 +1561,14 @@ export async function returnRepairSpareIssueHandler(
         if (itemId && itemId !== source.itemId) {
           throw new HttpsError('invalid-argument', 'الصنف لا يطابق بند المرتجع.');
         }
-        if (locationId && locationId !== String(source.locationId || '')) {
-          throw new HttpsError('invalid-argument', 'الرف لا يطابق بند المرتجع.');
+        const sourceAllocations = normalizeLineAllocations(source);
+        if (locationId) {
+          const allowed = sourceAllocations.length > 0
+            ? sourceAllocations.some((a) => a.locationId === locationId)
+            : locationId === String(source.locationId || '');
+          if (!allowed) {
+            throw new HttpsError('invalid-argument', 'الرف لا يطابق بند المرتجع.');
+          }
         }
         const remaining = toNumber(source.quantity) - toNumber(source.returnedQty);
         if (quantity > remaining + 0.000001) {
@@ -1384,20 +1607,33 @@ export async function returnRepairSpareIssueHandler(
             ),
           });
         }
-        if (resolved.source.locationId) {
+        const preferredReturnLoc = String(resolved.row.locationId || '').trim()
+          || String(resolved.source.locationId || '').trim()
+          || String(normalizeLineAllocations(resolved.source)[0]?.locationId || '').trim();
+        if (preferredReturnLoc) {
           const ref = db.collection(STOCK_LOCATION_BALANCES_COLLECTION).doc(
             locationBalanceDocId(
               current.warehouseId,
-              resolved.source.locationId,
+              preferredReturnLoc,
               resolved.source.itemId,
             ),
           );
           const locationRow = locationByPath.get(ref.path);
+          const sourceForLoc: ResolvedLine = {
+            ...resolved.source,
+            locationId: preferredReturnLoc,
+            locationCode: String(
+              resolved.row.locationCode
+              || resolved.source.locationCode
+              || normalizeLineAllocations(resolved.source).find((a) => a.locationId === preferredReturnLoc)?.locationCode
+              || preferredReturnLoc,
+            ),
+          };
           if (locationRow) {
             locationRow.quantity += resolved.quantity;
           } else {
             locationByPath.set(ref.path, {
-              source: resolved.source,
+              source: sourceForLoc,
               quantity: resolved.quantity,
               ref,
             });

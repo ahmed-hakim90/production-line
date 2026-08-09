@@ -20,6 +20,7 @@ import { ALL_PERMISSIONS, type Permission } from '../../../utils/permissions';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import {
   REPAIR_BUILTIN_ROLE_DEFS,
+  reconcileExistingRepairBuiltinPermissions,
   type RepairBuiltinRoleKey,
 } from '../../repair/lib/repairBuiltinRoles';
 
@@ -508,6 +509,7 @@ const REQUIRED_PERMISSION_MIGRATIONS_BY_ROLE_KEY: Record<string, readonly Permis
     'sparePartsRecall.view',
     'sparePartsRecall.confirm',
     'inventory.view',
+    'repair.complaints.view',
   ],
   inventory_viewer: [
     'sparePartsReplenishment.view',
@@ -608,6 +610,11 @@ export const roleService = {
    * Explicit default-role migration. Firestore rules require super-admin or
    * roles.manage, so normal sign-in/bootstrap code must only call getAll().
    */
+  /**
+   * Create missing default role docs + additive permission grants.
+   * Call only from an explicit admin action (Roles Management button) or company Setup.
+   * Must not run automatically on every login.
+   */
   async migrateDefaultRoles(): Promise<FirestoreRole[]> {
     if (!isConfigured) return [];
     const tid = getCurrentTenantId();
@@ -668,10 +675,10 @@ export const roleService = {
       const next = { ...current };
       let changed = false;
       for (const perm of toGrant) {
-        if (!next[perm]) {
-          next[perm] = true;
-          changed = true;
-        }
+        // Do not re-open keys an admin explicitly set to false.
+        if (next[perm] === true || next[perm] === false) continue;
+        next[perm] = true;
+        changed = true;
       }
       if (changed) {
         await this.update(role.id, {
@@ -685,8 +692,9 @@ export const roleService = {
   },
 
   /**
-   * Keep built-in repair reception/technician roles aligned with the isolated presets.
-   * Creates missing docs and overwrites permissions for these two roleKeys only.
+   * Ensure built-in repair reception/technician role docs exist.
+   * Existing roles: preserve admin permission edits; only strip isolation forbids.
+   * Never re-open permissions an admin turned off on login migrate.
    */
   async ensureRepairBuiltinRoleCatalogPermissions(): Promise<number> {
     if (!isConfigured) return 0;
@@ -716,18 +724,13 @@ export const roleService = {
         continue;
       }
 
-      const current = existing.permissions ?? {};
-      const same =
-        ALL_PERMISSIONS.every((perm) => Boolean(current[perm]) === Boolean(nextPermissions[perm]))
-        && existing.name === def.name
-        && existing.roleKey === roleKey;
-      if (same) continue;
+      const reconciled = reconcileExistingRepairBuiltinPermissions(existing.permissions, roleKey);
+      const needsRoleKey = existing.roleKey !== roleKey;
+      if (!reconciled.changed && !needsRoleKey) continue;
 
       await this.update(existing.id, {
-        name: def.name,
-        color: def.color,
-        permissions: nextPermissions,
-        roleKey,
+        ...(reconciled.changed ? { permissions: reconciled.permissions } : {}),
+        ...(needsRoleKey ? { roleKey } : {}),
       });
       patched += 1;
     }

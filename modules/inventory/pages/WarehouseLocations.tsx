@@ -18,6 +18,7 @@ import type {
 } from '../types';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
+import { useJobsStore } from '@/components/background-jobs/useJobsStore';
 import { resolveInventoryRoutingV1 } from '../lib/inventoryRoutingResolver';
 import { resolveSuppliesWarehouseId } from '../lib/resolveSuppliesWarehouse';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
@@ -35,6 +36,8 @@ type ImportPreviewRow = {
   shelf?: string;
   from?: string;
   to?: string;
+  /** Optional explicit location code (e.g. A1-1) instead of warehouse-rack-shelf. */
+  locationCode?: string;
   status: 'ready' | 'error' | 'done';
   error?: string;
 };
@@ -54,6 +57,14 @@ export const WarehouseLocations: React.FC = () => {
   const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const userDisplayName = useAppStore((s) => s.userDisplayName);
+  const addJob = useJobsStore((s) => s.addJob);
+  const startJob = useJobsStore((s) => s.startJob);
+  const setJobProgress = useJobsStore((s) => s.setJobProgress);
+  const completeJob = useJobsStore((s) => s.completeJob);
+  const failJob = useJobsStore((s) => s.failJob);
+  const setPanelHidden = useJobsStore((s) => s.setPanelHidden);
+  const setPanelMinimized = useJobsStore((s) => s.setPanelMinimized);
   const {
     scoped,
     warehouseId: scopedWarehouseId,
@@ -365,10 +376,11 @@ export const WarehouseLocations: React.FC = () => {
   const downloadImportTemplate = () => {
     const wb = XLSX.utils.book_new();
     const rows = [
-      ['كود المخزن', 'اسم الراك', 'كود الراك', 'نوع الرفوف', 'رف واحد', 'من', 'إلى'],
-      [selectedWarehouse?.code || 'WH-01', 'راك A', 'A', 'single', '01', '', ''],
-      [selectedWarehouse?.code || 'WH-01', 'راك B', 'B', 'numeric_range', '', '01', '10'],
-      [selectedWarehouse?.code || 'WH-01', 'راك C', 'C', 'alpha_range', '', 'A', 'F'],
+      ['كود المخزن', 'اسم الراك', 'كود الراك', 'نوع الرفوف', 'رف واحد', 'من', 'إلى', 'كود اللوكيشن'],
+      [selectedWarehouse?.code || 'WH-01', 'راك A', 'A', 'single', '01', '', '', ''],
+      [selectedWarehouse?.code || 'WH-01', 'A1', 'A1', 'single', '1', '', '', 'A1-1'],
+      [selectedWarehouse?.code || 'WH-01', 'راك B', 'B', 'numeric_range', '', '01', '10', ''],
+      [selectedWarehouse?.code || 'WH-01', 'راك C', 'C', 'alpha_range', '', 'A', 'F', ''],
     ];
     const ws = XLSX.utils.aoa_to_sheet(rows);
     ws['!views'] = [{ rightToLeft: true }];
@@ -380,7 +392,10 @@ export const WarehouseLocations: React.FC = () => {
     setImportFileName(file.name);
     const buffer = await file.arrayBuffer();
     const wb = XLSX.read(buffer, { type: 'array' });
-    const sheet = wb.Sheets[wb.SheetNames[0]];
+    const preferredSheetName = wb.SheetNames.find((name) =>
+      /لوكيشن|location/i.test(String(name || '')),
+    );
+    const sheet = wb.Sheets[preferredSheetName || wb.SheetNames[0]];
     const rawRows = XLSX.utils.sheet_to_json<Record<string, unknown>>(sheet, { defval: '' });
     const whByCode = new Map(warehouses.map((w) => [normalizeCode(w.code || ''), w]));
     const whByName = new Map(warehouses.map((w) => [String(w.name || '').trim().toLowerCase(), w]));
@@ -395,6 +410,9 @@ export const WarehouseLocations: React.FC = () => {
       const shelfValue = getCell(row, ['رف واحد', 'رف', 'كود الرف', 'shelf', 'shelfName', 'shelfCode', 'اسم الرف']);
       const fromValue = getCell(row, ['من', 'from', 'shelfFrom']);
       const toValue = getCell(row, ['إلى', 'الى', 'to', 'shelfTo']);
+      const locationCodeValue = normalizeCode(
+        getCell(row, ['كود اللوكيشن', 'locationCode', 'location code', 'كود الموقع']),
+      );
       const inferredMode: ShelfMode = modeRaw === 'numeric_range' || modeRaw.includes('رقم')
         ? 'numeric_range'
         : modeRaw === 'alpha_range' || modeRaw.includes('حرف')
@@ -408,6 +426,9 @@ export const WarehouseLocations: React.FC = () => {
       else if (!rackNameValue.trim()) error = 'اسم الراك مطلوب.';
       else if (inferredMode === 'single' && !shelfValue.trim()) error = 'اسم الرف مطلوب.';
       else if (inferredMode !== 'single' && (!fromValue.trim() || !toValue.trim())) error = 'مدى الأرفف مطلوب.';
+      else if (locationCodeValue && inferredMode !== 'single') {
+        error = 'كود اللوكيشن المخصص يُستخدم مع رف واحد فقط.';
+      }
       return {
         rowNo: index + 2,
         warehouseId: wh?.id || '',
@@ -418,6 +439,7 @@ export const WarehouseLocations: React.FC = () => {
         shelf: shelfValue,
         from: fromValue,
         to: toValue,
+        locationCode: locationCodeValue || undefined,
         status: error ? 'error' : 'ready',
         error,
       };
@@ -427,19 +449,48 @@ export const WarehouseLocations: React.FC = () => {
 
   const applyImport = async () => {
     const ready = importRows.filter((row) => row.status === 'ready');
-    if (!ready.length || !beginModalSave()) return;
+    if (!ready.length) return;
+
+    const readySnapshot = [...ready];
+    const warehousesSnapshot = [...warehouses];
+    const fileLabel = importFileName || 'warehouse-locations.xlsx';
+    const jobId = addJob({
+      fileName: fileLabel,
+      jobType: 'Locations Import',
+      totalRows: readySnapshot.length,
+      startedBy: userDisplayName || 'Current User',
+    });
+
+    setPanelHidden(false);
+    setPanelMinimized(false);
+    startJob(jobId, 'Saving to database...');
+    setModal(null);
+    setImportRows([]);
+    setImportFileName('');
+
+    let added = 0;
+    let skipped = 0;
+    let failed = 0;
+    let done = 0;
+
     try {
       const rackRows = await warehouseRackService.getAll();
       const locationRows = await warehouseLocationService.getAll();
       const rackByKey = new Map(rackRows.map((rack) => [`${rack.warehouseId}__${rack.code}`, rack]));
-      const locationKeys = new Set(locationRows.map((loc) => `${loc.warehouseId}__${loc.rackCode || normalizeCode(loc.rack)}__${loc.shelfCode || normalizeCode(loc.shelf)}`));
-      const nextRows = [...importRows];
-      for (const row of ready) {
+      const locationKeys = new Set(
+        locationRows.map(
+          (loc) =>
+            `${loc.warehouseId}__${loc.rackCode || normalizeCode(loc.rack)}__${loc.shelfCode || normalizeCode(loc.shelf)}`,
+        ),
+      );
+
+      for (const row of readySnapshot) {
         try {
-          const wh = warehouses.find((w) => w.id === row.warehouseId);
+          const wh = warehousesSnapshot.find((w) => w.id === row.warehouseId);
           if (!wh?.id) throw new Error('المخزن غير موجود.');
           const rackKey = `${row.warehouseId}__${row.rackCode}`;
           let rack = rackByKey.get(rackKey);
+          let createdSomething = false;
           if (!rack?.id) {
             const id = await warehouseRackService.create({
               warehouseId: wh.id,
@@ -448,8 +499,18 @@ export const WarehouseLocations: React.FC = () => {
               name: row.rackName,
               code: row.rackCode,
             });
-            rack = { id: id || '', warehouseId: wh.id, warehouseName: wh.name, warehouseCode: wh.code, name: row.rackName, code: row.rackCode, isActive: true, createdAt: new Date().toISOString() };
+            rack = {
+              id: id || '',
+              warehouseId: wh.id,
+              warehouseName: wh.name,
+              warehouseCode: wh.code,
+              name: row.rackName,
+              code: row.rackCode,
+              isActive: true,
+              createdAt: new Date().toISOString(),
+            };
             rackByKey.set(rackKey, rack);
+            createdSomething = true;
           }
           const shelfCodes = warehouseLocationService.buildShelfCodes({
             mode: row.mode,
@@ -457,7 +518,10 @@ export const WarehouseLocations: React.FC = () => {
             from: row.from,
             to: row.to,
           });
-          const missingShelves = shelfCodes.filter((shelfCode) => !locationKeys.has(`${row.warehouseId}__${row.rackCode}__${normalizeCode(shelfCode)}`));
+          const missingShelves = shelfCodes.filter(
+            (shelfCode) =>
+              !locationKeys.has(`${row.warehouseId}__${row.rackCode}__${normalizeCode(shelfCode)}`),
+          );
           for (const shelfCode of missingShelves) {
             await warehouseLocationService.create({
               warehouseId: wh.id,
@@ -468,22 +532,45 @@ export const WarehouseLocations: React.FC = () => {
               rackCode: rack.code,
               rack: rack.name,
               shelf: shelfCode,
+              // Keep Maghrabi-style codes (A1-1) when provided so stock import matches.
+              code: row.mode === 'single' ? row.locationCode : undefined,
               skipIfExists: true,
             });
             locationKeys.add(`${row.warehouseId}__${row.rackCode}__${normalizeCode(shelfCode)}`);
+            createdSomething = true;
           }
-          const idx = nextRows.findIndex((item) => item.rowNo === row.rowNo);
-          if (idx >= 0) nextRows[idx] = { ...nextRows[idx], status: 'done', error: missingShelves.length ? undefined : 'كل الأرفف موجودة بالفعل.' };
-        } catch (error: any) {
-          const idx = nextRows.findIndex((item) => item.rowNo === row.rowNo);
-          if (idx >= 0) nextRows[idx] = { ...nextRows[idx], status: 'error', error: error?.message || 'تعذر استيراد الصف.' };
+          if (createdSomething) added += 1;
+          else skipped += 1;
+        } catch {
+          failed += 1;
         }
+        done += 1;
+        setJobProgress(jobId, {
+          processedRows: done,
+          totalRows: readySnapshot.length,
+          statusText: 'Saving to database...',
+          status: 'processing',
+        });
       }
-      setImportRows(nextRows);
-      toast.success('تم تنفيذ استيراد اللوكيشنات.');
+
+      if (added === 0 && failed > 0 && skipped === 0) {
+        failJob(jobId, 'All rows failed during save', 'Failed');
+        toast.error('فشل استيراد اللوكيشنات.');
+      } else {
+        completeJob(jobId, {
+          addedRows: added,
+          failedRows: failed,
+          skippedRows: skipped,
+          statusText: `اكتمل: ${added} مضاف، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}`,
+        });
+        toast.success(
+          `تم استيراد اللوكيشنات: ${added} مضاف، ${skipped} تخطي${failed ? `، ${failed} فشل` : ''}.`,
+        );
+      }
       await load();
-    } finally {
-      endModalSave();
+    } catch (error: any) {
+      failJob(jobId, error?.message || 'تعذر استيراد اللوكيشنات', 'Failed');
+      toast.error('تعذر استيراد اللوكيشنات.');
     }
   };
 

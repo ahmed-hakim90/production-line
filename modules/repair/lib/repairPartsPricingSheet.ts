@@ -5,14 +5,22 @@ import { normalizeRepairSalePrice } from '../utils/sparePartPricing';
 const MAX_IMPORT_FILE_BYTES = 5 * 1024 * 1024;
 const MAX_IMPORT_ROWS = 2_000;
 
-const HEADERS = {
-  materialId: 'معرف المادة',
+/** Columns written to the downloadable pricing sheet (no Firestore document ids). */
+const EXPORT_HEADERS = {
   code: 'الكود',
   name: 'اسم القطعة',
   category: 'الفئة',
   consumer: 'سعر المستهلك',
   trader: 'سعر التاجر',
   cost: 'سعر التكلفة',
+} as const;
+
+/** Optional legacy column still accepted on import for older downloaded files. */
+const LEGACY_MATERIAL_ID_HEADER = 'معرف المادة';
+
+const HEADERS = {
+  materialId: LEGACY_MATERIAL_ID_HEADER,
+  ...EXPORT_HEADERS,
 } as const;
 
 type PriceValues = {
@@ -66,7 +74,6 @@ function parseOptionalPrice(
 function applyRtlSheet(sheet: XLSX.WorkSheet): void {
   sheet['!views'] = [{ rightToLeft: true }];
   sheet['!cols'] = [
-    { wch: 30 },
     { wch: 18 },
     { wch: 35 },
     { wch: 25 },
@@ -78,22 +85,21 @@ function applyRtlSheet(sheet: XLSX.WorkSheet): void {
 
 export function downloadRepairPartsPricingSheet(materials: Material[]): void {
   const rows = materials.map((material) => ({
-    [HEADERS.materialId]: String(material.id || ''),
-    [HEADERS.code]: String(material.code || ''),
-    [HEADERS.name]: String(material.name || ''),
-    [HEADERS.category]: String(material.categoryName || ''),
-    [HEADERS.consumer]: normalizeRepairSalePrice(material.defaultSalePrice),
-    [HEADERS.trader]: normalizeRepairSalePrice(material.traderSalePrice),
-    [HEADERS.cost]: normalizeRepairSalePrice(material.purchaseCost),
+    [EXPORT_HEADERS.code]: String(material.code || ''),
+    [EXPORT_HEADERS.name]: String(material.name || ''),
+    [EXPORT_HEADERS.category]: String(material.categoryName || ''),
+    [EXPORT_HEADERS.consumer]: normalizeRepairSalePrice(material.defaultSalePrice),
+    [EXPORT_HEADERS.trader]: normalizeRepairSalePrice(material.traderSalePrice),
+    [EXPORT_HEADERS.cost]: normalizeRepairSalePrice(material.purchaseCost),
   }));
   const sheet = XLSX.utils.json_to_sheet(rows, {
-    header: Object.values(HEADERS),
+    header: Object.values(EXPORT_HEADERS),
   });
   applyRtlSheet(sheet);
 
   const instructions = XLSX.utils.aoa_to_sheet([
     ['تعليمات تحديث تسعير قطع الغيار'],
-    ['عدّل أعمدة الأسعار فقط، ولا تغيّر معرف المادة أو الكود.'],
+    ['عدّل أعمدة الأسعار فقط، ولا تغيّر كود القطعة.'],
     ['الخانة الفارغة لا تغيّر السعر الحالي. اكتب 0 لتصفير السعر.'],
     ['سيتم رفض الصفوف المكررة أو الأكواد غير الموجودة أو الأسعار السالبة.'],
   ]);
@@ -140,9 +146,13 @@ export function parseRepairPartsPricingBuffer(
     const rowNumber = index + 2;
     const materialId = String(row[HEADERS.materialId] || '').trim();
     const code = normalizeCode(row[HEADERS.code]);
-    const material = (materialId && byId.get(materialId)) || (code && byCode.get(code));
+    if (!code && !materialId) {
+      errors.push(`صف ${rowNumber}: الكود مطلوب.`);
+      return;
+    }
+    const material = (code && byCode.get(code)) || (materialId && byId.get(materialId)) || null;
     if (!material?.id) {
-      errors.push(`صف ${rowNumber}: لم يتم العثور على قطعة بالمعرف أو الكود المحدد.`);
+      errors.push(`صف ${rowNumber}: لم يتم العثور على قطعة بالكود المحدد.`);
       return;
     }
     const resolvedId = String(material.id);
@@ -156,7 +166,7 @@ export function parseRepairPartsPricingBuffer(
       return;
     }
     if (code && code !== normalizeCode(material.code)) {
-      errors.push(`صف ${rowNumber}: الكود لا يطابق معرف المادة.`);
+      errors.push(`صف ${rowNumber}: الكود لا يطابق القطعة.`);
       return;
     }
 

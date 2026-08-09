@@ -138,6 +138,27 @@ describe('parseProductComponentsFromBuffer', () => {
     expect(result.newMaterialCount).toBe(0);
   });
 
+  it('allows empty or zero quantity for spare-parts catalog lines', () => {
+    const data = makeBuffer([
+      ['كود المنتج', 'كود المادة', 'اسم المادة', 'الكمية المستخدمة'],
+      ['SK-999N', 'MAT-001', 'موتور نحاس', ''],
+      ['SK-999N', 'MAT-002', 'هيكل', 0],
+    ]);
+
+    const result = parseProductComponentsFromBuffer(data, products, {
+      manufacturingMaterials: materials,
+      locations,
+    });
+
+    expect(result.errorCount).toBe(0);
+    expect(result.validCount).toBe(2);
+    expect(result.missingQuantityCount).toBe(2);
+    expect(result.rows[0].quantityUsed).toBe(0);
+    expect(result.rows[1].quantityUsed).toBe(0);
+    expect(result.bomGroupCount).toBe(1);
+    expect(result.bomGroups[0].items).toHaveLength(2);
+  });
+
   it('accepts balance under alternate header رصيد المخزن', () => {
     const data = makeBuffer([
       ['كود المنتج', 'كود المادة', 'الكمية المستخدمة', 'كود اللوكيشن', 'رصيد المخزن'],

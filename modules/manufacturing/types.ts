@@ -49,6 +49,11 @@ export interface Material {
   traderSalePrice?: number;
   wastePercent?: number;
   isManufacturedInternally?: boolean;
+  /**
+   * When false, material cannot be linked/created as a repair spare part (enforced server-side).
+   * Missing/true = available for spare parts / repair catalog.
+   */
+  availableForSpareParts?: boolean;
   /** Optional explicit link to finished/semi-finished product used for dynamic manufacturing average rollup. */
   manufacturedProductId?: string;
   linkedCostCenterIds?: string[];

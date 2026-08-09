@@ -20,10 +20,12 @@ import {
 import { SearchableSelect } from '@/components/UI';
 import { toast } from '../../../components/Toast';
 import {
-  loadAllCatalogMaterials,
+  filterCatalogComponentsForSpareParts,
   loadProductComponents,
+  loadSparePartsCatalogMaterials,
   type CatalogComponent,
 } from '../../catalog/lib/productComponents';
+import { materialService } from '../../manufacturing/services/materialService';
 import { useAppStore } from '../../../store/useAppStore';
 import { sparePartsService } from '../services/sparePartsService';
 import type { RepairSparePart } from '../types';
@@ -86,7 +88,7 @@ export const CreateRepairSparePartModal: React.FC<Props> = ({
       unit: 'قطعة',
       minStock: String(defaultMinStock),
     });
-    void loadAllCatalogMaterials()
+    void loadSparePartsCatalogMaterials()
       .then(setCatalogComponents)
       .catch(() => setCatalogComponents([]));
   }, [open, defaultMinStock]);
@@ -99,9 +101,9 @@ export const CreateRepairSparePartModal: React.FC<Props> = ({
       return;
     }
     let cancelled = false;
-    void loadProductComponents(productId)
-      .then((rows) => {
-        if (!cancelled) setBomComponents(rows);
+    void Promise.all([loadProductComponents(productId), materialService.getAll()])
+      .then(([rows, materials]) => {
+        if (!cancelled) setBomComponents(filterCatalogComponentsForSpareParts(rows, materials));
       })
       .catch(() => {
         if (!cancelled) setBomComponents([]);

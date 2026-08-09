@@ -40,6 +40,11 @@ export interface Product {
   avgAssemblyTime: number;
   imageUrl?: string;
   assemblyMode?: ProductAssemblyMode;
+  /**
+   * When false, product is spare-parts / repair catalog only.
+   * Missing/true = manufactured finished good used on production lines.
+   */
+  isManufactured?: boolean;
 }
 
 export type EmploymentType = "full_time" | "part_time" | "contract" | "daily";
@@ -106,6 +111,11 @@ export interface FirestoreProduct {
   defaultWorkerTargetQty?: number;
   /** Individual products use per-worker output targets; team products are reported as collective output. */
   assemblyMode?: ProductAssemblyMode;
+  /**
+   * When false, product is spare-parts / repair catalog only (hidden from production pickers).
+   * Missing/true = manufactured finished good used on production lines.
+   */
+  isManufactured?: boolean;
 }
 
 export interface ProductMaterial {
@@ -1598,8 +1608,22 @@ export interface RepairAccessSettings {
   managerScope?: "branch" | "centers";
 }
 
+/** Semantic role binding a status id to an action-driven workflow step. */
+export type RepairStatusRole =
+  | 'intake'
+  | 'diagnosis'
+  | 'estimate_review'
+  | 'awaiting_customer'
+  | 'awaiting_parts'
+  | 'in_repair'
+  | 'ready_delivery'
+  | 'delivered'
+  | 'cancelled'
+  | 'unrepairable'
+  | 'none';
+
 export interface RepairWorkflowSettings {
-  /** ط­ط§ظ„ط§طھ ط¯ظٹظ†ط§ظ…ظٹظƒظٹط© ظ‚ط§ط¨ظ„ط© ظ„ظ„ط¥ط¯ط§ط±ط© ظ…ظ† ط¥ط¹ط¯ط§ط¯ط§طھ ط§ظ„طµظٹط§ظ†ط© */
+  /** حالات ديناميكية قابلة للإدارة من إعدادات الصيانة */
   statuses?: Array<{
     id: string;
     label: string;
@@ -1607,10 +1631,12 @@ export interface RepairWorkflowSettings {
     order?: number;
     isTerminal?: boolean;
     isEnabled?: boolean;
+    /** الدور في المسار الأكشن-درايفن (تشخيص / تقدير / موافقة …) */
+    role?: RepairStatusRole;
   }>;
-  /** ط§ظ„ط­ط§ظ„ط© ط§ظ„ط§ظپطھط±ط§ط¶ظٹط© ط¹ظ†ط¯ ط¥ظ†ط´ط§ط، ط·ظ„ط¨ ط¬ط¯ظٹط¯ */
+  /** الحالة الافتراضية عند إنشاء طلب جديد */
   initialStatusId?: string;
-  /** ط­ط§ظ„ط§طھ طھط¹طھط¨ط± ظ…ظپطھظˆط­ط© ظپظٹ ط§ظ„طھظ‚ط§ط±ظٹط± ظˆط§ظ„ط¥ط­طµط§ط¦ظٹط§طھ */
+  /** حالات تعتبر مفتوحة في التقارير والإحصائيات */
   openStatusIds?: string[];
   /** Optional: which status ids set assignedAt; if omitted, client uses built-in defaults */
   assignmentTriggerStatusIds?: string[];
@@ -1664,6 +1690,12 @@ export interface RepairPaymentsUiSettings {
   allowPartialCollection?: boolean;
 }
 
+export interface RepairUnrepairableReason {
+  id: string;
+  label: string;
+  enabled?: boolean;
+}
+
 export interface RepairSettings {
   access?: RepairAccessSettings;
   workflow?: RepairWorkflowSettings;
@@ -1674,6 +1706,8 @@ export interface RepairSettings {
   accessoriesCatalog?: RepairAccessoryCatalogItem[];
   /** أنواع خدمات الإصلاح وأسعارها (أدمن الصيانة فقط) */
   serviceCatalog?: RepairServiceCatalogItem[];
+  /** أسباب قياسية لقرار عدم قابلية الإصلاح، لاستخدامها في التشغيل والتحليل. */
+  unrepairableReasons?: RepairUnrepairableReason[];
 }
 
 export interface SystemSettings {

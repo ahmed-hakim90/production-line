@@ -2,17 +2,10 @@ import { HttpsError } from 'firebase-functions/v2/https';
 import { getDb } from './adminApp.js';
 import { loadProtectedRepairServiceCatalog } from './repairServiceCatalogOps.js';
 import { decideTechnicianQrClaim } from './repairTechnicianClaimPolicy.js';
+import { recordAssignedJobFullyUnrepairable } from './repairCustomerPortalOps.js';
+import { mapLegacyRepairStatus } from './repairStatusIds.js';
+import { loadTenantWorkflowStatuses, resolveNextStatusForAction, resolveStatusRole, } from './repairStatusAdvance.js';
 const db = getDb();
-const TECH_STATUSES = new Set([
-    'received',
-    'diagnosing',
-    'estimate_ready',
-    'waiting_parts',
-    'repairing',
-    'testing',
-    'ready',
-    'unrepairable',
-]);
 const requireActor = async (request) => {
     const uid = String(request.auth?.uid || '').trim();
     if (!uid)
@@ -221,39 +214,99 @@ const saveTechnical = async (actor, data) => {
     const products = normalizeProducts(data.jobProducts, job.jobProducts);
     const at = new Date().toISOString();
     const warrantyScope = products.some((row) => Boolean(row.inWarranty)) ? 'manufacturer' : 'none';
-    await ref.update({
+    const hasDiagnosis = products.some((row) => String(row.technicianDiagnosis || '').trim());
+    const hasService = products.some((row) => Array.isArray(row.serviceIds) && row.serviceIds.some((id) => String(id || '').trim()));
+    const hasPart = (Array.isArray(job.partsUsed) ? job.partsUsed : [])
+        .some((row) => Number(row.quantity || 0) > 0);
+    const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+    const nextStatus = resolveNextStatusForAction({
+        action: 'diagnosis_saved',
+        currentStatus: String(job.status || ''),
+        statuses,
+        hasDiagnosis,
+        hasServiceOrPartSignal: hasService || hasPart,
+    });
+    const prevStatus = mapLegacyRepairStatus(String(job.status || ''));
+    const patch = {
         jobProducts: products,
         isServiceOnly: Boolean(data.isServiceOnly),
         warrantyScope,
         ...(warrantyScope === 'manufacturer' ? { warranty: 'none' } : {}),
         updatedAt: at,
-    });
+    };
+    if (nextStatus && nextStatus !== prevStatus) {
+        const history = Array.isArray(job.statusHistory) ? [...job.statusHistory] : [];
+        history.push({ status: nextStatus, at, technicianId: actor.uid, source: 'diagnosis_saved' });
+        patch.status = nextStatus;
+        patch.statusHistory = history;
+    }
+    await ref.update(patch);
+    if (nextStatus && nextStatus !== prevStatus) {
+        await ref.collection('service_events').add({
+            tenantId: actor.tenantId,
+            branchId: String(job.branchId || ''),
+            jobId,
+            at,
+            actorUid: actor.uid,
+            actorName: actor.displayName,
+            action: 'status_change',
+            domainEvent: nextStatus === 'diagnosing' || resolveStatusRole(nextStatus, statuses) === 'diagnosis'
+                ? 'diagnosis.completed'
+                : 'job.status_changed',
+            eventSchemaVersion: 1,
+            statusBefore: prevStatus,
+            statusAfter: nextStatus,
+            note: 'تقدم تلقائي بعد حفظ التشخيص',
+        });
+    }
     return {
         ok: true,
         job: sanitizeRepairJobForTechnician(jobId, {
             ...job,
+            ...patch,
             jobProducts: products,
             isServiceOnly: Boolean(data.isServiceOnly),
             warrantyScope,
             updatedAt: at,
+            ...(nextStatus ? { status: nextStatus } : {}),
         }),
     };
 };
 const changeTechnicalStatus = async (actor, data) => {
     const jobId = String(data.jobId || '').trim();
-    const status = String(data.status || '').trim();
-    if (!TECH_STATUSES.has(status) || status === 'received') {
-        throw new HttpsError('invalid-argument', 'هذه الحالة ليست من إجراءات الفني.');
-    }
+    const requested = mapLegacyRepairStatus(String(data.status || '').trim());
     const { ref, job } = await loadAssignedJob(actor, jobId);
     if (job.isClosed === true || ['delivered', 'cancelled'].includes(String(job.status || ''))) {
         throw new HttpsError('failed-precondition', 'الطلب مغلق ولا يمكن تغيير حالته.');
     }
-    const reason = String(data.reason || '').trim().slice(0, 2000);
-    if (status === 'unrepairable' && !reason) {
-        throw new HttpsError('invalid-argument', 'سبب عدم قابلية الإصلاح مطلوب.');
+    const statuses = await loadTenantWorkflowStatuses(db, actor.tenantId);
+    const requestedRole = resolveStatusRole(requested, statuses);
+    const isRepairDone = requestedRole === 'ready_delivery';
+    const isUnrepairable = requestedRole === 'unrepairable' || requested === 'unrepairable';
+    if (!isRepairDone && !isUnrepairable) {
+        throw new HttpsError('invalid-argument', 'الورشة تغيّر الحالة يدوياً لـ«تم الإصلاح» أو «غير قابل للإصلاح» فقط. باقي الحالات تتقدم تلقائياً.');
     }
-    if (status === 'ready') {
+    let status = requested;
+    if (isRepairDone) {
+        const waitsForParts = (Array.isArray(job.partsUsed) ? job.partsUsed : [])
+            .some((row) => ['pending_supply', 'ready_to_issue'].includes(String(row.fulfillmentStatus || '')));
+        const advanced = resolveNextStatusForAction({
+            action: 'repair_done',
+            currentStatus: String(job.status || ''),
+            statuses,
+            waitsForParts,
+        });
+        if (!advanced) {
+            throw new HttpsError('failed-precondition', 'لا يمكن تعليم الطلب كـ«تم الإصلاح» قبل مرحلة الإصلاح أو مع قطع ناقصة.');
+        }
+        status = advanced;
+    }
+    const reason = String(data.reason || '').trim().slice(0, 2000);
+    const reasonCode = String(data.reasonCode || '').trim().slice(0, 80);
+    if (isUnrepairable && !reasonCode) {
+        throw new HttpsError('invalid-argument', 'اختر سبب عدم قابلية الإصلاح من القائمة.');
+    }
+    if (isRepairDone) {
         const products = Array.isArray(job.jobProducts) ? job.jobProducts : [];
         const hasSelectedService = products.some((row) => Array.isArray(row.serviceIds) && row.serviceIds.some((id) => String(id || '').trim()));
         const hasUsedPart = (Array.isArray(job.partsUsed) ? job.partsUsed : [])
@@ -270,12 +323,46 @@ const changeTechnicalStatus = async (actor, data) => {
         technicianId: actor.uid,
         ...(reason ? { reason } : {}),
     });
+    if (isUnrepairable) {
+        await recordAssignedJobFullyUnrepairable({
+            uid: actor.uid,
+            tenantId: actor.tenantId,
+            displayName: actor.displayName,
+            permissions: actor.permissions,
+            isSuperAdmin: actor.isSuperAdmin,
+            jobId,
+            reasonCode,
+            reasonNote: reason,
+        });
+        await ref.set({
+            statusHistory: history,
+            updatedAt: at,
+            resolvedAt: at,
+            closedAt: at,
+            closedReason: reason,
+            isClosed: true,
+        }, { merge: true });
+        await ref.collection('service_events').add({
+            tenantId: actor.tenantId,
+            branchId: String(job.branchId || ''),
+            jobId,
+            at,
+            actorUid: actor.uid,
+            actorName: actor.displayName,
+            action: 'status_change',
+            domainEvent: 'job.unrepairable',
+            eventSchemaVersion: 1,
+            statusBefore: String(job.status || ''),
+            statusAfter: status,
+            note: reason,
+        });
+        return { ok: true, status };
+    }
     await ref.update({
         status,
         statusHistory: history,
         updatedAt: at,
-        ...(status === 'ready' || status === 'unrepairable' ? { resolvedAt: at } : {}),
-        ...(status === 'unrepairable' ? { closedReason: reason } : {}),
+        resolvedAt: at,
     });
     await ref.collection('service_events').add({
         tenantId: actor.tenantId,
@@ -285,7 +372,7 @@ const changeTechnicalStatus = async (actor, data) => {
         actorUid: actor.uid,
         actorName: actor.displayName,
         action: 'status_change',
-        domainEvent: status === 'ready' ? 'job.ready' : 'job.status_changed',
+        domainEvent: 'job.ready',
         eventSchemaVersion: 1,
         statusBefore: String(job.status || ''),
         statusAfter: status,
@@ -331,7 +418,15 @@ const loadPartsCatalog = async (actor, data) => {
     ]);
     const centralWarehouse = centralWarehouses.docs.find((row) => row.data().isActive !== false);
     const balanceId = (warehouseId, materialId) => `${warehouseId}__material__${materialId}`;
-    const active = materialsSnap.docs.filter((row) => row.data().isActive !== false);
+    const active = materialsSnap.docs.filter((row) => {
+        const data = row.data();
+        if (data.isActive === false)
+            return false;
+        // Missing flag = available (backward compatible with manufacturing materials).
+        if (data.availableForSpareParts === false)
+            return false;
+        return true;
+    });
     const refs = active.flatMap((row) => [
         ...(centerWarehouseId ? [db.collection('stock_items').doc(balanceId(centerWarehouseId, row.id))] : []),
         ...(centralWarehouse?.id ? [db.collection('stock_items').doc(balanceId(centralWarehouse.id, row.id))] : []),

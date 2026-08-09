@@ -88,6 +88,24 @@ const badgeSources = {
     const rows = await productionIssueService.getAll();
     return rows.filter((row) => row.status === 'requested').length;
   },
+  pendingSparePartsReplenishmentCentral: async (): Promise<number> => {
+    const { sparePartsReplenishmentService } = await import(
+      '../modules/inventory/services/sparePartsReplenishmentService'
+    );
+    return sparePartsReplenishmentService.countCentralPending();
+  },
+  pendingSparePartsReplenishmentReceive: async (): Promise<number> => {
+    const { sparePartsReplenishmentService } = await import(
+      '../modules/inventory/services/sparePartsReplenishmentService'
+    );
+    return sparePartsReplenishmentService.countAwaitingReceive();
+  },
+  pendingRepairSpareIssues: async (): Promise<number> => {
+    const { repairSpareIssueService } = await import(
+      '../modules/repair/services/repairSpareIssueService'
+    );
+    return repairSpareIssueService.countPending();
+  },
 };
 
 // ─── Menu Groups ────────────────────────────────────────────────────────────
@@ -121,8 +139,23 @@ export const MENU_CONFIG: MenuGroup[] = [
     children: [
       { key: 'catalog-products', label: 'المنتجات', icon: 'inventory_2', path: '/products', permission: 'products.view', activePatterns: ['/products/'] },
       { key: 'catalog-categories', label: 'الفئات', icon: 'category', path: '/catalog/categories', permission: 'catalog.categories.view' },
-      { key: 'manufacturing-materials', label: 'المواد التصنيعية', icon: 'precision_manufacturing', path: '/manufacturing/materials', permission: 'materials.view' },
-      { key: 'manufacturing-material-categories', label: 'فئات المواد', icon: 'category', path: '/manufacturing/material-categories', permission: 'materials.manage' },
+      {
+        key: 'manufacturing-materials',
+        label: 'المواد التصنيعية',
+        icon: 'precision_manufacturing',
+        path: '/manufacturing/materials',
+        permission: 'materials.view',
+        // Repair front desk uses center spare-parts stock — not the manufacturing materials master.
+        excludeRoleKeys: ['repair_reception', 'repair_technician'],
+      },
+      {
+        key: 'manufacturing-material-categories',
+        label: 'فئات المواد',
+        icon: 'category',
+        path: '/manufacturing/material-categories',
+        permission: 'materials.manage',
+        excludeRoleKeys: ['repair_reception', 'repair_technician'],
+      },
     ],
   },
   {
@@ -157,8 +190,9 @@ export const MENU_CONFIG: MenuGroup[] = [
         icon: 'package_2',
         path: '/production/packaging/control',
         permission: 'reports.view',
-        anyOfPermissions: ['reports.view', 'reports.packaging.create', 'inventory.view'],
-        excludeRoleKeys: ['materials_warehouse'],
+        // Production packaging only — not generic inventory.view (repair reception has that for spare parts).
+        anyOfPermissions: ['reports.view', 'reports.packaging.create'],
+        excludeRoleKeys: ['materials_warehouse', 'repair_reception', 'repair_technician'],
         activePatterns: ['/production/packaging/', '/inventory/packaging/'],
       },
       { key: 'lines', label: 'خطوط الإنتاج', icon: 'precision_manufacturing', path: '/lines', permission: 'lines.view', activePatterns: ['/lines/'] },
@@ -245,6 +279,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         permission: 'sparePartsReplenishment.view',
         // Central warehouse operators only — center create/receive lives under /repair/parts.
         anyOfPermissions: ['sparePartsReplenishment.prepare', 'sparePartsReplenishment.approve', 'inventory.view'],
+        badgeSource: badgeSources.pendingSparePartsReplenishmentCentral,
       },
       {
         key: 'inv-spare-parts-in',
@@ -399,8 +434,17 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'repair-payments', label: 'التحصيل والتسليم', icon: 'payments', path: '/repair/payments', permission: 'repair.payments.view' },
       { key: 'repair-call-center', label: 'مركز الاتصال', icon: 'call', path: '/repair/call-center', permission: 'repair.view' },
       { key: 'repair-customer-requests', label: 'طلبات العملاء', icon: 'assignment', path: '/repair/customer-requests', permission: 'repair.customerRequests.view', anyOfPermissions: ['repair.customerRequests.view', 'repair.customerRequests.assign', 'repair.customerRequests.receive'] },
-      { key: 'repair-custody-stock', label: 'عهدة أجهزة العملاء', icon: 'inventory', path: '/repair/custody-stock', permission: 'repair.custody.view', anyOfPermissions: ['repair.custody.view', 'repair.custody.record', 'repair.custody.handover'] },
-      { key: 'repair-unrepairable-stock', label: 'غير القابل للإصلاح', icon: 'warehouse', path: '/repair/unrepairable-stock', permission: 'repair.custody.view', anyOfPermissions: ['repair.custody.view', 'repair.custody.record', 'repair.custody.handover'] },
+      {
+        key: 'repair-custody-stock',
+        label: 'عهدة أجهزة العملاء',
+        icon: 'inventory',
+        path: '/repair/custody-stock',
+        permission: 'repair.custody.view',
+        // Warehouse ops only — `repair.custody.record` is workshop marking, not stock screens.
+        anyOfPermissions: ['repair.custody.view', 'repair.custody.handover'],
+        excludeRoleKeys: ['repair_technician'],
+        activePatterns: ['/repair/custody-stock', '/repair/unrepairable-stock'],
+      },
       { key: 'repair-replacements', label: 'طلبات الاستبدال', icon: 'swap_horiz', path: '/repair/replacements', permission: 'repair.replacements.view', anyOfPermissions: ['repair.replacements.view', 'repair.replacements.create', 'repair.replacements.approve', 'repair.replacements.deliver'] },
       { key: 'repair-technician-home', label: 'لوحة الفني', icon: 'engineering', path: '/repair/technician', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
       { key: 'repair-my-jobs', label: 'طلباتي (فني)', icon: 'engineering', path: '/repair/my-jobs', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
@@ -409,16 +453,16 @@ export const MENU_CONFIG: MenuGroup[] = [
       {
         key: 'repair-parts-replenishment', label: 'متابعة التموين', icon: 'local_shipping', path: '/repair/parts-replenishment', permission: 'sparePartsReplenishment.view',
         anyOfPermissions: ['sparePartsReplenishment.view', 'sparePartsReplenishment.create', 'sparePartsReplenishment.receive'],
+        badgeSource: badgeSources.pendingSparePartsReplenishmentReceive,
       },
       {
-        key: 'repair-parts-recall',
-        label: 'تأكيد سحب للرئيسي',
-        icon: 'keyboard_return',
-        path: '/inventory/spare-parts-recall',
-        permission: 'sparePartsRecall.view',
-        anyOfPermissions: ['sparePartsRecall.view', 'sparePartsRecall.confirm'],
+        key: 'repair-spare-issues',
+        label: 'سندات صرف قطع الغيار',
+        icon: 'assignment_turned_in',
+        path: '/repair/spare-issues',
+        permission: 'repairSpareIssues.view',
+        badgeSource: badgeSources.pendingRepairSpareIssues,
       },
-      { key: 'repair-spare-issues', label: 'سندات صرف قطع الغيار', icon: 'assignment_turned_in', path: '/repair/spare-issues', permission: 'repairSpareIssues.view' },
       { key: 'repair-sales-invoice', label: 'فواتير بيع القطع', icon: 'receipt_long', path: '/repair/sales-invoice', permission: 'repair.salesInvoice.create' },
       { key: 'repair-complaints', label: 'الشكاوى', icon: 'report', path: '/repair/complaints', permission: 'repair.complaints.view' },
       { key: 'repair-treasury', label: 'الخزينة', icon: 'account_balance_wallet', path: '/repair/treasury', permission: 'repair.treasury.view' },

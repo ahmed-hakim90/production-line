@@ -48,6 +48,12 @@ assert.match(
 );
 assert.match(pageSource, /warehouseLocationService\.remove/, 'shelf row must support hard delete');
 assert.match(pageSource, /حذف الرف/, 'delete confirm must mention shelf deletion');
+assert.match(pageSource, /كود اللوكيشن/, 'location Excel import must support explicit location code column');
+assert.match(
+  pageSource,
+  /code:\s*row\.mode === 'single' \? row\.locationCode : undefined/,
+  'import must pass custom location code on single-shelf rows',
+);
 
 assert.match(serviceSource, /async remove\(id: string\)/, 'location service must expose remove()');
 assert.match(

@@ -160,8 +160,10 @@ async function buildLines(productId: string, quantity: number, warehouseId: stri
   const byItem = new Map<string, ProductionIssueOrderLine>();
   for (const item of items) {
     if (item.itemType !== 'material') continue;
-    const stockLine = await resolveMaterialStockLine(item.itemId, item.itemName || '');
     const qtyPerUnit = Number(item.qtyPerUnit || 0);
+    // Catalog-only spare lines (qty 0) are not issued on production floors.
+    if (!(qtyPerUnit > 0)) continue;
+    const stockLine = await resolveMaterialStockLine(item.itemId, item.itemName || '');
     const wastePercent = Number(item.wastePercent || 0);
     const baseRequiredQty = qtyPerUnit * quantity;
     const plannedWasteQty = baseRequiredQty * (wastePercent / 100);

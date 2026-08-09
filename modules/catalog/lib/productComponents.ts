@@ -1,6 +1,7 @@
 import type { RawMaterial } from '../../inventory/types';
 import type { BomItem, Material, MaterialUnit } from '../../manufacturing/types';
 import { MATERIAL_UNIT_LABELS, normalizeLegacyUnit } from '../../manufacturing/types';
+import { isMaterialAvailableForSpareParts } from '../../manufacturing/utils/isMaterialAvailableForSpareParts';
 import type { ProductMaterial } from '../../../types';
 
 /**
@@ -236,4 +237,28 @@ export async function loadAllCatalogMaterials(): Promise<CatalogComponent[]> {
   const { materialService } = await import('../../manufacturing/services/materialService');
   const materials = await materialService.getAll();
   return materialsToCatalogComponents(materials);
+}
+
+/** Active materials allowed to appear as repair spare parts. */
+export async function loadSparePartsCatalogMaterials(): Promise<CatalogComponent[]> {
+  const { materialService } = await import('../../manufacturing/services/materialService');
+  const materials = await materialService.getAll();
+  return materialsToCatalogComponents(
+    materials.filter((material) => isMaterialAvailableForSpareParts(material)),
+  );
+}
+
+export function filterCatalogComponentsForSpareParts(
+  components: CatalogComponent[],
+  materials: Material[],
+): CatalogComponent[] {
+  const byId = new Map(
+    materials.filter((m) => m.id).map((m) => [String(m.id), m] as const),
+  );
+  return components.filter((component) => {
+    if (component.itemType === 'legacy_raw') return true;
+    const material = byId.get(component.materialId);
+    if (!material) return true;
+    return isMaterialAvailableForSpareParts(material);
+  });
 }
