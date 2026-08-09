@@ -64,10 +64,28 @@ export function canAccessMenuItem(
 
 const badgeSources = {
   pendingApprovals: async (): Promise<number> => {
-    const { approvalRequestsRef } = await import('../modules/hr/collections');
-    const { getDocs, query, where } = await import('firebase/firestore');
-    const q = query(approvalRequestsRef(), where('status', 'in', ['pending', 'in_progress', 'escalated']));
-    return (await getDocs(q)).size;
+    const { countActionableApprovalsForCurrentUser } = await import(
+      '../modules/hr/approval/countActionableApprovalsBadge'
+    );
+    return countActionableApprovalsForCurrentUser();
+  },
+  pendingLeaveApprovals: async (): Promise<number> => {
+    const { countActionableApprovalsForCurrentUser } = await import(
+      '../modules/hr/approval/countActionableApprovalsBadge'
+    );
+    return countActionableApprovalsForCurrentUser('leave');
+  },
+  pendingLoanApprovals: async (): Promise<number> => {
+    const { countActionableApprovalsForCurrentUser } = await import(
+      '../modules/hr/approval/countActionableApprovalsBadge'
+    );
+    return countActionableApprovalsForCurrentUser('loan');
+  },
+  activeSupplyCycles: async (): Promise<number> => {
+    const { supplyCycleService } = await import(
+      '../modules/production/services/supplyCycleService'
+    );
+    return supplyCycleService.countActive();
   },
   draftPayroll: async (): Promise<number> => {
     const { payrollMonthsRef } = await import('../modules/hr/payroll/collections');
@@ -286,7 +304,15 @@ export const MENU_CONFIG: MenuGroup[] = [
         activePathExcludePrefixes: ['/production/routing/analytics', '/production/routing/execution'],
       },
       { key: 'routing-analytics', label: 'تحليلات المسارات', icon: 'analytics', path: '/production/routing/analytics', permission: 'routing.analytics' },
-      { key: 'supply-cycles', label: 'دورات التوريد', icon: 'inventory', path: '/supply-cycles', permission: 'supplyCycles.view', activePatterns: ['/supply-cycles/'] },
+      {
+        key: 'supply-cycles',
+        label: 'دورات التوريد',
+        icon: 'inventory',
+        path: '/supply-cycles',
+        permission: 'supplyCycles.view',
+        activePatterns: ['/supply-cycles/'],
+        badgeSource: badgeSources.activeSupplyCycles,
+      },
       { key: 'material-planning-run', label: 'تخطيط احتياجات المواد', icon: 'checklist', path: '/manufacturing/planning-run', permission: 'planning.materialRequirements.view' },
       { key: 'purchase-gap', label: 'فجوة الشراء', icon: 'shopping_cart', path: '/manufacturing/purchase-gap', permission: 'manufacturing.purchaseGap.view' },
       { key: 'component-waste-reports', label: 'تقرير هالك المكونات', icon: 'report_problem', path: '/component-waste-reports', permission: 'reports.componentWaste.create' },
@@ -421,9 +447,30 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'employees', label: 'الموظفين', icon: 'groups', path: '/hr/employees', permission: 'employees.view', activePatterns: ['/hr/employees/'] },
       { key: 'org', label: 'الهيكل التنظيمي', icon: 'account_tree', path: '/hr/organization', permission: 'hrSettings.view' },
       { key: 'self-svc', label: 'الخدمة الذاتية', icon: 'person', path: '/hr/self-service', permission: 'selfService.view' },
-      { key: 'leaves', label: 'الإجازات', icon: 'beach_access', path: '/hr/leave-requests', permission: 'leave.view' },
-      { key: 'loans', label: 'السُلف', icon: 'payments', path: '/hr/loan-requests', permission: 'loan.view' },
-      { key: 'approvals', label: 'مركز الموافقات', icon: 'fact_check', path: '/hr/approval-center', permission: 'approval.view', badgeSource: badgeSources.pendingApprovals },
+      {
+        key: 'leaves',
+        label: 'الإجازات',
+        icon: 'beach_access',
+        path: '/hr/leave-requests',
+        permission: 'leave.view',
+        badgeSource: badgeSources.pendingLeaveApprovals,
+      },
+      {
+        key: 'loans',
+        label: 'السُلف',
+        icon: 'payments',
+        path: '/hr/loan-requests',
+        permission: 'loan.view',
+        badgeSource: badgeSources.pendingLoanApprovals,
+      },
+      {
+        key: 'approvals',
+        label: 'مركز الموافقات',
+        icon: 'fact_check',
+        path: '/hr/approval-center',
+        permission: 'approval.view',
+        badgeSource: badgeSources.pendingApprovals,
+      },
       { key: 'delegations', label: 'التفويضات', icon: 'swap_horiz', path: '/hr/delegations', permission: 'approval.delegate' },
       { key: 'att-daily', label: 'الحضور اليومي', icon: 'fact_check', path: '/hr/attendance/daily', permission: 'attendance.view' },
       { key: 'att-logs', label: 'السجلات الخام', icon: 'event_note', path: '/hr/attendance/logs', permission: 'attendance.view' },

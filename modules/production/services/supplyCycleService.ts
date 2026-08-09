@@ -4,6 +4,7 @@ import {
   addDoc,
   updateDoc,
   deleteDoc,
+  getCountFromServer,
   getDocs,
   getDoc,
   where,
@@ -232,6 +233,29 @@ export const supplyCycleService = {
     const q = tenantQuery(db, CYCLES, orderBy('createdAt', 'desc'));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SupplyCycle));
+  },
+
+  /** Sidebar badge: draft + open cycles that still need operator attention. */
+  async countActive(): Promise<number> {
+    if (!isConfigured) return 0;
+    try {
+      const [draftSnap, openSnap] = await Promise.all([
+        getCountFromServer(tenantQuery(db, CYCLES, where('status', '==', 'draft'))),
+        getCountFromServer(tenantQuery(db, CYCLES, where('status', '==', 'open'))),
+      ]);
+      return draftSnap.data().count + openSnap.data().count;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return 0;
+      console.error('supplyCycle.countActive failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      try {
+        return (await this.list()).filter((row) => row.status === 'draft' || row.status === 'open').length;
+      } catch {
+        return 0;
+      }
+    }
   },
 
   /**
