@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, KPIBox, Badge, Button, SearchableSelect } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
+import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
 import { getDocs } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { useAppStore } from '@/store/useAppStore';
@@ -943,84 +944,121 @@ export const HRDashboard: React.FC = () => {
     { key: 'leave' as const, label: 'إجازة', icon: 'beach_access', color: 'sky' },
   ];
 
-  if (loading) {
+  const hero = useMemo(
+    () => [
+      {
+        key: 'employees',
+        label: 'الموظفون النشطون',
+        value: formatNumber(empKpis.active),
+        meta: empKpis.inactive > 0 ? `${empKpis.inactive} غير نشط` : undefined,
+      },
+      {
+        key: 'present',
+        label: 'حاضرون اليوم',
+        value: formatNumber(attKpis.todayPresent),
+        accent: true,
+      },
+      {
+        key: 'absent',
+        label: 'غياب اليوم',
+        value: formatNumber(attKpis.todayAbsent),
+        toneClassName: attKpis.todayAbsent > 0 ? 'ops-dash-kpi-card--warn' : undefined,
+      },
+      {
+        key: 'late',
+        label: 'متأخرون اليوم',
+        value: formatNumber(attKpis.todayLate),
+        toneClassName: attKpis.todayLate > 0 ? 'ops-dash-kpi-card--warn' : undefined,
+      },
+      {
+        key: 'leave-pending',
+        label: 'إجازات معلقة',
+        value: formatNumber(leaveKpis.pending),
+        meta: loanKpis.pending > 0 ? `${loanKpis.pending} سلفة معلقة` : undefined,
+      },
+      {
+        key: 'approvals',
+        label: 'موافقات بانتظاري',
+        value: formatNumber(pendingApprovals),
+        accent: pendingApprovals > 0,
+      },
+    ],
+    [empKpis, attKpis, leaveKpis.pending, loanKpis.pending, pendingApprovals],
+  );
+
+  if (loading && employees.length === 0) {
     return <PageContentSkeleton variant="dashboard" kpiCount={6} />;
   }
 
   const inputCls = 'w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] px-3 py-2.5 text-sm font-medium bg-[var(--color-card)] outline-none focus:ring-2 focus:ring-primary/20 transition-shadow';
+  const todayLabel = new Date().toLocaleDateString('ar-EG', {
+    weekday: 'long',
+    year: 'numeric',
+    month: 'long',
+    day: 'numeric',
+  });
 
   return (
-    <div className="space-y-8">
-
-      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
-          HEADER — Title + Search + Quick Action Toolbar
-      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
-      <div className="space-y-4">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          {/* Title */}
-          <div>
-            <h2 className="text-2xl sm:text-3xl font-bold text-[var(--color-text)] flex items-center gap-2">
-              <span className="material-icons-round text-primary text-3xl">monitoring</span>
-              لوحة الموارد البشرية
-            </h2>
-            <p className="text-sm text-[var(--color-text-muted)] mt-1">
-              نظرة شاملة — {new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
-            </p>
-          </div>
-
-          {/* Search + Quick Actions toolbar */}
-          <div className="flex flex-wrap items-center gap-2">
-            {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
-            <Button
+    <DomainHomeShell
+      denseHero
+      eyebrow="الموارد البشرية"
+      hero={hero}
+      rangeLabel={todayLabel}
+      onRefresh={() => {
+        invalidatePageDataCache(DASHBOARD_CACHE_KEY);
+        void fetchData({ force: true });
+      }}
+      refreshing={loading}
+      secondarySummary="إجراءات وبحث سريع"
+      secondary={(
+        <div className="flex flex-wrap items-center gap-2">
+          {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SHIFT_RULES)}
+            data-modal-key={MODAL_KEYS.ATTENDANCE_SHIFT_RULES}
+          >
+            قواعد الوردية
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX)}
+            data-modal-key={MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX}
+          >
+            إشعار توقيع
+          </Button>
+          {qaActions.map((a) => (
+            <button
+              key={a.key}
               type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SHIFT_RULES)}
-              data-modal-key={MODAL_KEYS.ATTENDANCE_SHIFT_RULES}
+              onClick={() => { setQaOpen(qaOpen === a.key ? '' : a.key); resetQa(); setQaStaged([]); }}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all
+                ${qaOpen === a.key
+                  ? `ring-2 ring-${a.color}-400/40 bg-${a.color}-100 dark:bg-${a.color}-900/30 text-${a.color}-700 dark:text-${a.color}-300 border-${a.color}-300 dark:border-${a.color}-700`
+                  : `bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-${a.color}-300 hover:text-${a.color}-600`
+                }`}
+              title={a.label}
             >
-              قواعد الوردية
-            </Button>
-            <Button
-              type="button"
-              size="sm"
-              variant="ghost"
-              onClick={() => openModal(MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX)}
-              data-modal-key={MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX}
-            >
-              إشعار توقيع
-            </Button>
-            {/* Quick Action buttons */}
-            {qaActions.map((a) => (
-              <button
-                key={a.key}
-                onClick={() => { setQaOpen(qaOpen === a.key ? '' : a.key); resetQa(); setQaStaged([]); }}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all
-                  ${qaOpen === a.key
-                    ? `ring-2 ring-${a.color}-400/40 bg-${a.color}-100 dark:bg-${a.color}-900/30 text-${a.color}-700 dark:text-${a.color}-300 border-${a.color}-300 dark:border-${a.color}-700`
-                    : `bg-[var(--color-card)] text-[var(--color-text-muted)] border-[var(--color-border)] hover:border-${a.color}-300 hover:text-${a.color}-600`
-                  }`}
-                title={a.label}
-              >
-                <span className="material-icons-round text-base">{a.icon}</span>
-                <span className="hidden sm:inline">{a.label}</span>
-              </button>
-            ))}
-            {/* Divider */}
-            <div className="w-px h-8 bg-slate-200 mx-1 hidden sm:block" />
-            {/* Search */}
-            <div className="w-56 sm:w-64">
-              <SearchableSelect
-                options={empOptions}
-                value=""
-                onChange={(val) => { if (val) navigate(`/hr/employees/${val}`); }}
-                placeholder="بحث بالاسم أو الكود..."
-              />
-            </div>
+              <span className="material-icons-round text-base">{a.icon}</span>
+              <span>{a.label}</span>
+            </button>
+          ))}
+          <div className="w-full sm:w-64 min-w-[12rem]">
+            <SearchableSelect
+              options={empOptions}
+              value=""
+              onChange={(val) => { if (val) navigate(`/hr/employees/${val}`); }}
+              placeholder="بحث بالاسم أو الكود..."
+            />
           </div>
         </div>
-
-      </div>
-
+      )}
+      dir="rtl"
+    >
       {/* â”€â”€ Quick Action Dialogs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {qaOpen && (
         <div className="erp-modal-overlay" onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }}>
@@ -1687,66 +1725,6 @@ export const HRDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
-          CRITICAL ALERTS ROW
-      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <button
-          onClick={() => navigate('/hr/approval-center')}
-          className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
-        >
-          <div className="w-10 h-10 mx-auto mb-2 bg-amber-100 rounded-[var(--border-radius-base)] flex items-center justify-center">
-            <span className="material-icons-round text-amber-600 text-xl">pending_actions</span>
-          </div>
-          <p className="text-2xl font-bold text-[var(--color-text)]">{leaveKpis.pending + loanKpis.pending}</p>
-          <p className="text-[11px] text-[var(--color-text-muted)] font-medium">موافقات معلقة</p>
-        </button>
-        <button
-          onClick={() => navigate('/hr/attendance/logs')}
-          className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
-        >
-          <div className="w-10 h-10 mx-auto mb-2 bg-rose-100 rounded-[var(--border-radius-base)] flex items-center justify-center">
-            <span className="material-icons-round text-rose-600 text-xl">person_off</span>
-          </div>
-          <p className="text-2xl font-bold text-[var(--color-text)]">{attKpis.todayAbsent}</p>
-          <p className="text-[11px] text-[var(--color-text-muted)] font-medium">غياب اليوم</p>
-        </button>
-        <button
-          onClick={() => navigate('/hr/attendance/logs')}
-          className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
-        >
-          <div className="w-10 h-10 mx-auto mb-2 bg-orange-100 dark:bg-orange-900/30 rounded-[var(--border-radius-base)] flex items-center justify-center">
-            <span className="material-icons-round text-orange-600 dark:text-orange-400 text-xl">schedule</span>
-          </div>
-          <p className="text-2xl font-bold text-[var(--color-text)]">{attKpis.todayLate}</p>
-          <p className="text-[11px] text-[var(--color-text-muted)] font-medium">تأخير اليوم</p>
-        </button>
-        <button
-          onClick={() => navigate('/hr/payroll')}
-          className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-4 text-center hover:shadow-md transition-shadow group"
-        >
-          <div className={`w-10 h-10 mx-auto mb-2 rounded-[var(--border-radius-base)] flex items-center justify-center ${
-            payrollStatus === 'draft' ? 'bg-orange-100 dark:bg-orange-900/30' :
-            payrollStatus === 'finalized' ? 'bg-emerald-100' :
-            payrollStatus === 'locked' ? 'bg-blue-100' :
-            'bg-[#f0f2f5]'
-          }`}>
-            <span className={`material-icons-round text-xl ${
-              payrollStatus === 'draft' ? 'text-orange-600 dark:text-orange-400' :
-              payrollStatus === 'finalized' ? 'text-emerald-600' :
-              payrollStatus === 'locked' ? 'text-blue-600' :
-              'text-slate-400'
-            }`}>receipt_long</span>
-          </div>
-          <p className="text-sm font-bold text-[var(--color-text)]">
-            {payrollStatus === 'draft' ? 'مسودة' :
-             payrollStatus === 'finalized' ? 'مُعتمد' :
-             payrollStatus === 'locked' ? 'مقفل' : 'لم يُعد'}
-          </p>
-          <p className="text-[11px] text-[var(--color-text-muted)] font-medium">كشف الرواتب</p>
-        </button>
-      </div>
-
       {/* â”€â”€ Alert Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {alertItems.length > 0 && (
         <div className="flex flex-wrap gap-2">
@@ -1766,22 +1744,6 @@ export const HRDashboard: React.FC = () => {
           ))}
         </div>
       )}
-
-      {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
-          SECTION 1 — الحالة اليومية (Daily Status)
-      â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
-      <section>
-        <h3 className="text-lg font-bold text-[var(--color-text)] mb-4 flex items-center gap-2">
-          <span className="material-icons-round text-primary text-xl">today</span>
-          الحالة اليومية
-        </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <KPIBox label="إجمالي الموظفين" value={empKpis.active} icon="groups" colorClass="bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400" />
-          <KPIBox label="حاضرين اليوم" value={attKpis.todayPresent} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600" />
-          <KPIBox label="غياب اليوم" value={attKpis.todayAbsent} icon="cancel" colorClass="bg-rose-100 text-rose-600" />
-          <KPIBox label="متأخرين اليوم" value={attKpis.todayLate} icon="schedule" colorClass="bg-amber-100 text-amber-600" />
-        </div>
-      </section>
 
       {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
           SECTION 2 — مؤشرات شهرية (Monthly Overview)
@@ -2130,7 +2092,7 @@ export const HRDashboard: React.FC = () => {
         </div>
       </section>
 
-    </div>
+    </DomainHomeShell>
   );
 };
 
