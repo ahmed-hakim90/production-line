@@ -134,7 +134,6 @@ import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import {
   getInjectionShiftLabel,
   INJECTION_SHIFT_OPTIONS,
-  isDuplicateProductionReport,
   isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../utils/injectionReportShift';
@@ -2518,15 +2517,20 @@ export const Reports: React.FC = () => {
       excludeReportId?: string | null,
     ) => {
       if (resolveReportType(payload.reportType) === 'packaging') return false;
-      const sameDayReports = await reportService.getByDateRange(payload.date, payload.date);
-      const candidate = {
-        ...payload,
-        reportType: resolveReportType(payload.reportType),
-        shift: resolveReportType(payload.reportType) === 'component_injection' && isInjectionShiftSelected(payload.shift)
-          ? payload.shift
-          : undefined,
-      };
-      return sameDayReports.some((r) => isDuplicateProductionReport(r, candidate, excludeReportId));
+      const reportType = resolveReportType(payload.reportType);
+      return reportService.hasConflictingUniqueKey(
+        {
+          date: payload.date,
+          lineId: payload.lineId,
+          employeeId: payload.employeeId,
+          productId: payload.productId,
+          reportType,
+          shift: reportType === 'component_injection' && isInjectionShiftSelected(payload.shift)
+            ? payload.shift
+            : undefined,
+        },
+        excludeReportId,
+      );
     },
     [],
   );

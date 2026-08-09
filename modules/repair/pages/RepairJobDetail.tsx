@@ -52,7 +52,7 @@ import { resolveRepairJobPaymentCloseState } from '../lib/repairJobPaymentClose'
 import { isManufacturerWarrantyJob, isWarrantySettlementAuth } from '../lib/repairManufacturerWarranty';
 import { formatRepairApprovalRequestMessage } from '../utils/whatsappRepairMessage';
 import { RepairJobPrint } from '../components/RepairJobPrint';
-import { RepairJobProductCardPrint } from '../components/RepairJobProductCardPrint';
+import { RepairJobIntakePrintBundle } from '../components/RepairJobIntakePrintBundle';
 import { DeliveryReceiptPDF } from '../components/DeliveryReceiptPDF';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import { isReadyToIssueUsage } from '../lib/repairPartFulfillment';
@@ -205,22 +205,18 @@ export const RepairJobDetail: React.FC = () => {
   const [opsReasonCode, setOpsReasonCode] = useState('');
   const [opsBusy, setOpsBusy] = useState(false);
   const printRef = useRef<HTMLDivElement>(null);
-  const productCardPrintRef = useRef<HTMLDivElement>(null);
+  const intakeBundlePrintRef = useRef<HTMLDivElement>(null);
   const deliveryAuthorizationPrintRef = useRef<HTMLDivElement>(null);
   const printTemplate = systemSettings?.printTemplate;
-  const productCardPrintSettings = useMemo(
+  const intakeBundlePrintSettings = useMemo(
     () => ({ ...DEFAULT_PRINT_TEMPLATE, ...printTemplate, paperSize: 'a5' as const }),
     [printTemplate],
   );
-  const handlePrintReceipt = useManagedPrint({
-    contentRef: printRef,
-    printSettings: printTemplate,
-    documentTitle: job ? `ايصال-استلام-${job.receiptNo}` : 'ايصال-استلام',
-  });
-  const handlePrintProductCards = useManagedPrint({
-    contentRef: productCardPrintRef,
-    printSettings: productCardPrintSettings,
-    documentTitle: job ? `كارت-صيانة-داخلي-${job.receiptNo}` : 'كارت-صيانة-داخلي',
+  /** إيصال العميل (صفحة 1) + كارت داخلي (صفحة 2) في أمر طباعة واحد. */
+  const handlePrintIntakeBundle = useManagedPrint({
+    contentRef: intakeBundlePrintRef,
+    printSettings: intakeBundlePrintSettings,
+    documentTitle: job ? `ايصال-وكارت-${job.receiptNo}` : 'ايصال-وكارت-صيانة',
   });
   const handlePrintDeliveryAuthorization = useManagedPrint({
     contentRef: deliveryAuthorizationPrintRef,
@@ -1483,28 +1479,14 @@ export const RepairJobDetail: React.FC = () => {
                 variant="outline"
                 size="sm"
                 className="min-h-9 gap-1.5 font-semibold"
-                iconName="receipt_long"
+                iconName="print"
                 tone="print"
                 solid={false}
-                title="طباعة إيصال العميل"
-                onClick={() => handlePrintReceipt()}
+                title="طباعة إيصال العميل والكارت الداخلي (كل واحد في صفحة)"
+                onClick={() => handlePrintIntakeBundle()}
               >
-                <span className="hidden sm:inline">إيصال العميل</span>
-                <span className="sm:hidden">إيصال</span>
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="min-h-9 gap-1.5 font-semibold"
-                iconName="badge"
-                tone="print"
-                solid={false}
-                title="طباعة كارت الصيانة الداخلي"
-                onClick={() => handlePrintProductCards()}
-              >
-                <span className="hidden sm:inline">كارت داخلي</span>
-                <span className="sm:hidden">داخلي</span>
+                <span className="hidden sm:inline">طباعة الإيصال والكارت</span>
+                <span className="sm:hidden">طباعة</span>
               </Button>
             </div>
           )}
@@ -2116,30 +2098,20 @@ export const RepairJobDetail: React.FC = () => {
           <DialogHeader>
             <DialogTitle>طباعة بعد الاستلام</DialogTitle>
             <DialogDescription>
-              اطبع كارتًا داخليًا واحدًا للطلب بكل منتجاته مع QR، وإيصال العميل للتوقيع.
+              طباعة واحدة: إيصال العميل في الصفحة الأولى، والكارت الداخلي (A5) بكل المنتجات وQR في الصفحة الثانية.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-2 sm:flex-row">
+          <div className="flex flex-col gap-2">
             <Button
               type="button"
-              className="flex-1"
+              className="w-full"
+              iconName="print"
               onClick={() => {
                 setIntakePrintOpen(false);
-                handlePrintProductCards();
+                handlePrintIntakeBundle();
               }}
             >
-              طباعة كارت طلب الصيانة الداخلي (A5)
-            </Button>
-            <Button
-              type="button"
-              variant="secondary"
-              className="flex-1"
-              onClick={() => {
-                setIntakePrintOpen(false);
-                handlePrintReceipt();
-              }}
-            >
-              طباعة إيصال العميل
+              طباعة الإيصال والكارت الداخلي
             </Button>
           </div>
           <DialogFooter>
@@ -2219,6 +2191,17 @@ export const RepairJobDetail: React.FC = () => {
 
       {/* Off-screen system print documents — same DOM for print + PDF */}
       <div className="pointer-events-none fixed -left-[10000px] top-0" aria-hidden>
+        <RepairJobIntakePrintBundle
+          ref={intakeBundlePrintRef}
+          job={financialJob}
+          branch={branch}
+          products={jobProducts}
+          trackUrl={trackUrl}
+          workUrl={internalWorkUrl}
+          printSettings={intakeBundlePrintSettings}
+          statusMap={repairSettings.statusMap}
+        />
+        {/* PDF export keeps template paper size (may differ from A5 intake bundle). */}
         <RepairJobPrint
           ref={printRef}
           job={financialJob}
@@ -2226,15 +2209,6 @@ export const RepairJobDetail: React.FC = () => {
           products={jobProducts}
           trackUrl={trackUrl}
           printSettings={printTemplate}
-          statusMap={repairSettings.statusMap}
-        />
-        <RepairJobProductCardPrint
-          ref={productCardPrintRef}
-          job={financialJob}
-          branch={branch}
-          products={jobProducts}
-          printSettings={productCardPrintSettings}
-          workUrl={internalWorkUrl}
           statusMap={repairSettings.statusMap}
         />
         <DeliveryReceiptPDF

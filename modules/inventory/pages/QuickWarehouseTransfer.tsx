@@ -57,9 +57,22 @@ import {
   resolveComponentStockIdentity,
   type ComponentCatalogOption,
 } from '../lib/componentCatalogOptions';
+import { filterManualTransferWarehouses, isSparePartsTransferWarehouseRole } from '../lib/manualTransferWarehouses';
+import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type ItemType = 'finished_good' | 'raw_material';
 const APP_VERSION = __APP_VERSION__;
+const QUICK_TRANSFER_CATALOG_CACHE_KEY = 'inventory:quick-warehouse-transfer-catalog';
+
+type QuickTransferCatalog = {
+  warehouses: Warehouse[];
+  rawMaterials: RawMaterial[];
+  materials: Material[];
+  nextReferenceSeq: number;
+};
 
 export const QuickWarehouseTransfer: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -131,25 +144,55 @@ export const QuickWarehouseTransfer: React.FC = () => {
     documentTitle: 'stock-transfer',
   });
 
-  const loadData = useCallback(async () => {
-    const [whs, rms, mats, peekRef, bals] = await Promise.all([
-      warehouseService.getActiveWarehouses(),
-      rawMaterialService.getAll(),
-      materialService.getAll().catch(() => [] as Material[]),
-      stockService.getNextInvReferenceNo(),
-      stockService.getBalances(),
-    ]);
-    setWarehouses(whs);
-    setRawMaterials(rms.filter((m) => m.isActive !== false));
-    setMaterials(mats.filter((m) => m.isActive !== false));
+  const loadCatalog = useCallback(async () => {
+    const cached = peekPageDataCache<QuickTransferCatalog>(QUICK_TRANSFER_CATALOG_CACHE_KEY);
+    if (cached) {
+      setWarehouses(cached.warehouses);
+      setRawMaterials(cached.rawMaterials);
+      setMaterials(cached.materials);
+      setNextReferenceSeq(cached.nextReferenceSeq);
+    }
+    const { data } = await fetchCachedPageData(
+      QUICK_TRANSFER_CATALOG_CACHE_KEY,
+      async () => {
+        const [whs, rms, mats, peekRef] = await Promise.all([
+          warehouseService.getActiveWarehouses(),
+          rawMaterialService.getAll(),
+          materialService.getAll().catch(() => [] as Material[]),
+          stockService.getNextInvReferenceNo(),
+        ]);
+        const match = peekRef.trim().match(INV_REF_REGEX);
+        return {
+          warehouses: whs,
+          rawMaterials: rms.filter((m) => m.isActive !== false),
+          materials: mats.filter((m) => m.isActive !== false),
+          nextReferenceSeq: match ? Number(match[1] || 0) : 1,
+        } satisfies QuickTransferCatalog;
+      },
+      { maxAgeMs: 60_000 },
+    );
+    setWarehouses(data.warehouses);
+    setRawMaterials(data.rawMaterials);
+    setMaterials(data.materials);
+    setNextReferenceSeq(data.nextReferenceSeq);
+  }, []);
+
+  const loadBalancesForWarehouse = useCallback(async (whId: string) => {
+    if (!whId) {
+      setBalances([]);
+      return;
+    }
+    const bals = await stockService.getBalances(whId);
     setBalances(bals);
-    const match = peekRef.trim().match(INV_REF_REGEX);
-    setNextReferenceSeq(match ? Number(match[1] || 0) : 1);
   }, []);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    void loadCatalog();
+  }, [loadCatalog]);
+
+  useEffect(() => {
+    void loadBalancesForWarehouse(warehouseId);
+  }, [warehouseId, loadBalancesForWarehouse]);
 
   useEffect(() => {
     const queryWarehouseId = searchParams.get('warehouseId') || '';
@@ -165,8 +208,18 @@ export const QuickWarehouseTransfer: React.FC = () => {
   }, [scoped, warehouseIds.join('|'), scopedWarehouseId, searchParams, resolveScopedWarehouseId]);
 
   const fromWarehouseOptions = useMemo(
-    () => filterWarehouses(warehouses),
+    () => filterManualTransferWarehouses(filterWarehouses(warehouses)),
     [filterWarehouses, warehouses],
+  );
+
+  const selectedFromWarehouse = warehouses.find((w) => w.id === warehouseId);
+  const sparePartsTransferContext = isSparePartsTransferWarehouseRole(selectedFromWarehouse?.warehouseRole);
+
+  const toWarehouseOptions = useMemo(
+    () =>
+      filterManualTransferWarehouses(warehouses, { sparePartsOnly: sparePartsTransferContext })
+        .filter((w) => w.id !== warehouseId),
+    [warehouses, warehouseId, sparePartsTransferContext],
   );
 
   const referenceNo = useMemo(() => formatInvReference(nextReferenceSeq), [nextReferenceSeq]);
@@ -218,7 +271,6 @@ export const QuickWarehouseTransfer: React.FC = () => {
   const itemOptions: TransferItemOption[] =
     itemType === 'finished_good' ? finishedGoodOptions : rawMaterialOptions;
 
-  const selectedFromWarehouse = warehouses.find((w) => w.id === warehouseId);
   const selectedToWarehouse = warehouses.find((w) => w.id === toWarehouseId);
 
   const getItemById = useCallback(
@@ -266,13 +318,11 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
   const toWarehouseSelectOptions = useMemo(
     () =>
-      warehouses
-        .filter((w) => w.id !== warehouseId)
-        .map((w) => ({
-          value: w.id || '',
-          label: `${w.name} (${w.code})`,
-        })),
-    [warehouses, warehouseId],
+      toWarehouseOptions.map((w) => ({
+        value: w.id || '',
+        label: `${w.name} (${w.code})`,
+      })),
+    [toWarehouseOptions],
   );
 
   const getAvailableForItem = (lineItemId: string) => {
@@ -427,7 +477,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
     setToWarehouseId('');
     setItemType('finished_good');
     setTransferItems([createTransferLine()]);
-    void loadData();
+    void loadBalancesForWarehouse(warehouseId);
   };
 
   const handleExportPDF = async () => {

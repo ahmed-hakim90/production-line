@@ -297,10 +297,11 @@ export const RepairJobs: React.FC = () => {
         actorUid: userProfile?.id || '',
         actorName: userProfile?.displayName || userProfile?.email || 'مستخدم',
       });
-      await refetch();
       toast.success('تم تحديث حالة الطلب.');
+      void refetch();
     } catch (err: unknown) {
       toast.error(err instanceof Error ? err.message : 'تعذر تحديث الحالة.');
+      void refetch();
     }
   };
 

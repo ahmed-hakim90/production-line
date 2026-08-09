@@ -361,7 +361,7 @@ export const NewRepairJob: React.FC = () => {
         userName: String(user?.displayName || user?.email || 'مستخدم'),
       }));
       if (!result.jobId) throw new Error('تعذر إنشاء الطلب.');
-      toast.success('تم تسجيل طلب الصيانة. يمكنك طباعة كارت الطلب وإيصال العميل.');
+      toast.success('تم تسجيل طلب الصيانة. يمكنك طباعة الإيصال والكارت الداخلي معاً.');
       if (result.usedFallbackReceipt) {
         toast.info('تم استخدام رقم إيصال بديل تلقائيًا بسبب صلاحيات عداد الإيصالات.');
       }

@@ -45,7 +45,8 @@ export default defineConfig(({ mode }) => {
             scope: '/',
             start_url: '/',
             lang: 'ar',
-            orientation: 'portrait-primary',
+            // Allow portrait + landscape (tablets / installed PWA).
+            orientation: 'any',
             icons: [
               {
                 src: '/icons/pwa-icon-192.png',

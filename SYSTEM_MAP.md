@@ -49,7 +49,7 @@
 | Inventory admin | `/inventory/warehouses` hub (role/branch filters) |
 | Repair center / reception | Home `/` → repair ops; mobile repair bottom bar (طلب جديد); replenishment / custody |
 | Repair admin / centers manager | Home `/` → repair admin; mobile repair bottom bar (طلبات / تموين / أداء) |
-| Repair technician | Home `/` → technician portal; mobile bar (لوحتي / طلباتي) |
+| Repair technician | Home `/` → technician portal (mobile cards); mobile bar (لوحتي / طلباتي); job workspace steps: تشخيص → قطع → إنهاء |
 
 ## Repair / spare stock permission keys (workflow)
 

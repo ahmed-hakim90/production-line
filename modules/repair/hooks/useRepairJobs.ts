@@ -132,8 +132,9 @@ export function useRepairJobs(params: {
       return repairJobService.listByBranch(single);
     },
     enabled,
-    refetchInterval: 45_000,
-    staleTime: 20_000,
+    refetchInterval: 90_000,
+    staleTime: 45_000,
+    placeholderData: (previous) => previous,
     retry: 1,
   });
 

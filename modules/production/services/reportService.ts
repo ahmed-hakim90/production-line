@@ -310,6 +310,29 @@ export const reportService = {
     }
   },
 
+  /**
+   * Fast duplicate check via unique-key docs (1–2 reads) instead of scanning the day's reports.
+   * Pass `excludeReportId` when updating an existing report so its own key is ignored.
+   */
+  async hasConflictingUniqueKey(
+    data: Pick<ProductionReport, 'date' | 'lineId' | 'employeeId' | 'productId' | 'reportType' | 'shift'>,
+    excludeReportId?: string | null,
+  ): Promise<boolean> {
+    if (!isConfigured) return false;
+    if (skipsReportUniqueConstraint(data.reportType)) return false;
+    const keys =
+      resolveReportType(data.reportType) === 'component_injection'
+        ? getInjectionUniqueKeysToCheckOnCreate(data)
+        : [buildReportUniqueKey(data)];
+    const snaps = await Promise.all(keys.map((key) => getDoc(doc(db, UNIQUE_COLLECTION, key))));
+    const exclude = String(excludeReportId || '').trim();
+    return snaps.some((snap) => {
+      if (!snap.exists()) return false;
+      if (exclude && String(snap.data()?.reportId || '') === exclude) return false;
+      return true;
+    });
+  },
+
   async create(data: Omit<ProductionReport, 'id' | 'createdAt'>): Promise<string | null> {
     if (!isConfigured) return null;
 

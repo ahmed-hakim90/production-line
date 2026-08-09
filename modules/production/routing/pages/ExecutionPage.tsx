@@ -174,7 +174,8 @@ export const ExecutionPage: React.FC = () => {
       return id;
     },
     onSuccess: (id) => {
-      void qc.invalidateQueries({ queryKey: ['productionRouting'] });
+      void qc.invalidateQueries({ queryKey: ['productionRouting', 'activePlans'] });
+      void qc.invalidateQueries({ queryKey: ['productionRouting', 'execution', id] });
       navigate(`/production/routing/execution/${id}`, { replace: true });
     },
   });
@@ -184,7 +185,9 @@ export const ExecutionPage: React.FC = () => {
       await routingExecutionService.completeExecution(executionId, hourlyRate, uid || undefined);
     },
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['productionRouting'] });
+      void qc.invalidateQueries({ queryKey: ['productionRouting', 'execution', executionId] });
+      void qc.invalidateQueries({ queryKey: ['productionRouting', 'executionSteps', executionId] });
+      void qc.invalidateQueries({ queryKey: ['productionRouting', 'completed'] });
       setPhase('done');
     },
   });

@@ -3130,6 +3130,17 @@ input[type="radio"] {
   --color-primary-hex: #ea580c;
 }
 
+@media (max-width: 1023px) {
+  .erp-repair-theme {
+    --layout-main-padding-y: 0.75rem;
+  }
+
+  .erp-repair-theme .erp-page-head {
+    padding: 0.85rem 0.9rem;
+    margin-bottom: 0.85rem;
+  }
+}
+
 .erp-repair-theme .erp-page-head {
   align-items: flex-start;
   padding: 1.125rem 1.25rem;

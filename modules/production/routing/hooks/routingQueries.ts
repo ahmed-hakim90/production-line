@@ -64,8 +64,12 @@ export function usePublishRoutingPlanMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: routingPlanService.publishNewVersion,
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['productionRouting'] });
+    onSuccess: (data) => {
+      void qc.invalidateQueries({ queryKey: routingQueryKeys.activePlans });
+      if (data?.planId) {
+        void qc.invalidateQueries({ queryKey: routingQueryKeys.plan(data.planId) });
+        void qc.invalidateQueries({ queryKey: routingQueryKeys.steps(data.planId) });
+      }
     },
   });
 }
@@ -74,8 +78,10 @@ export function useSoftDeleteRoutingPlanMutation() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (planId: string) => routingPlanService.softDeletePlan(planId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['productionRouting'] });
+    onSuccess: (_data, planId) => {
+      void qc.invalidateQueries({ queryKey: routingQueryKeys.activePlans });
+      void qc.invalidateQueries({ queryKey: routingQueryKeys.plan(planId) });
+      void qc.invalidateQueries({ queryKey: routingQueryKeys.steps(planId) });
       void useAppStore.getState().fetchRoutingPlanTotals();
     },
   });
@@ -86,8 +92,10 @@ export function useCompleteRoutingExecutionMutation() {
   return useMutation({
     mutationFn: (p: { executionId: string; workerHourRate: number; completedBy?: string }) =>
       routingExecutionService.completeExecution(p.executionId, p.workerHourRate, p.completedBy),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['productionRouting'] });
+    onSuccess: (_data, vars) => {
+      void qc.invalidateQueries({ queryKey: routingQueryKeys.execution(vars.executionId) });
+      void qc.invalidateQueries({ queryKey: routingQueryKeys.executionSteps(vars.executionId) });
+      void qc.invalidateQueries({ queryKey: ['productionRouting', 'completed'] });
     },
   });
 }
@@ -96,9 +104,10 @@ export function useDeleteCompletedRoutingExecutionMutation(limit = 100) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (executionId: string) => routingExecutionService.deleteCompletedExecution(executionId),
-    onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['productionRouting'] });
+    onSuccess: (_data, executionId) => {
+      void qc.invalidateQueries({ queryKey: routingQueryKeys.execution(executionId) });
       void qc.invalidateQueries({ queryKey: routingQueryKeys.completedExecutions(limit) });
+      void qc.invalidateQueries({ queryKey: ['productionRouting', 'completed'] });
     },
   });
 }

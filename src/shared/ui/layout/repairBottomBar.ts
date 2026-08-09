@@ -51,6 +51,11 @@ export function shouldShowRepairBottomBar(checker: PortalPermissionChecker): boo
   return portal === 'repair' || portal === 'repair_technician';
 }
 
+/** Hide chrome bottom nav while technician focuses on a single job workspace. */
+export function isRepairWorkshopFocusPath(logicalPath: string): boolean {
+  return /^\/repair\/jobs\/[^/]+\/workspace\/?$/.test(String(logicalPath || ''));
+}
+
 export function resolveRepairBottomPersona(checker: PortalPermissionChecker): RepairBottomPersona {
   if (resolvePortalKind(checker) === 'repair_technician' || checker.roleKey === 'repair_technician') {
     return 'technician';

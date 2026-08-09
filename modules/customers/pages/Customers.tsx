@@ -154,7 +154,7 @@ export const Customers: React.FC = () => {
         userName: String(user?.displayName || user?.email || 'مستخدم'),
       };
       if (form.id) {
-        await customerService.update(form.id, {
+        const updated = await customerService.update(form.id, {
           code: form.code,
           type: form.type,
           name: form.name,
@@ -165,9 +165,10 @@ export const Customers: React.FC = () => {
           updatedBy: actor.userId,
           updatedByName: actor.userName,
         });
+        setRows((prev) => prev.map((row) => (row.id === updated.id ? updated : row)));
         toast.success('تم تحديث العميل.');
       } else {
-        await customerService.create({
+        const created = await customerService.create({
           code: form.code || undefined,
           type: form.type,
           name: form.name,
@@ -178,10 +179,10 @@ export const Customers: React.FC = () => {
           createdBy: actor.userId,
           createdByName: actor.userName,
         });
+        setRows((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
         toast.success('تم إنشاء العميل.');
       }
       setModalOpen(false);
-      await load();
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر حفظ العميل.');
     } finally {

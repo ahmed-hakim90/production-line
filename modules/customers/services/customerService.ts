@@ -219,6 +219,41 @@ export const customerService = {
     const explicitCode = normalizeCustomerCode(input.code || '');
     const customerRef = doc(collection(db, CUSTOMERS_COLLECTIONS.CUSTOMERS));
 
+    const finishCreate = (code: string): Customer => {
+      const created: Customer = {
+        id: customerRef.id,
+        tenantId,
+        code,
+        type: input.type,
+        name: String(input.name).trim(),
+        phone,
+        phoneDigits,
+        address: input.address?.trim() || '',
+        notes: input.notes?.trim() || '',
+        isActive: input.isActive !== false,
+        followUpStatus: 'none',
+        createdAt: now,
+        updatedAt: now,
+        createdBy: input.createdBy || '',
+        createdByName: input.createdByName || '',
+      };
+      void customerActivityService.record({
+        customerId: customerRef.id,
+        module: 'customers',
+        action: 'customer.created',
+        title: 'إنشاء عميل',
+        summary: `${created.code} — ${created.name}`,
+        actorUid: input.createdBy,
+        actorName: input.createdByName,
+      }).catch(() => undefined);
+      void activityLogService.logCurrentUser('CUSTOMER_CREATE', 'إنشاء عميل', {
+        customerId: customerRef.id,
+        code: created.code,
+        type: created.type,
+      }).catch(() => undefined);
+      return created;
+    };
+
     try {
       if (explicitCode) {
         if (await this.isCodeTaken(explicitCode)) throwDuplicateEntityCode();
@@ -253,78 +288,66 @@ export const customerService = {
             }),
           );
         });
-      } else {
-        const prefix = customerCodePrefixForType(input.type);
-        const counterKey = `customer_${input.type}`;
-        const seedMax = maxCustomerSeqFromCodes(
-          (await this.listAll({ includeInactive: true, max: 2000 })).map((c) => c.code),
-          prefix,
-        );
-        await runTransaction(db, async (tx) => {
-          const allocated = await allocateNextSequentialSuffixInTransaction(
-            tx,
-            counterKey,
-            prefix,
-            CUSTOMER_CODE_PADDING,
-            async () => seedMax,
-            async (nextCode, transaction) => {
-              const claimRef = customerClaimRef(tenantId, nextCode);
-              const claim = await transaction.get(claimRef);
-              if (claim.exists()) throwDuplicateEntityCode();
-              transaction.set(claimRef, {
-                tenantId,
-                entityType: CUSTOMER_ENTITY_TYPE,
-                code: nextCode,
-                ownerId: customerRef.id,
-                ownerCollection: CUSTOMERS_COLLECTIONS.CUSTOMERS,
-                createdAt: now,
-              });
-            },
-          );
-          tx.set(
-            customerRef,
-            stripUndefined({
-              tenantId,
-              code: allocated,
-              type: input.type,
-              name: String(input.name).trim(),
-              phone,
-              phoneDigits,
-              address: input.address?.trim() || '',
-              notes: input.notes?.trim() || '',
-              isActive: input.isActive !== false,
-              createdAt: now,
-              updatedAt: now,
-              createdBy: input.createdBy || '',
-              createdByName: input.createdByName || '',
-            }),
-          );
-        });
+        return finishCreate(explicitCode);
       }
+
+      const prefix = customerCodePrefixForType(input.type);
+      const counterKey = `customer_${input.type}`;
+      const counterRef = doc(db, 'entity_code_counters', `${tenantId}_${counterKey}`);
+      const counterSnap = await getDoc(counterRef);
+      // Only scan existing codes when the counter is missing (first create for this type).
+      const seedMax = counterSnap.exists()
+        ? 0
+        : maxCustomerSeqFromCodes(
+            (await this.listAll({ includeInactive: true, max: 2000 })).map((c) => c.code),
+            prefix,
+          );
+      let allocatedCode = '';
+      await runTransaction(db, async (tx) => {
+        const allocated = await allocateNextSequentialSuffixInTransaction(
+          tx,
+          counterKey,
+          prefix,
+          CUSTOMER_CODE_PADDING,
+          async () => seedMax,
+          async (nextCode, transaction) => {
+            const claimRef = customerClaimRef(tenantId, nextCode);
+            const claim = await transaction.get(claimRef);
+            if (claim.exists()) throwDuplicateEntityCode();
+            transaction.set(claimRef, {
+              tenantId,
+              entityType: CUSTOMER_ENTITY_TYPE,
+              code: nextCode,
+              ownerId: customerRef.id,
+              ownerCollection: CUSTOMERS_COLLECTIONS.CUSTOMERS,
+              createdAt: now,
+            });
+          },
+        );
+        allocatedCode = allocated;
+        tx.set(
+          customerRef,
+          stripUndefined({
+            tenantId,
+            code: allocated,
+            type: input.type,
+            name: String(input.name).trim(),
+            phone,
+            phoneDigits,
+            address: input.address?.trim() || '',
+            notes: input.notes?.trim() || '',
+            isActive: input.isActive !== false,
+            createdAt: now,
+            updatedAt: now,
+            createdBy: input.createdBy || '',
+            createdByName: input.createdByName || '',
+          }),
+        );
+      });
+      return finishCreate(allocatedCode);
     } catch (error) {
       toUserError(error);
     }
-
-    const created = await this.getById(customerRef.id);
-    if (!created) throw new Error('تعذر قراءة العميل بعد الإنشاء.');
-
-    await customerActivityService.record({
-      customerId: customerRef.id,
-      module: 'customers',
-      action: 'customer.created',
-      title: 'إنشاء عميل',
-      summary: `${created.code} — ${created.name}`,
-      actorUid: input.createdBy,
-      actorName: input.createdByName,
-    });
-
-    await activityLogService.logCurrentUser('CUSTOMER_CREATE', 'إنشاء عميل', {
-      customerId: customerRef.id,
-      code: created.code,
-      type: created.type,
-    });
-
-    return created;
   },
 
   async update(id: string, input: CustomerUpdateInput): Promise<Customer> {

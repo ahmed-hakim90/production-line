@@ -66,6 +66,47 @@ function EmptyChart({ label = 'لا توجد بيانات' }: { label?: string }
   );
 }
 
+function ModuleBarChart({
+  data,
+  layout = 'vertical',
+  fill,
+  categoryWidth = 78,
+}: {
+  data: Array<{ name: string; value: number }>;
+  layout?: 'vertical' | 'horizontal';
+  fill: string;
+  categoryWidth?: number;
+}) {
+  if (layout === 'horizontal') {
+    return (
+      <div className="h-[220px] w-full" dir="ltr">
+        <ResponsiveContainer>
+          <BarChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
+            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
+            <YAxis tick={{ fontSize: 10 }} width={32} allowDecimals={false} />
+            <Tooltip />
+            <Bar dataKey="value" name="العدد" fill={fill} radius={[8, 8, 0, 0]} barSize={20} />
+          </BarChart>
+        </ResponsiveContainer>
+      </div>
+    );
+  }
+  return (
+    <div className="h-[220px] w-full" dir="ltr">
+      <ResponsiveContainer>
+        <BarChart data={data} layout="vertical" margin={{ left: 8, right: 12, top: 8, bottom: 8 }}>
+          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
+          <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
+          <YAxis type="category" dataKey="name" width={categoryWidth} tick={{ fontSize: 10 }} />
+          <Tooltip />
+          <Bar dataKey="value" name="العدد" fill={fill} radius={[0, 8, 8, 0]} barSize={12} />
+        </BarChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
 /**
  * Donezo-like home: 4 KPI cards + one chart panel per permitted module.
  */
@@ -171,18 +212,12 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
 
         {modules.inventory && (
           <ModulePanel title="المخازن" path="/inventory">
-            {data.inventoryBars.some((b) => b.value > 0) ? (
-              <div className="h-[220px] w-full" dir="ltr">
-                <ResponsiveContainer>
-                  <BarChart data={data.inventoryBars} layout="vertical" margin={{ left: 8, right: 12, top: 8, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="name" width={78} tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="العدد" fill="rgb(var(--color-success))" radius={[0, 8, 8, 0]} barSize={12} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {data.inventoryBars.length > 0 ? (
+              <ModuleBarChart
+                data={data.inventoryBars}
+                fill="rgb(var(--color-success))"
+                categoryWidth={78}
+              />
             ) : (
               <EmptyChart />
             )}
@@ -196,24 +231,28 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
                 <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] p-3">
                   <p className="text-[10px] text-[var(--color-text-muted)] font-bold">تكلفة الوحدة</p>
                   <p className="text-lg font-black tabular-nums text-primary mt-1">
-                    {data.costSummary ? formatCost(data.costSummary.averageUnitCost) : '—'}
+                    {formatCost(data.costSummary?.averageUnitCost ?? 0)}
                   </p>
                 </div>
                 <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] p-3">
                   <p className="text-[10px] text-[var(--color-text-muted)] font-bold">إجمالي التكلفة</p>
                   <p className="text-lg font-black tabular-nums mt-1">
-                    {data.costSummary ? formatCost(data.costSummary.totalCost) : '—'}
+                    {formatCost(data.costSummary?.totalCost ?? 0)}
                   </p>
                 </div>
                 <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] p-3">
                   <p className="text-[10px] text-[var(--color-text-muted)] font-bold">إنتاج الشهر</p>
                   <p className="text-lg font-black tabular-nums mt-1">
-                    {data.costSummary ? formatNumber(data.costSummary.producedQty) : '—'}
+                    {formatNumber(data.costSummary?.producedQty ?? 0)}
                   </p>
                 </div>
               </div>
               <p className="text-[11px] text-[var(--color-text-muted)] font-medium text-center">
-                ملخص التكلفة الشهرية المعتمدة — الرسم اليومي يظهر أعلى مع الإنتاج
+                {data.costSummary?.source === 'approved'
+                  ? 'ملخص التكلفة الشهرية المعتمدة — الرسم اليومي يظهر أعلى مع الإنتاج'
+                  : data.costSummary?.source === 'live'
+                    ? 'حساب لحظي من تقارير الإنتاج (لم يُعتمد إغلاق شهري بعد)'
+                    : 'لا يوجد حساب شهري معتمد ولا إنتاج محسوب لهذا الشهر'}
               </p>
             </div>
           </ModulePanel>
@@ -221,17 +260,16 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
 
         {modules.hr && (
           <ModulePanel title="الموارد البشرية" path="/hr/dashboard">
-            {data.hrBars.some((b) => b.value > 0) ? (
-              <div className="h-[220px] w-full" dir="ltr">
-                <ResponsiveContainer>
-                  <BarChart data={data.hrBars} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} width={32} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="العدد" fill="rgb(var(--color-primary))" radius={[8, 8, 0, 0]} barSize={22} />
-                  </BarChart>
-                </ResponsiveContainer>
+            {data.hrBars.length > 0 ? (
+              <div>
+                <p className="text-[11px] text-[var(--color-text-muted)] font-bold mb-1 px-1">
+                  نشطون: {formatNumber(data.hrActiveCount)} · حضور اليوم
+                </p>
+                <ModuleBarChart
+                  data={data.hrBars}
+                  layout="horizontal"
+                  fill="rgb(var(--color-primary))"
+                />
               </div>
             ) : (
               <EmptyChart label="لا بيانات حضور لهذا اليوم" />
@@ -241,58 +279,40 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
 
         {modules.quality && (
           <ModulePanel title="الجودة" path="/quality/reports">
-            {data.qualityBars.some((b) => b.value > 0) ? (
-              <div className="h-[220px] w-full" dir="ltr">
-                <ResponsiveContainer>
-                  <BarChart data={data.qualityBars} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} width={32} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="قيمة" fill="#8b5cf6" radius={[8, 8, 0, 0]} barSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {data.qualityBars.length > 0 ? (
+              <ModuleBarChart
+                data={data.qualityBars}
+                layout="horizontal"
+                fill="#8b5cf6"
+              />
             ) : (
-              <EmptyChart />
+              <EmptyChart label="لا أوامر عمل بجودة مسجّلة" />
             )}
           </ModulePanel>
         )}
 
         {modules.repair && (
           <ModulePanel title="الصيانة / التشغيل" path="/repair">
-            {data.repairBars.some((b) => b.value > 0) ? (
-              <div className="h-[220px] w-full" dir="ltr">
-                <ResponsiveContainer>
-                  <BarChart data={data.repairBars} layout="vertical" margin={{ left: 8, right: 12, top: 8, bottom: 8 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
-                    <XAxis type="number" tick={{ fontSize: 10 }} />
-                    <YAxis type="category" dataKey="name" width={88} tick={{ fontSize: 10 }} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="العدد" fill="#f59e0b" radius={[0, 8, 8, 0]} barSize={12} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {data.repairBars.length > 0 ? (
+              <ModuleBarChart
+                data={data.repairBars}
+                fill="#f59e0b"
+                categoryWidth={72}
+              />
             ) : (
-              <EmptyChart label="لا طوابير معلّقة" />
+              <EmptyChart label="لا أوامر صيانة" />
             )}
           </ModulePanel>
         )}
 
         {modules.customers && (
           <ModulePanel title="العملاء" path="/customers/kpi">
-            {data.customersBars.some((b) => b.value > 0) ? (
-              <div className="h-[220px] w-full" dir="ltr">
-                <ResponsiveContainer>
-                  <BarChart data={data.customersBars} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-                    <YAxis tick={{ fontSize: 10 }} width={32} />
-                    <Tooltip />
-                    <Bar dataKey="value" name="العدد" fill="#06b6d4" radius={[8, 8, 0, 0]} barSize={20} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+            {data.customersBars.length > 0 ? (
+              <ModuleBarChart
+                data={data.customersBars}
+                layout="horizontal"
+                fill="#06b6d4"
+              />
             ) : (
               <EmptyChart />
             )}

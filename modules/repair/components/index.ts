@@ -2,6 +2,7 @@ export { StatusBadge } from './StatusBadge';
 export { DeliveryReceiptPDF } from './DeliveryReceiptPDF';
 export { RepairJobPrint } from './RepairJobPrint';
 export { RepairJobProductCardPrint } from './RepairJobProductCardPrint';
+export { RepairJobIntakePrintBundle } from './RepairJobIntakePrintBundle';
 export { RepairSalesInvoicePrint } from './RepairSalesInvoicePrint';
 export { LowStockAlert } from './LowStockAlert';
 export { WhatsAppShare } from './WhatsAppShare';

@@ -4,7 +4,9 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   onSnapshot,
+  orderBy,
   query,
   runTransaction,
   updateDoc,
@@ -123,6 +125,9 @@ const sortRepairJobsNewest = (rows: RepairJob[]): RepairJob[] =>
     String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
   );
 
+/** Cap operational repair job lists — newest first via Firestore orderBy. */
+const REPAIR_JOB_LIST_LIMIT = 400;
+
 type NewRepairJobInput = Omit<
   RepairJob,
   'id' | 'tenantId' | 'receiptNo' | 'createdAt' | 'updatedAt' | 'statusHistory'
@@ -172,6 +177,8 @@ export const repairJobService = {
       db,
       REPAIR_JOBS_COLLECTION,
       where('branchId', '==', branchId),
+      orderBy('createdAt', 'desc'),
+      limit(REPAIR_JOB_LIST_LIMIT),
     );
     const snap = await getDocs(q);
     return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
@@ -179,7 +186,12 @@ export const repairJobService = {
 
   async listAllBranches(): Promise<RepairJob[]> {
     if (!isConfigured) return [];
-    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION);
+    const q = tenantQuery(
+      db,
+      REPAIR_JOBS_COLLECTION,
+      orderBy('createdAt', 'desc'),
+      limit(REPAIR_JOB_LIST_LIMIT),
+    );
     const snap = await getDocs(q);
     return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
   },

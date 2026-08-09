@@ -65,7 +65,6 @@ import {
   LINE_WORKER_LABOR_ROLE_LABELS,
   resolveLineWorkerLaborRole,
 } from '../utils/lineWorkerLaborRoles';
-import { reportService } from '../services/reportService';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import { PageHeader } from '../../../components/PageHeader';
@@ -1331,7 +1330,6 @@ export const QuickAction: React.FC = () => {
       if (reportType === 'packaging') {
         setProductId(validPackagingLines[0].productId);
       }
-      const saved = await reportService.getById(id);
       const packagingPrintLines = reportType === 'packaging'
         ? buildPackagingPrintLinesFromReport(
           {
@@ -1344,7 +1342,7 @@ export const QuickAction: React.FC = () => {
         : undefined;
       const row: ReportPrintRow = {
         reportId: id,
-        reportCode: saved?.reportCode,
+        reportCode: undefined,
         date: today,
         sourceReportType: resolveReportType(reportType),
         shift: reportType === 'component_injection' && isInjectionShiftSelected(injectionShift)

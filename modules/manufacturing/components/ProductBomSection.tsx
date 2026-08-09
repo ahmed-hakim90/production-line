@@ -36,7 +36,7 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
   canManage: canManagePermission,
   userId,
 }) => {
-  const { data: bomData, isLoading, refetch } = useProductBom(productId);
+  const { data: bomData, isLoading } = useProductBom(productId);
   const { data: materials = [] } = useMaterialsCatalog();
   const { addItem, deleteItem } = useBomItemMutations('product', productId);
   const systemSettings = useAppStore((state) => state.systemSettings);
@@ -98,7 +98,6 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
         directCostPerUnit: 0,
         indirectCostPerUnit: 0,
       });
-      await refetch();
     } catch (e) {
       setError(e instanceof Error ? e.message : 'تعذر الإضافة');
     } finally {
@@ -111,7 +110,6 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
     if (!window.confirm('حذف هذا السطر من الـ BOM؟')) return;
     try {
       await deleteItem.mutateAsync(item.id);
-      await refetch();
     } catch {
       setError('تعذر الحذف');
     }

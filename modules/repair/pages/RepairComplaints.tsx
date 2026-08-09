@@ -354,9 +354,13 @@ export const RepairComplaints: React.FC = () => {
         notes: '',
       });
       setJobSearch('');
-      await load();
       const created = await repairComplaintService.getById(id);
-      if (created) openDetail(created);
+      if (created) {
+        setRows((prev) => [created, ...prev.filter((row) => row.id !== created.id)]);
+        openDetail(created);
+      } else {
+        void load();
+      }
     } catch (e: unknown) {
       const message = e instanceof Error ? e.message : 'تعذر تسجيل الشكوى.';
       toast.error(message);
@@ -413,9 +417,11 @@ export const RepairComplaints: React.FC = () => {
     try {
       await repairComplaintService.updateStatus(complaintId, toStatus as RepairComplaintStatus);
       toast.success('تم تحديث الحالة.');
-      await load();
+      setRows((prev) =>
+        prev.map((r) => (r.id === complaintId ? { ...r, status: toStatus as RepairComplaintStatus } : r)),
+      );
       if (selected?.id === complaintId) {
-        await refreshSelected(complaintId);
+        void refreshSelected(complaintId);
       }
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر تحديث الحالة.');

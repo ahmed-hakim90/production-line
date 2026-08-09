@@ -331,6 +331,19 @@ export const TransferApprovals: React.FC = () => {
       return;
     }
     setProcessingId(requestId);
+    const previous = requests;
+    setRequests((rows) =>
+      rows.map((row) =>
+        row.id === requestId
+          ? {
+              ...row,
+              status: 'approved',
+              approvedAt: new Date().toISOString(),
+              approvedBy: userDisplayName || userEmail || 'Current User',
+            }
+          : row,
+      ),
+    );
     try {
       unwrapOrThrow(await approveTransferRequest({
         requestId,
@@ -338,8 +351,11 @@ export const TransferApprovals: React.FC = () => {
         allowNegativeFromSource: allowNegativeFromSourceFor(request),
         approverUserId: uid || undefined,
       }, { path: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage }));
-      await loadData({ silent: true });
+      toast.success('تم اعتماد التحويلة.');
+      invalidatePageDataCache(TRANSFER_APPROVALS_CACHE_KEY);
+      void loadData({ silent: true, force: true });
     } catch (error: any) {
+      setRequests(previous);
       toast.error(error?.message || 'تعذر اعتماد التحويلة.');
     } finally {
       setProcessingId('');
@@ -351,6 +367,20 @@ export const TransferApprovals: React.FC = () => {
     const reason = window.prompt('سبب الرفض (اختياري):', '');
     if (reason === null) return;
     setProcessingId(requestId);
+    const previous = requests;
+    setRequests((rows) =>
+      rows.map((row) =>
+        row.id === requestId
+          ? {
+              ...row,
+              status: 'rejected',
+              rejectedAt: new Date().toISOString(),
+              rejectedBy: userDisplayName || userEmail || 'Current User',
+              rejectionReason: reason || '',
+            }
+          : row,
+      ),
+    );
     try {
       unwrapOrThrow(await rejectTransferRequest({
         requestId,
@@ -358,8 +388,11 @@ export const TransferApprovals: React.FC = () => {
         reason: reason || '',
         rejectedByUserId: uid || undefined,
       }, { path: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage }));
-      await loadData({ silent: true });
+      toast.success('تم رفض التحويلة.');
+      invalidatePageDataCache(TRANSFER_APPROVALS_CACHE_KEY);
+      void loadData({ silent: true, force: true });
     } catch (error: any) {
+      setRequests(previous);
       toast.error(error?.message || 'تعذر رفض التحويلة.');
     } finally {
       setProcessingId('');
@@ -373,6 +406,20 @@ export const TransferApprovals: React.FC = () => {
     const confirmed = window.confirm('سيتم عكس حركة المخزون لهذه التحويلة. هل تريد المتابعة؟');
     if (!confirmed) return;
     setProcessingId(requestId);
+    const previous = requests;
+    setRequests((rows) =>
+      rows.map((row) =>
+        row.id === requestId
+          ? {
+              ...row,
+              status: 'cancelled',
+              cancelledAt: new Date().toISOString(),
+              cancelledBy: userDisplayName || userEmail || 'Current User',
+              cancellationReason: reason || '',
+            }
+          : row,
+      ),
+    );
     try {
       await transferApprovalService.cancelRequest(
         requestId,
@@ -380,8 +427,11 @@ export const TransferApprovals: React.FC = () => {
         reason || '',
         uid || undefined,
       );
-      await loadData({ silent: true });
+      toast.success('تم إلغاء الحركة.');
+      invalidatePageDataCache(TRANSFER_APPROVALS_CACHE_KEY);
+      void loadData({ silent: true, force: true });
     } catch (error: any) {
+      setRequests(previous);
       toast.error(error?.message || 'تعذر إلغاء الحركة.');
     } finally {
       setProcessingId('');
@@ -449,6 +499,18 @@ export const TransferApprovals: React.FC = () => {
             approverUserId: uid || undefined,
           }, { path: INVENTORY_TRANSFER_DECISION_PATHS.transferApprovalsPage }));
           ok += 1;
+          setRequests((rows) =>
+            rows.map((row) =>
+              row.id === id
+                ? {
+                    ...row,
+                    status: 'approved',
+                    approvedAt: new Date().toISOString(),
+                    approvedBy: actor,
+                  }
+                : row,
+            ),
+          );
         } catch (e: any) {
           errors.push(`${req.referenceNo || id}: ${e?.message || 'خطأ'}`);
         }
@@ -457,7 +519,8 @@ export const TransferApprovals: React.FC = () => {
       setBulkApproving(false);
     }
 
-    await loadData({ silent: true });
+    invalidatePageDataCache(TRANSFER_APPROVALS_CACHE_KEY);
+    void loadData({ silent: true, force: true });
     if (errors.length === 0) {
       toast.success(`تم اعتماد ${ok} طلبات.`);
     } else {

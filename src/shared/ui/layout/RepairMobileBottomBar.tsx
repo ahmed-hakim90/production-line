@@ -9,7 +9,7 @@ import { useAppStore } from '@/store/useAppStore';
 import { isMenuItemOperationPathEnabled } from '@/modules/system/lib/operationPathSettings';
 import { resolveMenuIcon } from './menuIconMap';
 import { useSidebarActiveRoute } from './useSidebar';
-import { resolveVisibleRepairBottomBarItems } from './repairBottomBar';
+import { isRepairWorkshopFocusPath, resolveVisibleRepairBottomBarItems } from './repairBottomBar';
 
 interface RepairMobileBottomBarProps {
   onMoreClick: () => void;
@@ -43,7 +43,7 @@ export const RepairMobileBottomBar: React.FC<RepairMobileBottomBarProps> = ({ on
     () => logicalPathnameFromLocation(location.pathname),
     [location.pathname],
   );
-  const hideForWorkshopFocus = /^\/repair\/jobs\/[^/]+\/workspace\/?$/.test(logicalPath);
+  const hideForWorkshopFocus = isRepairWorkshopFocusPath(logicalPath);
 
   const visibleItems = useMemo(
     () =>

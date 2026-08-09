@@ -489,7 +489,6 @@ export const Materials: React.FC = () => {
 
       setShowForm(false);
       toast.success(editing ? 'تم تحديث المادة.' : 'تمت إضافة المادة.');
-      await refetch();
     } catch (e) {
       console.error('[materials] save failed', {
         type: e instanceof Error ? e.name : 'unknown',
@@ -513,7 +512,6 @@ export const Materials: React.FC = () => {
     try {
       await remove.mutateAsync(row.id);
       toast.success('تم حذف المادة.');
-      await refetch();
     } catch {
       toast.error('تعذر حذف المادة.');
     }
@@ -807,7 +805,7 @@ export const Materials: React.FC = () => {
           <MaterialSparePartsPricingPanel
             materials={rows}
             canManagePricing={canManagePricing}
-            onUpdated={async () => { await refetch(); }}
+            onUpdated={() => { void refetch(); }}
           />
         </div>
       ) : null}

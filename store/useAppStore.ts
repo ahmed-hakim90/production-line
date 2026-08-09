@@ -186,7 +186,6 @@ import { actionTrackerService } from '../modules/system/audit';
 import { useJobsStore } from '../components/background-jobs/useJobsStore';
 import { REPORT_DUPLICATE_MESSAGE, INJECTION_REPORT_DUPLICATE_MESSAGE, getReportDuplicateMessage } from '../modules/production/utils/reportDuplicateError';
 import {
-  isDuplicateProductionReport,
   isInjectionShiftSelected,
   normalizeInjectionShift,
 } from '../modules/production/utils/injectionReportShift';
@@ -962,6 +961,18 @@ function replaceLoadedReportRow(
 ): ProductionReport[] {
   if (!report.id || !rows.some((row) => row.id === report.id)) return rows;
   return rows.map((row) => row.id === report.id ? report : row);
+}
+
+/** Insert or replace a report in an in-memory list without a full Firestore reload. */
+function upsertLoadedReportRow(
+  rows: ProductionReport[],
+  report: ProductionReport,
+): ProductionReport[] {
+  if (!report.id) return rows;
+  if (rows.some((row) => row.id === report.id)) {
+    return rows.map((row) => (row.id === report.id ? { ...row, ...report } : row));
+  }
+  return [report, ...rows];
 }
 
 function isActiveWorkOrderStatus(status?: WorkOrder['status']): boolean {
@@ -4208,15 +4219,17 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
 
       if (reportBehavior.preventDuplicateReports && reportType !== 'packaging') {
-        const sameDayReports = await reportService.getByDateRange(savePayload.date, savePayload.date);
         const duplicateCandidate = {
-          ...savePayload,
+          date: savePayload.date,
+          lineId: savePayload.lineId,
+          employeeId: savePayload.employeeId,
+          productId: savePayload.productId,
           reportType,
           shift: reportType === 'component_injection' && isInjectionShiftSelected((data as ProductionReport).shift)
             ? (data as ProductionReport).shift
             : undefined,
         };
-        const hasDuplicate = sameDayReports.some((r) => isDuplicateProductionReport(r, duplicateCandidate));
+        const hasDuplicate = await reportService.hasConflictingUniqueKey(duplicateCandidate);
         if (hasDuplicate) {
           set({
             error: reportType === 'component_injection'
@@ -4512,26 +4525,39 @@ export const useAppStore = create<AppState>((set, get) => ({
       try {
         const today = getReportOperationalDateString(get().systemSettings);
         const { start: monthStart, end: monthEnd } = getMonthDateRange();
-        const [todayReports, monthlyReports, workOrders] = await Promise.all([
-          reportService.getByDateRange(today, today),
-          reportService.getByDateRange(monthStart, monthEnd),
-          workOrderService.getAll(),
-        ]);
+        const createdRow: ProductionReport = { ...reportData, id };
+        const inToday = String(reportData.date || '') === today;
+        const inMonth =
+          String(reportData.date || '') >= monthStart && String(reportData.date || '') <= monthEnd;
         invalidateProductionReportsRangeCacheForDates([reportData.date], get, set);
         const rangeCacheNow = Date.now();
         const rkToday = getProductionReportsRangeCacheKey(today, today);
         const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-        set((state) => ({
-          todayReports,
-          monthlyReports,
-          productionReports: monthlyReports,
-          workOrders,
-          productionReportsRangeCache: {
-            ...state.productionReportsRangeCache,
-            [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-            [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
-          },
-        }));
+        set((state) => {
+          const nextToday = inToday
+            ? upsertLoadedReportRow(state.todayReports, createdRow)
+            : state.todayReports;
+          const nextMonth = inMonth
+            ? upsertLoadedReportRow(state.monthlyReports, createdRow)
+            : state.monthlyReports;
+          const nextProduction = inMonth
+            ? upsertLoadedReportRow(state.productionReports, createdRow)
+            : state.productionReports;
+          return {
+            todayReports: nextToday,
+            monthlyReports: nextMonth,
+            productionReports: nextProduction,
+            productionReportsRangeCache: {
+              ...state.productionReportsRangeCache,
+              ...(inToday
+                ? { [rkToday]: { rows: nextToday, fetchedAt: rangeCacheNow } }
+                : {}),
+              ...(inMonth
+                ? { [rkMonth]: { rows: nextMonth, fetchedAt: rangeCacheNow } }
+                : {}),
+            },
+          };
+        });
         get()._rebuildProducts();
         get()._rebuildLines();
         try {
@@ -4559,12 +4585,9 @@ export const useAppStore = create<AppState>((set, get) => ({
           }).catch(() => undefined);
         }
         try {
-          await syncWorkerDailyPerformanceFromReport(id, { ...reportData, id });
+          void syncWorkerDailyPerformanceFromReport(id, { ...reportData, id });
         } catch (syncErr) {
           console.warn('syncWorkerDailyPerformanceFromReport (create):', syncErr);
-        }
-        if (activePlan?.id && shouldPostToPlan && !skipWoProgress) {
-          await get().reconcileProductionPlanFromReports(activePlan.id);
         }
       } catch (error) {
         postSaveWarning = (error as Error)?.message || 'تم حفظ التقرير ولكن تعذر تحديث البيانات المعروضة';
@@ -4843,16 +4866,18 @@ export const useAppStore = create<AppState>((set, get) => ({
       }
       const finalMergedReport = { ...(existingReport ?? {}), ...updatePayload } as ProductionReport;
       if (reportBehavior.preventDuplicateReports && nextReportType !== 'packaging') {
-        const sameDayReports = await reportService.getByDateRange(finalMergedReport.date, finalMergedReport.date);
-        const duplicateCandidate = {
-          ...finalMergedReport,
-          reportType: nextReportType,
-          shift: nextReportType === 'component_injection' && isInjectionShiftSelected(finalMergedReport.shift)
-            ? finalMergedReport.shift
-            : undefined,
-        };
-        const hasDuplicate = sameDayReports.some((report) =>
-          report.id !== id && isDuplicateProductionReport(report, duplicateCandidate)
+        const hasDuplicate = await reportService.hasConflictingUniqueKey(
+          {
+            date: finalMergedReport.date,
+            lineId: finalMergedReport.lineId,
+            employeeId: finalMergedReport.employeeId,
+            productId: finalMergedReport.productId,
+            reportType: nextReportType,
+            shift: nextReportType === 'component_injection' && isInjectionShiftSelected(finalMergedReport.shift)
+              ? finalMergedReport.shift
+              : undefined,
+          },
+          id,
         );
         if (hasDuplicate) {
           const msg = nextReportType === 'component_injection'
@@ -5013,10 +5038,10 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
       const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
-      const [todayReports, monthlyReports] = await Promise.all([
-        reportService.getByDateRange(today, today),
-        reportService.getByDateRange(monthStart, monthEnd),
-      ]);
+      const savedRow: ProductionReport = { ...savedReport, id };
+      const inToday = String(savedRow.date || '') === today;
+      const inMonth =
+        String(savedRow.date || '') >= monthStart && String(savedRow.date || '') <= monthEnd;
       const touchedDates = [existingReport?.date, data.date].filter(
         (d): d is string => Boolean(d && String(d).trim()),
       );
@@ -5024,16 +5049,29 @@ export const useAppStore = create<AppState>((set, get) => ({
       const rangeCacheNow = Date.now();
       const rkToday = getProductionReportsRangeCacheKey(today, today);
       const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-      set((state) => ({
-        todayReports,
-        monthlyReports,
-        productionReports: monthlyReports,
-        productionReportsRangeCache: {
-          ...state.productionReportsRangeCache,
-          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
-        },
-      }));
+      set((state) => {
+        const withoutOld = (rows: ProductionReport[]) =>
+          rows.filter((row) => row.id !== id);
+        const nextToday = inToday
+          ? upsertLoadedReportRow(withoutOld(state.todayReports), savedRow)
+          : withoutOld(state.todayReports);
+        const nextMonth = inMonth
+          ? upsertLoadedReportRow(withoutOld(state.monthlyReports), savedRow)
+          : withoutOld(state.monthlyReports);
+        const nextProduction = inMonth
+          ? upsertLoadedReportRow(withoutOld(state.productionReports), savedRow)
+          : withoutOld(state.productionReports);
+        return {
+          todayReports: nextToday,
+          monthlyReports: nextMonth,
+          productionReports: nextProduction,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            ...(inToday ? { [rkToday]: { rows: nextToday, fetchedAt: rangeCacheNow } } : {}),
+            ...(inMonth ? { [rkMonth]: { rows: nextMonth, fetchedAt: rangeCacheNow } } : {}),
+          },
+        };
+      });
       get()._rebuildProducts();
       get()._rebuildLines();
       try {
@@ -5216,11 +5254,6 @@ export const useAppStore = create<AppState>((set, get) => ({
       );
       const today = getReportOperationalDateString(get().systemSettings);
       const { start: monthStart, end: monthEnd } = getMonthDateRange();
-      const [todayReports, monthlyReports, workOrders] = await Promise.all([
-        reportService.getByDateRange(today, today),
-        reportService.getByDateRange(monthStart, monthEnd),
-        workOrderService.getAll(),
-      ]);
       invalidateProductionReportsRangeCacheForDates(
         [reportToDelete.date].filter((d) => Boolean(d && String(d).trim())),
         get,
@@ -5229,17 +5262,22 @@ export const useAppStore = create<AppState>((set, get) => ({
       const rangeCacheNow = Date.now();
       const rkToday = getProductionReportsRangeCacheKey(today, today);
       const rkMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-      set((state) => ({
-        todayReports,
-        monthlyReports,
-        productionReports: monthlyReports,
-        workOrders,
-        productionReportsRangeCache: {
-          ...state.productionReportsRangeCache,
-          [rkToday]: { rows: todayReports, fetchedAt: rangeCacheNow },
-          [rkMonth]: { rows: monthlyReports, fetchedAt: rangeCacheNow },
-        },
-      }));
+      set((state) => {
+        const removeRow = (rows: ProductionReport[]) => rows.filter((row) => row.id !== id);
+        const nextToday = removeRow(state.todayReports);
+        const nextMonth = removeRow(state.monthlyReports);
+        const nextProduction = removeRow(state.productionReports);
+        return {
+          todayReports: nextToday,
+          monthlyReports: nextMonth,
+          productionReports: nextProduction,
+          productionReportsRangeCache: {
+            ...state.productionReportsRangeCache,
+            [rkToday]: { rows: nextToday, fetchedAt: rangeCacheNow },
+            [rkMonth]: { rows: nextMonth, fetchedAt: rangeCacheNow },
+          },
+        };
+      });
       get()._rebuildProducts();
       get()._rebuildLines();
       if (!linkedPlanId) {

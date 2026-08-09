@@ -505,7 +505,7 @@ export const RepairJobWorkspace: React.FC = () => {
         });
       }
       setStatus(nextStatus);
-      refetchJob();
+      if (technicianMode) refetchJob();
       toast.success(action === 'unrepairable' ? 'تم تسجيل غير قابل للإصلاح.' : 'تم تعليم الطلب كجاهز للتسليم.');
     } catch (e: any) {
       if (job.status) setStatus(job.status);
@@ -547,7 +547,7 @@ export const RepairJobWorkspace: React.FC = () => {
       }
       setSelectedMaterialId('');
       setResQty('1');
-      refetchJob();
+      if (technicianMode) refetchJob();
     } catch (e: any) {
       toast.error(e?.message || 'تعذر طلب القطعة.');
     } finally {
@@ -564,7 +564,7 @@ export const RepairJobWorkspace: React.FC = () => {
         usageId,
       });
       toast.success(`تم صرف القطعة (${result.referenceNo}).`);
-      refetchJob();
+      if (technicianMode) refetchJob();
     } catch (e: any) {
       toast.error(e?.message || 'تعذر صرف القطعة.');
     } finally {
@@ -601,7 +601,7 @@ export const RepairJobWorkspace: React.FC = () => {
           payload: { field, url },
         });
       }
-      refetchJob();
+      if (technicianMode) refetchJob();
       toast.success('تم رفع الصورة.');
     } catch (e: any) {
       toast.error(e?.message || 'تعذر الرفع.');
@@ -632,31 +632,64 @@ export const RepairJobWorkspace: React.FC = () => {
     job.deviceType,
   ].filter(Boolean).join(' · ') || '—';
   const showUnrepairableForm = isUnrepairableStatus(status) || Boolean(reasonCode);
+  const customerComplaint = String(
+    jobProducts[0]?.diagnosis || job.problemDescription || '',
+  ).trim() || '—';
+  const closedJob = Boolean(actionState?.isClosed);
+
+  const showDiagnose = workshopStep === 'diagnose';
+  const showParts = workshopStep === 'parts';
+  const showFinish = workshopStep === 'finish';
+
+  const stepBtnClass = (active: boolean) =>
+    `flex min-h-11 flex-1 flex-col items-center justify-center gap-0.5 rounded-lg px-1 py-1.5 text-[11px] font-bold transition-colors ${
+      active
+        ? 'bg-primary text-primary-foreground shadow-sm'
+        : 'bg-muted/70 text-muted-foreground hover:bg-muted hover:text-foreground'
+    }`;
 
   return (
     <div
-      className="erp-ds-clean mx-auto w-full max-w-6xl space-y-3 px-2 pb-[calc(5.75rem+env(safe-area-inset-bottom))] sm:px-3 lg:pb-8"
+      className="erp-ds-clean mx-auto w-full max-w-3xl space-y-3 px-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-2 lg:max-w-6xl lg:pb-8"
       dir={dir}
     >
       <PageHeader
         title={`ورشة #${job.receiptNo}`}
         subtitle={deviceSummary}
         icon="fact_check"
-        backAction={{ to: withTenantPath(tenantSlug, `/repair/jobs/${job.id}`) }}
+        backAction={{
+          to: withTenantPath(
+            tenantSlug,
+            technicianMode ? '/repair/my-jobs' : `/repair/jobs/${job.id}`,
+          ),
+        }}
         actions={<StatusBadge status={job.status} />}
       />
 
-      {/* Header quick actions — always reachable on mobile */}
-      <div className="sticky top-0 z-30 -mx-2 border-b bg-background/95 px-2 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:mx-0 sm:rounded-xl sm:border sm:px-2">
+      {/* Sticky: steps + photo/history — below fixed topbar */}
+      <div className="sticky top-[52px] z-30 -mx-1 border-b bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:mx-0 sm:rounded-xl sm:border sm:px-2">
+        <div className="mb-2 flex gap-1 lg:hidden" role="tablist" aria-label="خطوات الورشة">
+          <button type="button" role="tab" aria-selected={showDiagnose} className={stepBtnClass(showDiagnose)} onClick={() => setWorkshopStep('diagnose')}>
+            <span className="text-sm leading-none">1</span>
+            تشخيص
+          </button>
+          <button type="button" role="tab" aria-selected={showParts} className={stepBtnClass(showParts)} onClick={() => setWorkshopStep('parts')}>
+            <span className="text-sm leading-none">2</span>
+            قطع
+          </button>
+          <button type="button" role="tab" aria-selected={showFinish} className={stepBtnClass(showFinish)} onClick={() => setWorkshopStep('finish')}>
+            <span className="text-sm leading-none">3</span>
+            إنهاء
+          </button>
+        </div>
+
         <div className="grid grid-cols-2 gap-1">
           <Button
             type="button"
             variant={headerPanel === 'photo' ? 'secondary' : 'ghost'}
-            className="h-auto min-h-12 flex-col gap-0.5 px-1 py-2"
+            className="h-auto min-h-11 flex-col gap-0.5 px-1 py-2"
             disabled={!canEditWorkshop}
-            onClick={() => {
-              toggleHeaderPanel('photo');
-            }}
+            onClick={() => toggleHeaderPanel('photo')}
           >
             <Camera className="h-5 w-5" />
             <span className="text-[10px] leading-none">صورة</span>
@@ -664,7 +697,7 @@ export const RepairJobWorkspace: React.FC = () => {
           <Button
             type="button"
             variant={headerPanel === 'events' ? 'secondary' : 'ghost'}
-            className="h-auto min-h-12 flex-col gap-0.5 px-1 py-2"
+            className="h-auto min-h-11 flex-col gap-0.5 px-1 py-2"
             onClick={() => toggleHeaderPanel('events')}
           >
             <History className="h-5 w-5" />
@@ -750,329 +783,396 @@ export const RepairJobWorkspace: React.FC = () => {
         </div>
       ) : null}
 
-      <div className="rounded-xl border bg-muted/25 px-3 py-2.5 text-sm space-y-1.5">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="text-xs text-muted-foreground">الجهاز</div>
-            <div className="font-medium leading-snug break-words">{deviceSummary}</div>
-          </div>
+      {/* Always-visible job context */}
+      <div className="rounded-xl border bg-muted/25 px-3 py-2.5 text-sm space-y-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={job.status} />
+          <span className="text-xs text-muted-foreground">{currentStatusLabel}</span>
+          {serviceOnly ? <Badge variant="outline" className="text-[10px]">خدمة فقط</Badge> : null}
+          {closedJob ? <Badge variant="secondary" className="text-[10px]">مغلق</Badge> : null}
+        </div>
+        <div>
+          <div className="text-[11px] font-medium text-muted-foreground">الجهاز</div>
+          <div className="font-semibold leading-snug break-words">{deviceSummary}</div>
+        </div>
+        <div>
+          <div className="text-[11px] font-medium text-muted-foreground">شكوى العميل</div>
+          <div className="whitespace-pre-wrap text-sm leading-relaxed text-foreground/90">{customerComplaint}</div>
         </div>
         <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
           <span>استحقاق: <strong className="text-foreground">{job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : '—'}</strong></span>
           <span>فرع: <strong className="text-foreground">{branch?.name || '—'}</strong></span>
-          {serviceOnly ? <Badge variant="outline" className="text-[10px]">خدمة فقط</Badge> : null}
-          {actionState?.isClosed ? <Badge variant="secondary" className="text-[10px]">مغلق</Badge> : null}
         </div>
       </div>
 
       <div className="flex flex-col gap-3">
-        <div className="order-1 space-y-3">
-          <section className="rounded-xl border bg-card p-3 space-y-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">1</span>
-              <div>
-                <h2 className="text-base font-semibold leading-none">الحالة</h2>
-                <p className="text-xs text-muted-foreground mt-1">تتقدم تلقائياً مع التشخيص والقطع والموافقة</p>
+        {/* 1 — Diagnosis (first for technicians) */}
+        <section className={`rounded-xl border bg-card p-3 space-y-3 shadow-sm ${showDiagnose ? '' : 'hidden lg:block'}`}>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">1</span>
+            <div>
+              <h2 className="text-base font-semibold leading-none">التشخيص والخدمات</h2>
+              <p className="mt-1 text-xs text-muted-foreground">اكتب التشخيص واختر الخدمات المنفذة</p>
+            </div>
+          </div>
+
+          {!canEditWorkshop ? (
+            <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
+              عرض فقط — لا صلاحية تعديل ورشة.
+            </p>
+          ) : null}
+
+          <label className="flex min-h-14 items-center gap-3 rounded-lg border px-3 py-3 text-sm active:bg-muted/50">
+            <input
+              type="checkbox"
+              className="h-5 w-5 shrink-0"
+              checked={serviceOnly}
+              disabled={!canEditWorkshop}
+              onChange={(e) => setServiceOnly(e.target.checked)}
+            />
+            <span className="min-w-0">
+              <span className="block font-medium">خدمة فقط بدون قطع</span>
+              <span className="text-xs text-muted-foreground">يقفل طلب قطع الغيار لهذا الطلب</span>
+            </span>
+          </label>
+
+          {jobProducts.map((item, idx) => (
+            <div key={item.itemId} className="space-y-3 rounded-lg border bg-muted/15 p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0 break-words text-sm font-semibold leading-snug">
+                  {idx + 1}. {item.productName || 'منتج'}
+                </div>
+                <Badge variant="outline" className="shrink-0 tabular-nums">×{item.quantity || 1}</Badge>
               </div>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <StatusBadge status={job.status} />
-              <span className="text-sm text-muted-foreground">{currentStatusLabel}</span>
-            </div>
-            <div className="grid gap-2 sm:grid-cols-2">
-              <Button
-                className="min-h-12 text-base font-semibold"
-                disabled={!canEditWorkshop || applyingStatus || !canMarkRepaired}
-                onClick={() => void applyWorkshopAction('repair_done')}
-              >
-                {applyingStatus ? 'جاري التطبيق…' : 'تم الإصلاح'}
-              </Button>
-              <Button
-                className="min-h-12 text-base"
-                variant="outline"
-                disabled={!canEditWorkshop || applyingStatus}
-                onClick={() => {
-                  setStatus(unrepairableStatusId);
-                  if (!reasonCode) setReasonCode('');
-                }}
-              >
-                غير قابل للإصلاح
-              </Button>
-            </div>
-            {showUnrepairableForm ? (
-              <div className="space-y-1.5 rounded-md border border-rose-200 bg-rose-50/40 p-3">
-                <Label>سبب عدم قابلية الإصلاح <span className="text-rose-600">*</span></Label>
-                <Select value={reasonCode} onValueChange={setReasonCode} disabled={!canEditWorkshop || applyingStatus}>
-                  <SelectTrigger className="min-h-12 bg-background"><SelectValue placeholder="اختر السبب" /></SelectTrigger>
-                  <SelectContent>
-                    {repairSettings.unrepairableReasons.filter((item) => item.enabled !== false).map((item) => (
-                      <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Label>تفاصيل إضافية (مطلوبة عند «سبب آخر»)</Label>
+
+              <div className="space-y-1">
+                <Label>تشخيص الفني</Label>
                 <textarea
-                  className="w-full min-h-24 rounded-md border border-input bg-background px-3 py-3 text-base"
-                  value={reason}
-                  onChange={(e) => setReason(e.target.value)}
-                  disabled={!canEditWorkshop || applyingStatus}
-                  placeholder="ملاحظة اختيارية عن الفحص"
+                  className="min-h-28 w-full rounded-md border border-input bg-background px-3 py-3 text-base"
+                  disabled={!canEditWorkshop}
+                  value={item.technicianDiagnosis || ''}
+                  onChange={(e) => updateProduct(item.itemId, { technicianDiagnosis: e.target.value })}
+                  placeholder="اكتب التشخيص بعد الفحص…"
                 />
-                <Button
-                  className="w-full min-h-12"
-                  variant="destructive"
-                  disabled={!canEditWorkshop || applyingStatus || !reasonCode}
-                  onClick={() => void applyWorkshopAction('unrepairable')}
-                >
-                  تأكيد غير قابل للإصلاح
-                </Button>
               </div>
-            ) : null}
-          </section>
 
-          <section className="rounded-xl border bg-card p-3 space-y-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">2</span>
-              <div>
-                <h2 className="text-base font-semibold leading-none">قطع الغيار</h2>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {serviceOnly ? 'مقفولة — خدمة فقط' : 'مركز / مركزي / غير متاح'}
-                </p>
-              </div>
-            </div>
-
-            {serviceOnly ? (
-              <p className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">
-                ألغِ «خدمة فقط» لإضافة قطع.
-              </p>
-            ) : (
-              <div className="space-y-3">
-                {!hasBranchWarehouse ? (
-                  <div className="rounded border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
-                    اربط مخزناً بالفرع أولاً.
-                  </div>
-                ) : null}
-                <p className="text-xs text-muted-foreground">
-                  كل قطعة في سطر — للجهاز الواحد أضف القطعة الأولى ثم الثانية بنفس الطريقة.
-                </p>
-                <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_5.5rem_auto] sm:items-end">
-                  <div className="space-y-1 min-w-0">
-                    <Label>القطعة</Label>
-                    <SearchableSelect
-                      options={materialOptions.map((opt) => ({
-                        value: opt.value,
-                        label: opt.label,
-                        hint: opt.hint,
-                        hintType: opt.hintType,
-                      }))}
-                      value={selectedMaterialId}
-                      onChange={setSelectedMaterialId}
-                      placeholder="ابحث واختر قطعة"
-                      disabled={!canEditWorkshop || !actionState?.canUseParts || !hasBranchWarehouse}
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label>الكمية</Label>
-                    <Input
-                      className="min-h-10 text-base sm:min-h-10"
-                      inputMode="numeric"
-                      value={resQty}
-                      onChange={(e) => setResQty(e.target.value)}
-                      disabled={!canEditWorkshop}
-                    />
-                  </div>
-                  <Button
-                    className="min-h-10 w-full px-5 text-base sm:w-auto"
-                    disabled={!canEditWorkshop || !actionState?.canUseParts || requestingPart || !hasBranchWarehouse}
-                    onClick={() => void requestSparePart()}
-                  >
-                    {requestingPart ? '…' : 'طلب'}
-                  </Button>
-                </div>
-              </div>
-            )}
-
-            <div className="space-y-2">
-              {(job.partsUsed || []).length === 0 ? (
-                <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
-                  لا توجد قطع على الطلب بعد.
-                </p>
-              ) : (
-                (job.partsUsed || []).map((row, idx) => {
-                  const fulfillment = effectiveFulfillmentStatus(row);
-                  const usageId = String(row.usageId || '');
-                  return (
-                    <div
-                      key={usageId || `${row.partId}-${idx}`}
-                      className="w-full rounded-lg border bg-muted/15 p-3 space-y-2 text-sm"
-                    >
-                      <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div className="min-w-0 font-medium leading-snug">
-                          <span className="text-muted-foreground tabular-nums">{idx + 1}. </span>
-                          {row.partName}
-                          {row.productName ? (
-                            <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
-                              للجهاز: {row.productName}
-                            </span>
-                          ) : null}
-                        </div>
-                        <span className="shrink-0 tabular-nums font-semibold">
-                          × {Number(row.quantity || 0).toLocaleString('ar-EG')}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1">
-                        <ErpStatusBadge
-                          label={REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}
-                          type={repairPartFulfillmentChipType(fulfillment)}
+              <div className="space-y-2">
+                <Label>الخدمات المنفذة</Label>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {enabledServices.map((service) => {
+                    const checked = (item.serviceIds || []).includes(service.id);
+                    return (
+                      <label
+                        key={service.id}
+                        className={`flex min-h-12 items-center gap-2.5 rounded-lg border px-3 py-3 text-sm active:scale-[0.99] ${
+                          checked ? 'border-primary bg-primary/5' : 'bg-background'
+                        } ${!canEditWorkshop ? 'opacity-60' : ''}`}
+                      >
+                        <input
+                          type="checkbox"
+                          className="h-5 w-5 shrink-0"
+                          disabled={!canEditWorkshop}
+                          checked={checked}
+                          onChange={() => updateProduct(item.itemId, {
+                            serviceIds: toggleCatalogId(item.serviceIds, service.id),
+                          })}
                         />
-                        {row.availabilityAtRequest ? (
-                          <ErpStatusBadge
-                            label={REPAIR_PART_AVAILABILITY_LABELS[row.availabilityAtRequest]}
-                            type={repairPartAvailabilityChipType(row.availabilityAtRequest)}
-                          />
-                        ) : null}
-                      </div>
-                          {canIssueParts && isReadyToIssueUsage(row) && usageId ? (
-                        <Button
-                          className="w-full min-h-12"
-                          variant="secondary"
-                          disabled={!canEditWorkshop || issuingUsageId === usageId}
-                          onClick={() => void issuePendingUsage(usageId)}
-                        >
-                          {issuingUsageId === usageId ? 'جاري الصرف…' : 'صرف الآن'}
-                        </Button>
-                      ) : null}
-                    </div>
-                  );
-                })
-              )}
-            </div>
-          </section>
-
-          <section className="rounded-xl border bg-card p-3 space-y-3 shadow-sm">
-            <div className="flex items-center gap-2">
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">3</span>
-              <div>
-                <h2 className="text-base font-semibold leading-none">التشخيص والخدمات</h2>
-                <p className="text-xs text-muted-foreground mt-1">وصف العميل ثابت</p>
+                        <span className="min-w-0 flex-1 font-medium leading-snug">{service.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {enabledServices.length === 0 ? (
+                  <p className="text-xs text-muted-foreground">عرّف الخدمات من إعدادات الصيانة.</p>
+                ) : null}
               </div>
             </div>
+          ))}
 
-            {!canEditWorkshop ? (
-              <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
-                عرض فقط — لا صلاحية تعديل ورشة.
-              </p>
-            ) : null}
-
-            <label className="flex min-h-14 items-center gap-3 rounded-lg border px-3 py-3 text-sm active:bg-muted/50">
-              <input
-                type="checkbox"
-                className="h-5 w-5 shrink-0"
-                checked={serviceOnly}
-                disabled={!canEditWorkshop}
-                onChange={(e) => setServiceOnly(e.target.checked)}
-              />
-              <span className="min-w-0">
-                <span className="font-medium block">خدمة فقط بدون قطع</span>
-                <span className="text-xs text-muted-foreground">الاستقبال يراجع التسعير بعد اكتمال التشخيص</span>
-              </span>
-            </label>
-
-            {jobProducts.map((item, idx) => (
-              <div key={item.itemId} className="rounded-lg border bg-muted/15 p-3 space-y-3">
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0 text-sm font-semibold leading-snug break-words">
-                    {idx + 1}. {item.productName || 'منتج'}
-                  </div>
-                  <Badge variant="outline" className="shrink-0 tabular-nums">×{item.quantity || 1}</Badge>
-                </div>
-
-                <div className="space-y-1">
-                  <Label className="text-xs text-muted-foreground">وصف العطل (عميل)</Label>
-                  <div className="rounded-md border bg-background px-3 py-2.5 text-sm whitespace-pre-wrap leading-relaxed">
-                    {item.diagnosis || job.problemDescription || '—'}
-                  </div>
-                </div>
-
-                <div className="space-y-1">
-                  <Label>تشخيص الفني</Label>
-                  <textarea
-                    className="w-full min-h-28 rounded-md border border-input bg-background px-3 py-3 text-base"
-                    disabled={!canEditWorkshop}
-                    value={item.technicianDiagnosis || ''}
-                    onChange={(e) => updateProduct(item.itemId, { technicianDiagnosis: e.target.value })}
-                    placeholder="اكتب التشخيص بعد الفحص…"
-                  />
-                </div>
-
-                <div className="space-y-2">
-                  <Label>الخدمات المنفذة</Label>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                    {enabledServices.map((service) => {
-                      const checked = (item.serviceIds || []).includes(service.id);
-                      return (
-                        <label
-                          key={service.id}
-                          className={`flex min-h-14 flex-col items-stretch gap-1 rounded-lg border px-2.5 py-2.5 text-sm active:scale-[0.99] sm:min-h-16 ${
-                            checked ? 'border-primary bg-primary/5' : 'bg-background'
-                          } ${!canEditWorkshop ? 'opacity-60' : ''}`}
-                        >
-                          <span className="flex items-start gap-2">
-                            <input
-                              type="checkbox"
-                              className="mt-0.5 h-5 w-5 shrink-0"
-                              disabled={!canEditWorkshop}
-                              checked={checked}
-                              onChange={() => updateProduct(item.itemId, {
-                                serviceIds: toggleCatalogId(item.serviceIds, service.id),
-                              })}
-                            />
-                            <span className="min-w-0 flex-1 font-medium leading-snug">{service.name}</span>
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                  {enabledServices.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">عرّف الخدمات من إعدادات الصيانة.</p>
-                  ) : null}
-                </div>
-              </div>
-            ))}
-
-            <Button
-              className="w-full min-h-14 text-base"
-              variant="secondary"
-              disabled={!canEditWorkshop || saving}
-              onClick={() => void persistFields()}
-            >
-              {saving ? 'جاري الحفظ…' : 'حفظ التشخيص والخدمات'}
-            </Button>
-          </section>
-        </div>
-
-      </div>
-
-      <div
-        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 lg:hidden"
-        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
-      >
-        <div className="mx-auto flex max-w-6xl items-center gap-2 px-2 py-2">
           <Button
-            className="min-h-12 flex-1 text-sm"
+            className="min-h-14 w-full text-base"
             variant="secondary"
             disabled={!canEditWorkshop || saving}
             onClick={() => void persistFields()}
           >
-            حفظ
+            {saving ? 'جاري الحفظ…' : 'حفظ التشخيص والخدمات'}
           </Button>
           <Button
-            className="min-h-12 flex-[1.35] text-sm font-semibold"
-            disabled={!canEditWorkshop || applyingStatus || !canMarkRepaired}
-            onClick={() => void applyWorkshopAction('repair_done')}
+            type="button"
+            variant="outline"
+            className="min-h-12 w-full lg:hidden"
+            onClick={() => setWorkshopStep(serviceOnly ? 'finish' : 'parts')}
           >
-            {applyingStatus ? 'جاري التطبيق…' : 'تم الإصلاح'}
+            التالي: {serviceOnly ? 'إنهاء الطلب' : 'قطع الغيار'}
           </Button>
+        </section>
+
+        {/* 2 — Parts */}
+        <section className={`rounded-xl border bg-card p-3 space-y-3 shadow-sm ${showParts ? '' : 'hidden lg:block'}`}>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">2</span>
+            <div>
+              <h2 className="text-base font-semibold leading-none">قطع الغيار</h2>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {serviceOnly ? 'مقفولة — خدمة فقط' : 'اطلب قطعة من مخزن المركز أو المركزي'}
+              </p>
+            </div>
+          </div>
+
+          {serviceOnly ? (
+            <p className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">
+              ألغِ «خدمة فقط» من خطوة التشخيص لإضافة قطع.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {!hasBranchWarehouse ? (
+                <div className="rounded border border-amber-300 bg-amber-50 p-2.5 text-xs text-amber-900">
+                  اربط مخزناً بالفرع أولاً.
+                </div>
+              ) : null}
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(0,1fr)_5.5rem_auto] sm:items-end">
+                <div className="min-w-0 space-y-1">
+                  <Label>القطعة</Label>
+                  <SearchableSelect
+                    options={materialOptions.map((opt) => ({
+                      value: opt.value,
+                      label: opt.label,
+                      hint: opt.hint,
+                      hintType: opt.hintType,
+                    }))}
+                    value={selectedMaterialId}
+                    onChange={setSelectedMaterialId}
+                    placeholder="ابحث واختر قطعة"
+                    disabled={!canEditWorkshop || !actionState?.canUseParts || !hasBranchWarehouse}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label>الكمية</Label>
+                  <Input
+                    className="min-h-11 text-base"
+                    inputMode="numeric"
+                    value={resQty}
+                    onChange={(e) => setResQty(e.target.value)}
+                    disabled={!canEditWorkshop}
+                  />
+                </div>
+                <Button
+                  className="min-h-11 w-full px-5 text-base sm:w-auto"
+                  disabled={!canEditWorkshop || !actionState?.canUseParts || requestingPart || !hasBranchWarehouse}
+                  onClick={() => void requestSparePart()}
+                >
+                  {requestingPart ? '…' : 'طلب'}
+                </Button>
+              </div>
+            </div>
+          )}
+
+          <div className="space-y-2">
+            {(job.partsUsed || []).length === 0 ? (
+              <p className="rounded-lg border border-dashed p-3 text-sm text-muted-foreground">
+                لا توجد قطع على الطلب بعد.
+              </p>
+            ) : (
+              (job.partsUsed || []).map((row, idx) => {
+                const fulfillment = effectiveFulfillmentStatus(row);
+                const usageId = String(row.usageId || '');
+                return (
+                  <div
+                    key={usageId || `${row.partId}-${idx}`}
+                    className="w-full space-y-2 rounded-lg border bg-muted/15 p-3 text-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-2">
+                      <div className="min-w-0 font-medium leading-snug">
+                        <span className="tabular-nums text-muted-foreground">{idx + 1}. </span>
+                        {row.partName}
+                        {row.productName ? (
+                          <span className="mt-0.5 block text-xs font-normal text-muted-foreground">
+                            للجهاز: {row.productName}
+                          </span>
+                        ) : null}
+                      </div>
+                      <span className="shrink-0 font-semibold tabular-nums">
+                        × {Number(row.quantity || 0).toLocaleString('ar-EG')}
+                      </span>
+                    </div>
+                    <div className="flex flex-wrap gap-1">
+                      <ErpStatusBadge
+                        label={REPAIR_PART_FULFILLMENT_LABELS[fulfillment]}
+                        type={repairPartFulfillmentChipType(fulfillment)}
+                      />
+                      {row.availabilityAtRequest ? (
+                        <ErpStatusBadge
+                          label={REPAIR_PART_AVAILABILITY_LABELS[row.availabilityAtRequest]}
+                          type={repairPartAvailabilityChipType(row.availabilityAtRequest)}
+                        />
+                      ) : null}
+                    </div>
+                    {canIssueParts && isReadyToIssueUsage(row) && usageId ? (
+                      <Button
+                        className="min-h-12 w-full"
+                        variant="secondary"
+                        disabled={!canEditWorkshop || issuingUsageId === usageId}
+                        onClick={() => void issuePendingUsage(usageId)}
+                      >
+                        {issuingUsageId === usageId ? 'جاري الصرف…' : 'صرف الآن'}
+                      </Button>
+                    ) : null}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          <div className="grid grid-cols-2 gap-2 lg:hidden">
+            <Button type="button" variant="outline" className="min-h-12" onClick={() => setWorkshopStep('diagnose')}>
+              السابق
+            </Button>
+            <Button type="button" variant="outline" className="min-h-12" onClick={() => setWorkshopStep('finish')}>
+              التالي: إنهاء
+            </Button>
+          </div>
+        </section>
+
+        {/* 3 — Finish */}
+        <section className={`rounded-xl border bg-card p-3 space-y-3 shadow-sm ${showFinish ? '' : 'hidden lg:block'}`}>
+          <div className="flex items-center gap-2">
+            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">3</span>
+            <div>
+              <h2 className="text-base font-semibold leading-none">إنهاء الطلب</h2>
+              <p className="mt-1 text-xs text-muted-foreground">جاهز للتسليم أو غير قابل للإصلاح</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <StatusBadge status={job.status} />
+            <span className="text-sm text-muted-foreground">{currentStatusLabel}</span>
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button
+              className="min-h-14 text-base font-semibold"
+              disabled={!canEditWorkshop || applyingStatus || !canMarkRepaired}
+              onClick={() => void applyWorkshopAction('repair_done')}
+            >
+              {applyingStatus ? 'جاري التطبيق…' : 'تم الإصلاح — جاهز للتسليم'}
+            </Button>
+            <Button
+              className="min-h-14 text-base"
+              variant="outline"
+              disabled={!canEditWorkshop || applyingStatus}
+              onClick={() => {
+                setStatus(unrepairableStatusId);
+                if (!reasonCode) setReasonCode('');
+              }}
+            >
+              غير قابل للإصلاح
+            </Button>
+          </div>
+          {showUnrepairableForm ? (
+            <div className="space-y-1.5 rounded-md border border-rose-200 bg-rose-50/40 p-3">
+              <Label>سبب عدم قابلية الإصلاح <span className="text-rose-600">*</span></Label>
+              <Select value={reasonCode} onValueChange={setReasonCode} disabled={!canEditWorkshop || applyingStatus}>
+                <SelectTrigger className="min-h-12 bg-background"><SelectValue placeholder="اختر السبب" /></SelectTrigger>
+                <SelectContent>
+                  {repairSettings.unrepairableReasons.filter((item) => item.enabled !== false).map((item) => (
+                    <SelectItem key={item.id} value={item.id}>{item.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Label>تفاصيل إضافية (مطلوبة عند «سبب آخر»)</Label>
+              <textarea
+                className="min-h-24 w-full rounded-md border border-input bg-background px-3 py-3 text-base"
+                value={reason}
+                onChange={(e) => setReason(e.target.value)}
+                disabled={!canEditWorkshop || applyingStatus}
+                placeholder="ملاحظة اختيارية عن الفحص"
+              />
+              <Button
+                className="min-h-12 w-full"
+                variant="destructive"
+                disabled={!canEditWorkshop || applyingStatus || !reasonCode}
+                onClick={() => void applyWorkshopAction('unrepairable')}
+              >
+                تأكيد غير قابل للإصلاح
+              </Button>
+            </div>
+          ) : null}
+          <Button
+            type="button"
+            variant="ghost"
+            className="min-h-11 w-full lg:hidden"
+            onClick={() => setWorkshopStep(serviceOnly ? 'diagnose' : 'parts')}
+          >
+            رجوع للخطوة السابقة
+          </Button>
+        </section>
+      </div>
+
+      {/* Mobile sticky CTA — contextual to step */}
+      <div
+        className="fixed inset-x-0 bottom-0 z-40 border-t bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/90 lg:hidden"
+        style={{ paddingBottom: 'max(0.5rem, env(safe-area-inset-bottom))' }}
+      >
+        <div className="mx-auto flex max-w-3xl items-center gap-2 px-2 py-2">
+          {workshopStep === 'diagnose' ? (
+            <>
+              <Button
+                className="min-h-12 flex-1 text-sm"
+                variant="secondary"
+                disabled={!canEditWorkshop || saving}
+                onClick={() => void persistFields()}
+              >
+                {saving ? '…' : 'حفظ'}
+              </Button>
+              <Button
+                className="min-h-12 flex-[1.4] text-sm font-semibold"
+                onClick={() => setWorkshopStep(serviceOnly ? 'finish' : 'parts')}
+              >
+                التالي
+              </Button>
+            </>
+          ) : null}
+          {workshopStep === 'parts' ? (
+            <>
+              <Button
+                className="min-h-12 flex-1 text-sm"
+                variant="outline"
+                onClick={() => setWorkshopStep('diagnose')}
+              >
+                السابق
+              </Button>
+              <Button
+                className="min-h-12 flex-1 text-sm"
+                disabled={!canEditWorkshop || !actionState?.canUseParts || requestingPart || !hasBranchWarehouse || serviceOnly}
+                onClick={() => void requestSparePart()}
+              >
+                {requestingPart ? '…' : 'طلب قطعة'}
+              </Button>
+              <Button
+                className="min-h-12 flex-1 text-sm font-semibold"
+                onClick={() => setWorkshopStep('finish')}
+              >
+                إنهاء
+              </Button>
+            </>
+          ) : null}
+          {workshopStep === 'finish' ? (
+            <>
+              <Button
+                className="min-h-12 flex-1 text-sm"
+                variant="secondary"
+                disabled={!canEditWorkshop || saving}
+                onClick={() => void persistFields()}
+              >
+                حفظ
+              </Button>
+              <Button
+                className="min-h-12 flex-[1.5] text-sm font-semibold"
+                disabled={!canEditWorkshop || applyingStatus || !canMarkRepaired}
+                onClick={() => void applyWorkshopAction('repair_done')}
+              >
+                {applyingStatus ? '…' : 'تم الإصلاح'}
+              </Button>
+            </>
+          ) : null}
         </div>
       </div>
     </div>

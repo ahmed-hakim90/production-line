@@ -205,7 +205,7 @@ export const RepairReplacements: React.FC = () => {
       toast.success('تم اعتماد طلب الاستبدال.');
       setApproveOpen(false);
       setSelected(null);
-      await load();
+      void load();
     } catch (e: unknown) {
       toast.error(toRepairOpsUserError(e, 'تعذر اعتماد الاستبدال.'));
     } finally {
@@ -229,7 +229,7 @@ export const RepairReplacements: React.FC = () => {
       };
       toast.success(messages[noteAction.action]);
       setNoteAction(null);
-      await load();
+      void load();
     } catch (e: unknown) {
       toast.error(toRepairOpsUserError(e, 'تعذر تحديث الاستبدال.'));
     } finally {

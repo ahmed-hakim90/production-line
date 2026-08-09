@@ -192,7 +192,7 @@ export const RepairSpareIssues: React.FC = () => {
     try {
       await action();
       toast.success(success);
-      await load();
+      void load();
     } catch (e: unknown) {
       toast.error(toUserSafeError(e, 'تعذر تنفيذ العملية.'));
     } finally {

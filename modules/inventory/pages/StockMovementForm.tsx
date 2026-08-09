@@ -12,7 +12,7 @@ import { rawMaterialService } from '../services/rawMaterialService';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
 import { warehouseRackService } from '../services/warehouseRackService';
-import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack } from '../types';
+import type { RawMaterial, StockAdjustmentReason, Warehouse, WarehouseLocation, StockItemBalance, WarehouseRack, TransferRequestLine } from '../types';
 import { resolveInventoryRoutingV1 } from '../services/inventoryRoutingService';
 import { StockAvailabilityHint } from '../components/StockAvailabilityHint';
 import { usePermission } from '../../../utils/permissions';
@@ -32,7 +32,6 @@ import {
   formatInvReference,
   lineQuantityInPieces as lineQtyPieces,
   validateTransferLines,
-  buildTransferRequestLines,
   buildTransferPrintDataPayload,
   type TransferFormLine,
   type TransferItemOption,
@@ -64,12 +63,36 @@ import {
 } from '../lib/componentCatalogOptions';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { WAREHOUSE_ROLE_LABELS } from '../lib/stockLabels';
+import { filterManualTransferWarehouses } from '../lib/manualTransferWarehouses';
+import {
+  defaultItemLocationKey,
+  indexDefaultItemLocations,
+  resolveManualTransferDestinationLocation,
+  resolveManualTransferSourceLocations,
+} from '../lib/manualTransferLocations';
+import { defaultItemLocationService } from '../services/defaultItemLocationService';
+import { applyWarehouseBalanceDeltas, type WarehouseBalanceDelta } from '../lib/localBalancePatch';
+import { mapGroupedSequentialParallel } from '../../shared/lib/mapGroupedSequentialParallel';
+import {
+  fetchCachedPageData,
+  peekPageDataCache,
+} from '../../shared/lib/pageDataCache';
 
 type MovementType = 'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT';
 type ItemType = 'finished_good' | 'raw_material';
 type TransferLine = TransferFormLine;
 const APP_VERSION = __APP_VERSION__;
 const SPARE_WAREHOUSE_ROLES = new Set(['spare_parts_central', 'maintenance_center']);
+const STOCK_MOVE_FORM_CATALOG_CACHE_KEY = 'inventory:stock-movement-form-catalog';
+
+type StockMoveFormCatalog = {
+  warehouses: Warehouse[];
+  rawMaterials: RawMaterial[];
+  materials: Material[];
+  warehouseLocations: WarehouseLocation[];
+  warehouseRacks: WarehouseRack[];
+  nextReferenceSeq: number;
+};
 
 function isSparePartsWarehouse(warehouse: Warehouse | undefined): boolean {
   return Boolean(warehouse?.warehouseRole && SPARE_WAREHOUSE_ROLES.has(warehouse.warehouseRole));
@@ -147,29 +170,61 @@ export const StockMovementForm: React.FC = () => {
     documentTitle: 'stock-transfer',
   });
 
-  const loadData = useCallback(async () => {
-    const [whs, rms, mats, peekRef, bals, locs, racks] = await Promise.all([
-      warehouseService.getActiveWarehouses(),
-      rawMaterialService.getAll(),
-      materialService.getAll().catch(() => [] as Material[]),
-      stockService.getNextInvReferenceNo(),
-      stockService.getBalances(),
-      warehouseLocationService.getAll(),
-      warehouseRackService.getAll(),
-    ]);
-    setWarehouses(whs);
-    setRawMaterials(rms.filter((m) => m.isActive !== false));
-    setMaterials(mats.filter((m) => m.isActive !== false));
+  const loadCatalog = useCallback(async () => {
+    const cached = peekPageDataCache<StockMoveFormCatalog>(STOCK_MOVE_FORM_CATALOG_CACHE_KEY);
+    if (cached) {
+      setWarehouses(cached.warehouses);
+      setRawMaterials(cached.rawMaterials);
+      setMaterials(cached.materials);
+      setWarehouseLocations(cached.warehouseLocations);
+      setWarehouseRacks(cached.warehouseRacks);
+      setNextReferenceSeq(cached.nextReferenceSeq);
+    }
+    const { data } = await fetchCachedPageData(
+      STOCK_MOVE_FORM_CATALOG_CACHE_KEY,
+      async () => {
+        const [whs, rms, mats, peekRef, locs, racks] = await Promise.all([
+          warehouseService.getActiveWarehouses(),
+          rawMaterialService.getAll(),
+          materialService.getAll().catch(() => [] as Material[]),
+          stockService.getNextInvReferenceNo(),
+          warehouseLocationService.getAll(),
+          warehouseRackService.getAll(),
+        ]);
+        const match = peekRef.trim().match(INV_REF_REGEX);
+        return {
+          warehouses: whs,
+          rawMaterials: rms.filter((m) => m.isActive !== false),
+          materials: mats.filter((m) => m.isActive !== false),
+          warehouseLocations: locs,
+          warehouseRacks: racks,
+          nextReferenceSeq: match ? Number(match[1] || 0) : 1,
+        } satisfies StockMoveFormCatalog;
+      },
+      { maxAgeMs: 60_000 },
+    );
+    setWarehouses(data.warehouses);
+    setRawMaterials(data.rawMaterials);
+    setMaterials(data.materials);
+    setWarehouseLocations(data.warehouseLocations);
+    setWarehouseRacks(data.warehouseRacks);
+    setNextReferenceSeq(data.nextReferenceSeq);
+  }, []);
+
+  const loadBalancesForWarehouse = useCallback(async (whId: string) => {
+    if (!whId) {
+      setBalances([]);
+      return;
+    }
+    const bals = await stockService.getBalances(whId);
     setBalances(bals);
-    setWarehouseLocations(locs);
-    setWarehouseRacks(racks);
-    const match = peekRef.trim().match(INV_REF_REGEX);
-    setNextReferenceSeq(match ? Number(match[1] || 0) : 1);
   }, []);
 
   useEffect(() => {
-    void loadData();
-  }, [loadData]);
+    void loadCatalog();
+  }, [loadCatalog]);
+
+  // balances loaded after effectiveWarehouseId is known (see below)
 
   useEffect(() => {
     const queryWarehouseId = initialSearch.get('warehouseId') || '';
@@ -205,7 +260,7 @@ export const StockMovementForm: React.FC = () => {
   }, [warehouses, warehouseId, scopedWarehouseId, scoped, movementType, initialSearch]);
 
   const sourceWarehouses = useMemo(
-    () => filterWarehouses(warehouses),
+    () => filterManualTransferWarehouses(filterWarehouses(warehouses)),
     [filterWarehouses, warehouses],
   );
 
@@ -214,10 +269,10 @@ export const StockMovementForm: React.FC = () => {
       warehouseId: warehouseId || '',
       itemType: nextItemType,
       onSaved: () => {
-        void loadData();
+        void loadBalancesForWarehouse(warehouseId);
       },
     });
-  }, [openModal, warehouseId, loadData]);
+  }, [openModal, warehouseId, loadBalancesForWarehouse]);
 
   useEffect(() => {
     const action = new URLSearchParams(location.search).get('action');
@@ -312,6 +367,11 @@ export const StockMovementForm: React.FC = () => {
   const effectiveWarehouseId = isFinishedTransferFlow
     ? (autoTransferSourceWarehouseId || warehouseId)
     : warehouseId;
+
+  useEffect(() => {
+    void loadBalancesForWarehouse(effectiveWarehouseId);
+  }, [effectiveWarehouseId, loadBalancesForWarehouse]);
+
   const selectedFromWarehouse = warehouses.find((w) => w.id === effectiveWarehouseId);
   const selectedToWarehouse = warehouses.find((w) => w.id === toWarehouseId);
   const selectedLocation = warehouseLocations.find((loc) => loc.id === locationId);
@@ -392,7 +452,10 @@ export const StockMovementForm: React.FC = () => {
             label: `${selectedFromWarehouse.name} (${selectedFromWarehouse.code}) — نقل رف → رف`,
           }]
         : [];
-      const others = warehouses
+      const destinationCandidates = filterManualTransferWarehouses(warehouses, {
+        sparePartsOnly: isSparePartsContext,
+      });
+      const others = destinationCandidates
         .filter((w) => w.id && w.id !== effectiveWarehouseId)
         .map((w) => ({
           value: w.id || '',
@@ -400,8 +463,16 @@ export const StockMovementForm: React.FC = () => {
         }));
       return [...same, ...others];
     },
-    [warehouses, effectiveWarehouseId, selectedFromWarehouse],
+    [warehouses, effectiveWarehouseId, selectedFromWarehouse, isSparePartsContext],
   );
+
+  useEffect(() => {
+    if (!toWarehouseId) return;
+    if (!toWarehouseSelectOptions.some((opt) => opt.value === toWarehouseId)) {
+      setToWarehouseId('');
+      setToLocationId('');
+    }
+  }, [toWarehouseId, toWarehouseSelectOptions]);
 
   const getItemById = (id: string) => itemOptions.find((item) => item.id === id);
 
@@ -535,6 +606,12 @@ export const StockMovementForm: React.FC = () => {
         }
 
         if (toWarehouseId === effectiveWarehouseId) {
+          const prepared: Array<{
+            line: TransferLine;
+            item: TransferItemOption;
+            qty: number;
+            stockIdentity: ReturnType<typeof resolveLineStockIdentity>;
+          }> = [];
           for (const line of transferItems) {
             const item = getItemById(line.itemId);
             if (!item) continue;
@@ -544,44 +621,116 @@ export const StockMovementForm: React.FC = () => {
               toast.error(`الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`);
               return;
             }
-            txId = unwrapOrThrow(await createStockMovement({
-              warehouseId: effectiveWarehouseId,
-              toWarehouseId: effectiveWarehouseId,
-              locationId,
-              locationCode: selectedLocation?.code,
-              toLocationId,
-              toLocationCode: selectedToLocation?.code,
-              itemType: stockIdentity.itemType,
-              itemId: stockIdentity.itemId,
-              itemName: item.name,
-              itemCode: item.code,
-              movementType: 'TRANSFER',
-              quantity: qty,
-              unit: itemType === 'finished_good' ? line.unit : 'unit',
-              requestQuantity: Number(line.quantity || 0),
-              requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
-              unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
-              minStock: item.minStock,
-              referenceNo: resolvedReferenceNo,
-              note: 'نقل رف → رف داخل نفس المخزن',
-              sourceModule: 'manual_movement',
-              createdBy: userDisplayName || 'Current User',
-            }, { path: INVENTORY_STOCK_MOVE_PATHS.immediateTransfer })).transactionId;
+            prepared.push({ line, item, qty, stockIdentity });
           }
-        } else {
-          // Prefer posting identity with available stock for each component line.
-          const requestLines = buildTransferRequestLines(
-            transferItems,
-            itemType,
-            (id) => {
-              const item = getItemById(id);
-              if (!item) return undefined;
-              if (itemType === 'finished_good') return item;
-              const identity = resolveLineStockIdentity(id, 'TRANSFER');
-              return { ...item, id: identity.itemId, stockItemType: identity.itemType };
+          if (!prepared.length) {
+            toast.error('تعذر ترحيل أي صنف.');
+            return;
+          }
+          await mapGroupedSequentialParallel(
+            prepared,
+            (row) => `${row.stockIdentity.itemType}__${row.stockIdentity.itemId}`,
+            async (row) => {
+              txId = unwrapOrThrow(await createStockMovement({
+                warehouseId: effectiveWarehouseId,
+                toWarehouseId: effectiveWarehouseId,
+                locationId,
+                locationCode: selectedLocation?.code,
+                toLocationId,
+                toLocationCode: selectedToLocation?.code,
+                itemType: row.stockIdentity.itemType,
+                itemId: row.stockIdentity.itemId,
+                itemName: row.item.name,
+                itemCode: row.item.code,
+                movementType: 'TRANSFER',
+                quantity: row.qty,
+                unit: itemType === 'finished_good' ? row.line.unit : 'unit',
+                requestQuantity: Number(row.line.quantity || 0),
+                requestUnit: itemType === 'finished_good' ? row.line.unit : 'unit',
+                unitsPerCarton: itemType === 'finished_good' ? Number(row.item.unitsPerCarton || 0) : undefined,
+                minStock: row.item.minStock,
+                referenceNo: resolvedReferenceNo,
+                note: 'نقل رف → رف داخل نفس المخزن',
+                sourceModule: 'manual_movement',
+                createdBy: userDisplayName || 'Current User',
+              }, { path: INVENTORY_STOCK_MOVE_PATHS.immediateTransfer })).transactionId;
             },
-            lineQuantityInPieces,
           );
+        } else {
+          const [sourceDefaults, destDefaults, sourceLocBalances] = await Promise.all([
+            defaultItemLocationService.getAll(effectiveWarehouseId).catch(() => []),
+            defaultItemLocationService.getAll(toWarehouseId).catch(() => []),
+            locationSelectOptions.length > 0
+              ? stockService.getLocationBalances({ warehouseId: effectiveWarehouseId }).catch(() => [])
+              : Promise.resolve([]),
+          ]);
+          const sourceDefaultsByKey = indexDefaultItemLocations(sourceDefaults);
+          const destDefaultsByKey = indexDefaultItemLocations(destDefaults);
+          const warehouseHasLocations = locationSelectOptions.length > 0;
+
+          const requestLines: TransferRequestLine[] = [];
+          for (const line of transferItems) {
+            const item = getItemById(line.itemId);
+            if (!item) {
+              toast.error('كل صف يجب أن يحتوي على صنف.');
+              return;
+            }
+            const identity = itemType === 'finished_good'
+              ? { itemType: 'finished_good' as const, itemId: item.id, available: getAvailableForItem(item.id) }
+              : resolveLineStockIdentity(line.itemId, 'TRANSFER');
+            const qty = lineQuantityInPieces(line);
+            if (qty > identity.available) {
+              toast.error(`الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${identity.available}).`);
+              return;
+            }
+            const sourceDefault = sourceDefaultsByKey.get(
+              defaultItemLocationKey(identity.itemType, identity.itemId),
+            );
+            const sourceResolved = resolveManualTransferSourceLocations({
+              itemName: item.name,
+              itemType: identity.itemType,
+              itemId: identity.itemId,
+              quantity: qty,
+              warehouseHasLocations,
+              defaultLocation: sourceDefault,
+              locationBalances: sourceLocBalances,
+            });
+            if (sourceResolved.ok === false) {
+              toast.error(sourceResolved.error);
+              return;
+            }
+            const destination = resolveManualTransferDestinationLocation({
+              itemType: identity.itemType,
+              itemId: identity.itemId,
+              defaultsByKey: destDefaultsByKey,
+            });
+            for (const slice of sourceResolved.slices) {
+              const row: TransferRequestLine = {
+                itemType: identity.itemType,
+                itemId: identity.itemId,
+                itemName: item.name,
+                itemCode: item.code,
+                quantity: slice.quantity,
+                requestQuantity: itemType === 'finished_good' && line.unit === 'carton'
+                  ? Number(line.quantity || 0)
+                  : slice.quantity,
+                requestUnit: (itemType === 'finished_good' ? line.unit : 'unit') as TransferRequestLine['requestUnit'],
+                minStock: item.minStock,
+              };
+              if (itemType === 'finished_good') {
+                row.unitsPerCarton = Number(item.unitsPerCarton || 0);
+              }
+              if (slice.locationId) {
+                row.locationId = slice.locationId;
+                if (slice.locationCode) row.locationCode = slice.locationCode;
+              }
+              if (destination.toLocationId) {
+                row.toLocationId = destination.toLocationId;
+                if (destination.toLocationCode) row.toLocationCode = destination.toLocationCode;
+              }
+              requestLines.push(row);
+            }
+          }
           if (!requestLines.length) {
             toast.error('تعذر تجهيز أصناف طلب التحويل.');
             return;
@@ -616,48 +765,55 @@ export const StockMovementForm: React.FC = () => {
           return;
         }
 
-        let posted = 0;
+        const prepared: Array<{
+          line: TransferLine;
+          item: TransferItemOption;
+          qty: number;
+          stockIdentity: ReturnType<typeof resolveLineStockIdentity>;
+        }> = [];
         for (const line of transferItems) {
           const item = getItemById(line.itemId);
           if (!item) continue;
           const qty = lineQuantityInPieces(line);
           const stockIdentity = resolveLineStockIdentity(line.itemId, movementType);
           if (movementType === 'OUT' && qty > stockIdentity.available) {
-            toast.error(
-              posted > 0
-                ? `تم ترحيل ${posted} صنفًا ثم توقف: الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`
-                : `الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`,
-            );
+            toast.error(`الكمية تتجاوز الرصيد المتاح للصنف "${item.name}" (${stockIdentity.available}).`);
             return;
           }
-          txId = unwrapOrThrow(await createStockMovement({
-            warehouseId: effectiveWarehouseId,
-            locationId: locationId || undefined,
-            locationCode: selectedLocation?.code,
-            toWarehouseId: undefined,
-            itemType: stockIdentity.itemType,
-            itemId: stockIdentity.itemId,
-            itemName: item.name,
-            itemCode: item.code,
-            movementType,
-            quantity: qty,
-            unit: itemType === 'finished_good' ? line.unit : 'unit',
-            requestQuantity: Number(line.quantity || 0),
-            requestUnit: itemType === 'finished_good' ? line.unit : 'unit',
-            unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
-            minStock: item.minStock,
-            referenceNo: resolvedReferenceNo,
-            note: voucherNote.trim() || undefined,
-            sourceModule: 'manual_movement',
-            sourceId: `${resolvedReferenceNo}:${line.id}`,
-            createdBy: userDisplayName || 'Current User',
-          }, { path: INVENTORY_STOCK_MOVE_PATHS.movementsForm })).transactionId;
-          posted += 1;
+          prepared.push({ line, item, qty, stockIdentity });
         }
-        if (posted === 0) {
+        if (prepared.length === 0) {
           toast.error('تعذر ترحيل أي صنف.');
           return;
         }
+        await mapGroupedSequentialParallel(
+          prepared,
+          (row) => `${row.stockIdentity.itemType}__${row.stockIdentity.itemId}`,
+          async (row) => {
+            txId = unwrapOrThrow(await createStockMovement({
+              warehouseId: effectiveWarehouseId,
+              locationId: locationId || undefined,
+              locationCode: selectedLocation?.code,
+              toWarehouseId: undefined,
+              itemType: row.stockIdentity.itemType,
+              itemId: row.stockIdentity.itemId,
+              itemName: row.item.name,
+              itemCode: row.item.code,
+              movementType,
+              quantity: row.qty,
+              unit: itemType === 'finished_good' ? row.line.unit : 'unit',
+              requestQuantity: Number(row.line.quantity || 0),
+              requestUnit: itemType === 'finished_good' ? row.line.unit : 'unit',
+              unitsPerCarton: itemType === 'finished_good' ? Number(row.item.unitsPerCarton || 0) : undefined,
+              minStock: row.item.minStock,
+              referenceNo: resolvedReferenceNo,
+              note: voucherNote.trim() || undefined,
+              sourceModule: 'manual_movement',
+              sourceId: `${resolvedReferenceNo}:${row.line.id}`,
+              createdBy: userDisplayName || 'Current User',
+            }, { path: INVENTORY_STOCK_MOVE_PATHS.movementsForm })).transactionId;
+          },
+        );
       } else {
         if (!selectedItem) {
           toast.error('اختر الصنف أولًا.');
@@ -711,26 +867,45 @@ export const StockMovementForm: React.FC = () => {
               ? `تم تسجيل المنصرف (${transferItems.length} صنف) بنجاح.`
               : 'تم تسجيل الحركة بنجاح.');
 
-      if (movementType === 'TRANSFER' && !isShelfTransfer && afterSaveAction !== 'none') {
-        const payload = buildTransferPrintData(resolvedReferenceNo, txId);
-        if (afterSaveAction === 'preview') {
-          setPreviewData(payload);
-          setShowPrintPreview(true);
-        } else if (afterSaveAction === 'share') {
-          setPrintData(payload);
-          await waitForExportPaint(150);
-          if (transferShareCardRef.current) {
-            const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${payload.transferNo}`);
-            showShareFeedback(result);
-          }
-          setTimeout(() => setPrintData(null), 1200);
-        } else {
-          setPrintData(payload);
-          await new Promise((r) => setTimeout(r, 250));
-          await printTransfer(`اذن-تحويل-${payload.transferNo}`);
-          setTimeout(() => setPrintData(null), 1200);
+      const balanceDeltas: WarehouseBalanceDelta[] = [];
+      if ((movementType === 'IN' || movementType === 'OUT') && effectiveWarehouseId) {
+        for (const line of transferItems) {
+          const item = getItemById(line.itemId);
+          if (!item) continue;
+          const stockIdentity = resolveLineStockIdentity(line.itemId, movementType);
+          const qty = lineQuantityInPieces(line);
+          balanceDeltas.push({
+            warehouseId: effectiveWarehouseId,
+            itemType: stockIdentity.itemType,
+            itemId: stockIdentity.itemId,
+            delta: movementType === 'IN' ? qty : -qty,
+            itemName: item.name,
+            itemCode: item.code,
+            minStock: item.minStock,
+          });
         }
+      } else if (movementType === 'ADJUSTMENT' && selectedItem && effectiveWarehouseId) {
+        const stockIdentity = resolveLineStockIdentity(selectedItem.id, movementType);
+        balanceDeltas.push({
+          warehouseId: effectiveWarehouseId,
+          itemType: stockIdentity.itemType,
+          itemId: stockIdentity.itemId,
+          delta: Number(quantity || 0),
+          itemName: selectedItem.name,
+          itemCode: selectedItem.code,
+          minStock: selectedItem.minStock,
+        });
       }
+      if (balanceDeltas.length) {
+        setBalances((prev) => applyWarehouseBalanceDeltas(prev, balanceDeltas));
+      }
+
+      const shouldPrintTransfer =
+        movementType === 'TRANSFER' && !isShelfTransfer && afterSaveAction !== 'none';
+      const printPayload = shouldPrintTransfer
+        ? buildTransferPrintData(resolvedReferenceNo, txId)
+        : null;
+      const printAction = shouldPrintTransfer ? afterSaveAction : 'none';
 
       setNextReferenceSeq((prev) => {
         const match = resolvedReferenceNo.match(INV_REF_REGEX);
@@ -738,7 +913,28 @@ export const StockMovementForm: React.FC = () => {
         return Math.max(prev + 1, fromUsedRef);
       });
       resetForm(movementType === 'TRANSFER' ? 'TRANSFER' : 'IN');
-      void loadData();
+      setSaving(false);
+
+      if (printPayload && printAction !== 'none') {
+        if (printAction === 'preview') {
+          setPreviewData(printPayload);
+          setShowPrintPreview(true);
+        } else if (printAction === 'share') {
+          setPrintData(printPayload);
+          await waitForExportPaint(150);
+          if (transferShareCardRef.current) {
+            const result = await shareToWhatsApp(transferShareCardRef.current, `stock-transfer-${printPayload.transferNo}`);
+            showShareFeedback(result);
+          }
+          setTimeout(() => setPrintData(null), 1200);
+        } else {
+          setPrintData(printPayload);
+          await new Promise((r) => setTimeout(r, 250));
+          await printTransfer(`اذن-تحويل-${printPayload.transferNo}`);
+          setTimeout(() => setPrintData(null), 1200);
+        }
+      }
+      return;
     } catch (error: any) {
       toast.error(error?.message || 'تعذر حفظ الحركة.');
     } finally {
@@ -1055,7 +1251,11 @@ export const StockMovementForm: React.FC = () => {
                   setLocationId('');
                   setToLocationId('');
                 }}
-                placeholder="ابحث واختر مخزن الوجهة أو نفس المخزن لنقل رف"
+                placeholder={
+                  isSparePartsContext
+                    ? 'ابحث واختر مركز صيانة أو مخزن قطع غيار'
+                    : 'ابحث واختر مخزن الوجهة أو نفس المخزن لنقل رف'
+                }
               />
             </div>
           )}

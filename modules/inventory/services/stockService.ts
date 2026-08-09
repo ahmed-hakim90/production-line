@@ -433,8 +433,10 @@ export const stockService = {
 
     const tenantId = getCurrentTenantId();
     const txRef = doc(collection(db, TRANSACTIONS_COLLECTION));
-    const sourceLocMeta = await locationMeta(input.locationId);
-    const targetLocMeta = await locationMeta(input.toLocationId);
+    const [sourceLocMeta, targetLocMeta] = await Promise.all([
+      locationMeta(input.locationId),
+      locationMeta(input.toLocationId),
+    ]);
     const sourceLocationFields = stripUndefined({
       locationCode: input.locationCode || sourceLocMeta.locationCode,
       rackId: input.rackId || sourceLocMeta.rackId,

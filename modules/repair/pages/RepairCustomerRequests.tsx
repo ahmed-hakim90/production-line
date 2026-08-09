@@ -181,7 +181,7 @@ export const RepairCustomerRequests: React.FC = () => {
       setAssignOpen(false);
       setSelected(null);
       setAssignBranchId('');
-      await load();
+      void load();
     } catch (e: unknown) {
       toast.error(toRepairOpsUserError(e, 'تعذر توزيع الطلب.'));
     } finally {
@@ -210,7 +210,7 @@ export const RepairCustomerRequests: React.FC = () => {
       toast.success(`تم الاستلام وإنشاء طلب الصيانة ${result.receiptNo}.`);
       setReceiveOpen(false);
       setSelected(null);
-      await load();
+      void load();
     } catch (e: unknown) {
       toast.error(toRepairOpsUserError(e, 'تعذر تأكيد الاستلام.'));
     } finally {

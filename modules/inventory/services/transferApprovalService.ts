@@ -37,10 +37,29 @@ import {
   peekNextInvReferenceNo,
 } from './inventoryInvSequence';
 import { getCurrentBoundInventoryWarehouseId } from './inventoryWarehouseScopeService';
+import {
+  isRepairSystemWarehouseRole,
+  MANUAL_TRANSFER_REPAIR_WAREHOUSE_ERROR,
+} from '../lib/manualTransferWarehouses';
 
 const COLLECTION = 'inventory_transfer_requests';
 const toIsoNow = () => new Date().toISOString();
 const MAX_PAGE_SIZE = 100;
+
+/** Firestore rejects `undefined` — strip deeply before writes. */
+const stripUndefinedDeep = <T>(value: T): T => {
+  if (Array.isArray(value)) {
+    return value.map((item) => stripUndefinedDeep(item)) as T;
+  }
+  if (value && typeof value === 'object' && Object.getPrototypeOf(value) === Object.prototype) {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, stripUndefinedDeep(v)]),
+    ) as T;
+  }
+  return value;
+};
 
 type FirestoreCursor = QueryDocumentSnapshot | null;
 type TransferRequestPageResult = {
@@ -92,6 +111,10 @@ async function executeTransferLikeRequest(
     await stockService.createMovement({
       warehouseId: request.fromWarehouseId,
       toWarehouseId: request.toWarehouseId,
+      locationId: line.locationId,
+      locationCode: line.locationCode,
+      toLocationId: line.toLocationId,
+      toLocationCode: line.toLocationCode,
       itemType: line.itemType,
       itemId: line.itemId,
       itemName: line.itemName,
@@ -364,9 +387,16 @@ export const transferApprovalService = {
     if (isTransferLikeType(requestType) && input.fromWarehouseId === input.toWarehouseId) {
       throw new Error('المخزن المصدر يجب أن يكون مختلفا عن مخزن الوجهة.');
     }
+    if (requestType === 'manual_transfer') {
+      const warehouseIds = [input.fromWarehouseId, input.toWarehouseId].filter(Boolean);
+      const warehouses = await Promise.all(warehouseIds.map((id) => warehouseService.getById(id)));
+      if (warehouses.some((w) => isRepairSystemWarehouseRole(w?.warehouseRole))) {
+        throw new Error(MANUAL_TRANSFER_REPAIR_WAREHOUSE_ERROR);
+      }
+    }
     const lines = input.lines
       .filter((line) => Number(line.quantity) > 0)
-      .map((line) => ({ ...line, quantity: Number(line.quantity) }));
+      .map((line) => stripUndefinedDeep({ ...line, quantity: Number(line.quantity) }));
     if (!lines.length) {
       throw new Error('لا توجد أصناف صالحة في طلب التحويل.');
     }
@@ -428,10 +458,10 @@ export const transferApprovalService = {
       if (createdByUserId) payload.createdByUserId = createdByUserId;
 
       const ref = doc(collection(db, COLLECTION));
-      t.set(ref, {
+      t.set(ref, stripUndefinedDeep({
         ...payload,
         tenantId: getCurrentTenantId(),
-      });
+      }));
       return ref.id;
     });
 
@@ -513,6 +543,10 @@ export const transferApprovalService = {
         await stockService.createMovement({
           warehouseId: request.fromWarehouseId,
           toWarehouseId: request.toWarehouseId,
+          locationId: line.locationId,
+          locationCode: line.locationCode,
+          toLocationId: line.toLocationId,
+          toLocationCode: line.toLocationCode,
           itemType: line.itemType,
           itemId: line.itemId,
           itemName: line.itemName,

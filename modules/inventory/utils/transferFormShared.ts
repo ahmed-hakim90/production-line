@@ -76,18 +76,27 @@ export function validateTransferLines(
   return null;
 }
 
+export type TransferRequestLineLocations = {
+  locationId?: string;
+  locationCode?: string;
+  toLocationId?: string;
+  toLocationCode?: string;
+};
+
+/** Build Firestore-safe transfer lines (never include `undefined` field values). */
 export function buildTransferRequestLines(
   transferItems: TransferFormLine[],
   itemType: 'finished_good' | 'raw_material',
   getItemById: (id: string) => TransferItemOption | undefined,
   qtyInPieces: (line: TransferFormLine) => number,
+  locations?: TransferRequestLineLocations,
 ): TransferRequestLine[] {
   return transferItems
     .map((line): TransferRequestLine | null => {
       const item = getItemById(line.itemId);
       if (!item) return null;
       const stockItemType = item.stockItemType || itemType;
-      return {
+      const row: TransferRequestLine = {
         itemType: stockItemType,
         itemId: item.id,
         itemName: item.name,
@@ -95,9 +104,24 @@ export function buildTransferRequestLines(
         quantity: qtyInPieces(line),
         requestQuantity: Number(line.quantity || 0),
         requestUnit: (itemType === 'finished_good' ? line.unit : 'unit') as TransferRequestLine['requestUnit'],
-        unitsPerCarton: itemType === 'finished_good' ? Number(item.unitsPerCarton || 0) : undefined,
         minStock: item.minStock,
       };
+      if (itemType === 'finished_good') {
+        row.unitsPerCarton = Number(item.unitsPerCarton || 0);
+      }
+      const locationId = String(locations?.locationId || '').trim();
+      if (locationId) {
+        row.locationId = locationId;
+        const locationCode = String(locations?.locationCode || '').trim();
+        if (locationCode) row.locationCode = locationCode;
+      }
+      const toLocationId = String(locations?.toLocationId || '').trim();
+      if (toLocationId) {
+        row.toLocationId = toLocationId;
+        const toLocationCode = String(locations?.toLocationCode || '').trim();
+        if (toLocationCode) row.toLocationCode = toLocationCode;
+      }
+      return row;
     })
     .filter((line): line is TransferRequestLine => Boolean(line));
 }

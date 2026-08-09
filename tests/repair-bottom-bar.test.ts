@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { MENU_CONFIG, type MenuItem } from '../config/menu.config.ts';
 import {
+  isRepairWorkshopFocusPath,
   resolveRepairBottomPersona,
   resolveVisibleRepairBottomBarItems,
   shouldShowRepairBottomBar,
@@ -122,6 +123,13 @@ const alwaysEnabled = () => true;
     ['admin-home', 'jobs'],
     'omits replenish/kpis when permissions missing',
   );
+}
+
+{
+  assert.equal(isRepairWorkshopFocusPath('/repair/jobs/abc123/workspace'), true);
+  assert.equal(isRepairWorkshopFocusPath('/repair/jobs/abc123/workspace/'), true);
+  assert.equal(isRepairWorkshopFocusPath('/repair/jobs/abc123'), false);
+  assert.equal(isRepairWorkshopFocusPath('/repair/my-jobs'), false);
 }
 
 console.log('repair-bottom-bar.test.ts: ok');

@@ -6,7 +6,7 @@ import { Sidebar } from './Sidebar';
 import { Topbar } from './Topbar';
 import { MobileBottomBar } from './MobileBottomBar';
 import { RepairMobileBottomBar } from './RepairMobileBottomBar';
-import { shouldShowRepairBottomBar } from './repairBottomBar';
+import { isRepairWorkshopFocusPath, shouldShowRepairBottomBar } from './repairBottomBar';
 import { PageBackProvider } from './PageBackContext';
 import { GlobalBackgroundJobs } from '@/components/background-jobs/GlobalBackgroundJobs';
 import { usePermission } from '@/utils/permissions';
@@ -47,7 +47,7 @@ const AppLayoutInner: React.FC<AppLayoutProps> = ({ children }) => {
   }, [location.pathname]);
   const workshopFocusMode = useMemo(() => {
     const p = stripTenantSegmentFromPathname(location.pathname);
-    return /^\/repair\/jobs\/[^/]+\/workspace\/?$/.test(p);
+    return isRepairWorkshopFocusPath(p);
   }, [location.pathname]);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,

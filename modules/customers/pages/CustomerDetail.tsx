@@ -376,7 +376,20 @@ export const CustomerDetail: React.FC = () => {
       });
       toast.success('تم تحديث العميل.');
       setEditOpen(false);
-      await load();
+      setCustomer((prev) =>
+        prev
+          ? {
+              ...prev,
+              code: editForm.code,
+              type: editForm.type,
+              name: editForm.name,
+              phone: editForm.phone,
+              address: editForm.address,
+              notes: editForm.notes,
+              isActive: editForm.isActive,
+            }
+          : prev,
+      );
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر حفظ العميل.');
     } finally {
@@ -403,7 +416,15 @@ export const CustomerDetail: React.FC = () => {
       });
       toast.success('تم تحديث المتابعة.');
       setFollowUpOpen(false);
-      await load();
+      setCustomer((prev) =>
+        prev
+          ? {
+              ...prev,
+              followUpStatus,
+              followUpNotes,
+            }
+          : prev,
+      );
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر تحديث المتابعة.');
     } finally {

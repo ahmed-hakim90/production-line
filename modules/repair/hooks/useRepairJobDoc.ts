@@ -34,7 +34,7 @@ export function useRepairJobDoc(jobId: string | undefined, technicianMode = fals
         }
       };
       void load();
-      const timer = window.setInterval(() => void load(), 20_000);
+      const timer = window.setInterval(() => void load(), 45_000);
       return () => {
         cancelled = true;
         window.clearInterval(timer);

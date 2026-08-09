@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -11,13 +13,61 @@ import { useRepairJobs } from '../hooks/useRepairJobs';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { repairBranchService } from '../services/repairBranchService';
 import { StatusBadge } from '../components/StatusBadge';
-import type { FirestoreUserWithRepair, RepairBranch, RepairJobStatus } from '../types';
+import type { FirestoreUserWithRepair, RepairBranch, RepairJob, RepairJobStatus } from '../types';
 import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
 const PAGE_SIZE = 20;
+
+function isClosedJobStatus(status: string): boolean {
+  return ['delivered', 'unrepairable', 'cancelled'].includes(String(status || ''));
+}
+
+function TechnicianJobMobileCard({
+  job,
+  branchName,
+  tenantSlug,
+}: {
+  job: RepairJob;
+  branchName: string;
+  tenantSlug?: string;
+}) {
+  const closed = isClosedJobStatus(String(job.status || ''));
+  const device = [job.deviceBrand, job.deviceModel].filter(Boolean).join(' ') || '—';
+  const workshopPath = withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`);
+  const overdue = job.dueAt && Date.parse(String(job.dueAt)) < Date.now() && !closed;
+
+  return (
+    <Link
+      to={workshopPath}
+      className="block rounded-xl border bg-card p-3 shadow-sm transition-colors active:bg-muted/40"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-mono text-sm font-bold text-primary">#{job.receiptNo}</div>
+          <div className="mt-1 truncate text-base font-semibold leading-snug">{device}</div>
+          <div className="mt-0.5 text-xs text-muted-foreground">{branchName || '—'}</div>
+        </div>
+        <ChevronLeft className="mt-1 h-5 w-5 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden />
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <StatusBadge status={job.status} />
+        {job.dueAt ? (
+          <span className={`text-xs tabular-nums ${overdue ? 'font-semibold text-rose-600' : 'text-muted-foreground'}`}>
+            استحقاق {new Date(job.dueAt).toLocaleDateString('ar-EG')}
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-3">
+        <span className="inline-flex min-h-10 w-full items-center justify-center rounded-lg bg-primary/10 px-3 text-sm font-bold text-primary">
+          {closed ? 'عرض الطلب' : 'فتح الورشة'}
+        </span>
+      </div>
+    </Link>
+  );
+}
 
 export const RepairMyJobs: React.FC = () => {
   const { dir } = useAppDirection();
@@ -100,11 +150,16 @@ export const RepairMyJobs: React.FC = () => {
       : REPAIR_JOB_STATUSES
   ) as RepairJobStatus[];
 
+  const emptyMessage = listError
+    || (technicianIds.length === 0
+      ? 'لا يمكن عرض الطلبات — اربط حسابك بموظف من إدارة المستخدمين.'
+      : 'لا توجد طلبات مسندة إليك. من الاستقبال: افتح الطلب واختر الفني ثم احفظ الإسناد (مع ربط الموظف بالحساب).');
+
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
+    <div className="erp-ds-clean space-y-4 p-3 md:p-6" dir={dir}>
       <PageHeader
-        title="طلباتي (فني)"
-        subtitle="كل الطلبات المسندة إليك، بما فيها المفتوحة والمنتهية وغير القابلة للإصلاح"
+        title="طلباتي"
+        subtitle="الطلبات المسندة إليك — اضغط لفتح الورشة"
         primaryAction={{
           label: 'تحديث',
           icon: 'refresh',
@@ -136,7 +191,28 @@ export const RepairMyJobs: React.FC = () => {
             }}
           />
 
-          <div className="overflow-x-auto">
+          {/* Mobile cards */}
+          <div className="space-y-2 p-3 md:hidden">
+            {loading ? (
+              <p className="py-8 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+                جاري التحميل...
+              </p>
+            ) : pagedJobs.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">{emptyMessage}</p>
+            ) : (
+              pagedJobs.map((job) => (
+                <TechnicianJobMobileCard
+                  key={job.id}
+                  job={job}
+                  branchName={branchNameById.get(String(job.branchId || '')) || ''}
+                  tenantSlug={tenantSlug}
+                />
+              ))
+            )}
+          </div>
+
+          {/* Desktop table */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="table erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
@@ -164,12 +240,10 @@ export const RepairMyJobs: React.FC = () => {
                     </td>
                     <td className="p-2">
                       <Link
-                        className="text-primary underline text-xs"
+                        className="text-xs text-primary underline"
                         to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
                       >
-                        {['delivered', 'unrepairable', 'cancelled'].includes(String(job.status || ''))
-                          ? 'عرض الطلب'
-                          : 'فتح الورشة'}
+                        {isClosedJobStatus(String(job.status || '')) ? 'عرض الطلب' : 'فتح الورشة'}
                       </Link>
                     </td>
                   </tr>
@@ -177,10 +251,7 @@ export const RepairMyJobs: React.FC = () => {
                 {!loading && visibleJobs.length === 0 && (
                   <tr>
                     <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                      {listError
-                        || (technicianIds.length === 0
-                          ? 'لا يمكن عرض الطلبات — اربط حسابك بموظف من إدارة المستخدمين.'
-                          : 'لا توجد طلبات مسندة إليك. من الاستقبال: افتح الطلب واختر الفني ثم احفظ الإسناد (مع ربط الموظف بالحساب).')}
+                      {emptyMessage}
                     </td>
                   </tr>
                 )}
@@ -197,6 +268,14 @@ export const RepairMyJobs: React.FC = () => {
           />
         </CardContent>
       </Card>
+
+      <div className="md:hidden">
+        <Link to={withTenantPath(tenantSlug, '/')}>
+          <Button type="button" variant="outline" className="min-h-11 w-full">
+            العودة للوحة الفني
+          </Button>
+        </Link>
+      </div>
     </div>
   );
 };

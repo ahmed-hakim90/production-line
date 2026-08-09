@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import { ChevronLeft } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -15,9 +16,10 @@ import {
   formatRepairTechnicianDeviceLabel,
   resolveRepairTechnicianHomeRange,
   summarizeRepairTechnicianHome,
+  type RepairTechnicianHomeJob,
   type RepairTechnicianHomePeriod,
 } from '../lib/repairTechnicianHomeMetrics';
-import type { FirestoreUserWithRepair, RepairJobStatus } from '../types';
+import type { FirestoreUserWithRepair, RepairJob, RepairJobStatus } from '../types';
 
 const PERIOD_OPTIONS: { value: RepairTechnicianHomePeriod; label: string }[] = [
   { value: 'daily', label: 'اليوم' },
@@ -45,6 +47,58 @@ function periodLabel(period: RepairTechnicianHomePeriod): string {
   if (period === 'daily') return 'اليوم';
   if (period === 'weekly') return 'هذا الأسبوع';
   return 'هذا الشهر';
+}
+
+function TechJobRowCard({
+  job,
+  dateValue,
+  tenantSlug,
+  dateTone,
+}: {
+  job: RepairJob | RepairTechnicianHomeJob;
+  dateValue?: string;
+  tenantSlug?: string;
+  dateTone?: 'amber' | 'default';
+}) {
+  if (!job.id) {
+    return (
+      <div className="rounded-xl border bg-card p-3 opacity-70">
+        <div className="font-mono text-sm font-bold">#{job.receiptNo || '—'}</div>
+        <div className="mt-1 truncate text-sm font-semibold">
+          {formatRepairTechnicianDeviceLabel(job)}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
+      className="block rounded-xl border bg-card p-3 shadow-sm transition-colors active:bg-muted/40"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="font-mono text-sm font-bold text-primary">#{job.receiptNo || '—'}</div>
+          <div className="mt-1 truncate text-base font-semibold leading-snug">
+            {formatRepairTechnicianDeviceLabel(job)}
+          </div>
+        </div>
+        <ChevronLeft className="mt-1 h-5 w-5 shrink-0 text-muted-foreground rtl:rotate-180" aria-hidden />
+      </div>
+      <div className="mt-2.5 flex flex-wrap items-center gap-2">
+        <StatusBadge status={job.status as RepairJobStatus} />
+        <span
+          className={`text-xs tabular-nums ${
+            dateTone === 'amber'
+              ? 'font-semibold text-amber-800 dark:text-amber-200'
+              : 'text-muted-foreground'
+          }`}
+        >
+          {formatDate(dateValue)}
+        </span>
+      </div>
+    </Link>
+  );
 }
 
 /**
@@ -87,7 +141,7 @@ export const RepairTechnicianHome: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
+      <div className="erp-ds-clean space-y-4 p-3 md:p-6" dir={dir}>
         <Card>
           <CardContent className="pt-6">
             <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض لوحة أداء الفني.</p>
@@ -98,10 +152,10 @@ export const RepairTechnicianHome: React.FC = () => {
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
+    <div className="erp-ds-clean space-y-4 p-3 md:p-6" dir={dir}>
       <PageHeader
         title="لوحة الفني"
-        subtitle={`مرحباً ${displayName} — متابعة أدائك والطلبات المسندة إليك`}
+        subtitle={`مرحباً ${displayName}`}
         icon="engineering"
         primaryAction={{
           label: 'تحديث',
@@ -110,14 +164,14 @@ export const RepairTechnicianHome: React.FC = () => {
           disabled: isFetching,
         }}
         actions={(
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex items-center gap-1 rounded-lg bg-muted p-1">
+          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+            <div className="flex w-full items-center gap-1 rounded-lg bg-muted p-1 sm:w-auto">
               {PERIOD_OPTIONS.map((opt) => (
                 <button
                   key={opt.value}
                   type="button"
                   onClick={() => setPeriod(opt.value)}
-                  className={`rounded-md px-3 py-1.5 text-sm font-semibold transition-colors ${
+                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors sm:flex-none ${
                     period === opt.value
                       ? 'bg-background text-primary shadow-sm'
                       : 'text-muted-foreground hover:text-foreground'
@@ -127,73 +181,166 @@ export const RepairTechnicianHome: React.FC = () => {
                 </button>
               ))}
             </div>
-            <Link to={withTenantPath(tenantSlug, '/repair/my-jobs')}>
-              <Button variant="outline" size="sm" type="button">طلباتي</Button>
+            <Link to={withTenantPath(tenantSlug, '/repair/my-jobs')} className="w-full sm:w-auto">
+              <Button className="w-full sm:w-auto" size="sm" type="button">طلباتي</Button>
             </Link>
           </div>
         )}
       />
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-2 md:gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">الطلبات ({periodLabel(period)})</CardTitle>
+          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
+            <CardTitle className="text-xs text-muted-foreground md:text-sm">
+              الطلبات ({periodLabel(period)})
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{loading ? '…' : num(metrics.requestsCount)}</p>
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <p className="text-2xl font-bold tabular-nums md:text-3xl">
+              {loading ? '…' : num(metrics.requestsCount)}
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">تم الإصلاح</CardTitle>
+          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
+            <CardTitle className="text-xs text-muted-foreground md:text-sm">تم الإصلاح</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums text-emerald-600">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <p className="text-2xl font-bold tabular-nums text-emerald-600 md:text-3xl">
               {loading ? '…' : num(metrics.fixedCount)}
             </p>
           </CardContent>
         </Card>
         <Card className="border-rose-200 bg-rose-50/50 dark:border-rose-900/40 dark:bg-rose-950/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-rose-900 dark:text-rose-200">غير قابل للإصلاح</CardTitle>
+          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
+            <CardTitle className="text-xs text-rose-900 dark:text-rose-200 md:text-sm">
+              غير قابل للإصلاح
+            </CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums text-rose-700 dark:text-rose-300">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <p className="text-2xl font-bold tabular-nums text-rose-700 dark:text-rose-300 md:text-3xl">
               {loading ? '…' : num(metrics.unrepairableCount)}
             </p>
           </CardContent>
         </Card>
         <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-amber-900 dark:text-amber-200">المتأخر</CardTitle>
+          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
+            <CardTitle className="text-xs text-amber-900 dark:text-amber-200 md:text-sm">المتأخر</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums text-amber-800 dark:text-amber-200">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <p className="text-2xl font-bold tabular-nums text-amber-800 dark:text-amber-200 md:text-3xl">
               {loading ? '…' : num(metrics.delayedCount)}
             </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">مفتوحة حالياً</CardTitle>
+          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
+            <CardTitle className="text-xs text-muted-foreground md:text-sm">مفتوحة حالياً</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">{loading ? '…' : num(metrics.openCount)}</p>
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <p className="text-2xl font-bold tabular-nums md:text-3xl">
+              {loading ? '…' : num(metrics.openCount)}
+            </p>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm text-muted-foreground">نسبة النجاح</CardTitle>
+          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
+            <CardTitle className="text-xs text-muted-foreground md:text-sm">نسبة النجاح</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-3xl font-bold tabular-nums">
+          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
+            <p className="text-2xl font-bold tabular-nums md:text-3xl">
               {loading ? '…' : formatPct(metrics.successRate, metrics.completedOutcomesCount > 0)}
             </p>
           </CardContent>
         </Card>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      {/* Mobile: card sections — delayed first, then fixed, then unrepairable */}
+      <div className="space-y-4 md:hidden">
+        <Card className="border-amber-200/80 dark:border-amber-900/40">
+          <CardHeader className="p-3 pb-2">
+            <CardTitle className="text-base text-amber-900 dark:text-amber-200">
+              المتأخر عن الموعد
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 p-3 pt-0">
+            {loading ? (
+              <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+                جاري التحميل...
+              </p>
+            ) : metrics.delayedJobs.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">لا توجد طلبات متأخرة حالياً.</p>
+            ) : (
+              metrics.delayedJobs.map((row) => (
+                <TechJobRowCard
+                  key={row.id || row.receiptNo}
+                  job={row}
+                  dateValue={row.dueAt}
+                  tenantSlug={tenantSlug}
+                  dateTone="amber"
+                />
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="p-3 pb-2">
+            <CardTitle className="text-base">ما تم إصلاحه — {periodLabel(period)}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 p-3 pt-0">
+            {loading ? (
+              <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+                جاري التحميل...
+              </p>
+            ) : metrics.fixedJobs.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                لا توجد أجهزة تم إصلاحها في هذه الفترة.
+              </p>
+            ) : (
+              metrics.fixedJobs.map((row) => (
+                <TechJobRowCard
+                  key={row.id || row.receiptNo}
+                  job={row}
+                  dateValue={row.deliveredAt || row.resolvedAt || row.closedAt || row.updatedAt}
+                  tenantSlug={tenantSlug}
+                />
+              ))
+            )}
+          </CardContent>
+        </Card>
+
+        <Card className="border-rose-200/80 dark:border-rose-900/40">
+          <CardHeader className="p-3 pb-2">
+            <CardTitle className="text-base text-rose-900 dark:text-rose-200">
+              غير قابل للإصلاح — {periodLabel(period)}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2 p-3 pt-0">
+            {loading ? (
+              <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+                جاري التحميل...
+              </p>
+            ) : metrics.unrepairableJobs.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">
+                لا توجد طلبات غير قابلة للإصلاح في هذه الفترة.
+              </p>
+            ) : (
+              metrics.unrepairableJobs.map((row) => (
+                <TechJobRowCard
+                  key={row.id || row.receiptNo}
+                  job={row}
+                  dateValue={row.resolvedAt || row.closedAt || row.updatedAt}
+                  tenantSlug={tenantSlug}
+                />
+              ))
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Desktop: existing three tables */}
+      <div className="hidden gap-4 md:grid md:grid-cols-1 xl:grid-cols-3">
         <Card>
           <CardHeader className="pb-2">
             <CardTitle className="text-base">ما تم إصلاحه — {periodLabel(period)}</CardTitle>

@@ -16,7 +16,7 @@ export const MaterialDetails: React.FC = () => {
   const { can } = usePermission();
   const canManage = can('bom.manage') || can('materials.manage');
   const { data: material, isLoading } = useMaterial(id);
-  const { data: bomData, isLoading: bomLoading, refetch } = useMaterialBom(id);
+  const { data: bomData, isLoading: bomLoading } = useMaterialBom(id);
   const { data: materials = [] } = useMaterialsCatalog();
   const { addItem, deleteItem } = useBomItemMutations('material', id || '');
   const [form, setForm] = useState({ materialId: '', qtyPerUnit: 0, unit: 'piece' as MaterialUnit });
@@ -40,7 +40,6 @@ export const MaterialDetails: React.FC = () => {
         unit: mat?.baseUnit ?? form.unit,
       });
       setForm({ materialId: '', qtyPerUnit: 0, unit: 'piece' });
-      await refetch();
     } finally {
       setSaving(false);
     }
