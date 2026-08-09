@@ -411,75 +411,137 @@ export const SupplyCyclesList: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="erp-table-wrap erp-table-scroll overflow-x-auto">
-              <table className="erp-table w-full text-right text-sm border-collapse min-w-[1000px]">
-                <thead>
-                  <tr>
-                    <th>كود الباتش</th>
-                    <th>النوع</th>
-                    <th>الصنف</th>
-                    <th>خارجي</th>
-                    <th>الحالة</th>
-                    <th>الفترة</th>
-                    <th>أول مدة</th>
-                    <th>وارد</th>
-                    <th>صرف يدوي</th>
-                    <th>صرف إنتاج</th>
-                    <th>هالك يدوي</th>
-                    <th>هالك تقارير</th>
-                    <th>متبقي (تقدير)</th>
-                    <th className="w-12" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filtered.map((c) => {
-                    const reportW = (c.id && reportWasteById[c.id]) || 0;
-                    const manualW = (c.id && manualWasteById[c.id]) || 0;
-                    const prodC = (c.id && productionConsumedById[c.id]) || 0;
-                    const { remaining } = computeSupplyCycleTotals(c, manualW, reportW, prodC);
-                    return (
-                      <tr
-                        key={c.id}
-                        className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-muted/40"
-                        onClick={() => c.id && navigate(`/supply-cycles/${c.id}`)}
-                      >
-                        <td className="font-mono font-semibold text-primary">{c.batchCode}</td>
-                        <td>{KIND_LABEL[c.kind]}</td>
-                        <td className="max-w-[200px] truncate font-medium">{resolveItemName(c)}</td>
-                        <td className="max-w-[120px] truncate text-muted-foreground">{c.externalLabel || '—'}</td>
-                        <td>
-                          <Badge variant={statusBadgeVariant(c.status)}>{STATUS_LABEL[c.status]}</Badge>
-                        </td>
-                        <td className="whitespace-nowrap text-xs text-muted-foreground">
-                          {c.periodStart} → {c.periodEnd}
-                        </td>
-                        <td className="tabular-nums">{formatNumber(c.openingQty)}</td>
-                        <td className="tabular-nums">{formatNumber(c.receivedQty)}</td>
-                        <td className="tabular-nums">{formatNumber(c.consumedQty)}</td>
-                        <td className="tabular-nums font-medium text-foreground">{formatNumber(prodC)}</td>
-                        <td className="tabular-nums">{formatNumber(manualW)}</td>
-                        <td className="tabular-nums">{formatNumber(reportW)}</td>
-                        <td className="tabular-nums font-semibold text-foreground">{formatNumber(remaining)}</td>
-                        <td className="text-left" onClick={(e) => e.stopPropagation()}>
-                          {can('supplyCycles.delete') && (c.status === 'draft' || c.status === 'open') && (
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => handleDelete(c)}
-                              title="حذف"
-                            >
-                              <Trash2 className="size-4" />
-                            </Button>
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
+            <>
+              <div className="erp-mobile-card-list p-2">
+                {filtered.map((c) => {
+                  const reportW = (c.id && reportWasteById[c.id]) || 0;
+                  const manualW = (c.id && manualWasteById[c.id]) || 0;
+                  const prodC = (c.id && productionConsumedById[c.id]) || 0;
+                  const { remaining } = computeSupplyCycleTotals(c, manualW, reportW, prodC);
+                  return (
+                    <div
+                      key={`m-${c.id}`}
+                      className="cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                      onClick={() => c.id && navigate(`/supply-cycles/${c.id}`)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          if (c.id) navigate(`/supply-cycles/${c.id}`);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-mono text-sm font-semibold text-primary">{c.batchCode}</p>
+                          <p className="mt-0.5 truncate text-sm font-medium">{resolveItemName(c)}</p>
+                          <p className="text-xs text-muted-foreground">{KIND_LABEL[c.kind]} · {c.externalLabel || '—'}</p>
+                        </div>
+                        <Badge variant={statusBadgeVariant(c.status)}>{STATUS_LABEL[c.status]}</Badge>
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <dt className="text-[10px] text-muted-foreground">متبقي (تقدير)</dt>
+                          <dd className="font-semibold tabular-nums">{formatNumber(remaining)}</dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] text-muted-foreground">صرف إنتاج</dt>
+                          <dd className="tabular-nums">{formatNumber(prodC)}</dd>
+                        </div>
+                        <div className="col-span-2">
+                          <dt className="text-[10px] text-muted-foreground">الفترة</dt>
+                          <dd className="text-xs tabular-nums text-muted-foreground">{c.periodStart} → {c.periodEnd}</dd>
+                        </div>
+                      </dl>
+                      {can('supplyCycles.delete') && (c.status === 'draft' || c.status === 'open') && (
+                        <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="text-destructive"
+                            onClick={() => handleDelete(c)}
+                          >
+                            <Trash2 className="me-1 size-3.5" />
+                            حذف
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="erp-desktop-table erp-table-wrap erp-table-scroll overflow-x-auto">
+                <table className="erp-table w-full text-right text-sm border-collapse min-w-[1000px]">
+                  <thead>
+                    <tr>
+                      <th>كود الباتش</th>
+                      <th>النوع</th>
+                      <th>الصنف</th>
+                      <th>خارجي</th>
+                      <th>الحالة</th>
+                      <th>الفترة</th>
+                      <th>أول مدة</th>
+                      <th>وارد</th>
+                      <th>صرف يدوي</th>
+                      <th>صرف إنتاج</th>
+                      <th>هالك يدوي</th>
+                      <th>هالك تقارير</th>
+                      <th>متبقي (تقدير)</th>
+                      <th className="w-12" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.map((c) => {
+                      const reportW = (c.id && reportWasteById[c.id]) || 0;
+                      const manualW = (c.id && manualWasteById[c.id]) || 0;
+                      const prodC = (c.id && productionConsumedById[c.id]) || 0;
+                      const { remaining } = computeSupplyCycleTotals(c, manualW, reportW, prodC);
+                      return (
+                        <tr
+                          key={c.id}
+                          className="cursor-pointer transition-colors hover:bg-slate-50 dark:hover:bg-muted/40"
+                          onClick={() => c.id && navigate(`/supply-cycles/${c.id}`)}
+                        >
+                          <td className="font-mono font-semibold text-primary">{c.batchCode}</td>
+                          <td>{KIND_LABEL[c.kind]}</td>
+                          <td className="max-w-[200px] truncate font-medium">{resolveItemName(c)}</td>
+                          <td className="max-w-[120px] truncate text-muted-foreground">{c.externalLabel || '—'}</td>
+                          <td>
+                            <Badge variant={statusBadgeVariant(c.status)}>{STATUS_LABEL[c.status]}</Badge>
+                          </td>
+                          <td className="whitespace-nowrap text-xs text-muted-foreground">
+                            {c.periodStart} → {c.periodEnd}
+                          </td>
+                          <td className="tabular-nums">{formatNumber(c.openingQty)}</td>
+                          <td className="tabular-nums">{formatNumber(c.receivedQty)}</td>
+                          <td className="tabular-nums">{formatNumber(c.consumedQty)}</td>
+                          <td className="tabular-nums font-medium text-foreground">{formatNumber(prodC)}</td>
+                          <td className="tabular-nums">{formatNumber(manualW)}</td>
+                          <td className="tabular-nums">{formatNumber(reportW)}</td>
+                          <td className="tabular-nums font-semibold text-foreground">{formatNumber(remaining)}</td>
+                          <td className="text-left" onClick={(e) => e.stopPropagation()}>
+                            {can('supplyCycles.delete') && (c.status === 'draft' || c.status === 'open') && (
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="text-destructive hover:text-destructive"
+                                onClick={() => handleDelete(c)}
+                                title="حذف"
+                              >
+                                <Trash2 className="size-4" />
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </>
           )}
         </CardContent>
       </Card>

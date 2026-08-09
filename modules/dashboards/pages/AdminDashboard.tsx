@@ -115,6 +115,7 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
+import { DomainHomeShell } from '../components/DomainHomeShell';
 import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
 import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import {
@@ -1859,33 +1860,81 @@ export const AdminDashboard: React.FC = () => {
 
   // â”€â”€ Loading State â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
-  if (isFinalLoading && reports.length === 0) {
-    return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
-  }
+  const adminHero = useMemo(
+    () => [
+      {
+        key: 'production',
+        label: 'الإنتاج',
+        value: formatNumber(kpis.totalProduction),
+        accent: true,
+      },
+      {
+        key: 'plan',
+        label: 'تحقيق الخطط',
+        value: `${kpis.planAchievementRate}%`,
+      },
+      {
+        key: 'schedule',
+        label: 'التزام الجدول',
+        value: `${kpis.scheduleAdherence}%`,
+      },
+      {
+        key: 'waste',
+        label: 'الهدر',
+        value: `${kpis.wastePercent}%`,
+      },
+      {
+        key: 'efficiency',
+        label: 'عائد الإنتاج',
+        value: `${kpis.efficiency}%`,
+      },
+      {
+        key: 'cost',
+        label: 'تكلفة الوحدة',
+        value: formatCost(kpis.avgCostPerUnit),
+        meta: `إجمالي ${formatCost(kpis.totalCost)}`,
+      },
+    ],
+    [kpis],
+  );
 
   return (
-    <div className="erp-dashboard-theme space-y-6">
-      {/* â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      {isVisible('alerts') && alerts.length > 0 && (
-        <div className="space-y-1.5">
-          {alerts.map((alert, i) => (
-            <div
-              key={i}
-              className={`erp-alert${
-                alert.type === 'danger'  ? ' erp-alert-error' :
-                alert.type === 'warning' ? ' erp-alert-warning' :
-                                           ' erp-alert-info'
-              } erp-animate-in`}
-            >
-              {renderDashboardIcon(alert.icon, 'text-[18px] shrink-0')}
-              <span>{alert.message}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-     
-
+    <DomainHomeShell
+      denseHero
+      eyebrow="لوحة الإدارة"
+      hero={adminHero}
+      periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
+        value: key,
+        label: PRESET_LABELS[key],
+      }))}
+      activePeriod={preset}
+      onPeriodChange={(value) => setPreset(value as PeriodPreset)}
+      rangeLabel={`${dateRange.start} → ${dateRange.end}`}
+      refreshing={isFinalLoading || decisionLoading}
+      secondarySummary="تنبيهات التشغيل"
+      secondary={
+        isVisible('alerts') && alerts.length > 0 ? (
+          <div className="space-y-1.5">
+            {alerts.map((alert, i) => (
+              <div
+                key={i}
+                className={`erp-alert${
+                  alert.type === 'danger'  ? ' erp-alert-error' :
+                  alert.type === 'warning' ? ' erp-alert-warning' :
+                                             ' erp-alert-info'
+                }`}
+              >
+                {renderDashboardIcon(alert.icon, 'text-[18px] shrink-0')}
+                <span>{alert.message}</span>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="text-sm text-muted-foreground">لا توجد تنبيهات ظاهرة حالياً.</p>
+        )
+      }
+      dir="rtl"
+    >
       <ModuleChartsHomeBoard />
 
       <OperationalDecisionQueue
@@ -3286,12 +3335,6 @@ export const AdminDashboard: React.FC = () => {
         </div>
       </details>
 
-    </div>
+    </DomainHomeShell>
   );
 };
-
-
-
-
-
-

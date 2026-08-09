@@ -843,8 +843,52 @@ export const Payroll: React.FC = () => {
       {/* Records Table */}
       {records.length > 0 && (
         <Card>
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full text-sm">
+          <div className="erp-mobile-card-list p-2">
+            {paginatedRecords.map((r) => (
+              <div
+                key={`m-${r.id}`}
+                className="cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                onClick={() => {
+                  if (!isLocked) return;
+                  setSelectedRecord(r);
+                }}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold">{r.employeeName}</p>
+                    <Badge variant="neutral">{EMPLOYMENT_TYPE_LABELS[r.employmentType]}</Badge>
+                  </div>
+                  {r.isLocked
+                    ? <span className="material-icons-round text-rose-400 text-base">lock</span>
+                    : r.calculationSnapshotVersion
+                      ? <span className="material-icons-round text-emerald-400 text-base">verified</span>
+                      : <span className="material-icons-round text-[var(--color-text-muted)] text-base">edit_note</span>}
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">الأساسي</dt>
+                    <dd className="font-mono text-xs font-bold">{formatCurrency(r.baseSalary)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">الصافي</dt>
+                    <dd className="font-mono text-xs font-bold text-primary">{formatCurrency(r.netSalary)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">المستحقات</dt>
+                    <dd className="font-mono text-xs font-bold text-emerald-600">{formatCurrency(r.grossSalary)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">الخصومات</dt>
+                    <dd className="font-mono text-xs font-bold text-rose-500">
+                      {r.totalDeductions > 0 ? formatCurrency(r.totalDeductions) : '—'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          </div>
+          <div className="erp-desktop-table overflow-x-auto">
+            <table className="erp-table w-full min-w-[900px] text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الموظف</th>

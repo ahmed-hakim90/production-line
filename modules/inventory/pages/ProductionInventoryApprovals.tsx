@@ -19,6 +19,7 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import { Skeleton } from '@/components/ui/skeleton';
+import { toast } from '../../../components/Toast';
 import { INVENTORY_DOCUMENT_PATHS } from '../../system/lib/operationPathSettings';
 
 const PAGE_SIZE = 20;
@@ -96,7 +97,6 @@ export const ProductionInventoryApprovals: React.FC = () => {
     return initialCache.receipts.filter((row) => allowedWarehouseIds.has(row.warehouseId));
   });
   const [loading, setLoading] = useState(() => initialCache == null);
-  const [message, setMessage] = useState('');
   const [compPage, setCompPage] = useState(1);
   const [disPage, setDisPage] = useState(1);
   const [receiptPage, setReceiptPage] = useState(1);
@@ -173,27 +173,25 @@ export const ProductionInventoryApprovals: React.FC = () => {
 
   const approveCompensation = async (row: ComponentCompensationRequest) => {
     if (!row.id) return;
-    setMessage('');
-    try {
+        try {
       await componentCompensationService.approve(row.id, actor);
-      setMessage('تم اعتماد التعويض وخصم المخزون.');
+      toast.success('تم اعتماد التعويض وخصم المخزون.');
       await reload();
     } catch (error: any) {
-      setMessage(error?.message || 'تعذر اعتماد التعويض.');
+      toast.error(error?.message || 'تعذر اعتماد التعويض.');
     }
   };
 
   const rejectCompensation = async (row: ComponentCompensationRequest) => {
     if (!row.id) return;
     await componentCompensationService.reject(row.id, actor);
-    setMessage('تم رفض التعويض.');
+    toast.success('تم رفض التعويض.');
     await reload();
   };
 
   const actionDisassembly = async (row: DisassemblyOrder, action: 'approve' | 'reject' | 'execute') => {
     if (!row.id) return;
-    setMessage('');
-    try {
+        try {
       if (action === 'approve') await disassemblyService.approve(
         row.id,
         actor,
@@ -213,17 +211,16 @@ export const ProductionInventoryApprovals: React.FC = () => {
         { path: INVENTORY_DOCUMENT_PATHS.approvalsHub },
         uid || undefined,
       );
-      setMessage('تم تحديث طلب التفكيك.');
+      toast.success('تم تحديث طلب التفكيك.');
       await reload();
     } catch (error: any) {
-      setMessage(error?.message || 'تعذر تحديث طلب التفكيك.');
+      toast.error(error?.message || 'تعذر تحديث طلب التفكيك.');
     }
   };
 
   const actionReceipt = async (row: SuppliesReceiptOrder, action: 'approve' | 'reject' | 'execute' | 'delete') => {
     if (!row.id) return;
-    setMessage('');
-    try {
+        try {
       if (action === 'approve') await suppliesReceiptService.approve(
         row.id,
         actor,
@@ -247,13 +244,13 @@ export const ProductionInventoryApprovals: React.FC = () => {
         const ok = window.confirm(`حذف مستند الاستلام ${row.referenceNo}؟ لا يمكن التراجع.`);
         if (!ok) return;
         await suppliesReceiptService.remove(row.id);
-        setMessage('تم حذف مستند استلام المستلزمات.');
+        toast.success('تم حذف مستند استلام المستلزمات.');
       } else {
-        setMessage('تم تحديث مستند استلام المستلزمات.');
+        toast.success('تم تحديث مستند استلام المستلزمات.');
       }
       await reload();
     } catch (error: any) {
-      setMessage(error?.message || 'تعذر تحديث مستند الاستلام.');
+      toast.error(error?.message || 'تعذر تحديث مستند الاستلام.');
     }
   };
 
@@ -286,11 +283,45 @@ export const ProductionInventoryApprovals: React.FC = () => {
   return (
     <div className="erp-ds-clean space-y-5">
       <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle="اعتماد تعويضات المكونات وطلبات التفكيك واستلام المستلزمات قبل تأثيرها على المخزون." icon="fact_check" />
-      {message && <p className="rounded-lg bg-primary/10 px-4 py-3 text-sm font-bold text-primary">{message}</p>}
-
       <Card className="!p-0 overflow-hidden" title="تعويضات المكونات">
-        <div className="overflow-x-auto">
-          <table className="erp-table w-full text-sm text-right border-collapse">
+                <div className="erp-mobile-card-list p-2">
+          {compensations.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">لا توجد تعويضات.</p>
+          ) : (
+            pagedCompensations.map((row) => (
+              <div key={`m-c-${row.id}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs">{row.referenceNo}</p>
+                    <p className="mt-0.5 text-sm font-semibold">{row.line.itemName}</p>
+                    <p className="text-xs text-slate-500">{row.locationCode}</p>
+                  </div>
+                  <span className="text-xs font-bold">{STATUS_LABELS[row.status] || row.status}</span>
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] text-slate-500">الكمية</dt>
+                    <dd className="tabular-nums">{row.quantity}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-slate-500">السبب</dt>
+                    <dd>{row.reason}</dd>
+                  </div>
+                </dl>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {row.status === 'pending' && (
+                    <TableIconAction action="approve" disabled={!can('productionIssue.approve')} onClick={() => void approveCompensation(row)} aria-label="اعتماد التعويض" />
+                  )}
+                  {row.status === 'pending' && (
+                    <TableIconAction action="reject" disabled={!can('productionIssue.approve')} onClick={() => void rejectCompensation(row)} aria-label="رفض التعويض" />
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="erp-desktop-table overflow-x-auto">
+          <table className="erp-table w-full min-w-[720px] text-sm text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الطلب</th>
@@ -359,8 +390,43 @@ export const ProductionInventoryApprovals: React.FC = () => {
       </Card>
 
       <Card className="!p-0 overflow-hidden" title="استلام مستلزمات">
-        <div className="overflow-x-auto">
-          <table className="erp-table w-full text-sm text-right border-collapse">
+                <div className="erp-mobile-card-list p-2">
+          {receipts.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">لا توجد إذونات استلام.</p>
+          ) : (
+            pagedReceipts.map((row) => (
+              <div key={`m-r-${row.id}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs">{row.referenceNo}</p>
+                    <p className="mt-0.5 text-sm font-semibold">{row.warehouseName || row.warehouseId}</p>
+                  </div>
+                  <span className="text-xs font-bold">{STATUS_LABELS[row.status] || row.status}</span>
+                </div>
+                <p className="mt-2 text-sm tabular-nums">مجموعات: {(row.groups?.length || 0) + (row.standaloneLines?.length || 0)}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {row.status === 'submitted' && (
+                    <TableIconAction action="approve" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'approve')} aria-label={`اعتماد إذن الاستلام ${row.referenceNo}`} />
+                  )}
+                  {row.status === 'submitted' && (
+                    <TableIconAction action="reject" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'reject')} aria-label={`رفض إذن الاستلام ${row.referenceNo}`} />
+                  )}
+                  {row.status === 'approved' && (
+                    <TableIconAction action="execute" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'execute')} aria-label={`تنفيذ إذن الاستلام ${row.referenceNo}`} />
+                  )}
+                  {(row.status === 'draft' || row.status === 'rejected' || row.status === 'cancelled') && (
+                    <TableIconAction action="delete" disabled={!can('inventory.transactions.create')} onClick={() => void actionReceipt(row, 'delete')} aria-label={`حذف إذن الاستلام ${row.referenceNo}`} />
+                  )}
+                  {canPrint && (
+                    <TableIconAction action="print" onClick={() => void printReceipt(row)} title="طباعة إذن الاستلام" aria-label={`طباعة إذن الاستلام ${row.referenceNo}`} />
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="erp-desktop-table overflow-x-auto">
+          <table className="erp-table w-full min-w-[720px] text-sm text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">رقم الإذن</th>
@@ -445,8 +511,37 @@ export const ProductionInventoryApprovals: React.FC = () => {
       </Card>
 
       <Card className="!p-0 overflow-hidden" title="طلبات التفكيك">
-        <div className="overflow-x-auto">
-          <table className="erp-table w-full text-sm text-right border-collapse">
+                <div className="erp-mobile-card-list p-2">
+          {disassemblies.length === 0 ? (
+            <p className="py-8 text-center text-sm text-slate-400">لا توجد طلبات تفكيك.</p>
+          ) : (
+            pagedDisassemblies.map((row) => (
+              <div key={`m-d-${row.id}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-xs">{row.referenceNo}</p>
+                    <p className="mt-0.5 text-sm font-semibold">{row.productName}</p>
+                  </div>
+                  <span className="text-xs font-bold">{STATUS_LABELS[row.status] || row.status}</span>
+                </div>
+                <p className="mt-2 text-sm tabular-nums">الكمية: {row.quantity}</p>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  {row.status === 'submitted' && (
+                    <TableIconAction action="approve" disabled={!can('inventory.disassembly.manage')} onClick={() => void actionDisassembly(row, 'approve')} aria-label={`اعتماد طلب التفكيك ${row.referenceNo}`} />
+                  )}
+                  {row.status === 'submitted' && (
+                    <TableIconAction action="reject" disabled={!can('inventory.disassembly.manage')} onClick={() => void actionDisassembly(row, 'reject')} aria-label={`رفض طلب التفكيك ${row.referenceNo}`} />
+                  )}
+                  {row.status === 'approved' && (
+                    <TableIconAction action="execute" disabled={!can('inventory.disassembly.manage')} onClick={() => void actionDisassembly(row, 'execute')} aria-label={`تنفيذ طلب التفكيك ${row.referenceNo}`} />
+                  )}
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+        <div className="erp-desktop-table overflow-x-auto">
+          <table className="erp-table w-full min-w-[720px] text-sm text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الطلب</th>

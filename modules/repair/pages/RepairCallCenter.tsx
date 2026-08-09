@@ -509,8 +509,54 @@ export const RepairCallCenter: React.FC = () => {
           {isFetching ? <Badge variant="secondary">جاري التحديث…</Badge> : null}
         </CardHeader>
         <CardContent>
-          <div className="overflow-x-auto rounded border">
-            <table className="w-full text-sm">
+          <div className="erp-mobile-card-list p-2">
+            {!searchReady && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                أدخل {MIN_SEARCH_LENGTH} أحرفًا على الأقل في البحث.
+              </p>
+            )}
+            {searchReady && pagedCustomerJobs.map((job) => (
+              <div
+                key={`m-${job.id}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-semibold">#{job.receiptNo}</p>
+                    <p className="mt-0.5 truncate text-sm font-medium">{job.customerName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {job.deviceBrand} {job.deviceModel}
+                    </p>
+                  </div>
+                  <StatusBadge status={job.status} />
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div>
+                    <dt className="text-[10px]">الفرع</dt>
+                    <dd className="text-[var(--color-text)]">{branchNameById[job.branchId || ''] || job.branchId}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px]">التاريخ</dt>
+                    <dd className="tabular-nums text-[var(--color-text)]">
+                      {job.createdAt ? new Date(job.createdAt).toLocaleString('ar-EG') : '—'}
+                    </dd>
+                  </div>
+                </dl>
+                <div className="mt-2">
+                  <Button size="sm" variant="outline" onClick={() => openJobDetail(job)}>
+                    عرض التفاصيل
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {searchReady && customerJobs.length === 0 && (
+              <p className="py-6 text-center text-sm text-muted-foreground">
+                {loading ? 'جاري التحميل…' : 'لا توجد بيانات للعرض.'}
+              </p>
+            )}
+          </div>
+          <div className="erp-desktop-table overflow-x-auto rounded border">
+            <table className="w-full min-w-[800px] text-sm">
               <thead className="bg-muted">
                 <tr>
                   <th className="p-2 text-right">الإيصال</th>
