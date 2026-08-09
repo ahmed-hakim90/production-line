@@ -139,8 +139,58 @@ export const AccountingCostCenters: React.FC = () => {
             ) : null
           }
         />
-        <div className="erp-table-scroll">
-          <table className="erp-table">
+        <div className="erp-mobile-card-list p-2">
+          {loading
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="rounded-xl border p-3">
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ))
+            : null}
+          {!loading &&
+            paged.map((center) => {
+              const parent = centers.find((row) => row.id === center.parentId);
+              return (
+                <div
+                  key={`m-${center.id}`}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm font-semibold">{center.code || "—"}</p>
+                      <p className="mt-0.5 text-sm font-medium">{center.name}</p>
+                    </div>
+                    <Badge variant={center.isActive ? "default" : "secondary"}>
+                      {center.isActive ? "نشط" : "موقوف"}
+                    </Badge>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-xs">
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">التصنيف</dt>
+                      <dd>{COST_CENTER_CATEGORY_LABEL[center.accountingCategory || "other"] || "عام"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">الطبيعة</dt>
+                      <dd>{center.type === "indirect" ? "غير مباشر" : "مباشر"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">الأب</dt>
+                      <dd>{parent?.name || "—"}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">الترحيل</dt>
+                      <dd>{center.allowPosting === false ? "تجميعي" : "مسموح"}</dd>
+                    </div>
+                  </dl>
+                </div>
+              );
+            })}
+          {!loading && filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد مراكز تكلفة في الماستر.</p>
+          ) : null}
+        </div>
+        <div className="erp-desktop-table erp-table-scroll">
+          <table className="erp-table min-w-[860px]">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th text-start">الكود</th>

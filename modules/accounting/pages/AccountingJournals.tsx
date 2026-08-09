@@ -207,8 +207,74 @@ export const AccountingJournals: React.FC = () => {
             ) : null
           }
         />
-        <div className="erp-table-scroll">
-          <table className="erp-table">
+        <div className="erp-mobile-card-list p-2">
+          {loading
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="rounded-xl border p-3">
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ))
+            : null}
+          {!loading &&
+            paged.map((row) => (
+              <div
+                key={`m-${row.id}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-semibold">{row.referenceNo}</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                      {String(row.date || row.postedAt || row.createdAt || "").slice(0, 10)}
+                    </p>
+                    <p className="mt-1 text-xs">{SOURCE_LABEL[row.source] || row.source}</p>
+                  </div>
+                  <Badge variant={row.status === "posted" ? "default" : "secondary"}>
+                    {row.status === "posted" ? "مرحل" : "معكوس"}
+                  </Badge>
+                </div>
+                <p className="mt-2 text-sm">{row.description || "—"}</p>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">مدين</dt>
+                    <dd className="tabular-nums">{formatAccountingMoney(row.totalDebit)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">دائن</dt>
+                    <dd className="tabular-nums">{formatAccountingMoney(row.totalCredit)}</dd>
+                  </div>
+                </dl>
+                {row.status === "posted" && can("accounting.journals.reverse") ? (
+                  <div className="mt-2">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        const reason = window.prompt("سبب عكس القيد:");
+                        if (reason)
+                          void run(
+                            () =>
+                              accountingService.reverseJournal(
+                                String(row.id),
+                                reason,
+                              ),
+                            "تم إنشاء القيد العكسي.",
+                          );
+                      }}
+                    >
+                      <RotateCcw className="ms-1 h-3.5 w-3.5" />
+                      عكس
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          {!loading && filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد قيود محاسبية.</p>
+          ) : null}
+        </div>
+        <div className="erp-desktop-table erp-table-scroll">
+          <table className="erp-table min-w-[860px]">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th text-start">المرجع</th>

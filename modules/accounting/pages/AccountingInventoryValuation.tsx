@@ -201,8 +201,45 @@ export const AccountingInventoryValuation: React.FC = () => {
             if (key === "warehouse") setWarehouseFilter(value);
           }}
         />
-        <div className="erp-table-scroll">
-          <table className="erp-table">
+        <div className="erp-mobile-card-list p-2">
+          {loading
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="rounded-xl border p-3">
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ))
+            : null}
+          {!loading &&
+            paged.map((row) => (
+              <div
+                key={`m-${row.id}`}
+                className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${!row.costKnown ? "bg-rose-50/60" : ""}`}
+              >
+                <p className="text-sm font-semibold truncate">{row.itemName}</p>
+                <p className="font-mono text-xs text-muted-foreground">{row.itemCode}</p>
+                <p className="mt-1 text-xs text-muted-foreground">{row.warehouseName}</p>
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">الكمية</dt>
+                    <dd className="tabular-nums">{formatAccountingMoney(row.quantity)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">تكلفة الوحدة</dt>
+                    <dd className="tabular-nums">{row.costKnown ? formatAccountingMoney(row.unitCost) : "غير محدد"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">القيمة</dt>
+                    <dd className="font-semibold tabular-nums">{formatAccountingMoney(row.value)}</dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          {!loading && filteredRows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد أرصدة مخزون.</p>
+          ) : null}
+        </div>
+        <div className="erp-desktop-table erp-table-scroll">
+          <table className="erp-table min-w-[720px]">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th text-start">المخزن</th>

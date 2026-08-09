@@ -1,14 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
-import { usePermission } from '../../../utils/permissions';
-import { Card, Badge } from '../components/UI';
-import { KPICard } from '@/src/components/erp/KPICard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
-import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
-import { DataTable, type Column } from '@/src/components/erp/DataTable';
-import { StatusBadge } from '@/src/components/erp/StatusBadge';
-import { GhostButton } from '@/src/components/erp/ActionButton';
+import { DomainHomeShell } from '../components/DomainHomeShell';
 import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
 import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
 import { useWorkerDashboardSnapshot } from '@/modules/production/hooks/useWorkerDashboardSnapshot';
@@ -18,21 +11,15 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import {
-  calculateProgressRatio,
-  calculateSmartStatus,
-  calculateTimeRatio,
   calculateWasteRatio,
   calculateWorkOrderExecutionMetrics,
   formatNumber,
   getReportWaste,
-  getExecutionDeviationTone,
   getTodayDateString,
 } from '../../../utils/calculations';
 import { effectiveStandardAssemblyMinutes } from '../../../utils/routingStandardAssembly';
 import { countsTowardFinishedGoodsProduction } from '../../production/utils/packagingLine';
-import { exportProductionPlanShortages } from '../../../utils/exportExcel';
 import {
-  formatCost,
   buildSupervisorHourlyRatesMap,
   computeLiveProductCosts,
 } from '../../../utils/costCalculations';
@@ -49,31 +36,16 @@ import {
 } from '../utils/workOrderCardMetrics';
 import {
   getAlertSettings,
-  getKPIThreshold,
-  getKPIColor,
 } from '../../../utils/dashboardConfig';
-import type { ProductionReport, PlanPriority, SmartStatus } from '../../../types';
+import type { ProductionReport } from '../../../types';
 import { useOperationalDecisionSnapshot } from '../hooks/useOperationalDecisionSnapshot';
 import {
   averageScheduleAdherence,
   isPlanBehindSchedule,
-  laborUtilizationPercent,
-  outputVsIdealPercent,
   qualityRatesFromTotals,
   volumeWeightedPlanAchievement,
   yieldEfficiencyPercent,
 } from '../lib/decisionMetrics';
-import {
-  ResponsiveContainer,
-  ComposedChart,
-  Bar,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  BarChart,
-} from 'recharts';
 
 type PeriodPreset = 'week' | 'month' | '3months' | 'custom';
 
@@ -128,11 +100,6 @@ const resolveWorkOrderProducedNow = (
 };
 
 export const FactoryManagerDashboard: React.FC = () => {
-  const navigate = useTenantNavigate();
-  const { can } = usePermission();
-  const canViewCosts = can('costs.view');
-  const canExport = can('export');
-
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const products = useAppStore((s) => s.products);
   const reportsUiReferenceCache = useAppStore((s) => s.reportsUiReferenceCache);
@@ -535,107 +502,6 @@ export const FactoryManagerDashboard: React.FC = () => {
     };
   }, [productionReports, liveCostComputation, hourlyRate, lineProductConfigs, routingTotalTimeSecondsByProduct, productionPlans, planReports, monthlyCostMode, monthlyCostSummary, reports]);
 
-  const utilizationMetrics = useMemo(() => {
-    const actualLaborHours = productionReports.reduce(
-      (sum, report) => sum + Number(report.workersCount || 0) * Number(report.workHours || 0),
-      0,
-    );
-    const byLineDay = new Map<string, { workers: number; lineHours: number }>();
-    let idealUnits = 0;
-    productionReports.forEach((report) => {
-      const line = _rawLines.find((row) => row.id === report.lineId);
-      const lineHours = Number(line?.dailyWorkingHours || 0);
-      const key = `${report.lineId}|${report.date}`;
-      const prev = byLineDay.get(key) || { workers: 0, lineHours };
-      prev.workers = Math.max(prev.workers, Number(report.workersCount || 0));
-      prev.lineHours = lineHours;
-      byLineDay.set(key, prev);
-
-      const product = _rawProducts.find((row) => row.id === report.productId);
-      const avgDaily = Number(product?.avgDailyProduction || 0);
-      const workHours = Number(report.workHours || 0);
-      if (avgDaily > 0 && lineHours > 0 && workHours > 0) {
-        idealUnits += avgDaily * (workHours / lineHours);
-      }
-    });
-    const scheduledLaborHours = Array.from(byLineDay.values()).reduce(
-      (sum, row) => sum + row.workers * row.lineHours,
-      0,
-    );
-    return {
-      laborUtilization: laborUtilizationPercent(actualLaborHours, scheduledLaborHours),
-      performanceProxy: outputVsIdealPercent(kpis.totalProduction, idealUnits),
-    };
-  }, [productionReports, _rawLines, _rawProducts, kpis.totalProduction]);
-
-  // â”€â”€ Chart 1: Production vs Cost Per Unit (daily) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const dailyChartData = useMemo(() => {
-    const byDate = new Map<string, { production: number; laborCost: number }>();
-    productionReports.forEach((r) => {
-      const prev = byDate.get(r.date) || { production: 0, laborCost: 0 };
-      prev.production += r.quantityProduced || 0;
-      prev.laborCost += (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-      byDate.set(r.date, prev);
-    });
-
-    const dateIndirect = new Map<string, number>();
-    reports.forEach((r) => {
-      if (!r.quantityProduced || r.quantityProduced <= 0) return;
-      const reportUnitCost = r.id ? Number(liveCostComputation.reportUnitCost.get(r.id) || 0) : 0;
-      if (reportUnitCost <= 0) return;
-      const laborCost = (r.workersCount || 0) * (r.workHours || 0) * hourlyRate;
-      const indirectPart = (reportUnitCost * r.quantityProduced) - laborCost;
-      if (indirectPart > 0) {
-        dateIndirect.set(r.date, (dateIndirect.get(r.date) || 0) + indirectPart);
-      }
-    });
-
-    return Array.from(byDate.entries())
-      .map(([date, d]) => {
-        const totalCost = d.laborCost + (dateIndirect.get(date) || 0);
-        return {
-          date: date.slice(5),
-          production: d.production,
-          costPerUnit: d.production > 0 ? Number((totalCost / d.production).toFixed(2)) : 0,
-        };
-      })
-      .sort((a, b) => a.date.localeCompare(b.date));
-  }, [productionReports, hourlyRate, liveCostComputation.reportUnitCost]);
-
-  // â”€â”€ Chart 3: Top 5 Lines by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const topLines = useMemo(() => {
-    const lineMap = new Map<string, number>();
-    productionReports.forEach((r) => {
-      lineMap.set(r.lineId, (lineMap.get(r.lineId) || 0) + (r.quantityProduced || 0));
-    });
-    return Array.from(lineMap.entries())
-      .map(([lineId, qty]) => ({
-        name: _rawLines.find((l) => l.id === lineId)?.name || lineId,
-        production: qty,
-      }))
-      .sort((a, b) => b.production - a.production)
-      .slice(0, 5);
-  }, [productionReports, _rawLines]);
-
-  // â”€â”€ Chart 4: Top 5 Products by production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const topProducts = useMemo(() => {
-    const prodMap = new Map<string, number>();
-    productionReports.forEach((r) => {
-      prodMap.set(r.productId, (prodMap.get(r.productId) || 0) + (r.quantityProduced || 0));
-    });
-    return Array.from(prodMap.entries())
-      .map(([productId, qty]) => ({
-        id: productId,
-        name: resolveManufacturingItemName(productId, manufacturingNameMap),
-        production: qty,
-      }))
-      .sort((a, b) => b.production - a.production)
-      .slice(0, 5);
-  }, [productionReports, manufacturingNameMap]);
-
   // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
@@ -810,137 +676,73 @@ export const FactoryManagerDashboard: React.FC = () => {
     return result;
   }, [kpis, productionPlans, planReports, alertCfg, decisionSnapshot, qualityKpis.pendingQuality, workOrderRisk.atRiskCount]);
 
-  const supervisorExecutionDiscipline = useMemo(() => {
-    const today = getTodayDateString();
-    const activeWOs = workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress');
-    if (activeWOs.length === 0) {
-      return {
-        delayedCount: 0,
-        avgDeviation: null as number | null,
-        worstSupervisors: [] as { supervisorId: string; name: string; deviation: number; delayed: number }[],
-      };
-    }
-
-    const rows = activeWOs.map((wo) => {
-      const productAvgDaily = Math.max(0, Number(_rawProducts.find((p) => p.id === wo.productId)?.avgDailyProduction || 0));
-      const execution = calculateWorkOrderExecutionMetrics({
-        quantity: wo.quantity,
-        producedQuantity: resolveWorkOrderProducedNow(wo),
-        targetDate: wo.targetDate,
-        createdAt: wo.createdAt,
-        today,
-        benchmarkDailyRate: productAvgDaily,
-      });
-      const delayed = execution.forecastEndDate !== '—' && execution.forecastEndDate > wo.targetDate;
-      return { wo, execution, delayed };
-    });
-
-    const weightedBase = rows.reduce((sum, r) => sum + r.execution.remainingQty, 0);
-    const weightedDeviation = weightedBase > 0
-      ? rows.reduce((sum, r) => sum + ((r.execution.deviationPct ?? 0) * r.execution.remainingQty), 0) / weightedBase
-      : null;
-
-    const bySupervisor = new Map<string, { weightedSum: number; weight: number; delayed: number }>();
-    rows.forEach((row) => {
-      const key = row.wo.supervisorId || 'unknown';
-      const prev = bySupervisor.get(key) ?? { weightedSum: 0, weight: 0, delayed: 0 };
-      prev.weightedSum += (row.execution.deviationPct ?? 0) * row.execution.remainingQty;
-      prev.weight += row.execution.remainingQty;
-      if (row.delayed) prev.delayed += 1;
-      bySupervisor.set(key, prev);
-    });
-
-    const worstSupervisors = Array.from(bySupervisor.entries())
-      .map(([supervisorId, agg]) => {
-        const deviation = agg.weight > 0 ? Number((agg.weightedSum / agg.weight).toFixed(1)) : 0;
-        const name = _rawEmployees.find((e) => e.id === supervisorId)?.name ?? 'غير معروف';
-        return { supervisorId, name, deviation, delayed: agg.delayed };
-      })
-      .sort((a, b) => a.deviation - b.deviation)
-      .slice(0, 3);
-
-    return {
-      delayedCount: rows.filter((r) => r.delayed).length,
-      avgDeviation: weightedDeviation !== null ? Number(weightedDeviation.toFixed(1)) : null,
-      worstSupervisors,
-    };
-  }, [workOrders, _rawEmployees, _rawProducts]);
-
-  const shortageRows = useMemo(() => {
-    return productionPlanFollowUps
-      .slice()
-      .sort((a, b) => {
-        const aTime = a.createdAt?.seconds || 0;
-        const bTime = b.createdAt?.seconds || 0;
-        return bTime - aTime;
-      })
-      .map((row) => ({
-        id: row.id || `${row.planId}-${row.componentId}`,
-        productName: resolveManufacturingItemName(row.productId, manufacturingNameMap),
-        componentName: row.componentName || '—',
-        shortageQty: Number(row.shortageQty || 0),
-        note: row.note || '',
-      }));
-  }, [productionPlanFollowUps, manufacturingNameMap]);
-
-  const complianceRows = useMemo(
-    () => [
-      ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
-      ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
-    ],
-    [yesterdayCompliance]
-  );
-
-  const complianceColumns: Column<(typeof complianceRows)[number]>[] = useMemo(
-    () => [
-      { key: 'name', header: 'المشرف', cell: (row) => <span className="font-medium text-[#0F172A]">{row.name}</span>, sortable: true },
-      { key: 'reports', header: 'التقارير', cell: (row) => `${row.submittedReports} / ${row.expectedReports}` },
-      { key: 'submittedLines', header: 'تم الإرسال', cell: (row) => (row.submittedLineNames.length > 0 ? row.submittedLineNames.join('، ') : '—') },
-      { key: 'missingLines', header: 'غير مرسل', cell: (row) => (row.missingLineNames.length > 0 ? row.missingLineNames.join('، ') : '—') },
-      {
-        key: 'status',
-        header: 'الحالة',
-        align: 'center',
-        cell: (row) => <StatusBadge label={row.submitted ? 'تم الإرسال' : 'لم يرسل'} type={row.submitted ? 'success' : 'danger'} />,
-      },
-    ],
-    []
-  );
-
-  const shortageColumns: Column<(typeof shortageRows)[number]>[] = useMemo(
-    () => [
-      { key: 'productName', header: 'المنتج', cell: (row) => <span className="font-medium text-[#0F172A]">{row.productName}</span>, sortable: true },
-      { key: 'componentName', header: 'المكون', cell: (row) => row.componentName },
-      { key: 'shortageQty', header: 'الكمية', align: 'center', cell: (row) => formatNumber(row.shortageQty), sortable: true },
-      { key: 'note', header: 'ملاحظات', cell: (row) => row.note || '—' },
-    ],
-    []
-  );
-
-  // â”€â”€ Custom Tooltip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-
-  const ChartTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null;
-    return (
-      <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-3 text-sm">
-        <p className="font-bold text-[var(--color-text-muted)] mb-1">{label}</p>
-        {payload.map((entry: any, i: number) => (
-          <div key={i} className="flex items-center gap-2">
-            <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: entry.color }}></span>
-            <span className="text-[var(--color-text-muted)]">{entry.name}:</span>
-            <span className="font-bold">{formatNumber(entry.value)}</span>
-          </div>
-        ))}
-      </div>
-    );
-  };
-
   if (loading && reports.length === 0) {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
+  const hero = useMemo(
+    () => [
+      {
+        key: 'production',
+        label: 'الإنتاج',
+        value: formatNumber(kpis.totalProduction),
+        accent: true,
+      },
+      {
+        key: 'plan',
+        label: 'تحقيق الخطط',
+        value: `${kpis.planAchievementRate}%`,
+      },
+      {
+        key: 'schedule',
+        label: 'التزام الجدول',
+        value: `${kpis.scheduleAdherence}%`,
+      },
+      {
+        key: 'waste',
+        label: 'الهدر',
+        value: `${kpis.wastePercent}%`,
+        toneClassName: kpis.wastePercent > alertCfg.wasteThreshold ? 'ops-dash-kpi-card--warn' : undefined,
+      },
+      {
+        key: 'efficiency',
+        label: 'عائد الإنتاج',
+        value: `${kpis.efficiency}%`,
+      },
+      {
+        key: 'quality',
+        label: 'جودة معلّقة',
+        value: formatNumber(qualityKpis.pendingQuality),
+        meta: workOrderRisk.atRiskCount > 0 ? `${workOrderRisk.atRiskCount} أمر متأخر` : undefined,
+        accent: qualityKpis.pendingQuality > 0 || workOrderRisk.atRiskCount > 0,
+      },
+    ],
+    [kpis, alertCfg.wasteThreshold, qualityKpis.pendingQuality, workOrderRisk.atRiskCount],
+  );
+
   return (
-    <div className="space-y-3 md:space-y-4">
+    <DomainHomeShell
+      denseHero
+      eyebrow="لوحة المصنع"
+      hero={hero}
+      rangeLabel={`${preset === 'custom' && customStart && customEnd ? `${customStart} → ${customEnd}` : preset}`}
+      refreshing={loading || decisionLoading}
+      secondarySummary="تنبيهات التشغيل"
+      secondary={(
+        <ul className="space-y-2">
+          {alerts.map((alert, index) => (
+            <li
+              key={`${alert.icon}-${index}`}
+              className="flex items-start gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm"
+            >
+              <span className="material-icons-round text-base text-[var(--color-text-muted)]">{alert.icon}</span>
+              <span>{alert.message}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+      dir="rtl"
+    >
       <ModuleChartsHomeBoard />
       <OperationalDecisionQueue
         snapshot={decisionSnapshot}
@@ -950,6 +752,6 @@ export const FactoryManagerDashboard: React.FC = () => {
         atRiskWorkOrders={workOrderRisk.atRiskCount}
         qualityPending={qualityKpis.pendingQuality}
       />
-    </div>
+    </DomainHomeShell>
   );
 };

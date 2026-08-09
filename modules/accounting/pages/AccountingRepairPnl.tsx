@@ -171,7 +171,38 @@ export const AccountingRepairPnl: React.FC = () => {
               {loading ? "…" : `${pnl.journalCount} قيد مرحّل في الفترة`}
             </p>
           </div>
-          <div className="overflow-x-auto">
+          
+          <div className="erp-mobile-card-list p-2">
+            {loading ? (
+              <div className="rounded-xl border p-3"><Skeleton className="h-5 w-full" /></div>
+            ) : (
+              [
+                { label: "إيراد خدمات الصيانة", value: pnl.serviceRevenue, tone: "text-emerald-700" },
+                { label: "إيراد قطع الغيار", value: pnl.partsRevenue, tone: "text-emerald-700" },
+                ...(pnl.miscIncome > 0
+                  ? [{ label: "إيرادات متنوعة", value: pnl.miscIncome, tone: "text-emerald-700" }]
+                  : []),
+                { label: "خصومات", value: pnl.discounts, tone: "text-rose-700" },
+                { label: "صافي الإيراد", value: pnl.netRevenue, tone: "font-semibold" },
+                { label: "تكلفة قطع الغيار", value: pnl.partsCogs, tone: "text-rose-700" },
+                { label: "مصروفات تشغيل الخزينة", value: pnl.operatingExpenses, tone: "text-rose-700" },
+                {
+                  label: "ربح تشغيل الصيانة",
+                  value: pnl.operatingProfit,
+                  tone: pnl.operatingProfit >= 0 ? "font-bold text-emerald-700" : "font-bold text-rose-700",
+                },
+              ].map((row) => (
+                <div
+                  key={row.label}
+                  className="flex items-center justify-between gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2.5 shadow-sm"
+                >
+                  <span className="text-sm">{row.label}</span>
+                  <span className={`tabular-nums ${row.tone}`}>{formatAccountingMoney(row.value)}</span>
+                </div>
+              ))
+            )}
+          </div>
+<div className="erp-desktop-table overflow-x-auto">
             <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
@@ -258,7 +289,32 @@ export const AccountingRepairPnl: React.FC = () => {
               مرتبات، كهرباء، تعبئة… من حركات الخزينة المرحّلة
             </p>
           </div>
-          <div className="overflow-x-auto">
+          
+          <div className="erp-mobile-card-list p-2">
+            {loading ? (
+              <div className="rounded-xl border p-3"><Skeleton className="h-5 w-full" /></div>
+            ) : pnl.expensesByType.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">لا توجد مصروفات خزينة مرحّلة في هذه الفترة.</p>
+            ) : (
+              pnl.expensesByType.map((row) => (
+                <div
+                  key={`m-${row.key}`}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold">{row.label}</p>
+                      <p className="font-mono text-xs text-muted-foreground">{row.accountCode || "—"}</p>
+                    </div>
+                    <p className="font-semibold tabular-nums text-rose-700">
+                      {formatAccountingMoney(row.amount)}
+                    </p>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+<div className="erp-desktop-table overflow-x-auto">
             <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>

@@ -160,8 +160,55 @@ export const AccountingChartOfAccounts: React.FC = () => {
             ) : null
           }
         />
-        <div className="erp-table-scroll">
-          <table className="erp-table">
+        <div className="erp-mobile-card-list p-2">
+          {loading
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="rounded-xl border p-3">
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ))
+            : null}
+          {!loading &&
+            paged.map((row) => (
+              <div
+                key={`m-${row.code}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-semibold tabular-nums">{row.code}</p>
+                    <p className="mt-0.5 text-sm font-medium">{row.name}</p>
+                    <p className="mt-1 text-xs text-muted-foreground">{ACCOUNT_TYPE_LABEL[row.type]}</p>
+                  </div>
+                  <Badge variant={row.isActive ? "default" : "secondary"}>
+                    {row.isActive ? "نشط" : "موقوف"}
+                  </Badge>
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+                  <div>
+                    <dt className="text-[10px]">الأب</dt>
+                    <dd className="font-mono text-[var(--color-text)]">{row.parentCode || "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px]">الترحيل</dt>
+                    <dd className="text-[var(--color-text)]">{row.allowPosting ? "نعم" : "تجميعي"}</dd>
+                  </div>
+                </dl>
+                {can("accounting.accounts.manage") ? (
+                  <div className="mt-2">
+                    <Button size="sm" variant="outline" onClick={() => openEdit(row)}>
+                      تعديل
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            ))}
+          {!loading && filtered.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد حسابات.</p>
+          ) : null}
+        </div>
+        <div className="erp-desktop-table erp-table-scroll">
+          <table className="erp-table min-w-[800px]">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th text-start">الكود</th>

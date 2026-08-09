@@ -121,8 +121,47 @@ export const AccountingLedger: React.FC = () => {
             </p>
           ) : null}
         </CardContent>
-        <div className="erp-table-scroll">
-          <table className="erp-table">
+        <div className="erp-mobile-card-list p-2">
+          {loading
+            ? Array.from({ length: 4 }).map((_, index) => (
+                <div key={index} className="rounded-xl border p-3">
+                  <Skeleton className="h-8 w-full" />
+                </div>
+              ))
+            : null}
+          {!loading &&
+            paged.map((row, index) => (
+              <div
+                key={`m-${row.entryId}_${index}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <p className="font-mono text-sm font-semibold">{row.referenceNo}</p>
+                  <p className="text-xs tabular-nums text-muted-foreground">{row.date}</p>
+                </div>
+                <p className="mt-1 text-sm">{row.description}</p>
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">مدين</dt>
+                    <dd className="tabular-nums">{formatAccountingMoney(row.debit)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">دائن</dt>
+                    <dd className="tabular-nums">{formatAccountingMoney(row.credit)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">الرصيد</dt>
+                    <dd className="font-semibold tabular-nums">{formatAccountingMoney(row.balance)}</dd>
+                  </div>
+                </dl>
+              </div>
+            ))}
+          {!loading && ledger.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد حركة لهذا الحساب في الفترة.</p>
+          ) : null}
+        </div>
+        <div className="erp-desktop-table erp-table-scroll">
+          <table className="erp-table min-w-[720px]">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">التاريخ</th>
