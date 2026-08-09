@@ -4,6 +4,7 @@ import {
   formatRepairPrintProductLabel,
   repairCustomerReceiptAcknowledgment,
   repairCustomerReceiptTitle,
+  repairReceiptCopyLabel,
   resolveRepairJobPrintProducts,
 } from '../modules/repair/lib/repairJobPrint';
 import {
@@ -119,6 +120,8 @@ assert.equal(cardFromSettings.statusColor, '#112233');
 
 assert.equal(repairCustomerReceiptTitle(false), 'إيصال استلام للصيانة');
 assert.equal(repairCustomerReceiptTitle(true), 'إيصال صيانة');
+assert.equal(repairReceiptCopyLabel('center'), 'نسخة المركز');
+assert.equal(repairReceiptCopyLabel('customer'), 'نسخة العميل');
 assert.match(repairCustomerReceiptAcknowledgment(false), /سلّمت المنتجات/);
 assert.match(repairCustomerReceiptAcknowledgment(true), /التكلفة/);
 assert.equal(

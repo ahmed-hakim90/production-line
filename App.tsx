@@ -962,6 +962,12 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!bootDecision.allowRoutes) return;
     dismissHtmlSplash();
+    // Allow a future one-shot stale-chunk recovery in this tab after a healthy boot.
+    try {
+      sessionStorage.removeItem(DYNAMIC_IMPORT_RELOAD_KEY);
+    } catch {
+      /* private mode / blocked storage */
+    }
     const lang = userLanguage ?? 'ar';
     void setAppLanguage(lang);
   }, [bootDecision.allowRoutes, userLanguage]);
@@ -1112,7 +1118,8 @@ const App: React.FC = () => {
       }
       sessionStorage.setItem(DYNAMIC_IMPORT_RELOAD_KEY, '1');
       event.preventDefault();
-      toast.error('تعذّر تحميل جزء من التطبيق (غالباً نسخة مخزّنة قديمة). جارٍ التحديث…');
+      toast.error('تعذّر تحميل جزء من التطبيق (غالباً نسخة مخزّنة قديمة). جارٍ إعادة فتح الصفحة…');
+      // Keep the user on the same route after purge — do not dump them on home.
       void hardClientReload();
       return true;
     };

@@ -9,6 +9,7 @@ import {
   resolvePreferredTenantSlug,
 } from '../lib/navigationRecovery.ts';
 import { tenantHomePath, tenantSlugFromPathname, withTenantPath } from '../lib/tenantPaths.ts';
+import { buildHardClientReloadHref } from '../utils/hardClientReload.ts';
 
 describe('resolvePreferredTenantSlug', () => {
   it('prefers last visited slug over env default', () => {
@@ -89,6 +90,26 @@ describe('isDynamicImportLoadFailure', () => {
     expect(isDynamicImportLoadFailure(new Error('permission denied'))).toBeFalsy();
     expect(isDynamicImportLoadFailure(null)).toBeFalsy();
     expect(isDynamicImportLoadFailure(undefined)).toBeFalsy();
+  });
+});
+
+describe('buildHardClientReloadHref', () => {
+  it('preserves the current tenant page instead of dumping on home', () => {
+    const href = buildHardClientReloadHref({
+      path: '/t/sokany-eg/inventory/locations',
+      origin: 'http://localhost:3000',
+      now: 123,
+    });
+    expect(href).toBe('http://localhost:3000/t/sokany-eg/inventory/locations?_sw_reload=123');
+  });
+
+  it('replaces a previous _sw_reload param without losing other query keys', () => {
+    const href = buildHardClientReloadHref({
+      currentHref: 'http://localhost:3000/t/acme/repair/jobs?tab=open&_sw_reload=old',
+      origin: 'http://localhost:3000',
+      now: 99,
+    });
+    expect(href).toBe('http://localhost:3000/t/acme/repair/jobs?tab=open&_sw_reload=99');
   });
 });
 

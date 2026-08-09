@@ -212,11 +212,11 @@ export const RepairJobDetail: React.FC = () => {
     () => ({ ...DEFAULT_PRINT_TEMPLATE, ...printTemplate, paperSize: 'a5' as const }),
     [printTemplate],
   );
-  /** إيصال العميل (صفحة 1) + كارت داخلي (صفحة 2) في أمر طباعة واحد. */
+  /** إيصال × نسختين (مركز + عميل) ثم كارت داخلي — كلها A5. */
   const handlePrintIntakeBundle = useManagedPrint({
     contentRef: intakeBundlePrintRef,
     printSettings: intakeBundlePrintSettings,
-    documentTitle: job ? `ايصال-وكارت-${job.receiptNo}` : 'ايصال-وكارت-صيانة',
+    documentTitle: job ? `ايصال-نسختين-وكارت-${job.receiptNo}` : 'ايصال-نسختين-وكارت',
   });
   const handlePrintDeliveryAuthorization = useManagedPrint({
     contentRef: deliveryAuthorizationPrintRef,
@@ -1482,11 +1482,11 @@ export const RepairJobDetail: React.FC = () => {
                 iconName="print"
                 tone="print"
                 solid={false}
-                title="طباعة إيصال العميل والكارت الداخلي (كل واحد في صفحة)"
+                title="طباعة إيصال بنسختين (مركز + عميل) والكارت الداخلي على A5"
                 onClick={() => handlePrintIntakeBundle()}
               >
-                <span className="hidden sm:inline">طباعة الإيصال والكارت</span>
-                <span className="sm:hidden">طباعة</span>
+                <span className="hidden sm:inline">طباعة A5 — نسختين + كارت</span>
+                <span className="sm:hidden">طباعة A5</span>
               </Button>
             </div>
           )}
@@ -2098,7 +2098,7 @@ export const RepairJobDetail: React.FC = () => {
           <DialogHeader>
             <DialogTitle>طباعة بعد الاستلام</DialogTitle>
             <DialogDescription>
-              طباعة واحدة: إيصال العميل في الصفحة الأولى، والكارت الداخلي (A5) بكل المنتجات وQR في الصفحة الثانية.
+              طباعة واحدة على ورق A5: نسخة المركز، ثم نسخة العميل، ثم الكارت الداخلي (كل واحد في صفحة).
             </DialogDescription>
           </DialogHeader>
           <div className="flex flex-col gap-2">
@@ -2111,7 +2111,7 @@ export const RepairJobDetail: React.FC = () => {
                 handlePrintIntakeBundle();
               }}
             >
-              طباعة الإيصال والكارت الداخلي
+              طباعة نسختي الإيصال + الكارت الداخلي
             </Button>
           </div>
           <DialogFooter>
@@ -2201,15 +2201,16 @@ export const RepairJobDetail: React.FC = () => {
           printSettings={intakeBundlePrintSettings}
           statusMap={repairSettings.statusMap}
         />
-        {/* PDF export keeps template paper size (may differ from A5 intake bundle). */}
+        {/* PDF export: single customer-copy receipt on A5 */}
         <RepairJobPrint
           ref={printRef}
           job={financialJob}
           branch={branch}
           products={jobProducts}
           trackUrl={trackUrl}
-          printSettings={printTemplate}
+          printSettings={intakeBundlePrintSettings}
           statusMap={repairSettings.statusMap}
+          copyKind="customer"
         />
         <DeliveryReceiptPDF
           ref={deliveryAuthorizationPrintRef}

@@ -306,7 +306,11 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
   };
 
   return (
-    <Popover open={disabled ? false : open} onOpenChange={(next) => !disabled && setOpen(next)}>
+    <Popover
+      modal
+      open={disabled ? false : open}
+      onOpenChange={(next) => !disabled && setOpen(next)}
+    >
       <PopoverTrigger asChild>
         <UiButton
           type="button"
@@ -315,7 +319,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           aria-expanded={open}
           disabled={disabled}
           className={cn(
-            'w-full justify-between h-10 text-[13px] font-medium border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
+            'w-full justify-between min-h-11 h-11 touch-manipulation text-[13px] font-medium border-[var(--color-border)] bg-[var(--color-bg)] hover:border-primary/30',
             disabled && 'opacity-70 cursor-not-allowed',
             className
           )}
@@ -330,7 +334,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                 role="button"
                 tabIndex={0}
                 aria-label={t('shared.clearSelection')}
-                className="inline-flex h-5 w-5 items-center justify-center rounded-sm hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-sm hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring touch-manipulation"
                 onClick={handleClear}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
@@ -351,10 +355,29 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
           </span>
         </UiButton>
       </PopoverTrigger>
-      <PopoverContent className="z-[500] w-[--radix-popover-trigger-width] p-0" align="start">
-        <Command filter={searchableSelectFilter}>
+      <PopoverContent
+        className="z-[500] w-[--radix-popover-trigger-width] max-w-[min(100vw-1.5rem,28rem)] p-0"
+        align="start"
+        collisionPadding={16}
+        onOpenAutoFocus={(e) => {
+          // Keep focus inside the panel so soft keyboard open does not dismiss on tablet.
+          e.preventDefault();
+          const root = e.currentTarget as HTMLElement | null;
+          const input = root?.querySelector<HTMLInputElement>('[cmdk-input]');
+          window.setTimeout(() => input?.focus({ preventScroll: true }), 0);
+        }}
+        onCloseAutoFocus={(e) => e.preventDefault()}
+        onFocusOutside={(e) => {
+          // Soft keyboard / visualViewport shifts can fire spurious focusoutside on iPad.
+          const next = e.detail?.originalEvent?.relatedTarget as Node | null | undefined;
+          if (next && (e.currentTarget as HTMLElement).contains(next)) {
+            e.preventDefault();
+          }
+        }}
+      >
+        <Command filter={searchableSelectFilter} shouldFilter>
           <CommandInput placeholder={t('shared.searchPlaceholder')} />
-          <CommandList>
+          <CommandList className="max-h-[min(50dvh,18rem)] overscroll-contain">
             <CommandEmpty>{t('shared.noResults')}</CommandEmpty>
             <CommandGroup>
               {options.map((opt, idx) => (
@@ -363,6 +386,7 @@ export const SearchableSelect: React.FC<SearchableSelectProps> = ({
                   // cmdk filters by `value`; include id so items stay unique when labels repeat (e.g. product names).
                   value={`${opt.label} ${opt.hint || ''} ${opt.value}`}
                   onSelect={() => handleSelect(opt.value)}
+                  className="min-h-11 touch-manipulation"
                 >
                   <Check className={cn('mr-2 h-4 w-4 shrink-0', value === opt.value ? 'opacity-100' : 'opacity-0')} />
                   <span className="min-w-0 flex-1 truncate">{opt.label}</span>

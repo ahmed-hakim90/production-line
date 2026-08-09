@@ -10,6 +10,7 @@ import {
   assignDefaultRolesToStatuses,
   defaultRoleForStatusId,
   isRepairStatusRole,
+  MANDATORY_REPAIR_STATUS_ROLES,
 } from '../lib/repairStatusAdvance';
 import { mapLegacyRepairStatus } from '../utils/repairStatusIds';
 
@@ -170,19 +171,25 @@ export const resolveRepairSettings = (
   const fallbackManagerScope = systemSettings?.repairAccess?.managerScope;
   const rawStatuses = Array.isArray(fromRoot?.workflow?.statuses) ? fromRoot.workflow.statuses : [];
   const configuredStatuses = rawStatuses.length > 0 ? [...rawStatuses] : [...DEFAULT_STATUSES];
-  if (!configuredStatuses.some((status) => mapLegacyRepairStatus(String(status?.id || '')) === 'estimate_ready')) {
-    const diagnosingOrder = Number(
-      configuredStatuses.find((status) => mapLegacyRepairStatus(String(status?.id || '')) === 'diagnosing')?.order || 2,
+  // Ensure canonical statuses that carry mandatory workflow roles still exist
+  // (legacy tenants may lack estimate_ready / waiting_approval after earlier edits).
+  for (const required of DEFAULT_STATUSES) {
+    if (!required.role || required.role === 'none') continue;
+    if (!MANDATORY_REPAIR_STATUS_ROLES.includes(required.role)) continue;
+    const hasId = configuredStatuses.some(
+      (status) => mapLegacyRepairStatus(String(status?.id || '')) === required.id,
     );
-    configuredStatuses.push({
-      id: 'estimate_ready',
-      label: 'التقدير جاهز لمراجعة الاستقبال',
-      color: '#0284c7',
-      order: diagnosingOrder + 0.5,
-      isTerminal: false,
-      isEnabled: true,
-      role: 'estimate_review',
+    if (hasId) continue;
+    const hasRole = configuredStatuses.some((status) => {
+      const id = mapLegacyRepairStatus(String(status?.id || ''));
+      const roleRaw = (status as { role?: unknown })?.role;
+      const role = isRepairStatusRole(roleRaw) && roleRaw !== 'none'
+        ? roleRaw
+        : defaultRoleForStatusId(id);
+      return role === required.role && status?.isEnabled !== false;
     });
+    if (hasRole) continue;
+    configuredStatuses.push({ ...required });
   }
   const mappedStatuses = configuredStatuses
     .map((status, index) => {

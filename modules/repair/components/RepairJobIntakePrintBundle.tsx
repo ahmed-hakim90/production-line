@@ -16,10 +16,16 @@ export type RepairJobIntakePrintBundleProps = {
   statusMap?: RepairPrintStatusMap;
 };
 
+const pageBreakStyle: React.CSSProperties = {
+  pageBreakAfter: 'always',
+  breakAfter: 'page',
+};
+
 /**
- * One print job after intake / from job detail:
- * page 1 = customer receipt, page 2 = internal A5 card.
- * Both sheets share A5 so the card is not clipped.
+ * One print job after intake / from job detail on A5:
+ * page 1 = receipt (center copy),
+ * page 2 = receipt (customer copy),
+ * page 3 = internal card.
  */
 export const RepairJobIntakePrintBundle = React.forwardRef<HTMLDivElement, RepairJobIntakePrintBundleProps>(
   function RepairJobIntakePrintBundle(
@@ -32,22 +38,22 @@ export const RepairJobIntakePrintBundle = React.forwardRef<HTMLDivElement, Repai
       paperSize: 'a5',
     };
 
+    const receiptProps = {
+      job,
+      branch,
+      products,
+      trackUrl,
+      printSettings: bundleSettings,
+      statusMap,
+    } as const;
+
     return (
       <div ref={ref} dir="rtl" className="print-root arabic-export-root">
-        <div
-          style={{
-            pageBreakAfter: 'always',
-            breakAfter: 'page',
-          }}
-        >
-          <RepairJobPrint
-            job={job}
-            branch={branch}
-            products={products}
-            trackUrl={trackUrl}
-            printSettings={bundleSettings}
-            statusMap={statusMap}
-          />
+        <div style={pageBreakStyle}>
+          <RepairJobPrint {...receiptProps} copyKind="center" />
+        </div>
+        <div style={pageBreakStyle}>
+          <RepairJobPrint {...receiptProps} copyKind="customer" />
         </div>
         <RepairJobProductCardPrint
           job={job}

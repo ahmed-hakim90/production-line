@@ -20,7 +20,7 @@ export type RepairJobProductCardPrintProps = {
   workUrl?: string;
 };
 
-/** A single A5 internal job card containing every product on the repair request. */
+/** Compact A5-width internal job card — height follows content (no fixed full-page stretch). */
 export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, RepairJobProductCardPrintProps>(
   function RepairJobProductCardPrint({ job, branch, products, printSettings, statusMap, workUrl }, ref) {
     if (!job) return <div ref={ref} />;
@@ -31,57 +31,171 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
     const cards = rows.map((product) => buildRepairProductCardFields(job, product, branch?.name, statusMap));
     const summary = cards[0];
     const statusStyle = repairStatusChipStyle(summary.statusColor);
+    const createdAt = job.createdAt
+      ? (() => {
+          const d = new Date(job.createdAt);
+          return Number.isNaN(d.getTime()) ? job.createdAt : d.toLocaleString('ar-EG');
+        })()
+      : '—';
+
+    const cellPad = '1mm 1.2mm';
+    const thStyle: React.CSSProperties = {
+      padding: cellPad,
+      border: `1px solid ${palette.border}`,
+      fontSize: '6.5pt',
+      fontWeight: 900,
+      textAlign: 'right',
+      background: palette.tableRowAltBg,
+      lineHeight: 1.2,
+    };
+    const tdStyle: React.CSSProperties = {
+      padding: cellPad,
+      border: `1px solid ${palette.border}`,
+      fontSize: '7pt',
+      verticalAlign: 'top',
+      lineHeight: 1.25,
+      overflowWrap: 'anywhere',
+    };
 
     return (
       <div ref={ref} dir="rtl" className="print-root arabic-export-root">
         <div
           style={{
             fontFamily: "'Calibri', 'Segoe UI', 'Tahoma', 'Arial', sans-serif",
-            width: '148mm', minHeight: '210mm', margin: '0 auto', padding: '8mm 9mm',
-            background: '#fff', color: palette.text, fontSize: '10pt', lineHeight: 1.4, boxSizing: 'border-box',
+            width: '148mm',
+            margin: '0 auto',
+            padding: '3mm 3.5mm',
+            background: '#fff',
+            color: palette.text,
+            fontSize: '8pt',
+            lineHeight: 1.25,
+            boxSizing: 'border-box',
           }}
         >
-          <div style={{ border: `2.5px solid ${ps.primaryColor}`, borderRadius: '3mm', overflow: 'hidden', minHeight: '194mm', display: 'flex', flexDirection: 'column' }}>
-            <div style={{ padding: '4mm 6mm', borderBottom: `3px solid ${ps.primaryColor}`, background: palette.tableRowAltBg, textAlign: 'center' }}>
-              {ps.logoUrl ? <img src={ps.logoUrl} alt="" style={{ maxHeight: '11mm', objectFit: 'contain', margin: '0 auto 1mm', display: 'block' }} /> : null}
-              <h1 style={{ margin: 0, fontSize: '15pt', fontWeight: 900, color: ps.primaryColor }}>{ps.headerText || 'مركز الصيانة'}</h1>
-              <p style={{ margin: '1mm 0 0', fontSize: '12pt', fontWeight: 900 }}>كارت طلب الصيانة الداخلي</p>
-              <p style={{ margin: '1mm 0 0', fontSize: '9pt', color: palette.mutedText, fontWeight: 700 }}>{summary.branchName}</p>
-            </div>
-
-            <div style={{ padding: '4mm 5mm', flex: 1 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '2mm', marginBottom: '3mm' }}>
-                <div style={{ padding: '2mm 3mm', borderRadius: '2mm', background: ps.primaryColor, color: '#fff', WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                  <span style={{ fontSize: '8pt', fontWeight: 700 }}>رقم الإيصال </span>
-                  <span style={{ fontSize: '13pt', fontWeight: 900, fontFamily: 'monospace' }}>{summary.receiptNo}</span>
+          <div
+            style={{
+              border: `1.5px solid ${ps.primaryColor}`,
+              borderRadius: '2mm',
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                padding: '2mm 3mm',
+                borderBottom: `2px solid ${ps.primaryColor}`,
+                background: palette.tableRowAltBg,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '2mm',
+              }}
+            >
+              <div style={{ flex: 1, minWidth: 0, textAlign: 'right' }}>
+                {ps.logoUrl ? (
+                  <img
+                    src={ps.logoUrl}
+                    alt=""
+                    style={{ maxHeight: '7mm', objectFit: 'contain', marginBottom: '0.4mm', display: 'block' }}
+                  />
+                ) : null}
+                <h1 style={{ margin: 0, fontSize: '11pt', fontWeight: 900, color: ps.primaryColor, lineHeight: 1.15 }}>
+                  {ps.headerText || 'مركز الصيانة'}
+                </h1>
+                <p style={{ margin: '0.3mm 0 0', fontSize: '8pt', fontWeight: 900, lineHeight: 1.15 }}>
+                  كارت طلب الصيانة الداخلي
+                </p>
+                <p style={{ margin: '0.2mm 0 0', fontSize: '6.5pt', color: palette.mutedText, fontWeight: 700 }}>
+                  {summary.branchName}
+                  {createdAt !== '—' ? ` · ${createdAt}` : ''}
+                </p>
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '1mm', alignItems: 'stretch', flexShrink: 0 }}>
+                <div
+                  style={{
+                    padding: '1mm 2mm',
+                    borderRadius: '1.2mm',
+                    background: ps.primaryColor,
+                    color: '#fff',
+                    textAlign: 'center',
+                    WebkitPrintColorAdjust: 'exact',
+                    printColorAdjust: 'exact',
+                  }}
+                >
+                  <span style={{ fontSize: '5.5pt', fontWeight: 700, display: 'block' }}>رقم الإيصال</span>
+                  <span style={{ fontSize: '11pt', fontWeight: 900, fontFamily: 'monospace', lineHeight: 1.1 }}>
+                    {summary.receiptNo}
+                  </span>
                 </div>
-                <div style={{ padding: '2mm 3mm', borderRadius: '2mm', border: `1.5px solid ${statusStyle.borderColor}`, background: statusStyle.backgroundColor, color: statusStyle.color, WebkitPrintColorAdjust: 'exact', printColorAdjust: 'exact' }}>
-                  <span style={{ fontSize: '8pt', fontWeight: 700 }}>الحالة </span>
-                  <span style={{ fontSize: '11pt', fontWeight: 900 }}>{summary.statusLabel}</span>
+                <div
+                  style={{
+                    padding: '1mm 2mm',
+                    borderRadius: '1.2mm',
+                    border: `1px solid ${statusStyle.borderColor}`,
+                    background: statusStyle.backgroundColor,
+                    color: statusStyle.color,
+                    textAlign: 'center',
+                    WebkitPrintColorAdjust: 'exact',
+                    printColorAdjust: 'exact',
+                  }}
+                >
+                  <span style={{ fontSize: '5.5pt', fontWeight: 700 }}>الحالة </span>
+                  <span style={{ fontSize: '8.5pt', fontWeight: 900 }}>{summary.statusLabel}</span>
                 </div>
               </div>
+            </div>
 
-              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '4mm' }}>
+            <div style={{ padding: '2.5mm 3mm' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', marginBottom: '2mm' }}>
                 <tbody>
-                  {[
-                    { label: 'اسم العميل', value: summary.customerName },
-                    { label: 'رقم الهاتف', value: summary.customerPhone },
-                  ].map((row) => (
-                    <tr key={row.label}>
-                      <td style={{ padding: '2mm', width: '28%', borderBottom: `1px solid ${palette.border}`, color: palette.mutedText, fontWeight: 700, background: palette.tableRowAltBg }}>{row.label}</td>
-                      <td style={{ padding: '2mm', borderBottom: `1px solid ${palette.border}`, fontWeight: 800 }}>{row.value}</td>
-                    </tr>
-                  ))}
+                  <tr>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        width: '16%',
+                        color: palette.mutedText,
+                        fontWeight: 700,
+                        background: palette.tableRowAltBg,
+                        fontSize: '6.5pt',
+                      }}
+                    >
+                      العميل
+                    </td>
+                    <td style={{ ...tdStyle, fontWeight: 800, width: '34%' }}>{summary.customerName}</td>
+                    <td
+                      style={{
+                        ...tdStyle,
+                        width: '14%',
+                        color: palette.mutedText,
+                        fontWeight: 700,
+                        background: palette.tableRowAltBg,
+                        fontSize: '6.5pt',
+                      }}
+                    >
+                      الهاتف
+                    </td>
+                    <td style={{ ...tdStyle, fontWeight: 800, width: '36%' }}>{summary.customerPhone}</td>
+                  </tr>
                 </tbody>
               </table>
 
-              <div style={{ marginBottom: '2mm', fontSize: '11pt', fontWeight: 900, color: ps.primaryColor }}>منتجات الطلب ({rows.length})</div>
+              <div
+                style={{
+                  marginBottom: '1mm',
+                  fontSize: '8pt',
+                  fontWeight: 900,
+                  color: ps.primaryColor,
+                  lineHeight: 1.2,
+                }}
+              >
+                منتجات الطلب ({rows.length})
+              </div>
               <table style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
                 <thead>
-                  <tr style={{ background: palette.tableRowAltBg }}>
-                    {['#', 'المنتج والكمية', 'السيريال', 'العطل والملحقات'].map((label, index) => (
-                      <th key={label} style={{ width: index === 0 ? '7%' : index === 1 ? '26%' : index === 2 ? '20%' : '47%', padding: '2mm 1.5mm', border: `1px solid ${palette.border}`, fontSize: '8.5pt', textAlign: 'right' }}>{label}</th>
-                    ))}
+                  <tr>
+                    <th style={{ ...thStyle, width: '5%' }}>#</th>
+                    <th style={{ ...thStyle, width: '28%' }}>المنتج × الكمية</th>
+                    <th style={{ ...thStyle, width: '16%' }}>السيريال</th>
+                    <th style={{ ...thStyle, width: '51%' }}>العطل / الملحقات</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -90,11 +204,25 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
                     const quantity = Math.max(1, Math.round(Number(product.quantity || 1)));
                     return (
                       <tr key={product.itemId || index} style={{ breakInside: 'avoid' }}>
-                        <td style={{ padding: '2mm 1.5mm', border: `1px solid ${palette.border}`, fontWeight: 900 }}>{index + 1}</td>
-                        <td style={{ padding: '2mm 1.5mm', border: `1px solid ${palette.border}`, fontWeight: 900, overflowWrap: 'anywhere' }}>{card.productName}<div style={{ fontSize: '8pt', color: palette.mutedText }}>الكمية: {quantity}</div></td>
-                        <td style={{ padding: '2mm 1.5mm', border: `1px solid ${palette.border}`, fontWeight: 700, overflowWrap: 'anywhere' }}>{card.serialNo}</td>
-                        <td style={{ padding: '2mm 1.5mm', border: `1px solid ${palette.border}`, fontSize: '8.5pt', whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
-                          <strong>العطل:</strong> {card.diagnosis}<br /><strong>الملحقات:</strong> {card.accessories}
+                        <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 900 }}>{index + 1}</td>
+                        <td style={{ ...tdStyle, fontWeight: 900 }}>
+                          {card.productName}
+                          <span style={{ fontWeight: 800, color: palette.mutedText }}> × {quantity}</span>
+                        </td>
+                        <td
+                          style={{
+                            ...tdStyle,
+                            fontWeight: 700,
+                            fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+                            fontSize: '6.5pt',
+                          }}
+                        >
+                          {card.serialNo}
+                        </td>
+                        <td style={{ ...tdStyle, fontSize: '6.5pt', whiteSpace: 'pre-wrap' }}>
+                          <strong>عطل:</strong> {card.diagnosis}
+                          {' · '}
+                          <strong>ملحقات:</strong> {card.accessories}
                         </td>
                       </tr>
                     );
@@ -103,18 +231,54 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
               </table>
 
               {workUrl ? (
-                <div style={{ marginTop: '4mm', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '4mm', border: `2px dashed ${ps.primaryColor}`, borderRadius: '3mm', padding: '3mm', background: '#fff', breakInside: 'avoid' }}>
-                  <QRCodeSVG value={workUrl} size={92} includeMargin />
+                <div
+                  style={{
+                    marginTop: '2.5mm',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '2.5mm',
+                    border: `1.5px dashed ${ps.primaryColor}`,
+                    borderRadius: '1.5mm',
+                    padding: '1.5mm 2mm',
+                    background: '#fff',
+                    breakInside: 'avoid',
+                  }}
+                >
+                  <QRCodeSVG value={workUrl} size={64} includeMargin={false} />
                   <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontSize: '12pt', fontWeight: 900, color: ps.primaryColor }}>مسح الفني</div>
-                    <div style={{ marginTop: '1mm', fontSize: '9pt', fontWeight: 700, color: palette.mutedText }}>
-هذا باركود الفني للطلب.                    </div>
+                    <div style={{ fontSize: '9pt', fontWeight: 900, color: ps.primaryColor, lineHeight: 1.2 }}>
+                      مسح الفني
+                    </div>
+                    <div style={{ marginTop: '0.4mm', fontSize: '6.5pt', fontWeight: 700, color: palette.mutedText, lineHeight: 1.25 }}>
+                      باركود فتح مساحة عمل الطلب
+                    </div>
+                    <div
+                      style={{
+                        marginTop: '0.4mm',
+                        fontSize: '6pt',
+                        fontWeight: 700,
+                        fontFamily: 'monospace',
+                        color: palette.mutedText,
+                      }}
+                    >
+                      {summary.receiptNo}
+                    </div>
                   </div>
                 </div>
               ) : null}
             </div>
 
-            <div style={{ padding: '3mm 6mm', borderTop: `1px solid ${palette.border}`, fontSize: '8.5pt', color: palette.mutedText, fontWeight: 700, textAlign: 'center' }}>
+            <div
+              style={{
+                padding: '1.5mm 3mm',
+                borderTop: `1px solid ${palette.border}`,
+                fontSize: '6.5pt',
+                color: palette.mutedText,
+                fontWeight: 700,
+                textAlign: 'center',
+              }}
+            >
               كارت واحد للطلب بالكامل — للاستخدام الداخلي
             </div>
           </div>

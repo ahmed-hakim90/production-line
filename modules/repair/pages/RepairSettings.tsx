@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/table';
 import { Separator } from '@/components/ui/separator';
 import { PageHeader } from '@/components/PageHeader';
+import { SearchableSelect } from '@/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
 import {
@@ -33,6 +34,7 @@ import { resolveRepairSettings, type ResolvedRepairStatus } from '../config/repa
 import {
   REPAIR_STATUS_ROLE_LABELS,
   REPAIR_STATUS_ROLES,
+  assignDefaultRolesToStatuses,
   validateMandatoryStatusRoles,
   type RepairStatusRole,
 } from '../lib/repairStatusAdvance';
@@ -119,7 +121,6 @@ export const RepairSettings: React.FC = () => {
   const [employees, setEmployees] = useState<FirestoreEmployee[]>(() => initialManagersCache?.employees ?? []);
   const [branchManagersLoading, setBranchManagersLoading] = useState(() => initialManagersCache == null);
   const [managerByBranchId, setManagerByBranchId] = useState<Record<string, string>>(() => initialManagersCache?.managerByBranchId ?? {});
-  const [managerSearch, setManagerSearch] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -186,15 +187,19 @@ export const RepairSettings: React.FC = () => {
     );
   }, [employees, repairBranches, managerByBranchId]);
 
-  const filteredManagerEmployees = useMemo(() => {
-    const q = managerSearch.trim().toLowerCase();
-    if (!q) return employeesForManagerSelect;
-    return employeesForManagerSelect.filter((e) => {
-      const name = String(e.name || '').toLowerCase();
-      const code = String(e.code || '').toLowerCase();
-      return `${name} ${code}`.includes(q);
-    });
-  }, [employeesForManagerSelect, managerSearch]);
+  const managerEmployeeOptions = useMemo(
+    () =>
+      employeesForManagerSelect.map((employee) => {
+        const id = String(employee.id || '');
+        const name = String(employee.name || '').trim() || '—';
+        const code = String(employee.code || '').trim();
+        return {
+          value: id,
+          label: code ? `${name} (${code})` : name,
+        };
+      }),
+    [employeesForManagerSelect],
+  );
 
   useEffect(() => {
     const r = resolveRepairSettings(useAppStore.getState().systemSettings);
@@ -262,11 +267,15 @@ export const RepairSettings: React.FC = () => {
         enabled: row.enabled !== false,
       }))
       .filter((row) => row.label.length > 0);
-    const roleErrors = validateMandatoryStatusRoles(statuses);
+    const normalizedStatuses = assignDefaultRolesToStatuses(
+      statuses.map((status, idx) => ({ ...status, order: idx + 1 })),
+    );
+    const roleErrors = validateMandatoryStatusRoles(normalizedStatuses);
     if (roleErrors.length > 0) {
       toast.error(roleErrors[0]);
       return;
     }
+    setStatuses(normalizedStatuses);
     setSaving(true);
     try {
       let branchManagersUpdated = false;
@@ -307,7 +316,7 @@ export const RepairSettings: React.FC = () => {
             managerScope,
           },
           workflow: {
-            statuses: statuses.map((status, idx) => ({
+            statuses: normalizedStatuses.map((status, idx) => ({
               ...status,
               id: mapLegacyRepairStatus(status.id),
               order: idx + 1,
@@ -359,13 +368,13 @@ export const RepairSettings: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6">
+    <div className="erp-ds-clean space-y-4 p-3 sm:p-4 md:p-6 pb-[calc(5.5rem+env(safe-area-inset-bottom))] lg:pb-6">
       <PageHeader
         title="إعدادات الصيانة"
         subtitle="تحكم في سير العمل، الصلاحيات، الافتراضيات، وسياسة خزينة الصيانة."
         icon="settings"
         actions={
-          <Button onClick={onSave} disabled={saving} className="shrink-0">
+          <Button onClick={onSave} disabled={saving} className="hidden sm:inline-flex shrink-0 min-h-11 touch-manipulation">
             {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
           </Button>
         }
@@ -403,7 +412,7 @@ export const RepairSettings: React.FC = () => {
             </span>
             <Link
               to={withTenantPath(tenantSlug, '/repair/branches')}
-              className="text-sm font-medium text-primary underline-offset-4 hover:underline shrink-0"
+              className="text-sm font-medium text-primary underline-offset-4 hover:underline shrink-0 min-h-11 inline-flex items-center touch-manipulation"
             >
               إدارة الفروع وإضافة فرع
             </Link>
@@ -421,18 +430,42 @@ export const RepairSettings: React.FC = () => {
               .
             </p>
           ) : (
-            <>
-              <div className="max-w-sm space-y-2">
-                <Label htmlFor="mgr-search">بحث عن موظف (لقائمة المسؤولين)</Label>
-                <Input
-                  id="mgr-search"
-                  value={managerSearch}
-                  onChange={(e) => setManagerSearch(e.target.value)}
-                  placeholder="اسم أو كود..."
-                  className="bg-background"
-                />
+            <div className="space-y-3">
+              {/* Tablet/mobile: stacked cards so the searchable manager picker stays usable with keyboard */}
+              <div className="grid gap-3 lg:hidden">
+                {repairBranches.map((branch) => {
+                  const bid = String(branch.id || '');
+                  const value = managerByBranchId[bid] ?? String(branch.managerEmployeeId || '');
+                  return (
+                    <div
+                      key={bid}
+                      className="rounded-lg border border-[var(--color-border)]/70 bg-muted/15 p-3 space-y-2"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <div className="font-medium truncate">{branch.name || bid}</div>
+                          {branch.isMain ? (
+                            <span className="text-xs text-muted-foreground">رئيسي</span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <Label className="text-xs text-muted-foreground">المسؤول عن الفرع</Label>
+                      <SearchableSelect
+                        options={managerEmployeeOptions}
+                        value={value}
+                        onChange={(v) =>
+                          setManagerByBranchId((prev) => ({ ...prev, [bid]: v }))
+                        }
+                        placeholder="اختر المسؤول"
+                        className="bg-background w-full"
+                      />
+                    </div>
+                  );
+                })}
               </div>
-              <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/15 overflow-hidden">
+
+              {/* Desktop table */}
+              <div className="hidden lg:block rounded-lg border border-[var(--color-border)]/70 bg-muted/15 overflow-hidden">
                 <Table>
                   <TableHeader>
                     <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
@@ -453,35 +486,15 @@ export const RepairSettings: React.FC = () => {
                             ) : null}
                           </TableCell>
                           <TableCell className="py-3">
-                            <Select
-                              value={value || undefined}
-                              onOpenChange={(open) => {
-                                if (!open) setManagerSearch('');
-                              }}
-                              onValueChange={(v) =>
+                            <SearchableSelect
+                              options={managerEmployeeOptions}
+                              value={value}
+                              onChange={(v) =>
                                 setManagerByBranchId((prev) => ({ ...prev, [bid]: v }))
                               }
-                            >
-                              <SelectTrigger className="bg-background w-full max-w-md">
-                                <SelectValue placeholder="اختر المسؤول" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <div className="p-2 border-b border-[var(--color-border)]">
-                                  <Input
-                                    value={managerSearch}
-                                    onChange={(e) => setManagerSearch(e.target.value)}
-                                    placeholder="ابحث..."
-                                    onKeyDown={(e) => e.stopPropagation()}
-                                    className="h-8"
-                                  />
-                                </div>
-                                {filteredManagerEmployees.map((employee) => (
-                                  <SelectItem key={String(employee.id)} value={String(employee.id || '')}>
-                                    {`${String(employee.name || '').trim() || '—'}${employee.code ? ` (${employee.code})` : ''}`}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
+                              placeholder="اختر المسؤول"
+                              className="bg-background w-full max-w-md"
+                            />
                           </TableCell>
                         </TableRow>
                       );
@@ -489,7 +502,7 @@ export const RepairSettings: React.FC = () => {
                   </TableBody>
                 </Table>
               </div>
-            </>
+            </div>
           )}
         </CardContent>
       </Card>
@@ -502,8 +515,8 @@ export const RepairSettings: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-hidden">
-            <Table>
+          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
+            <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
                   <TableHead className="w-[120px] font-medium">المعرف</TableHead>
@@ -627,8 +640,8 @@ export const RepairSettings: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-hidden">
-            <Table>
+          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
+            <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
                   <TableHead className="w-[140px] font-medium">المعرف</TableHead>
@@ -875,7 +888,7 @@ export const RepairSettings: React.FC = () => {
                           )
                         }
                       >
-                        <SelectTrigger className="h-9 bg-background text-xs">
+                        <SelectTrigger className="h-11 min-h-11 bg-background text-xs touch-manipulation">
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
@@ -1190,8 +1203,19 @@ export const RepairSettings: React.FC = () => {
         </Card>
       ) : null}
 
-      <div className="flex justify-end border-t border-[var(--color-border)]/60 pt-6">
-        <Button onClick={onSave} disabled={saving} size="lg">
+      <div className="hidden lg:flex justify-end border-t border-[var(--color-border)]/60 pt-6">
+        <Button onClick={onSave} disabled={saving} size="lg" className="min-h-11 touch-manipulation">
+          {saving ? 'جاري الحفظ...' : 'حفظ إعدادات الصيانة'}
+        </Button>
+      </div>
+
+      <div className="lg:hidden fixed inset-x-0 bottom-[72px] z-40 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-3 py-2.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] backdrop-blur supports-[backdrop-filter]:bg-[var(--color-card)]/90">
+        <Button
+          onClick={onSave}
+          disabled={saving}
+          size="lg"
+          className="w-full min-h-12 touch-manipulation"
+        >
           {saving ? 'جاري الحفظ...' : 'حفظ إعدادات الصيانة'}
         </Button>
       </div>

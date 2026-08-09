@@ -162,12 +162,49 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
     { id: 'ready', order: 2, role: 'ready_delivery', isEnabled: true },
   ]);
   assert.ok(missing.length > 0);
+  assert.ok(missing[0]?.includes('لا يمكن الحفظ'));
+}
+
+{
+  // Explicit `none` on a canonical id falls back to the default role for that id.
+  const restored = validateMandatoryStatusRoles([
+    { id: 'received', order: 1, role: 'none', isEnabled: true },
+    { id: 'diagnosing', order: 2, role: 'none', isEnabled: true },
+    { id: 'estimate_ready', order: 3, role: 'none', isEnabled: true },
+    { id: 'waiting_approval', order: 4, role: 'none', isEnabled: true },
+    { id: 'repairing', order: 5, role: 'none', isEnabled: true },
+    { id: 'ready', order: 6, role: 'none', isEnabled: true },
+    { id: 'unrepairable', order: 7, role: 'none', isEnabled: true, isTerminal: true },
+  ]);
+  assert.equal(restored.length, 0);
 }
 
 {
   const defaults = resolveRepairSettings(null);
   assert.equal(defaults.statusMap.diagnosing?.label, 'فحص');
   assert.equal(defaults.statusMap.diagnosing?.role, 'diagnosis');
+}
+
+{
+  // Legacy config without waiting_approval / estimate_ready gets them backfilled.
+  const healed = resolveRepairSettings({
+    repairSettings: {
+      workflow: {
+        statuses: [
+          { id: 'received', label: 'وارد', order: 1, isEnabled: true },
+          { id: 'diagnosing', label: 'فحص', order: 2, isEnabled: true },
+          { id: 'repairing', label: 'إصلاح', order: 3, isEnabled: true },
+          { id: 'ready', label: 'جاهز', order: 4, isEnabled: true },
+          { id: 'delivered', label: 'تسليم', order: 5, isTerminal: true, isEnabled: true },
+          { id: 'cancelled', label: 'ملغى', order: 6, isTerminal: true, isEnabled: true },
+          { id: 'unrepairable', label: 'غير قابل', order: 7, isTerminal: true, isEnabled: true },
+        ],
+      },
+    },
+  } as SystemSettings);
+  assert.equal(healed.statusMap.estimate_ready?.role, 'estimate_review');
+  assert.equal(healed.statusMap.waiting_approval?.role, 'awaiting_customer');
+  assert.equal(validateMandatoryStatusRoles(healed.workflow.statuses).length, 0);
 }
 
 console.log('repair-status-advance.test.ts: ok');

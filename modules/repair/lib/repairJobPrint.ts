@@ -78,6 +78,13 @@ export function repairCustomerReceiptTitle(showCosts: boolean): string {
   return showCosts ? 'إيصال صيانة' : 'إيصال استلام للصيانة';
 }
 
+export type RepairReceiptCopyKind = 'center' | 'customer';
+
+/** Badge on each printed receipt copy (center file vs customer handoff). */
+export function repairReceiptCopyLabel(copyKind: RepairReceiptCopyKind): string {
+  return copyKind === 'center' ? 'نسخة المركز' : 'نسخة العميل';
+}
+
 /** Custody acknowledgment shown above the customer signature. */
 export function repairCustomerReceiptAcknowledgment(showCosts: boolean): string {
   if (showCosts) {

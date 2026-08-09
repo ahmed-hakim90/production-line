@@ -150,7 +150,11 @@ export function validateMandatoryStatusRoles(rows: RepairStatusRoleRow[]): strin
   const present = new Set<RepairStatusRole>();
   const duplicates: RepairStatusRole[] = [];
   for (const row of enabled) {
-    const role = isRepairStatusRole(row.role) ? row.role : defaultRoleForStatusId(row.id);
+    // Match assignDefaultRolesToStatuses: explicit `none` falls back to id defaults.
+    const role =
+      isRepairStatusRole(row.role) && row.role !== 'none'
+        ? row.role
+        : defaultRoleForStatusId(row.id);
     if (role === 'none') continue;
     if (present.has(role) && MANDATORY_REPAIR_STATUS_ROLES.includes(role)) {
       duplicates.push(role);
@@ -160,10 +164,18 @@ export function validateMandatoryStatusRoles(rows: RepairStatusRoleRow[]): strin
   const missing = MANDATORY_REPAIR_STATUS_ROLES.filter((role) => !present.has(role));
   const errors: string[] = [];
   if (missing.length) {
-    errors.push(`أدوار إلزامية ناقصة: ${missing.map((r) => REPAIR_STATUS_ROLE_LABELS[r]).join('، ')}`);
+    errors.push(
+      `لا يمكن الحفظ — أدوار إلزامية ناقصة في الحالات المفعّلة: ${missing
+        .map((r) => REPAIR_STATUS_ROLE_LABELS[r])
+        .join('، ')}. عيّن الدور من عمود «الدور في المسار» أو فعّل الحالة المرتبطة.`,
+    );
   }
   if (duplicates.length) {
-    errors.push(`أدوار مكررة على أكثر من حالة: ${duplicates.map((r) => REPAIR_STATUS_ROLE_LABELS[r]).join('، ')}`);
+    errors.push(
+      `لا يمكن الحفظ — أدوار مكررة على أكثر من حالة: ${duplicates
+        .map((r) => REPAIR_STATUS_ROLE_LABELS[r])
+        .join('، ')}. اجعل كل دور إلزامي على حالة واحدة فقط.`,
+    );
   }
   return errors;
 }

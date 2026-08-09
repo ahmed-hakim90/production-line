@@ -17,6 +17,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { db, isConfigured } from './firebase';
+import { FIREBASE_MESSAGING_SW_SCOPE } from '../utils/clientCachePurge';
 
 const DEVICE_COLLECTION = 'user_devices';
 const USER_COLLECTION = 'users';
@@ -97,7 +98,11 @@ export const pushService = {
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') return null;
 
-      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
+      // Narrow scope so FCM SW never becomes the page controller for `/`
+      // (origin-wide control + leftover caches from other local apps breaks lazy routes).
+      const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js', {
+        scope: FIREBASE_MESSAGING_SW_SCOPE,
+      });
       const token = await getToken(messaging, {
         vapidKey: VAPID_KEY,
         serviceWorkerRegistration: registration,
