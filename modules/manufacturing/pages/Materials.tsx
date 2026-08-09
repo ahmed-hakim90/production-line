@@ -3,6 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { MaterialCategoryTreeSelect } from '../components/MaterialCategoryTreeSelect';
 import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import {
@@ -756,49 +758,57 @@ export const Materials: React.FC = () => {
   });
 
   return (
-    <div className="erp-ds-clean space-y-5 p-4 md:p-6">
-      <PageHeader
-        title="المواد التصنيعية"
-        subtitle="الخطوة 1 من الاستيراد — ثم المنتجات — ثم المكونات. تسعير قطع الغيار (المكونات) من هنا"
-        primaryAction={
-          canManage ? { label: 'إضافة مادة', onClick: openCreate, icon: 'add' } : undefined
-        }
-        moreActions={[
-          {
-            label: 'تصدير بيانات المواد (للاستيراد)',
-            icon: 'download',
-            group: 'بيانات أساسية',
-            hidden: !canExportFromPage || sorted.length === 0,
-            onClick: handleExportExcel,
-          },
-          {
-            label: 'تحميل قالب بيانات المواد',
-            icon: 'file_download',
-            group: 'بيانات أساسية',
-            hidden: !canImportFromPage,
-            onClick: () => downloadMaterialsTemplate(),
-          },
-          {
-            label: 'رفع/تحديث بيانات المواد',
-            icon: 'upload',
-            group: 'بيانات أساسية',
-            hidden: !canImportFromPage,
-            onClick: () => importInputRef.current?.click(),
-          },
-          {
-            label: migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم',
-            icon: 'refresh',
-            group: 'صيانة',
-            hidden: !canManage,
-            disabled: migrating,
-            onClick: () => void handleMigrate(),
-          },
-        ]}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="المواد التصنيعية"
+      onRefresh={() => { void refetch(); }}
+      refreshing={isLoading}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button type="button" size="sm" onClick={openCreate}>
+              إضافة مادة
+            </Button>
+          ) : null}
+          <PageHeader
+            title=""
+            className="!p-0 !mb-0 [&_.erp-page-head]:!mb-0 [&_.erp-page-title-block]:hidden"
+            moreActions={[
+              {
+                label: 'تصدير بيانات المواد (للاستيراد)',
+                icon: 'download',
+                group: 'بيانات أساسية',
+                hidden: !canExportFromPage || sorted.length === 0,
+                onClick: handleExportExcel,
+              },
+              {
+                label: 'تحميل قالب بيانات المواد',
+                icon: 'file_download',
+                group: 'بيانات أساسية',
+                hidden: !canImportFromPage,
+                onClick: () => downloadMaterialsTemplate(),
+              },
+              {
+                label: 'رفع/تحديث بيانات المواد',
+                icon: 'upload',
+                group: 'بيانات أساسية',
+                hidden: !canImportFromPage,
+                onClick: () => importInputRef.current?.click(),
+              },
+              {
+                label: migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم',
+                icon: 'refresh',
+                group: 'صيانة',
+                hidden: !canManage,
+                disabled: migrating,
+                onClick: () => void handleMigrate(),
+              },
+            ]}
+          />
+        </div>
+      )}
+    >
       {canManagePricing ? (
-        <div className="rounded-xl border border-border bg-card p-3">
-          <div className="mb-2 text-sm font-semibold">تسعير قطع الغيار (ماستر المكونات)</div>
+        <OpsDashPanel title="تسعير قطع الغيار (ماستر المكونات)" accent="plans">
           <p className="mb-3 text-xs text-muted-foreground">
             سعر المستهلك والجملة والتكلفة تُحفظ على المكوّن فقط — لا تسعير من شاشات الصيانة.
           </p>
@@ -807,7 +817,7 @@ export const Materials: React.FC = () => {
             canManagePricing={canManagePricing}
             onUpdated={() => { void refetch(); }}
           />
-        </div>
+        </OpsDashPanel>
       ) : null}
 
       <input
@@ -1639,6 +1649,6 @@ export const Materials: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
