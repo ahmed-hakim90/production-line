@@ -46,6 +46,7 @@ import { formatNumber } from '../../../utils/calculations';
 import { buildProductAvgCost, formatCost, getCurrentMonth, type ProductCostData } from '../../../utils/costCalculations';
 import type { Product, ProductionReport } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import {
   BOM_UPSERT_PATHS,
   INVENTORY_OPERATION_KEYS,
@@ -297,6 +298,7 @@ export const Products: React.FC = () => {
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
 
   const { can } = usePermission();
+  const productPerms = useResourcePermission('products');
   const canViewCosts = can('costs.view');
   const canViewSellingPrice = can('roles.manage');
   const pageControl = useMemo(
@@ -305,12 +307,12 @@ export const Products: React.FC = () => {
   );
   const canExportFromPage = can('export') && pageControl.exportEnabled;
   const canImportFromPage = can('import') && pageControl.importEnabled;
-  const canCreateProductModal = can('products.create') && isOperationPathEnabled(
+  const canCreateProductModal = productPerms.canCreate && isOperationPathEnabled(
     systemSettings,
     PRODUCT_OPERATION_KEYS.create,
     PRODUCT_CREATE_PATHS.globalModal,
   );
-  const canUpdateProductModal = can('products.edit') && isOperationPathEnabled(
+  const canUpdateProductModal = productPerms.canEdit && isOperationPathEnabled(
     systemSettings,
     PRODUCT_OPERATION_KEYS.update,
     PRODUCT_UPDATE_PATHS.globalModal,
@@ -326,16 +328,17 @@ export const Products: React.FC = () => {
       PRODUCT_OPERATION_KEYS.update,
       PRODUCT_UPDATE_PATHS.productsImport,
     );
-  const canBulkUpdateProducts = can('products.edit') && isOperationPathEnabled(
+  const canBulkUpdateProducts = productPerms.canEdit && isOperationPathEnabled(
     systemSettings,
     PRODUCT_OPERATION_KEYS.update,
     PRODUCT_UPDATE_PATHS.productsPageBulk,
   );
-  const canToggleProductSettings = can('products.edit') && isOperationPathEnabled(
+  const canToggleProductSettings = productPerms.canEdit && isOperationPathEnabled(
     systemSettings,
     PRODUCT_OPERATION_KEYS.update,
     PRODUCT_UPDATE_PATHS.productsPageToggle,
   );
+  const canDeleteProduct = productPerms.canDelete;
   const componentStockImportEnabled = isOperationPathEnabled(
     systemSettings,
     INVENTORY_OPERATION_KEYS.stockMove,
@@ -2434,7 +2437,7 @@ export const Products: React.FC = () => {
         {selectedIds.size > 0 && (
           <div className="px-5 py-3 bg-primary/5 border-b border-primary/20 flex items-center gap-3 flex-wrap">
             <span className="text-sm font-bold text-primary">{selectedIds.size} منتج محدد</span>
-            {can('products.delete') && (
+            {canDeleteProduct && (
               <Button
                 variant="danger"
                 size="sm"
@@ -2645,7 +2648,7 @@ export const Products: React.FC = () => {
                     {canUpdateProductModal && (
                       <TableIconAction action="edit" onClick={() => openEdit(product.id)} />
                     )}
-                    {can("products.delete") && (
+                    {canDeleteProduct && (
                       <TableIconAction action="delete" onClick={() => setDeleteConfirmId(product.id)} />
                     )}
                   </div>
@@ -2903,7 +2906,7 @@ export const Products: React.FC = () => {
                           onClick={() => openEdit(product.id)}
                         />
                       )}
-                      {can("products.delete") && (
+                      {canDeleteProduct && (
                         <TableIconAction
                           action="delete"
                           onClick={() => setDeleteConfirmId(product.id)}
@@ -3053,7 +3056,7 @@ export const Products: React.FC = () => {
                             تعديل
                           </ToneActionButton>
                         )}
-                        {can('products.delete') && (
+                        {canDeleteProduct && (
                           <TableIconAction
                             action="delete"
                             onClick={() => setDeleteConfirmId(product.id)}
@@ -3301,7 +3304,7 @@ export const Products: React.FC = () => {
 
 
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
-      {deleteConfirmId && can("products.delete") && (
+      {deleteConfirmId && canDeleteProduct && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">

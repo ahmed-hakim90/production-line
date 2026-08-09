@@ -25,7 +25,7 @@ const ROLE_LABELS: Record<WarehouseRole, string> = {
   repair_customer_custody: 'عهدة أجهزة العملاء',
   repair_unrepairable: 'غير قابل للإصلاح',
 };
-import { usePermission } from '../../../utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import { useGlobalModalManager } from '@/components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '@/components/modal-manager/modalKeys';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -64,7 +64,8 @@ function buildWarehouseBranchMap(branches: RepairBranch[]): Map<string, { branch
 export const Warehouses: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { can } = usePermission();
+  const inventoryPerms = useResourcePermission('inventory');
+  const warehousePerms = useResourcePermission('inventory.warehouses');
   const { openModal } = useGlobalModalManager();
   const fetchSystemSettings = useAppStore((s) => s.fetchSystemSettings);
   const systemSettings = useAppStore((s) => s.systemSettings);
@@ -86,8 +87,8 @@ export const Warehouses: React.FC = () => {
     add(routing.packagingTargetWarehouseId, 'تغليف (إلى)');
     return map;
   }, [routing]);
-  const canView = can('inventory.view');
-  const canManage = can('inventory.warehouses.manage');
+  const canView = inventoryPerms.canView || warehousePerms.canManage;
+  const canManage = warehousePerms.canManage || warehousePerms.canAction('manage');
   const { scoped, filterWarehouses } = useMaterialsWarehouseScope();
   /** Bound / materials-scoped users may view their warehouse but not create/delete. */
   const canCreateWarehouse = canManage && !scoped;

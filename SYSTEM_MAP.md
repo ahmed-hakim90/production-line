@@ -11,7 +11,7 @@ Hakimo is **one platform**, but each module must feel like its own **app** (home
 |-------|------|
 | **UX App** | Each MOD has its own home (`DomainHomeShell` / `ModuleOpsPageShell`), persona bottom bar where needed, and module-local navigation. Same **Hakimo Flow** design language everywhere. |
 | **Activity packs** | `tenants.activityPacks`: `manufacturing` \| `repair`. Missing/empty → **both** (Production never breaks). Gates menu groups + Roles catalog groups. Platform always on: dashboards, HR, customers, accounting, system. |
-| **Permission engine** | Flat Firestore keys + matrix catalog (`utils/permissionCatalog.ts`): per page/resource → **عرض / إضافة / تعديل / حذف** + named actions. UI: Roles modal matrix. Runtime: `useResourcePermission('products')`. Server still exact-key authoritative. |
+| **Permission engine** | Flat Firestore keys + matrix catalog (`utils/permissionCatalog.ts`): per page/resource → **عرض / إضافة / تعديل / حذف** + named actions. UI: Roles modal matrix. Runtime pilots: `useResourcePermission('products' | 'quality.workers' | 'inventory' | 'inventory.warehouses')`. Server still exact-key authoritative. |
 | **Domain ownership** | One module owns its aggregates, statuses, and write paths (e.g. Repair owns jobs; Inventory owns stock movements; Production owns plans/reports). |
 | **Cross-module talk** | Prefer: typed services / application use-cases / shared domain libs — **not** importing another module’s pages or UI state. Reads may use shared query services; writes stay in the owning module (or Cloud Functions when authoritative). |
 | **Platform core** | Auth, tenant, permissions, theme/tokens, shells, print, notifications — shared only as platform, never as business rules of another MOD. |

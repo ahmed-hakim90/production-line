@@ -29,7 +29,7 @@ Defined in `src/index.css` `:root` and `DEFAULT_THEME` (`utils/dashboardConfig.t
 
 ## Module apps
 
-Each product module feels like its own app; packs (`lib/activityPacks.ts`) gate manufacturing / repair. Permissions matrix: `utils/permissionCatalog.ts`.
+Each product module feels like its own app; packs (`lib/activityPacks.ts`) gate manufacturing / repair. Permissions matrix: `utils/permissionCatalog.ts` + page guards via `useResourcePermission` (pilots: products, quality.workers, inventory warehouses).
 
 ## Do
 

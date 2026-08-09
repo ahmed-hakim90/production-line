@@ -3,7 +3,7 @@ import { Badge, Button, Card } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
-import { usePermission } from '@/utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import { useAppStore } from '@/store/useAppStore';
 import { qualityWorkersService } from '../services/qualityWorkersService';
 import type { QualityWorkerAssignment } from '@/types';
@@ -29,8 +29,7 @@ const splitCsv = (value: string): string[] =>
     .filter(Boolean);
 
 export const QualityWorkers: React.FC = () => {
-  const { can } = usePermission();
-  const canManage = can('quality.workers.manage');
+  const { canView, canManage, canAccessPage } = useResourcePermission('quality.workers');
   const rawEmployees = useAppStore((s) => s._rawEmployees);
 
   const [message, setMessage] = useState('');
@@ -149,6 +148,16 @@ export const QualityWorkers: React.FC = () => {
       setMessage('تعذر حذف التعيين');
     }
   };
+
+  if (!canAccessPage && !canView) {
+    return (
+      <ModuleOpsPageShell eyebrow="عمال الجودة">
+        <OpsDashPanel accent="quality">
+          <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية عرض عمال الجودة.</p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
+    );
+  }
 
   if (loading && list.length === 0) return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
 
