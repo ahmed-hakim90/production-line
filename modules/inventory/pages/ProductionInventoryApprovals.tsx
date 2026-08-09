@@ -178,7 +178,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       toast.success('تم اعتماد التعويض وخصم المخزون.');
       await reload();
     } catch (error: any) {
-      toast.error(error?.message || 'تعذر اعتماد التعويض.');
+      toast.error('تعذر اعتماد التعويض.');
     }
   };
 
@@ -214,7 +214,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       toast.success('تم تحديث طلب التفكيك.');
       await reload();
     } catch (error: any) {
-      toast.error(error?.message || 'تعذر تحديث طلب التفكيك.');
+      toast.error('تعذر تحديث طلب التفكيك.');
     }
   };
 
@@ -250,7 +250,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
       }
       await reload();
     } catch (error: any) {
-      toast.error(error?.message || 'تعذر تحديث مستند الاستلام.');
+      toast.error('تعذر تحديث مستند الاستلام.');
     }
   };
 
