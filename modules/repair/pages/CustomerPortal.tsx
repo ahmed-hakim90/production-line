@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { Camera, ClipboardList, LogOut, PackagePlus, RefreshCw, Trash2, UserRound } from 'lucide-react';
+import { Camera, LogOut, PackagePlus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,6 +14,8 @@ import {
   lookupPortalProductCallable,
   type CustomerPortalHomeResult,
 } from '../../auth/services/firebase';
+import { CustomerPortalBottomBar } from '../components/CustomerPortalBottomBar';
+import { type CustomerPortalTab } from '../lib/customerPortalBottomBar';
 import {
   CUSTOMER_REQUEST_STATUS_LABELS,
   REPLACEMENT_STATUS_LABELS,
@@ -80,7 +82,7 @@ export const CustomerPortal: React.FC = () => {
   const [token, setToken] = useState(() => sessionStorage.getItem(sessionKey(tenantSlug)) || '');
   const [home, setHome] = useState<CustomerPortalHomeResult | null>(null);
   const [loading, setLoading] = useState(false);
-  const [tab, setTab] = useState<'requests' | 'timeline' | 'profile'>('requests');
+  const [tab, setTab] = useState<CustomerPortalTab>('requests');
   const [barcode, setBarcode] = useState('');
   const [lines, setLines] = useState<PortalLine[]>([]);
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -199,6 +201,7 @@ export const CustomerPortal: React.FC = () => {
       });
       toast.success(`تم إنشاء الطلب ${result.requestNo}.`);
       setLines([]);
+      setTab('requests');
       await loadHome(token);
     } catch (e: unknown) {
       toast.error(e instanceof Error ? e.message : 'تعذر إنشاء الطلب.');
@@ -299,196 +302,179 @@ export const CustomerPortal: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-3 md:p-6" dir="rtl">
+    <div className="min-h-screen bg-slate-50 p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.5rem+env(safe-area-inset-bottom))]" dir="rtl">
       <div className="mx-auto max-w-5xl space-y-4">
         <Card>
           <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
             <div>
-              <h1 className="text-2xl font-bold">مرحبًا، {home.customer.name}</h1>
+              <h1 className="text-xl font-bold sm:text-2xl">مرحبًا، {home.customer.name}</h1>
               <p className="text-sm text-muted-foreground">كود العميل: {home.customer.code}</p>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm" disabled={loading} onClick={() => void loadHome(token)}>
-                <RefreshCw className="ms-1 size-4" />
-                تحديث
-              </Button>
-              <Button variant="outline" size="sm" onClick={logout}>
-                <LogOut className="ms-1 size-4" />
-                خروج
-              </Button>
-            </div>
+            <Button variant="outline" size="sm" disabled={loading} onClick={() => void loadHome(token)}>
+              <RefreshCw className="ms-1 size-4" />
+              تحديث
+            </Button>
           </CardContent>
         </Card>
 
-        <div className="grid grid-cols-3 gap-2">
-          <Button variant={tab === 'requests' ? 'default' : 'outline'} onClick={() => setTab('requests')}>
-            <ClipboardList className="ms-1 size-4" />
-            طلباتي
-          </Button>
-          <Button variant={tab === 'timeline' ? 'default' : 'outline'} onClick={() => setTab('timeline')}>
-            <RefreshCw className="ms-1 size-4" />
-            التحديثات
-          </Button>
-          <Button variant={tab === 'profile' ? 'default' : 'outline'} onClick={() => setTab('profile')}>
-            <UserRound className="ms-1 size-4" />
-            ملفي
-          </Button>
-        </div>
+        {tab === 'compose' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <PackagePlus className="size-5" />
+                إنشاء طلب صيانة
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
+                امسح كل منتجاتك وأضفها هنا، ثم اضغط «حفظ وإرسال الطلب» مرة واحدة. كل المنتجات ستُحفظ داخل نفس الطلب.
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  dir="ltr"
+                  value={barcode}
+                  onChange={(e) => setBarcode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') void resolveBarcode(barcode);
+                  }}
+                  placeholder="امسح أو اكتب باركود العبوة"
+                />
+                <Button type="button" onClick={() => void resolveBarcode(barcode)}>إضافة</Button>
+                <Button type="button" variant="outline" aria-label="مسح بالكاميرا" onClick={() => setScannerOpen(true)}>
+                  <Camera className="size-4" />
+                </Button>
+              </div>
+              {scannerOpen && (
+                <div className="rounded-lg border bg-black p-2">
+                  <div id="customer-portal-scanner" className="min-h-56" />
+                </div>
+              )}
+              <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
+                <div className="font-semibold">منتجات الطلب</div>
+                <div className="text-sm text-muted-foreground">
+                  {lines.length} منتج · {requestUnitsCount} وحدة
+                </div>
+              </div>
+              <div className="space-y-2">
+                {lines.map((line) => (
+                  <div
+                    key={line.productId}
+                    className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_120px_2fr_auto] md:items-end"
+                  >
+                    <div>
+                      <div className="font-medium">{line.name}</div>
+                      <div className="text-xs text-muted-foreground" dir="ltr">{line.barcode}</div>
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">الكمية</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        step={1}
+                        inputMode="numeric"
+                        dir="ltr"
+                        value={line.quantity}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setLines((rows) =>
+                            rows.map((r) =>
+                              r.productId === line.productId ? { ...r, quantity: value } : r,
+                            ),
+                          );
+                        }}
+                        onBlur={() => {
+                          setLines((rows) =>
+                            rows.map((r) =>
+                              r.productId === line.productId
+                                ? { ...r, quantity: String(parsePortalLineQuantity(r.quantity)) }
+                                : r,
+                            ),
+                          );
+                        }}
+                      />
+                    </div>
+                    <div className="space-y-1.5">
+                      <Label className="text-xs">ملاحظة</Label>
+                      <Input
+                        value={line.note}
+                        onChange={(e) =>
+                          setLines((rows) =>
+                            rows.map((r) =>
+                              r.productId === line.productId ? { ...r, note: e.target.value } : r,
+                            ),
+                          )
+                        }
+                        placeholder="وصف العطل"
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      aria-label="حذف المنتج"
+                      onClick={() => setLines((rows) => rows.filter((r) => r.productId !== line.productId))}
+                    >
+                      <Trash2 className="size-4 text-rose-600" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              {lines.length === 0 && (
+                <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
+                  لم تُضف منتجات بعد. كل باركود تمسحه سيُضاف إلى نفس الطلب، وتكرار نفس الباركود يزيد الكمية.
+                </div>
+              )}
+              <Button
+                type="button"
+                className="w-full"
+                size="lg"
+                disabled={loading || lines.length === 0}
+                onClick={() => void submitRequest()}
+              >
+                {loading
+                  ? 'جاري حفظ الطلب…'
+                  : lines.length === 0
+                    ? 'أضف المنتجات أولًا ثم احفظ الطلب'
+                    : `حفظ وإرسال الطلب (${requestUnitsCount} وحدة)`}
+              </Button>
+            </CardContent>
+          </Card>
+        )}
 
         {tab === 'requests' && (
-          <>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <PackagePlus className="size-5" />
-                  إنشاء طلب صيانة واحد
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
-                  امسح كل منتجاتك وأضفها هنا، ثم اضغط «حفظ وإرسال الطلب» مرة واحدة. كل المنتجات ستُحفظ داخل نفس الطلب.
-                </div>
-                <div className="flex gap-2">
-                  <Input
-                    dir="ltr"
-                    value={barcode}
-                    onChange={(e) => setBarcode(e.target.value)}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter') void resolveBarcode(barcode);
-                    }}
-                    placeholder="امسح أو اكتب باركود العبوة"
-                  />
-                  <Button type="button" onClick={() => void resolveBarcode(barcode)}>إضافة للطلب</Button>
-                  <Button type="button" variant="outline" onClick={() => setScannerOpen(true)}>
-                    <Camera className="size-4" />
+          <div className="grid gap-3 md:grid-cols-2">
+            {combined.length === 0 ? (
+              <Card className="md:col-span-2">
+                <CardContent className="space-y-4 py-10 text-center">
+                  <p className="text-muted-foreground">لا توجد طلبات بعد.</p>
+                  <Button type="button" onClick={() => setTab('compose')}>
+                    <PackagePlus className="ms-1 size-4" />
+                    إنشاء طلب جديد
                   </Button>
-                </div>
-                {scannerOpen && (
-                  <div className="rounded-lg border bg-black p-2">
-                    <div id="customer-portal-scanner" className="min-h-56" />
-                  </div>
-                )}
-                <div className="flex flex-wrap items-center justify-between gap-2 border-b pb-2">
-                  <div className="font-semibold">منتجات الطلب</div>
-                  <div className="text-sm text-muted-foreground">
-                    {lines.length} منتج · {requestUnitsCount} وحدة
-                  </div>
-                </div>
-                <div className="space-y-2">
-                  {lines.map((line) => (
-                    <div
-                      key={line.productId}
-                      className="grid gap-2 rounded-lg border p-3 md:grid-cols-[1fr_120px_2fr_auto] md:items-end"
-                    >
-                      <div>
-                        <div className="font-medium">{line.name}</div>
-                        <div className="text-xs text-muted-foreground" dir="ltr">{line.barcode}</div>
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">الكمية</Label>
-                        <Input
-                          type="number"
-                          min={1}
-                          step={1}
-                          inputMode="numeric"
-                          dir="ltr"
-                          value={line.quantity}
-                          onChange={(e) => {
-                            const value = e.target.value;
-                            setLines((rows) =>
-                              rows.map((r) =>
-                                r.productId === line.productId ? { ...r, quantity: value } : r,
-                              ),
-                            );
-                          }}
-                          onBlur={() => {
-                            setLines((rows) =>
-                              rows.map((r) =>
-                                r.productId === line.productId
-                                  ? { ...r, quantity: String(parsePortalLineQuantity(r.quantity)) }
-                                  : r,
-                              ),
-                            );
-                          }}
-                        />
-                      </div>
-                      <div className="space-y-1.5">
-                        <Label className="text-xs">ملاحظة</Label>
-                        <Input
-                          value={line.note}
-                          onChange={(e) =>
-                            setLines((rows) =>
-                              rows.map((r) =>
-                                r.productId === line.productId ? { ...r, note: e.target.value } : r,
-                              ),
-                            )
-                          }
-                          placeholder="وصف العطل"
-                        />
-                      </div>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        aria-label="حذف المنتج"
-                        onClick={() => setLines((rows) => rows.filter((r) => r.productId !== line.productId))}
-                      >
-                        <Trash2 className="size-4 text-rose-600" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-                {lines.length === 0 && (
-                  <div className="rounded-lg border border-dashed p-5 text-center text-sm text-muted-foreground">
-                    لم تُضف منتجات بعد. كل باركود تمسحه سيُضاف إلى نفس الطلب، وتكرار نفس الباركود يزيد الكمية.
-                  </div>
-                )}
-                <Button
-                  type="button"
-                  className="w-full"
-                  size="lg"
-                  disabled={loading || lines.length === 0}
-                  onClick={() => void submitRequest()}
-                >
-                  {loading
-                    ? 'جاري حفظ الطلب…'
-                    : lines.length === 0
-                      ? 'أضف المنتجات أولًا ثم احفظ الطلب'
-                      : `حفظ وإرسال الطلب (${requestUnitsCount} وحدة)`}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              {combined.length === 0 ? (
-                <Card className="md:col-span-2">
-                  <CardContent className="py-10 text-center text-muted-foreground">
-                    لا توجد طلبات بعد. أنشئ طلبًا جديدًا من الأعلى.
-                  </CardContent>
-                </Card>
-              ) : (
-                combined.map((row) => {
-                  const status = portalStatusMeta(row.kind, String(row.status || ''));
-                  return (
-                    <Card key={`${row.kind}-${row.id}`}>
-                      <CardContent className="space-y-3 pt-5">
-                        <div className="flex flex-wrap items-start justify-between gap-2">
-                          <div>
-                            <div className="font-semibold">{row.label || row.id}</div>
-                            <div className="text-xs text-muted-foreground">{row.kind}</div>
-                          </div>
-                          <ErpStatusBadge label={status.label} type={status.type} />
+                </CardContent>
+              </Card>
+            ) : (
+              combined.map((row) => {
+                const status = portalStatusMeta(row.kind, String(row.status || ''));
+                return (
+                  <Card key={`${row.kind}-${row.id}`}>
+                    <CardContent className="space-y-3 pt-5">
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div>
+                          <div className="font-semibold">{row.label || row.id}</div>
+                          <div className="text-xs text-muted-foreground">{row.kind}</div>
                         </div>
-                        <div className="text-xs text-muted-foreground">
-                          {formatRepairOpsDate(String(row.updatedAt || row.createdAt || ''))}
-                        </div>
-                      </CardContent>
-                    </Card>
-                  );
-                })
-              )}
-            </div>
-          </>
+                        <ErpStatusBadge label={status.label} type={status.type} />
+                      </div>
+                      <div className="text-xs text-muted-foreground">
+                        {formatRepairOpsDate(String(row.updatedAt || row.createdAt || ''))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                );
+              })
+            )}
+          </div>
         )}
 
         {tab === 'timeline' && (
@@ -501,7 +487,7 @@ export const CustomerPortal: React.FC = () => {
                 <p className="py-6 text-center text-sm text-muted-foreground">لا توجد تحديثات بعد.</p>
               ) : (
                 home.events.map((event) => (
-                  <div key={event.id} className="border-r-2 border-primary pr-3">
+                  <div key={event.id} className="border-r-2 border-sky-500 pr-3">
                     <div className="font-medium">{event.title}</div>
                     <div className="text-sm text-muted-foreground">{event.message}</div>
                     <div className="text-xs text-muted-foreground">{formatRepairOpsDate(event.createdAt)}</div>
@@ -517,27 +503,40 @@ export const CustomerPortal: React.FC = () => {
             <CardHeader>
               <CardTitle>بياناتي</CardTitle>
             </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
-              <div>
-                <Label>الكود</Label>
-                <p>{home.customer.code}</p>
+            <CardContent className="space-y-4">
+              <div className="grid gap-3 md:grid-cols-2">
+                <div>
+                  <Label>الكود</Label>
+                  <p>{home.customer.code}</p>
+                </div>
+                <div>
+                  <Label>الاسم</Label>
+                  <p>{home.customer.name}</p>
+                </div>
+                <div>
+                  <Label>الهاتف</Label>
+                  <p dir="ltr" className="text-right">{home.customer.phone || '—'}</p>
+                </div>
+                <div>
+                  <Label>العنوان</Label>
+                  <p>{home.customer.address || '—'}</p>
+                </div>
               </div>
-              <div>
-                <Label>الاسم</Label>
-                <p>{home.customer.name}</p>
-              </div>
-              <div>
-                <Label>الهاتف</Label>
-                <p dir="ltr" className="text-right">{home.customer.phone || '—'}</p>
-              </div>
-              <div>
-                <Label>العنوان</Label>
-                <p>{home.customer.address || '—'}</p>
-              </div>
+              <Button type="button" variant="outline" className="w-full" onClick={logout}>
+                <LogOut className="ms-1 size-4" />
+                تسجيل الخروج
+              </Button>
             </CardContent>
           </Card>
         )}
       </div>
+
+      <CustomerPortalBottomBar
+        activeTab={tab}
+        onTabChange={setTab}
+        requestsCount={combined.length}
+        eventsCount={(home.events || []).length}
+      />
     </div>
   );
 };

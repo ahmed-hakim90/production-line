@@ -30,8 +30,8 @@ import { CreateRepairReplenishmentModal } from '../components/CreateRepairReplen
 import { repairBranchService } from '../services/repairBranchService';
 import { sparePartsService } from '../services/sparePartsService';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import {
-  resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairSparePart,
@@ -59,6 +59,7 @@ export const RepairPartsReplenishment: React.FC = () => {
   const userPermissions = useAppStore((s) => s.userPermissions);
   const userRoleName = useAppStore((s) => s.userRoleName);
   const systemSettings = useAppStore((s) => s.systemSettings);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const repairCtx = useMemo(
     () =>
       resolveRepairAccessContext({
@@ -91,15 +92,23 @@ export const RepairPartsReplenishment: React.FC = () => {
 
   const loadBranches = useCallback(async () => {
     const branchRows = await repairBranchService.list();
+    const accessibleIds = new Set(
+      resolveAccessibleRepairBranchIds({
+        user,
+        branches: branchRows,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: repairCtx.canViewAllBranches,
+      }),
+    );
     const scoped = repairCtx.canViewAllBranches
       ? branchRows
-      : branchRows.filter((b) => resolveUserRepairBranchIds(user).includes(String(b.id || '')));
+      : branchRows.filter((b) => accessibleIds.has(String(b.id || '')));
     setBranches(scoped);
     setSelectedBranchId((prev) => {
       if (prev && scoped.some((b) => b.id === prev)) return prev;
       return String(scoped[0]?.id || '');
     });
-  }, [repairCtx.canViewAllBranches, user]);
+  }, [repairCtx.canViewAllBranches, user, currentEmployee?.id]);
 
   const load = useCallback(async () => {
     if (!canView || !toWarehouseId) {

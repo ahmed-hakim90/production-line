@@ -28,9 +28,10 @@ export function isRepairTechnicianPortal(checker: PortalPermissionChecker): bool
 }
 
 function isWarehouseOperatorPortal(checker: PortalPermissionChecker): boolean {
-  // Center front-desk / tech stay on repair portals even when bound to a maintenance_center warehouse
-  // and granted spare-parts receive/confirm (reception runs the center stock — no separate warehouse role).
-  if (checker.roleKey === 'repair_reception' || checker.roleKey === 'repair_technician') {
+  // Repair ops (مدير مراكز / مدير مركز / استقبال) and technicians stay on repair portals
+  // even when bound to a maintenance_center warehouse for spare-parts receive/confirm.
+  // Match by permission — custom role names rarely have built-in roleKeys.
+  if (isRepairOpsPortal(checker) || isRepairTechnicianPortal(checker)) {
     return false;
   }
   const boundWarehouse = Boolean(String(checker.inventoryWarehouseId || '').trim());
@@ -61,11 +62,11 @@ export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind 
   if (checker.can('adminDashboard.view')) return 'admin';
   if (checker.can('factoryDashboard.view')) return 'factory_manager';
 
-  if (isWarehouseOperatorPortal(checker)) return 'warehouse_manager';
-
-  // Centers manager (`repair.adminDashboard.view`) and reception (`repair.dashboard.view`)
-  // must not fall through to the generic factory ops board.
+  // Centers / center managers + reception before warehouse: they often share a bound
+  // maintenance_center warehouse for replenishment, but their home is repair ops.
   if (isRepairOpsPortal(checker)) return 'repair';
+
+  if (isWarehouseOperatorPortal(checker)) return 'warehouse_manager';
 
   if (checker.can('employeeDashboard.view')) return 'employee';
 

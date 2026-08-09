@@ -33,6 +33,29 @@ const alwaysEnabled = () => true;
     true,
   );
   assert.equal(
+    shouldShowRepairBottomBar({
+      can: (p) =>
+        p === 'repair.adminDashboard.view'
+        || p === 'inventory.view'
+        || p === 'sparePartsReplenishment.view',
+      inventoryWarehouseId: 'wh-center',
+    }),
+    true,
+    'centers manager with bound warehouse still gets repair bottom bar',
+  );
+  assert.equal(
+    shouldShowRepairBottomBar({
+      can: (p) =>
+        p === 'repair.dashboard.view'
+        || p === 'repair.jobs.create'
+        || p === 'inventory.view'
+        || p === 'sparePartsReplenishment.receive',
+      inventoryWarehouseId: 'wh-center',
+    }),
+    true,
+    'center manager with bound warehouse still gets repair bottom bar',
+  );
+  assert.equal(
     shouldShowRepairBottomBar({ can: (p) => p === 'factoryDashboard.view' }),
     false,
   );
@@ -110,6 +133,38 @@ const alwaysEnabled = () => true;
     techItems.map((i) => i.key),
     ['tech-home', 'my-jobs'],
   );
+  assert.equal(techItems.find((i) => i.key === 'my-jobs')?.primary, true);
+}
+
+{
+  const opsItems = resolveVisibleRepairBottomBarItems({
+    can: (p) =>
+      p === 'repair.dashboard.view'
+      || p === 'repair.view'
+      || p === 'repair.parts.view'
+      || p === 'sparePartsReplenishment.view',
+    menuItemsByKey: MENU_ITEMS_BY_KEY,
+    isOperationPathEnabled: alwaysEnabled,
+  });
+  assert.deepEqual(
+    opsItems.map((i) => i.key),
+    ['dash', 'jobs', 'parts', 'replenish'],
+    'center manager without create gets ops bottom bar',
+  );
+  assert.equal(opsItems.find((i) => i.key === 'jobs')?.primary, true);
+}
+
+{
+  const adminWithPrimary = resolveVisibleRepairBottomBarItems({
+    can: (p) =>
+      p === 'repair.adminDashboard.view'
+      || p === 'repair.view'
+      || p === 'sparePartsReplenishment.view'
+      || p === 'repair.technician.view',
+    menuItemsByKey: MENU_ITEMS_BY_KEY,
+    isOperationPathEnabled: alwaysEnabled,
+  });
+  assert.equal(adminWithPrimary.find((i) => i.key === 'jobs')?.primary, true);
 }
 
 {

@@ -3,11 +3,14 @@ import {
   doc,
   getDoc,
   getDocs,
+  limit,
   query,
   where,
 } from 'firebase/firestore';
 import { db, isConfigured, mutateRepairPaymentCallable } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
+import { tenantQuery } from '../../../lib/tenantFirestore';
+import { chunkIdsForInQuery } from '../lib/repairBranchAccess';
 import {
   REPAIR_FINANCIAL_APPROVALS_COLLECTION,
   REPAIR_JOB_FINANCIALS_COLLECTION,
@@ -23,12 +26,59 @@ import type {
   RepairDiscountType,
 } from '../types';
 
+const MAX_PAYMENT_LIST = 400;
+
 const tenantRows = <T>(snap: Awaited<ReturnType<typeof getDocs>>): T[] => {
   const tenantId = getCurrentTenantId();
   return snap.docs
     .map((row) => ({ id: row.id, ...(row.data() as Record<string, unknown>) }) as unknown as T & { tenantId?: string })
     .filter((row) => String(row.tenantId || '') === tenantId) as T[];
 };
+
+/** Center-scoped reads use `branchId in` chunks; empty branchIds = capped tenant-wide (admin). */
+async function listScopedByBranchIds<T extends { id?: string; branchId?: string }>(
+  collectionName: string,
+  branchIds: string[] | undefined,
+  sortKey: (row: T) => string,
+): Promise<T[]> {
+  if (!isConfigured) return [];
+  const chunks = chunkIdsForInQuery(branchIds || []);
+
+  if (chunks.length === 0) {
+    const snap = await getDocs(query(
+      collection(db, collectionName),
+      where('tenantId', '==', getCurrentTenantId()),
+      limit(MAX_PAYMENT_LIST),
+    ));
+    return tenantRows<T>(snap).sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+  }
+
+  const results = await Promise.all(
+    chunks.map(async (chunk) => {
+      if (chunk.length === 1) {
+        const snap = await getDocs(tenantQuery(
+          db,
+          collectionName,
+          where('branchId', '==', chunk[0]),
+          limit(MAX_PAYMENT_LIST),
+        ));
+        return tenantRows<T>(snap);
+      }
+      const snap = await getDocs(tenantQuery(
+        db,
+        collectionName,
+        where('branchId', 'in', chunk),
+        limit(MAX_PAYMENT_LIST),
+      ));
+      return tenantRows<T>(snap);
+    }),
+  );
+  const byId = new Map<string, T>();
+  results.flat().forEach((row) => {
+    if (row.id) byId.set(row.id, row);
+  });
+  return Array.from(byId.values()).sort((a, b) => sortKey(b).localeCompare(sortKey(a)));
+}
 
 export const repairPaymentService = {
   async requestCustomerApproval(jobId: string): Promise<{ token: string; authorizationId: string; expiresAt: string }> {
@@ -40,13 +90,13 @@ export const repairPaymentService = {
     };
   },
   async listFinancials(branchIds?: string[]): Promise<RepairJobFinancial[]> {
-    if (!isConfigured) return [];
-    const snap = await getDocs(query(
-      collection(db, REPAIR_JOB_FINANCIALS_COLLECTION),
-      where('tenantId', '==', getCurrentTenantId()),
-    ));
-    const allowed = new Set((branchIds || []).filter(Boolean));
-    return tenantRows<RepairJobFinancial>(snap).filter((row) => allowed.size === 0 || allowed.has(row.branchId));
+    return listScopedByBranchIds<RepairJobFinancial>(
+      REPAIR_JOB_FINANCIALS_COLLECTION,
+      branchIds,
+      (row) => String((row as RepairJobFinancial & { updatedAt?: string; createdAt?: string }).updatedAt
+        || (row as RepairJobFinancial & { createdAt?: string }).createdAt
+        || ''),
+    );
   },
 
   async getFinancial(jobId: string): Promise<RepairJobFinancial | null> {
@@ -64,43 +114,38 @@ export const repairPaymentService = {
   },
 
   async listAuthorizations(branchIds?: string[]): Promise<RepairPaymentAuthorization[]> {
-    if (!isConfigured) return [];
-    const tenantId = getCurrentTenantId();
-    const allowed = new Set((branchIds || []).filter(Boolean));
-    // One tenant query (single-field index) + client branch filter — avoids N branch round-trips.
-    const snap = await getDocs(query(
-      collection(db, REPAIR_PAYMENT_AUTHORIZATIONS_COLLECTION),
-      where('tenantId', '==', tenantId),
-    ));
-    return tenantRows<RepairPaymentAuthorization>(snap)
-      .filter((row) => allowed.size === 0 || allowed.has(row.branchId))
-      .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
+    return listScopedByBranchIds<RepairPaymentAuthorization>(
+      REPAIR_PAYMENT_AUTHORIZATIONS_COLLECTION,
+      branchIds,
+      (row) => String(row.updatedAt || row.createdAt || ''),
+    );
   },
 
   async listApprovals(branchIds?: string[]): Promise<RepairFinancialApproval[]> {
-    if (!isConfigured) return [];
-    const tenantId = getCurrentTenantId();
-    const allowed = new Set((branchIds || []).filter(Boolean));
-    const snap = await getDocs(query(
-      collection(db, REPAIR_FINANCIAL_APPROVALS_COLLECTION),
-      where('tenantId', '==', tenantId),
-    ));
-    return tenantRows<RepairFinancialApproval>(snap)
-      .filter((row) => allowed.size === 0 || allowed.has(row.branchId))
-      .sort((a, b) => String(b.requestedAt || '').localeCompare(String(a.requestedAt || '')));
+    return listScopedByBranchIds<RepairFinancialApproval>(
+      REPAIR_FINANCIAL_APPROVALS_COLLECTION,
+      branchIds,
+      (row) => String(row.requestedAt || ''),
+    );
   },
 
   async listPayments(jobId?: string, branchIds?: string[]): Promise<RepairPayment[]> {
     if (!isConfigured) return [];
-    const tenantId = getCurrentTenantId();
-    const allowed = new Set((branchIds || []).filter(Boolean));
-    const snap = await getDocs(query(
-      collection(db, REPAIR_PAYMENTS_COLLECTION),
-      where('tenantId', '==', tenantId),
-    ));
-    return tenantRows<RepairPayment>(snap)
-      .filter((row) => (allowed.size === 0 || allowed.has(row.branchId)) && (!jobId || row.jobId === jobId))
-      .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    if (jobId) {
+      const snap = await getDocs(tenantQuery(
+        db,
+        REPAIR_PAYMENTS_COLLECTION,
+        where('jobId', '==', jobId),
+        limit(MAX_PAYMENT_LIST),
+      ));
+      return tenantRows<RepairPayment>(snap)
+        .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    }
+    return listScopedByBranchIds<RepairPayment>(
+      REPAIR_PAYMENTS_COLLECTION,
+      branchIds,
+      (row) => String(row.createdAt || ''),
+    );
   },
 
   prepare(input: { jobId: string; discountType: RepairDiscountType; discountValue: number; reason?: string }) {

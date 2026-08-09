@@ -52,8 +52,8 @@ import type {
   RepairPaymentAuthorization,
   RepairPaymentMethod,
 } from "../types";
-import { resolveUserRepairBranchIds } from "../types";
 import { isManufacturerWarrantyJob, isWarrantySettlementAuth } from "../lib/repairManufacturerWarranty";
+import { resolveAccessibleRepairBranchIds } from "../lib/repairBranchAccess";
 import { useAppDirection } from "@/src/shared/ui/layout/useAppDirection";
 
 const money = (value: unknown) =>
@@ -89,6 +89,7 @@ export const RepairPayments: React.FC = () => {
   const user = useAppStore(
     (s) => s.userProfile,
   ) as FirestoreUserWithRepair | null;
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const printSettings = useAppStore((s) => s.systemSettings)?.printTemplate;
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [jobs, setJobs] = useState<RepairJob[]>([]);
@@ -123,12 +124,16 @@ export const RepairPayments: React.FC = () => {
       printPayment?.paymentNo || printAuth?.authorizationNo || "اذن-دفع-صيانة",
   });
 
+  const canViewAllBranches = can("repair.branches.manage");
   const branchIds = useMemo(
     () =>
-      can("repair.branches.manage")
-        ? branches.map((b) => String(b.id || "")).filter(Boolean)
-        : resolveUserRepairBranchIds(user),
-    [branches, can, user],
+      resolveAccessibleRepairBranchIds({
+        user,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches,
+      }),
+    [branches, canViewAllBranches, currentEmployee?.id, user],
   );
   const jobById = useMemo(
     () => new Map(jobs.map((job) => [String(job.id || ""), job])),
@@ -206,22 +211,25 @@ export const RepairPayments: React.FC = () => {
     try {
       const branchRows = await repairBranchService.list();
       setBranches(branchRows);
-      const allowed = can("repair.branches.manage")
-        ? branchRows.map((row) => String(row.id || "")).filter(Boolean)
-        : resolveUserRepairBranchIds(user);
+      const allowed = resolveAccessibleRepairBranchIds({
+        user,
+        branches: branchRows,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: can("repair.branches.manage"),
+      });
       const canReadApprovals = can("repair.discounts.request")
         || can("repair.discounts.approve")
         || can("repair.credit.request")
         || can("repair.credit.approve");
-      const [jobLists, authRows, approvalRows, paymentRows] = await Promise.all(
+      const [jobRows, authRows, approvalRows, paymentRows] = await Promise.all(
         [
-          Promise.all(allowed.map((id) => repairJobService.listByBranch(id))),
+          repairJobService.listByBranches(allowed),
           repairPaymentService.listAuthorizations(allowed),
           canReadApprovals ? repairPaymentService.listApprovals(allowed) : Promise.resolve([]),
           repairPaymentService.listPayments(undefined, allowed),
         ],
       );
-      setJobs(jobLists.flat());
+      setJobs(jobRows);
       setAuthorizations(authRows);
       setApprovals(approvalRows);
       setPayments(paymentRows);

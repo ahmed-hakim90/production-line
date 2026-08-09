@@ -111,12 +111,15 @@ const loadAssignedJob = async (actor, jobId) => {
 };
 const listAssigned = async (actor) => {
     const technicianIds = await resolveActorTechnicianIds(actor);
+    const ids = technicianIds.slice(0, 10);
+    if (ids.length === 0)
+        return { ok: true, jobs: [] };
     const snap = await db.collection('repair_jobs')
-        .where('technicianId', 'in', technicianIds.slice(0, 10))
+        .where('tenantId', '==', actor.tenantId)
+        .where('technicianId', 'in', ids)
         .limit(500)
         .get();
     const jobs = snap.docs
-        .filter((row) => String(row.data().tenantId || '') === actor.tenantId)
         .map((row) => sanitizeRepairJobForTechnician(row.id, row.data()))
         .sort((a, b) => String(b.updatedAt || b.createdAt || '').localeCompare(String(a.updatedAt || a.createdAt || '')));
     return { ok: true, jobs };
@@ -407,8 +410,13 @@ const loadPartsCatalog = async (actor, data) => {
         throw new HttpsError('failed-precondition', 'فرع الصيانة غير صالح.');
     }
     const centerWarehouseId = String(branch?.warehouseId || '');
-    const [materialsSnap, centralWarehouses, serviceCatalog] = await Promise.all([
-        db.collection('materials').where('tenantId', '==', actor.tenantId).limit(1000).get(),
+    // Prefer center spare-parts catalog (branch-scoped) over scanning all tenant materials.
+    const [branchPartsSnap, centralWarehouses, serviceCatalog] = await Promise.all([
+        db.collection('repair_spare_parts')
+            .where('tenantId', '==', actor.tenantId)
+            .where('branchId', '==', branchId)
+            .limit(300)
+            .get(),
         db.collection('warehouses')
             .where('tenantId', '==', actor.tenantId)
             .where('warehouseRole', '==', 'spare_parts_central')
@@ -418,20 +426,51 @@ const loadPartsCatalog = async (actor, data) => {
     ]);
     const centralWarehouse = centralWarehouses.docs.find((row) => row.data().isActive !== false);
     const balanceId = (warehouseId, materialId) => `${warehouseId}__material__${materialId}`;
-    const active = materialsSnap.docs.filter((row) => {
+    const materialIds = Array.from(new Set(branchPartsSnap.docs
+        .map((row) => {
         const data = row.data();
-        if (data.isActive === false)
+        return String(data.materialId || data.componentId || '').trim();
+    })
+        .filter(Boolean))).slice(0, 300);
+    let materialDocs = [];
+    if (materialIds.length > 0) {
+        const materialRefs = materialIds.map((id) => db.collection('materials').doc(id));
+        const chunkSize = 100;
+        for (let i = 0; i < materialRefs.length; i += chunkSize) {
+            const chunk = await db.getAll(...materialRefs.slice(i, i + chunkSize));
+            materialDocs = materialDocs.concat(chunk);
+        }
+    }
+    else {
+        // Empty center catalog: bounded spare-parts materials only (never full tenant scan).
+        const materialsSnap = await db.collection('materials')
+            .where('tenantId', '==', actor.tenantId)
+            .where('availableForSpareParts', '==', true)
+            .limit(200)
+            .get();
+        materialDocs = materialsSnap.docs;
+    }
+    const active = materialDocs.filter((row) => {
+        if (!row.exists)
             return false;
-        // Missing flag = available (backward compatible with manufacturing materials).
-        if (data.availableForSpareParts === false)
+        if (String(row.data()?.tenantId || '') !== actor.tenantId)
+            return false;
+        const item = row.data();
+        if (item.isActive === false)
+            return false;
+        if (item.availableForSpareParts === false)
             return false;
         return true;
     });
-    const refs = active.flatMap((row) => [
+    const stockRefs = active.flatMap((row) => [
         ...(centerWarehouseId ? [db.collection('stock_items').doc(balanceId(centerWarehouseId, row.id))] : []),
         ...(centralWarehouse?.id ? [db.collection('stock_items').doc(balanceId(centralWarehouse.id, row.id))] : []),
     ]);
-    const balances = refs.length > 0 ? await db.getAll(...refs) : [];
+    let balances = [];
+    const stockChunk = 100;
+    for (let i = 0; i < stockRefs.length; i += stockChunk) {
+        balances = balances.concat(await db.getAll(...stockRefs.slice(i, i + stockChunk)));
+    }
     const qtyById = new Map(balances.map((row) => [row.id, Number(row.data()?.quantity || 0)]));
     const materials = active.map((row) => {
         const item = row.data();

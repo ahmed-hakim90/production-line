@@ -75,4 +75,39 @@ assert.equal(
   'repair admin portal beats employeeDashboard.view',
 );
 
+assert.equal(
+  resolvePortalKind({
+    can: (p) =>
+      p === 'repair.adminDashboard.view'
+      || p === 'inventory.view'
+      || p === 'sparePartsReplenishment.view',
+    inventoryWarehouseId: 'wh-center',
+  }),
+  'repair',
+  'centers manager keeps repair portal even with bound center warehouse',
+);
+
+assert.equal(
+  resolvePortalKind({
+    can: (p) =>
+      p === 'repair.dashboard.view'
+      || p === 'repair.jobs.create'
+      || p === 'inventory.view'
+      || p === 'sparePartsReplenishment.receive',
+    inventoryWarehouseId: 'wh-center',
+  }),
+  'repair',
+  'center manager (custom role, no roleKey) keeps repair portal with bound warehouse',
+);
+
+assert.equal(
+  resolvePortalKind({
+    can: (p) => p === 'repair.jobs.technician' || p === 'inventory.view',
+    roleKey: 'repair_technician',
+    inventoryWarehouseId: 'wh-center',
+  }),
+  'repair_technician',
+  'technician keeps repair portal even with bound warehouse',
+);
+
 console.log('portal-home.test.ts passed');

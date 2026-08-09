@@ -27,7 +27,8 @@ import {
 import { useAppStore } from '../../../store/useAppStore';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
-import { resolveUserRepairBranchIds, type FirestoreUserWithRepair, type RepairBranch, type RepairTreasuryEntry, type RepairTreasurySession } from '../types';
+import { type FirestoreUserWithRepair, type RepairBranch, type RepairTreasuryEntry, type RepairTreasurySession } from '../types';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { REPAIR_TREASURY_EXPENSE_TYPES, type RepairTreasuryExpenseTypeKey } from '../lib/repairTreasuryExpenseTypes';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
@@ -117,18 +118,15 @@ export const RepairTreasury: React.FC = () => {
 
   const allowedBranches = useMemo(() => {
     if (repairCtx.canViewAllBranches) return branches;
-    const baseUserBranchIds = resolveUserRepairBranchIds(user);
-    const userId = String(user?.id || '').trim();
-    const employeeId = String(currentEmployee?.id || '').trim();
-    return branches.filter((branch) => {
-      const id = String(branch.id || '');
-      if (!id) return false;
-      if (baseUserBranchIds.includes(id)) return true;
-      if (userId && (branch.technicianIds || []).includes(userId)) return true;
-      if (employeeId && (branch.technicianIds || []).includes(employeeId)) return true;
-      if (employeeId && String(branch.managerEmployeeId || '') === employeeId) return true;
-      return false;
-    });
+    const accessibleIds = new Set(
+      resolveAccessibleRepairBranchIds({
+        user,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: false,
+      }),
+    );
+    return branches.filter((branch) => accessibleIds.has(String(branch.id || '')));
   }, [branches, repairCtx.canViewAllBranches, currentEmployee?.id, user]);
 
   const load = async (selectedBranchId: string, options?: { suppressToast?: boolean; force?: boolean }) => {

@@ -20,13 +20,13 @@ import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import { exportTreasuryMonthlyExcel } from '../../../utils/treasuryExcelExport';
 import {
-  resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairTreasuryEntry,
   type RepairTreasuryMonthlyReportData,
   type RepairTreasurySessionStatusFilter,
 } from '../types';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import {
   fetchCachedPageData,
@@ -68,18 +68,17 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
   const [sessionsPage, setSessionsPage] = useState(1);
 
   const allowedBranches = useMemo(() => {
-    if (can('repair.branches.manage')) return branches;
-    const baseUserBranchIds = resolveUserRepairBranchIds(user);
-    const userId = String(user?.id || '').trim();
-    const employeeId = String(currentEmployee?.id || '').trim();
-    return branches.filter((branch) => {
-      const id = String(branch.id || '');
-      if (!id) return false;
-      if (baseUserBranchIds.includes(id)) return true;
-      if (userId && (branch.technicianIds || []).includes(userId)) return true;
-      if (employeeId && String(branch.managerEmployeeId || '') === employeeId) return true;
-      return false;
-    });
+    const canViewAllBranches = can('repair.branches.manage');
+    if (canViewAllBranches) return branches;
+    const accessibleIds = new Set(
+      resolveAccessibleRepairBranchIds({
+        user,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: false,
+      }),
+    );
+    return branches.filter((branch) => accessibleIds.has(String(branch.id || '')));
   }, [branches, can, currentEmployee?.id, user]);
 
   const branchNameMap = useMemo(

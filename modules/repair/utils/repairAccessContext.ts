@@ -57,11 +57,19 @@ export function resolveRepairAccessContext(input: {
       : inferManagerScopeFromRole(input.userRoleName);
 
   const canAdminDashboard = checkPermission(permissions, 'repair.adminDashboard.view' as Permission);
+  const canDeskJobs =
+    checkPermission(permissions, 'repair.view' as Permission)
+    || checkPermission(permissions, 'repair.dashboard.view' as Permission)
+    || checkPermission(permissions, 'repair.jobs.create' as Permission)
+    || checkPermission(permissions, 'repair.jobs.edit' as Permission)
+    || canAdminDashboard;
 
   const adminSeesAllBranches =
     canViewAllBranches || (canAdminDashboard && managerScope === 'centers');
 
-  const jobsTechnicianOnly = isRepairTechnician && !canViewAllBranches;
+  // Technician self-list only when the role is workshop-only (no desk/ops flags).
+  // Hybrid «مدير مركز» with technician permission must keep the center job board.
+  const jobsTechnicianOnly = isRepairTechnician && !canViewAllBranches && !canDeskJobs;
 
   return {
     userBranchIds,

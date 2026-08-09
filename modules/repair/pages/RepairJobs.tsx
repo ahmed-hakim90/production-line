@@ -14,12 +14,13 @@ import { repairJobService } from '../services/repairJobService';
 import { StatusBadge } from '../components/StatusBadge';
 import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import type { FirestoreUserWithRepair, RepairJobStatus } from '../types';
-import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS, resolveUserRepairBranchIds, type RepairBranch, type RepairJob } from '../types';
+import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS, type RepairBranch, type RepairJob } from '../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { computeRepairJobCost, summarizeRepairJobs } from '../utils/repairBusinessLogic';
 import { canManageRepairWorkshopWork } from '../lib/repairJobIntake';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
@@ -175,13 +176,18 @@ export const RepairJobs: React.FC = () => {
     canCreateJobs: can('repair.jobs.create'),
     canEditJobs: can('repair.jobs.edit'),
   });
-  const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedJob, setSelectedJob] = useState<RepairJob | null>(null);
-  const userBranchIds = useMemo(() => {
-    const base = resolveUserRepairBranchIds(userProfile);
-    return Array.from(new Set([...base, ...assignedBranchIds]));
-  }, [userProfile, assignedBranchIds]);
+  const userBranchIds = useMemo(
+    () =>
+      resolveAccessibleRepairBranchIds({
+        user: userProfile,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: repairCtx.canViewAllBranches,
+      }),
+    [userProfile, branches, currentEmployee?.id, repairCtx.canViewAllBranches],
+  );
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<RepairJobStatus | 'all'>('all');
   const [focusFilter, setFocusFilter] = useState<JobsFocusFilter>('all');
@@ -193,25 +199,6 @@ export const RepairJobs: React.FC = () => {
   useEffect(() => {
     void repairBranchService.list().then(setBranches);
   }, []);
-
-  useEffect(() => {
-    if (can('repair.branches.manage') || !userProfile?.id) {
-      setAssignedBranchIds([]);
-      return;
-    }
-    void repairBranchService.list().then((branchRows) => {
-      const uid = String(userProfile.id || '').trim();
-      const eid = String(currentEmployee?.id || '').trim();
-      const ids = branchRows
-        .filter((branch) => {
-          const t = branch.technicianIds || [];
-          return (uid && t.includes(uid)) || (eid && t.includes(eid));
-        })
-        .map((branch) => branch.id || '')
-        .filter(Boolean);
-      setAssignedBranchIds(ids);
-    });
-  }, [can, userProfile?.id, currentEmployee?.id]);
 
   const { jobs, loading, refetch, isFetching } = useRepairJobs({
     branchId: userBranchIds[0],

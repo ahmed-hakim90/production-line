@@ -18,7 +18,6 @@ import { unwrapOrThrow } from '@/shared/usecases';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairTreasuryService } from '../services/repairTreasuryService';
 import {
-  resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
   type RepairBranch,
   type RepairJob,
@@ -37,6 +36,7 @@ import { CustomerPicker } from '@/modules/customers/components/CustomerPicker';
 import { customerService } from '@/modules/customers/services/customerService';
 import type { Customer } from '@/modules/customers/types';
 import { findRepairProductByBarcode } from '../lib/repairProductBarcode';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { isRepairJobOpenStatus } from '../lib/repairTechnicianHomeMetrics';
 
 type JobProductRow = {
@@ -197,20 +197,17 @@ export const NewRepairJob: React.FC = () => {
   };
 
   const allowedBranches = useMemo(() => {
-    if (can('repair.branches.manage')) return branches;
-
-    const baseUserBranchIds = resolveUserRepairBranchIds(user);
-    const userId = String(user?.id || '').trim();
-    const employeeId = String(currentEmployee?.id || '').trim();
-    const visible = branches.filter((branch) => {
-      const branchId = String(branch.id || '');
-      if (!branchId) return false;
-      if (baseUserBranchIds.includes(branchId)) return true;
-      if (userId && (branch.technicianIds || []).includes(userId)) return true;
-      if (employeeId && String(branch.managerEmployeeId || '') === employeeId) return true;
-      return false;
-    });
-    return visible;
+    const canViewAllBranches = can('repair.branches.manage');
+    if (canViewAllBranches) return branches;
+    const accessibleIds = new Set(
+      resolveAccessibleRepairBranchIds({
+        user,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: false,
+      }),
+    );
+    return branches.filter((branch) => accessibleIds.has(String(branch.id || '')));
   }, [branches, can, user, currentEmployee?.id]);
 
   useEffect(() => {

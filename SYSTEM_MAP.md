@@ -47,9 +47,10 @@
 | Materials warehouse | Raw/decomposed control, production issues |
 | Spare-parts central | `/inventory/spare-parts-replenishment` (approve/prepare; menu badge) |
 | Inventory admin | `/inventory/warehouses` hub (role/branch filters) |
-| Repair center / reception | Home `/` → repair ops; mobile repair bottom bar (طلب جديد); replenishment / custody |
+| Repair center / reception | Home `/` → repair ops; mobile repair bottom bar (طلب جديد); branch scope via warehouse bind + `repairBranchIds` |
 | Repair admin / centers manager | Home `/` → repair admin; mobile repair bottom bar (طلبات / تموين / أداء) |
 | Repair technician | Home `/` → technician portal (mobile cards); mobile bar (لوحتي / طلباتي); job workspace steps: تشخيص → قطع → إنهاء |
+| Customer portal | `/portal/:tenantSlug` after PIN login; bottom bar (طلباتي / طلب جديد / التحديثات / ملفي) |
 
 ## Repair / spare stock permission keys (workflow)
 

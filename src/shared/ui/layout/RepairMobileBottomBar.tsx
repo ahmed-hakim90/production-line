@@ -58,13 +58,18 @@ export const RepairMobileBottomBar: React.FC<RepairMobileBottomBarProps> = ({ on
   );
 
   const columnCount = Math.max(2, visibleItems.length + 1);
+  const hasPrimary = visibleItems.some((item) => item.primary);
 
   // Focus mode: workshop work screen owns the bottom CTA — hide nav chrome.
   if (hideForWorkshopFocus) return null;
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
+      className={cn(
+        'fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-2 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden',
+        // Extra top padding so the elevated primary action is not clipped.
+        hasPrimary ? 'pt-5' : 'pt-1.5',
+      )}
       aria-label="تنقل الصيانة السريع"
     >
       <div

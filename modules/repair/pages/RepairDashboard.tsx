@@ -21,13 +21,14 @@ import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { sumManufacturerWarrantyPartsCost } from '../lib/repairManufacturerWarranty';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { repairBranchService } from '../services/repairBranchService';
 import {
   REPAIR_JOB_STATUSES,
   REPAIR_JOB_STATUS_COLORS,
   REPAIR_JOB_STATUS_LABELS,
-  resolveUserRepairBranchIds,
   type FirestoreUserWithRepair,
+  type RepairBranch,
   type RepairJob,
   type RepairJobStatus,
 } from '../types';
@@ -66,30 +67,21 @@ const RepairOperationalDashboard: React.FC = () => {
   );
   const technicianIds = useRepairTechnicianIds(userProfile, currentEmployee?.id);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
-  const [assignedBranchIds, setAssignedBranchIds] = useState<string[]>([]);
-  const userBranchIds = useMemo(() => {
-    const base = resolveUserRepairBranchIds(userProfile);
-    return Array.from(new Set([...base, ...assignedBranchIds]));
-  }, [userProfile, assignedBranchIds]);
+  const [branches, setBranches] = useState<RepairBranch[]>([]);
+  const userBranchIds = useMemo(
+    () =>
+      resolveAccessibleRepairBranchIds({
+        user: userProfile,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: repairCtx.canViewAllBranches,
+      }),
+    [userProfile, branches, currentEmployee?.id, repairCtx.canViewAllBranches],
+  );
 
   useEffect(() => {
-    if (can('repair.branches.manage') || !userProfile?.id) {
-      setAssignedBranchIds([]);
-      return;
-    }
-    void repairBranchService.list().then((branchRows) => {
-      const uid = String(userProfile.id || '').trim();
-      const eid = String(currentEmployee?.id || '').trim();
-      const ids = branchRows
-        .filter((branch) => {
-          const t = branch.technicianIds || [];
-          return (uid && t.includes(uid)) || (eid && t.includes(eid));
-        })
-        .map((branch) => branch.id || '')
-        .filter(Boolean);
-      setAssignedBranchIds(ids);
-    });
-  }, [can, userProfile?.id, currentEmployee?.id]);
+    void repairBranchService.list().then(setBranches);
+  }, []);
 
   const { rawJobs: jobs, refetch: refetchJobs } = useRepairJobs({
     branchId: userBranchIds[0],

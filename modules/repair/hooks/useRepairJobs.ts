@@ -119,15 +119,10 @@ export function useRepairJobs(params: {
       if (params.canViewAllBranches) {
         return repairJobService.listAllBranches();
       }
-      if (branchIdsKey.length > 1) {
-        const chunks = await Promise.all(branchIdsKey.map((bid) => repairJobService.listByBranch(bid)));
-        const byId = new Map<string, RepairJob>();
-        chunks.flat().forEach((j) => {
-          if (j.id) byId.set(j.id, j);
-        });
-        return Array.from(byId.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+      if (branchIdsKey.length > 0) {
+        return repairJobService.listByBranches(branchIdsKey);
       }
-      const single = params.branchId || branchIdsKey[0] || '';
+      const single = params.branchId || '';
       if (!single) return [];
       return repairJobService.listByBranch(single);
     },

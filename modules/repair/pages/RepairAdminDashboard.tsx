@@ -33,7 +33,7 @@ import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { useAppStore } from '../../../store/useAppStore';
 import type { FirestoreUserWithRepair } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
-import { resolveUserRepairBranchIds } from '../types';
+import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { downloadUtf8Csv } from '../utils/csvExport';
 import { PageHeader } from '@/components/PageHeader';
@@ -120,23 +120,16 @@ export const RepairAdminDashboard: React.FC = () => {
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const currentMonth = useMemo(() => normalizeTreasuryMonth(''), []);
 
-  const allowedBranchIds = useMemo(() => {
-    if (repairCtx.adminSeesAllBranches) {
-      return branches.map((b) => String(b.id || '')).filter(Boolean);
-    }
-    const base = resolveUserRepairBranchIds(userProfile);
-    const set = new Set(base);
-    const employeeId = String(currentEmployee?.id || '').trim();
-    const userId = String(userProfile?.id || '').trim();
-    branches.forEach((branch) => {
-      const id = String(branch.id || '').trim();
-      if (!id) return;
-      if (employeeId && String(branch.managerEmployeeId || '').trim() === employeeId) set.add(id);
-      const techs = (branch.technicianIds || []).map((x) => String(x || '').trim());
-      if ((userId && techs.includes(userId)) || (employeeId && techs.includes(employeeId))) set.add(id);
-    });
-    return Array.from(set);
-  }, [branches, repairCtx.adminSeesAllBranches, userProfile, currentEmployee?.id]);
+  const allowedBranchIds = useMemo(
+    () =>
+      resolveAccessibleRepairBranchIds({
+        user: userProfile,
+        branches,
+        currentEmployeeId: currentEmployee?.id,
+        canViewAllBranches: repairCtx.adminSeesAllBranches,
+      }),
+    [branches, repairCtx.adminSeesAllBranches, userProfile, currentEmployee?.id],
+  );
 
   const allowedBranchKey = useMemo(() => allowedBranchIds.slice().sort().join(','), [allowedBranchIds]);
 

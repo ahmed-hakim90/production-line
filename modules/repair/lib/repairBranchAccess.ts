@@ -21,11 +21,11 @@ export function resolveRepairBranchIdForInventoryWarehouse(
 
 /**
  * Branch IDs the operator may load on spare-parts / branch-scoped repair screens.
- * Combines profile scope, technician assignment ids, and warehouse bind fallback.
+ * Combines profile scope, technician assignment, warehouse bind, and branch manager.
  */
 export function resolveAccessibleRepairBranchIds(input: {
   user: FirestoreUserWithRepair | null | undefined;
-  branches: Array<Pick<RepairBranch, 'id' | 'warehouseId' | 'technicianIds'>>;
+  branches: Array<Pick<RepairBranch, 'id' | 'warehouseId' | 'technicianIds' | 'managerEmployeeId'>>;
   currentEmployeeId?: string | null;
   canViewAllBranches?: boolean;
 }): string[] {
@@ -43,21 +43,38 @@ export function resolveAccessibleRepairBranchIds(input: {
     input.user?.inventoryWarehouseId,
   );
 
-  const fromTechnicians: string[] = [];
+  const fromAssignments: string[] = [];
   for (const branch of input.branches || []) {
     const branchId = String(branch.id || '').trim();
     if (!branchId) continue;
     const techIds = branch.technicianIds || [];
     if ((uid && techIds.includes(uid)) || (eid && techIds.includes(eid))) {
-      fromTechnicians.push(branchId);
+      fromAssignments.push(branchId);
+      continue;
+    }
+    if (eid && String(branch.managerEmployeeId || '').trim() === eid) {
+      fromAssignments.push(branchId);
     }
   }
 
   return Array.from(
     new Set([
       ...fromProfile,
-      ...fromTechnicians,
+      ...fromAssignments,
       ...(fromWarehouse ? [fromWarehouse] : []),
     ]),
   );
+}
+
+/** Chunk size for Firestore `in` filters (hard limit 30; keep 10 for older indexes). */
+export const REPAIR_BRANCH_IN_QUERY_CHUNK = 10;
+
+export function chunkIdsForInQuery(ids: string[], chunkSize = REPAIR_BRANCH_IN_QUERY_CHUNK): string[][] {
+  const normalized = Array.from(new Set(ids.map((id) => String(id || '').trim()).filter(Boolean)));
+  if (normalized.length === 0) return [];
+  const chunks: string[][] = [];
+  for (let i = 0; i < normalized.length; i += chunkSize) {
+    chunks.push(normalized.slice(i, i + chunkSize));
+  }
+  return chunks;
 }

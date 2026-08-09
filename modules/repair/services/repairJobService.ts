@@ -184,6 +184,35 @@ export const repairJobService = {
     return sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)));
   },
 
+  /** Scoped multi-branch load via chunked `branchId in` (not N sequential getDocs per id beyond chunking). */
+  async listByBranches(branchIds: string[]): Promise<RepairJob[]> {
+    if (!isConfigured) return [];
+    const { chunkIdsForInQuery } = await import('../lib/repairBranchAccess');
+    const chunks = chunkIdsForInQuery(branchIds);
+    if (chunks.length === 0) return [];
+    if (chunks.length === 1 && chunks[0].length === 1) {
+      return this.listByBranch(chunks[0][0]);
+    }
+    const results = await Promise.all(
+      chunks.map(async (chunk) => {
+        const q = tenantQuery(
+          db,
+          REPAIR_JOBS_COLLECTION,
+          where('branchId', 'in', chunk),
+          orderBy('createdAt', 'desc'),
+          limit(REPAIR_JOB_LIST_LIMIT),
+        );
+        const snap = await getDocs(q);
+        return snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob));
+      }),
+    );
+    const byId = new Map<string, RepairJob>();
+    results.flat().forEach((job) => {
+      if (job.id) byId.set(job.id, job);
+    });
+    return sortRepairJobsNewest(Array.from(byId.values()));
+  },
+
   async listAllBranches(): Promise<RepairJob[]> {
     if (!isConfigured) return [];
     const q = tenantQuery(
@@ -202,6 +231,8 @@ export const repairJobService = {
       db,
       REPAIR_JOBS_COLLECTION,
       where('branchId', '==', branchId),
+      orderBy('createdAt', 'desc'),
+      limit(REPAIR_JOB_LIST_LIMIT),
     );
     return onSnapshot(
       q,
@@ -227,14 +258,15 @@ export const repairJobService = {
         if (!row.id) return;
         unique.set(row.id, row);
       });
-      const sorted = Array.from(unique.values()).sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-      cb(sorted);
+      cb(sortRepairJobsNewest(Array.from(unique.values())).slice(0, REPAIR_JOB_LIST_LIMIT));
     };
     const unsubs = normalized.map((branchId) => {
       const q = tenantQuery(
         db,
         REPAIR_JOBS_COLLECTION,
         where('branchId', '==', branchId),
+        orderBy('createdAt', 'desc'),
+        limit(REPAIR_JOB_LIST_LIMIT),
       );
       return onSnapshot(
         q,
@@ -254,7 +286,12 @@ export const repairJobService = {
 
   subscribeAll(cb: (rows: RepairJob[]) => void): Unsubscribe {
     if (!isConfigured) return () => {};
-    const q = tenantQuery(db, REPAIR_JOBS_COLLECTION);
+    const q = tenantQuery(
+      db,
+      REPAIR_JOBS_COLLECTION,
+      orderBy('createdAt', 'desc'),
+      limit(REPAIR_JOB_LIST_LIMIT),
+    );
     return onSnapshot(
       q,
       (snap) => cb(sortRepairJobsNewest(snap.docs.map((d) => normalizeJob({ id: d.id, ...d.data() } as RepairJob)))),
