@@ -2,7 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
@@ -258,24 +260,18 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
   return (
     <div className="space-y-6">
       {/* Allowances Section */}
-      <Card
-        title={
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-round text-emerald-500">add_circle</span>
-              <span>البدلات المخصصة</span>
-            </div>
-            {canEdit && (
-              <Button
-                onClick={() => { setAlError(''); setAlSuccess(''); setShowAllowanceModal(true); }}
-                data-modal-key={MODAL_KEYS.EMPLOYEE_ALLOWANCE_CREATE}
-                disabled={financialSaving}
-              >
-                إضافة بدل
-              </Button>
-            )}
-          </div>
-        }
+      <OpsDashPanel
+        title="البدلات المخصصة"
+        accent="hr"
+        action={canEdit ? (
+          <Button
+            onClick={() => { setAlError(''); setAlSuccess(''); setShowAllowanceModal(true); }}
+            data-modal-key={MODAL_KEYS.EMPLOYEE_ALLOWANCE_CREATE}
+            disabled={financialSaving}
+          >
+            إضافة بدل
+          </Button>
+        ) : undefined}
       >
         <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
           <table className="erp-table w-full text-sm text-right">
@@ -341,44 +337,38 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {/* Deductions Section */}
-      <Card
-        title={
-          <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-round text-rose-500">remove_circle</span>
-              <span>الخصومات المخصصة</span>
-            </div>
-            {canEdit && (
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  onClick={() => {
-                    setDedError('');
-                    setDedSuccess('');
-                    setDedCategory('disciplinary');
-                    setDedName('جزاء تأديبي');
-                    setDedRecurring(false);
-                    setShowDeductionModal(true);
-                  }}
-                  data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
-                  disabled={financialSaving}
-                >
-                  جزاء تأديبي
-                </Button>
-                <Button
-                  onClick={() => { setDedError(''); setDedSuccess(''); setShowDeductionModal(true); }}
-                  data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
-                  disabled={financialSaving}
-                >
-                  إضافة خصم
-                </Button>
-              </div>
-            )}
+      <OpsDashPanel
+        title="الخصومات المخصصة"
+        accent="hr"
+        action={canEdit ? (
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDedError('');
+                setDedSuccess('');
+                setDedCategory('disciplinary');
+                setDedName('جزاء تأديبي');
+                setDedRecurring(false);
+                setShowDeductionModal(true);
+              }}
+              data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
+              disabled={financialSaving}
+            >
+              جزاء تأديبي
+            </Button>
+            <Button
+              onClick={() => { setDedError(''); setDedSuccess(''); setShowDeductionModal(true); }}
+              data-modal-key={MODAL_KEYS.EMPLOYEE_DEDUCTION_CREATE}
+              disabled={financialSaving}
+            >
+              إضافة خصم
+            </Button>
           </div>
-        }
+        ) : undefined}
       >
         <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
           <table className="erp-table w-full text-sm text-right">
@@ -452,7 +442,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {/* Add Allowance Modal */}
       {showAllowanceModal && (
@@ -853,75 +843,85 @@ export const EmployeeProfile: React.FC = () => {
     return { baseSalary, totalAllowances, totalDeductions, totalCustomDeductions, totalLoanInstallments, estimatedNet };
   }, [employee, empAllowances, empDeductions, loans, currentMonth]);
 
+  const shellBackAction = (
+    <Button variant="outline" onClick={() => navigate('/hr/employees')}>
+      <span className="material-icons-round text-sm">arrow_back</span>
+      العودة للموظفين
+    </Button>
+  );
+
   if (loading) {
-    return <PageContentSkeleton variant="detail" />;
+    return (
+      <ModuleOpsPageShell className="max-w-5xl mx-auto" eyebrow="ملف الموظف" actions={shellBackAction}>
+        <PageContentSkeleton variant="detail" />
+      </ModuleOpsPageShell>
+    );
   }
 
   if (!employee) {
     return (
-      <div className="p-6 max-w-5xl mx-auto text-center">
-        <Card>
-          <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-slate-600">person_off</span>
-          <h2 className="text-xl font-bold mt-4">موظف غير موجود</h2>
-          <p className="text-[var(--color-text-muted)] mt-2">لم يتم العثور على الموظف المطلوب.</p>
-          <Button className="mt-6" onClick={() => navigate('/hr/employees')}>
-            العودة للقائمة
-          </Button>
-        </Card>
-      </div>
+      <ModuleOpsPageShell className="max-w-5xl mx-auto" eyebrow="ملف الموظف" actions={shellBackAction}>
+        <OpsDashPanel title="موظف غير موجود" accent="hr">
+          <div className="text-center py-8">
+            <span className="material-icons-round text-6xl text-[var(--color-text-muted)] dark:text-slate-600">person_off</span>
+            <h2 className="text-xl font-bold mt-4">موظف غير موجود</h2>
+            <p className="text-[var(--color-text-muted)] mt-2">لم يتم العثور على الموظف المطلوب.</p>
+            <Button className="mt-6" onClick={() => navigate('/hr/employees')}>
+              العودة للقائمة
+            </Button>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   const levelLabel = JOB_LEVEL_LABELS[(employee.level as JobLevel) ?? 1] ?? String(employee.level);
 
+  const shellHeaderActions = can('employees.edit') ? (
+    <div className="flex items-center gap-2">
+      <Button
+        variant="outline"
+        onClick={() => navigate('/hr/employees', { state: { editId: employee.id } })}
+      >
+        تعديل
+      </Button>
+      <Button
+        variant="outline"
+        onClick={handleToggleStatus}
+        disabled={toggling}
+      >
+        {employee.isActive ? 'إلغاء التفعيل' : 'تفعيل'}
+      </Button>
+    </div>
+  ) : undefined;
+
   return (
-    <div className="p-6 max-w-5xl mx-auto">
-      {/* Back + Header */}
-      <div className="mb-6">
-        <button
-          type="button"
-          onClick={() => navigate('/hr/employees')}
-          className="flex items-center gap-2 text-[var(--color-text-muted)] hover:text-primary font-medium mb-4"
-        >
-          <span className="material-icons-round">arrow_back</span>
-          العودة للموظفين
-        </button>
-        <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-6 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-2xl font-bold">{employee.name}</h1>
-            {employee.code && (
-              <span className="font-mono text-sm bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
-                {employee.code}
-              </span>
-            )}
-            <Badge variant="neutral">{getDepartmentName(employee.departmentId)}</Badge>
-            <Badge variant="info">{getJobPositionTitle(employee.jobPositionId)}</Badge>
-            <Badge variant={employee.isActive ? 'success' : 'danger'}>
-              {employee.isActive ? 'نشط' : 'غير نشط'}
-            </Badge>
-            <Badge variant="warning">{levelLabel}</Badge>
-          </div>
-          <div className="flex items-center gap-2">
-            {can('employees.edit') && (
-              <>
-                <Button
-                  variant="outline"
-                  onClick={() => navigate('/hr/employees', { state: { editId: employee.id } })}
-                >
-                  تعديل
-                </Button>
-                <Button
-                  variant="outline"
-                  onClick={handleToggleStatus}
-                  disabled={toggling}
-                >
-                  {employee.isActive ? 'إلغاء التفعيل' : 'تفعيل'}
-                </Button>
-              </>
-            )}
-          </div>
+    <ModuleOpsPageShell
+      className="max-w-5xl mx-auto"
+      eyebrow="ملف الموظف"
+      rangeLabel={employee.name}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {shellBackAction}
+          {shellHeaderActions}
         </div>
-      </div>
+      )}
+    >
+      <OpsDashPanel title={employee.name} accent="hr">
+        <div className="flex flex-wrap items-center gap-3">
+          {employee.code && (
+            <span className="font-mono text-sm bg-[#f0f2f5] text-[var(--color-text-muted)] px-2.5 py-1 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
+              {employee.code}
+            </span>
+          )}
+          <Badge variant="neutral">{getDepartmentName(employee.departmentId)}</Badge>
+          <Badge variant="info">{getJobPositionTitle(employee.jobPositionId)}</Badge>
+          <Badge variant={employee.isActive ? 'success' : 'danger'}>
+            {employee.isActive ? 'نشط' : 'غير نشط'}
+          </Badge>
+          <Badge variant="warning">{levelLabel}</Badge>
+        </div>
+      </OpsDashPanel>
 
       {/* Net Salary Preview */}
       {salaryPreview && (
@@ -986,7 +986,7 @@ export const EmployeeProfile: React.FC = () => {
 
       {/* Tab content */}
       {activeTab === 'overview' && (
-        <div className="space-y-6">
+        <OpsDashPanel title="نظرة عامة" accent="hr">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
             {[
               { label: 'القسم', value: getDepartmentName(employee.departmentId) },
@@ -1000,17 +1000,20 @@ export const EmployeeProfile: React.FC = () => {
               { label: 'المدير', value: managerName },
               { label: 'الدخول للنظام', value: employee.hasSystemAccess ? 'نعم' : 'لا' },
             ].map((item) => (
-              <Card key={item.label} className="!p-4">
+              <div
+                key={item.label}
+                className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-4"
+              >
                 <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">{item.label}</p>
                 <p className="font-bold">{item.value}</p>
-              </Card>
+              </div>
             ))}
           </div>
-        </div>
+        </OpsDashPanel>
       )}
 
       {activeTab === 'hierarchy' && (
-        <Card title="التسلسل الوظيفي">
+        <OpsDashPanel title="التسلسل الوظيفي" accent="hr">
           <div className="space-y-0">
             {[...managerChain].reverse().map((m) => (
               <div key={m.id} className="flex items-center gap-3 py-2 border-r-2 border-[var(--color-border)] pr-4 ml-4">
@@ -1035,12 +1038,12 @@ export const EmployeeProfile: React.FC = () => {
               <p className="text-[var(--color-text-muted)] text-sm py-2 pr-4 ml-4">لا يوجد مرؤوسون مباشرون</p>
             )}
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {activeTab === 'attendance' && (
         <div className="space-y-6">
-          <Card title="ملخص الحضور">
+          <OpsDashPanel title="ملخص الحضور" accent="hr">
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
               <div>
                 <p className="text-[var(--color-text-muted)] text-sm">إجمالي الأيام</p>
@@ -1063,8 +1066,8 @@ export const EmployeeProfile: React.FC = () => {
                 <p className="text-xl font-bold">{attendanceSummary.totalHours.toFixed(1)}</p>
               </div>
             </div>
-          </Card>
-          <Card title="سجلات الحضور">
+          </OpsDashPanel>
+          <OpsDashPanel title="سجلات الحضور" accent="hr">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
@@ -1105,7 +1108,7 @@ export const EmployeeProfile: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
@@ -1136,7 +1139,7 @@ export const EmployeeProfile: React.FC = () => {
       )}
 
       {activeTab === 'payroll' && (
-        <Card title="الرواتب">
+        <OpsDashPanel title="الرواتب" accent="hr">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <div>
               <p className="text-[var(--color-text-muted)] text-sm">الراتب الأساسي</p>
@@ -1157,12 +1160,12 @@ export const EmployeeProfile: React.FC = () => {
           <Button variant="outline" onClick={() => navigate('/hr/payroll')}>
             صفحة الرواتب
           </Button>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {activeTab === 'leaves' && (
         <div className="space-y-6">
-          <Card title="ملخص رصيد الإجازات (المستخدم والمتاح)">
+          <OpsDashPanel title="ملخص رصيد الإجازات (المستخدم والمتاح)" accent="hr">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
@@ -1202,8 +1205,8 @@ export const EmployeeProfile: React.FC = () => {
                 ? `${LEAVE_TYPE_LABELS[leaveUsageSummary.lastUsedLeave.leaveType]} - ${formatDateAr(leaveUsageSummary.lastUsedLeave.date)} (${formatNumber(leaveUsageSummary.lastUsedLeave.totalDays)} يوم)`
                 : 'لا يوجد استخدام معتمد حتى الآن'}
             </div>
-          </Card>
-          <Card title="طلبات الإجازة">
+          </OpsDashPanel>
+          <OpsDashPanel title="طلبات الإجازة" accent="hr">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
@@ -1241,7 +1244,7 @@ export const EmployeeProfile: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
@@ -1268,7 +1271,7 @@ export const EmployeeProfile: React.FC = () => {
               </div>
             </div>
           )}
-          <Card title="السُلف">
+          <OpsDashPanel title="السُلف" accent="hr">
             <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <table className="erp-table w-full text-sm text-right">
                 <thead className="erp-thead">
@@ -1308,7 +1311,7 @@ export const EmployeeProfile: React.FC = () => {
                         {loan.disbursed ? (
                           <Badge variant="success">تم الصرف</Badge>
                         ) : (
-                          <Badge variant="warning">لم يظڈصرف</Badge>
+                          <Badge variant="warning">لم يُصرف</Badge>
                         )}
                       </td>
                     </tr>
@@ -1316,21 +1319,21 @@ export const EmployeeProfile: React.FC = () => {
                   {loans.length === 0 && (
                     <tr>
                       <td colSpan={7} className="p-6 text-center text-slate-500">
-                        لا توجد سظڈلف
+                        لا توجد سُلف
                       </td>
                     </tr>
                   )}
                 </tbody>
               </table>
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
       {activeTab === 'production' && id && (
         <EmployeeProductionTab employeeId={id} />
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 
