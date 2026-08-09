@@ -178,7 +178,7 @@ export const ProductBomSection: React.FC<ProductBomSectionProps> = ({
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
-      <div className="overflow-x-auto">
+      <div className="erp-table-wrap overflow-x-auto">
         <table className="erp-table w-full min-w-[800px] text-right">
           <thead>
             <tr className="border-b border-border bg-muted/50">

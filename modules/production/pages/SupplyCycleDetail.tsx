@@ -705,7 +705,7 @@ export const SupplyCycleDetail: React.FC = () => {
         {linkedReports.length === 0 ? (
           <p className="text-sm text-muted-foreground">لا توجد تقارير مربوطة — اربط التقارير بهذه الدورة ليظهر التفصيل ويُحسب صرف الإنتاج (للتام).</p>
         ) : (
-          <div className="erp-table-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-border">
+          <div className="erp-table-wrap erp-table-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-border">
             <table className="erp-table w-full text-right text-sm border-collapse min-w-[640px]">
               <thead>
                 <tr>
@@ -788,7 +788,7 @@ export const SupplyCycleDetail: React.FC = () => {
             </div>
           )
         )}
-        <div className="erp-table-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-border">
+        <div className="erp-table-wrap erp-table-scroll overflow-x-auto rounded-lg border border-slate-200 dark:border-border">
           <table className="erp-table w-full text-right text-sm border-collapse min-w-[480px]">
             <thead>
               <tr>

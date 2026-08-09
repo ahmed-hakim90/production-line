@@ -255,8 +255,8 @@ export const Customers: React.FC = () => {
           />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="erp-table w-full">
+        <div className="erp-table-wrap overflow-x-auto">
+          <table className="erp-table w-full min-w-[720px]">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th">الكود</th>

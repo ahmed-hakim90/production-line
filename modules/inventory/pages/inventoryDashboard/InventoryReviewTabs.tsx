@@ -258,7 +258,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
             ))}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <div className="erp-table-wrap overflow-x-auto">
             <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 {reviewTab === 'movements' && (

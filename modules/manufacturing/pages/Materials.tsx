@@ -867,7 +867,7 @@ export const Materials: React.FC = () => {
           className="mb-0 border-0 rounded-none"
         />
 
-        <div className="overflow-x-auto erp-table-scroll">
+        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[980px] border-collapse text-right">
             <thead className="erp-thead">
               <tr>
@@ -1481,7 +1481,7 @@ export const Materials: React.FC = () => {
                       ))}
                     </ul>
                   )}
-                  <div className="overflow-x-auto rounded border">
+                  <div className="erp-table-wrap overflow-x-auto rounded border">
                     <table className="w-full min-w-[640px] text-right text-xs">
                       <thead className="bg-muted/50">
                         <tr>

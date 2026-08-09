@@ -317,7 +317,7 @@ const RepairOperationalDashboard: React.FC = () => {
         </div>
       )}
     >
-      <div className="ops-module-charts__qty-row" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+      <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
         <div className="ops-module-charts__qty">
           <p className="ops-module-charts__qty-label">نسبة إنهاء الطلبات</p>
           <p className="ops-module-charts__qty-value">{kpis.successRate.toFixed(1)}%</p>

@@ -784,7 +784,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                 <Badge variant="destructive">{fmt(delayedInScope.length)}</Badge>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                <div className="erp-table-wrap overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-muted">
                       <tr>
@@ -841,7 +841,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
             <CardTitle className="text-base">ملخص الفنيين</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="erp-table-wrap overflow-x-auto">
               <table className="table erp-table w-full min-w-[980px] text-sm">
                 <thead className="erp-thead">
                   <tr>
@@ -1411,7 +1411,7 @@ function TechnicianDetail({
       )}
 
       {detailTab === 'delayed' && (
-        <div className="overflow-x-auto rounded border">
+        <div className="erp-table-wrap overflow-x-auto rounded border">
           <table className="w-full text-xs">
             <thead className="bg-muted">
               <tr>
@@ -1455,7 +1455,7 @@ function TechnicianDetail({
       )}
 
       {detailTab === 'recent' && (
-        <div className="overflow-x-auto rounded border">
+        <div className="erp-table-wrap overflow-x-auto rounded border">
           <table className="w-full text-xs">
             <thead className="bg-muted">
               <tr>

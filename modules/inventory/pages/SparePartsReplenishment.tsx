@@ -746,7 +746,7 @@ export const SparePartsReplenishment: React.FC = () => {
                 ) : null}
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="erp-table-wrap overflow-x-auto">
                 <table className="w-full min-w-[640px] text-sm">
                   <thead>
                     <tr className="bg-slate-50 border-b">

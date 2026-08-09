@@ -877,7 +877,7 @@ export const ProductDetails: React.FC = () => {
             <div>
               <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">تفصيل تكلفة المنتج</h3>
               <p className="mb-3 text-xs font-medium text-slate-600 dark:text-muted-foreground">يتم الحساب تلقائياً عند تغيير أي عنصر</p>
-              <div className="overflow-x-auto">
+              <div className="erp-table-wrap overflow-x-auto">
                 <table className="erp-table w-full min-w-[700px] text-right">
                   <thead>
                     <tr className="border-b border-border bg-muted/50">
@@ -975,7 +975,7 @@ export const ProductDetails: React.FC = () => {
                   <p className="mt-2 text-sm text-muted-foreground">لا توجد بيانات متاحة</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
+                <div className="erp-table-wrap overflow-x-auto">
                   <table className="erp-table w-full min-w-[720px] text-right">
                     <thead>
                       <tr className="border-b border-border bg-muted/50">

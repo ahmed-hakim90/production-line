@@ -554,7 +554,7 @@ export const SparePartsInventory: React.FC = () => {
           )}
         </CardHeader>
         <CardContent>
-          <div className="-mx-1 overflow-x-auto rounded border sm:mx-0">
+          <div className="erp-table-wrap -mx-1 overflow-x-auto rounded border sm:mx-0">
             <table className="w-full min-w-[640px] text-sm">
               <thead className="bg-muted">
                 <tr>

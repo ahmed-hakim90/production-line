@@ -318,10 +318,7 @@ export const ProductionDashboard: React.FC = () => {
         </div>
       )}
     >
-      <div
-        className="ops-module-charts__qty-row"
-        style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}
-      >
+      <div className="ops-module-charts__qty-row ops-module-charts__qty-row--4">
         <button
           type="button"
           className="ops-module-charts__qty text-start"

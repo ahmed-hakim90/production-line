@@ -494,7 +494,7 @@ export const ProductionWorkerDetails: React.FC = () => {
       )}
 
       <Card title="تفصيل الحضور والإنتاج اليومي">
-        <div className="overflow-x-auto">
+        <div className="erp-table-wrap overflow-x-auto">
           <table className="w-full min-w-[980px] text-sm">
             <thead>
               <tr className="text-[var(--color-text-muted)]">
