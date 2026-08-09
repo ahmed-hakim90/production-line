@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -7,10 +6,11 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
-import { KPICard } from '@/src/components/erp/KPICard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import {
   repairMonthCloseChipType,
   repairOpenClosedChipType,
@@ -475,76 +475,48 @@ export const RepairTreasury: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5 p-4 md:p-6" dir={dir}>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض خزينة الصيانة.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="خزينة الصيانة" dir={dir}>
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض خزينة الصيانة.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-5 p-4 md:p-6" dir={dir}>
-      <PageHeader
-        title="خزينة الصيانة"
-        subtitle="فتح وتقفل يومي، تسجيل الإيرادات والمصروفات والتحويلات لكل فرع"
-        icon="wallet"
-        primaryAction={{
-          label: 'تحديث',
-          icon: 'refresh',
-          onClick: () => {
-            void refreshAll(branchId);
-          },
-          disabled: !branchId || busy,
-        }}
-        moreActions={[
-          {
-            label: 'التقرير الشهري',
-            icon: 'bar_chart',
-            group: 'تقارير',
-            onClick: () => navigate('/repair/treasury-report'),
-          },
-        ]}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KPICard
-          label="الرصيد الحسابي"
-          value={openSession ? fmt(computedBalance) : '—'}
-          unit="ج.م"
-          iconType="money"
-          color={openSession ? 'green' : 'gray'}
-          loading={loading}
-          subValue={selectedBranchName}
-        />
-        <KPICard
-          label="حالة الجلسة"
-          value={openSession ? 'مفتوحة' : 'مقفلة'}
-          iconType="metric"
-          color={openSession ? 'green' : 'red'}
-          loading={loading}
-          subValue={openSession?.needsManualClose ? 'تحتاج إقفال يدوي' : undefined}
-        />
-        <KPICard
-          label="إيراد الجلسة"
-          value={fmt(todayTotals.income)}
-          unit="ج.م"
-          iconType="trend"
-          color="indigo"
-          loading={loading}
-        />
-        <KPICard
-          label="مصروف الجلسة"
-          value={fmt(todayTotals.expense)}
-          unit="ج.م"
-          iconType="metric"
-          color="amber"
-          loading={loading}
-          subValue={`${todayTotals.count} حركة`}
-        />
-      </div>
+    <RepairOpsPageShell
+      eyebrow="خزينة الصيانة"
+      dir={dir}
+      hero={[
+        {
+          key: 'balance',
+          label: 'الرصيد الحسابي',
+          value: openSession ? fmt(computedBalance) : '—',
+          meta: openSession ? `${selectedBranchName || ''} ج.م`.trim() : selectedBranchName || undefined,
+        },
+        {
+          key: 'session',
+          label: 'حالة الجلسة',
+          value: openSession ? 'مفتوحة' : 'مقفلة',
+          meta: openSession?.needsManualClose ? 'تحتاج إقفال يدوي' : undefined,
+          toneClassName: openSession ? 'ops-dash-kpi-card--tone-emerald' : 'ops-dash-kpi-card--tone-rose',
+        },
+        { key: 'income', label: 'إيراد الجلسة', value: fmt(todayTotals.income), meta: 'ج.م' },
+        {
+          key: 'expense',
+          label: 'مصروف الجلسة',
+          value: fmt(todayTotals.expense),
+          meta: `${todayTotals.count} حركة`,
+        },
+      ]}
+      onRefresh={() => { if (branchId) void refreshAll(branchId); }}
+      refreshing={busy || loading}
+      actions={(
+        <Button type="button" variant="outline" size="sm" onClick={() => navigate('/repair/treasury-report')}>
+          التقرير الشهري
+        </Button>
+      )}
+    >
 
       {monthClosed && (
         <div className="rounded-lg border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800 flex flex-wrap items-center justify-between gap-3">
@@ -558,8 +530,8 @@ export const RepairTreasury: React.FC = () => {
         </div>
       )}
 
-      <Card>
-        <CardContent className="pt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
+      <OpsDashPanel title="الفرع والحالة" accent="repair">
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 lg:items-end">
           <div className="sm:col-span-2 lg:col-span-2">
             <Label>الفرع</Label>
             <Select
@@ -602,8 +574,8 @@ export const RepairTreasury: React.FC = () => {
               {!canManage ? 'عرض فقط' : monthClosed ? 'مقفول شهريًا' : 'متاحة'}
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
       <div className="grid gap-4 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-5">
@@ -776,11 +748,8 @@ export const RepairTreasury: React.FC = () => {
           </Card>
         </div>
 
-        <Card className="xl:col-span-7 !p-0 overflow-hidden">
-          <div className="border-b px-4 py-3">
-            <h2 className="text-base font-semibold">حركات الجلسة الحالية</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">مرتبة من الأحدث — تشمل افتتاح اليوم والتحصيلات والمصروفات</p>
-          </div>
+        <OpsDashPanel title="حركات الجلسة الحالية" accent="repair" bodyClassName="p-0" className="xl:col-span-7">
+          <p className="border-b px-4 py-2 text-xs text-muted-foreground">مرتبة من الأحدث — تشمل افتتاح اليوم والتحصيلات والمصروفات</p>
           <div className="erp-mobile-card-list p-2">
             {loading && Array.from({ length: 4 }).map((_, i) => (
               <div key={`entry-m-skel-${i}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3">
@@ -889,10 +858,10 @@ export const RepairTreasury: React.FC = () => {
             onPageChange={setEntriesPage}
             itemLabel="حركة"
           />
-        </Card>
+        </OpsDashPanel>
       </div>
 
-      <Card className="!p-0 overflow-hidden">
+      <OpsDashPanel title="سجل الجلسات" accent="repair" bodyClassName="p-0">
         <SmartFilterBar
           pageId="repair-treasury-sessions"
           searchPlaceholder="بحث بالفرع أو التاريخ..."
@@ -1108,7 +1077,7 @@ export const RepairTreasury: React.FC = () => {
           onPageChange={setSessionsPage}
           itemLabel="جلسة"
         />
-      </Card>
+      </OpsDashPanel>
 
       <Dialog open={showPrevDayCloseModal} onOpenChange={setShowPrevDayCloseModal}>
         <DialogContent dir={dir}>
@@ -1159,7 +1128,7 @@ export const RepairTreasury: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

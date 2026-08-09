@@ -1,7 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -33,10 +31,11 @@ import {
   invalidatePageDataCache,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
-import { KPICard } from '@/src/components/erp/KPICard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { isRepairTreasuryMonthClosedStatus } from '../lib/repairTreasuryMonthlyClose';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(Number(n || 0));
 const THIS_MONTH = new Date().toISOString().slice(0, 7);
@@ -356,72 +355,60 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5 p-4 md:p-6" dir={dir}>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض تقرير خزينة الصيانة.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="تقرير الخزائن الشهري" dir={dir}>
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض تقرير خزينة الصيانة.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-5 p-4 md:p-6" dir={dir}>
-      <PageHeader
-        title="تقرير الخزائن الشهري"
-        subtitle="ملخص وتفصيل يومي للجلسات مع تصدير Excel حسب صلاحيات المستخدم"
-        icon="bar_chart"
-        primaryAction={{
-          label: loading ? 'جارٍ التحديث...' : 'تحديث',
-          icon: 'refresh',
-          onClick: () => { void reloadReport(); },
-          disabled: loading || !branchFilter,
-        }}
-        moreActions={[
-          {
-            label: 'العودة للخزينة',
-            icon: 'wallet',
-            group: 'تنقل',
-            onClick: () => navigate('/repair/treasury'),
-          },
-          {
-            label: monthActionBusy ? 'جارٍ الإقفال...' : (branchFilter === ALL_BRANCHES_VALUE ? 'إقفال الشهر (كل الفروع)' : 'إقفال الشهر'),
-            icon: 'fact_check',
-            group: 'إقفال',
-            hidden: !canManage,
-            disabled: monthActionBusy || loading || !branchIdsForMonthAction.length || closedBranchCount === branchIdsForMonthAction.length,
-            onClick: () => { void handleCloseMonth(); },
-          },
-          {
-            label: 'تصدير Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !report,
-            onClick: handleExport,
-          },
-          {
-            label: 'طباعة / PDF',
-            icon: 'print',
-            group: 'تصدير',
-            hidden: !report,
-            onClick: () => window.print(),
-          },
-        ]}
-      />
-
+    <RepairOpsPageShell
+      eyebrow="تقرير الخزائن الشهري"
+      dir={dir}
+      hero={[
+        { key: 'sessions', label: 'عدد الجلسات', value: fmt(totals.sessions) },
+        { key: 'opening', label: 'إجمالي الافتتاح', value: fmt(totals.opening), meta: 'ج.م' },
+        {
+          key: 'net',
+          label: 'صافي الحركة',
+          value: fmt(totals.net),
+          meta: 'ج.م',
+          toneClassName: totals.net < 0 ? 'ops-dash-kpi-card--tone-rose' : 'ops-dash-kpi-card--tone-emerald',
+        },
+        { key: 'closing', label: 'إجمالي الإقفال', value: fmt(totals.closing), meta: 'ج.م' },
+      ]}
+      onRefresh={() => { void reloadReport(); }}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => navigate('/repair/treasury')}>
+            العودة للخزينة
+          </Button>
+          {report ? (
+            <>
+              <Button type="button" variant="outline" size="sm" onClick={handleExport}>
+                تصدير Excel
+              </Button>
+              <Button type="button" variant="outline" size="sm" onClick={() => window.print()}>
+                طباعة / PDF
+              </Button>
+            </>
+          ) : null}
+        </div>
+      )}
+    >
       {canManage && (
-        <Card>
-          <CardContent className="pt-5 flex flex-wrap items-center justify-between gap-3">
-            <div className="text-sm">
-              <div className="font-semibold">إقفال شهري — {month}</div>
-              <p className="text-xs text-muted-foreground mt-1">
-                {closedBranchCount}/{branchIdsForMonthAction.length || 0} فرع مقفول ضمن النطاق الحالي.
-                الإقفال يمنع فتح جلسات أو تسجيل حركات داخل الشهر.
-              </p>
-            </div>
+        <OpsDashPanel title={`إقفال شهري — ${month}`} accent="repair">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              {closedBranchCount}/{branchIdsForMonthAction.length || 0} فرع مقفول ضمن النطاق الحالي.
+              الإقفال يمنع فتح جلسات أو تسجيل حركات داخل الشهر.
+            </p>
             <div className="flex flex-wrap gap-2">
               <Button
+                size="sm"
                 onClick={() => { void handleCloseMonth(); }}
                 disabled={monthActionBusy || loading || !branchIdsForMonthAction.length || closedBranchCount === branchIdsForMonthAction.length}
               >
@@ -432,6 +419,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
                 && isRepairTreasuryMonthClosedStatus(report?.monthCloseByBranchId?.[branchFilter]?.status) && (
                 <Button
                   variant="outline"
+                  size="sm"
                   disabled={monthActionBusy}
                   onClick={() => {
                     setReopenTargetBranchId(branchFilter);
@@ -442,11 +430,11 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
                 </Button>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       )}
 
-      <Card className="!p-0 overflow-hidden">
+      <OpsDashPanel title="فلاتر التقرير" accent="repair" bodyClassName="p-0">
         <SmartFilterBar
           pageId="repair-treasury-monthly-report"
           searchPlaceholder="بحث في الجلسات بالفرع أو التاريخ..."
@@ -490,35 +478,23 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
           onAdvancedFilterChange={(key, value) => {
             if (key === 'month' && value && value !== 'all') setMonth(value);
           }}
-          extra={(
-            <Button variant="outline" size="sm" onClick={handleExport} disabled={!report}>
-              تصدير Excel
-            </Button>
-          )}
           className="mb-0 border-0 rounded-none"
         />
-      </Card>
+      </OpsDashPanel>
 
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-        <KPICard label="عدد الجلسات" value={fmt(totals.sessions)} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="إجمالي الافتتاح" value={fmt(totals.opening)} unit="ج.م" iconType="money" color="gray" loading={loading} />
-        <KPICard label="صافي الحركة" value={fmt(totals.net)} unit="ج.م" iconType="trend" color={totals.net >= 0 ? 'green' : 'red'} loading={loading} />
-        <KPICard label="إجمالي الإقفال" value={fmt(totals.closing)} unit="ج.م" iconType="money" color="green" loading={loading} />
-      </div>
-
-      <Card className="!p-0 overflow-hidden">
-        <div className="border-b px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <h2 className="text-base font-semibold">المطابقة ووسائل الدفع</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">حسب الفرع ومركز التكلفة ووسيلة الدفع بنفس الفلاتر.</p>
-          </div>
+      <OpsDashPanel
+        title="المطابقة ووسائل الدفع"
+        accent="repair"
+        bodyClassName="p-0"
+        action={(
           <div className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
             report && report.reconciliation.missingPaymentMethod + report.reconciliation.missingCostCenter + report.reconciliation.missingJournalReference === 0
               ? 'bg-emerald-50 text-emerald-800' : 'bg-rose-50 text-rose-800'
           }`}>
             {report ? `الحركات ${fmt(report.reconciliation.entriesCount)} — نواقص الوسيلة ${fmt(report.reconciliation.missingPaymentMethod)} — المركز ${fmt(report.reconciliation.missingCostCenter)} — القيد ${fmt(report.reconciliation.missingJournalReference)}` : 'لا توجد بيانات'}
           </div>
-        </div>
+        )}
+      >
         <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[760px] text-right border-collapse">
             <thead className="erp-thead"><tr>
