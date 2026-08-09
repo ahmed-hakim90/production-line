@@ -255,7 +255,77 @@ export const Customers: React.FC = () => {
           />
         </div>
 
-        <div className="erp-table-wrap overflow-x-auto">
+        <div className="erp-mobile-card-list p-2">
+          {loading ? (
+            Array.from({ length: 5 }).map((_, i) => (
+              <div
+                key={`cust-m-sk-${i}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm text-muted-foreground"
+              >
+                جاري التحميل…
+              </div>
+            ))
+          ) : loadError ? (
+            <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-6 text-center">
+              <p className="text-sm text-destructive font-medium">{loadError}</p>
+              <Button
+                type="button"
+                variant="outline"
+                className="mt-3"
+                onClick={() => void load()}
+              >
+                إعادة المحاولة
+              </Button>
+            </div>
+          ) : paged.length === 0 ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">لا يوجد عملاء مطابقون.</p>
+          ) : (
+            paged.map((customer) => (
+              <div
+                key={`m-${customer.id}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link
+                      className="block truncate text-sm font-bold text-primary hover:underline"
+                      to={withTenantPath(tenantSlug, `/customers/${customer.id}`)}
+                    >
+                      <span className="font-mono tabular-nums">{customer.code}</span>
+                      <span className="mx-1 text-[var(--color-text-muted)]">·</span>
+                      <span>{customer.name}</span>
+                    </Link>
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                      {CUSTOMER_TYPE_LABELS[customer.type]}
+                    </p>
+                    <p className="mt-0.5 text-xs tabular-nums text-[var(--color-text)]" dir="ltr">
+                      {customer.phone || '—'}
+                    </p>
+                  </div>
+                  <StatusBadge
+                    type={customer.isActive !== false ? 'success' : 'muted'}
+                    label={customer.isActive !== false ? 'نشط' : 'غير نشط'}
+                  />
+                </div>
+                {canEdit && (
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      className="!px-2 !py-1 text-xs"
+                      onClick={() => openEdit(customer)}
+                    >
+                      <Pencil className="me-1 h-3.5 w-3.5" />
+                      تعديل
+                    </Button>
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="erp-desktop-table erp-table-wrap overflow-x-auto">
           <table className="erp-table w-full min-w-[720px]">
             <thead className="erp-thead">
               <tr>

@@ -867,7 +867,87 @@ export const Materials: React.FC = () => {
           className="mb-0 border-0 rounded-none"
         />
 
-        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
+        <div className="erp-mobile-card-list p-2">
+          {isLoading &&
+            Array.from({ length: 5 }).map((_, i) => (
+              <Skeleton key={`mat-m-sk-${i}`} className="h-28 w-full rounded-xl" />
+            ))}
+          {!isLoading && sorted.length === 0 && (
+            <p className="py-10 text-center text-sm text-muted-foreground">
+              لا توجد مواد مطابقة للبحث أو الفلاتر.
+            </p>
+          )}
+          {!isLoading &&
+            paged.map((row) => {
+              const active = row.isActive !== false;
+              return (
+                <div
+                  key={`m-${row.id}`}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-xs tabular-nums text-[var(--color-text-muted)]">
+                        {row.code}
+                      </p>
+                      <p className="truncate text-sm font-bold text-[var(--color-text)]">{row.name}</p>
+                      <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                        {row.categoryName || '—'}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 flex-col items-end gap-1">
+                      <StatusBadge label={MATERIAL_TYPE_LABELS[row.type]} type={TYPE_BADGE[row.type]} />
+                      <StatusBadge label={active ? 'نشط' : 'موقوف'} type={active ? 'success' : 'danger'} />
+                    </div>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-1 gap-1 text-sm">
+                    <div className="flex items-center justify-between gap-2">
+                      <dt className="text-[10px] text-[var(--color-text-muted)]">تكلفة الشراء</dt>
+                      <dd className="font-semibold tabular-nums">
+                        {arNum(Number(row.purchaseCost ?? 0))}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {row.type === 'semi_finished' && row.id && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="!px-2 !py-1 text-xs"
+                        onClick={() => navigate(`/manufacturing/materials/${row.id}`)}
+                      >
+                        عرض قائمة المواد (BOM)
+                      </Button>
+                    )}
+                    {canManage && (
+                      <>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="!px-2 !py-1 text-xs"
+                          onClick={() => openEdit(row)}
+                        >
+                          <Pencil className="me-1 h-3.5 w-3.5" />
+                          تعديل
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="!px-2 !py-1 text-xs text-destructive"
+                          onClick={() => void handleDelete(row)}
+                        >
+                          <Trash2 className="me-1 h-3.5 w-3.5" />
+                          حذف
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+        </div>
+
+        <div className="erp-desktop-table erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[980px] border-collapse text-right">
             <thead className="erp-thead">
               <tr>
