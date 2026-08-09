@@ -181,10 +181,10 @@ export const RepairAdminOrders: React.FC = () => {
         title="عرض طلبات الصيانة - الإدارة"
         subtitle="متابعة الطلبات بالتفاصيل التشغيلية، والفني المسند، وحالة التسليم."
         icon="fact_check"
-        backAction={{ to: withTenantPath(tenantSlug, '/repair/admin-dashboard') }}
+        backAction={{ to: withTenantPath(tenantSlug, '/repair') }}
         actions={(
-          <Link to={withTenantPath(tenantSlug, '/repair/admin-dashboard')}>
-            <Button variant="outline" size="sm">لوحة الأدمن</Button>
+          <Link to={withTenantPath(tenantSlug, '/repair')}>
+            <Button variant="outline" size="sm">لوحة الصيانة</Button>
           </Link>
         )}
       />

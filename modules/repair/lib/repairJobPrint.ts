@@ -23,7 +23,7 @@ export const resolveRepairJobPrintProducts = (
     diagnosis: job.problemDescription,
     estimatedCost: job.estimatedCost,
     finalCost: job.finalCost,
-    inWarranty: (job.warranty || 'none') !== 'none',
+    inWarranty: false,
   }];
 };
 

@@ -39,11 +39,10 @@ export const REPAIR_ROUTES: AppRouteDef[] = [
     component: RepairDashboard,
     skeleton: 'dashboard',
   },
+  // Legacy bookmark — same board as `/repair` for admin users.
   {
     path: '/repair/admin-dashboard',
-    permission: 'repair.adminDashboard.view',
-    component: RepairDashboard,
-    skeleton: 'dashboard',
+    redirectTo: '/repair',
   },
   // Keep as internal admin flow; intentionally hidden from sidebar menu.
   { path: '/repair/admin-orders', permission: 'repair.adminDashboard.view', component: RepairAdminOrders },

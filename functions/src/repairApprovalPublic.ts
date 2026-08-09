@@ -14,6 +14,8 @@ export type PublicRepairApprovalProductLine = {
   name: string;
   quantity: number;
   lineCost: number;
+  inWarranty: boolean;
+  warrantyLabel: string;
 };
 
 export type PublicRepairApprovalView = {
@@ -29,6 +31,8 @@ export type PublicRepairApprovalView = {
   serviceOnlyCost: number;
   partsCost: number;
   productsCost: number;
+  warrantyProductsCost: number;
+  billableProductsCost: number;
   estimatedTotal: number;
   parts: PublicRepairApprovalPartLine[];
   products: PublicRepairApprovalProductLine[];
@@ -41,6 +45,8 @@ const money = (value: unknown): number => {
 
 const text = (value: unknown, max = 200): string =>
   String(value || '').trim().slice(0, max);
+
+const warrantyLineLabel = (inWarranty: boolean) => (inWarranty ? 'داخل الضمان' : 'بدون ضمان');
 
 export type PublicRepairApprovalJobSource = {
   receiptNo?: unknown;
@@ -66,6 +72,7 @@ export type PublicRepairApprovalJobSource = {
     quantity?: unknown;
     estimatedCost?: unknown;
     finalCost?: unknown;
+    inWarranty?: unknown;
   }> | unknown;
 };
 
@@ -94,17 +101,32 @@ export function buildPublicRepairApprovalView(
     .map((row) => {
       const name = text(row?.productName, 120) || 'منتج';
       const quantity = Math.max(1, Math.round(Number(row?.quantity || 1)));
-      const lineCost = money(row?.finalCost ?? row?.estimatedCost);
-      return { name, quantity, lineCost };
+      const inWarranty = Boolean(row?.inWarranty);
+      const rawCost = money(row?.finalCost ?? row?.estimatedCost);
+      const lineCost = inWarranty ? 0 : rawCost;
+      return {
+        name,
+        quantity,
+        lineCost,
+        inWarranty,
+        warrantyLabel: warrantyLineLabel(inWarranty),
+      };
     })
     .filter((row) => row.name.length > 0);
 
   const partsCost = money(parts.reduce((sum, row) => sum + row.lineTotal, 0));
   const laborCost = money(job.laborCost);
   const serviceOnlyCost = money(job.serviceOnlyCost);
-  const productsCost = money(products.reduce((sum, row) => sum + row.lineCost, 0));
+  const billableProductsCost = money(
+    products.filter((row) => !row.inWarranty).reduce((sum, row) => sum + row.lineCost, 0),
+  );
+  const warrantyProductsCost = money(
+    rawProducts
+      .filter((row) => Boolean(row?.inWarranty))
+      .reduce((sum, row) => sum + money(row?.finalCost ?? row?.estimatedCost), 0),
+  );
+  const productsCost = billableProductsCost;
   const computed = money(partsCost + laborCost + serviceOnlyCost + productsCost);
-  // التفاصيل الظاهرة للعميل هي المصدر الأول حتى لا يختلف الإجمالي عن مجموع السطور.
   const estimatedStored = money(job.estimatedCost);
   const estimatedTotal = computed > 0
     ? computed
@@ -123,6 +145,8 @@ export function buildPublicRepairApprovalView(
     serviceOnlyCost,
     partsCost,
     productsCost,
+    warrantyProductsCost,
+    billableProductsCost,
     estimatedTotal,
     parts,
     products,

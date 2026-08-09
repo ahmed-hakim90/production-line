@@ -523,81 +523,81 @@ export const RepairAdminDashboard: React.FC = () => {
   const emptyBranches = branchesLoaded && allowedBranchIds.length === 0;
 
   return (
-    <div className="erp-ds-clean space-y-5 p-4 md:p-6" dir={dir}>
+    <div className="erp-ds-clean space-y-4 p-3 sm:p-4 md:space-y-5 md:p-6" dir={dir}>
       <PageHeader
         title="لوحة أوامر الصيانة - الإدارة"
         subtitle="مركز قيادة: طوابير التشغيل، التوريد، الخزينة، أداء الفروع، والشكاوى."
         icon="layout_dashboard"
         actions={(
-          <div className="flex items-center gap-2 flex-wrap">
-            <Badge variant="secondary" className="w-fit text-xs">
+          <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            <Badge variant="secondary" className="w-fit shrink-0 text-xs">
               عدد الفروع النشطة: {fmt(cards.length)}
             </Badge>
-            <Link to={path('/repair/admin-orders')}>
+            <Link to={path('/repair/admin-orders')} className="shrink-0">
               <Button size="sm" variant="outline">طلبات الأدمن</Button>
             </Link>
             {canViewJobs && (
-              <Link to={path('/repair/jobs')}>
+              <Link to={path('/repair/jobs')} className="shrink-0">
                 <Button size="sm" variant="outline">الطلبات</Button>
               </Link>
             )}
             {canViewReplenishment && (
-              <Link to={path('/repair/parts-replenishment')}>
+              <Link to={path('/repair/parts-replenishment')} className="shrink-0">
                 <Button size="sm" variant="outline">التوريد</Button>
               </Link>
             )}
             {canViewSpareIssues && (
-              <Link to={path('/repair/spare-issues')}>
+              <Link to={path('/repair/spare-issues')} className="shrink-0">
                 <Button size="sm" variant="outline">سندات الصرف</Button>
               </Link>
             )}
             {canViewTreasury && (
-              <Link to={path('/repair/treasury-report')}>
+              <Link to={path('/repair/treasury-report')} className="shrink-0">
                 <Button size="sm" variant="outline">تقرير الخزينة</Button>
               </Link>
             )}
             {canViewTechKpis && (
-              <Link to={path('/repair/technician-kpis?period=month')}>
+              <Link to={path('/repair/technician-kpis?period=month')} className="shrink-0">
                 <Button size="sm" variant="outline">أداء الفنيين</Button>
               </Link>
             )}
             {canViewComplaints && (
-              <Link to={path('/repair/complaints')}>
+              <Link to={path('/repair/complaints')} className="shrink-0">
                 <Button size="sm" variant="outline">الشكاوى</Button>
               </Link>
             )}
             {canViewCustomerRequests && (
-              <Link to={path('/repair/customer-requests')}>
+              <Link to={path('/repair/customer-requests')} className="shrink-0">
                 <Button size="sm" variant="outline">طلبات العملاء</Button>
               </Link>
             )}
             {canViewCustody && (
-              <Link to={path('/repair/custody-stock')}>
+              <Link to={path('/repair/custody-stock')} className="shrink-0">
                 <Button size="sm" variant="outline">العهدة</Button>
               </Link>
             )}
             {canViewCustody && (
-              <Link to={path('/repair/custody-stock?stockType=unrepairable')}>
+              <Link to={path('/repair/custody-stock?stockType=unrepairable')} className="shrink-0">
                 <Button size="sm" variant="outline">غير القابل</Button>
               </Link>
             )}
             {canViewReplacements && (
-              <Link to={path('/repair/replacements')}>
+              <Link to={path('/repair/replacements')} className="shrink-0">
                 <Button size="sm" variant="outline">الاستبدال</Button>
               </Link>
             )}
             {canManagePricing && (
-              <Link to={path('/manufacturing/materials')}>
+              <Link to={path('/manufacturing/materials')} className="shrink-0">
                 <Button size="sm" variant="outline">التسعير (الماستر)</Button>
               </Link>
             )}
             {canManageBranches && (
-              <Link to={path('/repair/branches')}>
+              <Link to={path('/repair/branches')} className="shrink-0">
                 <Button size="sm" variant="outline">الفروع</Button>
               </Link>
             )}
             {canViewCustomers && (
-              <Link to={path('/customers/kpi')}>
+              <Link to={path('/customers/kpi')} className="shrink-0">
                 <Button size="sm" variant="outline">مؤشرات العملاء</Button>
               </Link>
             )}
@@ -623,45 +623,46 @@ export const RepairAdminDashboard: React.FC = () => {
 
       {!loading && !emptyBranches && (
         <>
-          <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+          {/* Overview KPIs: always 2 per row on mobile/tablet */}
+          <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-3 xl:grid-cols-5">
             <Card className="shadow-sm">
-              <CardContent className="pt-5 space-y-1">
-                <p className="text-xs text-muted-foreground">إجمالي الطلبات</p>
-                <p className="text-2xl font-bold tabular-nums">{fmt(overview.totalJobs)}</p>
+              <CardContent className="space-y-1 p-3 md:pt-5">
+                <p className="text-[11px] text-muted-foreground md:text-xs">إجمالي الطلبات</p>
+                <p className="text-xl font-bold tabular-nums md:text-2xl">{fmt(overview.totalJobs)}</p>
               </CardContent>
             </Card>
             <Card className="shadow-sm">
-              <CardContent className="pt-5 space-y-1">
-                <p className="text-xs text-muted-foreground">طلبات قيد التنفيذ</p>
-                <p className="text-2xl font-bold text-amber-600 tabular-nums">{fmt(overview.openJobs)}</p>
+              <CardContent className="space-y-1 p-3 md:pt-5">
+                <p className="text-[11px] text-muted-foreground md:text-xs">طلبات قيد التنفيذ</p>
+                <p className="text-xl font-bold text-amber-600 tabular-nums md:text-2xl">{fmt(overview.openJobs)}</p>
               </CardContent>
             </Card>
             <Card className="shadow-sm">
-              <CardContent className="pt-5 space-y-1">
-                <p className="text-xs text-muted-foreground">جاهز للتسليم</p>
-                <p className="text-2xl font-bold text-indigo-600 tabular-nums">{fmt(overview.readyJobs)}</p>
+              <CardContent className="space-y-1 p-3 md:pt-5">
+                <p className="text-[11px] text-muted-foreground md:text-xs">جاهز للتسليم</p>
+                <p className="text-xl font-bold text-indigo-600 tabular-nums md:text-2xl">{fmt(overview.readyJobs)}</p>
               </CardContent>
             </Card>
             <Card className="shadow-sm">
-              <CardContent className="pt-5 space-y-1">
-                <p className="text-xs text-muted-foreground">إيراد الصيانة</p>
-                <p className="text-2xl font-bold text-emerald-600 tabular-nums">{fmt(overview.revenue)}</p>
+              <CardContent className="space-y-1 p-3 md:pt-5">
+                <p className="text-[11px] text-muted-foreground md:text-xs">إيراد الصيانة</p>
+                <p className="text-xl font-bold text-emerald-600 tabular-nums md:text-2xl">{fmt(overview.revenue)}</p>
               </CardContent>
             </Card>
             <Card className="shadow-sm">
-              <CardContent className="pt-5 space-y-1">
-                <p className="text-xs text-muted-foreground">مبيعات قطع الغيار</p>
-                <p className="text-2xl font-bold text-sky-600 tabular-nums">{fmt(overview.partsRevenue)}</p>
+              <CardContent className="space-y-1 p-3 md:pt-5">
+                <p className="text-[11px] text-muted-foreground md:text-xs">مبيعات قطع الغيار</p>
+                <p className="text-xl font-bold text-sky-600 tabular-nums md:text-2xl">{fmt(overview.partsRevenue)}</p>
               </CardContent>
             </Card>
           </div>
 
           {can('repair.finance.view') ? (
             <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">الملخص المالي المحمي</CardTitle>
+              <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
+                <CardTitle className="text-sm md:text-base">الملخص المالي المحمي</CardTitle>
               </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-3 md:grid-cols-5">
+              <CardContent className="grid grid-cols-2 gap-2 p-3 pt-0 md:gap-3 md:p-6 md:pt-0 xl:grid-cols-5">
                 {[
                   ['الإجمالي', overview.grossAmount, 'text-slate-700'],
                   ['الخصومات', overview.discountAmount, 'text-rose-600'],
@@ -669,9 +670,9 @@ export const RepairAdminDashboard: React.FC = () => {
                   ['المحصل', overview.paidAmount, 'text-emerald-600'],
                   ['المتبقي', overview.balanceDue, 'text-amber-700'],
                 ].map(([label, value, tone]) => (
-                  <div key={String(label)} className="rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground">{label}</p>
-                    <p className={`mt-1 text-xl font-bold tabular-nums ${tone}`}>{fmt(Number(value))} ج.م</p>
+                  <div key={String(label)} className="rounded-lg border p-2.5 md:p-3">
+                    <p className="text-[11px] text-muted-foreground md:text-xs">{label}</p>
+                    <p className={`mt-1 text-lg font-bold tabular-nums md:text-xl ${tone}`}>{fmt(Number(value))} ج.م</p>
                   </div>
                 ))}
               </CardContent>
@@ -679,51 +680,55 @@ export const RepairAdminDashboard: React.FC = () => {
           ) : null}
 
           <Card className="shadow-sm">
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">طوابير التشغيل</CardTitle>
+            <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
+              <CardTitle className="text-sm md:text-base">طوابير التشغيل</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+            <CardContent className="space-y-3 p-3 pt-0 md:p-6 md:pt-0">
+              <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-3 2xl:grid-cols-5">
                 {queueCards.filter((card) => card.show).map((card) => (
-                  <Link key={card.key} to={card.to} className="block rounded-lg border bg-background p-3 hover:bg-muted/40 transition-colors">
-                    <p className="text-xs text-muted-foreground mb-1">{card.label}</p>
-                    <p className={`text-2xl font-bold tabular-nums ${card.tone}`}>{fmt(card.count)}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{card.hint}</p>
+                  <Link
+                    key={card.key}
+                    to={card.to}
+                    className="block rounded-lg border bg-background p-2.5 transition-colors hover:bg-muted/40 md:p-3"
+                  >
+                    <p className="mb-1 text-[11px] leading-snug text-muted-foreground md:text-xs">{card.label}</p>
+                    <p className={`text-xl font-bold tabular-nums md:text-2xl ${card.tone}`}>{fmt(card.count)}</p>
+                    <p className="mt-1 line-clamp-2 text-[10px] text-muted-foreground md:text-xs">{card.hint}</p>
                   </Link>
                 ))}
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-                <div className="rounded-lg border bg-background p-3">
-                  <p className="text-xs text-muted-foreground mb-1">نسبة النجاح العامة</p>
-                  <div className="flex items-center justify-between mb-2 gap-2 flex-wrap">
+              <div className="grid grid-cols-2 gap-2 text-sm md:gap-3 xl:grid-cols-3">
+                <div className="col-span-2 rounded-lg border bg-background p-2.5 xl:col-span-1 md:p-3">
+                  <p className="mb-1 text-[11px] text-muted-foreground md:text-xs">نسبة النجاح العامة</p>
+                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
                     <span className="font-semibold tabular-nums">{overview.successRate.toFixed(1)}%</span>
-                    <span className="text-xs text-muted-foreground text-left">
+                    <span className="text-[10px] text-muted-foreground text-start md:text-xs">
                       {fmt(overview.deliveredJobs)} تسليم، {fmt(overview.unrepairableJobs)} غير قابلة للإصلاح
                       {' '}
                       (منتهية: {fmt(overview.deliveredJobs + overview.unrepairableJobs)})
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                  <div className="h-2 overflow-hidden rounded-full bg-slate-100">
                     <div
                       className="h-full rounded-full bg-emerald-500"
                       style={{ width: `${Math.min(100, Math.max(0, overview.successRate))}%` }}
                     />
                   </div>
                 </div>
-                <div className="rounded-lg border bg-background p-3">
-                  <p className="text-xs text-muted-foreground mb-1">جاهز للصرف من المخزن</p>
-                  <p className="text-xl font-bold tabular-nums text-sky-700">{fmt(overview.readyToIssueParts)}</p>
-                  <p className="text-xs text-muted-foreground mt-1">قطع وصلت للتوريد وبانتظار الصرف على الطلب.</p>
+                <div className="rounded-lg border bg-background p-2.5 md:p-3">
+                  <p className="mb-1 text-[11px] text-muted-foreground md:text-xs">جاهز للصرف من المخزن</p>
+                  <p className="text-lg font-bold tabular-nums text-sky-700 md:text-xl">{fmt(overview.readyToIssueParts)}</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground md:text-xs">قطع وصلت للتوريد وبانتظار الصرف على الطلب.</p>
                 </div>
                 <Link
                   to={path(canViewParts ? '/repair/parts' : '/repair/admin-orders')}
-                  className="rounded-lg border bg-background p-3 hover:bg-muted/40 transition-colors block"
+                  className="block rounded-lg border bg-background p-2.5 transition-colors hover:bg-muted/40 md:p-3"
                 >
-                  <p className="text-xs text-muted-foreground mb-1">تنبيه المخزون</p>
-                  <p className={`text-xl font-bold tabular-nums ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
+                  <p className="mb-1 text-[11px] text-muted-foreground md:text-xs">تنبيه المخزون</p>
+                  <p className={`text-lg font-bold tabular-nums md:text-xl ${overview.lowStockCount > 0 ? 'text-amber-600' : 'text-emerald-600'}`}>
                     {fmt(overview.lowStockCount)}
                   </p>
-                  <p className="text-xs text-muted-foreground mt-1">أصناف تحت الحد الأدنى عبر الفروع المسموحة.</p>
+                  <p className="mt-1 text-[10px] text-muted-foreground md:text-xs">أصناف تحت الحد الأدنى عبر الفروع المسموحة.</p>
                 </Link>
               </div>
             </CardContent>
@@ -785,10 +790,10 @@ export const RepairAdminDashboard: React.FC = () => {
             </CardContent>
           </Card>
 
-          <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-4">
             <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">التوريد والمخزون</CardTitle>
+              <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
+                <CardTitle className="text-sm md:text-base">التوريد والمخزون</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-2">
@@ -837,8 +842,8 @@ export const RepairAdminDashboard: React.FC = () => {
             </Card>
 
             <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">العملاء والعهدة والاستبدال</CardTitle>
+              <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
+                <CardTitle className="text-sm md:text-base">العملاء والعهدة والاستبدال</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <p className="text-xs text-muted-foreground">
@@ -870,8 +875,8 @@ export const RepairAdminDashboard: React.FC = () => {
             </Card>
 
             <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">الخزينة والإقفال الشهري</CardTitle>
+              <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
+                <CardTitle className="text-sm md:text-base">الخزينة والإقفال الشهري</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-2">
@@ -907,8 +912,8 @@ export const RepairAdminDashboard: React.FC = () => {
             </Card>
 
             <Card className="shadow-sm">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base">الجودة والأداء</CardTitle>
+              <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
+                <CardTitle className="text-sm md:text-base">الجودة والأداء</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 text-sm">
                 <div className="grid grid-cols-2 gap-2">
@@ -944,11 +949,11 @@ export const RepairAdminDashboard: React.FC = () => {
             </Card>
           </div>
 
-          <div className="grid grid-cols-1 xl:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
             {rankedCards.map((card) => (
               <Card key={card.branch.id} className="shadow-sm">
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between gap-2 flex-wrap">
+                <CardHeader className="p-3 md:p-6">
+                  <CardTitle className="flex flex-wrap items-center justify-between gap-2 text-sm md:text-base">
                     <div className="flex items-center gap-2">
                       <span>{card.branch.name}</span>
                       {card.branch.isMain && <Badge>الفرع الرئيسي</Badge>}

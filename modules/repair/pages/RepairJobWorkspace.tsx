@@ -56,6 +56,7 @@ import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { canManageRepairWorkshopWork } from '../lib/repairJobIntake';
+import { resolveManufacturerWarrantyScope } from '../lib/repairManufacturerWarranty';
 import { resolveRepairSettings, accessoryLabelsFromIds } from '../config/repairSettings';
 import {
   resolveNextStatusForAction,
@@ -100,7 +101,7 @@ const inferProducts = (job: RepairJob | null): RepairJobProduct[] => {
     accessories: String(job.accessories || ''),
     diagnosis: job.problemDescription || '',
     technicianDiagnosis: '',
-    inWarranty: (job.warranty || 'none') !== 'none',
+    inWarranty: false,
   }];
 };
 
@@ -392,9 +393,7 @@ export const RepairJobWorkspace: React.FC = () => {
       warranty: normalizedProducts.some((item) => item.inWarranty)
         ? 'none'
         : (job.warranty || repairSettings.defaults.defaultWarranty),
-      warrantyScope: normalizedProducts.some((item) => item.inWarranty)
-        ? 'manufacturer' as const
-        : 'none' as const,
+      warrantyScope: resolveManufacturerWarrantyScope(normalizedProducts),
     };
     const hasDiagnosis = normalizedProducts.some((item) => String(item.technicianDiagnosis || '').trim());
     const hasService = normalizedProducts.some((item) => (item.serviceIds || []).some((id) => String(id || '').trim()));

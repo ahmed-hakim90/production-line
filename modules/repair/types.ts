@@ -51,7 +51,7 @@ export const REPAIR_JOB_STATUS_COLORS: Record<string, string> = {
 export type RepairWarranty = 'none' | '3months' | '6months';
 export type RepairJobPriority = 'normal' | 'urgent';
 /** ضمان الجهاز عند الاستلام (مختلف عن ضمان الورشة بعد الإصلاح) */
-export type RepairWarrantyScope = 'none' | 'manufacturer' | 'in_store';
+export type RepairWarrantyScope = 'none' | 'partial' | 'manufacturer' | 'in_store';
 export type RepairApprovalStatus = 'not_required' | 'pending' | 'approved' | 'rejected';
 export type RepairPartTransactionType = 'IN' | 'OUT';
 export type RepairTreasuryEntryType = 'OPENING' | 'INCOME' | 'EXPENSE' | 'TRANSFER_OUT' | 'TRANSFER_IN' | 'CLOSING';
@@ -147,6 +147,11 @@ export interface RepairJobFinancial {
   paymentStatus: 'unpaid' | 'partial' | 'paid';
   /** warranty = manufacturer warranty close (full allowance, zero net collection). */
   settlementType?: RepairSettlementType;
+  /** none | partial | manufacturer — mirrored from job at prepare. */
+  warrantyScope?: RepairWarrantyScope;
+  warrantyServiceGross?: number;
+  warrantyPartsGross?: number;
+  warrantyGrossAmount?: number;
   warrantyPartsActualCost?: number;
   warrantyServiceInternalCost?: number;
   warrantyActualCost?: number;
@@ -183,6 +188,10 @@ export interface RepairPaymentAuthorization {
   taxAmount?: number;
   /** warranty = full manufacturer allowance; collect is forbidden. */
   settlementType?: RepairSettlementType;
+  warrantyScope?: RepairWarrantyScope;
+  warrantyServiceGross?: number;
+  warrantyPartsGross?: number;
+  warrantyGrossAmount?: number;
   warrantyPartsActualCost?: number;
   warrantyServiceInternalCost?: number;
   warrantyActualCost?: number;

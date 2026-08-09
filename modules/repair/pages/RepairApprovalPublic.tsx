@@ -177,15 +177,22 @@ export const RepairApprovalPublic: React.FC = () => {
 
                 {estimate.products.length > 0 ? (
                   <div className="rounded-lg border bg-white p-3 space-y-2">
-                    <div className="font-medium">بنود المنتجات / الخدمات</div>
+                    <div className="font-medium">تفصيل المنتجات</div>
                     <div className="divide-y rounded-md border">
                       {estimate.products.map((row, idx) => (
                         <div key={`${row.name}-${idx}`} className="flex items-center justify-between gap-3 px-3 py-2">
-                          <span>
-                            {row.name}
-                            <span className="text-muted-foreground text-xs ms-1">×{row.quantity}</span>
+                          <div className="min-w-0">
+                            <div>
+                              {row.name}
+                              <span className="text-muted-foreground text-xs ms-1">×{row.quantity}</span>
+                            </div>
+                            <div className={`text-xs font-medium ${row.inWarranty ? 'text-sky-700' : 'text-muted-foreground'}`}>
+                              {row.warrantyLabel || (row.inWarranty ? 'داخل الضمان' : 'بدون ضمان')}
+                            </div>
+                          </div>
+                          <span className="tabular-nums font-medium">
+                            {row.inWarranty ? 'مجاني' : fmtMoney(row.lineCost)}
                           </span>
-                          <span className="tabular-nums font-medium">{fmtMoney(row.lineCost)}</span>
                         </div>
                       ))}
                     </div>
@@ -193,7 +200,7 @@ export const RepairApprovalPublic: React.FC = () => {
                 ) : null}
 
                 <div className="rounded-lg border bg-slate-50 p-3 space-y-2">
-                  <div className="font-medium">ملخص التكلفة</div>
+                  <div className="font-medium">تفصيل الحساب</div>
                   <div className="flex justify-between gap-2 text-xs text-muted-foreground">
                     <span>إذن الدفع</span>
                     <span className="tabular-nums">{estimate.authorizationNo} · إصدار {estimate.revision}</span>
@@ -216,10 +223,16 @@ export const RepairApprovalPublic: React.FC = () => {
                       <span className="tabular-nums">{fmtMoney(estimate.serviceOnlyCost)}</span>
                     </div>
                   ) : null}
-                  {estimate.productsCost > 0 ? (
+                  {(estimate.billableProductsCost ?? estimate.productsCost) > 0 ? (
                     <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">بنود المنتجات</span>
-                      <span className="tabular-nums">{fmtMoney(estimate.productsCost)}</span>
+                      <span className="text-muted-foreground">منتجات بدون ضمان</span>
+                      <span className="tabular-nums">{fmtMoney(estimate.billableProductsCost ?? estimate.productsCost)}</span>
+                    </div>
+                  ) : null}
+                  {Number(estimate.warrantyProductsCost || 0) > 0 ? (
+                    <div className="flex justify-between gap-2 text-sky-800">
+                      <span>منتجات داخل الضمان</span>
+                      <span className="tabular-nums">مجاني</span>
                     </div>
                   ) : null}
                   {estimate.discountAmount > 0 ? (
@@ -229,7 +242,7 @@ export const RepairApprovalPublic: React.FC = () => {
                     </div>
                   ) : null}
                   <div className="flex justify-between gap-2 border-t pt-2 text-base">
-                    <span className="font-bold">إجمالي التقدير</span>
+                    <span className="font-bold">صافي المطلوب</span>
                     <span className="font-bold tabular-nums text-primary">{fmtMoney(estimate.estimatedTotal)}</span>
                   </div>
                 </div>

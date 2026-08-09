@@ -11,6 +11,10 @@ import {
   shouldShowRepairPrintCosts,
   stripRepairProductsToIntake,
 } from '../modules/repair/lib/repairJobIntake';
+import {
+  manufacturerWarrantyLineLabel,
+  manufacturerWarrantyScopeLabel,
+} from '../modules/repair/lib/repairManufacturerWarranty';
 import type { RepairJob, RepairJobProduct } from '../modules/repair/types';
 
 const baseJob = {
@@ -42,6 +46,26 @@ const withProducts = resolveRepairJobPrintProducts(baseJob, [
 ]);
 assert.equal(withProducts.length, 2);
 assert.equal(withProducts[1].inWarranty, true);
+assert.equal(manufacturerWarrantyLineLabel(withProducts[0].inWarranty), 'بدون ضمان');
+assert.equal(manufacturerWarrantyLineLabel(withProducts[1].inWarranty), 'داخل الضمان');
+assert.equal(
+  manufacturerWarrantyScopeLabel('partial', withProducts),
+  'ضمان مختلط',
+);
+assert.equal(
+  manufacturerWarrantyScopeLabel(undefined, [
+    { inWarranty: true },
+    { inWarranty: true },
+  ]),
+  'داخل الضمان',
+);
+
+// Legacy jobs without jobProducts must not infer manufacturer warranty from workshop duration.
+const legacyWorkshop = resolveRepairJobPrintProducts({
+  ...baseJob,
+  warranty: '6months',
+});
+assert.equal(legacyWorkshop[0].inWarranty, false);
 
 const fromJobProducts = resolveRepairJobPrintProducts({
   ...baseJob,

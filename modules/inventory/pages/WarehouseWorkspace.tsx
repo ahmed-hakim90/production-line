@@ -60,27 +60,8 @@ function roleActions(
 ): ActionLink[] {
   switch (role) {
     case 'spare_parts_central':
+      // Primary ops live in «تحكم المخزن» — keep inquiry/count links here only.
       return [
-        {
-          label: 'إذن إضافة (وارد)',
-          path: `/inventory/movements?warehouseId=${encodeURIComponent(warehouseId)}&movementType=IN`,
-          description: 'إدخال رصيد وارد للمخزن المركزي',
-        },
-        {
-          label: 'إذن صرف للمراكز (تموين)',
-          path: '/inventory/spare-parts-replenishment',
-          description: 'اعتماد / تجهيز / موافقة مسؤول على طلبات المراكز',
-        },
-        {
-          label: 'أرصدة المراكز',
-          path: '/inventory/spare-parts-center-stock',
-          description: 'عرض الكمية ومكانها في كل مركز صيانة',
-        },
-        {
-          label: 'سحب من المراكز',
-          path: '/inventory/spare-parts-recall',
-          description: 'طلب إرجاع قطع من مركز إلى الرئيسي',
-        },
         {
           label: 'أرصدة أول المدة / الجرد',
           path: `/inventory/counts?warehouseId=${encodeURIComponent(warehouseId)}`,
@@ -92,9 +73,19 @@ function roleActions(
           description: 'أرصدة مخزن قطع الغيار المركزي',
         },
         {
+          label: 'كارت الصنف',
+          path: '/inventory/item-card',
+          description: 'تتبع حركة صنف عبر المخزن',
+        },
+        {
           label: 'الحركات',
           path: `/inventory/transactions?warehouseId=${encodeURIComponent(warehouseId)}`,
           description: 'أحدث حركات الصرف والوارد',
+        },
+        {
+          label: 'مواقع الأرفف',
+          path: `/inventory/locations?warehouseId=${encodeURIComponent(warehouseId)}`,
+          description: 'أرفف ولوكيشنات المخزن المركزي',
         },
       ];
     case 'maintenance_center':
@@ -354,11 +345,27 @@ export const WarehouseWorkspace: React.FC = () => {
           ))
           .slice(0, 15),
       );
-      setReplenishments(
-        spr.filter(
+      {
+        const pendingOrder: Record<string, number> = {
+          submitted: 0,
+          approved: 1,
+          prepared: 2,
+          responsible_approved: 3,
+        };
+        const scoped = spr.filter(
           (r) => r.fromWarehouseId === id || r.toWarehouseId === id,
-        ).slice(0, 15),
-      );
+        );
+        const sorted = [...scoped].sort((a, b) => {
+          const aPending = a.status in pendingOrder;
+          const bPending = b.status in pendingOrder;
+          if (aPending !== bPending) return aPending ? -1 : 1;
+          if (aPending && bPending) {
+            return (pendingOrder[a.status] ?? 9) - (pendingOrder[b.status] ?? 9);
+          }
+          return 0;
+        });
+        setReplenishments(sorted.slice(0, 20));
+      }
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'تعذر تحميل مساحة المخزن.');
     } finally {
@@ -429,10 +436,20 @@ export const WarehouseWorkspace: React.FC = () => {
     [countBalances],
   );
   const totalSkus = countBalances.length;
+  const awaitingApprove = replenishments.filter((r) => r.status === 'submitted').length;
+  const awaitingPrepare = replenishments.filter((r) => r.status === 'approved').length;
+  const awaitingResponsible = replenishments.filter((r) => r.status === 'prepared').length;
   const awaitingReceipt = replenishments.filter((r) => r.status === 'responsible_approved').length;
-  const awaitingPrepare = replenishments.filter(
-    (r) => r.status === 'approved' || r.status === 'submitted',
-  ).length;
+  const centralWorkQueue = awaitingApprove + awaitingPrepare + awaitingResponsible;
+  const pendingReplenishments = useMemo(
+    () => replenishments.filter((r) => (
+      r.status === 'submitted'
+      || r.status === 'approved'
+      || r.status === 'prepared'
+      || r.status === 'responsible_approved'
+    )).slice(0, 8),
+    [replenishments],
+  );
 
   if (!canEnterPage) {
     return (
@@ -499,18 +516,56 @@ export const WarehouseWorkspace: React.FC = () => {
         </Card>
         <Card title="تحت الحد الأدنى">
           <div className="text-2xl font-black">{lowStock}</div>
+          {isCentralSparePartsWarehouse && warehouse.id ? (
+            <Link
+              className="mt-1 inline-block text-xs font-bold text-primary underline"
+              to={withTenantPath(
+                tenantSlug,
+                `/inventory/balances?warehouseId=${encodeURIComponent(warehouse.id)}`,
+              )}
+            >
+              عرض الأرصدة
+            </Link>
+          ) : null}
         </Card>
-        <Card title="تحويلات معلّقة">
-          <div className="text-2xl font-black">{pendingTransfers.length}</div>
-        </Card>
-        <Card title="طلبات تموين نشطة">
-          <div className="text-2xl font-black">
-            {awaitingPrepare + awaitingReceipt}
-          </div>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            بانتظار معالجة {awaitingPrepare} · بانتظار استلام {awaitingReceipt}
-          </p>
-        </Card>
+        {isCentralSparePartsWarehouse ? (
+          <>
+            <Card title="بانتظارك (تموين)">
+              <div className="text-2xl font-black text-amber-700">{centralWorkQueue}</div>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                اعتماد {awaitingApprove} · تجهيز {awaitingPrepare} · موافقة {awaitingResponsible}
+              </p>
+              {canViewReplenishment ? (
+                <Link
+                  className="mt-1 inline-block text-xs font-bold text-primary underline"
+                  to={withTenantPath(tenantSlug, '/inventory/spare-parts-replenishment')}
+                >
+                  فتح قائمة التموين
+                </Link>
+              ) : null}
+            </Card>
+            <Card title="بانتظار استلام المراكز">
+              <div className="text-2xl font-black">{awaitingReceipt}</div>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                معتمد من المسؤول — ينتظر تأكيد المركز
+              </p>
+            </Card>
+          </>
+        ) : (
+          <>
+            <Card title="تحويلات معلّقة">
+              <div className="text-2xl font-black">{pendingTransfers.length}</div>
+            </Card>
+            <Card title="طلبات تموين نشطة">
+              <div className="text-2xl font-black">
+                {centralWorkQueue + awaitingReceipt}
+              </div>
+              <p className="text-xs text-[var(--color-text-muted)] mt-1">
+                بانتظار معالجة {centralWorkQueue} · بانتظار استلام {awaitingReceipt}
+              </p>
+            </Card>
+          </>
+        )}
       </div>
 
       {(showAddPart || showCountImport || isCentralSparePartsWarehouse) ? (
@@ -586,39 +641,50 @@ export const WarehouseWorkspace: React.FC = () => {
         </Card>
       ) : null}
 
-      <Card title="إجراءات هذا المخزن">
-        <div className="grid gap-2 md:grid-cols-2">
-          {actions.map((action) => (
-            <Link
-              key={action.path}
-              to={withTenantPath(tenantSlug, action.path)}
-              className="rounded-xl border border-[var(--color-border)] p-3 hover:bg-[var(--color-surface-hover)]"
-            >
-              <div className="font-bold text-sm">{action.label}</div>
-              <div className="text-xs text-[var(--color-text-muted)] mt-1">{action.description}</div>
-            </Link>
-          ))}
-        </div>
-      </Card>
+      {actions.length > 0 ? (
+        <Card title={isCentralSparePartsWarehouse ? 'استعلامات وجرد' : 'إجراءات هذا المخزن'}>
+          <div className="grid gap-2 md:grid-cols-2">
+            {actions.map((action) => (
+              <Link
+                key={action.path}
+                to={withTenantPath(tenantSlug, action.path)}
+                className="rounded-xl border border-[var(--color-border)] p-3 hover:bg-[var(--color-surface-hover)]"
+              >
+                <div className="font-bold text-sm">{action.label}</div>
+                <div className="text-xs text-[var(--color-text-muted)] mt-1">{action.description}</div>
+              </Link>
+            ))}
+          </div>
+        </Card>
+      ) : null}
 
       {(warehouse.warehouseRole === 'spare_parts_central'
         || warehouse.warehouseRole === 'maintenance_center')
-        && replenishments.length > 0 ? (
-        <Card title="طلبات تموين قطع الغيار">
+        && (isCentralSparePartsWarehouse ? pendingReplenishments.length > 0 : replenishments.length > 0) ? (
+        <Card title={isCentralSparePartsWarehouse ? 'طابور تموين يحتاج إجراء' : 'طلبات تموين قطع الغيار'}>
           <div className="space-y-2">
-            {replenishments.map((row) => (
-              <div key={row.id} className="flex flex-wrap justify-between gap-2 text-sm border-b border-[var(--color-border)]/50 py-2">
-                <div>
-                  <div className="font-semibold">{row.referenceNo}</div>
-                  <div className="text-xs text-[var(--color-text-muted)]">
-                    {row.fromWarehouseName} → {row.toWarehouseName}
+            {(isCentralSparePartsWarehouse ? pendingReplenishments : replenishments).map((row) => {
+              const path = warehouse.warehouseRole === 'maintenance_center'
+                ? '/repair/parts-replenishment'
+                : `/inventory/spare-parts-replenishment?requestId=${encodeURIComponent(String(row.id || ''))}`;
+              return (
+                <Link
+                  key={row.id}
+                  to={withTenantPath(tenantSlug, path)}
+                  className="flex flex-wrap justify-between gap-2 text-sm border-b border-[var(--color-border)]/50 py-2 hover:bg-[var(--color-surface-hover)] rounded-lg px-1"
+                >
+                  <div>
+                    <div className="font-semibold">{row.referenceNo}</div>
+                    <div className="text-xs text-[var(--color-text-muted)]">
+                      {row.fromWarehouseName} → {row.toWarehouseName}
+                    </div>
                   </div>
-                </div>
-                <div className="text-xs font-bold">
-                  {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[row.status]}
-                </div>
-              </div>
-            ))}
+                  <div className="text-xs font-bold text-amber-800">
+                    {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[row.status]}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
           <div className="mt-3">
             <Link

@@ -229,7 +229,10 @@ const saveTechnical = async (actor: Actor, data: Record<string, unknown>) => {
   }
   const products = normalizeProducts(data.jobProducts, job.jobProducts);
   const at = new Date().toISOString();
-  const warrantyScope = products.some((row) => Boolean(row.inWarranty)) ? 'manufacturer' : 'none';
+  const warrantyCount = products.filter((row) => Boolean(row.inWarranty)).length;
+  const warrantyScope = warrantyCount === 0
+    ? 'none'
+    : (warrantyCount === products.length ? 'manufacturer' : 'partial');
   const hasDiagnosis = products.some((row) => String(row.technicianDiagnosis || '').trim());
   const hasService = products.some((row) =>
     Array.isArray(row.serviceIds) && row.serviceIds.some((id) => String(id || '').trim()),
@@ -249,7 +252,7 @@ const saveTechnical = async (actor: Actor, data: Record<string, unknown>) => {
     jobProducts: products,
     isServiceOnly: Boolean(data.isServiceOnly),
     warrantyScope,
-    ...(warrantyScope === 'manufacturer' ? { warranty: 'none' } : {}),
+    ...(warrantyScope === 'manufacturer' || warrantyScope === 'partial' ? { warranty: 'none' } : {}),
     updatedAt: at,
   };
   if (nextStatus && nextStatus !== prevStatus) {

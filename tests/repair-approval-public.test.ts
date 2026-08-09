@@ -74,4 +74,25 @@ const baseJob = {
   assert.ok(view.problemDescription.length <= 1000);
 }
 
+{
+  const view = buildPublicRepairApprovalView({
+    ...baseJob,
+    partsUsed: [],
+    laborCost: 0,
+    estimatedCost: 0,
+    jobProducts: [
+      { productName: 'منتج ضمان', quantity: 1, finalCost: 500, inWarranty: true },
+      { productName: 'منتج مدفوع', quantity: 1, finalCost: 200, inWarranty: false },
+    ],
+  });
+  assert.equal(view.products.length, 2);
+  assert.equal(view.products[0]?.warrantyLabel, 'داخل الضمان');
+  assert.equal(view.products[0]?.lineCost, 0);
+  assert.equal(view.products[1]?.warrantyLabel, 'بدون ضمان');
+  assert.equal(view.products[1]?.lineCost, 200);
+  assert.equal(view.billableProductsCost, 200);
+  assert.equal(view.warrantyProductsCost, 500);
+  assert.equal(view.estimatedTotal, 200);
+}
+
 console.log('repair-approval-public.test.ts: ok');

@@ -11,7 +11,8 @@ const money = (value: unknown): number => {
 };
 
 const isWarrantyJob = (job: Row): boolean => {
-  if (String(job.warrantyScope || '') === 'manufacturer') return true;
+  const scope = String(job.warrantyScope || '');
+  if (scope === 'manufacturer' || scope === 'partial') return true;
   return (Array.isArray(job.jobProducts) ? job.jobProducts : [])
     .some((raw) => Boolean((raw as Row).inWarranty));
 };

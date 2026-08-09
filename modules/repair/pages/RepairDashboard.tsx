@@ -29,7 +29,6 @@ import {
   REPAIR_JOB_STATUS_LABELS,
   type FirestoreUserWithRepair,
   type RepairBranch,
-  type RepairJob,
   type RepairJobStatus,
 } from '../types';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
@@ -182,8 +181,60 @@ const RepairOperationalDashboard: React.FC = () => {
   }, [jobs]);
 
 
+  const unassignedCount = jobs.filter((job) => !job.technicianId && !isDeliveredStatus(job.status)).length;
+  const waitingCustomerCount = jobs.filter((job) => ['estimate_ready', 'waiting_approval'].includes(job.status)).length;
+  const waitingPartsCount = jobs.filter((job) => job.status === 'waiting_parts').length;
+  const inWorkshopCount = jobs.filter((job) => ['diagnosing', 'repairing', 'testing'].includes(job.status)).length;
+
+  const kpiCards = [
+    { key: 'open', label: 'طلبات مفتوحة', value: kpis.openJobs, tone: '' },
+    {
+      key: 'delayed',
+      label: 'متأخرة عن الموعد',
+      value: delayedCount,
+      tone: 'border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20',
+      titleTone: 'text-amber-900 dark:text-amber-200',
+      valueTone: 'text-amber-800 dark:text-amber-200',
+    },
+    { key: 'ready', label: 'جاهز للدفع/التسليم', value: kpis.pendingDelivery, tone: '' },
+    { key: 'unassigned', label: 'غير مسند', value: unassignedCount, tone: '' },
+    {
+      key: 'waiting_customer',
+      label: 'انتظار العميل',
+      value: waitingCustomerCount,
+      tone: '',
+      valueTone: 'text-violet-700 dark:text-violet-300',
+    },
+    {
+      key: 'waiting_parts',
+      label: 'انتظار قطع',
+      value: waitingPartsCount,
+      tone: '',
+      valueTone: 'text-orange-700 dark:text-orange-300',
+    },
+    {
+      key: 'workshop',
+      label: 'قيد الإصلاح/الاختبار',
+      value: inWorkshopCount,
+      tone: '',
+      valueTone: 'text-sky-700 dark:text-sky-300',
+    },
+  ] as const;
+
+  const metricCards = [
+    { key: 'success', label: 'نسبة إنهاء الطلبات', value: `${kpis.successRate.toFixed(1)}%` },
+    { key: 'total', label: 'إجمالي الطلبات', value: num(jobs.length) },
+    { key: 'avg', label: 'متوسط مدة الإصلاح (ساعة)', value: avgResolutionHours.toFixed(1) },
+    {
+      key: 'warranty',
+      label: 'تكلفة قطع تحت ضمان',
+      value: `${num(warrantyPartsCost)} ج.م`,
+      hint: 'من تكلفة الصرف الفعلية (ليس سعر البيع)',
+    },
+  ] as const;
+
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6">
+    <div className="erp-ds-clean space-y-3 p-3 sm:p-4 md:space-y-4 md:p-6">
       <PageHeader
         title="لوحة الصيانة"
         subtitle="لوحة تشغيل الاستقبال: الوارد والإسناد والانتظار والإصلاح والتحصيل والتسليم."
@@ -194,115 +245,105 @@ const RepairOperationalDashboard: React.FC = () => {
           onClick: () => navigate(withTenantPath(tenantSlug, '/repair/jobs/new')),
         } : undefined}
         actions={(
-          <div className="flex items-center gap-2 flex-wrap">
+          <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             <Button
               variant="secondary"
               type="button"
               size="sm"
+              className="shrink-0"
               onClick={() => {
                 void refetchJobs();
               }}
             >
               تحديث
             </Button>
-            <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
+            <Link to={withTenantPath(tenantSlug, '/repair/call-center')} className="shrink-0">
               <Button variant="outline" size="sm">مركز الاتصال</Button>
             </Link>
-            <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
+            <Link to={withTenantPath(tenantSlug, '/repair/jobs')} className="shrink-0">
               <Button variant="outline" size="sm">عرض الطلبات</Button>
             </Link>
             {(can('repair.customerRequests.view') || can('repair.customerRequests.assign') || can('repair.customerRequests.receive')) && (
-              <Link to={withTenantPath(tenantSlug, '/repair/customer-requests')}>
+              <Link to={withTenantPath(tenantSlug, '/repair/customer-requests')} className="shrink-0">
                 <Button variant="outline" size="sm">طلبات العملاء</Button>
               </Link>
             )}
             {(can('repair.custody.view') || can('repair.custody.handover')) && (
-              <Link to={withTenantPath(tenantSlug, '/repair/custody-stock')}>
+              <Link to={withTenantPath(tenantSlug, '/repair/custody-stock')} className="shrink-0">
                 <Button variant="outline" size="sm">العهدة</Button>
               </Link>
             )}
             {(can('repair.replacements.view') || can('repair.replacements.approve') || can('repair.replacements.deliver')) && (
-              <Link to={withTenantPath(tenantSlug, '/repair/replacements')}>
+              <Link to={withTenantPath(tenantSlug, '/repair/replacements')} className="shrink-0">
                 <Button variant="outline" size="sm">الاستبدال</Button>
               </Link>
             )}
-            <Link to={withTenantPath(tenantSlug, '/repair/parts')}>
+            <Link to={withTenantPath(tenantSlug, '/repair/parts')} className="shrink-0">
               <Button variant="outline" size="sm">قطع الغيار</Button>
             </Link>
           </div>
         )}
       />
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 xl:grid-cols-8 gap-3">
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">طلبات مفتوحة</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{num(kpis.openJobs)}</p></CardContent>
-        </Card>
-        <Card className="border-amber-200 bg-amber-50/50">
-          <CardHeader><CardTitle className="text-sm text-amber-900">متأخرة عن الموعد</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-amber-800">{num(delayedCount)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">جاهز للدفع/التسليم</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{num(kpis.pendingDelivery)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">غير مسند</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold">{num(jobs.filter((job) => !job.technicianId && !isDeliveredStatus(job.status)).length)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">انتظار العميل</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-violet-700">{num(jobs.filter((job) => ['estimate_ready', 'waiting_approval'].includes(job.status)).length)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">انتظار قطع</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-orange-700">{num(jobs.filter((job) => job.status === 'waiting_parts').length)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">قيد الإصلاح/الاختبار</CardTitle></CardHeader>
-          <CardContent><p className="text-3xl font-bold text-sky-700">{num(jobs.filter((job) => ['diagnosing', 'repairing', 'testing'].includes(job.status)).length)}</p></CardContent>
-        </Card>
+
+      {/* KPI cards: 2 per row on mobile/tablet, denser on desktop */}
+      <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-4 xl:grid-cols-7">
+        {kpiCards.map((card) => (
+          <Card key={card.key} className={`shadow-sm ${card.tone}`}>
+            <CardHeader className="space-y-0 p-3 pb-1 md:p-4 md:pb-2">
+              <CardTitle className={`text-[11px] leading-snug text-muted-foreground sm:text-xs md:text-sm ${'titleTone' in card ? card.titleTone : ''}`}>
+                {card.label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
+              <p className={`text-2xl font-bold tabular-nums md:text-3xl ${'valueTone' in card ? card.valueTone : ''}`}>
+                {num(card.value)}
+              </p>
+            </CardContent>
+          </Card>
+        ))}
       </div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">نسبة إنهاء الطلبات</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold">{kpis.successRate.toFixed(1)}%</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">إجمالي الطلبات</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold">{num(jobs.length)}</p></CardContent>
-        </Card>
-        <Card>
-          <CardHeader><CardTitle className="text-sm text-muted-foreground">متوسط مدة الإصلاح (ساعة)</CardTitle></CardHeader>
-          <CardContent><p className="text-2xl font-semibold">{avgResolutionHours.toFixed(1)}</p></CardContent>
-        </Card>
-        <Card className="md:col-span-3 lg:col-span-1">
-          <CardHeader>
-            <CardTitle className="text-sm text-muted-foreground">تكلفة قطع تحت ضمان</CardTitle>
+
+      {/* Summary metrics: 2 per row until large screens */}
+      <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-4">
+        {metricCards.map((card) => (
+          <Card key={card.key} className="shadow-sm">
+            <CardHeader className="space-y-0 p-3 pb-1 md:p-4 md:pb-2">
+              <CardTitle className="text-[11px] leading-snug text-muted-foreground sm:text-xs md:text-sm">
+                {card.label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
+              <p className="text-xl font-semibold tabular-nums md:text-2xl">{card.value}</p>
+              {'hint' in card && card.hint ? (
+                <p className="mt-1 text-[10px] leading-snug text-muted-foreground md:text-xs">{card.hint}</p>
+              ) : null}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <Card className="shadow-sm">
+          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
+            <CardTitle className="text-sm md:text-base">عبء الفنيين (طلبات مفتوحة)</CardTitle>
           </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold tabular-nums">{num(warrantyPartsCost)} ج.م</p>
-            <p className="mt-1 text-xs text-muted-foreground">من تكلفة الصرف الفعلية (ليس سعر البيع)</p>
-          </CardContent>
-        </Card>
-      </div>
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
-        <Card>
-          <CardHeader><CardTitle>عبء الفنيين (طلبات مفتوحة)</CardTitle></CardHeader>
-          <CardContent className="h-64 min-w-0">
+          <CardContent className="h-56 min-w-0 px-2 pb-3 md:h-64 md:px-6 md:pb-6">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={workloadRows} layout="vertical" margin={{ left: 8 }}>
+              <BarChart data={workloadRows} layout="vertical" margin={{ left: 4, right: 8 }}>
                 <CartesianGrid strokeDasharray="3 3" />
                 <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="id" width={88} tick={{ fontSize: 11 }} />
+                <YAxis type="category" dataKey="id" width={72} tick={{ fontSize: 10 }} />
                 <Tooltip formatter={(v: number) => num(v)} />
                 <Bar dataKey="count" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
-        <Card>
-          <CardHeader><CardTitle>أكثر الموديلات ظهورًا في الورشة</CardTitle></CardHeader>
-          <CardContent className="h-64 min-w-0">
+        <Card className="shadow-sm">
+          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
+            <CardTitle className="text-sm md:text-base">أكثر الموديلات ظهورًا في الورشة</CardTitle>
+          </CardHeader>
+          <CardContent className="h-56 min-w-0 px-2 pb-3 md:h-64 md:px-6 md:pb-6">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={topModels}>
                 <CartesianGrid strokeDasharray="3 3" />
@@ -315,13 +356,16 @@ const RepairOperationalDashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
-      <div className="grid grid-cols-1 xl:grid-cols-3 gap-3">
-        <Card className="xl:col-span-1">
-          <CardHeader><CardTitle>توزيع حالات الطلبات</CardTitle></CardHeader>
-          <CardContent className="h-72 min-w-0">
+
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+        <Card className="shadow-sm xl:col-span-1">
+          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
+            <CardTitle className="text-sm md:text-base">توزيع حالات الطلبات</CardTitle>
+          </CardHeader>
+          <CardContent className="h-60 min-w-0 px-2 md:h-72 md:px-6">
             <ResponsiveContainer width="100%" height="100%">
               <PieChart>
-                <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={52} outerRadius={88} paddingAngle={2}>
+                <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={44} outerRadius={78} paddingAngle={2}>
                   {statusChartData.map((entry) => (
                     <Cell key={entry.key} fill={repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b'} />
                   ))}
@@ -335,24 +379,26 @@ const RepairOperationalDashboard: React.FC = () => {
               </PieChart>
             </ResponsiveContainer>
           </CardContent>
-          <CardContent className="pt-0">
-            <div className="flex flex-wrap gap-2">
+          <CardContent className="px-3 pb-3 pt-0 md:px-6 md:pb-6">
+            <div className="flex flex-wrap gap-1.5 md:gap-2">
               {statusChartData.map((entry) => (
-                <Badge key={entry.key} variant="outline" className="gap-1">
-                  <span className="inline-block w-2 h-2 rounded-full" style={{ background: repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b' }} />
+                <Badge key={entry.key} variant="outline" className="gap-1 text-[10px] md:text-xs">
+                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b' }} />
                   {entry.name}: {num(entry.value)}
                 </Badge>
               ))}
             </div>
           </CardContent>
         </Card>
-        <Card className="xl:col-span-2">
-          <CardHeader><CardTitle>اتجاه الطلبات اليومية (آخر 14 يوم)</CardTitle></CardHeader>
-          <CardContent className="h-72 min-w-0">
+        <Card className="shadow-sm xl:col-span-2">
+          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
+            <CardTitle className="text-sm md:text-base">اتجاه الطلبات اليومية (آخر 14 يوم)</CardTitle>
+          </CardHeader>
+          <CardContent className="h-60 min-w-0 px-2 pb-3 md:h-72 md:px-6 md:pb-6">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={dailyTrendData}>
                 <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" />
+                <XAxis dataKey="day" tick={{ fontSize: 10 }} />
                 <YAxis allowDecimals={false} />
                 <Tooltip formatter={(value: number) => num(value)} />
                 <Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
@@ -361,20 +407,30 @@ const RepairOperationalDashboard: React.FC = () => {
           </CardContent>
         </Card>
       </div>
-      <Card>
-        <CardHeader><CardTitle>آخر الطلبات</CardTitle></CardHeader>
-        <CardContent className="space-y-2 text-sm">
+
+      <Card className="shadow-sm">
+        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-3 md:p-6">
+          <CardTitle className="text-sm md:text-base">آخر الطلبات</CardTitle>
+          <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
+            <Button variant="outline" size="sm" type="button">الكل</Button>
+          </Link>
+        </CardHeader>
+        <CardContent className="space-y-2 p-3 pt-0 text-sm md:p-6 md:pt-0">
           {recent.map((job) => (
-            <div key={job.id} className="flex items-center justify-between border rounded px-2 py-1">
-              <div className="flex items-center gap-2">
-                <Badge variant="outline">#{job.receiptNo}</Badge>
-                <span>{job.customerName}</span>
+            <Link
+              key={job.id}
+              to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
+              className="flex flex-col gap-1.5 rounded-lg border px-3 py-2 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
+            >
+              <div className="flex min-w-0 items-center gap-2">
+                <Badge variant="outline" className="shrink-0">#{job.receiptNo}</Badge>
+                <span className="truncate font-medium">{job.customerName}</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span>{job.deviceBrand} {job.deviceModel}</span>
+              <div className="flex min-w-0 flex-wrap items-center gap-2">
+                <span className="truncate text-muted-foreground">{job.deviceBrand} {job.deviceModel}</span>
                 <StatusBadge status={job.status} />
               </div>
-            </div>
+            </Link>
           ))}
           {recent.length === 0 && <div className="text-muted-foreground">لا توجد طلبات حتى الآن.</div>}
         </CardContent>

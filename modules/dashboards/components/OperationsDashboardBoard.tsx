@@ -112,6 +112,7 @@ export function OpsDashPanel({
   className,
   bodyClassName,
   tone = 'default',
+  accent,
 }: {
   title?: string;
   action?: React.ReactNode;
@@ -119,12 +120,15 @@ export function OpsDashPanel({
   className?: string;
   bodyClassName?: string;
   tone?: 'default' | 'primary';
+  /** Soft module accent for the title marker (inventory, costs, …). */
+  accent?: 'production' | 'inventory' | 'costs' | 'hr' | 'quality' | 'repair' | 'customers' | 'plans';
 }) {
   return (
     <section
       className={cn(
         'ops-dash-panel',
         tone === 'primary' && 'ops-dash-panel--primary',
+        accent && `ops-dash-panel--tone-${accent}`,
         className,
       )}
     >

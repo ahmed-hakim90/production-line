@@ -36,7 +36,9 @@ const money = (value: unknown) => {
 const hasActiveAuth = (auth: RepairPaymentAuthorization | null | undefined) => {
   if (!auth || String(auth.status || '') === 'void') return false;
   if (isWarrantySettlementAuth(auth)) return true;
-  return money(auth.grossAmount) > 0;
+  if (money(auth.grossAmount) > 0) return true;
+  // Mixed warranty may prepare with billable gross 0 while warranty allowance > 0.
+  return money(auth.warrantyGrossAmount) > 0;
 };
 
 /**

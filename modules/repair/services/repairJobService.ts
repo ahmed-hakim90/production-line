@@ -85,7 +85,7 @@ const normalizeJob = (job: RepairJob): RepairJob => {
         diagnosis: job.problemDescription || '',
         estimatedCost: Number(job.estimatedCost || 0),
         finalCost: Number(job.finalCost || 0),
-        inWarranty: (job.warranty || 'none') !== 'none',
+        inWarranty: false,
       }];
   const lead = normalizedProducts[0];
   const mappedStatus = mapLegacyRepairStatus(job.status);
@@ -390,7 +390,7 @@ export const repairJobService = {
             diagnosis: inputRest.problemDescription || '',
             estimatedCost: 0,
             finalCost: 0,
-            inWarranty: (inputRest.warranty || 'none') !== 'none',
+            inWarranty: false,
           }],
     ).map((item, idx) => ({
       ...item,

@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useAppStore, getProductionReportsRangeCacheKey } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
-import { buildDashboardKPIs, formatNumber, getTodayDateString } from '@/utils/calculations';
+import {
+  buildDashboardKPIs,
+  formatNumber,
+  getReportWaste,
+  getTodayDateString,
+} from '@/utils/calculations';
 import {
   buildDailyProductionCostChart,
   getCurrentMonth,
@@ -13,6 +18,11 @@ import { repairJobService } from '@/modules/repair/services/repairJobService';
 import { resolveRepairSettings } from '@/modules/repair/config/repairSettings';
 import { summarizeRepairJobs } from '@/modules/repair/utils/repairBusinessLogic';
 import { qualityRatesFromTotals } from '../lib/decisionMetrics';
+import {
+  inclusiveDayCount,
+  monthsOverlappingPeriod,
+  type HomeChartsPeriod,
+} from '../lib/homeChartsPeriod';
 import { useOperationalDecisionSnapshot } from './useOperationalDecisionSnapshot';
 import type { ProductionReport } from '@/types';
 
@@ -20,9 +30,11 @@ export type ModuleChartSeries = Array<{ name: string; value: number }>;
 
 export type HomeModuleChartsModel = {
   loading: boolean;
+  loadedAt: number | null;
+  period: HomeChartsPeriod;
   hero: {
     todayProduction: number;
-    monthlyProduction: number;
+    periodProduction: number;
     efficiency: number;
     wasteRatio: number;
     planAchievement: number;
@@ -36,11 +48,19 @@ export type HomeModuleChartsModel = {
     costPerUnit: number;
   }>;
   inventoryBars: ModuleChartSeries;
+  inventoryQty: {
+    wip: number;
+    finished: number;
+    packaging: number;
+  };
   hrBars: ModuleChartSeries;
   hrActiveCount: number;
   qualityBars: ModuleChartSeries;
+  qualitySource: 'work_orders' | 'production' | 'empty';
   repairBars: ModuleChartSeries;
   customersBars: ModuleChartSeries;
+  planStatusBars: ModuleChartSeries;
+  planTotalCount: number;
   costSummary: {
     averageUnitCost: number;
     totalCost: number;
@@ -66,11 +86,17 @@ const EMPTY_CUSTOMER_BARS: ModuleChartSeries = [
   { name: 'صغير', value: 0 },
 ];
 
+export type UseHomeModuleChartsOptions = {
+  period: HomeChartsPeriod;
+  refreshToken?: number;
+};
+
 /**
  * Aggregates real per-module series for the home charts board.
  * Each module panel is gated by the same permission keys used in the menu.
  */
-export function useHomeModuleCharts(): HomeModuleChartsModel {
+export function useHomeModuleCharts(options: UseHomeModuleChartsOptions): HomeModuleChartsModel {
+  const { period, refreshToken = 0 } = options;
   const { can } = usePermission();
   const modules = useMemo(
     () => ({
@@ -85,12 +111,11 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
     [can],
   );
 
-  const storeTodayReports = useAppStore((s) => s.todayReports);
-  const storeMonthlyReports = useAppStore((s) => s.monthlyReports);
   const ensureProductionReportsForRange = useAppStore((s) => s.ensureProductionReportsForRange);
   const fetchAttendanceRecords = useAppStore((s) => s.fetchAttendanceRecords);
   const fetchWorkOrders = useAppStore((s) => s.fetchWorkOrders);
   const fetchEmployees = useAppStore((s) => s.fetchEmployees);
+  const fetchProductionPlans = useAppStore((s) => s.fetchProductionPlans);
   const laborSettings = useAppStore((s) => s.laborSettings);
   const costCenters = useAppStore((s) => s.costCenters);
   const costCenterValues = useAppStore((s) => s.costCenterValues);
@@ -98,12 +123,13 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
   const workOrders = useAppStore((s) => s.workOrders);
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const attendanceRecords = useAppStore((s) => s.attendanceRecords);
+  const productionPlans = useAppStore((s) => s.productionPlans);
   const systemSettings = useAppStore((s) => s.systemSettings);
 
   const { snapshot: decision, loading: decisionLoading } = useOperationalDecisionSnapshot();
 
-  const [todayReports, setTodayReports] = useState<ProductionReport[]>(storeTodayReports);
-  const [monthlyReports, setMonthlyReports] = useState<ProductionReport[]>(storeMonthlyReports);
+  const [todayReports, setTodayReports] = useState<ProductionReport[]>([]);
+  const [periodReports, setPeriodReports] = useState<ProductionReport[]>([]);
   const [inventoryKpi, setInventoryKpi] = useState({ totalLines: 0, totalQty: 0, lowStockCount: 0 });
   const [approvedCost, setApprovedCost] = useState<{
     averageUnitCost: number;
@@ -114,35 +140,36 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
   const [repairBars, setRepairBars] = useState<ModuleChartSeries>([]);
   const [repairOpenCount, setRepairOpenCount] = useState(0);
   const [extraLoading, setExtraLoading] = useState(true);
+  const [loadedAt, setLoadedAt] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
-    const now = new Date();
-    const month = getCurrentMonth();
-    const monthStart = `${month}-01`;
-    const monthEnd = `${month}-${String(new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate()).padStart(2, '0')}`;
     const today = getTodayDateString();
-    const maxAgeMs = 5 * 60 * 1000;
+    const force = refreshToken > 0;
+    const maxAgeMs = force ? 0 : 5 * 60 * 1000;
     const cache = useAppStore.getState().productionReportsRangeCache;
     const kToday = getProductionReportsRangeCacheKey(today, today);
-    const kMonth = getProductionReportsRangeCacheKey(monthStart, monthEnd);
-    if (cache[kToday]) setTodayReports(cache[kToday].rows);
-    if (cache[kMonth]) setMonthlyReports(cache[kMonth].rows);
+    const kPeriod = getProductionReportsRangeCacheKey(period.start, period.end);
+    if (!force && cache[kToday]) setTodayReports(cache[kToday].rows);
+    if (!force && cache[kPeriod]) setPeriodReports(cache[kPeriod].rows);
 
+    setExtraLoading(true);
     const openStatusIds = resolveRepairSettings(systemSettings).workflow.openStatusIds;
+    const costMonth = period.end.slice(0, 7) || getCurrentMonth();
 
     void Promise.all([
-      ensureProductionReportsForRange(today, today, { maxAgeMs }),
-      ensureProductionReportsForRange(monthStart, monthEnd, { maxAgeMs }),
+      ensureProductionReportsForRange(today, today, { maxAgeMs, force }),
+      ensureProductionReportsForRange(period.start, period.end, { maxAgeMs, force }),
       modules.hr
-        ? fetchEmployees({ maxAgeMs }).catch(() => undefined)
+        ? fetchEmployees({ maxAgeMs, force }).catch(() => undefined)
         : Promise.resolve(undefined),
       modules.hr
-        ? fetchAttendanceRecords(today, today).catch(() => undefined)
+        ? fetchAttendanceRecords(period.start, period.end).catch(() => undefined)
         : Promise.resolve(undefined),
       modules.quality
-        ? fetchWorkOrders({ maxAgeMs, silent: true }).catch(() => undefined)
+        ? fetchWorkOrders({ maxAgeMs, silent: true, force }).catch(() => undefined)
         : Promise.resolve(undefined),
+      fetchProductionPlans({ maxAgeMs, force }).catch(() => undefined),
       modules.inventory
         ? stockService.getInventoryKpiSummary().catch(() => ({
             totalLines: 0,
@@ -153,7 +180,7 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
           }))
         : Promise.resolve(null),
       modules.costs
-        ? monthlyProductionCostService.getDashboardMonthlySummary(month).catch(() => null)
+        ? monthlyProductionCostService.getDashboardMonthlySummary(costMonth).catch(() => null)
         : Promise.resolve(null),
       modules.customers
         ? customerService.listAll({ includeInactive: false, max: 500 }).catch(() => [])
@@ -162,10 +189,10 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
         ? repairJobService.listAllBranches().catch(() => [])
         : Promise.resolve([]),
     ])
-      .then(([todayRows, monthRows, , , , inv, cost, customers, repairJobs]) => {
+      .then(([todayRows, periodRows, , , , , inv, cost, customers, repairJobs]) => {
         if (cancelled) return;
         setTodayReports(todayRows);
-        setMonthlyReports(monthRows);
+        setPeriodReports(periodRows);
         if (inv) {
           setInventoryKpi({
             totalLines: inv.totalLines,
@@ -212,10 +239,14 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
           setRepairOpenCount(0);
           setRepairBars([]);
         }
+        setLoadedAt(Date.now());
         setExtraLoading(false);
       })
       .catch(() => {
-        if (!cancelled) setExtraLoading(false);
+        if (!cancelled) {
+          setLoadedAt(Date.now());
+          setExtraLoading(false);
+        }
       });
 
     return () => {
@@ -226,56 +257,87 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
     fetchAttendanceRecords,
     fetchEmployees,
     fetchWorkOrders,
+    fetchProductionPlans,
     modules.inventory,
     modules.costs,
     modules.customers,
     modules.hr,
     modules.quality,
     modules.repair,
+    period.start,
+    period.end,
+    refreshToken,
     systemSettings,
   ]);
 
-  const kpis = useMemo(
-    () => buildDashboardKPIs(todayReports, monthlyReports),
-    [todayReports, monthlyReports],
+  const periodKpis = useMemo(
+    () => buildDashboardKPIs(todayReports, periodReports),
+    [todayReports, periodReports],
   );
 
   const productionDaily = useMemo(() => {
-    const month = getCurrentMonth();
-    if (modules.costs && monthlyReports.length > 0) {
+    if (periodReports.length === 0) return [];
+    if (modules.costs) {
       const hourlyRate = laborSettings?.hourlyRate ?? 0;
-      return buildDailyProductionCostChart(
-        monthlyReports,
-        '',
-        '',
-        month,
-        hourlyRate,
-        costCenters,
-        costCenterValues,
-        costAllocations,
-      ).map((row) => ({
-        day: String(row.day),
-        production: Number(row.production || 0),
-        costPerUnit: Number(row.costPerUnit || 0),
-      }));
+      const months = monthsOverlappingPeriod(period.start, period.end);
+      const merged = months.flatMap((month) =>
+        buildDailyProductionCostChart(
+          periodReports,
+          '',
+          '',
+          month,
+          hourlyRate,
+          costCenters,
+          costCenterValues,
+          costAllocations,
+        ),
+      );
+      const byDate = new Map<string, { production: number; costPerUnit: number; weight: number }>();
+      merged.forEach((row) => {
+        if (row.date < period.start || row.date > period.end) return;
+        const prev = byDate.get(row.date);
+        if (!prev) {
+          byDate.set(row.date, {
+            production: Number(row.production || 0),
+            costPerUnit: Number(row.costPerUnit || 0),
+            weight: Number(row.production || 0),
+          });
+          return;
+        }
+        const prod = prev.production + Number(row.production || 0);
+        const weight = prev.weight + Number(row.production || 0);
+        const costPerUnit = weight > 0
+          ? ((prev.costPerUnit * prev.weight) + (Number(row.costPerUnit || 0) * Number(row.production || 0))) / weight
+          : 0;
+        byDate.set(row.date, { production: prod, costPerUnit, weight });
+      });
+      return Array.from(byDate.entries())
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, row]) => ({
+          day: date.slice(5),
+          production: row.production,
+          costPerUnit: Number(row.costPerUnit.toFixed(2)),
+        }));
     }
     const byDay = new Map<string, number>();
-    monthlyReports.forEach((r) => {
-      const day = String(r.date || '').slice(8, 10);
-      if (!day) return;
+    periodReports.forEach((r) => {
+      const day = String(r.date || '');
+      if (!day || day < period.start || day > period.end) return;
       byDay.set(day, (byDay.get(day) || 0) + Number(r.quantityProduced || 0));
     });
     return Array.from(byDay.entries())
       .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([day, production]) => ({ day, production, costPerUnit: 0 }));
-  }, [modules.costs, monthlyReports, laborSettings, costCenters, costCenterValues, costAllocations]);
+      .map(([day, production]) => ({ day: day.slice(5), production, costPerUnit: 0 }));
+  }, [modules.costs, periodReports, period.start, period.end, laborSettings, costCenters, costCenterValues, costAllocations]);
 
   const costSummary = useMemo<HomeModuleChartsModel['costSummary']>(() => {
     if (!modules.costs) return null;
     const approvedHasData = Boolean(
       approvedCost && (approvedCost.totalCost > 0 || approvedCost.producedQty > 0),
     );
-    if (approvedHasData && approvedCost) {
+    const periodIsCurrentMonth =
+      period.start.startsWith(getCurrentMonth()) && period.end.startsWith(getCurrentMonth());
+    if (approvedHasData && approvedCost && periodIsCurrentMonth) {
       return { ...approvedCost, source: 'approved' };
     }
     const producedQty = productionDaily.reduce((s, d) => s + d.production, 0);
@@ -288,7 +350,7 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
         source: 'live',
       };
     }
-    if (approvedCost) {
+    if (approvedHasData && approvedCost) {
       return { ...approvedCost, source: 'approved' };
     }
     return {
@@ -297,7 +359,7 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
       producedQty: 0,
       source: 'empty',
     };
-  }, [modules.costs, approvedCost, productionDaily]);
+  }, [modules.costs, approvedCost, productionDaily, period.start, period.end]);
 
   const inventoryBars = useMemo<ModuleChartSeries>(() => {
     if (!modules.inventory) return [];
@@ -313,6 +375,15 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
     ];
   }, [modules.inventory, inventoryKpi, decision]);
 
+  const inventoryQty = useMemo(
+    () => ({
+      wip: decision.inventory.wipQty,
+      finished: decision.inventory.finishedQty,
+      packaging: decision.packaging.awaitingUnits,
+    }),
+    [decision],
+  );
+
   const hrActiveCount = useMemo(() => {
     if (!modules.hr) return 0;
     return _rawEmployees.filter((e) => e.isActive !== false).length;
@@ -320,25 +391,33 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
 
   const hrBars = useMemo<ModuleChartSeries>(() => {
     if (!modules.hr) return [];
-    const today = getTodayDateString();
-    const todayAtt = attendanceRecords.filter((r) => String(r.date || '') === today);
-    const present = todayAtt.filter((r) => {
+    const inRange = attendanceRecords.filter((r) => {
+      const d = String(r.date || '');
+      return d >= period.start && d <= period.end;
+    });
+    const present = inRange.filter((r) => {
       const s = String(r.status || '');
-      return s === 'present' || s === 'late';
+      return s === 'present' || s === 'late' || s.startsWith('present');
     }).length;
-    const absent = todayAtt.filter((r) => String(r.status || '') === 'absent').length;
-    const late = todayAtt.filter((r) => String(r.status || '') === 'late').length;
-    const unrecorded = Math.max(0, hrActiveCount - todayAtt.length);
+    const absent = inRange.filter((r) => String(r.status || '') === 'absent').length;
+    const late = inRange.filter((r) => {
+      const s = String(r.status || '');
+      return s === 'late' || s.includes('late');
+    }).length;
+    const days = inclusiveDayCount(period.start, period.end);
+    const unrecorded = Math.max(0, hrActiveCount * days - inRange.length);
     return [
       { name: 'حضور', value: present },
       { name: 'غياب', value: absent },
       { name: 'تأخير', value: late },
       { name: 'بدون سجل', value: unrecorded },
     ];
-  }, [modules.hr, attendanceRecords, hrActiveCount]);
+  }, [modules.hr, attendanceRecords, hrActiveCount, period.start, period.end]);
 
-  const qualityBars = useMemo<ModuleChartSeries>(() => {
-    if (!modules.quality) return [];
+  const { qualityBars, qualitySource } = useMemo(() => {
+    if (!modules.quality) {
+      return { qualityBars: [] as ModuleChartSeries, qualitySource: 'empty' as const };
+    }
     const active = workOrders.filter(
       (w) => w.status === 'pending' || w.status === 'in_progress' || w.status === 'completed',
     );
@@ -357,19 +436,49 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
     );
     const rates = qualityRatesFromTotals(totals);
     const pending = active.filter((wo) => wo.qualityStatus && wo.qualityStatus !== 'approved').length;
-    return [
-      { name: 'مفحوص', value: totals.inspected },
-      { name: 'فشل %', value: rates.failRate },
-      { name: 'إعادة %', value: rates.reworkRate },
-      { name: 'FPY', value: rates.avgFpy },
-      { name: 'بانتظار', value: pending },
-    ];
-  }, [modules.quality, workOrders]);
+    const hasWoQuality = totals.inspected > 0 || pending > 0 || rates.avgFpy > 0;
+    if (hasWoQuality) {
+      return {
+        qualityBars: [
+          { name: 'مفحوص', value: totals.inspected },
+          { name: 'فشل %', value: rates.failRate },
+          { name: 'إعادة %', value: rates.reworkRate },
+          { name: 'FPY', value: rates.avgFpy },
+          { name: 'بانتظار', value: pending },
+        ],
+        qualitySource: 'work_orders' as const,
+      };
+    }
+    const produced = periodReports.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
+    const waste = periodReports.reduce((s, r) => s + getReportWaste(r), 0);
+    const base = produced + waste;
+    const wastePct = base > 0 ? Number(((waste / base) * 100).toFixed(1)) : 0;
+    if (produced > 0 || waste > 0) {
+      return {
+        qualityBars: [
+          { name: 'إنتاج', value: produced },
+          { name: 'هالك', value: waste },
+          { name: 'هالك %', value: wastePct },
+          { name: 'سليم', value: produced },
+        ],
+        qualitySource: 'production' as const,
+      };
+    }
+    return {
+      qualityBars: [
+        { name: 'مفحوص', value: 0 },
+        { name: 'فشل %', value: 0 },
+        { name: 'إعادة %', value: 0 },
+        { name: 'FPY', value: 0 },
+        { name: 'بانتظار', value: 0 },
+      ],
+      qualitySource: 'empty' as const,
+    };
+  }, [modules.quality, workOrders, periodReports]);
 
   const resolvedRepairBars = useMemo<ModuleChartSeries>(() => {
     if (!modules.repair) return [];
     if (repairBars.length > 0) return repairBars;
-    // Fallback operational queues when repair jobs list is unavailable/empty-load
     return [
       { name: 'مفتوح', value: 0 },
       { name: 'جاهز', value: 0 },
@@ -379,19 +488,38 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
     ];
   }, [modules.repair, repairBars]);
 
+  const planStatusBars = useMemo<ModuleChartSeries>(() => {
+    const planned = productionPlans.filter((p) => p.status === 'planned').length;
+    const inProgress = productionPlans.filter((p) => p.status === 'in_progress').length;
+    const completed = productionPlans.filter((p) => p.status === 'completed').length;
+    const cancelled = productionPlans.filter((p) => p.status === 'cancelled').length;
+    return [
+      { name: 'مخطط', value: planned },
+      { name: 'جاري', value: inProgress },
+      { name: 'مكتمل', value: completed },
+      { name: 'متأخر', value: decision.behindScheduleCount },
+      { name: 'ملغي', value: cancelled },
+    ];
+  }, [productionPlans, decision.behindScheduleCount]);
+
+  const planTotalCount = productionPlans.length;
   const planAchievement = decision.planVolumeAchievement;
   const scheduleAdherence = decision.scheduleAdherence;
   const lowStockCount = modules.inventory
     ? Math.max(inventoryKpi.lowStockCount, decision.inventory.lowStockCount)
     : decision.inventory.lowStockCount;
 
+  const periodProduction = periodReports.reduce((s, r) => s + Number(r.quantityProduced || 0), 0);
+
   return {
     loading: decisionLoading || extraLoading,
+    loadedAt,
+    period,
     hero: {
-      todayProduction: kpis.todayProduction,
-      monthlyProduction: kpis.monthlyProduction,
-      efficiency: kpis.efficiency,
-      wasteRatio: kpis.wasteRatio,
+      todayProduction: periodKpis.todayProduction,
+      periodProduction,
+      efficiency: periodKpis.efficiency,
+      wasteRatio: periodKpis.wasteRatio,
       planAchievement,
       scheduleAdherence,
       lowStockCount,
@@ -401,11 +529,15 @@ export function useHomeModuleCharts(): HomeModuleChartsModel {
     },
     productionDaily,
     inventoryBars,
+    inventoryQty,
     hrBars,
     hrActiveCount,
     qualityBars,
+    qualitySource,
     repairBars: resolvedRepairBars,
     customersBars: modules.customers ? customerBars : [],
+    planStatusBars,
+    planTotalCount,
     costSummary,
     modules,
   };

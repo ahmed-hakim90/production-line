@@ -4,6 +4,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { toast } from '../../../components/Toast';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
@@ -52,6 +54,16 @@ const LIST_PAGE_SIZE = 20;
 
 type DraftLine = { itemId: string; quantity: string };
 
+function replenishmentStatusTone(
+  status: SparePartsReplenishmentStatus,
+): 'success' | 'warning' | 'danger' | 'info' | 'muted' {
+  if (status === 'received') return 'success';
+  if (status === 'rejected' || status === 'cancelled') return 'danger';
+  if (status === 'responsible_approved') return 'info';
+  if (status === 'prepared' || status === 'approved' || status === 'submitted') return 'warning';
+  return 'muted';
+}
+
 export const SparePartsReplenishment: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [searchParams] = useSearchParams();
@@ -75,8 +87,9 @@ export const SparePartsReplenishment: React.FC = () => {
   const [statusFilter, setStatusFilter] = useState('');
   const [stockoutOnly, setStockoutOnly] = useState(false);
   const [listTab, setListTab] = useState<'pending' | 'all'>('pending');
+  const [search, setSearch] = useState('');
   const [showCreate, setShowCreate] = useState(false);
-  const [selectedId, setSelectedId] = useState('');
+  const [selectedId, setSelectedId] = useState(searchParams.get('requestId') || '');
   const [listPage, setListPage] = useState(1);
   const detailPanelRef = useRef<HTMLDivElement>(null);
   /** Suggested pick locations when the request doc has no persisted allocations yet. */
@@ -162,8 +175,20 @@ export const SparePartsReplenishment: React.FC = () => {
     if (stockoutOnly) {
       list = list.filter((r) => (r.lines || []).some((line) => isStockoutDemandLine(line)));
     }
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((r) => {
+        const hay = [
+          r.referenceNo,
+          r.fromWarehouseName,
+          r.toWarehouseName,
+          ...(r.lines || []).map((l) => `${l.itemName} ${l.itemCode}`),
+        ].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+    }
     return list;
-  }, [rows, listTab, statusFilter, stockoutOnly]);
+  }, [rows, listTab, statusFilter, stockoutOnly, search]);
 
   const listTotalPages = Math.max(1, Math.ceil(filtered.length / LIST_PAGE_SIZE));
   const safeListPage = Math.min(listPage, listTotalPages);
@@ -181,7 +206,12 @@ export const SparePartsReplenishment: React.FC = () => {
 
   useEffect(() => {
     setListPage(1);
-  }, [statusFilter, stockoutOnly, listTab]);
+  }, [statusFilter, stockoutOnly, listTab, search]);
+
+  useEffect(() => {
+    const fromUrl = String(searchParams.get('requestId') || '').trim();
+    if (fromUrl) setSelectedId(fromUrl);
+  }, [searchParams]);
 
   useEffect(() => {
     if (!filtered.length) {
@@ -376,22 +406,41 @@ export const SparePartsReplenishment: React.FC = () => {
       />
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <Card title="مطلوب ولم يُستلم">
-          <p className="text-2xl font-bold text-amber-700 sm:text-3xl">{kpis.pendingCount}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">طلبات قبل تأكيد الاستلام</p>
-        </Card>
+        <button
+          type="button"
+          className="text-start"
+          onClick={() => {
+            setListTab('pending');
+            setStatusFilter('');
+            setStockoutOnly(false);
+          }}
+        >
+          <Card title="مطلوب ولم يُستلم">
+            <p className="text-2xl font-bold text-amber-700 sm:text-3xl">{kpis.pendingCount}</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">اضغط لعرض المعلّق فقط</p>
+          </Card>
+        </button>
         <Card title="تم التموين + المدة">
           <p className="text-2xl font-bold sm:text-3xl">{kpis.receivedCount}</p>
           <p className="text-xs text-[var(--color-text-muted)] mt-1">
             متوسط زمن التنفيذ: {kpis.avgDurationLabel}
           </p>
         </Card>
-        <Card title="قطع ناقصة (صفر هنا وهناك)">
-          <p className="text-2xl font-bold text-rose-700 sm:text-3xl">{kpis.stockoutLineCount}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            في {kpis.stockoutRequestCount} طلب — أصناف معرفة بدون رصيد عند الطلب
-          </p>
-        </Card>
+        <button
+          type="button"
+          className="text-start"
+          onClick={() => {
+            setListTab('all');
+            setStockoutOnly(true);
+          }}
+        >
+          <Card title="قطع ناقصة (صفر هنا وهناك)">
+            <p className="text-2xl font-bold text-rose-700 sm:text-3xl">{kpis.stockoutLineCount}</p>
+            <p className="text-xs text-[var(--color-text-muted)] mt-1">
+              في {kpis.stockoutRequestCount} طلب — اضغط لتصفية الناقص
+            </p>
+          </Card>
+        </button>
       </div>
 
       {centralWarehouses.length === 0 || centerWarehouses.length === 0 ? (
@@ -514,35 +563,48 @@ export const SparePartsReplenishment: React.FC = () => {
         </Card>
       ) : null}
 
-      <div className="flex flex-col gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <select
-          className="w-full border rounded-lg px-3 py-2 text-sm sm:w-auto"
-          value={statusFilter}
-          onChange={(e) => setStatusFilter(e.target.value)}
-        >
-          <option value="">كل الحالات</option>
-          {(Object.keys(SPARE_PARTS_REPLENISHMENT_STATUS_LABELS) as SparePartsReplenishmentStatus[]).map(
-            (status) => (
-              <option key={status} value={status}>
-                {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[status]}
-              </option>
-            ),
+      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
+        <SmartFilterBar
+          pageId="spare-parts-replenishment"
+          searchPlaceholder="رقم الطلب أو المركز أو الصنف…"
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'status',
+              placeholder: 'كل الحالات',
+              options: (Object.keys(SPARE_PARTS_REPLENISHMENT_STATUS_LABELS) as SparePartsReplenishmentStatus[]).map(
+                (status) => ({
+                  value: status,
+                  label: SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[status],
+                }),
+              ),
+            },
+            {
+              key: 'stockout',
+              placeholder: 'كل الأصناف',
+              options: [{ value: 'yes', label: 'ناقص فقط' }],
+            },
+          ]}
+          quickFilterValues={{
+            status: statusFilter || 'all',
+            stockout: stockoutOnly ? 'yes' : 'all',
+          }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'status') setStatusFilter(value === 'all' ? '' : value);
+            if (key === 'stockout') setStockoutOnly(value === 'yes');
+          }}
+          extra={(
+            <div className="flex flex-wrap items-center gap-2">
+              <Button type="button" size="sm" variant="ghost" onClick={() => void load()}>
+                تحديث
+              </Button>
+              <span className="text-xs text-[var(--color-text-muted)]">
+                الطلبات: {filtered.length}
+              </span>
+            </div>
           )}
-        </select>
-        <label className="inline-flex min-h-9 items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={stockoutOnly}
-            onChange={(e) => setStockoutOnly(e.target.checked)}
-          />
-          ناقص فقط
-        </label>
-        <Button type="button" size="sm" variant="ghost" onClick={() => void load()}>
-          تحديث
-        </Button>
-        <span className="text-xs text-[var(--color-text-muted)] sm:ms-auto">
-          الطلبات: {filtered.length}
-        </span>
+        />
       </div>
 
       {/* Physical LTR row: details LEFT, requests RIGHT — content stays RTL. */}
@@ -651,9 +713,12 @@ export const SparePartsReplenishment: React.FC = () => {
                 </div>
                 <div className="rounded-lg border bg-white p-3">
                   <p className="text-xs font-bold text-slate-500">الحالة</p>
-                  <p className="mt-1 text-sm font-black">
-                    {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[selectedRequest.status]}
-                  </p>
+                  <div className="mt-1">
+                    <StatusBadge
+                      label={SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[selectedRequest.status]}
+                      type={replenishmentStatusTone(selectedRequest.status)}
+                    />
+                  </div>
                 </div>
                 <div className="rounded-lg border bg-white p-3">
                   <p className="text-xs font-bold text-slate-500">التكلفة المركزية</p>
@@ -824,12 +889,15 @@ export const SparePartsReplenishment: React.FC = () => {
                   <p className="mt-0.5 line-clamp-2 text-xs text-[var(--color-text-muted)]">
                     من {row.fromWarehouseName} → إلى {row.toWarehouseName}
                   </p>
-                  <p className="text-xs mt-1">
-                    {SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[row.status]}
-                    {(row.lines || []).some((line) => isStockoutDemandLine(line))
-                      ? ' · ناقص'
-                      : ''}
-                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-1.5">
+                    <StatusBadge
+                      label={SPARE_PARTS_REPLENISHMENT_STATUS_LABELS[row.status]}
+                      type={replenishmentStatusTone(row.status)}
+                    />
+                    {(row.lines || []).some((line) => isStockoutDemandLine(line)) ? (
+                      <StatusBadge label="ناقص" type="danger" />
+                    ) : null}
+                  </div>
                 </button>
               );
             })

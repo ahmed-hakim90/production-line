@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -68,19 +68,40 @@ function sizeBadgeType(tier: CustomerSizeTier | undefined): 'info' | 'success' |
 
 export const CustomersKPI: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const [searchParams] = useSearchParams();
   const { can } = usePermission();
   const canEdit = can('customers.edit');
   const canImport = can('customers.import');
   const user = useAppStore((s) => s.userProfile);
 
+  const sizeFromQuery = String(searchParams.get('size') || '').trim();
+  const followUpFromQuery = String(searchParams.get('followUp') || '').trim();
+
   const [rows, setRows] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
-  const [sizeFilter, setSizeFilter] = useState('all');
-  const [followUpFilter, setFollowUpFilter] = useState('all');
+  const [sizeFilter, setSizeFilter] = useState(
+    sizeFromQuery === 'large' || sizeFromQuery === 'medium' || sizeFromQuery === 'small'
+      ? sizeFromQuery
+      : 'all',
+  );
+  const [followUpFilter, setFollowUpFilter] = useState(
+    followUpFromQuery === 'needs_call' || followUpFromQuery === 'followed_up' || followUpFromQuery === 'none'
+      ? followUpFromQuery
+      : 'all',
+  );
   const [metricsFilter, setMetricsFilter] = useState('all');
   const [page, setPage] = useState(1);
+
+  useEffect(() => {
+    if (sizeFromQuery === 'large' || sizeFromQuery === 'medium' || sizeFromQuery === 'small') {
+      setSizeFilter(sizeFromQuery);
+    }
+    if (followUpFromQuery === 'needs_call' || followUpFromQuery === 'followed_up' || followUpFromQuery === 'none') {
+      setFollowUpFilter(followUpFromQuery);
+    }
+  }, [sizeFromQuery, followUpFromQuery]);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);

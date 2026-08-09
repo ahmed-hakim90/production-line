@@ -49,7 +49,15 @@ import { userService } from '../../../services/userService';
 import { employeeService } from '../../hr/employeeService';
 import { buildRepairApprovalPublicUrl, buildRepairTrackPublicUrl } from '../lib/repairPublicLinks';
 import { resolveRepairJobPaymentCloseState } from '../lib/repairJobPaymentClose';
-import { isManufacturerWarrantyJob, isWarrantySettlementAuth } from '../lib/repairManufacturerWarranty';
+import {
+  isFullManufacturerWarrantyJob,
+  isManufacturerWarrantyJob,
+  isPartialManufacturerWarrantyJob,
+  isWarrantySettlementAuth,
+  manufacturerWarrantyLineLabel,
+  manufacturerWarrantyScopeLabel,
+  resolveManufacturerWarrantyScope,
+} from '../lib/repairManufacturerWarranty';
 import { formatRepairApprovalRequestMessage } from '../utils/whatsappRepairMessage';
 import { RepairJobPrint } from '../components/RepairJobPrint';
 import { RepairJobIntakePrintBundle } from '../components/RepairJobIntakePrintBundle';
@@ -123,7 +131,7 @@ const inferProducts = (job: RepairJob | null): RepairJobProduct[] => {
     technicianDiagnosis: '',
     estimatedCost: toNumber(job.estimatedCost),
     finalCost: toNumber(job.finalCost),
-    inWarranty: (job.warranty || 'none') !== 'none',
+    inWarranty: false,
   }];
 };
 
@@ -485,9 +493,7 @@ export const RepairJobDetail: React.FC = () => {
         : (nextServiceOnly ? toNumber(serviceOnlyCost || finalCost) : undefined),
       serviceOnlyCost: nextServiceOnly ? toNumber(serviceOnlyCost || finalCost) : 0,
       warranty: normalizedProducts.some((item) => item.inWarranty) ? 'none' : warranty,
-      warrantyScope: normalizedProducts.some((item) => item.inWarranty)
-        ? 'manufacturer' as const
-        : 'none' as const,
+      warrantyScope: resolveManufacturerWarrantyScope(normalizedProducts),
     };
     await repairJobService.update(jobId, payload);
     const refreshed = await repairJobService.getById(jobId);
@@ -1746,6 +1752,8 @@ export const RepairJobDetail: React.FC = () => {
               <CardTitle className="text-base">المنتجات المستلمة</CardTitle>
               <CardDescription>
                 عرض الاستلام — التشخيص والخدمات من الورشة.
+                {' · '}
+                ضمان الطلب: {manufacturerWarrantyScopeLabel(job.warrantyScope, jobProducts)}
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
@@ -1762,9 +1770,14 @@ export const RepairJobDetail: React.FC = () => {
                       </div>
                       <div className="flex flex-wrap gap-1">
                         <Badge variant="secondary" className="tabular-nums">×{item.quantity || 1}</Badge>
-                        {item.inWarranty ? (
-                          <Badge variant="outline" className="border-sky-300 bg-sky-50 text-sky-800">ضمان مصنّع</Badge>
-                        ) : null}
+                        <Badge
+                          variant="outline"
+                          className={item.inWarranty
+                            ? 'border-sky-300 bg-sky-50 text-sky-800'
+                            : 'border-slate-300 bg-slate-50 text-slate-700'}
+                        >
+                          {manufacturerWarrantyLineLabel(item.inWarranty)}
+                        </Badge>
                         {Number(item.unrepairableQuantity || 0) > 0 ? (
                           <Badge variant="outline" className="border-rose-300 bg-rose-50 text-rose-800">
                             غير قابل {item.unrepairableQuantity}
@@ -1878,7 +1891,13 @@ export const RepairJobDetail: React.FC = () => {
           <Card className={cn(SURFACE_CARD)}>
             <CardHeader className="pb-3">
               <CardTitle className="text-base">ملخص الطلب</CardTitle>
-              <CardDescription>{jobProducts.length} سطر · {productsQtyTotal} قطعة · ضمان ورشة {workshopWarrantyLabel}</CardDescription>
+              <CardDescription>
+                {jobProducts.length} سطر · {productsQtyTotal} قطعة
+                {' · '}
+                {manufacturerWarrantyScopeLabel(job.warrantyScope, jobProducts)}
+                {' · '}
+                ضمان ورشة {workshopWarrantyLabel}
+              </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
               <dl className="grid grid-cols-1 gap-2">
@@ -1904,19 +1923,36 @@ export const RepairJobDetail: React.FC = () => {
                 ) : null}
               </dl>
 
-              {paymentAuthorization && Number(paymentAuthorization.grossAmount || 0) <= 0 && !isWarrantySettlementAuth(paymentAuthorization) ? (
+              {paymentAuthorization
+                && Number(paymentAuthorization.grossAmount || 0) <= 0
+                && Number(paymentAuthorization.warrantyGrossAmount || 0) <= 0
+                && !isWarrantySettlementAuth(paymentAuthorization) ? (
                 <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-950">
                   إذن الدفع قيمته صفر — اختر خدمة مسعّرة أو قطعة ثم جهّز إصدارًا جديدًا.
                 </div>
               ) : null}
               {paymentAuthorization && isWarrantySettlementAuth(paymentAuthorization) ? (
                 <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
-                  ضمان مصنّع — إعفاء كامل بدون تحصيل.
+                  داخل الضمان بالكامل — إعفاء كامل بدون تحصيل.
+                </div>
+              ) : null}
+              {paymentAuthorization
+                && !isWarrantySettlementAuth(paymentAuthorization)
+                && (isPartialManufacturerWarrantyJob(job) || Number(paymentAuthorization.warrantyGrossAmount || 0) > 0) ? (
+                <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
+                  ضمان مختلط — يُحصَّل غير الضمان فقط، ومنتجات الضمان مجانية.
+                  {Number(paymentAuthorization.warrantyGrossAmount || 0) > 0 ? (
+                    <span className="mt-1 block tabular-nums text-xs">
+                      قيمة الضمان (مجاني): {Number(paymentAuthorization.warrantyGrossAmount || 0).toLocaleString('ar-EG')} ج.م
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
               {hasInWarrantyProduct && !paymentAuthorization ? (
                 <div className="rounded-md border border-sky-200 bg-sky-50/70 p-2 text-xs text-sky-950">
-                  معلّم كضمان مصنّع: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.
+                  {isFullManufacturerWarrantyJob(job)
+                    ? 'كل المنتجات داخل الضمان: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.'
+                    : 'طلب مختلط: عند الجاهزية جهّز إذن الدفع — يُحصَّل غير الضمان فقط.'}
                 </div>
               ) : null}
 

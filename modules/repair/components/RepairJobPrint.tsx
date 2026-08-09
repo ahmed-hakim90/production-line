@@ -13,6 +13,10 @@ import {
   type RepairReceiptCopyKind,
 } from '../lib/repairJobPrint';
 import { shouldShowRepairPrintCosts } from '../lib/repairJobIntake';
+import {
+  manufacturerWarrantyLineLabel,
+  manufacturerWarrantyScopeLabel,
+} from '../lib/repairManufacturerWarranty';
 import { resolveRepairStatusChip } from '../lib/repairStatusChipStyle';
 import type { RepairBranch, RepairJob, RepairJobProduct } from '../types';
 
@@ -31,12 +35,6 @@ const PAPER_DIMENSIONS: Record<string, { width: string; minHeight: string }> = {
   a4: { width: '210mm', minHeight: '297mm' },
   a5: { width: '148mm', minHeight: '210mm' },
   thermal: { width: '80mm', minHeight: 'auto' },
-};
-
-const WARRANTY_LABELS: Record<string, string> = {
-  none: 'بدون ضمان مصنّع',
-  '3months': 'ضمان مصنّع 3 شهور',
-  '6months': 'ضمان مصنّع 6 شهور',
 };
 
 const money = (value: number | undefined | null, decimalPlaces = 0) => {
@@ -71,7 +69,7 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
     const createdAt = formatDateTime(job.createdAt);
     const printedAt = new Date().toLocaleString('ar-EG');
     const statusChip = resolveRepairStatusChip(job.status, statusMap);
-    const warrantyLabel = WARRANTY_LABELS[job.warranty] || job.warranty || '—';
+    const warrantyLabel = manufacturerWarrantyScopeLabel(job.warrantyScope, rows);
     const parts = Array.isArray(job.partsUsed) ? job.partsUsed : [];
     const showQr = Boolean(trackUrl);
     const showCosts = ps.showCosts !== false && shouldShowRepairPrintCosts(job, products);
@@ -381,11 +379,16 @@ export const RepairJobPrint = React.forwardRef<HTMLDivElement, RepairJobPrintPro
                   <td style={{ ...tdStyle, textAlign: 'center', fontWeight: 800 }}>{index + 1}</td>
                   <td style={{ ...tdStyle, fontWeight: 800 }}>
                     {formatRepairPrintProductLabel(item)}
-                    {item.inWarranty ? (
-                      <div style={{ marginTop: '0.3mm', fontSize: isThermal ? '5pt' : '6pt', color: palette.success, fontWeight: 800 }}>
-                        داخل الضمان
-                      </div>
-                    ) : null}
+                    <div
+                      style={{
+                        marginTop: '0.3mm',
+                        fontSize: isThermal ? '5pt' : '6pt',
+                        color: item.inWarranty ? palette.success : palette.mutedText,
+                        fontWeight: 800,
+                      }}
+                    >
+                      {manufacturerWarrantyLineLabel(item.inWarranty)}
+                    </div>
                   </td>
                   <td
                     style={{

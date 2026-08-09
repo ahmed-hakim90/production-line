@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   Bar,
   BarChart,
@@ -10,11 +10,20 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { RefreshCw } from 'lucide-react';
 import { formatCost } from '@/utils/costCalculations';
 import { formatNumber } from '@/utils/calculations';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { OpsDashPanel } from './OperationsDashboardBoard';
 import { DashboardProgressGauge } from './DashboardProgressGauge';
 import { useHomeModuleCharts } from '../hooks/useHomeModuleCharts';
+import { resolveHomeChartDrilldown } from '../lib/homeChartsDrilldown';
+import {
+  HOME_CHARTS_PERIOD_LABELS,
+  formatLoadedAt,
+  getHomeChartsPresetRange,
+  type HomeChartsPeriodPreset,
+} from '../lib/homeChartsPeriod';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 
@@ -22,29 +31,69 @@ type Props = {
   title?: string;
   subtitle?: string;
   headerExtra?: React.ReactNode;
+  /** When false, period filter is omitted (parent owns filtering). Default true. */
+  showPeriodFilter?: boolean;
 };
+
+type ModuleAccent = 'production' | 'inventory' | 'costs' | 'hr' | 'quality' | 'repair' | 'customers' | 'plans';
+
+const CHART_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' };
+const GRID_STROKE = 'color-mix(in srgb, var(--color-border) 80%, transparent)';
+
+function ChartTooltip({ active, payload, label }: {
+  active?: boolean;
+  payload?: Array<{ name?: string; value?: number | string; color?: string }>;
+  label?: string | number;
+}) {
+  if (!active || !payload?.length) return null;
+  return (
+    <div
+      style={{
+        background: 'var(--color-card)',
+        border: '1px solid var(--color-border)',
+        borderRadius: 10,
+        padding: '8px 10px',
+        boxShadow: '0 8px 20px rgba(15, 23, 42, 0.1)',
+        fontSize: 11,
+        fontWeight: 700,
+        color: 'var(--color-text)',
+        direction: 'rtl',
+      }}
+    >
+      {label != null ? <div style={{ marginBottom: 4, color: 'var(--color-text-muted)' }}>{label}</div> : null}
+      {payload.map((row) => (
+        <div key={String(row.name)} style={{ color: row.color || 'var(--color-text)' }}>
+          {row.name}: {typeof row.value === 'number' ? formatNumber(row.value) : row.value}
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function ModulePanel({
   title,
   path,
   children,
   wide,
+  accent,
 }: {
   title: string;
   path?: string;
   children: React.ReactNode;
   wide?: boolean;
+  accent?: ModuleAccent;
 }) {
   const navigate = useTenantNavigate();
   return (
     <div className={wide ? 'ops-module-charts__wide' : undefined}>
       <OpsDashPanel
         title={title}
+        accent={accent}
         action={
           path ? (
             <button
               type="button"
-              className="text-[11px] font-bold text-primary"
+              className="ops-dash-panel__action"
               onClick={() => navigate(path)}
             >
               فتح
@@ -60,8 +109,9 @@ function ModulePanel({
 
 function EmptyChart({ label = 'لا توجد بيانات' }: { label?: string }) {
   return (
-    <div className="h-[220px] flex items-center justify-center text-xs font-bold text-[var(--color-text-muted)]">
-      {label}
+    <div className="ops-module-charts__empty">
+      <span className="ops-module-charts__empty-mark" aria-hidden />
+      <p className="ops-module-charts__empty-label">{label}</p>
     </div>
   );
 }
@@ -71,36 +121,65 @@ function ModuleBarChart({
   layout = 'vertical',
   fill,
   categoryWidth = 78,
+  compact,
+  onBarClick,
 }: {
   data: Array<{ name: string; value: number }>;
   layout?: 'vertical' | 'horizontal';
   fill: string;
   categoryWidth?: number;
+  compact?: boolean;
+  onBarClick?: (name: string) => void;
 }) {
+  const handleClick = (entry: unknown) => {
+    if (!onBarClick) return;
+    const row = entry as { name?: string; payload?: { name?: string } } | undefined;
+    const name = row?.name ?? row?.payload?.name;
+    if (name) onBarClick(String(name));
+  };
+
+  const heightClass = compact ? 'ops-module-charts__chart--compact' : '';
+
   if (layout === 'horizontal') {
     return (
-      <div className="h-[220px] w-full" dir="ltr">
+      <div className={`ops-module-charts__chart ${heightClass} ${onBarClick ? 'cursor-pointer' : ''}`} dir="ltr">
         <ResponsiveContainer>
           <BarChart data={data} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-            <XAxis dataKey="name" tick={{ fontSize: 10 }} />
-            <YAxis tick={{ fontSize: 10 }} width={32} allowDecimals={false} />
-            <Tooltip />
-            <Bar dataKey="value" name="العدد" fill={fill} radius={[8, 8, 0, 0]} barSize={20} />
+            <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+            <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
+            <YAxis tick={CHART_TICK} width={32} allowDecimals={false} axisLine={false} tickLine={false} />
+            <Tooltip content={<ChartTooltip />} />
+            <Bar
+              dataKey="value"
+              name="العدد"
+              fill={fill}
+              radius={[8, 8, 0, 0]}
+              barSize={compact ? 16 : 20}
+              cursor={onBarClick ? 'pointer' : undefined}
+              onClick={handleClick}
+            />
           </BarChart>
         </ResponsiveContainer>
       </div>
     );
   }
   return (
-    <div className="h-[220px] w-full" dir="ltr">
+    <div className={`ops-module-charts__chart ${heightClass} ${onBarClick ? 'cursor-pointer' : ''}`} dir="ltr">
       <ResponsiveContainer>
         <BarChart data={data} layout="vertical" margin={{ left: 8, right: 12, top: 8, bottom: 8 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" horizontal={false} />
-          <XAxis type="number" tick={{ fontSize: 10 }} allowDecimals={false} />
-          <YAxis type="category" dataKey="name" width={categoryWidth} tick={{ fontSize: 10 }} />
-          <Tooltip />
-          <Bar dataKey="value" name="العدد" fill={fill} radius={[0, 8, 8, 0]} barSize={12} />
+          <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} horizontal={false} />
+          <XAxis type="number" tick={CHART_TICK} allowDecimals={false} axisLine={false} tickLine={false} />
+          <YAxis type="category" dataKey="name" width={categoryWidth} tick={CHART_TICK} axisLine={false} tickLine={false} />
+          <Tooltip content={<ChartTooltip />} />
+          <Bar
+            dataKey="value"
+            name="العدد"
+            fill={fill}
+            radius={[0, 8, 8, 0]}
+            barSize={compact ? 10 : 12}
+            cursor={onBarClick ? 'pointer' : undefined}
+            onClick={handleClick}
+          />
         </BarChart>
       </ResponsiveContainer>
     </div>
@@ -114,40 +193,104 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
   title = 'لوحة التحكم',
   subtitle = 'مؤشرات ورسوم لكل موديول',
   headerExtra,
+  showPeriodFilter = true,
 }) => {
-  const data = useHomeModuleCharts();
+  const navigate = useTenantNavigate();
+  const [preset, setPreset] = useState<HomeChartsPeriodPreset>('month');
+  const [customStart, setCustomStart] = useState('');
+  const [customEnd, setCustomEnd] = useState('');
+  const [refreshToken, setRefreshToken] = useState(0);
+
+  const period = useMemo(() => {
+    if (preset === 'custom' && customStart && customEnd && customStart <= customEnd) {
+      return { start: customStart, end: customEnd };
+    }
+    return getHomeChartsPresetRange(preset === 'custom' ? 'month' : preset);
+  }, [preset, customStart, customEnd]);
+
+  const data = useHomeModuleCharts({ period, refreshToken });
   const { hero, modules } = data;
 
-  if (data.loading && data.productionDaily.length === 0) {
+  const drill = (
+    module: Parameters<typeof resolveHomeChartDrilldown>[0],
+    barName?: string,
+  ) => {
+    navigate(resolveHomeChartDrilldown(module, { ...period, barName }));
+  };
+
+  if (data.loading && data.productionDaily.length === 0 && refreshToken === 0) {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
   const showTitle = Boolean(title?.trim());
+  const showPlanGauge = hero.planAchievement > 0 || data.planTotalCount > 0;
 
   return (
     <div className="erp-dashboard-theme ops-dash-board">
-      {(showTitle || headerExtra) && (
-        <div className="ops-dash-header flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
-          {showTitle ? (
-            <div className="min-w-0">
-              <h1 className="text-xl sm:text-2xl font-bold tracking-tight text-[var(--color-text)]">{title}</h1>
-              {subtitle ? (
-                <p className="text-xs sm:text-sm text-[var(--color-text-muted)] font-medium mt-1">{subtitle}</p>
-              ) : null}
+      <header className="ops-dash-header">
+        {showTitle ? (
+          <div className="min-w-0">
+            <h1 className="ops-dash-header__title">{title}</h1>
+            {subtitle ? <p className="ops-dash-header__subtitle">{subtitle}</p> : null}
+          </div>
+        ) : (
+          <span />
+        )}
+        <div className="ops-dash-header__tools">
+          {showPeriodFilter ? (
+            <div className="ops-dash-header__filter">
+              <SmartFilterBar
+                pageId="home-module-charts"
+                periods={(Object.keys(HOME_CHARTS_PERIOD_LABELS) as HomeChartsPeriodPreset[]).map((key) => ({
+                  value: key,
+                  label: HOME_CHARTS_PERIOD_LABELS[key],
+                }))}
+                activePeriod={preset}
+                onPeriodChange={(value) => setPreset(value as HomeChartsPeriodPreset)}
+                advancedFilters={[
+                  { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[140px]' },
+                  { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[140px]' },
+                ]}
+                advancedFilterValues={{
+                  dateFrom: customStart || period.start,
+                  dateTo: customEnd || period.end,
+                }}
+                onAdvancedFilterChange={(key, value) => {
+                  if (key === 'dateFrom') {
+                    setCustomStart(value);
+                    setPreset('custom');
+                  }
+                  if (key === 'dateTo') {
+                    setCustomEnd(value);
+                    setPreset('custom');
+                  }
+                }}
+              />
             </div>
-          ) : (
-            <span />
-          )}
+          ) : null}
+          <div className="ops-dash-refresh">
+            <span className="ops-dash-refresh__time">
+              آخر تحديث: {formatLoadedAt(data.loadedAt)}
+            </span>
+            <button
+              type="button"
+              className="ops-dash-refresh__btn"
+              disabled={data.loading}
+              onClick={() => setRefreshToken((n) => n + 1)}
+            >
+              <RefreshCw className={`h-3.5 w-3.5 ${data.loading ? 'animate-spin' : ''}`} />
+              تحديث
+            </button>
+          </div>
           {headerExtra}
         </div>
-      )}
+      </header>
 
-      {/* Hero KPI row — Donezo style */}
       <div className="ops-dash-kpi-grid">
         <div className="ops-dash-kpi-card ops-dash-kpi-card--accent">
-          <p className="ops-dash-kpi-card__label">إنتاج اليوم</p>
-          <p className="ops-dash-kpi-card__value">{formatNumber(hero.todayProduction)}</p>
-          <p className="ops-dash-kpi-card__meta">الشهر: {formatNumber(hero.monthlyProduction)}</p>
+          <p className="ops-dash-kpi-card__label">إنتاج الفترة</p>
+          <p className="ops-dash-kpi-card__value">{formatNumber(hero.periodProduction)}</p>
+          <p className="ops-dash-kpi-card__meta">اليوم: {formatNumber(hero.todayProduction)}</p>
         </div>
         <div className="ops-dash-kpi-card">
           <p className="ops-dash-kpi-card__label">كفاءة الإنتاج</p>
@@ -170,18 +313,27 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
 
       <div className="ops-module-charts">
         {modules.production && (
-          <ModulePanel title="الإنتاج — يومي" path="/production-plans" wide>
+          <ModulePanel
+            title="الإنتاج — يومي"
+            path={resolveHomeChartDrilldown('production', period)}
+            wide
+            accent="production"
+          >
             {data.productionDaily.length > 0 ? (
-              <div className="h-[260px] w-full" dir="ltr">
+              <div className="ops-module-charts__chart ops-module-charts__chart--tall cursor-pointer" dir="ltr">
                 <ResponsiveContainer>
-                  <ComposedChart data={data.productionDaily} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="var(--color-border)" vertical={false} />
-                    <XAxis dataKey="day" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} />
-                    <YAxis yAxisId="left" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
+                  <ComposedChart
+                    data={data.productionDaily}
+                    margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                    onClick={() => drill('production')}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                    <XAxis dataKey="day" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                    <YAxis yAxisId="left" tick={CHART_TICK} axisLine={false} tickLine={false} width={36} />
                     {modules.costs && (
-                      <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={36} />
+                      <YAxis yAxisId="right" orientation="right" tick={CHART_TICK} axisLine={false} tickLine={false} width={36} />
                     )}
-                    <Tooltip />
+                    <Tooltip content={<ChartTooltip />} />
                     <Bar
                       yAxisId="left"
                       dataKey="production"
@@ -196,7 +348,7 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
                         type="monotone"
                         dataKey="costPerUnit"
                         name="تكلفة الوحدة"
-                        stroke="#f59e0b"
+                        stroke="#d97706"
                         strokeWidth={2.5}
                         dot={false}
                       />
@@ -205,19 +357,36 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
                 </ResponsiveContainer>
               </div>
             ) : (
-              <EmptyChart />
+              <EmptyChart label="لا تقارير إنتاج في الفترة" />
             )}
           </ModulePanel>
         )}
 
         {modules.inventory && (
-          <ModulePanel title="المخازن" path="/inventory">
+          <ModulePanel title="المخازن" path="/inventory" accent="inventory">
             {data.inventoryBars.length > 0 ? (
-              <ModuleBarChart
-                data={data.inventoryBars}
-                fill="rgb(var(--color-success))"
-                categoryWidth={78}
-              />
+              <div>
+                <ModuleBarChart
+                  data={data.inventoryBars}
+                  fill="rgb(var(--color-success))"
+                  categoryWidth={78}
+                  onBarClick={(name) => drill('inventory', name)}
+                />
+                <div className="ops-module-charts__qty-row">
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">WIP</p>
+                    <p className="ops-module-charts__qty-value">{formatNumber(data.inventoryQty.wip)}</p>
+                  </div>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">تام</p>
+                    <p className="ops-module-charts__qty-value">{formatNumber(data.inventoryQty.finished)}</p>
+                  </div>
+                  <div className="ops-module-charts__qty">
+                    <p className="ops-module-charts__qty-label">تغليف معلّق</p>
+                    <p className="ops-module-charts__qty-value">{formatNumber(data.inventoryQty.packaging)}</p>
+                  </div>
+                </div>
+              </div>
             ) : (
               <EmptyChart />
             )}
@@ -225,79 +394,93 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
         )}
 
         {modules.costs && (
-          <ModulePanel title="التكاليف" path="/monthly-costs">
-            <div className="h-[220px] flex flex-col justify-center gap-4 px-1">
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] p-3">
-                  <p className="text-[10px] text-[var(--color-text-muted)] font-bold">تكلفة الوحدة</p>
-                  <p className="text-lg font-black tabular-nums text-primary mt-1">
+          <ModulePanel title="التكاليف" path={resolveHomeChartDrilldown('costs', period)} accent="costs">
+            <div className="flex h-[210px] flex-col justify-center gap-3">
+              <div className="ops-module-charts__metrics">
+                <div className="ops-module-charts__metric">
+                  <p className="ops-module-charts__metric-label">تكلفة الوحدة</p>
+                  <p className="ops-module-charts__metric-value ops-module-charts__metric-value--accent">
                     {formatCost(data.costSummary?.averageUnitCost ?? 0)}
                   </p>
                 </div>
-                <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] p-3">
-                  <p className="text-[10px] text-[var(--color-text-muted)] font-bold">إجمالي التكلفة</p>
-                  <p className="text-lg font-black tabular-nums mt-1">
+                <div className="ops-module-charts__metric">
+                  <p className="ops-module-charts__metric-label">إجمالي التكلفة</p>
+                  <p className="ops-module-charts__metric-value">
                     {formatCost(data.costSummary?.totalCost ?? 0)}
                   </p>
                 </div>
-                <div className="rounded-[var(--border-radius-lg)] bg-[var(--color-surface-hover)] p-3">
-                  <p className="text-[10px] text-[var(--color-text-muted)] font-bold">إنتاج الشهر</p>
-                  <p className="text-lg font-black tabular-nums mt-1">
+                <div className="ops-module-charts__metric">
+                  <p className="ops-module-charts__metric-label">إنتاج الفترة</p>
+                  <p className="ops-module-charts__metric-value">
                     {formatNumber(data.costSummary?.producedQty ?? 0)}
                   </p>
                 </div>
               </div>
-              <p className="text-[11px] text-[var(--color-text-muted)] font-medium text-center">
+              <p className="ops-module-charts__foot">
                 {data.costSummary?.source === 'approved'
                   ? 'ملخص التكلفة الشهرية المعتمدة — الرسم اليومي يظهر أعلى مع الإنتاج'
                   : data.costSummary?.source === 'live'
-                    ? 'حساب لحظي من تقارير الإنتاج (لم يُعتمد إغلاق شهري بعد)'
-                    : 'لا يوجد حساب شهري معتمد ولا إنتاج محسوب لهذا الشهر'}
+                    ? 'حساب لحظي من تقارير الإنتاج للفترة المحددة'
+                    : 'لا يوجد حساب شهري معتمد ولا إنتاج محسوب لهذه الفترة'}
               </p>
             </div>
           </ModulePanel>
         )}
 
         {modules.hr && (
-          <ModulePanel title="الموارد البشرية" path="/hr/dashboard">
+          <ModulePanel title="الموارد البشرية" path={resolveHomeChartDrilldown('hr', period)} accent="hr">
             {data.hrBars.length > 0 ? (
               <div>
-                <p className="text-[11px] text-[var(--color-text-muted)] font-bold mb-1 px-1">
-                  نشطون: {formatNumber(data.hrActiveCount)} · حضور اليوم
+                <p className="ops-module-charts__hint">
+                  نشطون: {formatNumber(data.hrActiveCount)} · حضور الفترة
                 </p>
                 <ModuleBarChart
                   data={data.hrBars}
                   layout="horizontal"
                   fill="rgb(var(--color-primary))"
+                  onBarClick={(name) => drill('hr', name)}
                 />
               </div>
             ) : (
-              <EmptyChart label="لا بيانات حضور لهذا اليوم" />
+              <EmptyChart label="لا بيانات حضور لهذه الفترة" />
             )}
           </ModulePanel>
         )}
 
         {modules.quality && (
-          <ModulePanel title="الجودة" path="/quality/reports">
+          <ModulePanel title="الجودة" path={resolveHomeChartDrilldown('quality', period)} accent="quality">
             {data.qualityBars.length > 0 ? (
-              <ModuleBarChart
-                data={data.qualityBars}
-                layout="horizontal"
-                fill="#8b5cf6"
-              />
+              <div>
+                {data.qualitySource === 'production' ? (
+                  <p className="ops-module-charts__hint">
+                    من هالك تقارير الإنتاج (لا ملخص جودة على أوامر العمل)
+                  </p>
+                ) : null}
+                <ModuleBarChart
+                  data={data.qualityBars}
+                  layout="horizontal"
+                  fill="#0d9488"
+                  onBarClick={() => drill('quality')}
+                />
+              </div>
             ) : (
-              <EmptyChart label="لا أوامر عمل بجودة مسجّلة" />
+              <EmptyChart label="لا بيانات جودة في الفترة" />
             )}
           </ModulePanel>
         )}
 
         {modules.repair && (
-          <ModulePanel title="الصيانة / التشغيل" path="/repair">
+          <ModulePanel
+            title="الصيانة / التشغيل"
+            path={resolveHomeChartDrilldown('repair', { ...period, barName: 'مفتوح' })}
+            accent="repair"
+          >
             {data.repairBars.length > 0 ? (
               <ModuleBarChart
                 data={data.repairBars}
-                fill="#f59e0b"
+                fill="#ea580c"
                 categoryWidth={72}
+                onBarClick={(name) => drill('repair', name)}
               />
             ) : (
               <EmptyChart label="لا أوامر صيانة" />
@@ -306,12 +489,13 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
         )}
 
         {modules.customers && (
-          <ModulePanel title="العملاء" path="/customers/kpi">
+          <ModulePanel title="العملاء" path={resolveHomeChartDrilldown('customers', period)} accent="customers">
             {data.customersBars.length > 0 ? (
               <ModuleBarChart
                 data={data.customersBars}
                 layout="horizontal"
-                fill="#06b6d4"
+                fill="#0891b2"
+                onBarClick={(name) => drill('customers', name)}
               />
             ) : (
               <EmptyChart />
@@ -319,17 +503,37 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
           </ModulePanel>
         )}
 
-        <ModulePanel title="تقدم الخطة">
-          <DashboardProgressGauge
-            value={hero.planAchievement}
-            label="تحقيق الخطة"
-            sublabel={`كفاءة ${hero.efficiency}% · جدول ${hero.scheduleAdherence}%`}
-            legend={[
-              { label: 'مكتمل', color: 'rgb(var(--color-success))' },
-              { label: 'متابعة', color: 'rgb(var(--color-warning))' },
-              { label: 'حرج', color: 'rgb(var(--color-danger))' },
-            ]}
-          />
+        <ModulePanel title="تقدم الخطة" path={resolveHomeChartDrilldown('plans', period)} accent="plans">
+          {data.planTotalCount === 0 ? (
+            <EmptyChart label="لا خطط إنتاج مسجّلة" />
+          ) : (
+            <div>
+              {showPlanGauge && hero.planAchievement > 0 ? (
+                <DashboardProgressGauge
+                  value={hero.planAchievement}
+                  label="تحقيق الخطة"
+                  sublabel={`كفاءة ${hero.efficiency}% · جدول ${hero.scheduleAdherence}%`}
+                  legend={[
+                    { label: 'مكتمل', color: 'rgb(var(--color-success))' },
+                    { label: 'متابعة', color: 'rgb(var(--color-warning))' },
+                    { label: 'حرج', color: 'rgb(var(--color-danger))' },
+                  ]}
+                />
+              ) : (
+                <p className="ops-module-charts__hint" style={{ textAlign: 'center' }}>
+                  توزيع حالات الخطط
+                  {hero.planAchievement === 0 ? ' · لا إنجاز حجم محسوب بعد' : ''}
+                </p>
+              )}
+              <ModuleBarChart
+                data={data.planStatusBars}
+                layout="horizontal"
+                fill="rgb(var(--color-primary))"
+                compact={hero.planAchievement > 0}
+                onBarClick={(name) => drill('plans', name)}
+              />
+            </div>
+          )}
         </ModulePanel>
       </div>
     </div>

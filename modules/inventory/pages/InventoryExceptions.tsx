@@ -1,5 +1,5 @@
-import React, { useCallback } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import React, { useCallback, useMemo } from 'react';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/src/components/erp/PageHeader';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,6 +26,8 @@ const EXCEPTIONS_CACHE_KEY = 'inventory:exceptions';
 
 export const InventoryExceptions: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
+  const [searchParams] = useSearchParams();
+  const kindFilter = String(searchParams.get('kind') || '').trim();
   const { openModal } = useGlobalModalManager();
   const threshold = useAppStore(
     (s) => Number(s.systemSettings.planSettings?.inventoryExceptionManualThreshold || 500),
@@ -92,7 +94,13 @@ export const InventoryExceptions: React.FC = () => {
     { maxAgeMs: 45_000 },
   );
 
-  const rows = rowsData ?? [];
+  const rows = useMemo(() => {
+    const all = rowsData ?? [];
+    if (kindFilter === 'low' || kindFilter === 'negative' || kindFilter === 'large_manual') {
+      return all.filter((row) => row.kind === kindFilter);
+    }
+    return all;
+  }, [rowsData, kindFilter]);
 
   const load = useCallback(async () => {
     invalidatePageDataCache(EXCEPTIONS_CACHE_KEY);

@@ -593,19 +593,39 @@ export const NewRepairJob: React.FC = () => {
                               )));
                             }}
                           />
-                          داخل ضمان الشركة المصنعة (إصلاح مجاني)
+                          داخل الضمان (إصلاح مجاني للمنتج)
                         </label>
                       </div>
                     ))}
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => {
-                        setJobProducts((prev) => [...prev, createEmptyProductRow()]);
-                      }}
-                    >
-                      إضافة منتج
-                    </Button>
+                    <div className="flex flex-wrap gap-2">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setJobProducts((prev) => prev.map((item) => ({ ...item, inWarranty: true })));
+                        }}
+                      >
+                        كل المنتجات داخل الضمان
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setJobProducts((prev) => prev.map((item) => ({ ...item, inWarranty: false })));
+                        }}
+                      >
+                        إلغاء ضمان الكل
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => {
+                          setJobProducts((prev) => [...prev, createEmptyProductRow()]);
+                        }}
+                      >
+                        إضافة منتج
+                      </Button>
+                    </div>
                   </div>
                 </div>
               </div>

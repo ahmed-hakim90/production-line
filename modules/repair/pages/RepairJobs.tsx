@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { Headset, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -188,9 +188,19 @@ export const RepairJobs: React.FC = () => {
       }),
     [userProfile, branches, currentEmployee?.id, repairCtx.canViewAllBranches],
   );
+  const [searchParams] = useSearchParams();
+  const focusFromQuery = String(searchParams.get('focus') || '').trim();
+  const initialFocus: JobsFocusFilter =
+    focusFromQuery === 'open'
+    || focusFromQuery === 'ready'
+    || focusFromQuery === 'delivered'
+    || focusFromQuery === 'overdue'
+    || focusFromQuery === 'today'
+      ? focusFromQuery
+      : 'all';
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<RepairJobStatus | 'all'>('all');
-  const [focusFilter, setFocusFilter] = useState<JobsFocusFilter>('all');
+  const [focusFilter, setFocusFilter] = useState<JobsFocusFilter>(initialFocus);
   const [branchFilter, setBranchFilter] = useState<string>('all');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
@@ -199,6 +209,17 @@ export const RepairJobs: React.FC = () => {
   useEffect(() => {
     void repairBranchService.list().then(setBranches);
   }, []);
+  useEffect(() => {
+    if (
+      focusFromQuery === 'open'
+      || focusFromQuery === 'ready'
+      || focusFromQuery === 'delivered'
+      || focusFromQuery === 'overdue'
+      || focusFromQuery === 'today'
+    ) {
+      setFocusFilter(focusFromQuery);
+    }
+  }, [focusFromQuery]);
 
   const { jobs, loading, refetch, isFetching } = useRepairJobs({
     branchId: userBranchIds[0],

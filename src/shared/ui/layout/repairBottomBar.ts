@@ -30,7 +30,7 @@ const TECHNICIAN_ITEMS: RepairBottomBarCandidate[] = [
 
 /** مدير مراكز: نظرة شاملة عبر كل المراكز. */
 const ADMIN_ITEMS: RepairBottomBarCandidate[] = [
-  { key: 'admin-home', label: 'الرئيسية', menuItemKey: 'repair-admin-dashboard', pathOverride: '/' },
+  { key: 'admin-home', label: 'الرئيسية', menuItemKey: 'repair-dashboard', pathOverride: '/' },
   { key: 'jobs', label: 'الطلبات', menuItemKey: 'repair-jobs', primary: true },
   { key: 'replenish', label: 'التموين', menuItemKey: 'repair-parts-replenishment' },
   { key: 'kpis', label: 'الأداء', menuItemKey: 'repair-kpis' },

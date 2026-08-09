@@ -1,29 +1,124 @@
 /**
  * Manufacturer warranty settlement helpers.
- * Intake `inWarranty` on any product → whole job is manufacturer warranty (no customer revenue).
+ *
+ * Per-product `inWarranty` at intake:
+ * - all products → full manufacturer settlement (no customer revenue)
+ * - some products → partial (bill non-warranty lines only)
+ * - none → standard collection
  */
 import type { RepairJobProduct, RepairPartUsage, RepairWarrantyScope } from '../types';
 
 export const REPAIR_WARRANTY_SETTLEMENT = 'warranty' as const;
 
+export const MANUFACTURER_WARRANTY_LINE_LABEL = {
+  inWarranty: 'داخل الضمان',
+  without: 'بدون ضمان',
+} as const;
+
+export const MANUFACTURER_WARRANTY_SCOPE_LABEL: Record<'none' | 'partial' | 'manufacturer', string> = {
+  none: 'بدون ضمان',
+  partial: 'ضمان مختلط',
+  manufacturer: 'داخل الضمان',
+};
+
+type WarrantyProductFlag = Pick<RepairJobProduct, 'inWarranty' | 'itemId'> | null | undefined;
+
 export function jobHasInWarrantyProduct(
-  products: Array<Pick<RepairJobProduct, 'inWarranty'> | null | undefined> | null | undefined,
+  products: Array<WarrantyProductFlag> | null | undefined,
 ): boolean {
   return (products || []).some((item) => Boolean(item?.inWarranty));
 }
 
-export function resolveManufacturerWarrantyScope(
-  products: Array<Pick<RepairJobProduct, 'inWarranty'> | null | undefined> | null | undefined,
-): RepairWarrantyScope {
-  return jobHasInWarrantyProduct(products) ? 'manufacturer' : 'none';
+export function jobHasBillableProduct(
+  products: Array<WarrantyProductFlag> | null | undefined,
+): boolean {
+  const list = products || [];
+  if (list.length === 0) return true;
+  return list.some((item) => !item?.inWarranty);
 }
 
-export function isManufacturerWarrantyJob(job: {
+/** Derive job warranty scope from product lines. Legacy `in_store` is not written. */
+export function resolveManufacturerWarrantyScope(
+  products: Array<WarrantyProductFlag> | null | undefined,
+): Exclude<RepairWarrantyScope, 'in_store'> {
+  const list = (products || []).filter(Boolean) as Array<NonNullable<WarrantyProductFlag>>;
+  if (list.length === 0) return 'none';
+  const warrantyCount = list.filter((item) => Boolean(item.inWarranty)).length;
+  if (warrantyCount === 0) return 'none';
+  if (warrantyCount === list.length) return 'manufacturer';
+  return 'partial';
+}
+
+export function manufacturerWarrantyLineLabel(inWarranty: boolean | null | undefined): string {
+  return inWarranty
+    ? MANUFACTURER_WARRANTY_LINE_LABEL.inWarranty
+    : MANUFACTURER_WARRANTY_LINE_LABEL.without;
+}
+
+export function manufacturerWarrantyScopeLabel(
+  scope: string | null | undefined,
+  products?: Array<WarrantyProductFlag> | null,
+): string {
+  const resolved = scope === 'partial' || scope === 'manufacturer' || scope === 'none'
+    ? scope
+    : resolveManufacturerWarrantyScope(products);
+  if (resolved === 'partial') return MANUFACTURER_WARRANTY_SCOPE_LABEL.partial;
+  if (resolved === 'manufacturer') return MANUFACTURER_WARRANTY_SCOPE_LABEL.manufacturer;
+  return MANUFACTURER_WARRANTY_SCOPE_LABEL.none;
+}
+
+/** Full manufacturer warranty — entire job free / warranty settlement. */
+export function isFullManufacturerWarrantyJob(job: {
   warrantyScope?: string | null;
-  jobProducts?: Array<Pick<RepairJobProduct, 'inWarranty'> | null | undefined> | null;
+  jobProducts?: Array<WarrantyProductFlag> | null;
 }): boolean {
   if (String(job.warrantyScope || '') === 'manufacturer') return true;
+  if (String(job.warrantyScope || '') === 'partial') return false;
+  if (String(job.warrantyScope || '') === 'none') return false;
+  return resolveManufacturerWarrantyScope(job.jobProducts) === 'manufacturer';
+}
+
+/** Mixed job: some lines warranty, some billable. */
+export function isPartialManufacturerWarrantyJob(job: {
+  warrantyScope?: string | null;
+  jobProducts?: Array<WarrantyProductFlag> | null;
+}): boolean {
+  if (String(job.warrantyScope || '') === 'partial') return true;
+  if (String(job.warrantyScope || '') === 'manufacturer') return false;
+  if (String(job.warrantyScope || '') === 'none') return false;
+  return resolveManufacturerWarrantyScope(job.jobProducts) === 'partial';
+}
+
+/**
+ * True when the job has manufacturer warranty coverage (full or partial).
+ * Prefer `isFullManufacturerWarrantyJob` for settlementType === 'warranty'.
+ */
+export function isManufacturerWarrantyJob(job: {
+  warrantyScope?: string | null;
+  jobProducts?: Array<WarrantyProductFlag> | null;
+}): boolean {
+  return isFullManufacturerWarrantyJob(job);
+}
+
+export function hasManufacturerWarrantyCoverage(job: {
+  warrantyScope?: string | null;
+  jobProducts?: Array<WarrantyProductFlag> | null;
+}): boolean {
+  const scope = String(job.warrantyScope || '');
+  if (scope === 'manufacturer' || scope === 'partial') return true;
   return jobHasInWarrantyProduct(job.jobProducts);
+}
+
+export function warrantyProductItemIds(
+  products: Array<WarrantyProductFlag> | null | undefined,
+): Set<string> {
+  const ids = new Set<string>();
+  for (const row of products || []) {
+    if (!row?.inWarranty) continue;
+    const id = String(row.itemId || '').trim();
+    if (id) ids.add(id);
+  }
+  return ids;
 }
 
 export function isWarrantySettlementAuth(auth: {
@@ -58,16 +153,36 @@ export function sumWarrantyPartsIssueCost(
   return Math.round(sum * 100) / 100;
 }
 
+/**
+ * Parts cost attributable to manufacturer warranty.
+ * Full warranty jobs: all parts. Partial: only parts linked to warranty productItemId.
+ */
+export function sumJobManufacturerWarrantyPartsCost(job: {
+  warrantyScope?: string | null;
+  jobProducts?: Array<WarrantyProductFlag> | null;
+  partsUsed?: Array<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot' | 'productItemId' | 'scope'> | null | undefined> | null;
+}): number {
+  if (isFullManufacturerWarrantyJob(job)) {
+    return sumWarrantyPartsIssueCost(job.partsUsed);
+  }
+  if (!isPartialManufacturerWarrantyJob(job)) return 0;
+  const warrantyIds = warrantyProductItemIds(job.jobProducts);
+  const warrantyParts = (job.partsUsed || []).filter((raw) => {
+    if (!raw) return false;
+    const productItemId = String(raw.productItemId || '').trim();
+    return Boolean(productItemId && warrantyIds.has(productItemId));
+  });
+  return sumWarrantyPartsIssueCost(warrantyParts);
+}
+
 export function sumManufacturerWarrantyPartsCost(
   jobs: Array<{
     warrantyScope?: string | null;
-    jobProducts?: Array<Pick<RepairJobProduct, 'inWarranty'> | null | undefined> | null;
-    partsUsed?: Array<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot'> | null | undefined> | null;
+    jobProducts?: Array<WarrantyProductFlag> | null;
+    partsUsed?: Array<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot' | 'productItemId' | 'scope'> | null | undefined> | null;
   }>,
 ): number {
   return Math.round(
-    jobs
-      .filter((job) => isManufacturerWarrantyJob(job))
-      .reduce((sum, job) => sum + sumWarrantyPartsIssueCost(job.partsUsed), 0) * 100,
+    jobs.reduce((sum, job) => sum + sumJobManufacturerWarrantyPartsCost(job), 0) * 100,
   ) / 100;
 }

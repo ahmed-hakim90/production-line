@@ -2,9 +2,13 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { toast } from '../../../components/Toast';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
+import { useAppStore } from '../../../store/useAppStore';
 import { warehouseService } from '../services/warehouseService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { sparePartsRecallService } from '../services/sparePartsRecallService';
@@ -14,11 +18,24 @@ import {
   canConfirmSparePartsRecall,
 } from '../lib/sparePartsRecall';
 import { WAREHOUSE_ROLE_LABELS } from '../lib/stockLabels';
-import type { SparePartsRecallRequest, Warehouse } from '../types';
+import type { SparePartsRecallRequest, SparePartsRecallStatus, Warehouse } from '../types';
 import type { Material } from '../../manufacturing/types';
+
+const PAGE_SIZE = 20;
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
+
+function normalizeRoleName(value: unknown): string {
+  return String(value || '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+function recallStatusTone(status: SparePartsRecallStatus): 'success' | 'warning' | 'danger' | 'muted' {
+  if (status === 'confirmed') return 'success';
+  if (status === 'cancelled') return 'danger';
+  if (status === 'submitted') return 'warning';
+  return 'muted';
+}
 
 type DraftLine = { itemId: string; quantity: string };
 
@@ -26,11 +43,22 @@ export const SparePartsRecall: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [searchParams] = useSearchParams();
   const { can } = usePermission();
+  const roles = useAppStore((s) => s.roles);
+  const userRoleId = useAppStore((s) => s.userRoleId);
+  const userRoleName = useAppStore((s) => s.userRoleName);
 
   const canView = can('sparePartsRecall.view') || can('sparePartsReplenishment.view') || can('inventory.view');
   const canCreate = can('sparePartsRecall.create');
-  const canConfirm = can('sparePartsRecall.confirm');
+  const canConfirmPerm = can('sparePartsRecall.confirm');
   const canCancel = can('sparePartsRecall.cancel');
+
+  /** Central HQ creates/cancels; center warehouse confirms delivery back. */
+  const isCentralWarehouseOperator = useMemo(() => {
+    const role = roles.find((r) => r.id === userRoleId);
+    if (role?.roleKey === 'spare_parts_central_warehouse') return true;
+    return normalizeRoleName(userRoleName) === normalizeRoleName('مسؤول مخزن قطع الغيار المركزي');
+  }, [roles, userRoleId, userRoleName]);
+  const canConfirm = canConfirmPerm && !isCentralWarehouseOperator;
 
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -38,6 +66,11 @@ export const SparePartsRecall: React.FC = () => {
   const [materials, setMaterials] = useState<Material[]>([]);
   const [rows, setRows] = useState<SparePartsRecallRequest[]>([]);
   const [showCreate, setShowCreate] = useState(Boolean(searchParams.get('fromWarehouseId')));
+  const [listTab, setListTab] = useState<'pending' | 'all'>('pending');
+  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [expandedId, setExpandedId] = useState('');
 
   const [fromWarehouseId, setFromWarehouseId] = useState(searchParams.get('fromWarehouseId') || '');
   const [note, setNote] = useState('');
@@ -88,6 +121,45 @@ export const SparePartsRecall: React.FC = () => {
     }
   }, [searchParams]);
 
+  const pendingCount = useMemo(
+    () => rows.filter((r) => r.status === 'submitted').length,
+    [rows],
+  );
+
+  const filtered = useMemo(() => {
+    let list = rows;
+    if (listTab === 'pending') {
+      list = list.filter((r) => r.status === 'submitted');
+    }
+    if (statusFilter) {
+      list = list.filter((r) => r.status === statusFilter);
+    }
+    const q = search.trim().toLowerCase();
+    if (q) {
+      list = list.filter((r) => {
+        const hay = [
+          r.referenceNo,
+          r.fromWarehouseName,
+          r.toWarehouseName,
+          ...(r.lines || []).map((l) => `${l.itemName} ${l.itemCode}`),
+        ].join(' ').toLowerCase();
+        return hay.includes(q);
+      });
+    }
+    return list;
+  }, [rows, listTab, statusFilter, search]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [listTab, statusFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = useMemo(
+    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filtered, safePage],
+  );
+
   const submitCreate = async () => {
     if (!fromWarehouseId) {
       toast.error('حدد مخزن المركز.');
@@ -114,6 +186,7 @@ export const SparePartsRecall: React.FC = () => {
       setShowCreate(false);
       setNote('');
       setDraftLines([{ itemId: '', quantity: '1' }]);
+      setListTab('pending');
       await load();
     } catch (error: unknown) {
       toast.error(error instanceof Error ? error.message : 'تعذر إنشاء الطلب.');
@@ -152,7 +225,11 @@ export const SparePartsRecall: React.FC = () => {
     <div className="space-y-4 p-4 md:p-6">
       <PageHeader
         title="سحب قطع الغيار من المراكز"
-        subtitle="المركزي يطلب سحب كمية من مركز → المركز يؤكد → الرصيد يرجع للمخزن الرئيسي."
+        subtitle={
+          isCentralWarehouseOperator
+            ? 'أنشئ طلب سحب من أرصدة المراكز — المركز يؤكد التسليم ثم يرجع الرصيد للرئيسي.'
+            : 'المركزي يطلب سحب كمية من مركز → المركز يؤكد → الرصيد يرجع للمخزن الرئيسي.'
+        }
         actions={(
           <div className="flex flex-wrap gap-2">
             {canCreate ? (
@@ -169,8 +246,20 @@ export const SparePartsRecall: React.FC = () => {
         )}
       />
 
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Card title="بانتظار تأكيد المركز">
+          <div className="text-2xl font-black text-amber-700">{pendingCount}</div>
+        </Card>
+        <Card title="كل الطلبات المحمّلة">
+          <div className="text-2xl font-black">{rows.length}</div>
+        </Card>
+      </div>
+
       {showCreate && canCreate ? (
         <Card title="طلب سحب إلى المخزن الرئيسي">
+          <p className="mb-3 text-xs text-[var(--color-text-muted)]">
+            الأسهل: اختر الأصناف من «أرصدة المراكز» ثم اضغط سحب المحدد — أو أنشئ يدوياً هنا.
+          </p>
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-sm font-semibold space-y-1">
               <span>من مخزن المركز</span>
@@ -256,61 +345,171 @@ export const SparePartsRecall: React.FC = () => {
         </Card>
       ) : null}
 
-      <Card title="طلبات السحب">
-        {loading ? (
-          <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل…</p>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">لا توجد طلبات بعد.</p>
-        ) : (
-          <div className="space-y-3">
-            {rows.map((row) => (
-              <div key={row.id} className="rounded-xl border border-[var(--color-border)] p-3">
-                <div className="flex flex-wrap justify-between gap-2">
-                  <div>
-                    <div className="font-bold">{row.referenceNo}</div>
-                    <div className="text-xs text-[var(--color-text-muted)]">
-                      {row.fromWarehouseName} → {row.toWarehouseName}
-                    </div>
-                    <div className="text-xs font-semibold mt-1">
-                      {SPARE_PARTS_RECALL_STATUS_LABELS[row.status]}
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    {canConfirm && canConfirmSparePartsRecall(row) ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        disabled={busyId === `confirm:${row.id}`}
-                        onClick={() => void runAction(String(row.id), 'confirm')}
-                      >
-                        تأكيد السحب
-                      </Button>
-                    ) : null}
-                    {canCancel && canCancelSparePartsRecall(row) ? (
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="ghost"
-                        disabled={busyId === `cancel:${row.id}`}
-                        onClick={() => void runAction(String(row.id), 'cancel')}
-                      >
-                        إلغاء
-                      </Button>
-                    ) : null}
-                  </div>
-                </div>
-                <ul className="mt-2 text-xs space-y-1">
-                  {(row.lines || []).map((line) => (
-                    <li key={line.lineId}>
-                      {line.itemName} ({line.itemCode || '—'}) — {fmt(line.requestedQty)}
-                      {line.confirmedQty != null ? ` · مؤكد ${fmt(line.confirmedQty)}` : ''}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        )}
+      <Card className="!p-0 overflow-hidden">
+        <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] px-3 pt-3">
+          {([
+            ['pending', `معلّق (${pendingCount})`],
+            ['all', 'كل الطلبات'],
+          ] as const).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              onClick={() => setListTab(key)}
+              className={`min-h-9 rounded-lg border px-3 py-1.5 text-xs font-bold ${
+                listTab === key
+                  ? 'border-primary bg-primary text-white'
+                  : 'border-slate-200 bg-white text-slate-600'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        <SmartFilterBar
+          pageId="spare-parts-recall"
+          searchPlaceholder="رقم الطلب أو المركز أو الصنف…"
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'status',
+              placeholder: 'كل الحالات',
+              options: (Object.keys(SPARE_PARTS_RECALL_STATUS_LABELS) as SparePartsRecallStatus[]).map(
+                (status) => ({
+                  value: status,
+                  label: SPARE_PARTS_RECALL_STATUS_LABELS[status],
+                }),
+              ),
+            },
+          ]}
+          quickFilterValues={{
+            status: statusFilter || 'all',
+          }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'status') setStatusFilter(value === 'all' ? '' : value);
+          }}
+          extra={(
+            <Button type="button" variant="ghost" size="sm" onClick={() => void load()}>
+              تحديث
+            </Button>
+          )}
+        />
+
+        <div className="overflow-x-auto">
+          <table className="erp-table w-full text-sm">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th text-start">الطلب</th>
+                <th className="erp-th text-start">من → إلى</th>
+                <th className="erp-th text-start">الحالة</th>
+                <th className="erp-th text-start">البنود</th>
+                <th className="erp-th text-start">إجراء</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 5 }).map((_, i) => (
+                  <tr key={`sk-${i}`}>
+                    <td className="py-3 px-2" colSpan={5}>
+                      <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                    </td>
+                  </tr>
+                ))
+              ) : paged.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="py-10 text-center text-sm text-[var(--color-text-muted)]">
+                    لا توجد طلبات مطابقة.
+                  </td>
+                </tr>
+              ) : (
+                paged.map((row) => {
+                  const id = String(row.id || '');
+                  const expanded = expandedId === id;
+                  return (
+                    <React.Fragment key={id}>
+                      <tr className="border-b border-[var(--color-border)]/50">
+                        <td className="py-2 px-2 font-bold">{row.referenceNo}</td>
+                        <td className="py-2 px-2 text-xs">
+                          {row.fromWarehouseName} → {row.toWarehouseName}
+                        </td>
+                        <td className="py-2 px-2">
+                          <StatusBadge
+                            label={SPARE_PARTS_RECALL_STATUS_LABELS[row.status]}
+                            type={recallStatusTone(row.status)}
+                          />
+                        </td>
+                        <td className="py-2 px-2">
+                          <button
+                            type="button"
+                            className="text-xs font-bold text-primary underline"
+                            onClick={() => setExpandedId((prev) => (prev === id ? '' : id))}
+                          >
+                            {(row.lines || []).length} بند{expanded ? ' ▾' : ' ▸'}
+                          </button>
+                        </td>
+                        <td className="py-2 px-2">
+                          <div className="flex flex-wrap gap-2">
+                            {canConfirm && canConfirmSparePartsRecall(row) ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                disabled={busyId === `confirm:${row.id}`}
+                                onClick={() => void runAction(id, 'confirm')}
+                              >
+                                تأكيد السحب
+                              </Button>
+                            ) : null}
+                            {canCancel && canCancelSparePartsRecall(row) ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                disabled={busyId === `cancel:${row.id}`}
+                                onClick={() => void runAction(id, 'cancel')}
+                              >
+                                إلغاء
+                              </Button>
+                            ) : null}
+                            {isCentralWarehouseOperator && row.status === 'submitted' ? (
+                              <span className="text-[11px] text-[var(--color-text-muted)]">
+                                بانتظار تأكيد المركز
+                              </span>
+                            ) : null}
+                          </div>
+                        </td>
+                      </tr>
+                      {expanded ? (
+                        <tr className="border-b border-[var(--color-border)]/40 bg-slate-50/70">
+                          <td colSpan={5} className="px-3 py-2">
+                            <ul className="space-y-1 text-xs">
+                              {(row.lines || []).map((line) => (
+                                <li key={line.lineId}>
+                                  {line.itemName} ({line.itemCode || '—'}) — {fmt(line.requestedQty)}
+                                  {line.confirmedQty != null ? ` · مؤكد ${fmt(line.confirmedQty)}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          </td>
+                        </tr>
+                      ) : null}
+                    </React.Fragment>
+                  );
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {!loading && filtered.length > 0 ? (
+          <DataPaginationFooter
+            page={safePage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            onPageChange={setPage}
+            itemLabel="طلب"
+          />
+        ) : null}
       </Card>
     </div>
   );

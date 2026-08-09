@@ -194,13 +194,13 @@ export const ProductionPlans: React.FC = () => {
 
   // â”€â”€ View / Filter state â”€â”€
   const [viewMode, setViewMode] = useState<ViewMode>('table');
-  const [filterStatus, setFilterStatus] = useState<string>('');
+  const [filterStatus, setFilterStatus] = useState<string>(() => String(searchParams.get('status') || ''));
   const [filterLine, setFilterLine] = useState('');
   const [filterProduct, setFilterProduct] = useState('');
   const [filterPriority, setFilterPriority] = useState('');
   const [filterSearch, setFilterSearch] = useState('');
-  const [filterDateFrom, setFilterDateFrom] = useState('');
-  const [filterDateTo, setFilterDateTo] = useState('');
+  const [filterDateFrom, setFilterDateFrom] = useState(() => String(searchParams.get('dateFrom') || ''));
+  const [filterDateTo, setFilterDateTo] = useState(() => String(searchParams.get('dateTo') || ''));
   const [dateQuick, setDateQuick] = useState<DateQuickFilter>('all');
   const [groupBy, setGroupBy] = useState<GroupByField>('none');
   const [sortField, setSortField] = useState<PlanSortField>('');
@@ -224,6 +224,15 @@ export const ProductionPlans: React.FC = () => {
       setFormPlanType('component_injection');
     }
   }, [can, canManageComponentInjectionPlans]);
+
+  useEffect(() => {
+    const status = String(searchParams.get('status') || '');
+    const dateFrom = String(searchParams.get('dateFrom') || '');
+    const dateTo = String(searchParams.get('dateTo') || '');
+    if (status) setFilterStatus(status);
+    if (dateFrom) setFilterDateFrom(dateFrom);
+    if (dateTo) setFilterDateTo(dateTo);
+  }, [searchParams]);
 
   // â”€â”€ Capacity warning â”€â”€
   const [capacityWarning, setCapacityWarning] = useState<{ show: boolean; load: number; capacity: number }>({ show: false, load: 0, capacity: 0 });

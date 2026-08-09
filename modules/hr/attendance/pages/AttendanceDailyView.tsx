@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '@/components/SelectableTable';
@@ -72,16 +73,25 @@ function toClock(value: unknown): string {
 export const AttendanceDailyView: React.FC = () => {
   const { can } = usePermission();
   const canEdit = can('attendance.edit');
+  const [searchParams] = useSearchParams();
   const records = useAppStore((s) => s.attendanceRecords);
   const rawEmployees = useAppStore((s) => s._rawEmployees);
   const fetchEmployees = useAppStore((s) => s.fetchEmployees);
   const fetchAttendanceRecords = useAppStore((s) => s.fetchAttendanceRecords);
   const updateAttendanceRecordTimes = useAppStore((s) => s.updateAttendanceRecordTimes);
   const deleteAttendanceRecordsByIds = useAppStore((s) => s.deleteAttendanceRecordsByIds);
-  const [startDate, setStartDate] = useState(getMonthStart);
-  const [endDate, setEndDate] = useState(getToday);
-  const [activePeriod, setActivePeriod] = useState<DateRangePreset>('month');
-  const [dateFilters, setDateFilters] = useState({ startDate: getMonthStart(), endDate: getToday() });
+  const queryStart = String(searchParams.get('dateFrom') || '').trim();
+  const queryEnd = String(searchParams.get('dateTo') || '').trim();
+  const queryStatus = String(searchParams.get('status') || '').trim();
+  const initialStart = queryStart || getMonthStart();
+  const initialEnd = queryEnd || getToday();
+  const [startDate, setStartDate] = useState(initialStart);
+  const [endDate, setEndDate] = useState(initialEnd);
+  const [activePeriod, setActivePeriod] = useState<DateRangePreset>(
+    queryStart || queryEnd ? 'custom' : 'month',
+  );
+  const [dateFilters, setDateFilters] = useState({ startDate: initialStart, endDate: initialEnd });
+  const [statusFilter, setStatusFilter] = useState(queryStatus);
   const [loading, setLoading] = useState(false);
   const [actionBusy, setActionBusy] = useState(false);
   const [deleteProgress, setDeleteProgress] = useState({ visible: false, done: 0, total: 0 });
@@ -126,6 +136,34 @@ export const AttendanceDailyView: React.FC = () => {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    if (queryStart) {
+      setStartDate(queryStart);
+      setDateFilters((prev) => ({ ...prev, startDate: queryStart }));
+      setActivePeriod('custom');
+    }
+    if (queryEnd) {
+      setEndDate(queryEnd);
+      setDateFilters((prev) => ({ ...prev, endDate: queryEnd }));
+      setActivePeriod('custom');
+    }
+    if (queryStatus) setStatusFilter(queryStatus);
+  }, [queryStart, queryEnd, queryStatus]);
+
+  const visibleRecords = useMemo(() => {
+    if (!statusFilter) return records;
+    if (statusFilter === 'present') {
+      return records.filter((record) => PRESENT_STATUSES.has(record.status) || LATE_STATUSES.has(record.status));
+    }
+    if (statusFilter === 'late') {
+      return records.filter((record) => LATE_STATUSES.has(record.status));
+    }
+    if (statusFilter === 'absent') {
+      return records.filter((record) => record.status === 'absent');
+    }
+    return records.filter((record) => String(record.status) === statusFilter);
+  }, [records, statusFilter]);
 
   const stats = useMemo(() => {
     const total = records.length;
@@ -229,7 +267,7 @@ export const AttendanceDailyView: React.FC = () => {
     : 0;
 
   const handleExport = useCallback(() => {
-    const rows = records.map((r) => ({
+    const rows = visibleRecords.map((r) => ({
       employeeId: r.employeeId,
       date: r.date,
       checkIn: r.checkIn,
@@ -247,7 +285,7 @@ export const AttendanceDailyView: React.FC = () => {
       if (e.id) empMap.set(e.id, { name: e.name, code: e.code });
     });
     exportAttendanceLogs(rows, empMap, `${startDate}-${endDate}`);
-  }, [records, rawEmployees, startDate, endDate]);
+  }, [visibleRecords, rawEmployees, startDate, endDate]);
 
   const tableColumns = useMemo<TableColumn<AttendanceRecord>[]>(() => [
     {
@@ -392,7 +430,7 @@ export const AttendanceDailyView: React.FC = () => {
           label: 'تصدير Excel',
           icon: 'download',
           onClick: handleExport,
-          disabled: records.length === 0,
+          disabled: visibleRecords.length === 0,
         }}
         loading={loading || actionBusy}
       />
@@ -405,6 +443,11 @@ export const AttendanceDailyView: React.FC = () => {
           </div>
         ))}
       </div>
+      {statusFilter ? (
+        <p className="text-xs font-bold text-[var(--color-text-muted)]">
+          فلتر الحالة من اللوحة: {statusFilter}
+        </p>
+      ) : null}
 
       {deleteProgress.visible && (
         <div className="card p-3 space-y-2">
@@ -451,7 +494,7 @@ export const AttendanceDailyView: React.FC = () => {
           className="mb-0 border-0 rounded-none"
         />
         <SelectableTable<AttendanceRecord>
-          data={records}
+          data={visibleRecords}
           columns={tableColumns}
           getId={(record) => record.id}
           bulkActions={bulkActions}

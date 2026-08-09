@@ -52,7 +52,14 @@ import type {
   RepairPaymentAuthorization,
   RepairPaymentMethod,
 } from "../types";
-import { isManufacturerWarrantyJob, isWarrantySettlementAuth } from "../lib/repairManufacturerWarranty";
+import {
+  hasManufacturerWarrantyCoverage,
+  isFullManufacturerWarrantyJob,
+  isManufacturerWarrantyJob,
+  isPartialManufacturerWarrantyJob,
+  isWarrantySettlementAuth,
+  manufacturerWarrantyScopeLabel,
+} from "../lib/repairManufacturerWarranty";
 import { resolveAccessibleRepairBranchIds } from "../lib/repairBranchAccess";
 import { useAppDirection } from "@/src/shared/ui/layout/useAppDirection";
 
@@ -547,9 +554,13 @@ export const RepairPayments: React.FC = () => {
                         {job.productName || job.deviceBrand}
                         {job.customerPhone ? ` · ${job.customerPhone}` : ""}
                       </p>
-                      {isManufacturerWarrantyJob(job) ? (
+                      {hasManufacturerWarrantyCoverage(job) ? (
                         <Badge variant="secondary" className="mt-1">
-                          ضمان مصنّع — بدون تحصيل
+                          {isFullManufacturerWarrantyJob(job)
+                            ? "داخل الضمان — بدون تحصيل"
+                            : isPartialManufacturerWarrantyJob(job)
+                              ? "ضمان مختلط — تحصيل غير الضمان"
+                              : manufacturerWarrantyScopeLabel(job.warrantyScope, job.jobProducts)}
                         </Badge>
                       ) : null}
                     </div>

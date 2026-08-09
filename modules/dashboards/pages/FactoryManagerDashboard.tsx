@@ -942,37 +942,6 @@ export const FactoryManagerDashboard: React.FC = () => {
     <ModuleChartsHomeBoard
       title="لوحة مدير المصنع"
       subtitle="كروت مؤشرات + رسوم لكل موديول"
-      headerExtra={(
-        <div className="min-w-0 w-full xl:max-w-2xl">
-          <SmartFilterBar
-            pageId="dashboard-factory-manager"
-            periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
-              value: key,
-              label: PRESET_LABELS[key],
-            }))}
-            activePeriod={preset}
-            onPeriodChange={(value) => setPreset(value as PeriodPreset)}
-            advancedFilters={[
-              { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
-              { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[150px]' },
-            ]}
-            advancedFilterValues={{
-              dateFrom: customStart || dateRange.start,
-              dateTo: customEnd || dateRange.end,
-            }}
-            onAdvancedFilterChange={(key, value) => {
-              if (key === 'dateFrom') {
-                setCustomStart(value);
-                setPreset('custom');
-              }
-              if (key === 'dateTo') {
-                setCustomEnd(value);
-                setPreset('custom');
-              }
-            }}
-          />
-        </div>
-      )}
     />
   );
 };

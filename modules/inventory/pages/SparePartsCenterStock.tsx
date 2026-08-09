@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Link, useParams, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { PageHeader } from '@/components/PageHeader';
 import { Card, Button } from '../components/UI';
+import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { toast } from '../../../components/Toast';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { sparePartsRecallService } from '../services/sparePartsRecallService';
 import type { MaintenanceCenterSpareBalanceRow } from '../types';
+
+const PAGE_SIZE = 20;
 
 const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
@@ -14,6 +18,7 @@ const fmt = (n: number) =>
 export const SparePartsCenterStock: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const { can } = usePermission();
   const canView = can('sparePartsRecall.view') || can('sparePartsReplenishment.view') || can('inventory.view');
   const canCreateRecall = can('sparePartsRecall.create');
@@ -24,6 +29,7 @@ export const SparePartsCenterStock: React.FC = () => {
   const [warehouseFilter, setWarehouseFilter] = useState(searchParams.get('warehouseId') || '');
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState<Record<string, string>>({});
+  const [page, setPage] = useState(1);
 
   const load = useCallback(async () => {
     if (!canView) return;
@@ -31,7 +37,6 @@ export const SparePartsCenterStock: React.FC = () => {
     try {
       const result = await sparePartsRecallService.listCenterBalances({
         warehouseId: warehouseFilter || undefined,
-        search: search || undefined,
       });
       setRows(result.rows);
       setCenters(result.centers);
@@ -41,19 +46,60 @@ export const SparePartsCenterStock: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  }, [canView, warehouseFilter, search]);
+  }, [canView, warehouseFilter]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
+  useEffect(() => {
+    setPage(1);
+  }, [warehouseFilter, search]);
+
   const selectionKey = (row: MaintenanceCenterSpareBalanceRow) =>
     `${row.warehouseId}__${row.itemId}`;
+
+  const filtered = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => {
+      const hay = `${row.warehouseName} ${row.itemName} ${row.itemCode}`.toLowerCase();
+      return hay.includes(q);
+    });
+  }, [rows, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paged = useMemo(
+    () => filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE),
+    [filtered, safePage],
+  );
 
   const selectedRows = useMemo(
     () => rows.filter((row) => Number(selected[selectionKey(row)] || 0) > 0),
     [rows, selected],
   );
+
+  const pageCenterId = useMemo(() => {
+    if (!paged.length) return '';
+    const first = paged[0]?.warehouseId || '';
+    return paged.every((row) => row.warehouseId === first) ? first : '';
+  }, [paged]);
+
+  const fillPageQty = () => {
+    if (!pageCenterId) {
+      toast.error('صفّ حسب مركز واحد أولاً ثم عبّئ كميات الصفحة.');
+      return;
+    }
+    setSelected((prev) => {
+      const next = { ...prev };
+      for (const row of paged) {
+        if (row.warehouseId !== pageCenterId) continue;
+        next[selectionKey(row)] = String(row.quantity);
+      }
+      return next;
+    });
+  };
 
   const buildRecallQuery = () => {
     if (selectedRows.length === 0) return '';
@@ -85,7 +131,7 @@ export const SparePartsCenterStock: React.FC = () => {
     <div className="space-y-4 p-4 md:p-6">
       <PageHeader
         title="أرصدة قطع الغيار في المراكز"
-        subtitle="عرض الكمية ومكانها في أي مركز صيانة — يمكن إنشاء طلب سحب للرئيسي من هنا."
+        subtitle="اعرض رصيد كل مركز، حدّد الكمية، وأنشئ طلب سحب للرئيسي مباشرة."
         actions={(
           <div className="flex flex-wrap gap-2">
             <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-recall')}>
@@ -97,68 +143,81 @@ export const SparePartsCenterStock: React.FC = () => {
                 onClick={() => {
                   const q = buildRecallQuery();
                   if (!q) return;
-                  window.location.assign(withTenantPath(tenantSlug, `/inventory/spare-parts-recall${q}`));
+                  navigate(withTenantPath(tenantSlug, `/inventory/spare-parts-recall${q}`));
                 }}
                 disabled={selectedRows.length === 0}
               >
-                سحب المحدد للرئيسي
+                سحب المحدد للرئيسي ({selectedRows.length})
               </Button>
             ) : null}
           </div>
         )}
       />
 
-      <Card title="تصفية">
-        <div className="grid gap-3 md:grid-cols-3">
-          <label className="text-sm font-semibold space-y-1">
-            <span>المركز</span>
-            <select
-              className="w-full border rounded-lg px-3 py-2"
-              value={warehouseFilter}
-              onChange={(e) => setWarehouseFilter(e.target.value)}
-            >
-              <option value="">كل المراكز</option>
-              {centers.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm font-semibold space-y-1 md:col-span-2">
-            <span>بحث</span>
-            <input
-              className="w-full border rounded-lg px-3 py-2"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="اسم أو كود الصنف أو اسم المركز…"
-            />
-          </label>
-        </div>
-        <div className="mt-3">
-          <Button type="button" variant="ghost" size="sm" onClick={() => void load()}>
-            تحديث
-          </Button>
-        </div>
-      </Card>
+      <Card className="!p-0 overflow-hidden">
+        <SmartFilterBar
+          pageId="spare-parts-center-stock"
+          searchPlaceholder="اسم أو كود الصنف أو اسم المركز…"
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'warehouse',
+              placeholder: 'كل المراكز',
+              options: centers.map((c) => ({ value: c.id, label: c.name })),
+            },
+          ]}
+          quickFilterValues={{
+            warehouse: warehouseFilter || 'all',
+          }}
+          onQuickFilterChange={(key, value) => {
+            if (key === 'warehouse') setWarehouseFilter(value === 'all' ? '' : value);
+          }}
+          extra={(
+            <div className="flex flex-wrap gap-2">
+              {canCreateRecall && pageCenterId ? (
+                <Button type="button" variant="ghost" size="sm" onClick={fillPageQty}>
+                  تعبئة كميات الصفحة
+                </Button>
+              ) : null}
+              <Button type="button" variant="ghost" size="sm" onClick={() => void load()}>
+                تحديث
+              </Button>
+            </div>
+          )}
+        />
 
-      <Card title="الأرصدة">
-        {loading ? (
-          <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل…</p>
-        ) : rows.length === 0 ? (
-          <p className="text-sm text-[var(--color-text-muted)]">لا توجد أرصدة موجبة في المراكز.</p>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)]">
-                  <th className="text-start py-2 px-2">المركز</th>
-                  <th className="text-start py-2 px-2">الصنف</th>
-                  <th className="text-start py-2 px-2">الكود</th>
-                  <th className="text-start py-2 px-2">الرصيد</th>
-                  {canCreateRecall ? <th className="text-start py-2 px-2">كمية السحب</th> : null}
+        <div className="overflow-x-auto">
+          <table className="erp-table w-full text-sm">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th text-start">المركز</th>
+                <th className="erp-th text-start">الصنف</th>
+                <th className="erp-th text-start">الكود</th>
+                <th className="erp-th text-start">الرصيد</th>
+                {canCreateRecall ? <th className="erp-th text-start">كمية السحب</th> : null}
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                Array.from({ length: 6 }).map((_, i) => (
+                  <tr key={`sk-${i}`}>
+                    <td className="py-3 px-2" colSpan={canCreateRecall ? 5 : 4}>
+                      <div className="h-4 w-full animate-pulse rounded bg-slate-100" />
+                    </td>
+                  </tr>
+                ))
+              ) : paged.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={canCreateRecall ? 5 : 4}
+                    className="py-10 text-center text-sm text-[var(--color-text-muted)]"
+                  >
+                    لا توجد أرصدة موجبة مطابقة للتصفية.
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {rows.map((row) => {
+              ) : (
+                paged.map((row) => {
                   const key = selectionKey(row);
                   return (
                     <tr key={key} className="border-b border-[var(--color-border)]/50">
@@ -185,11 +244,21 @@ export const SparePartsCenterStock: React.FC = () => {
                       ) : null}
                     </tr>
                   );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {!loading && filtered.length > 0 ? (
+          <DataPaginationFooter
+            page={safePage}
+            totalPages={totalPages}
+            totalItems={filtered.length}
+            onPageChange={setPage}
+            itemLabel="صنف"
+          />
+        ) : null}
       </Card>
     </div>
   );

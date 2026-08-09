@@ -428,7 +428,17 @@ export const MENU_CONFIG: MenuGroup[] = [
     label: 'الصيانة',
     icon: 'build_circle',
     children: [
-      { key: 'repair-dashboard', label: 'لوحة الصيانة', icon: 'dashboard', path: '/repair', permission: 'repair.dashboard.view' },
+      {
+        key: 'repair-dashboard',
+        label: 'لوحة الصيانة',
+        icon: 'dashboard',
+        path: '/repair',
+        permission: 'repair.dashboard.view',
+        // Admin view already renders on `/repair` when `repair.adminDashboard.view` is present —
+        // one sidebar entry only (no duplicate «لوحة الإدارة»).
+        anyOfPermissions: ['repair.dashboard.view', 'repair.adminDashboard.view'],
+        exact: true,
+      },
       { key: 'repair-new-job', label: 'تسجيل طلب جديد', icon: 'add_circle', path: '/repair/jobs/new', permission: 'repair.jobs.create' },
       { key: 'repair-jobs', label: 'طلبات الصيانة', icon: 'construction', path: '/repair/jobs', permission: 'repair.view' },
       { key: 'repair-payments', label: 'التحصيل والتسليم', icon: 'payments', path: '/repair/payments', permission: 'repair.payments.view' },
@@ -448,7 +458,6 @@ export const MENU_CONFIG: MenuGroup[] = [
       { key: 'repair-replacements', label: 'طلبات الاستبدال', icon: 'swap_horiz', path: '/repair/replacements', permission: 'repair.replacements.view', anyOfPermissions: ['repair.replacements.view', 'repair.replacements.create', 'repair.replacements.approve', 'repair.replacements.deliver'] },
       { key: 'repair-technician-home', label: 'لوحة الفني', icon: 'engineering', path: '/repair/technician', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
       { key: 'repair-my-jobs', label: 'طلباتي (فني)', icon: 'engineering', path: '/repair/my-jobs', permission: 'repair.jobs.technician', includeRoleKeys: ['repair_technician'], exact: true },
-      { key: 'repair-admin-dashboard', label: 'لوحة الإدارة', icon: 'admin_panel_settings', path: '/repair/admin-dashboard', permission: 'repair.adminDashboard.view' },
       { key: 'repair-parts', label: 'قطع غيار المراكز', icon: 'inventory_2', path: '/repair/parts', permission: 'repair.parts.view' },
       {
         key: 'repair-parts-replenishment', label: 'متابعة التموين', icon: 'local_shipping', path: '/repair/parts-replenishment', permission: 'sparePartsReplenishment.view',

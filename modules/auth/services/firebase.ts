@@ -613,6 +613,8 @@ export type PublicRepairApprovalEstimate = {
   serviceOnlyCost: number;
   partsCost: number;
   productsCost: number;
+  warrantyProductsCost?: number;
+  billableProductsCost?: number;
   estimatedTotal: number;
   grossAmount: number;
   discountAmount: number;
@@ -628,6 +630,8 @@ export type PublicRepairApprovalEstimate = {
     name: string;
     quantity: number;
     lineCost: number;
+    inWarranty?: boolean;
+    warrantyLabel?: string;
   }>;
 };
 

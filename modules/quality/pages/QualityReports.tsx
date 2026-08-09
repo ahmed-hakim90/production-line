@@ -23,6 +23,8 @@ export const QualityReports: React.FC = () => {
   const _rawEmployees = useAppStore((s) => s._rawEmployees);
   const printTemplate = useAppStore((s) => s.systemSettings.printTemplate);
   const [selectedWorkOrderId, setSelectedWorkOrderId] = useState(searchParams.get('workOrderId') ?? '');
+  const dateFromQuery = String(searchParams.get('dateFrom') || '').trim();
+  const dateToQuery = String(searchParams.get('dateTo') || '').trim();
   const [summary, setSummary] = useState({
     inspectedUnits: 0,
     passedUnits: 0,
@@ -75,6 +77,16 @@ export const QualityReports: React.FC = () => {
     return qualityReportRows.filter((wo) => {
       const normalizedStatus = (wo.qualityStatus ?? 'pending') as 'approved' | 'rejected' | 'pending' | 'not_required';
       if (statusFilter !== 'all' && normalizedStatus !== statusFilter) return false;
+      if (dateFromQuery || dateToQuery) {
+        const ts =
+          wo.qualitySummary?.lastInspectionAt?.toDate?.()?.getTime?.()
+          ?? new Date(wo.qualityApprovedAt || wo.createdAt || 0).getTime();
+        if (Number.isFinite(ts) && ts > 0) {
+          const day = new Date(ts).toISOString().slice(0, 10);
+          if (dateFromQuery && day < dateFromQuery) return false;
+          if (dateToQuery && day > dateToQuery) return false;
+        }
+      }
       if (!query) return true;
       const productName = (_rawProducts.find((p) => p.id === wo.productId)?.name ?? '').toLowerCase();
       const lineName = (_rawLines.find((l) => l.id === wo.lineId)?.name ?? '').toLowerCase();
@@ -87,7 +99,7 @@ export const QualityReports: React.FC = () => {
         reportCode.includes(query)
       );
     });
-  }, [_rawLines, _rawProducts, qualityReportRows, statusFilter, tableQuery]);
+  }, [_rawLines, _rawProducts, qualityReportRows, statusFilter, tableQuery, dateFromQuery, dateToQuery]);
 
   const runReport = async () => {
     if (!selectedWorkOrderId) return;
