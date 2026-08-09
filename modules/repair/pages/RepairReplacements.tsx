@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { MessageCircle, RefreshCw } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import {
   Dialog,
   DialogContent,
@@ -239,59 +239,29 @@ export const RepairReplacements: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5" dir="rtl">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلبات الاستبدال.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="طلبات الاستبدال" dir="rtl">
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلبات الاستبدال.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 px-1 sm:space-y-5 sm:px-0" dir="rtl">
-      <PageHeader
-        title="طلبات الاستبدال"
-        subtitle="اعتماد ومتابعة وتسليم البدائل — دون حجز أو خصم من مخزون المنتج الجديد"
-        icon="swap_horiz"
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <ListViewToggle value={boardView} onChange={setBoardView} />
-            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className="ms-1 size-4" />
-              تحديث
-            </Button>
-          </div>
-        }
-      />
-
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-        {(
-          [
-            { key: 'pending_approval' as const, label: 'بانتظار الاعتماد', value: counts.pending_approval || 0 },
-            { key: 'approved' as const, label: 'معتمد', value: counts.approved || 0 },
-            { key: 'delivered' as const, label: 'تم التسليم', value: counts.delivered || 0 },
-            { key: '' as const, label: 'الإجمالي', value: rows.length },
-          ]
-        ).map((chip) => (
-          <button
-            key={chip.label}
-            type="button"
-            className={`rounded-lg border px-3 py-2 text-right transition-colors ${
-              statusFilter === chip.key
-                ? 'border-primary bg-primary/5'
-                : 'bg-card hover:bg-muted/40'
-            }`}
-            onClick={() => setStatusFilter(chip.key === '' ? '' : chip.key)}
-          >
-            <div className="text-xs text-muted-foreground">{chip.label}</div>
-            <div className="text-lg font-semibold tabular-nums">{chip.value}</div>
-          </button>
-        ))}
-      </div>
-
-      <Card className="!p-3 sm:!p-4">
+    <RepairOpsPageShell
+      eyebrow="طلبات الاستبدال"
+      dir="rtl"
+      hero={[
+        { key: 'pending_approval', label: 'بانتظار الاعتماد', value: counts.pending_approval || 0, onClick: () => setStatusFilter('pending_approval'), active: statusFilter === 'pending_approval' },
+        { key: 'approved', label: 'معتمد', value: counts.approved || 0, onClick: () => setStatusFilter('approved'), active: statusFilter === 'approved' },
+        { key: 'delivered', label: 'تم التسليم', value: counts.delivered || 0, onClick: () => setStatusFilter('delivered'), active: statusFilter === 'delivered' },
+        { key: 'all', label: 'الإجمالي', value: rows.length, onClick: () => setStatusFilter(''), active: statusFilter === '' },
+      ]}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={<ListViewToggle value={boardView} onChange={setBoardView} />}
+    >
+      <OpsDashPanel title="قائمة الاستبدالات" accent="repair" bodyClassName="p-0">
         <SmartFilterBar
           pageId="repair-replacements-list"
           searchPlaceholder="بحث بالإيصال، العميل، المنتج، السبب..."
@@ -325,9 +295,10 @@ export const RepairReplacements: React.FC = () => {
             if (key === 'status') setStatusFilter(value as RepairReplacementStatus | '');
             if (key === 'branchId') setBranchFilter(value);
           }}
+          className="mb-0 border-0 rounded-none"
         />
 
-        <div className="mt-4">
+        <div className="p-3 md:p-4">
           {boardView === 'kanban' ? (
             <StatusKanbanBoard
               columns={replacementKanbanColumns}
@@ -528,7 +499,7 @@ export const RepairReplacements: React.FC = () => {
             </>
           )}
         </div>
-      </Card>
+      </OpsDashPanel>
 
       <Dialog
         open={approveOpen}
@@ -646,7 +617,7 @@ export const RepairReplacements: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { MessageCircle, RefreshCw } from 'lucide-react';
+import { MessageCircle } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import {
   Dialog,
   DialogContent,
@@ -220,59 +220,29 @@ export const RepairCustomerRequests: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5" dir="rtl">
-        <Card>
-          <CardContent className="p-4">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلبات العملاء.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="طلبات العملاء" dir="rtl">
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلبات العملاء.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 px-1 sm:space-y-5 sm:px-0" dir="rtl">
-      <PageHeader
-        title="طلبات العملاء"
-        subtitle="طلبات بوابة العميل قبل توزيعها واستلامها في مراكز الصيانة"
-        icon="assignment"
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <ListViewToggle value={boardView} onChange={setBoardView} />
-            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => void load()} disabled={loading}>
-              <RefreshCw className="ms-1 size-4" />
-              تحديث
-            </Button>
-          </div>
-        }
-      />
-
-      <div className="grid grid-cols-2 gap-2 xl:grid-cols-4">
-        {(
-          [
-            { key: 'submitted' as const, label: 'غير موزع', value: counts.submitted },
-            { key: 'assigned' as const, label: 'بانتظار الاستلام', value: counts.assigned },
-            { key: 'converted' as const, label: 'تم التحويل', value: counts.converted },
-            { key: '' as const, label: 'الإجمالي', value: rows.length },
-          ]
-        ).map((chip) => (
-          <button
-            key={chip.label}
-            type="button"
-            className={`rounded-lg border px-3 py-2 text-right transition-colors ${
-              statusFilter === chip.key
-                ? 'border-primary bg-primary/5'
-                : 'bg-card hover:bg-muted/40'
-            }`}
-            onClick={() => setStatusFilter(chip.key === '' ? '' : chip.key)}
-          >
-            <div className="text-xs text-muted-foreground">{chip.label}</div>
-            <div className="text-lg font-semibold tabular-nums">{chip.value}</div>
-          </button>
-        ))}
-      </div>
-
-      <Card className="!p-3 sm:!p-4">
+    <RepairOpsPageShell
+      eyebrow="طلبات العملاء"
+      dir="rtl"
+      hero={[
+        { key: 'submitted', label: 'غير موزع', value: counts.submitted, onClick: () => setStatusFilter('submitted'), active: statusFilter === 'submitted' },
+        { key: 'assigned', label: 'بانتظار الاستلام', value: counts.assigned, onClick: () => setStatusFilter('assigned'), active: statusFilter === 'assigned' },
+        { key: 'converted', label: 'تم التحويل', value: counts.converted, onClick: () => setStatusFilter('converted'), active: statusFilter === 'converted' },
+        { key: 'all', label: 'الإجمالي', value: rows.length, onClick: () => setStatusFilter(''), active: statusFilter === '' },
+      ]}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={<ListViewToggle value={boardView} onChange={setBoardView} />}
+    >
+      <OpsDashPanel title="قائمة الطلبات" accent="repair" bodyClassName="p-0">
         <SmartFilterBar
           pageId="repair-customer-requests-list"
           searchPlaceholder="بحث برقم الطلب، العميل، الهاتف، المنتج..."
@@ -306,9 +276,10 @@ export const RepairCustomerRequests: React.FC = () => {
             if (key === 'status') setStatusFilter(value as CustomerServiceRequestStatus | '');
             if (key === 'branchId') setBranchFilter(value);
           }}
+          className="mb-0 border-0 rounded-none"
         />
 
-        <div className="mt-4">
+        <div className="p-3 md:p-4">
           {boardView === 'kanban' ? (
             <StatusKanbanBoard
               columns={requestKanbanColumns}
@@ -479,7 +450,7 @@ export const RepairCustomerRequests: React.FC = () => {
             </>
           )}
         </div>
-      </Card>
+      </OpsDashPanel>
 
       <Dialog
         open={assignOpen}
@@ -598,7 +569,7 @@ export const RepairCustomerRequests: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

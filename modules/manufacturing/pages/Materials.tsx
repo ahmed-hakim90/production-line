@@ -771,7 +771,6 @@ export const Materials: React.FC = () => {
           ) : null}
           <PageHeader
             title=""
-            className="!p-0 !mb-0 [&_.erp-page-head]:!mb-0 [&_.erp-page-title-block]:hidden"
             moreActions={[
               {
                 label: 'تصدير بيانات المواد (للاستيراد)',
