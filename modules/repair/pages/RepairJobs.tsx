@@ -523,7 +523,93 @@ export const RepairJobs: React.FC = () => {
             <CardDescription>اضغط رقم الإيصال لفتح تفاصيل الطلب.</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="overflow-x-auto rounded-lg border">
+            <div className="erp-mobile-card-list p-2">
+              {loading ? (
+                <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm text-muted-foreground">
+                  <span role="status" aria-live="polite">جاري التحميل...</span>
+                </div>
+              ) : visibleJobs.length === 0 ? (
+                <p className="py-10 text-center text-sm text-muted-foreground">
+                  لا توجد طلبات مطابقة للفلاتر الحالية.
+                </p>
+              ) : (
+                visibleJobs.map((job) => {
+                  const cost = computeRepairJobCost(job);
+                  const overdue = job.dueAt
+                    && Date.parse(String(job.dueAt)) < Date.now()
+                    && openStatusSet.has(mapLegacyRepairStatus(job.status));
+                  return (
+                    <div
+                      key={`m-${job.id}`}
+                      className="cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                      onClick={() => setSelectedJob(job)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setSelectedJob(job);
+                        }
+                      }}
+                      role="button"
+                      tabIndex={0}
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <Link
+                            className="font-mono text-sm font-semibold text-primary hover:underline"
+                            to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            #{job.receiptNo}
+                          </Link>
+                          <p className="mt-1 truncate text-sm font-medium">{job.customerName}</p>
+                          <p className="text-xs text-muted-foreground" dir="ltr">{job.customerPhone}</p>
+                          <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                            {job.deviceBrand} {job.deviceModel}
+                          </p>
+                        </div>
+                        <StatusBadge status={job.status} />
+                      </div>
+                      <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                        <div>
+                          <dt className="text-[10px] text-[var(--color-text-muted)]">التكلفة</dt>
+                          <dd className="font-semibold tabular-nums">
+                            {cost.finalCost.toLocaleString('ar-EG')}
+                            <span className="ms-1 text-xs font-medium text-muted-foreground">ج.م</span>
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] text-[var(--color-text-muted)]">الاستحقاق</dt>
+                          <dd className={cn('tabular-nums', overdue && 'font-semibold text-rose-600')}>
+                            {job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : '—'}
+                          </dd>
+                        </div>
+                      </dl>
+                      <div className="mt-2">
+                        {canShowWorkshopNav ? (
+                          <Link
+                            className="text-xs font-medium text-primary hover:underline"
+                            to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            الورشة
+                          </Link>
+                        ) : (
+                          <Link
+                            className="text-xs font-medium text-primary hover:underline"
+                            to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            إيصال
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            <div className="erp-desktop-table overflow-x-auto rounded-lg border">
               <table className="w-full text-sm">
                 <thead className="bg-muted/60">
                   <tr>
