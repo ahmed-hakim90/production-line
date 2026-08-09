@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { Button, Badge, SearchableSelect } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
@@ -331,27 +333,35 @@ export const LoanRequests: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="إدارة السُلف"
-        subtitle="سلف شهرية وسلف مقسطة مع تتبع الصرف"
-        icon="account_balance_wallet"
-        primaryAction={(isHR || can('loan.create')) ? {
-          label: showForm ? 'إغلاق' : 'سلفة جديدة',
-          icon: showForm ? 'close' : 'add',
-          onClick: () => setShowForm(!showForm),
-        } : undefined}
-        moreActions={[
-          {
-            label: 'تصدير Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !canExportFromPage,
-            onClick: handleExport,
-          },
-        ]}
-      />
+    <ModuleOpsPageShell
+      eyebrow="إدارة السُلف"
+      rangeLabel="سلف شهرية وسلف مقسطة مع تتبع الصرف"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {(isHR || can('loan.create')) ? (
+            <Button onClick={() => setShowForm(!showForm)}>
+              <span className="material-icons-round text-sm">{showForm ? 'close' : 'add'}</span>
+              {showForm ? 'إغلاق' : 'سلفة جديدة'}
+            </Button>
+          ) : null}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'تصدير Excel',
+                  icon: 'download',
+                  group: 'تصدير',
+                  hidden: !canExportFromPage,
+                  onClick: handleExport,
+                },
+              ]}
+            />
+          </div>
+        </div>
+      }
+    >
 
       {/* Tabs */}
       <div className="flex gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
@@ -394,12 +404,10 @@ export const LoanRequests: React.FC = () => {
 
       {/* Create Form */}
       {showForm && (
-        <Card>
-          <div className="space-y-4">
-            <h3 className="font-bold text-lg flex items-center gap-2">
-              <span className="material-icons-round text-primary">{activeTab === 'monthly_advance' ? 'today' : 'calendar_month'}</span>
-              {activeTab === 'monthly_advance' ? 'سلفة شهرية جديدة' : 'سلفة مقسطة جديدة'}
-            </h3>
+        <OpsDashPanel
+          title={activeTab === 'monthly_advance' ? 'سلفة شهرية جديدة' : 'سلفة مقسطة جديدة'}
+          accent="hr"
+        >
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {isHR && (
                 <div className="sm:col-span-2">
@@ -458,12 +466,10 @@ export const LoanRequests: React.FC = () => {
                 {submitting ? 'جاري الإنشاء...' : 'إنشاء السلفة'}
               </Button>
             </div>
-          </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      {/* Filters + Table */}
-      <Card className="mb-0 border-0 rounded-none">
+      <OpsDashPanel title="السُلف" accent="hr" bodyClassName="p-0">
         <SmartFilterBar
       pageId="hr-loan-requests"
           className="mb-0 border-0 rounded-none"
@@ -543,7 +549,7 @@ export const LoanRequests: React.FC = () => {
             onDelete={setDeleteConfirm}
           />
         )}
-      </Card>
+      </OpsDashPanel>
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
@@ -573,7 +579,7 @@ export const LoanRequests: React.FC = () => {
           {toast.message}
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

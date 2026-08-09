@@ -38,7 +38,7 @@ import {
 import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
 import { type ProductBomCountCard } from '../components/ProductBomCountCardPrint';
 import { ProductBomCountCardPreviewModal } from '../components/ProductBomCountCardPreviewModal';
 import { buildProductBomCountCards } from '../lib/buildProductBomCountCards';
@@ -101,6 +101,8 @@ import type { StockItemBalance } from '../../inventory/types';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { TableIconAction, ToneActionButton } from '@/src/components/erp/TableIconAction';
@@ -2194,9 +2196,165 @@ export const Products: React.FC = () => {
     }
   };
 
+  const layoutToggle = (
+    <div
+      className="inline-flex items-center gap-0.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-0.5"
+      role="group"
+      aria-label="طريقة العرض"
+    >
+      <button
+        type="button"
+        onClick={() => setLayoutModePersist('table')}
+        className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
+          layoutMode === 'table'
+            ? 'bg-primary text-white'
+            : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
+        }`}
+        title="عرض جدول"
+        aria-pressed={layoutMode === 'table'}
+      >
+        <List className="size-3.5" aria-hidden />
+        جدول
+      </button>
+      <button
+        type="button"
+        onClick={() => setLayoutModePersist('grid')}
+        className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
+          layoutMode === 'grid'
+            ? 'bg-primary text-white'
+            : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
+        }`}
+        title="عرض بطاقات"
+        aria-pressed={layoutMode === 'grid'}
+      >
+        <LayoutGrid className="size-3.5" aria-hidden />
+        بطاقات
+      </button>
+    </div>
+  );
+
   return (
-    <div className="space-y-6">
-      {/* Hidden file input */}
+    <ModuleOpsPageShell
+      eyebrow="إدارة المنتجات"
+      rangeLabel="ترتيب الاستيراد: مواد تصنيعية ← بيانات المنتجات ← مكونات (BOM/قطع صيانة)"
+      actions={(
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            primaryAction={canCreateProductModal ? {
+              label: 'منتج جديد',
+              icon: 'add',
+              onClick: openCreate,
+              dataModalKey: MODAL_KEYS.PRODUCTS_CREATE,
+            } : undefined}
+            moreActions={[
+              {
+                label: 'تصدير بيانات المنتجات (للاستيراد)',
+                icon: 'table_chart',
+                group: 'بيانات أساسية',
+                hidden: !canExportFromPage || _rawProducts.length === 0,
+                onClick: () => {
+                  const rows = _rawProducts
+                    .filter((p) => p.id && p.code)
+                    .map((p) => ({
+                      code: p.code,
+                      name: p.name,
+                      barcode: p.barcode || '',
+                      model: p.model || p.categoryName || '',
+                      isManufactured: p.isManufactured !== false,
+                      chineseUnitCost: canViewCosts ? Number(p.chineseUnitCost || 0) : undefined,
+                      innerBoxCost: canViewCosts ? Number(p.innerBoxCost || 0) : undefined,
+                      outerCartonCost: canViewCosts ? Number(p.outerCartonCost || 0) : undefined,
+                      unitsPerCarton: canViewCosts ? Number(p.unitsPerCarton || 0) : undefined,
+                      sellingPrice: canViewSellingPrice ? Number(p.sellingPrice || 0) : undefined,
+                      routingTargetUnitSeconds:
+                        p.routingTargetUnitSeconds != null && Number(p.routingTargetUnitSeconds) > 0
+                          ? Math.round(Number(p.routingTargetUnitSeconds))
+                          : undefined,
+                    }));
+                  if (rows.length === 0) {
+                    toast.error('لا توجد منتجات للتصدير.');
+                    return;
+                  }
+                  exportProductsBasicMaster(rows, {
+                    includeCosts: canViewCosts,
+                    includeSellingPrice: canViewSellingPrice,
+                  });
+                  toast.success(`تم تصدير ${rows.length} منتج (بيانات أساسية للاستيراد).`);
+                },
+              },
+              {
+                label: 'تحميل قالب بيانات المنتجات',
+                icon: 'file_download',
+                group: 'بيانات أساسية',
+                hidden: !canImportFromPage,
+                onClick: downloadProductsTemplate,
+              },
+              {
+                label: 'رفع/تحديث بيانات المنتجات',
+                icon: 'upload_file',
+                group: 'بيانات أساسية',
+                hidden: !canImportProducts,
+                onClick: () => fileInputRef.current?.click(),
+              },
+              {
+                label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير مكونات المنتجات (للاستيراد)',
+                icon: 'table_chart',
+                group: 'مكونات',
+                hidden: !canExportFromPage || _rawProducts.length === 0,
+                onClick: openBomExportModal,
+              },
+              {
+                label: 'تحميل قالب المكونات',
+                icon: 'file_download',
+                group: 'مكونات',
+                hidden: !canImportFromPage,
+                onClick: downloadProductComponentsTemplate,
+              },
+              {
+                label: 'رفع/تحديث مكونات المنتجات',
+                icon: 'upload_file',
+                group: 'مكونات',
+                hidden: !canImportFromPage,
+                onClick: () => componentsFileInputRef.current?.click(),
+              },
+              {
+                label: 'تصدير تقرير المنتجات (Excel)',
+                icon: 'table_chart',
+                group: 'تقارير',
+                hidden: !canExportFromPage || products.length === 0,
+                onClick: () => {
+                  setExportScope('all');
+                  setExportMonth(getCurrentMonth());
+                  setExportColumnPrefs({ ...visibleColumns });
+                  setShowWarehouseExportModal(true);
+                },
+              },
+              {
+                label: 'تصدير تقرير المنتجات بإنتاج الشهر',
+                icon: 'table_chart',
+                group: 'تقارير',
+                hidden: !canExportFromPage || products.length === 0,
+                onClick: () => {
+                  setExportScope('current_month');
+                  setExportMonth(getCurrentMonth());
+                  setExportColumnPrefs({ ...visibleColumns });
+                  setShowWarehouseExportModal(true);
+                },
+              },
+              {
+                label: 'إدارة الأعمدة الظاهرة',
+                icon: 'view_column',
+                group: 'عرض',
+                hidden: !canExportFromPage || layoutMode !== 'table',
+                onClick: () => setShowColumnsModal(true),
+              },
+            ]}
+          />
+        </div>
+      )}
+    >
       <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" className="hidden" onChange={handleFileSelect} />
       <input
         ref={componentsFileInputRef}
@@ -2204,122 +2362,6 @@ export const Products: React.FC = () => {
         accept=".xlsx,.xls,.csv"
         className="hidden"
         onChange={handleComponentsFileSelect}
-      />
-
-      {/* â”€â”€ Page Header â”€â”€ */}
-      <PageHeader
-        title="إدارة المنتجات"
-        subtitle="ترتيب الاستيراد: مواد تصنيعية ← بيانات المنتجات ← مكونات (BOM/قطع صيانة)"
-        icon="inventory_2"
-        primaryAction={canCreateProductModal ? {
-          label: 'منتج جديد',
-          icon: 'add',
-          onClick: openCreate,
-          dataModalKey: MODAL_KEYS.PRODUCTS_CREATE,
-        } : undefined}
-        moreActions={[
-          {
-            label: 'تصدير بيانات المنتجات (للاستيراد)',
-            icon: 'table_chart',
-            group: 'بيانات أساسية',
-            hidden: !canExportFromPage || _rawProducts.length === 0,
-            onClick: () => {
-              const rows = _rawProducts
-                .filter((p) => p.id && p.code)
-                .map((p) => ({
-                  code: p.code,
-                  name: p.name,
-                  barcode: p.barcode || '',
-                  model: p.model || p.categoryName || '',
-                  isManufactured: p.isManufactured !== false,
-                  chineseUnitCost: canViewCosts ? Number(p.chineseUnitCost || 0) : undefined,
-                  innerBoxCost: canViewCosts ? Number(p.innerBoxCost || 0) : undefined,
-                  outerCartonCost: canViewCosts ? Number(p.outerCartonCost || 0) : undefined,
-                  unitsPerCarton: canViewCosts ? Number(p.unitsPerCarton || 0) : undefined,
-                  sellingPrice: canViewSellingPrice ? Number(p.sellingPrice || 0) : undefined,
-                  routingTargetUnitSeconds:
-                    p.routingTargetUnitSeconds != null && Number(p.routingTargetUnitSeconds) > 0
-                      ? Math.round(Number(p.routingTargetUnitSeconds))
-                      : undefined,
-                }));
-              if (rows.length === 0) {
-                toast.error('لا توجد منتجات للتصدير.');
-                return;
-              }
-              exportProductsBasicMaster(rows, {
-                includeCosts: canViewCosts,
-                includeSellingPrice: canViewSellingPrice,
-              });
-              toast.success(`تم تصدير ${rows.length} منتج (بيانات أساسية للاستيراد).`);
-            },
-          },
-          {
-            label: 'تحميل قالب بيانات المنتجات',
-            icon: 'file_download',
-            group: 'بيانات أساسية',
-            hidden: !canImportFromPage,
-            onClick: downloadProductsTemplate,
-          },
-          {
-            label: 'رفع/تحديث بيانات المنتجات',
-            icon: 'upload_file',
-            group: 'بيانات أساسية',
-            hidden: !canImportProducts,
-            onClick: () => fileInputRef.current?.click(),
-          },
-          {
-            label: exportingBom ? 'جاري تصدير المكونات...' : 'تصدير مكونات المنتجات (للاستيراد)',
-            icon: 'table_chart',
-            group: 'مكونات',
-            hidden: !canExportFromPage || _rawProducts.length === 0,
-            onClick: openBomExportModal,
-          },
-          {
-            label: 'تحميل قالب المكونات',
-            icon: 'file_download',
-            group: 'مكونات',
-            hidden: !canImportFromPage,
-            onClick: downloadProductComponentsTemplate,
-          },
-          {
-            label: 'رفع/تحديث مكونات المنتجات',
-            icon: 'upload_file',
-            group: 'مكونات',
-            hidden: !canImportFromPage,
-            onClick: () => componentsFileInputRef.current?.click(),
-          },
-          {
-            label: 'تصدير تقرير المنتجات (Excel)',
-            icon: 'table_chart',
-            group: 'تقارير',
-            hidden: !canExportFromPage || products.length === 0,
-            onClick: () => {
-              setExportScope('all');
-              setExportMonth(getCurrentMonth());
-              setExportColumnPrefs({ ...visibleColumns });
-              setShowWarehouseExportModal(true);
-            },
-          },
-          {
-            label: 'تصدير تقرير المنتجات بإنتاج الشهر',
-            icon: 'table_chart',
-            group: 'تقارير',
-            hidden: !canExportFromPage || products.length === 0,
-            onClick: () => {
-              setExportScope('current_month');
-              setExportMonth(getCurrentMonth());
-              setExportColumnPrefs({ ...visibleColumns });
-              setShowWarehouseExportModal(true);
-            },
-          },
-          {
-            label: 'إدارة الأعمدة الظاهرة',
-            icon: 'view_column',
-            group: 'عرض',
-            hidden: !canExportFromPage || layoutMode !== 'table',
-            onClick: () => setShowColumnsModal(true),
-          },
-        ]}
       />
 
       {saveMsg && (
@@ -2338,95 +2380,56 @@ export const Products: React.FC = () => {
         </div>
       )}
 
-      {/* â”€â”€ Search & Filters â”€â”€ */}
-      <SmartFilterBar
-      pageId="production-products"
-        searchPlaceholder="ابحث بالاسم أو الكود..."
-        searchValue={search}
-        onSearchChange={setSearch}
-        quickFilters={[
-          {
-            key: 'stock',
-            placeholder: 'حالة المخزون',
-            options: [
-              { value: 'available', label: 'متوفر' },
-              { value: 'low', label: 'منخفض' },
-              { value: 'out', label: 'نفد' },
-            ],
-          },
-          {
-            key: 'manufactured',
-            placeholder: 'تاج المصنع',
-            options: [
-              { value: 'yes', label: 'تصنيعي' },
-              { value: 'no', label: 'غير تصنيعي' },
-            ],
-          },
-        ]}
-        quickFilterValues={{ stock: stockFilter || 'all', manufactured: manufacturedFilter || 'all' }}
-        onQuickFilterChange={(key, value) => {
-          const next = value === 'all' ? '' : value;
-          if (key === 'stock') setStockFilter(next);
-          if (key === 'manufactured') setManufacturedFilter(next);
-        }}
-        advancedFilters={[
-          {
-            key: 'category',
-            label: 'الفئة',
-            placeholder: 'كل الفئات',
-            options: mergedCategoryFilterOptions.map((o) => ({ value: o.value, label: o.label })),
-          },
-        ]}
-        advancedFilterValues={{ category: categoryFilter || 'all' }}
-        onAdvancedFilterChange={(key, value) => {
-          if (key === 'category') setCategoryFilter(value === 'all' ? '' : value);
-        }}
-      />
-
-      {/* Table / Grid */}
-      <Card className="!p-0 border-none overflow-hidden ">
-        <div className="px-5 py-3 border-b border-[var(--color-border)] flex items-center justify-between gap-3 flex-wrap">
-          <div className="text-sm font-bold text-[var(--color-text)]">
-            قائمة المنتجات
-            {sorted.length > 0 ? (
-              <span className="ms-2 text-[var(--color-text-muted)] font-medium tabular-nums">({sorted.length})</span>
-            ) : null}
-          </div>
-          <div
-            className="inline-flex items-center gap-0.5 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] p-0.5"
-            role="group"
-            aria-label="طريقة العرض"
-          >
-            <button
-              type="button"
-              onClick={() => setLayoutModePersist('table')}
-              className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
-                layoutMode === 'table'
-                  ? 'bg-primary text-white'
-                  : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
-              }`}
-              title="عرض جدول"
-              aria-pressed={layoutMode === 'table'}
-            >
-              <List className="size-3.5" aria-hidden />
-              جدول
-            </button>
-            <button
-              type="button"
-              onClick={() => setLayoutModePersist('grid')}
-              className={`inline-flex items-center gap-1.5 rounded-[calc(var(--border-radius-base)-2px)] px-3 py-1.5 text-xs font-bold transition-colors ${
-                layoutMode === 'grid'
-                  ? 'bg-primary text-white'
-                  : 'text-[var(--color-text-muted)] hover:bg-[#f8f9fa] hover:text-[var(--color-text)]'
-              }`}
-              title="عرض بطاقات"
-              aria-pressed={layoutMode === 'grid'}
-            >
-              <LayoutGrid className="size-3.5" aria-hidden />
-              بطاقات
-            </button>
-          </div>
-        </div>
+      <OpsDashPanel
+        title={sorted.length > 0 ? `قائمة المنتجات (${sorted.length})` : 'قائمة المنتجات'}
+        accent="production"
+        bodyClassName="p-0 overflow-hidden"
+        action={layoutToggle}
+      >
+        <SmartFilterBar
+          pageId="production-products"
+          searchPlaceholder="ابحث بالاسم أو الكود..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'stock',
+              placeholder: 'حالة المخزون',
+              options: [
+                { value: 'available', label: 'متوفر' },
+                { value: 'low', label: 'منخفض' },
+                { value: 'out', label: 'نفد' },
+              ],
+            },
+            {
+              key: 'manufactured',
+              placeholder: 'تاج المصنع',
+              options: [
+                { value: 'yes', label: 'تصنيعي' },
+                { value: 'no', label: 'غير تصنيعي' },
+              ],
+            },
+          ]}
+          quickFilterValues={{ stock: stockFilter || 'all', manufactured: manufacturedFilter || 'all' }}
+          onQuickFilterChange={(key, value) => {
+            const next = value === 'all' ? '' : value;
+            if (key === 'stock') setStockFilter(next);
+            if (key === 'manufactured') setManufacturedFilter(next);
+          }}
+          advancedFilters={[
+            {
+              key: 'category',
+              label: 'الفئة',
+              placeholder: 'كل الفئات',
+              options: mergedCategoryFilterOptions.map((o) => ({ value: o.value, label: o.label })),
+            },
+          ]}
+          advancedFilterValues={{ category: categoryFilter || 'all' }}
+          onAdvancedFilterChange={(key, value) => {
+            if (key === 'category') setCategoryFilter(value === 'all' ? '' : value);
+          }}
+          className="mb-0 border-0 rounded-none"
+        />
         {/* Bulk bar */}
         {selectedIds.size > 0 && (
           <div className="px-5 py-3 bg-primary/5 border-b border-primary/20 flex items-center gap-3 flex-wrap">
@@ -3074,7 +3077,7 @@ export const Products: React.FC = () => {
             itemLabel="منتج"
           />
         )}
-      </Card>
+      </OpsDashPanel>
 
       {detailDrawerProductId && detailDrawerProduct && (() => {
         const p = detailDrawerProduct;
@@ -4162,7 +4165,7 @@ export const Products: React.FC = () => {
           setCountCardPreviewWarning(null);
         }}
       />
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

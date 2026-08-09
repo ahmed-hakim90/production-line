@@ -1,9 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageHeader } from '@/src/components/erp/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
-import { Card, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
@@ -20,7 +20,6 @@ import { productionIssueService } from '../services/productionIssueService';
 import { listPlanIssueAlerts } from '../services/rawMaterialWarehouseAlertsService';
 import { planIssueAlertHref, planReplenishAlertHref } from '../lib/planIssueAlerts';
 import type { StockItemBalance, StockTransaction } from '../types';
-import { Bell } from 'lucide-react';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 
@@ -272,61 +271,55 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
 
   if (!loadingWarehouse && !configured) {
     return (
-      <div className="space-y-6">
-        <PageHeader
-          title="تنبيهات مخزن المستلزمات"
-          subtitle="مخزن المستلزمات من إعدادات توجيه المخازن"
-          icon={<Bell size={18} />}
-        />
-        <Card>
-          <CardContent className="py-10 text-center space-y-4">
+      <ModuleOpsPageShell
+        eyebrow="تنبيهات مخزن المستلزمات"
+        rangeLabel="مخزن المستلزمات من إعدادات توجيه المخازن"
+      >
+        <OpsDashPanel accent="inventory">
+          <div className="py-10 text-center space-y-4">
             <p className="text-sm text-[var(--color-text-muted)]">
               لم يُحدَّد مخزن المستلزمات بعد. عيّن «مخزن المفكك (مستلزم إنتاج)» أو «مخزن المواد الخام» من إعدادات توجيه المخزون، ثم احفظ الصفحة.
             </p>
             <Link to={withTenantPath(tenantSlug, '/settings/production')}>
               <PrimaryButton iconName="settings" tone="print">فتح إعدادات التوجيه</PrimaryButton>
             </Link>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="تنبيهات مخزن المستلزمات"
-        subtitle={configured ? `تنبيهات تشغيلية لمخزن المستلزمات: ${warehouseName}` : 'جاري التحميل…'}
-        icon={<Bell size={18} />}
-        actions={(
-          <div className="flex flex-wrap gap-2 items-center">
-            {canSwitchWarehouse && (
-              <select
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                value={warehouseId}
-                onChange={(e) => setWarehouseId(e.target.value)}
-                aria-label="تبديل مخزن المستلزمات"
-              >
-                {allowedWarehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}{w.code ? ` (${w.code})` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control#assemblable')}>
-              <GhostButton iconName="visibility" tone="view">المتاح للتجميع</GhostButton>
-            </Link>
-            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control')}>
-              <GhostButton iconName="dashboard" tone="view">لوحة التحكم</GhostButton>
-            </Link>
-            <PrimaryButton iconName="refresh" tone="neutral" onClick={() => void load()} disabled={loading}>
-              تحديث
-            </PrimaryButton>
-          </div>
-        )}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="تنبيهات مخزن المستلزمات"
+      rangeLabel={configured ? `تنبيهات تشغيلية لمخزن المستلزمات: ${warehouseName}` : 'جاري التحميل…'}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2 items-center">
+          {canSwitchWarehouse && (
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+              value={warehouseId}
+              onChange={(e) => setWarehouseId(e.target.value)}
+              aria-label="تبديل مخزن المستلزمات"
+            >
+              {allowedWarehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}{w.code ? ` (${w.code})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control#assemblable')}>
+            <GhostButton iconName="visibility" tone="view">المتاح للتجميع</GhostButton>
+          </Link>
+          <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/control')}>
+            <GhostButton iconName="dashboard" tone="view">لوحة التحكم</GhostButton>
+          </Link>
+        </div>
+      )}
+    >
       <div className="grid grid-cols-2 md:grid-cols-4 xl:grid-cols-8 gap-3">
         {(Object.keys(KIND_META) as AlertKind[]).map((kind) => (
           <button
@@ -345,8 +338,8 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
         ))}
       </div>
 
-      <Card>
-        <CardContent className="pt-5 space-y-4">
+      <OpsDashPanel title="التنبيهات" accent="inventory" bodyClassName="p-0 overflow-hidden">
+        <div className="pt-5 space-y-4 px-4 pb-4">
           <SmartFilterBar
       pageId="raw-material-warehouse-alerts"
             searchValue={search}
@@ -478,8 +471,8 @@ export const RawMaterialWarehouseAlerts: React.FC = () => {
               />
             </>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

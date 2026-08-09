@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
-import { PageHeader } from '@/src/components/erp/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PrimaryButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAppStore } from '../../../store/useAppStore';
 import { purchaseGapService, type PurchaseGapRow } from '../services/purchaseGapService';
@@ -39,49 +39,46 @@ export const PurchaseGapReport: React.FC = () => {
   const list = rows ?? [];
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="فجوة الشراء"
-        subtitle="المواد الناقصة مقارنة باحتياجات الخطط في مستودع المواد الخام"
-        actions={
-          <>
-            <PrimaryButton onClick={() => void load()} disabled={loading} iconName="refresh" tone="neutral">تحديث</PrimaryButton>
-            <PrimaryButton
-              onClick={() =>
-                exportGenericRows(
-                  list.map((r) => ({
-                    المادة: r.materialName,
-                    المطلوب: r.requiredQty,
-                    المتاح: r.availableQty,
-                    النقص: r.gapQty,
-                    الوحدة: r.unit || '',
-                  })),
-                  'purchase-gap',
-                  'فجوة شراء',
-                )
-              }
-              disabled={!list.length}
-              iconName="download"
-              tone="export"
-            >
-              Excel
-            </PrimaryButton>
-            <PrimaryButton onClick={() => void createDraft()} disabled={!list.length} iconName="add_circle" tone="submit">
-              مسودة طلب شراء
-            </PrimaryButton>
-          </>
-        }
-      />
+    <ModuleOpsPageShell
+      eyebrow="فجوة الشراء"
+      rangeLabel="المواد الناقصة مقارنة باحتياجات الخطط في مستودع المواد الخام"
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <PrimaryButton
+            onClick={() =>
+              exportGenericRows(
+                list.map((r) => ({
+                  المادة: r.materialName,
+                  المطلوب: r.requiredQty,
+                  المتاح: r.availableQty,
+                  النقص: r.gapQty,
+                  الوحدة: r.unit || '',
+                })),
+                'purchase-gap',
+                'فجوة شراء',
+              )
+            }
+            disabled={!list.length}
+            iconName="download"
+            tone="export"
+          >
+            Excel
+          </PrimaryButton>
+          <PrimaryButton onClick={() => void createDraft()} disabled={!list.length} iconName="add_circle" tone="submit">
+            مسودة طلب شراء
+          </PrimaryButton>
+        </div>
+      )}
+    >
       {draftMsg && <p className="text-sm font-bold text-primary">{draftMsg}</p>}
 
       {loading && list.length === 0 ? (
         <Skeleton className="h-40 w-full rounded-xl" />
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>أصناف ناقصة ({list.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="overflow-x-auto">
+        <OpsDashPanel title={`أصناف ناقصة (${list.length})`} accent="inventory" bodyClassName="p-0 overflow-hidden">
+          <div className="overflow-x-auto">
             <table className="erp-table w-full text-right text-sm">
               <thead>
                 <tr>
@@ -102,9 +99,9 @@ export const PurchaseGapReport: React.FC = () => {
                 ))}
               </tbody>
             </table>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

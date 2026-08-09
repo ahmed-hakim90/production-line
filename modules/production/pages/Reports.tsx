@@ -129,6 +129,8 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { toast } from '../../../components/Toast';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
 import {
@@ -3984,33 +3986,27 @@ export const Reports: React.FC = () => {
   const hasImportPreview = importMode === 'updateDate' ? !!importDateUpdateResult : !!importResult;
 
   return (
-    <div className="erp-ds-clean space-y-6">
-      {/* Hidden file input */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".xlsx,.xls,.csv"
-        className="hidden"
-        onChange={handleFileSelect}
-      />
-
-      {/* â”€â”€ Page Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+    <ModuleOpsPageShell
+      eyebrow="تقارير الإنتاج"
+      rangeLabel="إنشاء ومراجعة تقارير الإنتاج اليومية"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {can('reports.edit') ? (
+            <Button variant="secondary" onClick={() => { openGeneralMonthlyDialog(); }} disabled={rangeLoading}>
+              <ReportIcon name="insights" className="text-sm" />
+              عرض التقرير العام الشهري
+            </Button>
+          ) : null}
+          {reportsPageCreateEnabled && (canCreateFinishedReports || can('reports.packaging.create')) ? (
+            <Button onClick={openCreate} data-modal-key="reports.create">
+              <ReportIcon name="add" className="text-sm" />
+              إنشاء تقرير
+            </Button>
+          ) : null}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
       <PageHeader
-        title="تقارير الإنتاج"
-        subtitle="إنشاء ومراجعة تقارير الإنتاج اليومية"
-        icon="bar_chart"
-        secondaryAction={can('reports.edit') ? {
-          label: 'عرض التقرير العام الشهري',
-          icon: 'insights',
-          onClick: () => { openGeneralMonthlyDialog(); },
-          disabled: rangeLoading,
-        } : undefined}
-        primaryAction={reportsPageCreateEnabled && (canCreateFinishedReports || can('reports.packaging.create')) ? {
-          label: 'إنشاء تقرير',
-          icon: 'add',
-          onClick: openCreate,
-          dataModalKey: 'reports.create',
-        } : undefined}
+        title=""
+        backAction={false}
         moreActions={[
           {
             label: 'إنشاء تقرير مكون حقن',
@@ -4116,6 +4112,18 @@ export const Reports: React.FC = () => {
           },
         ]}
       />
+          </div>
+        </div>
+      )}
+    >
+      {/* Hidden file input */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".xlsx,.xls,.csv"
+        className="hidden"
+        onChange={handleFileSelect}
+      />
 
       <Dialog open={generalMonthlyDialogOpen} onOpenChange={setGeneralMonthlyDialogOpen}>
         <DialogContent className="sm:max-w-md" dir={dir}>
@@ -4193,7 +4201,7 @@ export const Reports: React.FC = () => {
         </div>
       )}
       {viewMode === 'general' ? (
-        <Card className="!p-0 overflow-hidden">
+        <OpsDashPanel accent="production" bodyClassName="p-0 overflow-hidden">
           <div className="p-4 border-b border-[var(--color-border)] bg-[#f8f9fa]/40 flex flex-col gap-3">
             <div className="flex flex-col md:flex-row md:items-center gap-3">
               <Button variant="secondary" onClick={handleBackToReports}>
@@ -4327,22 +4335,22 @@ export const Reports: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       ) : (
         <div className="space-y-4">
-          <Card className="!p-0 overflow-hidden">
+          <OpsDashPanel accent="production" bodyClassName="p-0 overflow-hidden">
             {reportsFilterBar}
-          </Card>
+          </OpsDashPanel>
           {reportGroupBy !== 'none' ? (
             <>
               {groupedReports.length === 0 ? (
-                <Card>
+                <OpsDashPanel accent="production">
                   <div className="py-16 text-center text-[var(--color-text-muted)]">
                     لا توجد تقارير{viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}
                   </div>
-                </Card>
+                </OpsDashPanel>
               ) : groupedReports.map((group) => (
-                <Card key={group.key} className="!p-0 overflow-hidden">
+                <OpsDashPanel key={group.key} accent="production" bodyClassName="p-0 overflow-hidden">
                   <div className="px-4 py-3 border-b border-[var(--color-border)] bg-[#f8f9fa]/60 flex flex-wrap items-center gap-3">
                     <span className="text-sm font-black text-[var(--color-text)]">{group.label || 'غير محدد'}</span>
                     <span className="text-xs font-bold text-[var(--color-text-muted)]">{group.reports.length} تقرير</span>
@@ -4368,7 +4376,7 @@ export const Reports: React.FC = () => {
                     emptyTitle={`لا توجد تقارير${viewMode === 'today' ? ' لهذا اليوم' : ' في هذه الفترة'}`}
                     emptySubtitle={reportsPageCreateEnabled && can("reports.create") ? 'اضغط "إنشاء تقرير" لإضافة تقرير جديد' : 'لا توجد تقارير لعرضها حالياً'}
                   />
-                </Card>
+                </OpsDashPanel>
               ))}
               {reportTableFooter}
             </>
@@ -6415,6 +6423,6 @@ export const Reports: React.FC = () => {
         </div>
       )}
 
-    </div>
+    </ModuleOpsPageShell>
   );
 };

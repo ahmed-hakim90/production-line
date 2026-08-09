@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
-import { Card } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { TableIconAction } from '@/src/components/erp';
 import { SuppliesReceiptPrint } from '../components/SuppliesReceiptPrint';
@@ -285,18 +285,16 @@ export const ProductionInventoryApprovals: React.FC = () => {
 
   if (loading && compensations.length === 0 && disassemblies.length === 0 && receipts.length === 0) {
     return (
-      <div className="erp-ds-clean space-y-5">
-        <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle={pageSubtitle} icon="fact_check" />
+      <ModuleOpsPageShell eyebrow="اعتمادات الإنتاج المخزنية" rangeLabel={pageSubtitle}>
         <Skeleton className="h-48 w-full rounded-xl" />
         <Skeleton className="h-48 w-full rounded-xl" />
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle={pageSubtitle} icon="fact_check" />
-      <Card className="!p-0 overflow-hidden" title="تعويضات المكونات">
+    <ModuleOpsPageShell eyebrow="اعتمادات الإنتاج المخزنية" rangeLabel={pageSubtitle}>
+      <OpsDashPanel title="تعويضات المكونات" accent="inventory" bodyClassName="p-0">
                 <div className="erp-mobile-card-list p-2">
           {compensations.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">لا توجد تعويضات.</p>
@@ -400,9 +398,9 @@ export const ProductionInventoryApprovals: React.FC = () => {
           onPageChange={setCompPage}
           itemLabel="طلب"
         />
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="!p-0 overflow-hidden" title="استلام مستلزمات">
+      <OpsDashPanel title="استلام مستلزمات" accent="inventory" bodyClassName="p-0">
                 <div className="erp-mobile-card-list p-2">
           {receipts.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">لا توجد إذونات استلام.</p>
@@ -521,9 +519,9 @@ export const ProductionInventoryApprovals: React.FC = () => {
           onPageChange={setReceiptPage}
           itemLabel="إذن"
         />
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="!p-0 overflow-hidden" title="طلبات التفكيك">
+      <OpsDashPanel title="طلبات التفكيك" accent="inventory" bodyClassName="p-0">
                 <div className="erp-mobile-card-list p-2">
           {disassemblies.length === 0 ? (
             <p className="py-8 text-center text-sm text-slate-400">لا توجد طلبات تفكيك.</p>
@@ -617,7 +615,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
           onPageChange={setDisPage}
           itemLabel="طلب"
         />
-      </Card>
+      </OpsDashPanel>
 
       <div
         style={{
@@ -634,6 +632,6 @@ export const ProductionInventoryApprovals: React.FC = () => {
       >
         <SuppliesReceiptPrint ref={printRef} order={printOrder} printSettings={printTemplate} />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

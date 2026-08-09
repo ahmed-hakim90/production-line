@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Button, LoadingSkeleton } from '../components/UI';
+import { Button, LoadingSkeleton } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
-import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '../../../src/components/erp/StatusBadge';
 import { useAppStore } from '../../../store/useAppStore';
@@ -516,79 +517,64 @@ export const UsersManagement: React.FC = () => {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
 
-  return (
-    <div className="space-y-4 erp-ds-clean">
-      <PageHeader
-        title="إدارة المستخدمين"
-        subtitle="إنشاء المستخدمين يدوياً وربطهم بالموظفين وتعيين الدور والتحكم في التفعيل والحذف النهائي. زر «فك الربط» في نافذة المستخدم يخص الموظف وليس الدور — لتغيير الدور اختر دوراً آخر واحفظ."
-        backAction={false}
-        extra={(
-          <>
-            <Button
-              variant="ghost"
-              className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
-              onClick={() => exportHRData(exportRows, 'المستخدمون', `المستخدمون-${new Date().toISOString().slice(0, 10)}`)}
-              disabled={rows.length === 0}
-            >
-              <span className="material-icons-round text-[15px]">download</span>
-              تصدير
-            </Button>
-            <Button
-              variant="ghost"
-              className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
-              onClick={openImportUsersModal}
-              data-modal-key={MODAL_KEYS.SYSTEM_USERS_IMPORT}
-            >
-              <span className="material-icons-round text-[15px]">upload_file</span>
-              استيراد
-            </Button>
-          </>
-        )}
-        primaryAction={{
-          label: '+ إنشاء مستخدم',
-          icon: 'add',
-          onClick: openCreateUserModal,
-          dataModalKey: MODAL_KEYS.SYSTEM_USERS_CREATE,
-        }}
-      />
+  const usersHero = useMemo(
+    () => [
+      { key: 'total', label: 'إجمالي', value: rows.length },
+      { key: 'linked', label: 'مرتبطون بالموظف', value: linkedCount },
+      { key: 'active', label: 'مفعلون', value: activeCount, toneClassName: 'ops-dash-kpi-card--tone-emerald' },
+      { key: 'pending', label: 'انتظار الموافقة', value: pendingCount, toneClassName: pendingCount > 0 ? 'ops-dash-kpi-card--tone-amber' : undefined },
+    ],
+    [rows.length, linkedCount, activeCount, pendingCount],
+  );
 
+  return (
+    <ModuleOpsPageShell
+      eyebrow="إدارة المستخدمين"
+      rangeLabel="إنشاء المستخدمين يدوياً وربطهم بالموظفين وتعيين الدور والتحكم في التفعيل والحذف النهائي"
+      hero={loading ? undefined : usersHero}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Button
+            variant="ghost"
+            className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+            onClick={() => exportHRData(exportRows, 'المستخدمون', `المستخدمون-${new Date().toISOString().slice(0, 10)}`)}
+            disabled={rows.length === 0}
+          >
+            <span className="material-icons-round text-[15px]">download</span>
+            تصدير
+          </Button>
+          <Button
+            variant="ghost"
+            className="text-[13px] font-medium border border-[var(--color-border)] bg-white hover:bg-[var(--color-bg)]"
+            onClick={openImportUsersModal}
+            data-modal-key={MODAL_KEYS.SYSTEM_USERS_IMPORT}
+          >
+            <span className="material-icons-round text-[15px]">upload_file</span>
+            استيراد
+          </Button>
+          <Button variant="primary" onClick={openCreateUserModal} data-modal-key={MODAL_KEYS.SYSTEM_USERS_CREATE}>
+            <span className="material-icons-round text-[15px]">add</span>
+            إنشاء مستخدم
+          </Button>
+        </div>
+      )}
+    >
       {msg && (
         <div className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm border ${msg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-rose-50 text-rose-700 border-rose-200'}`}>
           {msg.text}
         </div>
       )}
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
-        {loading ? (
-          <>
-            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
-            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
-            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
-            <Card className="p-4"><LoadingSkeleton rows={1} type="card" /></Card>
-          </>
-        ) : (
-          <>
-            <Card className="p-4">
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">إجمالي</p>
-              <p className="text-2xl font-bold text-[var(--color-text)]">{rows.length}</p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مرتبطون بالموظف</p>
-              <p className="text-2xl font-bold text-primary">{linkedCount}</p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مفعلون</p>
-              <p className="text-2xl font-bold text-emerald-600">{activeCount}</p>
-            </Card>
-            <Card className="p-4">
-              <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">انتظار الموافقة</p>
-              <p className="text-2xl font-bold text-amber-600">{pendingCount}</p>
-            </Card>
-          </>
-        )}
-      </div>
+      {loading && rows.length === 0 ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+          <OpsDashPanel accent="hr"><LoadingSkeleton rows={1} type="card" /></OpsDashPanel>
+          <OpsDashPanel accent="hr"><LoadingSkeleton rows={1} type="card" /></OpsDashPanel>
+          <OpsDashPanel accent="hr"><LoadingSkeleton rows={1} type="card" /></OpsDashPanel>
+          <OpsDashPanel accent="hr"><LoadingSkeleton rows={1} type="card" /></OpsDashPanel>
+        </div>
+      ) : null}
 
-      <Card title="قائمة المستخدمين">
+      <OpsDashPanel title="قائمة المستخدمين" accent="hr" bodyClassName="p-0">
         <SmartFilterBar
       pageId="users-management"
           searchPlaceholder="بحث بالبريد أو الاسم أو كود الموظف"
@@ -666,7 +652,7 @@ export const UsersManagement: React.FC = () => {
             </table>
           </div>
         )}
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

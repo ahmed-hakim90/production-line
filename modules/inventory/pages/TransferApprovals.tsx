@@ -1,7 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { Badge, Card } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Badge } from '../components/UI';
 import { TableIconAction, ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { transferApprovalService } from '../services/transferApprovalService';
@@ -535,19 +537,16 @@ export const TransferApprovals: React.FC = () => {
     }
   };
 
-  return (
-    <div className="erp-ds-clean space-y-5">
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">اعتماد تحويلات المخازن</h2>
-          <p className="page-subtitle">
-            {pendingApprovalCount > 0 ? `بانتظار الاعتماد: ${pendingApprovalCount}. ` : ''}
-            اعتماد إدخال الإنتاج يرحّل الرصيد إلى «تم الإنتاج» بانتظار التغليف. التحويلات لا تؤثر على المخزون قبل الاعتماد.
-          </p>
-        </div>
-      </div>
+  const pageSubtitle =
+    pendingApprovalCount > 0
+      ? `بانتظار الاعتماد: ${pendingApprovalCount}. اعتماد إدخال الإنتاج يرحّل الرصيد إلى «تم الإنتاج» بانتظار التغليف. التحويلات لا تؤثر على المخزون قبل الاعتماد.`
+      : 'اعتماد إدخال الإنتاج يرحّل الرصيد إلى «تم الإنتاج» بانتظار التغليف. التحويلات لا تؤثر على المخزون قبل الاعتماد.';
 
-      <SmartFilterBar
+  return (
+    <ModuleOpsPageShell eyebrow="اعتماد تحويلات المخازن" rangeLabel={pageSubtitle}>
+      <OpsDashPanel title="طلبات التحويل" accent="inventory" bodyClassName="p-0">
+        <div className="p-3 sm:p-4 space-y-3 border-b">
+          <SmartFilterBar
       pageId="transfer-approvals"
         quickFilters={[
           {
@@ -604,15 +603,15 @@ export const TransferApprovals: React.FC = () => {
             </ToneActionButton>
           </>
         }
-      />
+          />
 
-      <MaterialsWarehouseScopeBanner
-        scoped={scoped}
-        routingConfigured={routingConfigured}
-        settingsPath={settingsPath}
-      />
+          <MaterialsWarehouseScopeBanner
+            scoped={scoped}
+            routingConfigured={routingConfigured}
+            settingsPath={settingsPath}
+          />
 
-      <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-2">
         {([
           ['production_entry', 'إدخال إنتاج'],
           ['all', 'الكل'],
@@ -648,8 +647,8 @@ export const TransferApprovals: React.FC = () => {
           لذلك الاعتماد بالسالب غير متاح لك.
         </div>
       )}
+        </div>
 
-      <Card className="!p-0 overflow-hidden">
         {loading ? (
           <div className="space-y-2.5 p-4">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -885,12 +884,12 @@ export const TransferApprovals: React.FC = () => {
             />
           </div>
         )}
-      </Card>
+      </OpsDashPanel>
 
       <div className="hidden">
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
 
-    </div>
+    </ModuleOpsPageShell>
   );
 };

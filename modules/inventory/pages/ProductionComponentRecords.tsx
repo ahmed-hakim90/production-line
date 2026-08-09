@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
-import { Card } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { componentReturnService } from '../services/componentReturnService';
 import { componentScrapService } from '../services/componentScrapService';
@@ -91,19 +91,22 @@ export const ProductionComponentRecords: React.FC = () => {
 
   if (loading && !data) {
     return (
-      <div className="erp-ds-clean space-y-5">
-        <PageHeader title="سجلات مكونات الإنتاج" subtitle="عرض سجلات المرتجعات والهالك الفعلي المرتبطة بأوامر الصرف." icon="receipt_long" />
+      <ModuleOpsPageShell
+        eyebrow="سجلات مكونات الإنتاج"
+        rangeLabel="عرض سجلات المرتجعات والهالك الفعلي المرتبطة بأوامر الصرف"
+      >
         <Skeleton className="h-48 w-full rounded-xl" />
         <Skeleton className="h-48 w-full rounded-xl" />
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader title="سجلات مكونات الإنتاج" subtitle="عرض سجلات المرتجعات والهالك الفعلي المرتبطة بأوامر الصرف." icon="receipt_long" />
-
-      <Card className="!p-0 overflow-hidden" title="مرتجعات المكونات">
+    <ModuleOpsPageShell
+      eyebrow="سجلات مكونات الإنتاج"
+      rangeLabel="عرض سجلات المرتجعات والهالك الفعلي المرتبطة بأوامر الصرف"
+    >
+      <OpsDashPanel title="مرتجعات المكونات" accent="inventory" bodyClassName="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm text-right border-collapse">
             <thead className="erp-thead">
@@ -143,9 +146,9 @@ export const ProductionComponentRecords: React.FC = () => {
           onPageChange={setReturnsPage}
           itemLabel="مرتجع"
         />
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="!p-0 overflow-hidden" title="الهالك الفعلي">
+      <OpsDashPanel title="الهالك الفعلي" accent="inventory" bodyClassName="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm text-right border-collapse">
             <thead className="erp-thead">
@@ -185,7 +188,7 @@ export const ProductionComponentRecords: React.FC = () => {
           onPageChange={setScrapsPage}
           itemLabel="سجل"
         />
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

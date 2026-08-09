@@ -1,13 +1,12 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge, SearchableSelect } from '../components/UI';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
-  DetailPageShell,
-  DetailPageStickyHeader,
   SectionSkeleton,
-  SURFACE_CARD,
   NESTED_TILE,
   FIELD_ON_PANEL,
 } from '@/src/components/erp/DetailPageChrome';
@@ -35,7 +34,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -303,27 +301,35 @@ export const SupplyCyclesList: React.FC = () => {
   };
 
   return (
-    <DetailPageShell className="max-w-[1600px] mx-auto">
-      <DetailPageStickyHeader>
-        <PageHeader
-          title="دورات التوريد"
-          subtitle="تتبع خام أو تام — فترة، أرقام، هالك تقارير ويدوي، وإقفال"
-          icon="inventory_2"
-          backAction={false}
-          primaryAction={
-            can('supplyCycles.manage')
-              ? { label: 'دورة جديدة', icon: 'add', onClick: openCreate }
-              : undefined
-          }
-          moreActions={
-            canExportFromPage
-              ? [{ label: 'تصدير Excel', icon: 'download', onClick: handleExportList, group: 'تصدير' }]
-              : []
-          }
-        />
-        <Card className={cn('overflow-hidden', SURFACE_CARD)}>
-          <CardContent className="p-3 md:p-4">
-            <SmartFilterBar
+    <ModuleOpsPageShell
+      className="max-w-[1600px] mx-auto"
+      eyebrow="دورات التوريد"
+      rangeLabel="تتبع خام أو تام — فترة، أرقام، هالك تقارير ويدوي، وإقفال"
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {can('supplyCycles.manage') ? (
+            <Button type="button" size="sm" onClick={openCreate}>
+              دورة جديدة
+            </Button>
+          ) : null}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={
+                canExportFromPage
+                  ? [{ label: 'تصدير Excel', icon: 'download', onClick: handleExportList, group: 'تصدير' }]
+                  : []
+              }
+            />
+          </div>
+        </div>
+      )}
+    >
+      <OpsDashPanel title="فلاتر البحث" accent="production" bodyClassName="p-3 md:p-4">
+        <SmartFilterBar
       pageId="supply-cycles"
               searchPlaceholder="بحث بالكود أو الصنف أو التسمية الخارجية…"
               searchValue={searchTerm}
@@ -357,9 +363,7 @@ export const SupplyCyclesList: React.FC = () => {
                 if (key === 'kind') setKindFilter(value as 'all' | SupplyCycleKind);
               }}
             />
-          </CardContent>
-        </Card>
-      </DetailPageStickyHeader>
+      </OpsDashPanel>
 
       {!loading && cycles.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -385,14 +389,11 @@ export const SupplyCyclesList: React.FC = () => {
         </div>
       )}
 
-      <Card className={cn('overflow-hidden', SURFACE_CARD)}>
-        <div className="border-b border-slate-200 bg-slate-50/80 px-4 py-2.5 dark:border-border dark:bg-muted/30">
-          <h2 className="text-sm font-semibold text-slate-900 dark:text-foreground">قائمة الدورات</h2>
-          <p className="text-[11px] text-muted-foreground mt-0.5">
-            انقر على صف للانتقال إلى التفاصيل. المتبقي تقديري حتى إقفال الدورة.
-          </p>
-        </div>
-        <CardContent className="p-0">
+      <OpsDashPanel
+        title="قائمة الدورات"
+        accent="production"
+        bodyClassName="p-0"
+      >
           {loading && cycles.length === 0 ? (
             <SectionSkeleton rows={10} height={14} />
           ) : filtered.length === 0 ? (
@@ -543,8 +544,7 @@ export const SupplyCyclesList: React.FC = () => {
               </div>
             </>
           )}
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
       <Dialog open={showModal} onOpenChange={(o) => !saving && setShowModal(o)}>
         <DialogContent className="gap-0" dir="rtl">
@@ -699,6 +699,6 @@ export const SupplyCyclesList: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DetailPageShell>
+    </ModuleOpsPageShell>
   );
 };

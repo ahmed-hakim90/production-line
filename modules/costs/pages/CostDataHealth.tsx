@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Card, KPIBox, Button } from '../components/UI';
-import { PageHeader } from '../../../components/PageHeader';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useShallowStore } from '../../../store/useAppStore';
 import {
@@ -564,27 +565,43 @@ export const CostDataHealth: React.FC = () => {
 
   const activeFiltersCount = Number(Boolean(search)) + Number(Boolean(severityFilter)) + Number(Boolean(typeFilter));
 
+  const hero = useMemo(
+    () => [
+      {
+        key: 'status',
+        label: 'حالة الشهر',
+        value: passChecks ? 'سليم' : 'يحتاج مراجعة',
+        accent: !passChecks,
+        toneClassName: passChecks ? 'ops-dash-kpi-card--tone-emerald' : 'ops-dash-kpi-card--tone-rose',
+      },
+      { key: 'critical', label: 'مشاكل حرجة', value: criticalCount, toneClassName: criticalCount > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined },
+      { key: 'high', label: 'مشاكل مرتفعة', value: highCount, toneClassName: highCount > 0 ? 'ops-dash-kpi-card--tone-amber' : undefined },
+      { key: 'medium', label: 'مشاكل متوسطة', value: mediumCount },
+      {
+        key: 'fullCost',
+        label: 'تغطية التكلفة الكاملة',
+        value: `${fullCostCoverage}%`,
+        toneClassName: fullCostCoverage === 100 ? 'ops-dash-kpi-card--tone-emerald' : undefined,
+      },
+    ],
+    [passChecks, criticalCount, highCount, mediumCount, fullCostCoverage],
+  );
+
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="صحة بيانات التكاليف"
-        subtitle="فحص سلامة بيانات التكلفة للشهر المختار (حسابات + Firestore + أداء)"
-        icon="verified_user"
-      />
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        <KPIBox
-          label="حالة الشهر"
-          value={passChecks ? 'سليم' : 'يحتاج مراجعة'}
-          icon={passChecks ? 'task_alt' : 'warning'}
-          colorClass={passChecks ? 'bg-emerald-500/10 text-emerald-600' : 'bg-red-500/10 text-red-600'}
-        />
-        <KPIBox label="مشاكل حرجة" value={criticalCount} icon="priority_high" colorClass="bg-red-500/10 text-red-600" />
-        <KPIBox label="مشاكل مرتفعة" value={highCount} icon="report_problem" colorClass="bg-amber-500/10 text-amber-600" />
-        <KPIBox label="مشاكل متوسطة" value={mediumCount} icon="info" colorClass="bg-blue-500/10 text-blue-600" />
-        <KPIBox label="تغطية التكلفة الكاملة" value={`${fullCostCoverage}%`} icon="price_check" colorClass={fullCostCoverage === 100 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-violet-500/10 text-violet-600'} />
-      </div>
-
+    <ModuleOpsPageShell
+      eyebrow="صحة بيانات التكاليف"
+      rangeLabel="فحص سلامة بيانات التكلفة للشهر المختار (حسابات + Firestore + أداء)"
+      hero={hero}
+      onRefresh={() => void reloadHealth()}
+      refreshing={loading}
+      periodExtra={(
+        <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
+          <span className="ml-2 text-xs text-slate-500">الشهر</span>
+          <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
+        </div>
+      )}
+    >
+      <OpsDashPanel title="المشاكل المرجعية" accent="costs" bodyClassName="p-0">
       <SmartFilterBar
       pageId="cost-data-health"
         searchPlaceholder="ابحث داخل عنوان المشكلة أو وصفها..."
@@ -619,33 +636,23 @@ export const CostDataHealth: React.FC = () => {
         onAdvancedFilterChange={(key, value) => {
           if (key === 'type') setTypeFilter(value === 'all' ? '' : value);
         }}
-        onApply={() => void reloadHealth()}
-        applyLabel={loading ? 'جار التحميل...' : 'تحديث الفحص'}
-        extra={(
-          <div className="inline-flex h-[34px] items-center gap-2">
-            <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
-              <span className="ml-2 text-xs text-slate-500">الشهر</span>
-              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
-            </div>
-            {activeFiltersCount > 0 && (
-              <Button
-                type="button"
-                size="sm"
-                variant="ghost"
-                onClick={() => {
-                  setSearch('');
-                  setSeverityFilter('');
-                  setTypeFilter('');
-                }}
-              >
-                {`مسح (${activeFiltersCount})`}
-              </Button>
-            )}
-          </div>
-        )}
+        extra={activeFiltersCount > 0 ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setSearch('');
+              setSeverityFilter('');
+              setTypeFilter('');
+            }}
+          >
+            {`مسح (${activeFiltersCount})`}
+          </Button>
+        ) : undefined}
+        className="border-0 rounded-none"
       />
 
-      <Card>
         {loading ? (
           <div className="py-16 flex items-center justify-center">
             <div className="animate-spin w-8 h-8 border-4 border-primary/30 border-t-primary rounded-full" />
@@ -690,7 +697,7 @@ export const CostDataHealth: React.FC = () => {
             </table>
           </div>
         )}
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

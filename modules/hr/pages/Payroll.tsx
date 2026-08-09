@@ -1,5 +1,7 @@
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
-import { Card, Button, Badge, KPIBox } from '../components/UI';
+import { Button, Badge, KPIBox } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { usePermission } from '@/utils/permissions';
 import { getExportImportPageControl } from '@/utils/exportImportControls';
@@ -36,7 +38,6 @@ import type {
   PayrollEmployeeData,
   EmploymentType,
 } from '../payroll/types';
-import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 
 // ─── Constants ──────────────────────────────────────────────────────────────
@@ -288,7 +289,7 @@ const AuditPanel: React.FC<{ logs: FirestorePayrollAuditLog[] }> = ({ logs }) =>
   };
 
   return (
-    <Card title="سجل المراجعة">
+    <OpsDashPanel title="سجل المراجعة" accent="hr">
       <div className="space-y-3 max-h-60 overflow-y-auto">
         {logs.map((log) => (
           <div key={log.id} className="flex items-start gap-3 text-sm">
@@ -309,7 +310,7 @@ const AuditPanel: React.FC<{ logs: FirestorePayrollAuditLog[] }> = ({ logs }) =>
           </div>
         ))}
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };
 
@@ -639,30 +640,31 @@ export const Payroll: React.FC = () => {
   }, [canDistributePayroll, isLocked, records, payrollMonth?.id, month, uid, userDisplayName]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="كشف الرواتب"
-        subtitle="إدارة الرواتب الشهرية — الاحتساب والاعتماد والقفل"
-        icon="payments"
-        primaryAction={{
-          label: 'تحميل',
-          icon: loading ? 'refresh' : 'search',
-          onClick: () => {
-            invalidatePageDataCache(`hr:payroll:${month}`);
-            void loadPayrollData({ force: true });
-          },
-          disabled: loading,
-        }}
-        extra={
+    <ModuleOpsPageShell
+      eyebrow="كشف الرواتب"
+      rangeLabel="إدارة الرواتب الشهرية — الاحتساب والاعتماد والقفل"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="primary"
+            onClick={() => {
+              invalidatePageDataCache(`hr:payroll:${month}`);
+              void loadPayrollData({ force: true });
+            }}
+            disabled={loading}
+          >
+            <span className="material-icons-round text-sm">{loading ? 'refresh' : 'search'}</span>
+            تحميل
+          </Button>
           <input
             type="month"
             value={month}
             onChange={(e) => { setMonth(e.target.value); setVisibleCount(ROWS_PER_PAGE); }}
             className="erp-filter-select"
           />
-        }
-      />
+        </div>
+      }
+    >
 
       {/* Status Banner */}
       {dataLoaded && payrollMonth && (
@@ -809,8 +811,8 @@ export const Payroll: React.FC = () => {
         </div>
       )}
 
-      {/* Filters */}
       {records.length > 0 && (
+        <OpsDashPanel title="سجلات الرواتب" accent="hr" bodyClassName="p-0">
         <SmartFilterBar
       pageId="hr-payroll"
           searchPlaceholder="بحث باسم الموظف..."
@@ -838,11 +840,7 @@ export const Payroll: React.FC = () => {
             if (key === 'employment') { setEmploymentFilter(value); setVisibleCount(ROWS_PER_PAGE); }
           }}
         />
-      )}
 
-      {/* Records Table */}
-      {records.length > 0 && (
-        <Card>
           <div className="erp-mobile-card-list p-2">
             {paginatedRecords.map((r) => (
               <div
@@ -988,12 +986,12 @@ export const Payroll: React.FC = () => {
               )}
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Empty state */}
       {dataLoaded && records.length === 0 && !loading && (
-        <Card>
+        <OpsDashPanel accent="hr">
           <div className="text-center py-16">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-4 block">
               receipt_long
@@ -1011,12 +1009,12 @@ export const Payroll: React.FC = () => {
               </Button>
             )}
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Not loaded state */}
       {!dataLoaded && !loading && (
-        <Card>
+        <OpsDashPanel accent="hr">
           <div className="text-center py-16">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-[var(--color-text)] mb-4 block">
               calendar_month
@@ -1028,7 +1026,7 @@ export const Payroll: React.FC = () => {
               سيتم عرض كشف الرواتب الخاص بالشهر المحدد.
             </p>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Audit Logs */}
@@ -1041,7 +1039,7 @@ export const Payroll: React.FC = () => {
         month={month}
         canPrintPayslip={isLocked}
       />
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

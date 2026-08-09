@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -892,11 +891,8 @@ export const RepairSalesInvoicePage: React.FC = () => {
             </div>
           )}
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">بيانات الفاتورة</CardTitle>
-            </CardHeader>
-            <CardContent className="grid gap-3 md:grid-cols-2">
+          <OpsDashPanel title="بيانات الفاتورة" accent="repair">
+            <div className="grid gap-3 md:grid-cols-2">
               <div>
                 <Label>الفرع</Label>
                 <Select value={branchId} onValueChange={setBranchId} disabled={Boolean(editingInvoiceId)}>
@@ -994,14 +990,11 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   </Button>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">إضافة بند</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <OpsDashPanel title="إضافة بند" accent="repair">
+            <div className="space-y-3">
               <div className="grid gap-3 md:grid-cols-12 md:items-end">
                 <div className="md:col-span-5">
                   <Label>القطعة</Label>
@@ -1055,15 +1048,14 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   )}
                 </div>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
 
-          <Card className="!p-0 overflow-hidden">
-            <div className="border-b px-4 py-3 flex flex-wrap items-center justify-between gap-2">
-              <div>
-                <h2 className="text-base font-semibold">بنود الفاتورة</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">{lines.length} بند — الإجمالي {fmt(total)} ج.م</p>
-              </div>
+          <OpsDashPanel
+            title="بنود الفاتورة"
+            accent="repair"
+            bodyClassName="p-0"
+            action={(
               <div className="flex flex-wrap gap-2">
                 <Button
                   onClick={() => void handleSaveInvoice()}
@@ -1075,7 +1067,9 @@ export const RepairSalesInvoicePage: React.FC = () => {
                   <Button variant="outline" onClick={resetDraft} disabled={saving}>إلغاء التعديل</Button>
                 )}
               </div>
-            </div>
+            )}
+          >
+            <p className="border-b px-4 py-2 text-xs text-muted-foreground">{lines.length} بند — الإجمالي {fmt(total)} ج.م</p>
             <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
               <table className="erp-table w-full min-w-[700px] text-right border-collapse">
                 <thead className="erp-thead">
@@ -1133,15 +1127,12 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 </div>
               </div>
             )}
-          </Card>
+          </OpsDashPanel>
         </div>
 
         <div className="space-y-4 xl:col-span-5">
-          <Card className="no-print">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">معاينة وإجراءات</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <OpsDashPanel title="معاينة وإجراءات" accent="repair" className="no-print">
+            <div className="space-y-3">
               <div className="flex flex-wrap gap-2">
                 <Button variant="outline" size="sm" onClick={() => handlePrint()} disabled={!printableInvoice}>
                   طباعة A4
@@ -1175,8 +1166,8 @@ export const RepairSalesInvoicePage: React.FC = () => {
               <p className="text-[11px] text-muted-foreground">
                 مشاركة واتساب + PDF تولّد الملف ثم تفتح واتساب برسالة جاهزة لإرفاق الملف يدويًا.
               </p>
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
 
           <div className="overflow-auto rounded-lg border bg-white shadow-sm max-h-[70vh]">
             <RepairSalesInvoicePrint
@@ -1194,7 +1185,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
         </div>
       </div>
 
-      <Card className="!p-0 overflow-hidden no-print">
+      <OpsDashPanel accent="repair" bodyClassName="p-0" className="no-print overflow-hidden">
         <SmartFilterBar
           pageId="repair-sales-invoices"
           searchPlaceholder="بحث برقم الفاتورة أو العميل أو الهاتف..."
@@ -1433,7 +1424,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
           onPageChange={setPage}
           itemLabel="فاتورة"
         />
-      </Card>
+      </OpsDashPanel>
 
       <Dialog open={Boolean(cancelTarget)} onOpenChange={(open) => { if (!open) setCancelTarget(null); }}>
         <DialogContent dir={dir}>

@@ -1,12 +1,13 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { formatNumber, getTodayDateString } from '@/utils/calculations';
-import { Badge, Button, Card, KPIBox, LoadingSkeleton } from '../components/UI';
+import { Badge, Button, Card, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '../components/SelectableTable';
 import type {
   ProductionWorker,
@@ -614,16 +615,34 @@ export const ProductionWorkers: React.FC = () => {
 
   if (loading || !supervisorLinesLoaded) return <LoadingSkeleton rows={8} />;
 
-  return (
-    <div className="space-y-4">
-      <PageHeader
-        title="عمال الإنتاج"
-        subtitle="مساحة موحدة لقائمة العمال والتقارير والتقييمات والتفاصيل"
-        primaryAction={canManage && activeWorkspaceTab === 'summary' ? { label: 'نقل العمالة بين الخطوط', onClick: openLineTransferByLine } : undefined}
-      />
+  const workersHero = activeWorkspaceTab === 'summary' ? [
+    { key: 'total', label: 'إجمالي العمال', value: scopedRows.length },
+    { key: 'active', label: 'نشطون', value: scopedRows.filter((w) => w.isActive !== false).length },
+    {
+      key: 'achievement',
+      label: 'متوسط إنجاز الشهر',
+      value: statsLoading ? '…' : `${filtered.length > 0 ? Math.round(filtered.reduce((s, r) => s + (r.monthStats?.monthlyAchievement ?? 0), 0) / filtered.length) : 0}%`,
+    },
+    {
+      key: 'bonus',
+      label: 'تقدير المكافآت',
+      value: statsLoading ? '…' : formatNumber(filtered.reduce((s, r) => s + (r.monthStats?.bonusEstimate ?? 0), 0)),
+    },
+  ] : undefined;
 
-      <Card>
-        <div className="flex flex-col gap-3 p-3 md:flex-row md:items-center md:justify-between">
+  return (
+    <ModuleOpsPageShell
+      eyebrow="عمال الإنتاج"
+      rangeLabel="مساحة موحدة لقائمة العمال والتقارير والتقييمات والتفاصيل"
+      hero={workersHero}
+      actions={
+        canManage && activeWorkspaceTab === 'summary' ? (
+          <Button variant="primary" onClick={openLineTransferByLine}>نقل العمالة بين الخطوط</Button>
+        ) : undefined
+      }
+    >
+      <OpsDashPanel accent="production">
+        <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div className="flex flex-wrap gap-2">
             <Button
               type="button"
@@ -655,7 +674,7 @@ export const ProductionWorkers: React.FC = () => {
             الروابط القديمة للتقارير والتقييمات ما زالت تعمل، وهذه الصفحة هي نقطة الدخول الأساسية.
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {activeWorkspaceTab === 'reports' ? (
         <ProductionWorkerReports embedded />
@@ -663,22 +682,7 @@ export const ProductionWorkers: React.FC = () => {
         canViewRatingReview ? <ProductionWorkerRatingsReview embedded /> : <SupervisorWorkerEvaluation embedded />
       ) : (
         <>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <KPIBox label="إجمالي العمال" value={String(scopedRows.length)} icon="groups" />
-        <KPIBox label="نشطون" value={String(scopedRows.filter((w) => w.isActive !== false).length)} icon="check_circle" />
-        <KPIBox
-          label="متوسط إنجاز الشهر"
-          value={statsLoading ? '…' : `${filtered.length > 0 ? Math.round(filtered.reduce((s, r) => s + (r.monthStats?.monthlyAchievement ?? 0), 0) / filtered.length) : 0}%`}
-          icon="speed"
-        />
-        <KPIBox
-          label="تقدير المكافآت"
-          value={statsLoading ? '…' : formatNumber(filtered.reduce((s, r) => s + (r.monthStats?.bonusEstimate ?? 0), 0))}
-          icon="payments"
-        />
-      </div>
-
-      <Card className="!p-0 overflow-hidden">
+      <OpsDashPanel title="قائمة العمال" accent="production" bodyClassName="p-0 overflow-hidden">
       <SmartFilterBar
       pageId="production-workers"
         searchValue={search}
@@ -776,7 +780,7 @@ export const ProductionWorkers: React.FC = () => {
             </div>
           )}
         />
-      </Card>
+      </OpsDashPanel>
 
       {lineTransfer && canManage && (
         <div className="fixed inset-0 z-50 bg-black/40 flex items-center justify-center p-4" onClick={closeLineTransfer}>
@@ -873,6 +877,6 @@ export const ProductionWorkers: React.FC = () => {
 
         </>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

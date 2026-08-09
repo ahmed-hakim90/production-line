@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Save } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -95,39 +96,41 @@ export const AccountingChartOfAccounts: React.FC = () => {
     }, "تم حفظ الحساب في شجرة الحسابات.");
 
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="شجرة الحسابات"
-        subtitle="دليل حسابات هرمي قابل للتحكم والربط مع كل الموديولات"
-        icon="account_tree"
-        backAction={false}
-        primaryAction={
-          can("accounting.accounts.manage")
-            ? {
-                label: "حساب جديد",
-                icon: "add",
-                onClick: openCreate,
-              }
-            : undefined
-        }
-        moreActions={
-          can("accounting.accounts.manage")
-            ? [
-                {
-                  label: "استكمال الشجرة الافتراضية",
-                  icon: "auto_fix_high",
-                  onClick: () =>
-                    void run(
-                      accountingService.seedDefaults,
-                      "تم استكمال الحسابات الافتراضية.",
-                    ),
-                },
-              ]
-            : undefined
-        }
-      />
-
-      <Card className="!p-0 overflow-hidden shadow-none">
+    <ModuleOpsPageShell
+      eyebrow="شجرة الحسابات"
+      rangeLabel="دليل حسابات هرمي قابل للتحكم والربط مع كل الموديولات"
+      dir="rtl"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {can("accounting.accounts.manage") ? (
+            <Button size="sm" onClick={openCreate}>
+              <Plus className="ms-1 h-4 w-4" />
+              حساب جديد
+            </Button>
+          ) : null}
+          {can("accounting.accounts.manage") ? (
+            <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+              <PageHeader
+                title=""
+                backAction={false}
+                moreActions={[
+                  {
+                    label: "استكمال الشجرة الافتراضية",
+                    icon: "auto_fix_high",
+                    onClick: () =>
+                      void run(
+                        accountingService.seedDefaults,
+                        "تم استكمال الحسابات الافتراضية.",
+                      ),
+                  },
+                ]}
+              />
+            </div>
+          ) : null}
+        </div>
+      }
+    >
+      <OpsDashPanel title="دليل الحسابات" bodyClassName="p-0">
         <SmartFilterBar
           pageId="accounting-chart"
           searchPlaceholder="بحث بالكود أو الاسم"
@@ -289,7 +292,7 @@ export const AccountingChartOfAccounts: React.FC = () => {
           onPageChange={setPage}
           itemLabel="حساب"
         />
-      </Card>
+      </OpsDashPanel>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-lg">
@@ -410,6 +413,6 @@ export const AccountingChartOfAccounts: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

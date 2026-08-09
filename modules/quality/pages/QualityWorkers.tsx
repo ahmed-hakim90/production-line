@@ -1,5 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Badge, Button, Card } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -151,17 +153,11 @@ export const QualityWorkers: React.FC = () => {
   if (loading && list.length === 0) return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text)]">عمال الجودة</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">
-            ربط أدوار الجودة بموظفي HR الحاليين دون إنشاء بيانات عاملين منفصلة.
-          </p>
-        </div>
-        <Badge variant="info">إجمالي التعيينات: {list.length}</Badge>
-      </div>
-
+    <ModuleOpsPageShell
+      eyebrow="عمال الجودة"
+      rangeLabel="ربط أدوار الجودة بموظفي HR الحاليين دون إنشاء بيانات عاملين منفصلة"
+      actions={<Badge variant="info">إجمالي التعيينات: {list.length}</Badge>}
+    >
       {message && (
         <Card>
           <p className="text-sm font-semibold text-[var(--color-text)]">{message}</p>
@@ -250,7 +246,7 @@ export const QualityWorkers: React.FC = () => {
           </form>
         </Card>
 
-        <Card className="xl:col-span-2" title="تعيينات الجودة الحالية">
+        <OpsDashPanel className="xl:col-span-2" title="تعيينات الجودة الحالية" accent="quality" bodyClassName="p-0">
           <SmartFilterBar
       pageId="quality-workers"
             searchPlaceholder="بحث بالاسم أو الكود أو الدور..."
@@ -321,9 +317,9 @@ export const QualityWorkers: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </OpsDashPanel>
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

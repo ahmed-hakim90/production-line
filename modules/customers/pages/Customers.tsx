@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -195,39 +196,36 @@ export const Customers: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="العملاء"
-        subtitle="ماستر بيانات العملاء (مستهلك / تاجر) — المرجع لكل الموديولات"
-        actions={
-          <div className="flex flex-wrap gap-2">
-            {canEdit && (
+    <ModuleOpsPageShell
+      eyebrow="العملاء"
+      rangeLabel="ماستر بيانات العملاء (مستهلك / تاجر) — المرجع لكل الموديولات"
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          {canEdit && (
+            <Button type="button" variant="outline" asChild>
+              <Link to={withTenantPath(tenantSlug, '/customers/repair-link')}>ربط طلبات الصيانة</Link>
+            </Button>
+          )}
+          {canImport && (
+            <>
+              <Button type="button" variant="outline" onClick={() => downloadCustomersTemplate()}>
+                قالب Excel
+              </Button>
               <Button type="button" variant="outline" asChild>
-                <Link to={withTenantPath(tenantSlug, '/customers/repair-link')}>ربط طلبات الصيانة</Link>
+                <Link to={withTenantPath(tenantSlug, '/customers/import')}>استيراد</Link>
               </Button>
-            )}
-            {canImport && (
-              <>
-                <Button type="button" variant="outline" onClick={() => downloadCustomersTemplate()}>
-                  قالب Excel
-                </Button>
-                <Button type="button" variant="outline" asChild>
-                  <Link to={withTenantPath(tenantSlug, '/customers/import')}>استيراد</Link>
-                </Button>
-              </>
-            )}
-            {canCreate && (
-              <Button type="button" onClick={openCreate}>
-                عميل جديد
-              </Button>
-            )}
-          </div>
-        }
-      />
-
-      <div className="rounded-xl border bg-[var(--color-card)] overflow-hidden">
-        <div className="p-3 border-b">
-          <SmartFilterBar
+            </>
+          )}
+          {canCreate && (
+            <Button type="button" onClick={openCreate}>
+              عميل جديد
+            </Button>
+          )}
+        </div>
+      )}
+    >
+      <OpsDashPanel title="قائمة العملاء" accent="customers" bodyClassName="p-0">
+        <SmartFilterBar
             pageId="customers-list"
             searchPlaceholder="بحث بالكود / الاسم / الموبايل…"
             searchValue={search}
@@ -252,8 +250,8 @@ export const Customers: React.FC = () => {
               if (key === 'type') setTypeFilter(value || 'all');
               if (key === 'status') setStatusFilter(value || 'all');
             }}
-          />
-        </div>
+          className="mb-0 border-0 rounded-none"
+        />
 
         <div className="erp-mobile-card-list p-2">
           {loading ? (
@@ -417,7 +415,7 @@ export const Customers: React.FC = () => {
           itemLabel="عميل"
           onPageChange={setPage}
         />
-      </div>
+      </OpsDashPanel>
 
       <Dialog open={modalOpen} onOpenChange={setModalOpen}>
         <DialogContent>
@@ -498,6 +496,6 @@ export const Customers: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

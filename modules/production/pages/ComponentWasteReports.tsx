@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Loader2, PackageX } from 'lucide-react';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { Card, Button, SearchableSelect, Badge } from '../components/UI';
+import { Loader2 } from 'lucide-react';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button, SearchableSelect, Badge } from '../components/UI';
 import { loadWasteComponentOptions } from '../utils/wasteComponentOptions';
 import { useAppStore } from '../../../store/useAppStore';
 import type { ProductionReport, ReportComponentScrapItem } from '../../../types';
@@ -319,15 +320,12 @@ export const ComponentWasteReports: React.FC = () => {
   const shareTotalQty = shareItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
 
   return (
-    <div className="erp-dashboard-theme space-y-5">
-      <PageHeader
-        title="تقرير هالك المكونات"
-        subtitle="اختيار منتج ومكوّن أو أكثر وتسجيل كميات الهالك مع حركة مخزون تلقائية"
-        icon={<PackageX size={18} />}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="تقرير هالك المكونات"
+      rangeLabel="اختيار منتج ومكوّن أو أكثر وتسجيل كميات الهالك مع حركة مخزون تلقائية"
+    >
       <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_420px] gap-4">
-        <Card title="تسجيل هالك مكونات">
+        <OpsDashPanel title="تسجيل هالك مكونات" accent="production">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1.5">التاريخ</label>
@@ -474,9 +472,9 @@ export const ComponentWasteReports: React.FC = () => {
               {saving ? 'جاري الحفظ...' : 'حفظ تقرير الهالك'}
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
 
-        <Card title="ملخص الاختيار">
+        <OpsDashPanel title="ملخص الاختيار" accent="production">
           <div className="space-y-3 text-sm">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[var(--color-text-muted)]">المنتج</span>
@@ -508,10 +506,10 @@ export const ComponentWasteReports: React.FC = () => {
               التقرير لا يضيف إنتاج ولا ساعات عمل، لكنه يسجل الهالك ويحدث المخزون تلقائياً.
             </div>
           </div>
-        </Card>
+        </OpsDashPanel>
       </div>
 
-      <Card title="آخر تقارير هالك المكونات">
+      <OpsDashPanel title="آخر تقارير هالك المكونات" accent="production">
         {reportsLoading ? (
           <div className="flex items-center gap-2 text-sm text-[var(--color-text-muted)]">
             <Loader2 size={16} className="animate-spin" />
@@ -570,7 +568,7 @@ export const ComponentWasteReports: React.FC = () => {
             </table>
           </div>
         )}
-      </Card>
+      </OpsDashPanel>
 
       <div style={{ position: 'fixed', left: '-9999px', top: 0, zIndex: -1, direction: 'rtl' }}>
         {shareReport && (
@@ -628,7 +626,7 @@ export const ComponentWasteReports: React.FC = () => {
           </div>
         )}
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

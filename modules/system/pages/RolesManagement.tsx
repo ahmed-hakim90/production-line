@@ -2,7 +2,9 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import {
   usePermission,
   PERMISSION_GROUPS,
@@ -163,17 +165,12 @@ export const RolesManagement: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      {/* ── Header ── */}
-      <div className="erp-page-head">
-        <div className="erp-page-title-block">
-          <h1 className="page-title">الأدوار والصلاحيات</h1>
-          <p className="page-subtitle">
-            إدارة الأدوار والتحكم في صلاحيات المستخدمين. لعرض من له أي دور أو تغيير دور مستخدم، استخدم «إدارة المستخدمين» (صلاحية منفصلة عن إدارة الأدوار).
-          </p>
-        </div>
-        {can('roles.manage') && (
-          <div className="erp-page-actions flex flex-wrap gap-2">
+    <ModuleOpsPageShell
+      eyebrow="الأدوار والصلاحيات"
+      rangeLabel="إدارة الأدوار والتحكم في صلاحيات المستخدمين. لعرض من له أي دور أو تغيير دور مستخدم، استخدم «إدارة المستخدمين»"
+      actions={
+        can('roles.manage') ? (
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               disabled={seedBusy}
@@ -188,19 +185,20 @@ export const RolesManagement: React.FC = () => {
               إنشاء دور جديد
             </Button>
           </div>
-        )}
-      </div>
-
+        ) : undefined
+      }
+    >
       {/* ── Roles Card Grid: 1 col → 2 col → 3 col ── */}
       {visibleRoleGroups.length === 0 ? (
-        <Card>
+        <OpsDashPanel title="لا توجد أدوار" accent="hr">
           <div className="text-center py-16 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-20">admin_panel_settings</span>
             <p className="font-bold text-base">لا توجد أدوار بعد</p>
             <p className="text-sm mt-1">ابدأ بإنشاء أول دور للمؤسسة</p>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : (
+        <OpsDashPanel title="الأدوار" accent="hr">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {visibleRoleGroups.map(({ role }) => {
             const count = enabledCount(role.permissions);
@@ -312,6 +310,7 @@ export const RolesManagement: React.FC = () => {
             );
           })}
         </div>
+        </OpsDashPanel>
       )}
 
       {/* ── Delete Confirmation Modal ── */}
@@ -351,6 +350,6 @@ export const RolesManagement: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

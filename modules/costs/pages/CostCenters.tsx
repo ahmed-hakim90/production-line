@@ -2,10 +2,10 @@ import React, { useMemo, useState } from 'react';
 import { Download, Eye, Pencil, Trash2 } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Badge, Button } from '../../../components/UI';
-import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataTable, type Column } from '../../../src/components/erp/DataTable';
 import type { RowActionMenuItem } from '../../../src/components/erp/RowActionsMenu';
-import { KPICard } from '../../../src/components/erp/KPICard';
 import { StatusBadge } from '../../../src/components/erp/StatusBadge';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '../../../store/useAppStore';
@@ -270,44 +270,44 @@ export const CostCenters: React.FC = () => {
     return actions;
   };
 
+  const centerHero = useMemo(
+    () => [
+      { key: 'total', label: 'إجمالي المراكز', value: filteredCenters.length },
+      { key: 'direct', label: 'مراكز مباشرة', value: directCentersCount },
+      { key: 'indirect', label: 'مراكز غير مباشرة', value: indirectCentersCount },
+    ],
+    [filteredCenters.length, directCentersCount, indirectCentersCount],
+  );
+
   return (
-    <div className="space-y-6 erp-ds-clean">
-      <PageHeader
-        title="مراكز التكلفة"
-        subtitle="إدارة مراكز التكلفة المباشرة وغير المباشرة بأسلوب ERP."
-        icon="account_balance"
-        backAction={false}
-        primaryAction={canManage ? {
-          label: 'إضافة مركز تكلفة',
-          icon: 'add',
-          onClick: openCreate,
-          dataModalKey: MODAL_KEYS.COST_CENTERS_CREATE,
-        } : undefined}
-        extra={(
-          <div className="flex items-center gap-2 flex-wrap">
-            <input
-              type="month"
-              value={selectedMonth}
-              onChange={(e) => setSelectedMonth(e.target.value)}
-              className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none"
-            />
-            {canExport && costCenters.length > 0 && (
-              <Button variant="ghost" onClick={handleExportCenters}>
-                <Download className="h-4 w-4" />
-                تصدير التوزيع
-              </Button>
-            )}
-          </div>
-        )}
-      />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KPICard label="إجمالي المراكز" value={filteredCenters.length} iconType="metric" color="indigo" />
-        <KPICard label="مراكز مباشرة" value={directCentersCount} iconType="money" color="green" />
-        <KPICard label="مراكز غير مباشرة" value={indirectCentersCount} iconType="trend" color="amber" />
-      </div>
-
-      <Card>
+    <ModuleOpsPageShell
+      eyebrow="مراكز التكلفة"
+      rangeLabel="إدارة مراكز التكلفة المباشرة وغير المباشرة بأسلوب ERP"
+      hero={centerHero}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.COST_CENTERS_CREATE}>
+              <span className="material-icons-round text-sm">add</span>
+              إضافة مركز تكلفة
+            </Button>
+          ) : null}
+          <input
+            type="month"
+            value={selectedMonth}
+            onChange={(e) => setSelectedMonth(e.target.value)}
+            className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm outline-none"
+          />
+          {canExport && costCenters.length > 0 ? (
+            <Button variant="ghost" onClick={handleExportCenters}>
+              <Download className="h-4 w-4" />
+              تصدير التوزيع
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
+      <OpsDashPanel title="قائمة المراكز" accent="costs" bodyClassName="p-0">
         <SmartFilterBar
       pageId="cost-centers"
           searchPlaceholder="بحث باسم المركز أو المعرف..."
@@ -356,16 +356,13 @@ export const CostCenters: React.FC = () => {
           }
           className="mb-0 border-0 rounded-none"
         />
-      </Card>
 
       {filteredCenters.length === 0 ? (
-        <Card>
-          <div className="text-center py-12 text-slate-400">
+        <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">account_balance</span>
             <p className="font-medium">لا توجد نتائج مطابقة</p>
             {canManage && <p className="text-sm mt-1">أضف مراكز التكلفة لبدء تتبع المصروفات</p>}
           </div>
-        </Card>
       ) : viewMode === 'cards' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredCenters.map((cc) => (
@@ -441,15 +438,14 @@ export const CostCenters: React.FC = () => {
           ))}
         </div>
       ) : (
-        <Card>
           <DataTable
             columns={centerColumns}
             data={filteredCenters}
             emptyMessage="لا توجد نتائج مطابقة"
             getRowActions={getCenterRowActions}
           />
-        </Card>
       )}
+      </OpsDashPanel>
 
       {/* Delete Confirm */}
       {deleteConfirm && (
@@ -471,7 +467,7 @@ export const CostCenters: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '@/components/SelectableTable';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -421,19 +422,22 @@ export const AttendanceDailyView: React.FC = () => {
   ], [stats]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="الحضور اليومي المعالج"
-        subtitle="نتائج المعالجة اليومية للحضور (check-in / check-out / ساعات العمل)"
-        icon="fact_check"
-        secondaryAction={{
-          label: 'تصدير Excel',
-          icon: 'download',
-          onClick: handleExport,
-          disabled: visibleRecords.length === 0,
-        }}
-        loading={loading || actionBusy}
-      />
+    <ModuleOpsPageShell
+      eyebrow="الحضور اليومي المعالج"
+      rangeLabel="نتائج المعالجة اليومية للحضور (check-in / check-out / ساعات العمل)"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant="secondary"
+            onClick={handleExport}
+            disabled={visibleRecords.length === 0}
+          >
+            <span className="material-icons-round text-sm">download</span>
+            تصدير Excel
+          </Button>
+        </div>
+      }
+    >
 
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {kpiCards.map((item) => (
@@ -450,18 +454,20 @@ export const AttendanceDailyView: React.FC = () => {
       ) : null}
 
       {deleteProgress.visible && (
-        <div className="card p-3 space-y-2">
-          <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)]">
-            <span>جاري الحذف النهائي...</span>
-            <span>{deleteProgress.done}/{deleteProgress.total}</span>
+        <OpsDashPanel accent="hr">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between text-xs text-[var(--color-text-muted)]">
+              <span>جاري الحذف النهائي...</span>
+              <span>{deleteProgress.done}/{deleteProgress.total}</span>
+            </div>
+            <div className="erp-progress-wrap">
+              <div className="erp-progress-bar striped" style={{ width: `${progressPercent}%` }} />
+            </div>
           </div>
-          <div className="erp-progress-wrap">
-            <div className="erp-progress-bar striped" style={{ width: `${progressPercent}%` }} />
-          </div>
-        </div>
+        </OpsDashPanel>
       )}
 
-      <div className="card p-0">
+      <OpsDashPanel title="سجلات الحضور" accent="hr" bodyClassName="p-0">
         <SmartFilterBar
       pageId="attendance-daily-view"
           periods={[
@@ -512,7 +518,7 @@ export const AttendanceDailyView: React.FC = () => {
           selectAllScope="filtered"
           loading={loading}
         />
-      </div>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

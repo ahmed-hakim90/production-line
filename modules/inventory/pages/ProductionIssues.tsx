@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { productionIssueService, isProductionIssueApprovalError } from '../services/productionIssueService';
@@ -915,12 +916,10 @@ export const ProductionIssues: React.FC = () => {
   if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader
-        title="صرف إنتاج"
-        subtitle="طلبات موديول الإنتاج تظهر هنا لاعتماد أو رفض المستلزم. يمكن للمستودع أيضاً إنشاء إذن صرف مباشر عند الحاجة."
-        icon="inventory_2"
-      />
+    <ModuleOpsPageShell
+      eyebrow="صرف إنتاج"
+      rangeLabel="طلبات موديول الإنتاج تظهر هنا لاعتماد أو رفض المستلزم. يمكن للمستودع أيضاً إنشاء إذن صرف مباشر عند الحاجة."
+    >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
@@ -928,7 +927,7 @@ export const ProductionIssues: React.FC = () => {
       />
 
       {can('productionIssue.create') && (
-      <Card title="إنشاء أمر صرف (من المستودع)">
+      <OpsDashPanel title="إنشاء أمر صرف (من المستودع)" accent="production">
         <div className="grid grid-cols-1 lg:grid-cols-[150px_minmax(240px,1fr)_180px_180px_110px] gap-3 p-4 items-end">
           <label className="space-y-1">
             <span className="text-xs font-bold text-slate-500">نوع المصدر</span>
@@ -982,7 +981,7 @@ export const ProductionIssues: React.FC = () => {
                 : 'اختر المصدر لعرض الكمية الافتراضية.'}
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
       )}
 
       {message && (
@@ -1004,8 +1003,10 @@ export const ProductionIssues: React.FC = () => {
       {/* Physical LTR row: details LEFT, list RIGHT — content stays RTL. */}
       <div className="flex flex-col xl:flex-row gap-4 items-stretch" dir="ltr">
         <div className="order-2 xl:order-1 min-w-0 flex-1 w-full" dir="rtl">
-        <Card
-          className="!p-0 overflow-hidden h-full"
+        <OpsDashPanel
+          className="h-full"
+          bodyClassName="p-0"
+          accent="production"
           title={selectedOrder ? `تفاصيل ${selectedOrder.referenceNo}` : 'التفاصيل'}
         >
           {selectedOrder && (
@@ -1217,12 +1218,14 @@ export const ProductionIssues: React.FC = () => {
               </div>
             </>
           )}
-        </Card>
+        </OpsDashPanel>
         </div>
 
         <div className="order-1 xl:order-2 w-full xl:w-[360px] xl:shrink-0" dir="rtl">
-        <Card
-          className="!p-0 overflow-hidden h-full"
+        <OpsDashPanel
+          className="h-full"
+          bodyClassName="p-0"
+          accent="production"
           title="أوامر الصرف"
         >
           <div className="flex gap-2 px-3 pt-3">
@@ -1277,7 +1280,7 @@ export const ProductionIssues: React.FC = () => {
               />
             </>
           )}
-        </Card>
+        </OpsDashPanel>
         </div>
       </div>
       <div
@@ -1423,6 +1426,6 @@ export const ProductionIssues: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

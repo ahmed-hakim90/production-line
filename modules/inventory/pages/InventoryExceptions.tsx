@@ -1,9 +1,9 @@
 import React, { useCallback, useMemo } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { stockService } from '../services/stockService';
 import { useAppStore } from '../../../store/useAppStore';
@@ -108,32 +108,28 @@ export const InventoryExceptions: React.FC = () => {
   }, [reloadCached]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="استثناءات المخزون"
-        subtitle={`أرصدة سالبة، منخفضة، وحركات يدوية ≥ ${threshold}`}
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')}>
-              <GhostButton iconName="warning_amber" tone="undo">تنبيهات المستلزمات</GhostButton>
-            </Link>
-            <PrimaryButton iconName="refresh" tone="neutral" onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
-          </div>
-        )}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="استثناءات المخزون"
+      rangeLabel={`أرصدة سالبة، منخفضة، وحركات يدوية ≥ ${threshold}`}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <Button type="button" variant="outline" size="sm" asChild>
+          <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')}>
+            تنبيهات المستلزمات
+          </Link>
+        </Button>
+      )}
+    >
       {loading ? (
         <Skeleton className="h-40 w-full rounded-xl" />
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>القائمة ({rows.length})</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {rows.length === 0 ? (
-              <p className="text-sm text-center text-[var(--color-text-muted)] py-8">لا توجد استثناءات حالياً.</p>
-            ) : (
-              rows.map((row) => (
+        <OpsDashPanel title={`القائمة (${rows.length})`} accent="inventory">
+          {rows.length === 0 ? (
+            <p className="text-sm text-center text-[var(--color-text-muted)] py-8">لا توجد استثناءات حالياً.</p>
+          ) : (
+            <div className="space-y-2">
+              {rows.map((row) => (
                 <div
                   key={row.id}
                   className="flex flex-wrap items-center justify-between gap-3 border border-[var(--color-border)] rounded-lg px-4 py-3"
@@ -143,9 +139,10 @@ export const InventoryExceptions: React.FC = () => {
                     <p className="text-xs text-[var(--color-text-muted)]">{row.detail}</p>
                   </div>
                   {row.balance && (
-                    <PrimaryButton
-                      iconName="tune"
-                      tone="edit"
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="secondary"
                       onClick={() =>
                         openModal(MODAL_KEYS.INVENTORY_STOCK_ADJUSTMENT, {
                           warehouseId: row.balance!.warehouseId,
@@ -155,14 +152,14 @@ export const InventoryExceptions: React.FC = () => {
                       }
                     >
                       تعديل رصيد
-                    </PrimaryButton>
+                    </Button>
                   )}
                 </div>
-              ))
-            )}
-          </CardContent>
-        </Card>
+              ))}
+            </div>
+          )}
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

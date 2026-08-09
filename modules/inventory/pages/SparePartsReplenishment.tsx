@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -360,91 +361,83 @@ export const SparePartsReplenishment: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5">
-        <PageHeader title="تموين قطع الغيار للمراكز" icon="construction" />
+      <ModuleOpsPageShell eyebrow="تموين قطع الغيار للمراكز">
         <p className="text-sm text-slate-500">ليس لديك صلاحية عرض هذه الصفحة.</p>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
+  const hero = [
+    {
+      key: 'pending',
+      label: 'مطلوب ولم يُستلم',
+      value: kpis.pendingCount,
+      accent: kpis.pendingCount > 0,
+      onClick: () => {
+        setListTab('pending');
+        setStatusFilter('');
+        setStockoutOnly(false);
+      },
+    },
+    {
+      key: 'received',
+      label: 'تم التموين',
+      value: kpis.receivedCount,
+      meta: `متوسط زمن التنفيذ: ${kpis.avgDurationLabel}`,
+    },
+    {
+      key: 'stockout',
+      label: 'قطع ناقصة',
+      value: kpis.stockoutLineCount,
+      meta: `في ${kpis.stockoutRequestCount} طلب`,
+      toneClassName: kpis.stockoutLineCount > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined,
+      onClick: () => {
+        setListTab('all');
+        setStockoutOnly(true);
+      },
+    },
+  ];
+
   return (
-    <div className="erp-ds-clean space-y-4 sm:space-y-5 px-1 sm:px-0">
-      <PageHeader
-        title="تموين قطع الغيار للمراكز"
-        subtitle="طلب من المركز → اعتماد → تجهيز → موافقة المسؤول → تأكيد الاستلام (دخول الرصيد عند الاستلام فقط). التسعير من ماستر المكونات مركزياً."
-        icon="construction"
-        actions={
-          (canManageCounts && primaryCentralWarehouseId) || canCreate
-            ? (
-              <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-                {canManageCounts && primaryCentralWarehouseId ? (
-                  <Link
-                    className="min-w-0 flex-1 sm:flex-none"
-                    to={withTenantPath(
-                      tenantSlug,
-                      `/inventory/warehouses/${encodeURIComponent(primaryCentralWarehouseId)}`,
-                    )}
-                  >
-                    <Button type="button" variant="secondary" className="w-full sm:w-auto">
-                      رفع أرصدة أول المدة
-                    </Button>
-                  </Link>
-                ) : null}
-                {canCreate ? (
-                  <Button
-                    type="button"
-                    className="min-w-0 flex-1 sm:flex-none"
-                    onClick={() => setShowCreate((v) => !v)}
-                  >
-                    {showCreate ? 'إخفاء النموذج' : 'طلب تموين جديد'}
+    <ModuleOpsPageShell
+      eyebrow="تموين قطع الغيار للمراكز"
+      rangeLabel="طلب من المركز → اعتماد → تجهيز → موافقة المسؤول → تأكيد الاستلام (دخول الرصيد عند الاستلام فقط). التسعير من ماستر المكونات مركزياً."
+      hero={hero}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={
+        (canManageCounts && primaryCentralWarehouseId) || canCreate
+          ? (
+            <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+              {canManageCounts && primaryCentralWarehouseId ? (
+                <Link
+                  className="min-w-0 flex-1 sm:flex-none"
+                  to={withTenantPath(
+                    tenantSlug,
+                    `/inventory/warehouses/${encodeURIComponent(primaryCentralWarehouseId)}`,
+                  )}
+                >
+                  <Button type="button" variant="secondary" className="w-full sm:w-auto">
+                    رفع أرصدة أول المدة
                   </Button>
-                ) : null}
-              </div>
-            )
-            : undefined
-        }
-      />
-
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <button
-          type="button"
-          className="text-start"
-          onClick={() => {
-            setListTab('pending');
-            setStatusFilter('');
-            setStockoutOnly(false);
-          }}
-        >
-          <Card title="مطلوب ولم يُستلم">
-            <p className="text-2xl font-bold text-amber-700 sm:text-3xl">{kpis.pendingCount}</p>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">اضغط لعرض المعلّق فقط</p>
-          </Card>
-        </button>
-        <Card title="تم التموين + المدة">
-          <p className="text-2xl font-bold sm:text-3xl">{kpis.receivedCount}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            متوسط زمن التنفيذ: {kpis.avgDurationLabel}
-          </p>
-        </Card>
-        <button
-          type="button"
-          className="text-start"
-          onClick={() => {
-            setListTab('all');
-            setStockoutOnly(true);
-          }}
-        >
-          <Card title="قطع ناقصة (صفر هنا وهناك)">
-            <p className="text-2xl font-bold text-rose-700 sm:text-3xl">{kpis.stockoutLineCount}</p>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">
-              في {kpis.stockoutRequestCount} طلب — اضغط لتصفية الناقص
-            </p>
-          </Card>
-        </button>
-      </div>
-
+                </Link>
+              ) : null}
+              {canCreate ? (
+                <Button
+                  type="button"
+                  className="min-w-0 flex-1 sm:flex-none"
+                  onClick={() => setShowCreate((v) => !v)}
+                >
+                  {showCreate ? 'إخفاء النموذج' : 'طلب تموين جديد'}
+                </Button>
+              ) : null}
+            </div>
+          )
+          : undefined
+      }
+    >
       {centralWarehouses.length === 0 || centerWarehouses.length === 0 ? (
-        <Card title="تهيئة المخازن">
+        <OpsDashPanel title="تهيئة المخازن" accent="repair">
           <p className="text-sm text-[var(--color-text-muted)] mb-3">
             أنشئ مخزناً بدور «{WAREHOUSE_ROLE_LABELS.spare_parts_central}» ومخزناً بدور «
             {WAREHOUSE_ROLE_LABELS.maintenance_center}» من إدارة المخازن.
@@ -455,11 +448,11 @@ export const SparePartsReplenishment: React.FC = () => {
           >
             فتح إدارة المخازن
           </Link>
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
       {showCreate && canCreate ? (
-        <Card title="طلب تموين من المركز">
+        <OpsDashPanel title="طلب تموين من المركز" accent="repair">
           <div className="grid gap-3 md:grid-cols-2">
             <label className="text-sm font-semibold space-y-1">
               <span>مخزن قطع الغيار المركزي</span>
@@ -560,10 +553,10 @@ export const SparePartsReplenishment: React.FC = () => {
               {busyId === 'create' ? 'جاري الإرسال…' : 'إرسال الطلب'}
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
-      <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] overflow-hidden">
+      <OpsDashPanel title="تصفية الطلبات" accent="repair" bodyClassName="p-0">
         <SmartFilterBar
           pageId="spare-parts-replenishment"
           searchPlaceholder="رقم الطلب أو المركز أو الصنف…"
@@ -605,13 +598,15 @@ export const SparePartsReplenishment: React.FC = () => {
             </div>
           )}
         />
-      </div>
+      </OpsDashPanel>
 
       {/* Physical LTR row: details LEFT, requests RIGHT — content stays RTL. */}
       <div className="flex flex-col xl:flex-row gap-4 items-stretch" dir="ltr">
         <div ref={detailPanelRef} className="order-2 xl:order-1 min-w-0 flex-1 w-full" dir="rtl">
-        <Card
-          className="!p-0 overflow-hidden h-full"
+        <OpsDashPanel
+          className="h-full"
+          bodyClassName="p-0"
+          accent="repair"
           title={selectedRequest ? `تفاصيل ${selectedRequest.referenceNo}` : 'التفاصيل'}
         >
           {!selectedRequest ? (
@@ -837,12 +832,14 @@ export const SparePartsReplenishment: React.FC = () => {
               </div>
             </>
           )}
-        </Card>
+        </OpsDashPanel>
         </div>
 
         <div className="order-1 w-full xl:order-2 xl:w-[360px] xl:shrink-0" dir="rtl">
-        <Card
-          className="!p-0 overflow-hidden h-full"
+        <OpsDashPanel
+          className="h-full"
+          bodyClassName="p-0"
+          accent="repair"
           title="الطلبات"
         >
           <div className="flex flex-wrap gap-2 px-3 pt-3">
@@ -912,9 +909,9 @@ export const SparePartsReplenishment: React.FC = () => {
               itemLabel="طلب"
             />
           ) : null}
-        </Card>
+        </OpsDashPanel>
         </div>
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

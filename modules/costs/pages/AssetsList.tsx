@@ -1,7 +1,8 @@
 ﻿import React, { useEffect, useMemo, useState } from 'react';
 import { Calendar, Eye, Pencil, Trash2 } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '../../../components/UI';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
@@ -296,48 +297,36 @@ export const AssetsList: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 erp-ds-clean">
-      <PageHeader
-        title="إدارة الأصول"
-        subtitle="تسجيل الأصول الثابتة ومتابعة الإهلاك الشهري"
-        icon="precision_manufacturing"
-        backAction={false}
-        primaryAction={canCreate ? {
-          label: showCreate ? 'إخفاء النموذج' : '+ إضافة أصل',
-          icon: showCreate ? 'expand_less' : 'add',
-          onClick: () => setShowCreate((p) => !p),
-        } : undefined}
-        extra={
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => navigate(-1)}>
-              <span></span>
+    <ModuleOpsPageShell
+      eyebrow="إدارة الأصول"
+      rangeLabel="تسجيل الأصول الثابتة ومتابعة الإهلاك الشهري"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreate ? (
+            <Button variant="primary" onClick={() => setShowCreate((p) => !p)}>
+              <span className="material-icons-round text-sm">{showCreate ? 'expand_less' : 'add'}</span>
+              {showCreate ? 'إخفاء النموذج' : 'إضافة أصل'}
             </Button>
-            {canRun && (
-              <>
+          ) : null}
+          {canRun ? (
+            <>
               <input
                 type="month"
                 className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
                 value={period}
                 onChange={(e) => setPeriod(e.target.value)}
               />
-              <Button
-                variant="ghost"
-                disabled={runningJob}
-                onClick={onRunDepreciation}
-              >
+              <Button variant="ghost" disabled={runningJob} onClick={onRunDepreciation}>
                 <Calendar className="h-4 w-4" />
                 {runningJob ? 'جاري الاحتساب...' : 'تشغيل إهلاك الشهر'}
               </Button>
-              </>
-            )}
-          </div>
-        }
-      />
-
+            </>
+          ) : null}
+        </div>
+      )}
+    >
       {showCreate && canCreate && (
-        <div className="page-card">
-          <div className="section-head">بيانات الأصل</div>
-          <div className="p-4">
+        <OpsDashPanel title="بيانات الأصل" accent="costs">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <label className="erp-field">
               <span className="erp-field-label">اسم الأصل</span>
@@ -403,11 +392,11 @@ export const AssetsList: React.FC = () => {
               {saving ? 'جاري الحفظ...' : 'حفظ الأصل'}
             </Button>
           </div>
-          </div>
-        </div>
+        </OpsDashPanel>
       )}
 
-      <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
+      <OpsDashPanel title="قائمة الأصول" accent="costs" bodyClassName="p-0">
+        <div className="p-4">
         <SmartFilterBar
       pageId="assets-list"
           searchPlaceholder="بحث بالاسم أو الكود"
@@ -449,14 +438,15 @@ export const AssetsList: React.FC = () => {
           emptyMessage="لا توجد أصول مسجلة"
           getRowActions={getRowActions}
         />
-      </div>
+        </div>
+      </OpsDashPanel>
 
       {canEdit && (
-        <div className="text-xs text-[var(--color-text-muted)]">
+        <p className="text-xs text-[var(--color-text-muted)]">
           يمكن تعديل أو حذف الأصل من صفحة التفاصيل.
-        </div>
+        </p>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

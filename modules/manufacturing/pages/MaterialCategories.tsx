@@ -2,7 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
 import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '@/modules/production/components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button } from '@/modules/production/components/UI';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePermission } from '@/utils/permissions';
@@ -170,45 +172,51 @@ export const MaterialCategories: React.FC = () => {
   }
 
   return (
-    <div className="space-y-5 p-4 md:p-6">
-      <PageHeader
-        title="فئات المواد التصنيعية"
-        subtitle="تصنيف هرمي للمواد الخام والمستهلكات"
-        primaryAction={
-          canManage
-            ? { label: 'فئة رئيسية', onClick: () => { setEditId(null); setForm(emptyForm()); }, icon: 'add' }
-            : undefined
-        }
-        moreActions={
-          canManage
-            ? [
-                {
-                  label: migrating ? 'جاري الترحيل...' : 'ترحيل من أسماء قديمة',
-                  onClick: () => void (async () => {
-                    if (!window.confirm('ربط المواد بفئات من حقل categoryName القديم؟')) return;
-                    setMigrating(true);
-                    try {
-                      const { migrateMaterialCategoriesV1 } = await import(
-                        '../../catalog/services/categoryMigration'
-                      );
-                      const r = await migrateMaterialCategoriesV1();
-                      toast.success(`تم ترحيل ${r.categoriesCreated} فئة وربط ${r.materialsUpdated} مادة.`);
-                      await loadData();
-                    } catch {
-                      toast.error('فشل ترحيل الفئات.');
-                    } finally {
-                      setMigrating(false);
-                    }
-                  })(),
-                  disabled: migrating,
-                },
-              ]
-            : []
-        }
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="فئات المواد التصنيعية"
+      rangeLabel="تصنيف هرمي للمواد الخام والمستهلكات"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button type="button" variant="primary" onClick={() => { setEditId(null); setForm(emptyForm()); }}>
+              فئة رئيسية
+            </Button>
+          ) : null}
+          {canManage ? (
+            <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+              <PageHeader
+                title=""
+                backAction={false}
+                moreActions={[
+                  {
+                    label: migrating ? 'جاري الترحيل...' : 'ترحيل من أسماء قديمة',
+                    onClick: () => void (async () => {
+                      if (!window.confirm('ربط المواد بفئات من حقل categoryName القديم؟')) return;
+                      setMigrating(true);
+                      try {
+                        const { migrateMaterialCategoriesV1 } = await import(
+                          '../../catalog/services/categoryMigration'
+                        );
+                        const r = await migrateMaterialCategoriesV1();
+                        toast.success(`تم ترحيل ${r.categoriesCreated} فئة وربط ${r.materialsUpdated} مادة.`);
+                        await loadData();
+                      } catch {
+                        toast.error('فشل ترحيل الفئات.');
+                      } finally {
+                        setMigrating(false);
+                      }
+                    })(),
+                    disabled: migrating,
+                  },
+                ]}
+              />
+            </div>
+          ) : null}
+        </div>
+      )}
+    >
       {canManage && (
-        <Card>
+        <OpsDashPanel title="إضافة / تعديل فئة" accent="production">
           <div className="grid items-start gap-3 md:grid-cols-[minmax(160px,0.7fr)_minmax(240px,1.3fr)_minmax(200px,1fr)_auto]">
             <div className="space-y-1.5">
             <Label htmlFor="material-category-code">كود الفئة *</Label>
@@ -266,10 +274,10 @@ export const MaterialCategories: React.FC = () => {
               {editId ? 'حفظ' : 'إضافة'}
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      <Card className="overflow-x-auto !p-0">
+      <OpsDashPanel title="شجرة الفئات" accent="production" bodyClassName="p-0 overflow-hidden">
         <table className="erp-table w-full text-right">
           <thead className="erp-thead">
             <tr>
@@ -373,7 +381,7 @@ export const MaterialCategories: React.FC = () => {
             )}
           </tbody>
         </table>
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

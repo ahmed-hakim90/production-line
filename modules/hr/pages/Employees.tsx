@@ -52,6 +52,8 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { useRegisterModalOpener } from '../../../components/modal-manager/useRegisterModalOpener';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { productionWorkerService } from '@/modules/production/services/productionWorkerService';
 import { productionLineWorkerAssignmentService } from '@/modules/production/services/productionLineWorkerAssignmentService';
@@ -924,93 +926,95 @@ export const Employees: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* 1. Page header */}
-      <PageHeader
-        title="الموظفين"
-        subtitle="إدارة الموظفين والتسلسل الوظيفي والحسابات"
-        icon="groups"
-        primaryAction={can('employees.create') ? {
-          label: 'إضافة موظف',
-          icon: 'add',
-          onClick: openCreate,
-          dataModalKey: MODAL_KEYS.EMPLOYEES_CREATE,
-        } : undefined}
-        moreActions={[
-          {
-            label: 'تصدير Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !canExportFromPage || (tenantEmployeeCount ?? 0) === 0,
-            onClick: () => {
-              void (async () => {
-                const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
-                const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
-                const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
-                const all = await employeeService.getAll();
-                exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
-                  getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
-                  getManagerName: getEffectiveManagerName,
-                });
-              })();
-            },
-          },
-          {
-            label: 'استيراد Excel',
-            icon: 'upload_file',
-            group: 'استيراد',
-            hidden: !canImportFromPage,
-            onClick: () => navigate('/hr/employees/import'),
-          },
-        ]}
-      />
-
-      {/* 2. Stats bar - KPI chips ABOVE filter card */}
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-        <Card className={`p-4 cursor-pointer transition-all ${filterValues.status === 'all' ? 'ring-2 ring-primary' : ''}`} onClick={() => handleFilterChange('status', 'all')}>
-          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الإجمالي</p>
-          <p className="text-2xl font-bold text-[var(--color-text)]">{summaryKpis.total}</p>
-        </Card>
-        <Card className={`p-4 cursor-pointer transition-all ${filterValues.status === 'active' ? 'ring-2 ring-emerald-400' : ''}`} onClick={() => handleFilterChange('status', filterValues.status === 'active' ? 'all' : 'active')}>
-          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">نشط</p>
-          <p className="text-2xl font-bold text-emerald-600">{summaryKpis.active}</p>
-        </Card>
-        <Card className={`p-4 cursor-pointer transition-all ${filterValues.status === 'inactive' ? 'ring-2 ring-slate-400' : ''}`} onClick={() => handleFilterChange('status', filterValues.status === 'inactive' ? 'all' : 'inactive')}>
-          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">غير نشط</p>
-          <p className="text-2xl font-bold text-slate-500">{summaryKpis.inactive}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">لديهم دخول النظام</p>
-          <p className="text-2xl font-bold text-primary">{summaryKpis.withSystemAccess}</p>
-        </Card>
-        <Card className="p-4">
-          <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">في انتظار الموافقة</p>
-          <p className="text-2xl font-bold text-amber-600">{summaryKpis.pending}</p>
-        </Card>
-      </div>
+    <ModuleOpsPageShell
+      eyebrow="الموظفين"
+      rangeLabel="إدارة الموظفين والتسلسل الوظيفي والحسابات"
+      hero={[
+        {
+          key: 'total',
+          label: 'الإجمالي',
+          value: summaryKpis.total,
+          onClick: () => handleFilterChange('status', 'all'),
+          active: filterValues.status === 'all',
+        },
+        {
+          key: 'active',
+          label: 'نشط',
+          value: summaryKpis.active,
+          onClick: () => handleFilterChange('status', filterValues.status === 'active' ? 'all' : 'active'),
+          active: filterValues.status === 'active',
+        },
+        {
+          key: 'inactive',
+          label: 'غير نشط',
+          value: summaryKpis.inactive,
+          onClick: () => handleFilterChange('status', filterValues.status === 'inactive' ? 'all' : 'inactive'),
+          active: filterValues.status === 'inactive',
+        },
+        { key: 'access', label: 'لديهم دخول النظام', value: summaryKpis.withSystemAccess },
+        { key: 'pending', label: 'في انتظار الموافقة', value: summaryKpis.pending },
+      ]}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {can('employees.create') ? (
+            <Button type="button" onClick={openCreate} data-modal-key={MODAL_KEYS.EMPLOYEES_CREATE}>
+              إضافة موظف
+            </Button>
+          ) : null}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'تصدير Excel',
+                  icon: 'download',
+                  group: 'تصدير',
+                  hidden: !canExportFromPage || (tenantEmployeeCount ?? 0) === 0,
+                  onClick: () => {
+                    void (async () => {
+                      const getDeptName = (id: string) => departments.find((d) => d.id === id)?.name || '—';
+                      const getJobTitle = (id: string) => jobPositions.find((j) => j.id === id)?.title || '—';
+                      const getShiftName = (id: string) => shifts.find((s) => s.id === id)?.name || '—';
+                      const all = await employeeService.getAll();
+                      exportAllEmployees(all, getDeptName, getJobTitle, getShiftName, {
+                        getProductionLineName: (employee) => getProductionContext(employee.id)?.lineName || '—',
+                        getManagerName: getEffectiveManagerName,
+                      });
+                    })();
+                  },
+                },
+                {
+                  label: 'استيراد Excel',
+                  icon: 'upload_file',
+                  group: 'استيراد',
+                  hidden: !canImportFromPage,
+                  onClick: () => navigate('/hr/employees/import'),
+                },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+    >
       <p className="text-xs text-[var(--color-text-muted)] px-1">
         الإجمالي من الخادم. مؤشرات نشط / غير نشط / دخول النظام تُحسب من الموظفين المحمّلين في الجدول — استخدم «تحميل المزيد» لإظهار دفعات إضافية (٥٠ لكل دفعة).
       </p>
 
-      {/* 3. Pending users moved to users page */}
       {pendingUsers.length > 0 && canManageUsers && (
-        <Card>
+        <OpsDashPanel title="الموافقة على المستخدمين انتقلت لصفحة المستخدمين" accent="hr">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <div>
-              <h3 className="text-lg font-bold">الموافقة على المستخدمين انتقلت لصفحة المستخدمين</h3>
-              <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                يوجد {pendingUsers.length} مستخدم/مستخدمين بانتظار الموافقة.
-              </p>
-            </div>
+            <p className="text-sm text-[var(--color-text-muted)]">
+              يوجد {pendingUsers.length} مستخدم/مستخدمين بانتظار الموافقة.
+            </p>
             <Button variant="secondary" onClick={() => navigate('/system/users')}>
               فتح إدارة المستخدمين
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      {/* 4. SmartFilterBar + Table in one card */}
-      <Card className="p-0">
+      <OpsDashPanel title="قائمة الموظفين" accent="hr" bodyClassName="p-0 overflow-hidden">
         <SmartFilterBar
       pageId="hr-employees"
           searchPlaceholder="بحث باسم / رمز / خط إنتاج / مدير"
@@ -1065,7 +1069,7 @@ export const Employees: React.FC = () => {
         emptySubtitle={can('employees.create') ? 'اضغط "إضافة موظف" لإضافة أول موظف' : undefined}
         pageSize={15}
       />
-      </Card>
+      </OpsDashPanel>
 
       {(listHasMore || listLoading) && (
         <div className="flex justify-center">
@@ -1079,14 +1083,14 @@ export const Employees: React.FC = () => {
         </div>
       )}
 
-      <Card className="py-3 px-4">
+      <OpsDashPanel accent="hr">
         <div className="flex items-center justify-between gap-3">
           <span className="text-sm font-bold text-[var(--color-text-muted)]">إجمالي المرتبات (حسب النتائج المعروضة)</span>
           <span className="text-base font-extrabold text-primary">
             {filteredSalaryTotal.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} ج.م
           </span>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {/* 6. Create/Edit Modal — Professional HR Panel */}
       {showModal && (can('employees.create') || can('employees.edit')) && (
@@ -1601,7 +1605,7 @@ export const Employees: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

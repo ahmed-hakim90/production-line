@@ -1,5 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -579,11 +578,8 @@ export const RepairTreasury: React.FC = () => {
 
       <div className="grid gap-4 xl:grid-cols-12">
         <div className="space-y-4 xl:col-span-5">
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">{openSession ? 'تقفيل الخزينة' : 'فتح الخزينة'}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <OpsDashPanel title={openSession ? 'تقفيل الخزينة' : 'فتح الخزينة'} accent="repair">
+            <div className="space-y-4">
               {!openSession ? (
                 <div className="space-y-3">
                   <p className="text-sm text-muted-foreground">ابدأ يوم العمل بتسجيل الرصيد الافتتاحي للفرع المحدد.</p>
@@ -647,14 +643,11 @@ export const RepairTreasury: React.FC = () => {
               {canManage && monthClosed && (
                 <p className="text-xs text-rose-700">الشهر مقفول — أعد فتحه من التقرير الشهري لتسجيل حركات.</p>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
 
-          <Card>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">إضافة حركة</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <OpsDashPanel title="إضافة حركة" accent="repair">
+            <div className="space-y-3">
               {!openSession ? (
                 <div className="rounded-lg border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">
                   افتح الخزينة أولًا لتسجيل الحركات.
@@ -744,8 +737,8 @@ export const RepairTreasury: React.FC = () => {
                   </Button>
                 </>
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         </div>
 
         <OpsDashPanel title="حركات الجلسة الحالية" accent="repair" bodyClassName="p-0" className="xl:col-span-7">

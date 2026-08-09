@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -90,24 +90,20 @@ export const AccountingCostCenters: React.FC = () => {
     }, "تم حفظ مركز التكلفة في ماستر الحسابات.");
 
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="مراكز التكلفة"
-        subtitle="ماستر عام للحسابات يخدم الإنتاج والصيانة والمخازن والإدارة"
-        icon="account_balance"
-        backAction={false}
-        primaryAction={
-          can("accounting.settings.manage")
-            ? {
-                label: "مركز تكلفة جديد",
-                icon: "add",
-                onClick: openCreate,
-              }
-            : undefined
-        }
-      />
-
-      <Card className="!p-0 overflow-hidden shadow-none">
+    <ModuleOpsPageShell
+      eyebrow="مراكز التكلفة"
+      rangeLabel="ماستر عام للحسابات يخدم الإنتاج والصيانة والمخازن والإدارة"
+      dir="rtl"
+      actions={
+        can("accounting.settings.manage") ? (
+          <Button size="sm" onClick={openCreate}>
+            <Plus className="ms-1 h-4 w-4" />
+            مركز تكلفة جديد
+          </Button>
+        ) : undefined
+      }
+    >
+      <OpsDashPanel title="مراكز التكلفة" bodyClassName="p-0">
         <SmartFilterBar
           pageId="accounting-cost-centers"
           searchPlaceholder="بحث بالكود أو الاسم"
@@ -290,7 +286,7 @@ export const AccountingCostCenters: React.FC = () => {
           onPageChange={setPage}
           itemLabel="مركز"
         />
-      </Card>
+      </OpsDashPanel>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-2xl">
@@ -437,6 +433,6 @@ export const AccountingCostCenters: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -64,49 +65,49 @@ export const AccountingRepairPnl: React.FC = () => {
   );
 
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="ربحية الصيانة"
-        subtitle="إيراد التسليم وتكلفة القطع ومصروفات الخزينة المرحّلة — من القيود المحاسبية فقط"
-        icon="monitoring"
-        backAction={false}
-        primaryAction={{
-          label: "تحديث",
-          icon: "refresh",
-          onClick: () => {
-            void reload();
-          },
-        }}
-        moreActions={[
-          {
-            label: "تصدير CSV",
-            icon: "download",
-            onClick: () =>
-              exportAccountingCsv(
-                "repair-pnl.csv",
-                ["البند", "المبلغ"],
-                [
-                  ["إيراد خدمات", pnl.serviceRevenue],
-                  ["إيراد قطع", pnl.partsRevenue],
-                  ["إيرادات متنوعة", pnl.miscIncome],
-                  ["خصومات", pnl.discounts],
-                  ["صافي الإيراد", pnl.netRevenue],
-                  ["تكلفة قطع الغيار", pnl.partsCogs],
-                  ["مصروفات تشغيل", pnl.operatingExpenses],
-                  ["ربح التشغيل", pnl.operatingProfit],
-                  ...pnl.expensesByType.map(
-                    (row) =>
-                      [`مصروف: ${row.label}`, row.amount] as [string, number],
+    <ModuleOpsPageShell
+      eyebrow="ربحية الصيانة"
+      rangeLabel="إيراد التسليم وتكلفة القطع ومصروفات الخزينة المرحّلة — من القيود المحاسبية فقط"
+      dir="rtl"
+      onRefresh={() => void reload()}
+      refreshing={loading}
+      actions={
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            moreActions={[
+              {
+                label: "تصدير CSV",
+                icon: "download",
+                onClick: () =>
+                  exportAccountingCsv(
+                    "repair-pnl.csv",
+                    ["البند", "المبلغ"],
+                    [
+                      ["إيراد خدمات", pnl.serviceRevenue],
+                      ["إيراد قطع", pnl.partsRevenue],
+                      ["إيرادات متنوعة", pnl.miscIncome],
+                      ["خصومات", pnl.discounts],
+                      ["صافي الإيراد", pnl.netRevenue],
+                      ["تكلفة قطع الغيار", pnl.partsCogs],
+                      ["مصروفات تشغيل", pnl.operatingExpenses],
+                      ["ربح التشغيل", pnl.operatingProfit],
+                      ...pnl.expensesByType.map(
+                        (row) =>
+                          [`مصروف: ${row.label}`, row.amount] as [string, number],
+                      ),
+                    ],
                   ),
-                ],
-              ),
-            group: "تصدير",
-          },
-        ]}
-      />
-
-      <Card className="!p-0 overflow-hidden shadow-none">
-        <CardContent className="border-b p-4 space-y-3">
+                group: "تصدير",
+              },
+            ]}
+          />
+        </div>
+      }
+    >
+      <OpsDashPanel title="الفترة ومركز التكلفة">
+        <div className="space-y-3">
           <AccountingPeriodToolbar
             from={from}
             to={to}
@@ -133,8 +134,8 @@ export const AccountingRepairPnl: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {loading ? (
@@ -164,14 +165,17 @@ export const AccountingRepairPnl: React.FC = () => {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="!p-0 overflow-hidden shadow-none">
-          <div className="border-b px-4 py-3">
-            <h2 className="text-base font-semibold">تفصيل الإيراد والتكلفة</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              {loading ? "…" : `${pnl.journalCount} قيد مرحّل في الفترة`}
-            </p>
-          </div>
-          
+        <OpsDashPanel
+          title="تفصيل الإيراد والتكلفة"
+          bodyClassName="p-0"
+          action={
+            !loading ? (
+              <span className="text-xs text-muted-foreground">
+                {pnl.journalCount} قيد مرحّل في الفترة
+              </span>
+            ) : null
+          }
+        >
           <div className="erp-mobile-card-list p-2">
             {loading ? (
               <div className="rounded-xl border p-3"><Skeleton className="h-5 w-full" /></div>
@@ -280,16 +284,17 @@ export const AccountingRepairPnl: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </OpsDashPanel>
 
-        <Card className="!p-0 overflow-hidden shadow-none">
-          <div className="border-b px-4 py-3">
-            <h2 className="text-base font-semibold">المصروفات حسب النوع</h2>
-            <p className="text-xs text-muted-foreground mt-0.5">
+        <OpsDashPanel
+          title="المصروفات حسب النوع"
+          bodyClassName="p-0"
+          action={
+            <span className="text-xs text-muted-foreground">
               مرتبات، كهرباء، تعبئة… من حركات الخزينة المرحّلة
-            </p>
-          </div>
-          
+            </span>
+          }
+        >
           <div className="erp-mobile-card-list p-2">
             {loading ? (
               <div className="rounded-xl border p-3"><Skeleton className="h-5 w-full" /></div>
@@ -355,8 +360,8 @@ export const AccountingRepairPnl: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </OpsDashPanel>
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getDocs, query, where } from 'firebase/firestore';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/UI';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { payrollDistributionsRef } from '../collections';
@@ -143,17 +144,21 @@ export const PayrollAccounts: React.FC = () => {
   }, [rows]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="صرف الرواتب"
-        subtitle="تأكيد صرف الرواتب الموزعة"
-        icon="payments"
-        primaryAction={{ label: loading ? 'جار التحميل...' : 'تحديث', icon: 'refresh', onClick: () => void load(), disabled: loading }}
-      />
+    <ModuleOpsPageShell
+      eyebrow="صرف الرواتب"
+      rangeLabel="تأكيد صرف الرواتب الموزعة"
+      actions={
+        <Button onClick={() => void load()} disabled={loading}>
+          <span className="material-icons-round text-sm">refresh</span>
+          {loading ? 'جار التحميل...' : 'تحديث'}
+        </Button>
+      }
+    >
 
       {error && <div className="card p-3 text-sm font-bold text-rose-600">{error}</div>}
 
-      <SmartFilterBar
+      <OpsDashPanel title="رواتب موزعة" accent="hr" bodyClassName="p-0">
+        <SmartFilterBar
       pageId="hr-payroll-accounts"
         advancedFilters={[
           {
@@ -180,8 +185,7 @@ export const PayrollAccounts: React.FC = () => {
         }
       />
 
-      <div className="card !p-0 overflow-hidden">
-        <div className="erp-mobile-card-list p-2">
+      <div className="erp-mobile-card-list p-2">
           {rows.map((row) => (
             <div
               key={`m-${row.id}`}
@@ -253,7 +257,7 @@ export const PayrollAccounts: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

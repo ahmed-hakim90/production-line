@@ -1,13 +1,36 @@
 # SYSTEM_MAP — Production Line ERP
 
 **Identity:** Arabic (RTL) multi-tenant factory ERP — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-09
+**Last updated:** 2026-08-09 (activity packs + CRUD permission engine)
+
+## Product shape — Module Apps + Domain-Driven
+
+Hakimo is **one platform**, but each module must feel like its own **app** (home, KPIs, lists, quick actions, mobile chrome), while modules talk through **domain contracts** — not UI spaghetti.
+
+| Layer | Rule |
+|-------|------|
+| **UX App** | Each MOD has its own home (`DomainHomeShell` / `ModuleOpsPageShell`), persona bottom bar where needed, and module-local navigation. Same **Hakimo Flow** design language everywhere. |
+| **Activity packs** | `tenants.activityPacks`: `manufacturing` \| `repair`. Missing/empty → **both** (Production never breaks). Gates menu groups + Roles catalog groups. Platform always on: dashboards, HR, customers, accounting, system. |
+| **Permission engine** | Flat Firestore keys + matrix catalog (`utils/permissionCatalog.ts`): per page/resource → **عرض / إضافة / تعديل / حذف** + named actions. UI: Roles modal matrix. Runtime: `useResourcePermission('products')`. Server still exact-key authoritative. |
+| **Domain ownership** | One module owns its aggregates, statuses, and write paths (e.g. Repair owns jobs; Inventory owns stock movements; Production owns plans/reports). |
+| **Cross-module talk** | Prefer: typed services / application use-cases / shared domain libs — **not** importing another module’s pages or UI state. Reads may use shared query services; writes stay in the owning module (or Cloud Functions when authoritative). |
+| **Platform core** | Auth, tenant, permissions, theme/tokens, shells, print, notifications — shared only as platform, never as business rules of another MOD. |
+
+Examples of correct integration:
+
+- Production report → Inventory **production issue** (inventory owns stock out)
+- Repair spare request → Inventory **replenishment / RSI** (inventory owns warehouse stock; repair owns job demand)
+- Production totals → Accounting **monthly cost** (costs owns valuation; production supplies quantities)
+- Customer master ↔ Repair jobs (customers own master; repair links `customerId`)
+
+Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, trusting client totals across modules.
 
 ## Core / runtime
 
 - Vite + React SPA → Firebase Auth, Firestore, Cloud Functions, Storage/FCM
 - Tenant-scoped routes under `/t/:tenantSlug/...`
 - Shared permissions (`utils/permissions.ts`), menu (`config/menu.config.ts`), inventory warehouse scope
+- Visual language: **Hakimo Flow** — tokens in `src/index.css` / `DEFAULT_THEME`; shells `DomainHomeShell` + `ModuleOpsPageShell`; doc `docs/HAKIMO_FLOW.md`
 
 ## Modules (MOD)
 
@@ -87,3 +110,7 @@
 | Technician team performance | `/repair/technician-kpis` |
 | Inventory analysis home | `/inventory` |
 | Accounting home (DomainHomeShell) | `/accounting` |
+| HR home (DomainHomeShell) | `/hr/dashboard` |
+| Customers KPI board (ModuleOpsPageShell) | `/customers/kpi` |
+| Quality reports board (ModuleOpsPageShell) | `/quality/reports` |
+| Shared ops list chrome | `ModuleOpsPageShell` / `DomainHomeShell` in `modules/dashboards/components` |

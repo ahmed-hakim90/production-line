@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button } from '../components/UI';
 import { productionIssueService } from '../services/productionIssueService';
 import type { ProductionIssueOrder } from '../types';
 import { usePermission } from '../../../utils/permissions';
@@ -73,20 +74,24 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
 
   if (loading && !ordersData) {
     return (
-      <div className="erp-ds-clean space-y-5">
-        <PageHeader title="تحليل استهلاك أوامر الشغل" subtitle="مقارنة BOM بالمصروف والتعويض والمرتجع والهالك الفعلي." icon="analytics" />
+      <ModuleOpsPageShell
+        eyebrow="تحليل استهلاك أوامر الشغل"
+        rangeLabel="مقارنة BOM بالمصروف والتعويض والمرتجع والهالك الفعلي"
+      >
         <Skeleton className="h-24 w-full rounded-xl" />
         <Skeleton className="h-64 w-full rounded-xl" />
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader title="تحليل استهلاك أوامر الشغل" subtitle="مقارنة BOM بالمصروف والتعويض والمرتجع والهالك الفعلي." icon="analytics" />
-      <Card>
+    <ModuleOpsPageShell
+      eyebrow="تحليل استهلاك أوامر الشغل"
+      rangeLabel="مقارنة BOM بالمصروف والتعويض والمرتجع والهالك الفعلي"
+    >
+      <OpsDashPanel title="البحث والتصدير" accent="inventory" bodyClassName="p-0 overflow-hidden">
         <SmartFilterBar
-      pageId="production-consumption-analysis"
+          pageId="production-consumption-analysis"
           searchPlaceholder="بحث بإذن الصرف، المنتج، أمر الشغل، أو المكون"
           searchValue={search}
           onSearchChange={setSearch}
@@ -95,9 +100,14 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
           }
           className="mb-0 border-0 rounded-none"
         />
-      </Card>
+      </OpsDashPanel>
       {filteredOrders.map((order) => (
-        <Card key={order.id} className="!p-0 overflow-hidden" title={`${order.referenceNo} - ${order.productName}`}>
+        <OpsDashPanel
+          key={order.id}
+          title={`${order.referenceNo} - ${order.productName}`}
+          accent="inventory"
+          bodyClassName="p-0 overflow-hidden"
+        >
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -138,8 +148,8 @@ export const ProductionConsumptionAnalysis: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </OpsDashPanel>
       ))}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

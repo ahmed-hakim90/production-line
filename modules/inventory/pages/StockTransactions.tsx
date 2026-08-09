@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { stockService } from '../services/stockService';
 import { transferApprovalService } from '../services/transferApprovalService';
 import {
@@ -687,38 +689,42 @@ export const StockTransactions: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader
-        title="سجل حركات المخزون"
-        subtitle="تتبع كامل لكل حركة على المنتجات والخامات"
-        icon="swap_horiz"
-        primaryAction={
-          can('inventory.transactions.create')
-            ? {
-                label: 'إدخال حركة',
-                icon: 'add',
-                onClick: () => navigate('/inventory/movements'),
-              }
-            : undefined
-        }
-        moreActions={[
-          {
-            label: 'تصدير Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !can('inventory.transactions.export') || effectiveExportRows.length === 0,
-            onClick: () => exportExcel(effectiveExportRows),
-          },
-        ]}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="سجل حركات المخزون"
+      rangeLabel="تتبع كامل لكل حركة على المنتجات والخامات"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {can('inventory.transactions.create') ? (
+            <Button variant="primary" onClick={() => navigate('/inventory/movements')}>
+              <span className="material-icons-round text-sm">add</span>
+              إدخال حركة
+            </Button>
+          ) : null}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'تصدير Excel',
+                  icon: 'download',
+                  group: 'تصدير',
+                  hidden: !can('inventory.transactions.export') || effectiveExportRows.length === 0,
+                  onClick: () => exportExcel(effectiveExportRows),
+                },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+    >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
         settingsPath={settingsPath}
       />
 
-      <Card className="!p-4">
+      <OpsDashPanel title="الحركات والتحويلات" accent="inventory" bodyClassName="p-0">
         <SmartFilterBar
       pageId="stock-transactions"
           searchPlaceholder="ابحث بالاسم أو الكود..."
@@ -818,9 +824,6 @@ export const StockTransactions: React.FC = () => {
           )}
           className="mb-0 border-0 rounded-none"
         />
-      </Card>
-
-      <Card className="!p-0 overflow-hidden">
         <StockTransactionsTable
           loading={loading}
           combinedRows={pagedCombinedRows}
@@ -896,7 +899,7 @@ export const StockTransactions: React.FC = () => {
             itemLabel="سجل"
           />
         )}
-      </Card>
+      </OpsDashPanel>
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
         <StockTransferPrint ref={transferPrintRef} data={printData} printSettings={printTemplate} />
       </div>
@@ -948,6 +951,6 @@ export const StockTransactions: React.FC = () => {
         onPrintApprovedFromModal={(line) => void printTransferFromRow(line)}
         onShareTransfer={(tx, scope) => void shareTransferFromRow(tx, scope ?? 'line')}
       />
-    </div>
+    </ModuleOpsPageShell>
   );
 };

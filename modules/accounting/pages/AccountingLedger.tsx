@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter";
 import { AccountingPeriodToolbar } from "../components/AccountingPeriodToolbar";
@@ -48,42 +49,49 @@ export const AccountingLedger: React.FC = () => {
   const selected = accounts.find((row) => row.code === ledgerAccount);
 
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="دفتر الأستاذ"
-        subtitle="حركة ورصيد كل حساب بالتسلسل الزمني"
-        icon="menu_book"
-        backAction={false}
-        moreActions={[
-          {
-            label: "طباعة",
-            icon: "print",
-            onClick: () => window.print(),
-            group: "تصدير",
-          },
-          {
-            label: "تصدير CSV",
-            icon: "download",
-            onClick: () =>
-              exportAccountingCsv(
-                "general-ledger.csv",
-                ["التاريخ", "المرجع", "البيان", "مدين", "دائن", "الرصيد"],
-                ledger.map((row) => [
-                  row.date,
-                  row.referenceNo,
-                  row.description,
-                  row.debit,
-                  row.credit,
-                  row.balance,
-                ]),
-              ),
-            group: "تصدير",
-          },
-        ]}
-      />
-
-      <Card className="!p-0 overflow-hidden shadow-none">
-        <CardContent className="border-b p-4">
+    <ModuleOpsPageShell
+      eyebrow="دفتر الأستاذ"
+      rangeLabel="حركة ورصيد كل حساب بالتسلسل الزمني"
+      dir="rtl"
+      onRefresh={() => void reload()}
+      refreshing={loading}
+      actions={
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            moreActions={[
+              {
+                label: "طباعة",
+                icon: "print",
+                onClick: () => window.print(),
+                group: "تصدير",
+              },
+              {
+                label: "تصدير CSV",
+                icon: "download",
+                onClick: () =>
+                  exportAccountingCsv(
+                    "general-ledger.csv",
+                    ["التاريخ", "المرجع", "البيان", "مدين", "دائن", "الرصيد"],
+                    ledger.map((row) => [
+                      row.date,
+                      row.referenceNo,
+                      row.description,
+                      row.debit,
+                      row.credit,
+                      row.balance,
+                    ]),
+                  ),
+                group: "تصدير",
+              },
+            ]}
+          />
+        </div>
+      }
+    >
+      <OpsDashPanel title="حركة الحساب" bodyClassName="p-0">
+        <div className="border-b p-4">
           <AccountingPeriodToolbar
             from={from}
             to={to}
@@ -120,7 +128,7 @@ export const AccountingLedger: React.FC = () => {
               </strong>
             </p>
           ) : null}
-        </CardContent>
+        </div>
         <div className="erp-mobile-card-list p-2">
           {loading
             ? Array.from({ length: 4 }).map((_, index) => (
@@ -219,7 +227,7 @@ export const AccountingLedger: React.FC = () => {
           onPageChange={setPage}
           itemLabel="حركة"
         />
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

@@ -2,16 +2,17 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Button, Badge } from '../components/UI';
+import { Badge, Button } from '../components/UI';
 import { formatNumber, getTodayDateString } from '../../../utils/calculations';
 import { ProductionLineStatus, FirestoreProductionLine } from '../../../types';
 import type { LineWorkerAssignment } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
-import { PageHeader } from '../../../components/PageHeader';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { filterProductionProducts } from '../utils/isProductionProduct';
@@ -289,21 +290,20 @@ export const Lines: React.FC = () => {
   }
 
   return (
-    <div className="erp-ds-clean space-y-6">
-      <PageHeader
-        title="خطوط الإنتاج"
-        subtitle="عرض وإدارة خطوط الإنتاج فقط بأسلوب ERPNext"
-        icon="linear_scale"
-        primaryAction={can('lines.create') ? {
-          label: 'إضافة خط إنتاج',
-          icon: 'add',
-          onClick: openCreate,
-          dataModalKey: MODAL_KEYS.LINES_CREATE,
-        } : undefined}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="خطوط الإنتاج"
+      rangeLabel="عرض وإدارة خطوط الإنتاج فقط بأسلوب ERPNext"
+      actions={
+        can('lines.create') ? (
+          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.LINES_CREATE}>
+            <span className="material-icons-round text-sm">add</span>
+            إضافة خط إنتاج
+          </Button>
+        ) : undefined
+      }
+    >
       {productionLines.length === 0 ? (
-        <Card>
+        <OpsDashPanel title="لا توجد خطوط" accent="production">
           <div className="text-center py-12 text-slate-400">
             <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
             <p className="font-bold text-lg">لا توجد خطوط إنتاج بعد</p>
@@ -313,9 +313,9 @@ export const Lines: React.FC = () => {
                 : 'لا توجد خطوط إنتاج لعرضها حالياً'}
             </p>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : (
-        <div className="list-view-wrapper">
+        <OpsDashPanel title="قائمة الخطوط" accent="production" bodyClassName="p-0">
           <SmartFilterBar
       pageId="production-lines"
             searchPlaceholder="ابحث باسم الخط أو الكود..."
@@ -433,10 +433,10 @@ export const Lines: React.FC = () => {
             <div className="empty-state border-t border-[var(--color-border)]">
               <span className="material-icons-round">search_off</span>
               <p className="empty-state-title">لا توجد نتائج مطابقة</p>
-              <p className="empty-state-sub">جرظ‘ب تغيير البحث أو فلتر الحالة</p>
+              <p className="empty-state-sub">جرّب تغيير البحث أو فلتر الحالة</p>
             </div>
           )}
-        </div>
+        </OpsDashPanel>
       )}
 
       {/* â”€â”€ Add / Edit Modal â”€â”€ */}
@@ -661,7 +661,7 @@ export const Lines: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

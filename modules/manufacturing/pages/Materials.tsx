@@ -760,8 +760,7 @@ export const Materials: React.FC = () => {
   return (
     <ModuleOpsPageShell
       eyebrow="المواد التصنيعية"
-      onRefresh={() => { void refetch(); }}
-      refreshing={isLoading}
+      rangeLabel="الخطوة 1 من الاستيراد — ثم المنتجات — ثم المكونات. تسعير قطع الغيار (المكونات) من هنا"
       actions={(
         <div className="flex flex-wrap items-center gap-2">
           {canManage ? (
@@ -769,43 +768,47 @@ export const Materials: React.FC = () => {
               إضافة مادة
             </Button>
           ) : null}
-          <PageHeader
-            title=""
-            moreActions={[
-              {
-                label: 'تصدير بيانات المواد (للاستيراد)',
-                icon: 'download',
-                group: 'بيانات أساسية',
-                hidden: !canExportFromPage || sorted.length === 0,
-                onClick: handleExportExcel,
-              },
-              {
-                label: 'تحميل قالب بيانات المواد',
-                icon: 'file_download',
-                group: 'بيانات أساسية',
-                hidden: !canImportFromPage,
-                onClick: () => downloadMaterialsTemplate(),
-              },
-              {
-                label: 'رفع/تحديث بيانات المواد',
-                icon: 'upload',
-                group: 'بيانات أساسية',
-                hidden: !canImportFromPage,
-                onClick: () => importInputRef.current?.click(),
-              },
-              {
-                label: migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم',
-                icon: 'refresh',
-                group: 'صيانة',
-                hidden: !canManage,
-                disabled: migrating,
-                onClick: () => void handleMigrate(),
-              },
-            ]}
-          />
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'تصدير بيانات المواد (للاستيراد)',
+                  icon: 'download',
+                  group: 'بيانات أساسية',
+                  hidden: !canExportFromPage || sorted.length === 0,
+                  onClick: handleExportExcel,
+                },
+                {
+                  label: 'تحميل قالب بيانات المواد',
+                  icon: 'file_download',
+                  group: 'بيانات أساسية',
+                  hidden: !canImportFromPage,
+                  onClick: () => downloadMaterialsTemplate(),
+                },
+                {
+                  label: 'رفع/تحديث بيانات المواد',
+                  icon: 'upload',
+                  group: 'بيانات أساسية',
+                  hidden: !canImportFromPage,
+                  onClick: () => importInputRef.current?.click(),
+                },
+                {
+                  label: migrating ? 'جاري الترحيل...' : 'ترحيل من النظام القديم',
+                  icon: 'refresh',
+                  group: 'صيانة',
+                  hidden: !canManage,
+                  disabled: migrating,
+                  onClick: () => void handleMigrate(),
+                },
+              ]}
+            />
+          </div>
         </div>
       )}
     >
+
       {canManagePricing ? (
         <OpsDashPanel title="تسعير قطع الغيار (ماستر المكونات)" accent="plans">
           <p className="mb-3 text-xs text-muted-foreground">
@@ -831,7 +834,7 @@ export const Materials: React.FC = () => {
         }}
       />
 
-      <div className="overflow-hidden rounded-xl border border-border bg-card">
+      <OpsDashPanel title="كتالوج المواد" accent="production" bodyClassName="p-0">
         <SmartFilterBar
       pageId="materials-list"
           searchPlaceholder="بحث بالاسم أو الكود أو الفئة"
@@ -1112,7 +1115,7 @@ export const Materials: React.FC = () => {
             itemLabel="مادة"
           />
         )}
-      </div>
+      </OpsDashPanel>
 
       <Dialog
         open={showForm && canManage}

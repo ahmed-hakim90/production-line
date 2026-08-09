@@ -2,6 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button } from '../../components/UI';
 import { PageHeader } from '../../../../components/PageHeader';
 import { toast } from '../../../../components/Toast';
 import { useGlobalModalManager } from '../../../../components/modal-manager/GlobalModalManager';
@@ -680,87 +683,85 @@ export const WorkOrders: React.FC = () => {
   }
 
   return (
-    <div className={`erp-ds-clean ${styles.page}`}>
-      <PageHeader
-        title="أوامر الشغل"
-        subtitle="نسخة محسّنة مع تفاصيل في درج جانبي وتحديث مباشر"
-        icon="assignment"
-        primaryAction={canCreateWorkOrder ? {
-          label: 'أمر شغل جديد',
-          icon: 'add',
-          onClick: handleOpenCreate,
-          dataModalKey: MODAL_KEYS.WORK_ORDERS_CREATE,
-        } : undefined}
-        moreActions={[
-          {
-            label: 'طلب صرف إنتاج',
-            icon: 'fact_check',
-            group: 'مخزون',
-            hidden: !can('productionIssue.request'),
-            onClick: () => navigate('/production/issue-requests'),
-          },
-          {
-            label: 'تصدير أوامر الشغل Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: rowViews.length === 0,
-            onClick: handleExport,
-          },
-          {
-            label: 'استيراد أوامر الشغل',
-            icon: 'file_download',
-            group: 'استيراد',
-            hidden: !canCreateWorkOrder,
-            onClick: handleImport,
-          },
-        ]}
-      />
-
-      <div className={styles.kpiRow}>
-        <div className={styles.kpiCard}>
-          <span>قيد التنفيذ</span>
-          <strong>{kpis.inProgress}</strong>
-        </div>
-        <div className={styles.kpiCard}>
-          <span>مكتمل</span>
-          <strong>{kpis.completed}</strong>
-        </div>
-        <div className={styles.kpiCard}>
-          <span>متأخر</span>
-          <strong>{kpis.overdue}</strong>
-        </div>
-      </div>
-
-      <WorkOrderFilters
-        filters={filters}
-        counts={counts}
-        lines={_rawLines.map((line) => ({ id: line.id || '', name: line.name }))}
-        onSetFilter={setFilter}
-        onClear={clearFilters}
-      />
-
-      {(syncingStatus || error) && (
-        <div className={styles.toolbar}>
-          {syncingStatus && <span className={styles.syncHint}>جاري مزامنة الحالة...</span>}
-          {error && <span className={styles.errorHint}>{error}</span>}
+    <ModuleOpsPageShell
+      className={styles.page}
+      eyebrow="أوامر الشغل"
+      rangeLabel="نسخة محسّنة مع تفاصيل في درج جانبي وتحديث مباشر"
+      hero={[
+        { key: 'inProgress', label: 'قيد التنفيذ', value: kpis.inProgress },
+        { key: 'completed', label: 'مكتمل', value: kpis.completed },
+        { key: 'overdue', label: 'متأخر', value: kpis.overdue },
+      ]}
+      actions={(
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            primaryAction={canCreateWorkOrder ? {
+              label: 'أمر شغل جديد',
+              icon: 'add',
+              onClick: handleOpenCreate,
+              dataModalKey: MODAL_KEYS.WORK_ORDERS_CREATE,
+            } : undefined}
+            moreActions={[
+              {
+                label: 'طلب صرف إنتاج',
+                icon: 'fact_check',
+                group: 'مخزون',
+                hidden: !can('productionIssue.request'),
+                onClick: () => navigate('/production/issue-requests'),
+              },
+              {
+                label: 'تصدير أوامر الشغل Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: rowViews.length === 0,
+                onClick: handleExport,
+              },
+              {
+                label: 'استيراد أوامر الشغل',
+                icon: 'file_download',
+                group: 'استيراد',
+                hidden: !canCreateWorkOrder,
+                onClick: handleImport,
+              },
+            ]}
+          />
         </div>
       )}
+    >
+      <OpsDashPanel title="قائمة أوامر الشغل" accent="production" bodyClassName="p-0 overflow-hidden">
+        <WorkOrderFilters
+          filters={filters}
+          counts={counts}
+          lines={_rawLines.map((line) => ({ id: line.id || '', name: line.name }))}
+          onSetFilter={setFilter}
+          onClear={clearFilters}
+        />
 
-      <WorkOrdersTable
-        rows={rowViews}
-        groupBy={filters.groupBy}
-        loading={loading}
-        loadingMore={loadingMore}
-        hasMore={hasMore}
-        onRowClick={(order) => setSelectedOrder(order.id || null)}
-        onStatusChange={canUpdateWorkOrderStatus ? handleStatusChange : undefined}
-        onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
-        onCloseOrder={canUpdateWorkOrderStatus ? (order) => void handleCloseOrder(order) : undefined}
-        onDelete={canDeleteWorkOrder ? (order) => void handleDeleteOrder(order) : undefined}
-        onReopenCompleted={can('workOrders.edit') ? handleReopenCompletedOrder : undefined}
-        onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
-        onLoadMore={() => void loadMore()}
-      />
+        {(syncingStatus || error) && (
+          <div className={styles.toolbar}>
+            {syncingStatus && <span className={styles.syncHint}>جاري مزامنة الحالة...</span>}
+            {error && <span className={styles.errorHint}>{error}</span>}
+          </div>
+        )}
+
+        <WorkOrdersTable
+          rows={rowViews}
+          groupBy={filters.groupBy}
+          loading={loading}
+          loadingMore={loadingMore}
+          hasMore={hasMore}
+          onRowClick={(order) => setSelectedOrder(order.id || null)}
+          onStatusChange={canUpdateWorkOrderStatus ? handleStatusChange : undefined}
+          onEdit={canEditWorkOrderInModal ? handleEditOrder : undefined}
+          onCloseOrder={canUpdateWorkOrderStatus ? (order) => void handleCloseOrder(order) : undefined}
+          onDelete={canDeleteWorkOrder ? (order) => void handleDeleteOrder(order) : undefined}
+          onReopenCompleted={can('workOrders.edit') ? handleReopenCompletedOrder : undefined}
+          onOpenScanner={canUseWorkOrderScanner ? handleOpenScanner : undefined}
+          onLoadMore={() => void loadMore()}
+        />
+      </OpsDashPanel>
 
       <WorkOrderDrawer
         order={selectedOrder}
@@ -783,6 +784,6 @@ export const WorkOrders: React.FC = () => {
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <WorkOrderPrint ref={woPrintRef} data={printData} printSettings={printTemplate} />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

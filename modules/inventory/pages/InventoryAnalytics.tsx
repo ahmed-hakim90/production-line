@@ -1,8 +1,8 @@
 import React, { useCallback, useMemo } from 'react';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { PrimaryButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { stockService } from '../services/stockService';
 import { materialService } from '../../manufacturing/services/materialService';
 import { materialPurchaseCostPerBaseUnit } from '../../manufacturing/types';
@@ -13,6 +13,7 @@ import { exportGenericRows } from '../../../utils/exportExcel';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { useMaterialsWarehouseScope } from '../hooks/useMaterialsWarehouseScope';
+import { formatNumber } from '@/utils/calculations';
 
 const ANALYTICS_CACHE_KEY = 'inventory:analytics';
 
@@ -98,32 +99,40 @@ export const InventoryAnalytics: React.FC = () => {
     );
   };
 
-  return (
-    <div className="space-y-6">
-      <PageHeader
-        title="تحليلات المخزون"
-        subtitle="تصنيف ABC ودوران مبسّط من الأرصدة والحركات"
-        actions={
-          <>
-            <PrimaryButton iconName="refresh" tone="neutral" onClick={() => void load()} disabled={loading}>تحديث</PrimaryButton>
-            <PrimaryButton iconName="download" tone="export" onClick={exportAbc} disabled={loading || abcRows.length === 0}>تصدير ABC</PrimaryButton>
-          </>
-        }
-      />
+  const hero = useMemo(
+    () => [
+      { key: 'a', label: 'تصنيف A', value: loading ? '…' : formatNumber(abcSummary.A) },
+      { key: 'b', label: 'تصنيف B', value: loading ? '…' : formatNumber(abcSummary.B) },
+      { key: 'c', label: 'تصنيف C', value: loading ? '…' : formatNumber(abcSummary.C) },
+    ],
+    [abcSummary, loading],
+  );
 
+  return (
+    <ModuleOpsPageShell
+      eyebrow="تحليلات المخزون"
+      rangeLabel="تصنيف ABC ودوران مبسّط من الأرصدة والحركات"
+      hero={hero}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <Button
+          type="button"
+          size="sm"
+          variant="outline"
+          onClick={exportAbc}
+          disabled={loading || abcRows.length === 0}
+        >
+          تصدير ABC
+        </Button>
+      )}
+    >
       {loading ? (
         <Skeleton className="h-40 w-full rounded-xl" />
       ) : (
         <>
-          <div className="grid grid-cols-3 gap-3 text-center">
-            <Card><CardContent className="py-4 font-bold">A: {abcSummary.A}</CardContent></Card>
-            <Card><CardContent className="py-4 font-bold">B: {abcSummary.B}</CardContent></Card>
-            <Card><CardContent className="py-4 font-bold">C: {abcSummary.C}</CardContent></Card>
-          </div>
-
-          <Card>
-            <CardHeader><CardTitle>أعلى ٢٠ صنفاً (قيمة)</CardTitle></CardHeader>
-            <CardContent className="overflow-x-auto">
+          <OpsDashPanel title="أعلى ٢٠ صنفاً (قيمة)" accent="inventory" bodyClassName="p-0">
+            <div className="overflow-x-auto">
               <table className="erp-table w-full text-right text-sm">
                 <thead>
                   <tr>
@@ -144,12 +153,11 @@ export const InventoryAnalytics: React.FC = () => {
                   ))}
                 </tbody>
               </table>
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
 
-          <Card>
-            <CardHeader><CardTitle>دوران المخزون (تقريبي)</CardTitle></CardHeader>
-            <CardContent className="overflow-x-auto">
+          <OpsDashPanel title="دوران المخزون (تقريبي)" accent="inventory" bodyClassName="p-0">
+            <div className="overflow-x-auto">
               <table className="erp-table w-full text-right text-sm">
                 <thead>
                   <tr>
@@ -170,10 +178,10 @@ export const InventoryAnalytics: React.FC = () => {
                   ))}
                 </tbody>
               </table>
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         </>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

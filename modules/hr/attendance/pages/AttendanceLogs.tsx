@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
-import { Button } from '@/components/UI';
 import { SelectableTable, type TableColumn } from '@/components/SelectableTable';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import type { FirestoreEmployee } from '@/types';
 import type { AttendanceLog } from '../types';
@@ -167,22 +167,17 @@ export const AttendanceLogs: React.FC = () => {
   ], [employeeNames]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="سجل بصمة الحضور الخام"
-        subtitle="عرض السجلات الخام الواردة من أجهزة ZKTeco"
-        icon="fingerprint"
-        loading={loading}
-      />
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="erp-kpi-card"><div className="erp-kpi-label">الإجمالي</div><div className="erp-kpi-value">{stats.total}</div></div>
-        <div className="erp-kpi-card"><div className="erp-kpi-label">دخول</div><div className="erp-kpi-value">{stats.checkIn}</div></div>
-        <div className="erp-kpi-card"><div className="erp-kpi-label">خروج</div><div className="erp-kpi-value">{stats.checkOut}</div></div>
-        <div className="erp-kpi-card"><div className="erp-kpi-label">غير معروف</div><div className="erp-kpi-value">{stats.unknown}</div></div>
-      </div>
-
-      <div className="card p-0">
+    <ModuleOpsPageShell
+      eyebrow="سجل بصمة الحضور الخام"
+      rangeLabel="عرض السجلات الخام الواردة من أجهزة ZKTeco"
+      hero={[
+        { key: 'total', label: 'الإجمالي', value: stats.total },
+        { key: 'checkIn', label: 'دخول', value: stats.checkIn },
+        { key: 'checkOut', label: 'خروج', value: stats.checkOut },
+        { key: 'unknown', label: 'غير معروف', value: stats.unknown },
+      ]}
+    >
+      <OpsDashPanel title="السجلات" accent="hr" bodyClassName="p-0 overflow-hidden">
         <SmartFilterBar
       pageId="attendance-logs"
           periods={[
@@ -230,7 +225,7 @@ export const AttendanceLogs: React.FC = () => {
           checkboxSelection={false}
           loading={loading}
         />
-      </div>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

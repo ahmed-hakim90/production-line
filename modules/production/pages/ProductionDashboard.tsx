@@ -28,11 +28,158 @@ import {
   type HomeChartsPeriodPreset,
 } from '@/modules/dashboards/lib/homeChartsPeriod';
 import { useAppStore } from '@/store/useAppStore';
+import {
+  ProductionLineStatus,
+  type LineStatus,
+  type ProductionLine,
+  type ProductionPlan,
+  type WorkOrder,
+} from '@/types';
 import { formatNumber } from '@/utils/calculations';
 import { formatCost } from '@/utils/costCalculations';
 import { usePermission } from '@/utils/permissions';
 
 const PERIOD_ORDER: HomeChartsPeriodPreset[] = ['today', 'week', 'month', '3months', 'custom'];
+
+const FLOW_LINE_CARD_LIMIT = 6;
+
+type FlowLineChipKey = 'running' | 'stopped' | 'maintenance' | 'waiting' | 'no-plan';
+
+type FlowLineCardModel = {
+  id: string;
+  name: string;
+  productName: string | null;
+  statusKey: FlowLineChipKey;
+  statusLabel: string;
+  progressPct: number | null;
+  progressLabel: string | null;
+  efficiencyPct: number | null;
+  href: string;
+};
+
+function lineHasActivePlan(plans: ProductionPlan[], lineId: string): boolean {
+  return plans.some(
+    (p) => p.lineId === lineId && (p.status === 'in_progress' || p.status === 'planned' || p.status === 'paused'),
+  );
+}
+
+function lineHasOpenWorkOrder(workOrders: WorkOrder[], lineId: string): boolean {
+  return workOrders.some(
+    (w) => w.lineId === lineId && (w.status === 'in_progress' || w.status === 'pending'),
+  );
+}
+
+function resolveFlowLineChip(
+  line: ProductionLine,
+  hasPlan: boolean,
+  hasOpenWo: boolean,
+  hasLineTarget: boolean,
+  plans: ProductionPlan[],
+  workOrders: WorkOrder[],
+): { key: FlowLineChipKey; label: string } {
+  if (line.status === ProductionLineStatus.MAINTENANCE) {
+    return { key: 'maintenance', label: 'صيانة' };
+  }
+
+  const waitingPlan = plans.some((p) => p.lineId === line.id && p.status === 'planned');
+  const waitingWo = workOrders.some((w) => w.lineId === line.id && w.status === 'pending');
+  const runningPlan = plans.some((p) => p.lineId === line.id && p.status === 'in_progress');
+  const runningWo = workOrders.some((w) => w.lineId === line.id && w.status === 'in_progress');
+
+  if (!hasPlan && !hasOpenWo && !hasLineTarget && !(Number(line.target) > 0)) {
+    return { key: 'no-plan', label: 'بدون خطة' };
+  }
+
+  if (
+    line.status === ProductionLineStatus.ACTIVE
+    || line.status === ProductionLineStatus.INJECTION
+    || runningPlan
+    || runningWo
+  ) {
+    return { key: 'running', label: 'يعمل' };
+  }
+
+  if (waitingPlan || waitingWo || line.status === ProductionLineStatus.WARNING) {
+    return { key: 'waiting', label: 'انتظار' };
+  }
+
+  if (line.status === ProductionLineStatus.IDLE || plans.some((p) => p.lineId === line.id && p.status === 'paused')) {
+    return { key: 'stopped', label: 'متوقف' };
+  }
+
+  return { key: 'stopped', label: 'متوقف' };
+}
+
+function buildFlowLineCards(
+  lines: ProductionLine[],
+  plans: ProductionPlan[],
+  workOrders: WorkOrder[],
+  lineStatuses: LineStatus[],
+  canViewLines: boolean,
+  canViewWorkOrders: boolean,
+): FlowLineCardModel[] {
+  const statusByLineId = new Map(lineStatuses.map((row) => [row.lineId, row]));
+
+  const ranked = lines.map((line) => {
+    const hasPlan = lineHasActivePlan(plans, line.id);
+    const hasOpenWo = lineHasOpenWorkOrder(workOrders, line.id);
+    const lineStatus = statusByLineId.get(line.id);
+    const hasLineTarget = Number(lineStatus?.targetTodayQty) > 0;
+    const score =
+      (line.status === ProductionLineStatus.ACTIVE || line.status === ProductionLineStatus.INJECTION ? 100 : 0)
+      + (line.status === ProductionLineStatus.MAINTENANCE ? 70 : 0)
+      + (line.status === ProductionLineStatus.WARNING ? 60 : 0)
+      + (hasPlan ? 50 : 0)
+      + (hasOpenWo ? 40 : 0)
+      + (hasLineTarget || Number(line.target) > 0 ? 20 : 0)
+      + (Number(line.achievement) > 0 ? 10 : 0);
+    return { line, hasPlan, hasOpenWo, hasLineTarget, score };
+  });
+
+  ranked.sort((a, b) => {
+    if (b.score !== a.score) return b.score - a.score;
+    return (Number(a.line.sortOrder) || 0) - (Number(b.line.sortOrder) || 0);
+  });
+
+  return ranked.slice(0, FLOW_LINE_CARD_LIMIT).map(({ line, hasPlan, hasOpenWo, hasLineTarget }) => {
+    const chip = resolveFlowLineChip(line, hasPlan, hasOpenWo, hasLineTarget, plans, workOrders);
+    const target = Number(line.target) || 0;
+    const achievement = Number(line.achievement) || 0;
+    const hasProgress = target > 0;
+    const progressPct = hasProgress
+      ? Math.min(100, Math.max(0, Math.round((achievement / target) * 100)))
+      : null;
+    const efficiencyRaw = Number(line.efficiency);
+    const efficiencyPct = hasProgress && Number.isFinite(efficiencyRaw)
+      ? Math.min(100, Math.max(0, Math.round(efficiencyRaw)))
+      : null;
+    const productName =
+      line.currentProduct && line.currentProduct !== '—'
+        ? line.currentProduct
+        : null;
+
+    let href = '/lines';
+    if (canViewLines) {
+      href = `/lines/${line.id}`;
+    } else if (canViewWorkOrders) {
+      href = '/work-orders';
+    }
+
+    return {
+      id: line.id,
+      name: line.name,
+      productName,
+      statusKey: chip.key,
+      statusLabel: chip.label,
+      progressPct,
+      progressLabel: hasProgress
+        ? `${formatNumber(achievement)} / ${formatNumber(target)}`
+        : null,
+      efficiencyPct,
+      href,
+    };
+  });
+}
 
 const PERIODS = PERIOD_ORDER.map((value) => ({
   value,
@@ -135,6 +282,9 @@ export const ProductionDashboard: React.FC = () => {
   const { can } = usePermission();
   const fetchWorkOrders = useAppStore((s) => s.fetchWorkOrders);
   const workOrders = useAppStore((s) => s.workOrders);
+  const productionLines = useAppStore((s) => s.productionLines);
+  const productionPlans = useAppStore((s) => s.productionPlans);
+  const lineStatuses = useAppStore((s) => s.lineStatuses);
 
   const [preset, setPreset] = useState<HomeChartsPeriodPreset>('month');
   const [customStart, setCustomStart] = useState('');
@@ -167,6 +317,22 @@ export const ProductionDashboard: React.FC = () => {
   const activeWorkOrders = useMemo(
     () => workOrders.filter((wo) => wo.status === 'pending' || wo.status === 'in_progress').length,
     [workOrders],
+  );
+
+  const canViewLines = can('lines.view');
+  const canViewWorkOrders = can('workOrders.view');
+
+  const flowLineCards = useMemo(
+    () =>
+      buildFlowLineCards(
+        productionLines,
+        productionPlans,
+        workOrders,
+        lineStatuses,
+        canViewLines,
+        canViewWorkOrders,
+      ),
+    [productionLines, productionPlans, workOrders, lineStatuses, canViewLines, canViewWorkOrders],
   );
 
   const drill = (
@@ -550,6 +716,86 @@ export const ProductionDashboard: React.FC = () => {
           </OpsDashPanel>
         )}
       </div>
+
+      <OpsDashPanel
+        title="خطوط الإنتاج"
+        accent="production"
+        action={
+          canViewLines ? (
+            <button
+              type="button"
+              className="ops-dash-panel__action"
+              onClick={() => navigate('/lines')}
+            >
+              فتح
+            </button>
+          ) : canViewWorkOrders ? (
+            <button
+              type="button"
+              className="ops-dash-panel__action"
+              onClick={() => navigate('/work-orders')}
+            >
+              أوامر الشغل
+            </button>
+          ) : undefined
+        }
+      >
+        {flowLineCards.length === 0 ? (
+          <EmptyChart label="لا خطوط إنتاج لعرضها" />
+        ) : (
+          <div className="hakimo-flow-line-grid" dir="rtl">
+            {flowLineCards.map((card) => (
+              <button
+                key={card.id}
+                type="button"
+                className="hakimo-flow-line-card text-start"
+                onClick={() => navigate(card.href)}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-bold text-sm text-[var(--color-text)] truncate">{card.name}</p>
+                    <p className="text-xs text-[var(--color-text-muted)] mt-0.5 truncate">
+                      {card.productName || '—'}
+                    </p>
+                  </div>
+                  <span
+                    className={`hakimo-flow-status hakimo-flow-status--${card.statusKey} shrink-0`}
+                  >
+                    {card.statusLabel}
+                  </span>
+                </div>
+
+                {card.progressPct != null ? (
+                  <div className="hakimo-flow-progress mt-3">
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-bold mb-1">
+                      <span className="text-[var(--color-text-muted)]">التقدم</span>
+                      <span className="tabular-nums text-[var(--color-text)]">
+                        {card.progressLabel} · {card.progressPct}%
+                      </span>
+                    </div>
+                    <div className="hakimo-flow-progress__track" aria-hidden>
+                      <div
+                        className="hakimo-flow-progress__bar"
+                        style={{ width: `${card.progressPct}%` }}
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <p className="mt-3 text-[11px] font-bold text-[var(--color-text-muted)]">
+                    التقدم: —
+                  </p>
+                )}
+
+                {card.efficiencyPct != null ? (
+                  <p className="mt-2 text-[11px] font-bold text-[var(--color-text-muted)]">
+                    الكفاءة: <span className="tabular-nums text-[var(--color-text)]">{card.efficiencyPct}%</span>
+                  </p>
+                ) : null}
+              </button>
+            ))}
+          </div>
+        )}
+      </OpsDashPanel>
     </DomainHomeShell>
   );
 };

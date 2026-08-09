@@ -1,10 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { KPICard } from '@/src/components/erp/KPICard';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { GhostButton, PrimaryButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { withTenantPath } from '@/lib/tenantPaths';
@@ -157,27 +156,33 @@ export const ProductionFloorStock: React.FC = () => {
     return <PageContentSkeleton variant="dashboard" />;
   }
 
-  return (
-    <div className="erp-ds-clean space-y-6">
-      <PageHeader
-        title="مخزون صالة الإنتاج"
-        subtitle={
-          floorId
-            ? `رصيد المكونات المصروفة من المفكك إلى «${data?.warehouse?.name || 'صالة الإنتاج'}» واستهلاك التقارير`
-            : 'حدّد مخزن صالة الإنتاج في توجيه المخازن'
-        }
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            <GhostButton iconName="refresh" tone="neutral" onClick={() => void reload()} disabled={loading}>
-              تحديث
-            </GhostButton>
-            <PrimaryButton iconName="download" tone="share" onClick={exportPeriod} disabled={!periodRows.length}>
-              تصدير الفترة
-            </PrimaryButton>
-          </div>
-        )}
-      />
+  const floorHero = useMemo(
+    () => [
+      { key: 'sku', label: 'أصناف في الصالة', value: data?.balances.length || 0 },
+      { key: 'qty', label: 'إجمالي الرصيد', value: formatNumber(totalQty) },
+      { key: 'days', label: 'أيام الفترة', value: data?.daily.length || 0 },
+      { key: 'rows', label: 'بنود التقرير', value: periodRows.length },
+    ],
+    [data?.balances.length, totalQty, data?.daily.length, periodRows.length],
+  );
 
+  return (
+    <ModuleOpsPageShell
+      eyebrow="مخزون صالة الإنتاج"
+      rangeLabel={
+        floorId
+          ? `رصيد المكونات المصروفة من المفكك إلى «${data?.warehouse?.name || 'صالة الإنتاج'}» واستهلاك التقارير`
+          : 'حدّد مخزن صالة الإنتاج في توجيه المخازن'
+      }
+      hero={floorHero}
+      onRefresh={() => void reload()}
+      refreshing={loading}
+      actions={(
+        <PrimaryButton iconName="download" tone="share" onClick={exportPeriod} disabled={!periodRows.length}>
+          تصدير الفترة
+        </PrimaryButton>
+      )}
+    >
       {!floorId && (
         <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
           عيّن «مخزن صالة الإنتاج» من إعدادات توجيه المخزون.
@@ -192,13 +197,6 @@ export const ProductionFloorStock: React.FC = () => {
           تحذير: تقرير الفترة مقطوع بسبب حجم الحركات الكبير. قلّص الفترة أو نفّذ backfill يومي.
         </p>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <KPICard label="أصناف في الصالة" value={data?.balances.length || 0} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="إجمالي الرصيد" value={formatNumber(totalQty)} iconType="metric" color="green" loading={loading} />
-        <KPICard label="أيام الفترة" value={data?.daily.length || 0} iconType="trend" color="amber" loading={loading} />
-        <KPICard label="بنود التقرير" value={periodRows.length} iconType="metric" color="indigo" loading={loading} />
-      </div>
 
       <div className="flex flex-wrap gap-2 items-center">
         {(['today', '7d', '30d'] as const).map((key) => (
@@ -239,11 +237,7 @@ export const ProductionFloorStock: React.FC = () => {
         )}
       </div>
 
-      <Card className="border-slate-200 shadow-none overflow-hidden">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">تقرير الفترة (أول / وارد / منصرف / آخر)</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
+      <OpsDashPanel title="تقرير الفترة (أول / وارد / منصرف / آخر)" accent="inventory" bodyClassName="p-0">
           <div className="overflow-x-auto">
             <table className="erp-table w-full">
               <thead className="erp-thead">
@@ -292,14 +286,9 @@ export const ProductionFloorStock: React.FC = () => {
             onPageChange={setPage}
             itemLabel="صنف"
           />
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="border-slate-200 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium">آخر الحركات</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      <OpsDashPanel title="آخر الحركات" accent="inventory">
           {(data?.recentTx || []).length === 0 ? (
             <p className="text-sm text-slate-400">لا توجد حركات.</p>
           ) : (
@@ -316,8 +305,7 @@ export const ProductionFloorStock: React.FC = () => {
               </div>
             ))
           )}
-        </CardContent>
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

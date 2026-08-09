@@ -1,6 +1,8 @@
 ﻿import React, { useState, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button, SearchableSelect } from '../components/UI';
+import { Badge, Button, SearchableSelect } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -448,22 +450,27 @@ export const HRTransactions: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="سجل حركات الموارد البشرية"
-        subtitle="جميع الإجازات والسلف والبدلات والاقتطاعات في مكان واحد"
-        icon="receipt_long"
-        moreActions={[
-          {
-            label: 'تصدير Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !canExportFromPage,
-            onClick: handleExport,
-          },
-        ]}
-      />
+    <ModuleOpsPageShell
+      eyebrow="سجل حركات الموارد البشرية"
+      rangeLabel="جميع الإجازات والسلف والبدلات والاقتطاعات في مكان واحد"
+      actions={
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            moreActions={[
+              {
+                label: 'تصدير Excel',
+                icon: 'download',
+                group: 'تصدير',
+                hidden: !canExportFromPage,
+                onClick: handleExport,
+              },
+            ]}
+          />
+        </div>
+      }
+    >
 
       {/* KPIs */}
       <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
@@ -489,8 +496,7 @@ export const HRTransactions: React.FC = () => {
         ))}
       </div>
 
-      {/* Filters + Table */}
-      <Card className="mb-0 border-0 rounded-none">
+      <OpsDashPanel title="الحركات" accent="hr" bodyClassName="p-0">
         <SmartFilterBar
       pageId="hr-transactions"
           className="mb-0 border-0 rounded-none"
@@ -714,7 +720,7 @@ export const HRTransactions: React.FC = () => {
             </div>
           </>
         )}
-      </Card>
+      </OpsDashPanel>
 
       {/* Edit Modal */}
       {editModal && (
@@ -792,7 +798,7 @@ export const HRTransactions: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

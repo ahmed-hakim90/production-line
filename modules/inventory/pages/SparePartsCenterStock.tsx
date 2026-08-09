@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { toast } from '../../../components/Toast';
@@ -120,41 +121,38 @@ export const SparePartsCenterStock: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="p-6">
-        <PageHeader title="أرصدة المراكز" />
+      <ModuleOpsPageShell eyebrow="أرصدة المراكز">
         <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية العرض.</p>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <PageHeader
-        title="أرصدة قطع الغيار في المراكز"
-        subtitle="اعرض رصيد كل مركز، حدّد الكمية، وأنشئ طلب سحب للرئيسي مباشرة."
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-recall')}>
-              <Button type="button" variant="secondary">طلبات السحب</Button>
-            </Link>
-            {canCreateRecall ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  const q = buildRecallQuery();
-                  if (!q) return;
-                  navigate(withTenantPath(tenantSlug, `/inventory/spare-parts-recall${q}`));
-                }}
-                disabled={selectedRows.length === 0}
-              >
-                سحب المحدد للرئيسي ({selectedRows.length})
-              </Button>
-            ) : null}
-          </div>
-        )}
-      />
-
-      <Card className="!p-0 overflow-hidden">
+    <ModuleOpsPageShell
+      eyebrow="أرصدة قطع الغيار في المراكز"
+      rangeLabel="اعرض رصيد كل مركز، حدّد الكمية، وأنشئ طلب سحب للرئيسي مباشرة."
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-recall')}>
+            <Button type="button" variant="secondary">طلبات السحب</Button>
+          </Link>
+          {canCreateRecall ? (
+            <Button
+              type="button"
+              onClick={() => {
+                const q = buildRecallQuery();
+                if (!q) return;
+                navigate(withTenantPath(tenantSlug, `/inventory/spare-parts-recall${q}`));
+              }}
+              disabled={selectedRows.length === 0}
+            >
+              سحب المحدد للرئيسي ({selectedRows.length})
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
+      <OpsDashPanel title="أرصدة المراكز" accent="inventory" bodyClassName="p-0">
         <SmartFilterBar
           pageId="spare-parts-center-stock"
           searchPlaceholder="اسم أو كود الصنف أو اسم المركز…"
@@ -259,8 +257,8 @@ export const SparePartsCenterStock: React.FC = () => {
             itemLabel="صنف"
           />
         ) : null}
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
 

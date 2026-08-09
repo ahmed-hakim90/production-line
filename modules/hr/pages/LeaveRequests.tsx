@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { Button, Badge, SearchableSelect } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
@@ -461,31 +463,39 @@ export const LeaveRequests: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="إدارة الإجازات"
-        subtitle="طلب إجازة ومتابعة الأرصدة وحالات الموافقة"
-        icon="beach_access"
-        primaryAction={canCreateLeave ? {
-          label: showForm ? 'إغلاق' : 'طلب إجازة',
-          icon: showForm ? 'close' : 'add',
-          onClick: () => setShowForm(!showForm),
-        } : undefined}
-        moreActions={[
-          {
-            label: 'تصدير Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !canExportFromPage || filtered.length === 0,
-            onClick: () => {
-              const employeeMap = new Map<string, { name: string }>();
-              empNameMap.forEach((name, id) => employeeMap.set(id, { name }));
-              exportLeaveRequests(filtered, employeeMap);
-            },
-          },
-        ]}
-      />
+    <ModuleOpsPageShell
+      eyebrow="إدارة الإجازات"
+      rangeLabel="طلب إجازة ومتابعة الأرصدة وحالات الموافقة"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreateLeave ? (
+            <Button variant="primary" onClick={() => setShowForm(!showForm)}>
+              <span className="material-icons-round text-sm">{showForm ? 'close' : 'add'}</span>
+              {showForm ? 'إغلاق' : 'طلب إجازة'}
+            </Button>
+          ) : null}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'تصدير Excel',
+                  icon: 'download',
+                  group: 'تصدير',
+                  hidden: !canExportFromPage || filtered.length === 0,
+                  onClick: () => {
+                    const employeeMap = new Map<string, { name: string }>();
+                    empNameMap.forEach((name, id) => employeeMap.set(id, { name }));
+                    exportLeaveRequests(filtered, employeeMap);
+                  },
+                },
+              ]}
+            />
+          </div>
+        </div>
+      }
+    >
 
       {/* Balance Cards */}
       {balance && (
@@ -519,7 +529,10 @@ export const LeaveRequests: React.FC = () => {
 
       {/* Create Form */}
       {showForm && (
-        <Card title={requestableEmployees.length > 1 ? 'طلب إجازة جديد للفريق' : 'طلب إجازة جديد'}>
+        <OpsDashPanel
+          title={requestableEmployees.length > 1 ? 'طلب إجازة جديد للفريق' : 'طلب إجازة جديد'}
+          accent="hr"
+        >
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {requestableEmployees.length > 1 && (
               <div className="sm:col-span-2">
@@ -625,11 +638,10 @@ export const LeaveRequests: React.FC = () => {
               {submitting ? 'جاري التقديم...' : 'تقديم الطلب'}
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      {/* Filters + Table in one card */}
-      <Card className="p-0">
+      <OpsDashPanel title="طلبات الإجازة" accent="hr" bodyClassName="p-0">
         <SmartFilterBar
       pageId="hr-leave-requests"
           quickFilters={[
@@ -818,7 +830,7 @@ export const LeaveRequests: React.FC = () => {
             </div>
           </>
         )}
-      </Card>
+      </OpsDashPanel>
 
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
@@ -838,7 +850,7 @@ export const LeaveRequests: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

@@ -1,6 +1,8 @@
 import React, { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button, KPIBox } from '../components/UI';
+import { Card, Badge, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useShallowStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { monthlyProductionCostService } from '../services/monthlyProductionCostService';
@@ -29,9 +31,6 @@ import {
 import { getExportImportPageControl } from '../../../utils/exportImportControls';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { PageHeader } from '../../../components/PageHeader';
-import { Card as UiCard, CardContent } from '@/components/ui/card';
-import { DetailPageShell, DetailPageStickyHeader, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
 import { toast } from '../../../components/Toast';
 import {
   invalidatePageDataCache,
@@ -936,72 +935,65 @@ export const MonthlyProductionCosts: React.FC = () => {
     return new Date(y, m - 1).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' });
   })();
 
-  return (
-    <DetailPageShell className="space-y-6">
-      <DetailPageStickyHeader>
-        <PageHeader
-          title="تكلفة الإنتاج الشهرية"
-          subtitle="حساب ومراجعة تكلفة الإنتاج لكل منتج حسب الشهر"
-          icon="price_check"
-          primaryAction={canManage ? {
-            label: calculating
-              ? `جاري الحساب... ${calculateProgress.done}/${calculateProgress.total || products.length}`
-              : 'حساب الكل',
-            icon: 'calculate',
-            onClick: handleCalculateAll,
-            disabled: calculating || allClosed,
-          } : undefined}
-          extra={
-            <input
-              type="month"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-              className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
-            />
-          }
-        />
-        <UiCard className={SURFACE_CARD}>
-          <CardContent className="p-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-              <KPIBox
-                label="عدد المنتجات"
-                value={displayRecords.length}
-                icon="inventory_2"
-                colorClass="bg-primary/10 text-primary"
-              />
-              <KPIBox
-                label="إجمالي الكمية"
-                value={formatCost(totalQty)}
-                icon="precision_manufacturing"
-                colorClass="bg-emerald-500/10 text-emerald-600"
-                unit="وحدة"
-              />
-              <KPIBox
-                label="إجمالي تكلفة التحويل"
-                value={formatCost(totalCost)}
-                icon="payments"
-                colorClass="bg-amber-500/10 text-amber-600"
-                unit="ج.م"
-              />
-              <KPIBox
-                label="متوسط التحويل للوحدة"
-                value={formatCost(overallAvg)}
-                icon="price_check"
-                colorClass="bg-violet-500/10 text-violet-600"
-                unit="ج.م"
-              />
-              <KPIBox
-                label="تكلفة التصنيع الكاملة"
-                value={totalFullManufacturingCost > 0 ? formatCost(totalFullManufacturingCost) : 'غير مكتملة'}
-                icon="factory"
-                colorClass={fullCostCoveragePct >= 99.999 ? 'bg-emerald-500/10 text-emerald-600' : 'bg-blue-500/10 text-blue-600'}
-                unit={totalFullManufacturingCost > 0 ? `ج.م · تغطية ${formatCost(fullCostCoveragePct)}%` : undefined}
-              />
-            </div>
-          </CardContent>
-        </UiCard>
-      </DetailPageStickyHeader>
+  const monthHero = useMemo(
+    () => [
+      { key: 'products', label: 'عدد المنتجات', value: displayRecords.length },
+      { key: 'qty', label: 'إجمالي الكمية', value: formatCost(totalQty), meta: 'وحدة' },
+      { key: 'total', label: 'إجمالي تكلفة التحويل', value: formatCost(totalCost), meta: 'ج.م' },
+      { key: 'avg', label: 'متوسط التحويل للوحدة', value: formatCost(overallAvg), meta: 'ج.م' },
+      {
+        key: 'full',
+        label: 'تكلفة التصنيع الكاملة',
+        value: totalFullManufacturingCost > 0 ? formatCost(totalFullManufacturingCost) : 'غير مكتملة',
+        meta: totalFullManufacturingCost > 0 ? `تغطية ${formatCost(fullCostCoveragePct)}%` : undefined,
+      },
+    ],
+    [displayRecords.length, totalQty, totalCost, overallAvg, totalFullManufacturingCost, fullCostCoveragePct],
+  );
 
+  return (
+    <ModuleOpsPageShell
+      eyebrow="تكلفة الإنتاج الشهرية"
+      rangeLabel="حساب ومراجعة تكلفة الإنتاج لكل منتج حسب الشهر"
+      hero={monthHero}
+      onRefresh={() => void fetchRecords({ force: true })}
+      refreshing={loading}
+      periodExtra={(
+        <input
+          type="month"
+          value={month}
+          onChange={(e) => setMonth(e.target.value)}
+          className="h-10 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm focus:ring-2 focus:ring-primary/50 outline-none"
+        />
+      )}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {canManage ? (
+            <Button onClick={handleCalculateAll} disabled={calculating || allClosed}>
+              <span className="material-icons-round text-[18px] ml-1">calculate</span>
+              {calculating
+                ? `جاري الحساب... ${calculateProgress.done}/${calculateProgress.total || products.length}`
+                : 'حساب الكل'}
+            </Button>
+          ) : null}
+          {canClose && records.length > 0 && !allClosed ? (
+            !confirmClose ? (
+              <Button variant="outline" onClick={() => setConfirmClose(true)}>
+                <span className="material-icons-round text-[18px] ml-1">lock</span>
+                إغلاق فترة {monthLabel}
+              </Button>
+            ) : (
+              <>
+                <Button onClick={handleCloseMonth} disabled={closingMonth}>
+                  {closingMonth ? 'جاري الإغلاق...' : 'تأكيد الإغلاق'}
+                </Button>
+                <Button variant="outline" onClick={() => setConfirmClose(false)}>إلغاء</Button>
+              </>
+            )
+          ) : null}
+        </div>
+      )}
+    >
       {/* Month close banner */}
       {allClosed && (
         <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
@@ -1072,7 +1064,7 @@ export const MonthlyProductionCosts: React.FC = () => {
       )}
 
       {/* Table */}
-      <Card>
+      <OpsDashPanel title="تكلفة المنتجات" accent="costs" bodyClassName="p-0">
         {records.length > 0 && (
           <div className="p-4 border-b border-[var(--color-border)] flex flex-col md:flex-row md:items-center gap-3">
             <div className="flex items-center gap-2 w-full md:w-auto md:ml-auto">
@@ -1616,32 +1608,18 @@ export const MonthlyProductionCosts: React.FC = () => {
             </table>
           )}
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      {/* Close month button */}
-      {canClose && records.length > 0 && !allClosed && (
-        <div className="flex justify-end">
-          {!confirmClose ? (
-            <Button variant="outline" onClick={() => setConfirmClose(true)}>
-              <span className="material-icons-round text-[18px] ml-1">lock</span>
-              إغلاق فترة {monthLabel}
-            </Button>
-          ) : (
-            <div className="flex flex-wrap items-center gap-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-[var(--border-radius-lg)] p-4">
-              <span className="material-icons-round text-red-500">warning</span>
-              <p className="text-sm text-red-700 dark:text-red-400 font-semibold">
-                سيتم إغلاق الفترة ولن يمكن إعادة الحساب. متأكد؟
-              </p>
-              <Button onClick={handleCloseMonth} disabled={closingMonth}>
-                {closingMonth ? 'جاري الإغلاق...' : 'تأكيد الإغلاق'}
-              </Button>
-              <Button variant="outline" onClick={() => setConfirmClose(false)}>
-                إلغاء
-              </Button>
-            </div>
-          )}
-        </div>
-      )}
+      {canClose && records.length > 0 && !allClosed && confirmClose ? (
+        <OpsDashPanel accent="costs">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="material-icons-round text-red-500">warning</span>
+            <p className="text-sm text-red-700 dark:text-red-400 font-semibold">
+              سيتم إغلاق الفترة ولن يمكن إعادة الحساب. متأكد؟
+            </p>
+          </div>
+        </OpsDashPanel>
+      ) : null}
 
       <Dialog
         open={analysisOpen}
@@ -1911,6 +1889,6 @@ export const MonthlyProductionCosts: React.FC = () => {
           </div>
         </div>
       )}
-    </DetailPageShell>
+    </ModuleOpsPageShell>
   );
 };

@@ -1,4 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/UI';
 import { SelectableTable, type TableColumn } from '@/components/SelectableTable';
@@ -576,12 +578,11 @@ export const AttendanceSyncDashboard: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="لوحة مزامنة الحضور"
-        subtitle="استيراد ملفات ZKTeco ومعالجة السجلات اليومية"
-        icon="sync"
-        extra={(
+    <ModuleOpsPageShell
+      eyebrow="لوحة مزامنة الحضور"
+      rangeLabel="استيراد ملفات ZKTeco ومعالجة السجلات اليومية"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
           <label className="erp-filter-date">
             <span className="erp-filter-label">تاريخ المعالجة</span>
             <input
@@ -591,68 +592,81 @@ export const AttendanceSyncDashboard: React.FC = () => {
               disabled={busy}
             />
           </label>
-        )}
-        secondaryAction={{
-          label: tab === 'new_import' ? 'سجل الاستيراد' : 'استيراد جديد',
-          icon: tab === 'new_import' ? 'search' : 'add',
-          onClick: () => {
-            const nextTab = tab === 'new_import' ? 'history' : 'new_import';
-            setTab(nextTab);
-            if (nextTab === 'history') {
-              void loadHistory();
-            }
-          },
-          disabled: busy || historyLoading,
-        }}
-        moreActions={[
-          {
-            label: 'تحديث سجل الاستيراد',
-            icon: 'refresh',
-            group: 'السجل',
-            onClick: () => {
-              setTab('history');
-              void loadHistory();
-            },
-            disabled: historyLoading,
-          },
-          {
-            label: 'قواعد البصمة للورديات',
-            icon: 'settings',
-            group: 'الإعدادات',
-            onClick: () => {
-              openModal(MODAL_KEYS.ATTENDANCE_SHIFT_RULES);
-            },
-            dataModalKey: MODAL_KEYS.ATTENDANCE_SHIFT_RULES,
-          },
-          {
-            label: 'إشعار توقيع (معالجة يدوية)',
-            icon: 'edit',
-            group: 'الإعدادات',
-            onClick: () => {
-              openModal(MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX);
-            },
-            dataModalKey: MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX,
-          },
-          {
-            label: 'معالجة اليوم المحدد',
-            icon: 'check',
-            group: 'المعالجة اليومية',
-            onClick: () => {
-              void handleProcessDate();
-            },
-            disabled: busy,
-          },
-          {
-            label: 'إعادة حساب اليوم المحدد',
-            icon: 'refresh',
-            group: 'المعالجة اليومية',
-            onClick: () => {
-              void handleRecalculate();
-            },
-            disabled: busy,
-          },
-        ]}
-      />
+          <Button
+            type="button"
+            variant="ghost"
+            className="h-[34px] px-3 text-xs"
+            onClick={() => {
+              const nextTab = tab === 'new_import' ? 'history' : 'new_import';
+              setTab(nextTab);
+              if (nextTab === 'history') {
+                void loadHistory();
+              }
+            }}
+            disabled={busy || historyLoading}
+          >
+            <span className="material-icons-round text-sm">
+              {tab === 'new_import' ? 'search' : 'add'}
+            </span>
+            {tab === 'new_import' ? 'سجل الاستيراد' : 'استيراد جديد'}
+          </Button>
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'تحديث سجل الاستيراد',
+                  icon: 'refresh',
+                  group: 'السجل',
+                  onClick: () => {
+                    setTab('history');
+                    void loadHistory();
+                  },
+                  disabled: historyLoading,
+                },
+                {
+                  label: 'قواعد البصمة للورديات',
+                  icon: 'settings',
+                  group: 'الإعدادات',
+                  onClick: () => {
+                    openModal(MODAL_KEYS.ATTENDANCE_SHIFT_RULES);
+                  },
+                  dataModalKey: MODAL_KEYS.ATTENDANCE_SHIFT_RULES,
+                },
+                {
+                  label: 'إشعار توقيع (معالجة يدوية)',
+                  icon: 'edit',
+                  group: 'الإعدادات',
+                  onClick: () => {
+                    openModal(MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX);
+                  },
+                  dataModalKey: MODAL_KEYS.ATTENDANCE_SIGNATURE_FIX,
+                },
+                {
+                  label: 'معالجة اليوم المحدد',
+                  icon: 'check',
+                  group: 'المعالجة اليومية',
+                  onClick: () => {
+                    void handleProcessDate();
+                  },
+                  disabled: busy,
+                },
+                {
+                  label: 'إعادة حساب اليوم المحدد',
+                  icon: 'refresh',
+                  group: 'المعالجة اليومية',
+                  onClick: () => {
+                    void handleRecalculate();
+                  },
+                  disabled: busy,
+                },
+              ]}
+            />
+          </div>
+        </div>
+      }
+    >
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
         <div className="erp-kpi-card">
@@ -698,7 +712,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
       </div>
 
       {tab === 'history' && (
-        <div className="card p-0 overflow-hidden space-y-0">
+        <OpsDashPanel title="سجل الاستيراد" accent="hr" bodyClassName="p-0">
           <SmartFilterBar
       pageId="attendance-sync-history"
             periods={[
@@ -772,14 +786,13 @@ export const AttendanceSyncDashboard: React.FC = () => {
               loading={historyLoading}
             />
           )}
-        </div>
+        </OpsDashPanel>
       )}
 
       {tab === 'new_import' && (
         <>
 
-      <div className="card p-4 space-y-4">
-        <h3 className="text-sm font-bold text-[var(--color-text)]">استيراد يدوي من ملف</h3>
+      <OpsDashPanel title="استيراد يدوي من ملف" accent="hr">
         {detectedFormat && (
           <div className="inline-flex items-center px-2.5 py-1 rounded-full bg-[var(--color-card)] border border-[var(--color-border)] text-xs font-bold">
             {detectedFormat === 'zk_export' ? 'تنسيق ZK تصدير' : 'تنسيق ZK قياسي'}
@@ -832,10 +845,10 @@ export const AttendanceSyncDashboard: React.FC = () => {
             </div>
           </div>
         )}
-      </div>
+      </OpsDashPanel>
 
       {previewRows.length > 0 && (
-        <div className="card p-4 space-y-3">
+        <OpsDashPanel title="معاينة الاستيراد" accent="hr">
           <div className="grid grid-cols-2 md:grid-cols-6 gap-2">
             <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] px-3 py-2">
               <div className="text-[11px] text-[var(--color-text-muted)]">إجمالي الملف</div>
@@ -950,13 +963,13 @@ export const AttendanceSyncDashboard: React.FC = () => {
             enableColumnVisibility={true}
             checkboxSelection={false}
           />
-        </div>
+        </OpsDashPanel>
       )}
 
       {message && (
-        <div className="card p-3 text-sm font-bold text-[var(--color-text)]">
-          {message}
-        </div>
+        <OpsDashPanel accent="hr">
+          <p className="text-sm font-bold text-[var(--color-text)]">{message}</p>
+        </OpsDashPanel>
       )}
         </>
       )}
@@ -975,6 +988,6 @@ export const AttendanceSyncDashboard: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

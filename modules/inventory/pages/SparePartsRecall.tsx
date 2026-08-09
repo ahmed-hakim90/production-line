@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
@@ -214,49 +215,45 @@ export const SparePartsRecall: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="p-6">
-        <PageHeader title="سحب من المراكز" />
+      <ModuleOpsPageShell eyebrow="سحب من المراكز">
         <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية العرض.</p>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
+  const hero = [
+    { key: 'pending', label: 'بانتظار تأكيد المركز', value: pendingCount, accent: pendingCount > 0 },
+    { key: 'all', label: 'كل الطلبات المحمّلة', value: rows.length },
+  ];
+
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <PageHeader
-        title="سحب قطع الغيار من المراكز"
-        subtitle={
-          isCentralWarehouseOperator
-            ? 'أنشئ طلب سحب من أرصدة المراكز — المركز يؤكد التسليم ثم يرجع الرصيد للرئيسي.'
-            : 'المركزي يطلب سحب كمية من مركز → المركز يؤكد → الرصيد يرجع للمخزن الرئيسي.'
-        }
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            {canCreate ? (
-              <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-center-stock')}>
-                <Button type="button" variant="secondary">أرصدة المراكز</Button>
-              </Link>
-            ) : null}
-            {canCreate ? (
-              <Button type="button" onClick={() => setShowCreate((v) => !v)}>
-                {showCreate ? 'إخفاء النموذج' : 'طلب سحب جديد'}
-              </Button>
-            ) : null}
-          </div>
-        )}
-      />
-
-      <div className="grid gap-3 sm:grid-cols-2">
-        <Card title="بانتظار تأكيد المركز">
-          <div className="text-2xl font-black text-amber-700">{pendingCount}</div>
-        </Card>
-        <Card title="كل الطلبات المحمّلة">
-          <div className="text-2xl font-black">{rows.length}</div>
-        </Card>
-      </div>
-
+    <ModuleOpsPageShell
+      eyebrow="سحب قطع الغيار من المراكز"
+      rangeLabel={
+        isCentralWarehouseOperator
+          ? 'أنشئ طلب سحب من أرصدة المراكز — المركز يؤكد التسليم ثم يرجع الرصيد للرئيسي.'
+          : 'المركزي يطلب سحب كمية من مركز → المركز يؤكد → الرصيد يرجع للمخزن الرئيسي.'
+      }
+      hero={hero}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          {canCreate ? (
+            <Link to={withTenantPath(tenantSlug, '/inventory/spare-parts-center-stock')}>
+              <Button type="button" variant="secondary">أرصدة المراكز</Button>
+            </Link>
+          ) : null}
+          {canCreate ? (
+            <Button type="button" onClick={() => setShowCreate((v) => !v)}>
+              {showCreate ? 'إخفاء النموذج' : 'طلب سحب جديد'}
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
       {showCreate && canCreate ? (
-        <Card title="طلب سحب إلى المخزن الرئيسي">
+        <OpsDashPanel title="طلب سحب إلى المخزن الرئيسي" accent="repair">
           <p className="mb-3 text-xs text-[var(--color-text-muted)]">
             الأسهل: اختر الأصناف من «أرصدة المراكز» ثم اضغط سحب المحدد — أو أنشئ يدوياً هنا.
           </p>
@@ -342,10 +339,10 @@ export const SparePartsRecall: React.FC = () => {
               {busyId === 'create' ? 'جاري الإنشاء…' : 'إنشاء طلب السحب'}
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
-      <Card className="!p-0 overflow-hidden">
+      <OpsDashPanel title="طلبات السحب" accent="repair" bodyClassName="p-0">
         <div className="flex flex-wrap gap-2 border-b border-[var(--color-border)] px-3 pt-3">
           {([
             ['pending', `معلّق (${pendingCount})`],
@@ -510,8 +507,8 @@ export const SparePartsRecall: React.FC = () => {
             itemLabel="طلب"
           />
         ) : null}
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
 

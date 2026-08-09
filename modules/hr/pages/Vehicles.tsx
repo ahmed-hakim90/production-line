@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -13,6 +13,8 @@ import type { FirestoreEmployee } from '@/types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
 import { invalidatePageDataCache } from '../../shared/lib/pageDataCache';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -178,69 +180,55 @@ export const Vehicles: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="إدارة المركبات"
-        subtitle="تعريف المركبات وربط الموظفين وحساب تكلفة النقل"
-        icon="directions_bus"
-        primaryAction={{
-          label: 'إضافة مركبة',
-          icon: 'add',
-          onClick: openCreate,
-          dataModalKey: MODAL_KEYS.VEHICLES_CREATE,
-        }}
-        moreActions={[
-          {
-            label: 'تصدير Excel',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !canExportFromPage || vehicles.length === 0,
-            onClick: handleExport,
-          },
-        ]}
-      />
-
-      {/* KPIs */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-        {[
-          { label: 'إجمالي المركبات', value: stats.total, icon: 'directions_bus', color: 'bg-indigo-100 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400' },
-          { label: 'نشط', value: stats.active, icon: 'check_circle', color: 'bg-emerald-100 text-emerald-600' },
-          { label: 'إجمالي السعة', value: stats.totalCapacity, icon: 'groups', color: 'bg-sky-100 dark:bg-sky-900/30 text-sky-600 dark:text-sky-400' },
-          { label: 'موظفون معيّنون', value: stats.totalAssigned, icon: 'person_pin', color: 'bg-violet-100 dark:bg-violet-900/30 text-violet-600 dark:text-violet-400' },
-          { label: 'تكلفة شهرية', value: formatCurrency(stats.totalMonthlyCost), icon: 'payments', color: 'bg-amber-100 text-amber-600' },
-        ].map((kpi) => (
-          <div key={kpi.label} className="bg-[var(--color-card)] p-4 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] flex items-center gap-3">
-            <div className={`w-12 h-12 ${kpi.color} rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0`}>
-              <span className="material-icons-round text-2xl">{kpi.icon}</span>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[var(--color-text-muted)] text-xs font-medium">{kpi.label}</p>
-              <h3 className="text-xl font-bold">{kpi.value}</h3>
-            </div>
+    <ModuleOpsPageShell
+      eyebrow="إدارة المركبات"
+      rangeLabel="تعريف المركبات وربط الموظفين وحساب تكلفة النقل"
+      hero={[
+        { key: 'total', label: 'إجمالي المركبات', value: stats.total },
+        { key: 'active', label: 'نشط', value: stats.active },
+        { key: 'capacity', label: 'إجمالي السعة', value: stats.totalCapacity },
+        { key: 'assigned', label: 'موظفون معيّنون', value: stats.totalAssigned },
+        { key: 'cost', label: 'تكلفة شهرية', value: formatCurrency(stats.totalMonthlyCost) },
+      ]}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="button" onClick={openCreate} data-modal-key={MODAL_KEYS.VEHICLES_CREATE}>
+            إضافة مركبة
+          </Button>
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'تصدير Excel',
+                  icon: 'download',
+                  group: 'تصدير',
+                  hidden: !canExportFromPage || vehicles.length === 0,
+                  onClick: handleExport,
+                },
+              ]}
+            />
           </div>
-        ))}
-      </div>
-
-      {/* Search & Filters */}
-      <SmartFilterBar
+        </div>
+      )}
+    >
+      <OpsDashPanel title="قائمة المركبات" accent="hr" bodyClassName="p-0 overflow-hidden">
+        <SmartFilterBar
       pageId="hr-vehicles"
         searchPlaceholder="بحث بالاسم أو رقم اللوحة أو السائق..."
         searchValue={searchQuery}
         onSearchChange={setSearchQuery}
-        className="mb-0 border-0 rounded-[var(--border-radius-lg)]"
+        className="mb-0 border-0 rounded-none"
       />
 
-      {/* Vehicle Cards */}
       {filtered.length === 0 ? (
-        <Card>
-          <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">directions_bus</span>
-            <p className="text-sm font-bold text-slate-500">لا توجد مركبات{searchQuery ? ' تطابق البحث' : ''}</p>
-          </div>
-        </Card>
+        <div className="text-center py-12 p-4">
+          <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">directions_bus</span>
+          <p className="text-sm font-bold text-slate-500">لا توجد مركبات{searchQuery ? ' تطابق البحث' : ''}</p>
+        </div>
       ) : (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4">
           {filtered.map((v) => {
             const assignedEmployeeIds = getAssignedEmployeeIds(v);
             const monthlyCost = v.dailyRate * v.workingDaysPerMonth;
@@ -370,7 +358,8 @@ export const Vehicles: React.FC = () => {
           })}
         </div>
       )}
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
 

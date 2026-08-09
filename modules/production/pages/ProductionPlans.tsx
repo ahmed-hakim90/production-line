@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button, KPIBox, SearchableSelect } from '../components/UI';
+import { Card, Badge, Button, SearchableSelect } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore, useShallowStore } from '../../../store/useAppStore';
 import { DEFAULT_PLAN_SETTINGS } from '../../../utils/dashboardConfig';
@@ -34,6 +34,8 @@ import type { ProductionPlan, ProductionReport, PlanPriority, PlanStatus, SmartS
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
   Select,
@@ -817,23 +819,39 @@ export const ProductionPlans: React.FC = () => {
     });
   };
 
+  const planHero = useMemo(
+    () => [
+      { key: 'active', label: 'خطط نشطة', value: formatNumber(kpis.activeCount) },
+      {
+        key: 'delayed',
+        label: 'خطط متأخرة',
+        value: formatNumber(kpis.delayedCount),
+        accent: kpis.delayedCount > 0,
+      },
+      { key: 'remaining', label: 'الكمية المتبقية', value: formatNumber(kpis.totalRemaining) },
+      { key: 'avg', label: 'متوسط الإنجاز', value: kpis.avgCompletion, meta: '%' },
+    ],
+    [kpis],
+  );
+
   if (loading) {
     return <PageContentSkeleton variant="list" showFilters tableRows={8} />;
   }
 
   return (
-    <div className="erp-ds-clean space-y-6 sm:space-y-8">
-      {/* Header */}
-      <PageHeader
-        title="خطط الإنتاج"
-        subtitle="إدارة وتتبع خطط الإنتاج الرسمية"
-        icon="event_note"
-        primaryAction={canCreate ? {
-          label: 'خطة جديدة',
-          icon: 'add',
-          onClick: () => setFormOpen(true),
-        } : undefined}
-        extra={
+    <ModuleOpsPageShell
+      className="max-w-[1600px] mx-auto"
+      eyebrow="خطط الإنتاج"
+      rangeLabel="إدارة وتتبع خطط الإنتاج الرسمية"
+      hero={planHero}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreate ? (
+            <Button variant="primary" onClick={() => setFormOpen(true)}>
+              <span className="material-icons-round text-sm">add</span>
+              خطة جديدة
+            </Button>
+          ) : null}
           <div className="flex items-center bg-[#f0f2f5] rounded-[var(--border-radius-base)] p-0.5 overflow-x-auto">
             {([['table', 'view_list'], ['kanban', 'view_kanban'], ['timeline', 'timeline']] as [ViewMode, string][]).map(([mode, icon]) => (
               <button
@@ -846,41 +864,38 @@ export const ProductionPlans: React.FC = () => {
               </button>
             ))}
           </div>
-        }
-        moreActions={[
-          {
-            label: 'طلب صرف إنتاج',
-            icon: 'fact_check',
-            group: 'مخزون',
-            hidden: !can('productionIssue.request'),
-            onClick: () => navigate('/production/issue-requests'),
-          },
-          {
-            label: 'تصدير الخطط',
-            icon: 'download',
-            group: 'تصدير',
-            hidden: !canExport || filteredPlans.length === 0,
-            onClick: handleExportPlans,
-          },
-          {
-            label: 'استيراد الخطط',
-            icon: 'upload',
-            group: 'استيراد',
-            hidden: !canImport || !canCreatePermission || !planImportEnabled,
-            onClick: () => openModal(MODAL_KEYS.PRODUCTION_PLANS_IMPORT),
-          },
-        ]}
-      />
-
-      {/* KPI Row */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <KPIBox label="خطط نشطة" value={kpis.activeCount} icon="event_available" colorClass="bg-blue-100 text-blue-600" />
-        <KPIBox label="خطط متأخرة" value={kpis.delayedCount} icon="warning" colorClass="bg-rose-100 text-rose-600" />
-        <KPIBox label="الكمية المتبقية" value={formatNumber(kpis.totalRemaining)} icon="inventory_2" colorClass="bg-amber-100 text-amber-600" />
-        <KPIBox label="متوسط الإنجاز" value={kpis.avgCompletion} icon="speed" unit="%" colorClass="bg-emerald-100 text-emerald-600" />
-      </div>
-
-      {/* Create Form Modal */}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'طلب صرف إنتاج',
+                  icon: 'fact_check',
+                  group: 'مخزون',
+                  hidden: !can('productionIssue.request'),
+                  onClick: () => navigate('/production/issue-requests'),
+                },
+                {
+                  label: 'تصدير الخطط',
+                  icon: 'download',
+                  group: 'تصدير',
+                  hidden: !canExport || filteredPlans.length === 0,
+                  onClick: handleExportPlans,
+                },
+                {
+                  label: 'استيراد الخطط',
+                  icon: 'upload',
+                  group: 'استيراد',
+                  hidden: !canImport || !canCreatePermission || !planImportEnabled,
+                  onClick: () => openModal(MODAL_KEYS.PRODUCTION_PLANS_IMPORT),
+                },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+    >
       <Dialog open={canCreate && formOpen} onOpenChange={(open) => setFormOpen(open)}>
         <DialogContent className="max-w-5xl w-[min(100vw-1.5rem,64rem)] border-0 p-0 rounded-[var(--border-radius-xl)] gap-0" dir="rtl">
           <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
@@ -1094,6 +1109,7 @@ export const ProductionPlans: React.FC = () => {
         </div>
       )}
 
+      <OpsDashPanel title="الخطط" accent="plans" bodyClassName="p-0">
       <SmartFilterBar
       pageId="production-plans"
         searchPlaceholder="ابحث بالخط أو المنتج أو الكود..."
@@ -1211,10 +1227,10 @@ export const ProductionPlans: React.FC = () => {
         applyLabel="تطبيق"
       />
 
-      {/* Content Area */}
       {viewMode === 'table' && <TableView groups={groupedPlanSections} />}
       {viewMode === 'kanban' && <KanbanView plans={sortedPlans} />}
       {viewMode === 'timeline' && <TimelineView plans={sortedPlans} />}
+      </OpsDashPanel>
 
       {/* Plan Drawer */}
       <div className={`fixed inset-0 z-50 transition-opacity ${activeDrawerPlan ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'}`}>
@@ -1547,7 +1563,7 @@ export const ProductionPlans: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 
   // â”€â”€â”€ Table View â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

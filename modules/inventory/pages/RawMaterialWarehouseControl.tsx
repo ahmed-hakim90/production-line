@@ -1,11 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { KPICard } from '@/src/components/erp/KPICard';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
 import type { TableIconActionTone } from '@/src/components/erp/TableIconAction';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -516,14 +515,12 @@ export const RawMaterialWarehouseControl: React.FC = () => {
 
   if (!configured) {
     return (
-      <div className="erp-ds-clean space-y-6">
-        <PageHeader
-          title="تحكم مخزن المستلزمات"
-          subtitle="مخزن المستلزمات المحدد في إعدادات توجيه المخازن (المفكك ثم المواد الخام)"
-          icon={<Package size={18} />}
-        />
-        <Card>
-          <CardContent className="py-10 text-center space-y-4">
+      <ModuleOpsPageShell
+        eyebrow="تحكم مخزن المستلزمات"
+        rangeLabel="مخزن المستلزمات المحدد في إعدادات توجيه المخازن (المفكك ثم المواد الخام)"
+      >
+        <OpsDashPanel accent="inventory">
+          <div className="py-10 text-center space-y-4">
             <p className="text-sm text-[var(--color-text-muted)]">
               لم يُحدَّد مخزن المستلزمات بعد. عيّن «مخزن المفكك (مستلزم إنتاج)» أو «مخزن المواد الخام» من إعدادات توجيه المخزون، ثم اضغط «حفظ الصفحة».
             </p>
@@ -533,60 +530,56 @@ export const RawMaterialWarehouseControl: React.FC = () => {
             <p className="text-xs text-[var(--color-text-muted)]">
               بعد الحفظ ستظهر لوحة التشغيل اليومية لهذا المخزن.
             </p>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
+  const warehouseHero = useMemo(
+    () => [
+      { key: 'sku', label: 'أصناف في المخزن', value: kpis.skuCount },
+      { key: 'qty', label: 'إجمالي الكمية', value: formatNumber(kpis.totalQty) },
+      { key: 'alerts', label: 'تنبيهات الرصيد', value: kpis.alertCount, toneClassName: kpis.alertCount > 0 ? 'ops-dash-kpi-card--tone-amber' : undefined },
+      { key: 'pending', label: 'معلّقات', value: pendingTransfers + pendingIssues },
+    ],
+    [kpis, pendingTransfers, pendingIssues],
+  );
+
   return (
-    <div className="erp-ds-clean erp-dashboard-theme space-y-6">
-      <PageHeader
-        title="تحكم مخزن المستلزمات"
-        subtitle={`تشغيل يومي بسيط: ${warehouseName}`}
-        icon={<Package size={18} />}
-        actions={(
-          <div className="flex flex-wrap gap-2 items-center">
-            {canSwitchWarehouse && (
-              <select
-                className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
-                value={warehouseId}
-                onChange={(e) => setWarehouseId(e.target.value)}
-                aria-label="تبديل مخزن المستلزمات"
-              >
-                {allowedWarehouses.map((w) => (
-                  <option key={w.id} value={w.id}>
-                    {w.name}{w.code ? ` (${w.code})` : ''}
-                  </option>
-                ))}
-              </select>
-            )}
-            <GhostButton iconName="refresh" tone="neutral" onClick={() => void loadData()} disabled={loading}>تحديث</GhostButton>
-            <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')}>
-              <PrimaryButton iconName="warning_amber" tone="undo">
-                التنبيهات
-                {kpis.alertCount + pendingTransfers + pendingIssues > 0
-                  ? ` (${kpis.alertCount + pendingTransfers + pendingIssues})`
-                  : ''}
-              </PrimaryButton>
-            </Link>
-          </div>
-        )}
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        <KPICard label="أصناف في المخزن" value={kpis.skuCount} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="إجمالي الكمية" value={formatNumber(kpis.totalQty)} iconType="metric" color="green" loading={loading} />
-        <KPICard label="تنبيهات الرصيد" value={kpis.alertCount} iconType="trend" color="amber" loading={loading} />
-        <KPICard
-          label="معلّقات"
-          value={pendingTransfers + pendingIssues}
-          iconType="metric"
-          color="amber"
-          loading={loading}
-        />
-      </div>
-
+    <ModuleOpsPageShell
+      eyebrow="تحكم مخزن المستلزمات"
+      rangeLabel={`تشغيل يومي بسيط: ${warehouseName}`}
+      hero={warehouseHero}
+      onRefresh={() => void loadData()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2 items-center">
+          {canSwitchWarehouse && (
+            <select
+              className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700"
+              value={warehouseId}
+              onChange={(e) => setWarehouseId(e.target.value)}
+              aria-label="تبديل مخزن المستلزمات"
+            >
+              {allowedWarehouses.map((w) => (
+                <option key={w.id} value={w.id}>
+                  {w.name}{w.code ? ` (${w.code})` : ''}
+                </option>
+              ))}
+            </select>
+          )}
+          <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')}>
+            <PrimaryButton iconName="warning_amber" tone="undo">
+              التنبيهات
+              {kpis.alertCount + pendingTransfers + pendingIssues > 0
+                ? ` (${kpis.alertCount + pendingTransfers + pendingIssues})`
+                : ''}
+            </PrimaryButton>
+          </Link>
+        </div>
+      )}
+    >
       {kpis.negative > 0 && (
         <p className="text-sm font-medium text-red-700 bg-red-50 border border-red-100 rounded-lg px-4 py-3">
           يوجد {kpis.negative} رصيد سالب في مخزن المستلزمات. راجع شاشة التنبيهات.
@@ -599,14 +592,15 @@ export const RawMaterialWarehouseControl: React.FC = () => {
         </p>
       )}
 
-      <Card className="border-slate-200 shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-slate-800">خطوات التشغيل اليومية</CardTitle>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+      <OpsDashPanel
+        title="خطوات التشغيل اليومية"
+        accent="inventory"
+        action={(
+          <p className="text-xs text-[var(--color-text-muted)]">
             أرصدة → استلام → صرف أو تحويل → جرد ومطابقة → مراجعة الحركات
           </p>
-        </CardHeader>
-        <CardContent>
+        )}
+      >
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
             {visibleOpCards.map((card) => {
               const links = card.links.filter((link) => !link.permission || can(link.permission));
@@ -657,31 +651,27 @@ export const RawMaterialWarehouseControl: React.FC = () => {
               );
             })}
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
       {visibleTools.length > 0 && (
-        <Card className="border-slate-200 shadow-none">
-          <CardHeader className="pb-2">
+        <OpsDashPanel
+          title="أدوات إضافية"
+          accent="inventory"
+          action={(
             <button
               type="button"
-              className="flex w-full items-center justify-between gap-3 text-start"
+              className="flex items-center gap-2 text-xs text-slate-500"
               onClick={() => setToolsOpen((open) => !open)}
               aria-expanded={toolsOpen}
             >
-              <div>
-                <CardTitle className="text-sm font-medium text-slate-800">أدوات إضافية</CardTitle>
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                  تنبيهات، لوكيشنات، واستيراد سريع بالكود
-                </p>
-              </div>
-              <span className="material-icons-round text-[22px] text-slate-500">
+              {toolsOpen ? 'إخفاء' : 'عرض'}
+              <span className="material-icons-round text-[18px]">
                 {toolsOpen ? 'expand_less' : 'expand_more'}
               </span>
             </button>
-          </CardHeader>
-          {toolsOpen && (
-            <CardContent>
+          )}
+        >
+          {toolsOpen ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-3">
                 {visibleTools.map((item) => (
                   <Link
@@ -697,38 +687,33 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                   </Link>
                 ))}
               </div>
-            </CardContent>
+          ) : (
+            <p className="text-xs text-[var(--color-text-muted)]">تنبيهات، لوكيشنات، واستيراد سريع بالكود</p>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
-      <Card id="assemblable" className="border-slate-200 shadow-none overflow-hidden scroll-mt-24">
-        <CardHeader className="pb-2">
+      <div id="assemblable" className="scroll-mt-24">
+      <OpsDashPanel
+        title="المتاح للتجميع حسب المنتج"
+        accent="inventory"
+        bodyClassName="p-0"
+        action={(
           <button
             type="button"
-            className="flex w-full items-start justify-between gap-3 text-start"
+            className="flex items-center gap-2 text-xs text-slate-500"
             onClick={() => setAssemblableOpen((open) => !open)}
             aria-expanded={assemblableOpen}
           >
-            <div>
-              <CardTitle className="text-sm font-medium text-slate-800">المتاح للتجميع حسب المنتج</CardTitle>
-              <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                قسم ثانوي: أقصى وحدات تامة من أرصدة هذا المخزن حسب BOM
-                {kpis.canAssembleProducts > 0
-                  ? ` — ${kpis.canAssembleProducts} منتج قابل للتجميع`
-                  : ''}
-                {kpis.topProductName && kpis.topAssemblable > 0
-                  ? ` · أعلى: ${kpis.topProductName} (${formatNumber(kpis.topAssemblable)})`
-                  : ''}
-              </p>
-            </div>
-            <span className="material-icons-round text-[22px] text-slate-500 mt-0.5">
+            {assemblableOpen ? 'إخفاء' : 'عرض'}
+            <span className="material-icons-round text-[18px]">
               {assemblableOpen ? 'expand_less' : 'expand_more'}
             </span>
           </button>
-        </CardHeader>
+        )}
+      >
         {assemblableOpen && (
-          <CardContent className="p-0">
+            <>
             {assemblableError && (
               <p className="mx-4 mb-3 text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
                 تعذر حساب المتاح للتجميع: {assemblableError}
@@ -917,16 +902,13 @@ export const RawMaterialWarehouseControl: React.FC = () => {
               onPageChange={setAssemblablePage}
               itemLabel="منتج"
             />
-          </CardContent>
+            </>
         )}
-      </Card>
+      </OpsDashPanel>
+      </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-5">
-        <Card className="border-slate-200 shadow-none">
-          <CardHeader>
-            <CardTitle className="text-sm font-medium text-slate-800">آخر حركات المخزن</CardTitle>
-          </CardHeader>
-          <CardContent>
+        <OpsDashPanel title="آخر حركات المخزن" accent="inventory">
             {loading ? (
               <p className="text-sm text-slate-400">جاري التحميل…</p>
             ) : transactions.length === 0 ? (
@@ -952,17 +934,17 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                 ))}
               </div>
             )}
-          </CardContent>
-        </Card>
+        </OpsDashPanel>
 
-        <Card className="border-slate-200 shadow-none">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-sm font-medium text-slate-800">أصناف تحت الحد الأدنى</CardTitle>
+        <OpsDashPanel
+          title="أصناف تحت الحد الأدنى"
+          accent="inventory"
+          action={(
             <Link to={withTenantPath(tenantSlug, '/inventory/raw-materials/alerts')} className="text-xs font-bold text-indigo-600">
               عرض الكل
             </Link>
-          </CardHeader>
-          <CardContent>
+          )}
+        >
             {lowPreview.length === 0 ? (
               <p className="text-sm font-medium text-emerald-600">لا توجد أصناف تحت الحد الأدنى.</p>
             ) : (
@@ -988,8 +970,7 @@ export const RawMaterialWarehouseControl: React.FC = () => {
                 حد الحركة اليدوية الكبيرة في التنبيهات: {formatNumber(threshold)}
               </p>
             )}
-          </CardContent>
-        </Card>
+        </OpsDashPanel>
       </div>
 
       <ProductBomCountCardPreviewModal
@@ -1004,6 +985,6 @@ export const RawMaterialWarehouseControl: React.FC = () => {
           setCountCardPreviewWarning(null);
         }}
       />
-    </div>
+    </ModuleOpsPageShell>
   );
 };

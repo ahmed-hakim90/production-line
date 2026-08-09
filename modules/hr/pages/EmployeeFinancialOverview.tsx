@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Button, Badge } from '../components/UI';
-import { PageHeader } from '@/components/PageHeader';
+import { Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { employeeService } from '../employeeService';
 import { getPayrollMonth, getPayrollRecords } from '../payroll';
@@ -123,7 +124,6 @@ export const EmployeeFinancialOverview: React.FC = () => {
     }
   }, [month, applyOverviewData]);
 
-  // Soft-restore on revisit when this month was previously loaded
   useEffect(() => {
     if (peekPageDataCache<FinancialOverviewPageData>(`hr:financial-overview:${month}`)) {
       void loadData();
@@ -148,49 +148,53 @@ export const EmployeeFinancialOverview: React.FC = () => {
   }, [records]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="التحليل المالي للموظفين"
-        subtitle="عرض شامل للأجر الأساسي والبدلات والخصومات والمؤثرات والإجازات والصافي"
-        icon="table_view"
-        primaryAction={{
-          label: loading ? 'جاري التحميل...' : 'تحميل البيانات',
-          icon: loading ? 'refresh' : 'search',
-          onClick: () => {
+    <ModuleOpsPageShell
+      eyebrow="التحليل المالي للموظفين"
+      rangeLabel="عرض شامل للأجر الأساسي والبدلات والخصومات والمؤثرات والإجازات والصافي"
+      actions={(
+        <Button
+          type="button"
+          variant="primary"
+          onClick={() => {
             invalidatePageDataCache(`hr:financial-overview:${month}`);
             void loadData({ force: true });
-          },
-          disabled: loading,
-        }}
-      />
-
-      <SmartFilterBar
-      pageId="hr-employee-financial-overview"
-        searchPlaceholder="بحث باسم الموظف..."
-        searchValue={search}
-        onSearchChange={setSearch}
-        quickFilters={[
-          {
-            key: 'department',
-            placeholder: 'كل الأقسام',
-            options: departmentOptions.map((deptId) => ({
-              value: deptId,
-              label: deptNameById[deptId] || deptId,
-            })),
-            width: 'w-[180px]',
-          },
-        ]}
-        quickFilterValues={{ department: departmentFilter || 'all' }}
-        onQuickFilterChange={(_, value) => setDepartmentFilter(value === 'all' ? '' : value)}
-        onApply={() => void loadData()}
-        applyLabel={loading ? 'جار التحميل...' : 'تطبيق'}
-        extra={(
-          <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
-            <span className="ml-2 text-xs text-slate-500">الشهر</span>
-            <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
-          </div>
-        )}
-      />
+          }}
+          disabled={loading}
+        >
+          {loading ? 'جاري التحميل...' : 'تحميل البيانات'}
+        </Button>
+      )}
+    >
+      <OpsDashPanel title="الفلاتر" accent="hr" bodyClassName="p-0 overflow-hidden">
+        <SmartFilterBar
+          pageId="hr-employee-financial-overview"
+          searchPlaceholder="بحث باسم الموظف..."
+          searchValue={search}
+          onSearchChange={setSearch}
+          quickFilters={[
+            {
+              key: 'department',
+              placeholder: 'كل الأقسام',
+              options: departmentOptions.map((deptId) => ({
+                value: deptId,
+                label: deptNameById[deptId] || deptId,
+              })),
+              width: 'w-[180px]',
+            },
+          ]}
+          quickFilterValues={{ department: departmentFilter || 'all' }}
+          onQuickFilterChange={(_, value) => setDepartmentFilter(value === 'all' ? '' : value)}
+          onApply={() => void loadData()}
+          applyLabel={loading ? 'جار التحميل...' : 'تطبيق'}
+          extra={(
+            <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 bg-white px-2.5">
+              <span className="ml-2 text-xs text-slate-500">الشهر</span>
+              <input type="month" value={month} onChange={(e) => setMonth(e.target.value)} className="h-[28px] text-xs outline-none" />
+            </div>
+          )}
+          className="mb-0 border-0 rounded-none"
+        />
+      </OpsDashPanel>
 
       {error && (
         <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 text-rose-700 text-sm font-bold">
@@ -199,7 +203,7 @@ export const EmployeeFinancialOverview: React.FC = () => {
       )}
 
       {payrollMonth && (
-        <Card className="!p-4">
+        <OpsDashPanel accent="hr">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="text-sm text-[var(--color-text-muted)]">
               الشهر: <strong>{month}</strong> - موظفون: <strong>{payrollMonth.totalEmployees}</strong>
@@ -208,11 +212,11 @@ export const EmployeeFinancialOverview: React.FC = () => {
               {payrollMonth.status === 'locked' ? 'مقفل' : payrollMonth.status === 'finalized' ? 'معتمد' : 'مسودة'}
             </Badge>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {records.length > 0 && (
-        <Card>
+        <OpsDashPanel title="تفاصيل الرواتب" accent="hr" bodyClassName="p-0 overflow-hidden">
           <div className="erp-table-scroll">
             <table className="erp-table w-full text-sm text-right">
               <thead className="erp-thead">
@@ -280,26 +284,22 @@ export const EmployeeFinancialOverview: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {!loading && records.length === 0 && (
-        <Card>
+        <OpsDashPanel accent="hr">
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] mb-3 block">receipt_long</span>
             <p className="text-sm font-bold text-[var(--color-text-muted)] mb-4">
-              لا توجد بيانات رواتب للشهر المحدد. قم بإنشاء/تحميل كشف الرواتب أولاظ‹.
+              لا توجد بيانات رواتب للشهر المحدد. قم بإنشاء/تحميل كشف الرواتب أولاً.
             </p>
             <Button variant="outline" onClick={() => navigate('/hr/payroll')}>
               الانتقال إلى كشف الرواتب
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
-
-
-
-

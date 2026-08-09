@@ -3,7 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
-import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { SelectableTable, type TableColumn, type TableBulkAction } from '../components/SelectableTable';
 import { ProductionReportPrint, mapReportsToPrintRows, computePrintTotals } from '../components/ProductionReportPrint';
 import {
@@ -23,7 +23,8 @@ import { getExportImportPageControl } from '../../../utils/exportImportControls'
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
-import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import {
   Select,
@@ -1188,21 +1189,19 @@ export const Supervisors: React.FC = () => {
   const toggleStatFilter = (f: StatFilter) => setStatFilter((prev) => prev === f ? '' : f);
 
   return (
-    <div className="erp-ds-clean erpnext-supervisors space-y-6">
-      {/* Header */}
-      <PageHeader
-        title="المشرفين"
-        subtitle="لوحة إدارة مشرفي خطوط الإنتاج وتحليل الأداء"
-        icon="engineering"
-        secondaryAction={activeTab === 'list' && hasActiveFilters ? {
-          label: 'مسح الفلاتر',
-          icon: 'filter_alt_off',
-          onClick: clearAllFilters,
-        } : undefined}
-      />
-
+    <ModuleOpsPageShell
+      className="erpnext-supervisors"
+      eyebrow="المشرفين"
+      rangeLabel="لوحة إدارة مشرفي خطوط الإنتاج وتحليل الأداء"
+      actions={activeTab === 'list' && hasActiveFilters ? (
+        <Button type="button" variant="secondary" onClick={clearAllFilters}>
+          مسح الفلاتر
+        </Button>
+      ) : undefined}
+    >
       {supervisorTabs.length > 1 && (
-        <div className="flex flex-wrap gap-2 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-2">
+        <OpsDashPanel accent="production">
+          <div className="flex flex-wrap gap-2">
           {supervisorTabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -1222,7 +1221,8 @@ export const Supervisors: React.FC = () => {
               </button>
             );
           })}
-        </div>
+          </div>
+        </OpsDashPanel>
       )}
 
       {activeTab === 'assignments' ? (
@@ -1285,7 +1285,7 @@ export const Supervisors: React.FC = () => {
       </div>
 
       {/* Filters + table */}
-      <Card className="!p-0 overflow-hidden">
+      <OpsDashPanel title="قائمة المشرفين" accent="production" bodyClassName="p-0 overflow-hidden">
         <SmartFilterBar
       pageId="production-supervisors"
           searchPlaceholder="ابحث باسم المشرف أو الكود..."
@@ -1350,7 +1350,7 @@ export const Supervisors: React.FC = () => {
           emptySubtitle={hasActiveFilters ? 'جرب تغيير الفلاتر أو مسحها' : 'لم يتم العثور على مشرفين بمستوى "مشرف" (level 2)'}
           pageSize={15}
         />
-      </Card>
+      </OpsDashPanel>
 
       {detailDrawerSupervisor && (() => {
         const sup = detailDrawerSupervisor;
@@ -1567,7 +1567,7 @@ export const Supervisors: React.FC = () => {
       </div>
         </>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

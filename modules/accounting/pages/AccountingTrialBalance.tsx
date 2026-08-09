@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter";
 import { SmartFilterBar } from "@/src/components/erp/SmartFilterBar";
@@ -60,41 +61,48 @@ export const AccountingTrialBalance: React.FC = () => {
   );
 
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="ميزان المراجعة"
-        subtitle="إجمالي المدين والدائن ورصيد كل حساب"
-        icon="balance"
-        backAction={false}
-        moreActions={[
-          {
-            label: "طباعة",
-            icon: "print",
-            onClick: () => window.print(),
-            group: "تصدير",
-          },
-          {
-            label: "تصدير CSV",
-            icon: "download",
-            onClick: () =>
-              exportAccountingCsv(
-                "trial-balance.csv",
-                ["الكود", "الحساب", "مدين", "دائن", "الرصيد"],
-                visible.map((row) => [
-                  row.code,
-                  row.name,
-                  row.debit,
-                  row.credit,
-                  row.balance,
-                ]),
-              ),
-            group: "تصدير",
-          },
-        ]}
-      />
-
-      <Card className="!p-0 overflow-hidden shadow-none">
-        <CardContent className="border-b p-4">
+    <ModuleOpsPageShell
+      eyebrow="ميزان المراجعة"
+      rangeLabel="إجمالي المدين والدائن ورصيد كل حساب"
+      dir="rtl"
+      onRefresh={() => void reload()}
+      refreshing={loading}
+      actions={
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            moreActions={[
+              {
+                label: "طباعة",
+                icon: "print",
+                onClick: () => window.print(),
+                group: "تصدير",
+              },
+              {
+                label: "تصدير CSV",
+                icon: "download",
+                onClick: () =>
+                  exportAccountingCsv(
+                    "trial-balance.csv",
+                    ["الكود", "الحساب", "مدين", "دائن", "الرصيد"],
+                    visible.map((row) => [
+                      row.code,
+                      row.name,
+                      row.debit,
+                      row.credit,
+                      row.balance,
+                    ]),
+                  ),
+                group: "تصدير",
+              },
+            ]}
+          />
+        </div>
+      }
+    >
+      <OpsDashPanel title="ميزان المراجعة" bodyClassName="p-0">
+        <div className="border-b p-4">
           <AccountingPeriodToolbar
             from={from}
             to={to}
@@ -117,7 +125,7 @@ export const AccountingTrialBalance: React.FC = () => {
               )
             }
           />
-        </CardContent>
+        </div>
         <SmartFilterBar
           pageId="accounting-trial"
           searchPlaceholder="بحث بالكود أو اسم الحساب"
@@ -235,7 +243,7 @@ export const AccountingTrialBalance: React.FC = () => {
           onPageChange={setPage}
           itemLabel="حساب"
         />
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

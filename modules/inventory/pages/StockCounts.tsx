@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
 import type { StockCountSession, StockItemBalance, Warehouse } from '../types';
@@ -205,15 +207,14 @@ export const StockCounts: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="page-title">جرد ومطابقة المخزون</h2>
-        <p className="page-subtitle">
-          {awaitingApprovalCount > 0 ? `بانتظار الاعتماد: ${awaitingApprovalCount}. ` : ''}
-          فتح جرد → إدخال الكميات الفعلية → مطابقة واعتماد الفروقات كتسويات مخزنية.
-        </p>
-      </div>
-
+    <ModuleOpsPageShell
+      eyebrow="جرد ومطابقة المخزون"
+      rangeLabel={
+        awaitingApprovalCount > 0
+          ? `بانتظار الاعتماد: ${awaitingApprovalCount}. فتح جرد → إدخال الكميات الفعلية → مطابقة واعتماد الفروقات كتسويات مخزنية.`
+          : 'فتح جرد → إدخال الكميات الفعلية → مطابقة واعتماد الفروقات كتسويات مخزنية.'
+      }
+    >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
@@ -227,7 +228,7 @@ export const StockCounts: React.FC = () => {
         </p>
       )}
 
-      <Card title="مسار الجرد والمطابقة">
+      <OpsDashPanel title="مسار الجرد والمطابقة" accent="inventory">
         <ol className="mb-4 space-y-1 text-sm text-slate-600 list-decimal list-inside">
           <li>افتح جلسة جرد للمخزن المحدد.</li>
           <li>أدخل الكميات الفعلية لكل صنف.</li>
@@ -280,10 +281,10 @@ export const StockCounts: React.FC = () => {
           />
         </div>
         {msg && <p className="mt-3 text-sm font-bold text-slate-600">{msg}</p>}
-      </Card>
+      </OpsDashPanel>
 
       {countPreview && (
-        <Card title={`معاينة الجرد — ${countPreview.fileName}`}>
+        <OpsDashPanel title={`معاينة الجرد — ${countPreview.fileName}`} accent="inventory">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5 mb-4">
             <div className="rounded-lg bg-slate-50 p-3"><div className="text-xs text-slate-500">صفوف المخزن</div><div className="text-xl font-bold">{countPreview.parsed.lines.length}</div></div>
             <div className="rounded-lg bg-emerald-50 p-3"><div className="text-xs text-emerald-700">معدود من الملف</div><div className="text-xl font-bold">{countPreview.parsed.importedRows}</div></div>
@@ -315,10 +316,10 @@ export const StockCounts: React.FC = () => {
             {countPreview.parsed.errors.length > 0 && <Button variant="outline" onClick={() => downloadStockCountErrors(countPreview.parsed.errors)}>تنزيل تقرير الأخطاء</Button>}
             <Button variant="outline" onClick={() => fileInputRef.current?.click()}>إعادة رفع الملف</Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      <Card title="جلسات الجرد والمطابقة">
+      <OpsDashPanel title="جلسات الجرد والمطابقة" accent="inventory">
         {visibleSessions.length === 0 ? (
           <p className="text-sm text-slate-400">لا توجد جلسات جرد حتى الآن.</p>
         ) : (
@@ -348,8 +349,7 @@ export const StockCounts: React.FC = () => {
             ))}
           </div>
         )}
-      </Card>
-
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

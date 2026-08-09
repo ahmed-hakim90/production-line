@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { getDocs } from 'firebase/firestore';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { exportGenericRows } from '../../../utils/exportExcel';
@@ -551,54 +552,54 @@ export const DepartmentConsumables: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="p-6">
-        <Card className="p-6 text-sm text-[var(--color-text-muted)]">
-          ليس لديك صلاحية عرض صرف مستهلكات الأقسام.
-        </Card>
-      </div>
+      <ModuleOpsPageShell eyebrow="صرف مستهلكات الأقسام">
+        <OpsDashPanel accent="inventory">
+          <p className="text-sm text-[var(--color-text-muted)]">
+            ليس لديك صلاحية عرض صرف مستهلكات الأقسام.
+          </p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="صرف مستهلكات الأقسام"
-        subtitle="تعريف مستهلكات وإضافتها للمخزن وصرفها نهائياً للأقسام مع تقرير شهري"
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            {(canExport || canView) && (
-              <Button
-                variant="secondary"
-                onClick={() => void exportBalancesSheet()}
-                disabled={exportingBalances || loading}
-              >
-                {exportingBalances ? 'جاري التصدير...' : 'تصدير أرصدة Excel'}
-              </Button>
-            )}
-            {canImportSheet && (
-              <Button variant="secondary" onClick={() => setActiveModal('importSheet')}>
-                رفع شيت مستهلكات
-              </Button>
-            )}
-            {canDefine && (
-              <Button variant="secondary" onClick={() => setShowDefine(true)}>
-                تعريف مستهلك
-              </Button>
-            )}
-            {canAddStock && (
-              <Button variant="secondary" onClick={() => setActiveModal('addStock')}>
-                إضافة للمخزن
-              </Button>
-            )}
-            {canCreate && (
-              <Button onClick={() => setActiveModal('createIssue')}>
-                سند صرف جديد
-              </Button>
-            )}
-          </div>
-        )}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="صرف مستهلكات الأقسام"
+      rangeLabel="تعريف مستهلكات وإضافتها للمخزن وصرفها نهائياً للأقسام مع تقرير شهري"
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          {(canExport || canView) && (
+            <Button
+              variant="secondary"
+              onClick={() => void exportBalancesSheet()}
+              disabled={exportingBalances || loading}
+            >
+              {exportingBalances ? 'جاري التصدير...' : 'تصدير أرصدة Excel'}
+            </Button>
+          )}
+          {canImportSheet && (
+            <Button variant="secondary" onClick={() => setActiveModal('importSheet')}>
+              رفع شيت مستهلكات
+            </Button>
+          )}
+          {canDefine && (
+            <Button variant="secondary" onClick={() => setShowDefine(true)}>
+              تعريف مستهلك
+            </Button>
+          )}
+          {canAddStock && (
+            <Button variant="secondary" onClick={() => setActiveModal('addStock')}>
+              إضافة للمخزن
+            </Button>
+          )}
+          {canCreate && (
+            <Button onClick={() => setActiveModal('createIssue')}>
+              سند صرف جديد
+            </Button>
+          )}
+        </div>
+      )}
+    >
       <div className="flex flex-wrap gap-2">
         <Button variant={tab === 'issues' ? 'primary' : 'secondary'} onClick={() => setTab('issues')}>
           السندات
@@ -612,7 +613,7 @@ export const DepartmentConsumables: React.FC = () => {
       </div>
 
       {tab === 'catalog' && (
-        <Card className="p-0 overflow-hidden">
+        <OpsDashPanel title="المستهلكات المعرفة" accent="inventory" className="p-0 overflow-hidden" bodyClassName="p-0">
           <div className="p-4 border-b border-[var(--color-border)]">
             <SmartFilterBar
               pageId="department-consumables-catalog"
@@ -700,11 +701,11 @@ export const DepartmentConsumables: React.FC = () => {
             onPageChange={setCatalogPage}
             itemLabel="مستهلك"
           />
-        </Card>
+        </OpsDashPanel>
       )}
 
       {tab === 'issues' && (
-        <Card className="p-0 overflow-hidden">
+        <OpsDashPanel title="سندات الصرف" accent="inventory" className="p-0 overflow-hidden" bodyClassName="p-0">
           <div className="p-4 border-b border-[var(--color-border)]">
             <SmartFilterBar
               searchPlaceholder="بحث برقم السند / القسم / الصنف"
@@ -905,11 +906,11 @@ export const DepartmentConsumables: React.FC = () => {
             onPageChange={setPage}
             itemLabel="سند"
           />
-        </Card>
+        </OpsDashPanel>
       )}
 
       {tab === 'report' && (
-        <Card className="p-4 space-y-4">
+        <OpsDashPanel title="التقرير الشهري" accent="inventory" className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
             <label className="text-sm space-y-1">
               <span className="font-bold">الشهر</span>
@@ -1041,7 +1042,7 @@ export const DepartmentConsumables: React.FC = () => {
           {report?.truncated && (
             <p className="text-xs text-amber-700">تم اقتطاع التقرير عند حد الحركات الأقصى.</p>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       <DefineConsumableModal
@@ -1104,6 +1105,6 @@ export const DepartmentConsumables: React.FC = () => {
         item={traceItem}
         warehouses={warehouses}
       />
-    </div>
+    </ModuleOpsPageShell>
   );
 };

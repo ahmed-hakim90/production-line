@@ -3,7 +3,8 @@ import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { getDocs } from 'firebase/firestore';
 import { Card, Button, Badge } from '../../../components/UI';
-import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import {
   Select,
   SelectContent,
@@ -12,7 +13,6 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { DataTable, type Column } from '../../../src/components/erp/DataTable';
-import { KPICard } from '../../../src/components/erp/KPICard';
 import { StatusBadge } from '../../../src/components/erp/StatusBadge';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -537,67 +537,90 @@ export const CostCenterDistribution: React.FC = () => {
 
   if (!center) {
     return (
-      <div className="text-center py-20 text-slate-400">
-        <span className="material-icons-round text-5xl mb-3 block opacity-30">error_outline</span>
-        <p className="font-bold">مركز التكلفة غير موجود</p>
-        <Button variant="ghost" className="mt-4" onClick={() => navigate('/cost-centers')}>العودة</Button>
-      </div>
+      <ModuleOpsPageShell eyebrow="توزيع مركز التكلفة">
+        <OpsDashPanel title="مركز غير موجود" accent="costs">
+          <div className="text-center py-12 text-slate-400">
+            <span className="material-icons-round text-5xl mb-3 block opacity-30">error_outline</span>
+            <p className="font-bold">مركز التكلفة غير موجود</p>
+            <Button variant="ghost" className="mt-4" onClick={() => navigate('/cost-centers')}>العودة</Button>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
-  return (
-    <div className="space-y-6 erp-ds-clean">
-      <PageHeader
-        title={center.name}
-        subtitle={`إدارة القيمة الشهرية وتوزيع التكلفة على خطوط الإنتاج • ${center.type === 'indirect' ? 'غير مباشر' : 'مباشر'}`}
-        icon="account_tree"
-        backAction={{ label: 'رجوع', onClick: () => navigate('/cost-centers') }}
-        primaryAction={canManage ? {
-          label: 'حفظ الكل',
-          icon: 'save',
-          onClick: handleSaveAll,
-          disabled: saving || totalPercentage > 100,
-        } : undefined}
-        extra={(
-          <div className="flex items-center gap-2 flex-wrap">
-            <StatusBadge label={center.type === 'indirect' ? 'غير مباشر' : 'مباشر'} type={center.type === 'indirect' ? 'warning' : 'success'} />
-            {canManage && (
-              <>
-                <Select
-                  value={sourceMonth || 'none'}
-                  onValueChange={(v) => setSourceMonth(v === 'none' ? '' : v)}
-                  disabled={availableSourceMonths.length === 0}
-                >
-                  <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] rounded-lg border border-slate-200 bg-white text-sm">
-                    <SelectValue placeholder="اختر شهرظ‹ا سابقًا" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {availableSourceMonths.length === 0 ? (
-                      <SelectItem value="none">لا توجد بيانات مرجعية في شهور سابقة</SelectItem>
-                    ) : (
-                      availableSourceMonths.map((m) => (
-                        <SelectItem key={m} value={m}>
-                          {new Date(`${m}-01`).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="ghost"
-                  onClick={handleCopyAllocationsFromMonth}
-                  disabled={!sourceMonth || availableSourceMonths.length === 0}
-                >
-                  <span className="material-icons-round text-sm">content_copy</span>
-                  سحب النسب والقيمة
-                </Button>
-              </>
-            )}
-          </div>
-        )}
-      />
+  const distributionHero = [
+    {
+      key: 'amount',
+      label: costingStatus === 'actual' ? 'القيمة الفعلية المعتمدة' : 'القيمة المبدئية اللحظية',
+      value: formatCost(effectiveMonthlyAmount),
+    },
+    {
+      key: 'allocated',
+      label: 'إجمالي التوزيع',
+      value: `${totalPercentage.toFixed(1)}%`,
+      toneClassName: totalPercentage > 100 ? 'ops-dash-kpi-card--tone-rose' : 'ops-dash-kpi-card--tone-emerald',
+    },
+    {
+      key: 'remaining',
+      label: 'المتبقي',
+      value: `${remainingPercentage.toFixed(1)}%`,
+      toneClassName: remainingPercentage < 0 ? 'ops-dash-kpi-card--tone-rose' : undefined,
+    },
+  ];
 
-      <div className="rounded-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] p-4 sm:p-5">
+  return (
+    <ModuleOpsPageShell
+      eyebrow={center.name}
+      rangeLabel={`إدارة القيمة الشهرية وتوزيع التكلفة على خطوط الإنتاج • ${center.type === 'indirect' ? 'غير مباشر' : 'مباشر'}`}
+      hero={distributionHero}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" onClick={() => navigate('/cost-centers')}>
+            <span className="material-icons-round text-sm">arrow_forward</span>
+            رجوع
+          </Button>
+          <StatusBadge label={center.type === 'indirect' ? 'غير مباشر' : 'مباشر'} type={center.type === 'indirect' ? 'warning' : 'success'} />
+          {canManage ? (
+            <>
+              <Button variant="primary" onClick={handleSaveAll} disabled={saving || totalPercentage > 100}>
+                <span className="material-icons-round text-sm">save</span>
+                حفظ الكل
+              </Button>
+              <Select
+                value={sourceMonth || 'none'}
+                onValueChange={(v) => setSourceMonth(v === 'none' ? '' : v)}
+                disabled={availableSourceMonths.length === 0}
+              >
+                <SelectTrigger className="w-full sm:w-auto sm:min-w-[170px] rounded-lg border border-slate-200 bg-white text-sm">
+                  <SelectValue placeholder="اختر شهرًا سابقًا" />
+                </SelectTrigger>
+                <SelectContent>
+                  {availableSourceMonths.length === 0 ? (
+                    <SelectItem value="none">لا توجد بيانات مرجعية في شهور سابقة</SelectItem>
+                  ) : (
+                    availableSourceMonths.map((m) => (
+                      <SelectItem key={m} value={m}>
+                        {new Date(`${m}-01`).toLocaleDateString('ar-EG', { year: 'numeric', month: 'long' })}
+                      </SelectItem>
+                    ))
+                  )}
+                </SelectContent>
+              </Select>
+              <Button
+                variant="ghost"
+                onClick={handleCopyAllocationsFromMonth}
+                disabled={!sourceMonth || availableSourceMonths.length === 0}
+              >
+                <span className="material-icons-round text-sm">content_copy</span>
+                سحب النسب والقيمة
+              </Button>
+            </>
+          ) : null}
+        </div>
+      )}
+    >
+      <OpsDashPanel accent="costs" bodyClassName="p-4 sm:p-5">
         <div className="flex-1">
           {editMode ? (
             <div className="flex items-center gap-2">
@@ -629,13 +652,7 @@ export const CostCenterDistribution: React.FC = () => {
             </p>
           )}
         </div>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <KPICard label={costingStatus === 'actual' ? 'القيمة الفعلية المعتمدة' : 'القيمة المبدئية اللحظية'} value={formatCost(effectiveMonthlyAmount)} iconType="money" color="indigo" />
-        <KPICard label="إجمالي التوزيع" value={`${totalPercentage.toFixed(1)}%`} iconType="metric" color={totalPercentage > 100 ? 'red' : 'green'} />
-        <KPICard label="المتبقي" value={`${remainingPercentage.toFixed(1)}%`} iconType="trend" color={remainingPercentage < 0 ? 'red' : 'amber'} />
-      </div>
+      </OpsDashPanel>
 
       {/* Month Selector */}
       <div className="erp-date-seg w-full">
@@ -651,7 +668,7 @@ export const CostCenterDistribution: React.FC = () => {
       </div>
 
       {/* Monthly Value */}
-      <Card title="القيمة الشهرية">
+      <OpsDashPanel title="القيمة الشهرية" accent="costs">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
           <div className="space-y-2 lg:col-span-3">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">حالة القيمة</label>
@@ -729,7 +746,7 @@ export const CostCenterDistribution: React.FC = () => {
         <p className="mt-2 text-xs font-bold text-[var(--color-text-muted)]">
           عدد أيام الشهر يتم أخذه تلقائيًا من صفحة إعدادات التكلفة ({appliedWorkingDays} يوم لهذا الشهر). الإهلاك المرتبط بالأصول لنفس المركز في هذا الشهر: <span className="text-primary">{formatCost(centerMonthlyDepreciation)} ج.م</span> (يضاف تلقائيًا في الحسابات)
         </p>
-      </Card>
+      </OpsDashPanel>
   {/* Summary */}
   <div className="mt-4 flex items-center justify-between flex-wrap gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)]">
                 <div className="flex items-center gap-4 sm:gap-6 flex-wrap">
@@ -761,7 +778,7 @@ export const CostCenterDistribution: React.FC = () => {
       )}
       {/* Allocation Table (indirect only) */}
       {center.type === 'indirect' && isQtyAllocation && (
-        <Card title="نطاق توزيع المنتجات">
+        <OpsDashPanel title="نطاق توزيع المنتجات" accent="costs">
           <div className="space-y-3">
             <p className="text-sm text-[var(--color-text-muted)]">
               يتم توزيع التكلفة تلقائيًا على {center.productScope === 'selected' ? 'المنتجات المحددة' : center.productScope === 'category' ? 'منتجات الفئة المختارة' : 'كل المنتجات'} حسب كمية الإنتاج الفعلية.
@@ -839,10 +856,10 @@ export const CostCenterDistribution: React.FC = () => {
               </div>
             )}
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
       {center.type === 'indirect' && !isQtyAllocation && (
-        <Card title="توزيع التكلفة على الخطوط">
+        <OpsDashPanel title="توزيع التكلفة على الخطوط" accent="costs">
           {_rawLines.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد خطوط إنتاج</p>
           ) : (
@@ -892,9 +909,9 @@ export const CostCenterDistribution: React.FC = () => {
               )}
             </>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

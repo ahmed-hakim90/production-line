@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -377,14 +377,11 @@ export const RepairSettings: React.FC = () => {
         </Button>
       )}
     >
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">صلاحية مدير الصيانة (النطاق)</CardTitle>
-          <CardDescription>
-            يحدد هل يرى مدير الصيانة في اللوحات فرعاً مرتبطاً به فقط، أم كل مراكز الصيانة. أما «مسؤول الفرع» فيُحدَّد لكل مركز في الجدول أدناه.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <OpsDashPanel title="صلاحية مدير الصيانة (النطاق)" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">
+          يحدد هل يرى مدير الصيانة في اللوحات فرعاً مرتبطاً به فقط، أم كل مراكز الصيانة. أما «مسؤول الفرع» فيُحدَّد لكل مركز في الجدول أدناه.
+        </p>
+        <div className="space-y-3">
           <div className="max-w-md space-y-2">
             <Label htmlFor="manager-scope">نطاق مدير الصيانة</Label>
             <Select value={managerScope} onValueChange={(v) => setManagerScope(v as 'branch' | 'centers')}>
@@ -397,25 +394,22 @@ export const RepairSettings: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">مسؤول كل فرع (مدير المركز)</CardTitle>
-          <CardDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-            <span>
-              اختر الموظف المسؤول عن تشغيل كل مركز صيانة. يُستخدم في الصلاحيات والخزينة والطلبات المرتبطة بالفرع.
-            </span>
-            <Link
-              to={withTenantPath(tenantSlug, '/repair/branches')}
-              className="text-sm font-medium text-primary underline-offset-4 hover:underline shrink-0 min-h-11 inline-flex items-center touch-manipulation"
-            >
-              إدارة الفروع وإضافة فرع
-            </Link>
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <OpsDashPanel title="مسؤول كل فرع (مدير المركز)" accent="repair">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between mb-3">
+          <p className="text-sm text-muted-foreground">
+            اختر الموظف المسؤول عن تشغيل كل مركز صيانة. يُستخدم في الصلاحيات والخزينة والطلبات المرتبطة بالفرع.
+          </p>
+          <Link
+            to={withTenantPath(tenantSlug, '/repair/branches')}
+            className="text-sm font-medium text-primary underline-offset-4 hover:underline shrink-0 min-h-11 inline-flex items-center touch-manipulation"
+          >
+            إدارة الفروع وإضافة فرع
+          </Link>
+        </div>
+        <div className="space-y-4">
           {branchManagersLoading ? (
             <p className="text-sm text-muted-foreground">جاري تحميل الفروع والموظفين...</p>
           ) : repairBranches.length === 0 ? (
@@ -501,17 +495,14 @@ export const RepairSettings: React.FC = () => {
               </div>
             </div>
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">إكسسوارات الاستلام</CardTitle>
-          <CardDescription>
-            قائمة الإكسسوارات عند الاستلام. اربط كل إكسسوار بفئات المنتجات — بدون فئات = يظهر لكل المنتجات.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <OpsDashPanel title="إكسسوارات الاستلام" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">
+          قائمة الإكسسوارات عند الاستلام. اربط كل إكسسوار بفئات المنتجات — بدون فئات = يظهر لكل المنتجات.
+        </p>
+        <div className="space-y-4">
           <div className="erp-table-wrap rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
             <Table className="min-w-[640px]">
               <TableHeader>
@@ -626,17 +617,14 @@ export const RepairSettings: React.FC = () => {
           >
             إضافة إكسسوار
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">خدمات وتكاليف الإصلاح</CardTitle>
-          <CardDescription>
-            سعر البيع للعميل والتكلفة الداخلية المعيارية المستخدمة في تحليل الضمان فقط.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <OpsDashPanel title="خدمات وتكاليف الإصلاح" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">
+          سعر البيع للعميل والتكلفة الداخلية المعيارية المستخدمة في تحليل الضمان فقط.
+        </p>
+        <div className="space-y-4">
           <div className="erp-table-wrap rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
             <Table className="min-w-[640px]">
               <TableHeader>
@@ -755,15 +743,11 @@ export const RepairSettings: React.FC = () => {
           >
             إضافة خدمة
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">الافتراضيات عند إنشاء الطلبات</CardTitle>
-          <CardDescription>قيم البداية لقطع الغيار والضمان ووقت الاستجابة المتوقع.</CardDescription>
-        </CardHeader>
-        <CardContent>
+      <OpsDashPanel title="الافتراضيات عند إنشاء الطلبات" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">قيم البداية لقطع الغيار والضمان ووقت الاستجابة المتوقع.</p>
           <div className="grid gap-6 sm:grid-cols-3">
             <div className="space-y-2">
               <Label>الضمان الافتراضي</Label>
@@ -803,18 +787,13 @@ export const RepairSettings: React.FC = () => {
               />
             </div>
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">إقفال الدفع من شاشة الطلب</CardTitle>
-          <CardDescription>
-            تحكم في الأزرار الظاهرة عند تحصيل وتسليم الطلب من شاشة تفاصيل الطلب.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <label className="flex items-start gap-3 rounded-lg border border-[var(--color-border)]/70 bg-muted/20 p-3 text-sm">
+      <OpsDashPanel title="إقفال الدفع من شاشة الطلب" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">
+          تحكم في الأزرار الظاهرة عند تحصيل وتسليم الطلب من شاشة تفاصيل الطلب.
+        </p>
+        <label className="flex items-start gap-3 rounded-lg border border-[var(--color-border)]/70 bg-muted/20 p-3 text-sm">
             <Checkbox
               checked={allowPartialCollection}
               onCheckedChange={(checked) => setAllowPartialCollection(checked === true)}
@@ -826,18 +805,14 @@ export const RepairSettings: React.FC = () => {
                 عند الإيقاف يبقى زر «تحصيل كامل وتسليم» فقط على شاشة الطلب. التحصيل الجزئي يبقى متاحًا من شاشة التحصيل والتسليم إن لزم.
               </span>
             </span>
-          </label>
-        </CardContent>
-      </Card>
+        </label>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">حالات الطلب وسير العمل</CardTitle>
-          <CardDescription>
-            عرّف الحالات والألوان والدور في المسار. الحالة تتقدم تلقائياً حسب الأكشن (تشخيص / قطعة / موافقة / تم الإصلاح) عبر الدور المعيّن.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <OpsDashPanel title="حالات الطلب وسير العمل" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">
+          عرّف الحالات والألوان والدور في المسار. الحالة تتقدم تلقائياً حسب الأكشن (تشخيص / قطعة / موافقة / تم الإصلاح) عبر الدور المعيّن.
+        </p>
+        <div className="space-y-4">
           <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto">
             <Table>
               <TableHeader>
@@ -1019,17 +994,14 @@ export const RepairSettings: React.FC = () => {
               </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">أسباب عدم قابلية الإصلاح</CardTitle>
-          <CardDescription>
-            قائمة ثابتة يختار منها الفني. تُحفظ ككود واسم وتظهر في تحليل أسباب عدم الإصلاح وإعادة الفتح.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-3">
+      <OpsDashPanel title="أسباب عدم قابلية الإصلاح" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">
+          قائمة ثابتة يختار منها الفني. تُحفظ ككود واسم وتظهر في تحليل أسباب عدم الإصلاح وإعادة الفتح.
+        </p>
+        <div className="space-y-3">
           <div className="rounded-lg border border-[var(--color-border)]/70 overflow-hidden">
             <Table>
               <TableHeader>
@@ -1095,15 +1067,12 @@ export const RepairSettings: React.FC = () => {
           >
             إضافة سبب
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border border-[var(--color-border)]/80 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-        <CardHeader className="space-y-1 pb-2">
-          <CardTitle className="text-base font-semibold tracking-tight">سياسة الخزينة</CardTitle>
-          <CardDescription>الإغلاق التلقائي والتحقق من خزينة اليوم السابق.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <OpsDashPanel title="سياسة الخزينة" accent="repair">
+        <p className="text-sm text-muted-foreground mb-3">الإغلاق التلقائي والتحقق من خزينة اليوم السابق.</p>
+        <div className="space-y-4">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between rounded-lg border border-[var(--color-border)]/60 bg-muted/15 p-4">
             <div className="space-y-1 min-w-0">
               <p className="text-sm font-medium">إغلاق تلقائي منتصف الليل</p>
@@ -1139,20 +1108,21 @@ export const RepairSettings: React.FC = () => {
               dir="ltr"
             />
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
       {canPurgeOps && tenantId ? (
-        <Card className="border-destructive/40">
-          <CardHeader>
-            <CardTitle className="text-destructive">منطقة خطر — مسح بيانات تشغيل تجريبية</CardTitle>
-            <CardDescription>
-              يمسح كل طلبات الصيانة والعهدة وسندات الصرف وطلبات العملاء والاستبدال والتحصيل المرتبط،
-              مع الإبقاء على الفروع والقطع والعملاء وأرصدة المخزون الحالية.
-              لا يُستخدم إلا على بيانات تجريبية.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4">
+        <OpsDashPanel
+          title="منطقة خطر — مسح بيانات تشغيل تجريبية"
+          accent="repair"
+          className="border-destructive/40"
+        >
+          <p className="text-sm text-muted-foreground mb-3 text-destructive">
+            يمسح كل طلبات الصيانة والعهدة وسندات الصرف وطلبات العملاء والاستبدال والتحصيل المرتبط،
+            مع الإبقاء على الفروع والقطع والعملاء وأرصدة المخزون الحالية.
+            لا يُستخدم إلا على بيانات تجريبية.
+          </p>
+          <div className="space-y-4">
             <div className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 text-sm space-y-1">
               <p>سيُحذف: الطلبات · العهدة · غير القابل للإصلاح · سندات الصرف · طلبات العملاء · الاستبدال · الماليات/الخزينة المرتبطة.</p>
               <p>سيبقى: الفروع · كتالوج القطع · أرصدة قطع المراكز · العملاء · stock_items.</p>
@@ -1196,8 +1166,8 @@ export const RepairSettings: React.FC = () => {
             >
               {purging ? 'جارٍ المسح...' : 'مسح بيانات تشغيل الصيانة'}
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       ) : null}
 
       <div className="hidden lg:flex justify-end border-t border-[var(--color-border)]/60 pt-6">

@@ -1,8 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/src/components/erp/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import {
   Dialog,
@@ -701,59 +701,52 @@ export const ProductionIssueRequests: React.FC = () => {
   const planProductName = productNameById.get(planProductId) || planProductId;
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader
-        title="طلبات صرف الإنتاج"
-        subtitle="تحليل الجاهزية والمكونات الناقصة، ثم طلب الصرف والتعويض من المودال."
-        icon={<ClipboardList size={18} />}
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            {canRequest && (
-              <>
-                <PrimaryButton iconName="precision_manufacturing" tone="edit" onClick={openBlankRequestModal}>طلب صرف</PrimaryButton>
-                <GhostButton iconName="replay" tone="undo" onClick={openCompensationModal}>طلب تعويضي</GhostButton>
-              </>
+    <ModuleOpsPageShell
+      eyebrow="طلبات صرف الإنتاج"
+      rangeLabel="تحليل الجاهزية والمكونات الناقصة، ثم طلب الصرف والتعويض من المودال"
+      onRefresh={() => {
+        invalidatePageDataCache(ISSUE_REQUESTS_CACHE_KEY);
+        void reload();
+      }}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          {canRequest && (
+            <>
+              <PrimaryButton iconName="precision_manufacturing" tone="edit" onClick={openBlankRequestModal}>طلب صرف</PrimaryButton>
+              <GhostButton iconName="replay" tone="undo" onClick={openCompensationModal}>طلب تعويضي</GhostButton>
+            </>
+          )}
+          <GhostButton
+            iconName="print"
+            tone="print"
+            disabled={loading || shortageReportSections.length === 0}
+            onClick={() => void printShortageReport(
+              shortageReportSections,
+              'كل المنتجات ذات النقص مقابل الخطط المفتوحة',
             )}
-            <GhostButton
-              iconName="print"
-              tone="print"
-              disabled={loading || shortageReportSections.length === 0}
-              onClick={() => void printShortageReport(
-                shortageReportSections,
-                'كل المنتجات ذات النقص مقابل الخطط المفتوحة',
-              )}
-            >
-              طباعة تقرير الناقص
-            </GhostButton>
-            <GhostButton
-              iconName="refresh"
-              tone="neutral"
-              onClick={() => {
-                invalidatePageDataCache(ISSUE_REQUESTS_CACHE_KEY);
-                void reload();
-              }}
-              disabled={loading}
-            >
-              تحديث
-            </GhostButton>
-          </div>
-        )}
-      />
-
+          >
+            طباعة تقرير الناقص
+          </GhostButton>
+        </div>
+      )}
+    >
       {message && (
         <p className="rounded-lg border border-primary/20 bg-primary/5 px-4 py-3 text-sm font-bold text-primary">
           {message}
         </p>
       )}
 
-      <Card className="border-slate-200 shadow-none overflow-hidden">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">المتاح للتجميع من مخزن المستلزمات</CardTitle>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+      <OpsDashPanel
+        title="المتاح للتجميع من مخزن المستلزمات"
+        accent="production"
+        bodyClassName="p-0"
+        action={(
+          <p className="text-xs text-[var(--color-text-muted)]">
             منتجات يمكن تجميعها بالمكونات الحالية. اضغط السهم لعرض المكونات وحدودها. لو مفيش خطة مفتوحة — أنشئ خطة ثم اطلب الصرف.
           </p>
-        </CardHeader>
-        <CardContent className="p-0">
+        )}
+      >
           <div className="overflow-x-auto">
             <table className="erp-table w-full">
               <thead className="erp-thead">
@@ -936,21 +929,20 @@ export const ProductionIssueRequests: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
       {(noComponentAlerts.length > 0 || partialCoverageAlerts.length > 0) && (
         <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 items-start">
           {noComponentAlerts.length > 0 && (
-            <Card className="border-rose-200 bg-rose-50/60 shadow-none h-full min-w-0">
-              <CardHeader className="pb-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-rose-800">خطط مفتوحة بدون مكونات — الناقص</CardTitle>
-                    <p className="text-xs text-rose-700 mt-1">
-                      المتاح للتجميع = 0. اعرض المكونات الناقصة أو اطبع تقريراً للمستلزم.
-                    </p>
-                  </div>
+            <OpsDashPanel
+              title="خطط مفتوحة بدون مكونات — الناقص"
+              accent="production"
+              className="border-rose-200 bg-rose-50/60 shadow-none h-full min-w-0"
+              action={(
+                <div className="flex flex-wrap items-start justify-between gap-2 w-full">
+                  <p className="text-xs text-rose-700">
+                    المتاح للتجميع = 0. اعرض المكونات الناقصة أو اطبع تقريراً للمستلزم.
+                  </p>
                   <GhostButton
                     iconName="print"
                     tone="print"
@@ -962,8 +954,8 @@ export const ProductionIssueRequests: React.FC = () => {
                     طباعة هذا القسم
                   </GhostButton>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
+              )}
+            >
                 {noComponentAlerts.slice(0, 12).map((row) => {
                   const expanded = expandedShortageProductId === row.productId;
                   const missing = missingComponentsForTarget(row.capacity, row.remaining);
@@ -1043,20 +1035,19 @@ export const ProductionIssueRequests: React.FC = () => {
                     </div>
                   );
                 })}
-              </CardContent>
-            </Card>
+            </OpsDashPanel>
           )}
 
           {partialCoverageAlerts.length > 0 && (
-            <Card className="border-amber-200 bg-amber-50/50 shadow-none h-full min-w-0">
-              <CardHeader className="pb-2">
-                <div className="flex flex-wrap items-start justify-between gap-2">
-                  <div>
-                    <CardTitle className="text-sm font-bold text-amber-900">تغطية جزئية — مكونات ناقصة لباقي الخطة</CardTitle>
-                    <p className="text-xs text-amber-800 mt-1">
-                      فيه متاح للتجميع، لكنه أقل من متبقي الخطة. تقدر تطلب المتاح، والناقص يظهر بالتفصيل أو يُطبع.
-                    </p>
-                  </div>
+            <OpsDashPanel
+              title="تغطية جزئية — مكونات ناقصة لباقي الخطة"
+              accent="production"
+              className="border-amber-200 bg-amber-50/50 shadow-none h-full min-w-0"
+              action={(
+                <div className="flex flex-wrap items-start justify-between gap-2 w-full">
+                  <p className="text-xs text-amber-800">
+                    فيه متاح للتجميع، لكنه أقل من متبقي الخطة. تقدر تطلب المتاح، والناقص يظهر بالتفصيل أو يُطبع.
+                  </p>
                   <GhostButton
                     iconName="print"
                     tone="print"
@@ -1068,8 +1059,8 @@ export const ProductionIssueRequests: React.FC = () => {
                     طباعة هذا القسم
                   </GhostButton>
                 </div>
-              </CardHeader>
-              <CardContent className="space-y-2">
+              )}
+            >
                 {partialCoverageAlerts.slice(0, 12).map((row) => {
                   const expanded = expandedShortageProductId === `partial:${row.productId}`;
                   const missing = missingComponentsForTarget(row.capacity, row.remaining);
@@ -1141,18 +1132,13 @@ export const ProductionIssueRequests: React.FC = () => {
                     </div>
                   );
                 })}
-              </CardContent>
-            </Card>
+            </OpsDashPanel>
           )}
         </div>
       )}
 
       {productionCompensations.length > 0 && (
-        <Card className="border-slate-200 shadow-none overflow-hidden">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium">طلبات الصرف التعويضي</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
+        <OpsDashPanel title="طلبات الصرف التعويضي" accent="production" bodyClassName="p-0">
             <div className="overflow-x-auto">
               <table className="erp-table w-full">
                 <thead className="erp-thead">
@@ -1191,15 +1177,11 @@ export const ProductionIssueRequests: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </CardContent>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      <Card id="production-issue-orders" className="border-slate-200 shadow-none overflow-hidden scroll-mt-24">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium">سجل الطلبات والمصروف</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
+      <div id="production-issue-orders" className="scroll-mt-24">
+      <OpsDashPanel title="سجل الطلبات والمصروف" accent="production" bodyClassName="p-0">
           <div className="overflow-x-auto">
             <table className="erp-table w-full">
               <thead className="erp-thead">
@@ -1251,8 +1233,8 @@ export const ProductionIssueRequests: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
+      </div>
 
       <Dialog open={planModalOpen} onOpenChange={setPlanModalOpen}>
         <DialogContent className="sm:max-w-md">
@@ -1530,6 +1512,6 @@ export const ProductionIssueRequests: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

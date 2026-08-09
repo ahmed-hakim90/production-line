@@ -4,8 +4,9 @@ import { ChevronDown, ChevronRight, Lock, Loader2, Unlock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '../../../components/PageHeader';
 import { Card, Button } from '../../production/components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
 import {
   categoryService,
@@ -322,37 +323,34 @@ export const Categories: React.FC = () => {
   if (!canView) return null;
 
   return (
-    <div className="space-y-5">
-      <PageHeader
-        title="فئات المنتجات"
-        subtitle="هيكل تصنيفات المنتجات (رئيسية وفرعية)"
-        icon="category"
-      />
-
-      <Card className="space-y-4">
-        <div className="flex flex-wrap gap-3 items-center justify-between">
-          <div className="text-sm text-[var(--color-text-muted)]">
+    <ModuleOpsPageShell
+      eyebrow="فئات المنتجات"
+      rangeLabel="هيكل تصنيفات المنتجات (رئيسية وفرعية)"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-sm text-[var(--color-text-muted)]">
             إجمالي الفئات: <strong>{productCategories.length}</strong> — نشطة:{' '}
             <strong>{activeCount}</strong>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            {canCreate && (
-              <>
-                <Button variant="outline" onClick={() => resetForm(null)}>
-                  فئة رئيسية
-                </Button>
-                <Button variant="primary" onClick={handleMigrate} disabled={migrating}>
-                  {migrating ? 'جاري الترحيل...' : 'ترحيل ربط المنتجات'}
-                </Button>
-              </>
-            )}
-            {(canCreate || (canEdit && editId)) && (
-              <Button variant="outline" onClick={() => resetForm(form.parentId)}>
-                إعادة تعيين
+          </span>
+          {canCreate && (
+            <>
+              <Button variant="outline" onClick={() => resetForm(null)}>
+                فئة رئيسية
               </Button>
-            )}
-          </div>
+              <Button variant="primary" onClick={handleMigrate} disabled={migrating}>
+                {migrating ? 'جاري الترحيل...' : 'ترحيل ربط المنتجات'}
+              </Button>
+            </>
+          )}
+          {(canCreate || (canEdit && editId)) && (
+            <Button variant="outline" onClick={() => resetForm(form.parentId)}>
+              إعادة تعيين
+            </Button>
+          )}
         </div>
+      )}
+    >
+      <Card className="space-y-4">
 
         {(canCreate || canEdit) && (
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
@@ -430,7 +428,7 @@ export const Categories: React.FC = () => {
         )}
       </Card>
 
-      <Card className="!p-0 border-none overflow-hidden">
+      <OpsDashPanel title="شجرة الفئات" accent="production" bodyClassName="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-right border-collapse">
             <thead className="erp-thead">

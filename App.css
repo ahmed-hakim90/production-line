@@ -3149,15 +3149,10 @@ input[type="radio"] {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  border-radius: calc(var(--border-radius-xl) + 2px);
+  border-radius: var(--border-radius-xl);
   border: 1px solid color-mix(in srgb, var(--color-border) 88%, transparent);
-  background:
-    linear-gradient(
-      180deg,
-      color-mix(in srgb, var(--color-card) 96%, #fff 4%) 0%,
-      var(--color-card) 48%
-    );
-  box-shadow: var(--shadow-desk-card, 0 4px 16px rgba(15, 23, 42, 0.06));
+  background: var(--color-card);
+  box-shadow: var(--shadow-desk-card, 0 4px 20px rgba(15, 23, 42, 0.05));
   overflow: hidden;
   transition: box-shadow 180ms ease, border-color 180ms ease, transform 180ms ease;
 }
@@ -3301,12 +3296,12 @@ input[type="radio"] {
 
 .ops-dash-kpi-card {
   position: relative;
-  border-radius: calc(var(--border-radius-xl) + 2px);
+  border-radius: var(--border-radius-xl);
   border: 1px solid var(--color-border);
   background: var(--color-card);
-  padding: 0.95rem 1.05rem;
-  box-shadow: var(--shadow-desk-card, 0 4px 16px rgba(15, 23, 42, 0.06));
-  min-height: 104px;
+  padding: 1.15rem 1.2rem;
+  box-shadow: var(--shadow-desk-card, 0 4px 20px rgba(15, 23, 42, 0.05));
+  min-height: 118px;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
@@ -3344,11 +3339,11 @@ input[type="radio"] {
   background: linear-gradient(
     145deg,
     rgb(var(--color-primary)) 0%,
-    color-mix(in srgb, rgb(var(--color-primary)) 78%, #0f172a 22%) 100%
+    color-mix(in srgb, rgb(var(--color-primary)) 82%, #4338ca 18%) 100%
   );
   border-color: transparent;
   color: #fff;
-  box-shadow: 0 10px 26px rgb(var(--color-primary) / 0.28);
+  box-shadow: var(--shadow-flow-primary, 0 10px 28px rgba(79, 70, 229, 0.22));
 }
 
 .ops-dash-kpi-card--accent::after {
@@ -3356,7 +3351,7 @@ input[type="radio"] {
 }
 
 .ops-dash-kpi-card__label {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   font-weight: 700;
   color: var(--color-text-muted);
   padding-inline-start: 0.45rem;
@@ -3367,10 +3362,10 @@ input[type="radio"] {
 }
 
 .ops-dash-kpi-card__value {
-  font-size: clamp(1.35rem, 2.2vw, 1.7rem);
-  font-weight: 800;
-  letter-spacing: -0.04em;
-  line-height: 1.1;
+  font-size: clamp(1.75rem, 3.2vw, 2.25rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
   font-variant-numeric: tabular-nums;
   color: var(--color-text);
   padding-inline-start: 0.45rem;
@@ -3768,19 +3763,110 @@ input[type="radio"] {
   }
 }
 
-/* Production/Inventory DS normalization wrapper */
-.erp-ds-clean .font-bold,
-.erp-ds-clean .font-semibold {
+/* Production/Inventory DS normalization — keep Hakimo Flow elevation on ops boards */
+.erp-ds-clean:not(.ops-dash-board) .font-bold,
+.erp-ds-clean:not(.ops-dash-board) .font-semibold {
   font-weight: 500 !important;
 }
 
-.erp-ds-clean [class*="shadow"] {
+.erp-ds-clean:not(.ops-dash-board) [class*="shadow"] {
   box-shadow: none !important;
 }
 
-.erp-ds-clean [class*="bg-gradient"] {
+.erp-ds-clean:not(.ops-dash-board) [class*="bg-gradient"] {
   background-image: none !important;
   background-color: #eef2ff !important;
+}
+
+/* ── Hakimo Flow — production line cards ───────────────── */
+.hakimo-flow-line-card {
+  display: block;
+  width: 100%;
+  border-radius: var(--border-radius-xl);
+  border: 1px solid var(--color-border);
+  background: var(--color-card);
+  box-shadow: var(--shadow-desk-card);
+  padding: 1rem 1.1rem;
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+
+.hakimo-flow-line-card:hover {
+  border-color: rgb(var(--color-primary) / 0.35);
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.07);
+}
+
+.hakimo-flow-line-card:active {
+  transform: scale(0.995);
+}
+
+.hakimo-flow-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-size: 0.68rem;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.hakimo-flow-status::before {
+  content: '';
+  width: 0.45rem;
+  height: 0.45rem;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.hakimo-flow-status--running {
+  background: rgb(var(--color-success) / 0.12);
+  color: rgb(var(--color-success));
+}
+
+.hakimo-flow-status--stopped,
+.hakimo-flow-status--error {
+  background: rgb(var(--color-danger) / 0.12);
+  color: rgb(var(--color-danger));
+}
+
+.hakimo-flow-status--maintenance,
+.hakimo-flow-status--waiting,
+.hakimo-flow-status--pending {
+  background: rgb(var(--color-warning) / 0.14);
+  color: rgb(var(--color-warning));
+}
+
+.hakimo-flow-status--idle,
+.hakimo-flow-status--none {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.hakimo-flow-progress__track {
+  height: 0.45rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-border) 70%, #fff);
+  overflow: hidden;
+}
+
+.hakimo-flow-progress__bar {
+  height: 100%;
+  border-radius: 999px;
+  background: rgb(var(--color-primary));
+  transition: width 280ms ease;
+}
+
+.hakimo-flow-line-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .hakimo-flow-line-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
 
 .erp-ds-clean .erp-date-seg-btn.active,

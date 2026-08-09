@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button } from '../components/UI';
+import { Badge, Button } from '../components/UI';
 import { stockService } from '../services/stockService';
 import { warehouseService } from '../services/warehouseService';
 import type { StockItemBalance, Warehouse, WarehouseRole } from '../types';
@@ -16,6 +16,8 @@ import {
   downloadInventoryRawInByCodeTemplate,
 } from '../../../utils/downloadTemplates';
 import { exportHRData } from '../../../utils/exportExcel';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageHeader } from '../../../components/PageHeader';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
@@ -216,57 +218,64 @@ export const StockBalances: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader
-        title="أرصدة المخزون"
-        subtitle="عرض الرصيد الحالي لكل صنف داخل كل مخزن"
-        icon="warehouse"
-        moreActions={[
-          {
-            label: 'المتاح للتجميع',
-            icon: 'precision_manufacturing',
-            group: 'عرض',
-            hidden: !can('inventory.view'),
-            onClick: () => navigate('/inventory/raw-materials/control#assemblable'),
-          },
-          {
-            label: 'تصدير الأرصدة Excel',
-            icon: 'table_view',
-            group: 'تصدير',
-            hidden: !can('inventory.transactions.export') || rows.length === 0,
-            onClick: exportBalancesExcel,
-          },
-          {
-            label: 'تحميل قالب المنتجات النهائية',
-            icon: 'file_download',
-            group: 'استيراد',
-            hidden: !can('inventory.transactions.create'),
-            onClick: downloadInventoryInByCodeTemplate,
-          },
-          {
-            label: 'تحميل قالب المواد الخام',
-            icon: 'file_download',
-            group: 'استيراد',
-            hidden: !can('inventory.transactions.create'),
-            onClick: downloadInventoryRawInByCodeTemplate,
-          },
-          {
-            label: 'استيراد منتجات نهائية',
-            icon: 'upload_file',
-            group: 'استيراد',
-            hidden: !can('inventory.transactions.create'),
-            onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=finished_good'),
-          },
-          {
-            label: 'استيراد مواد خام',
-            icon: 'upload_file',
-            group: 'استيراد',
-            hidden: !can('inventory.transactions.create'),
-            onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=raw_material'),
-          },
-        ]}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="أرصدة المخزون"
+      rangeLabel="عرض الرصيد الحالي لكل صنف داخل كل مخزن"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: 'المتاح للتجميع',
+                  icon: 'precision_manufacturing',
+                  group: 'عرض',
+                  hidden: !can('inventory.view'),
+                  onClick: () => navigate('/inventory/raw-materials/control#assemblable'),
+                },
+                {
+                  label: 'تصدير الأرصدة Excel',
+                  icon: 'table_view',
+                  group: 'تصدير',
+                  hidden: !can('inventory.transactions.export') || rows.length === 0,
+                  onClick: exportBalancesExcel,
+                },
+                {
+                  label: 'تحميل قالب المنتجات النهائية',
+                  icon: 'file_download',
+                  group: 'استيراد',
+                  hidden: !can('inventory.transactions.create'),
+                  onClick: downloadInventoryInByCodeTemplate,
+                },
+                {
+                  label: 'تحميل قالب المواد الخام',
+                  icon: 'file_download',
+                  group: 'استيراد',
+                  hidden: !can('inventory.transactions.create'),
+                  onClick: downloadInventoryRawInByCodeTemplate,
+                },
+                {
+                  label: 'استيراد منتجات نهائية',
+                  icon: 'upload_file',
+                  group: 'استيراد',
+                  hidden: !can('inventory.transactions.create'),
+                  onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=finished_good'),
+                },
+                {
+                  label: 'استيراد مواد خام',
+                  icon: 'upload_file',
+                  group: 'استيراد',
+                  hidden: !can('inventory.transactions.create'),
+                  onClick: () => navigate('/inventory/movements?action=import-in-by-code&itemType=raw_material'),
+                },
+              ]}
+            />
+          </div>
+        </div>
+      )}
+    >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
@@ -313,7 +322,7 @@ export const StockBalances: React.FC = () => {
         </div>
       )}
 
-      <Card className="!p-0 overflow-hidden">
+      <OpsDashPanel title="قائمة الأرصدة" accent="inventory" bodyClassName="p-0">
         <SmartFilterBar
       pageId="stock-balances"
           searchPlaceholder="ابحث بالاسم أو الكود..."
@@ -590,8 +599,8 @@ export const StockBalances: React.FC = () => {
             itemLabel="رصيد"
           />
         )}
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
 

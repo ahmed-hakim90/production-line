@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
 import { PageHeader } from "@/components/PageHeader";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import {
   Dialog,
   DialogContent,
@@ -123,50 +124,54 @@ export const AccountingJournals: React.FC = () => {
     settings?.allowManualJournals !== false;
 
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="القيود اليومية"
-        subtitle="القيود الآلية واليدوية والعكوس مع مصدر كل عملية"
-        icon="receipt_long"
-        backAction={false}
-        primaryAction={
-          canPost
-            ? {
-                label: "قيد جديد",
-                icon: "add",
-                onClick: () => setDialogOpen(true),
-              }
-            : undefined
-        }
-        moreActions={[
-          {
-            label: "طباعة",
-            icon: "print",
-            onClick: () => window.print(),
-            group: "تصدير",
-          },
-          {
-            label: "تصدير CSV",
-            icon: "download",
-            onClick: () =>
-              exportAccountingCsv(
-                "journal-entries.csv",
-                ["المرجع", "التاريخ", "المصدر", "البيان", "مدين", "دائن"],
-                filtered.map((row) => [
-                  row.referenceNo,
-                  String(row.date || row.postedAt || "").slice(0, 10),
-                  SOURCE_LABEL[row.source] || row.source,
-                  row.description || "",
-                  row.totalDebit,
-                  row.totalCredit,
-                ]),
-              ),
-            group: "تصدير",
-          },
-        ]}
-      />
-
-      <Card className="!p-0 overflow-hidden shadow-none">
+    <ModuleOpsPageShell
+      eyebrow="القيود اليومية"
+      rangeLabel="القيود الآلية واليدوية والعكوس مع مصدر كل عملية"
+      dir="rtl"
+      actions={
+        <div className="flex flex-wrap items-center gap-2">
+          {canPost ? (
+            <Button size="sm" onClick={() => setDialogOpen(true)}>
+              <Plus className="ms-1 h-4 w-4" />
+              قيد جديد
+            </Button>
+          ) : null}
+          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+            <PageHeader
+              title=""
+              backAction={false}
+              moreActions={[
+                {
+                  label: "طباعة",
+                  icon: "print",
+                  onClick: () => window.print(),
+                  group: "تصدير",
+                },
+                {
+                  label: "تصدير CSV",
+                  icon: "download",
+                  onClick: () =>
+                    exportAccountingCsv(
+                      "journal-entries.csv",
+                      ["المرجع", "التاريخ", "المصدر", "البيان", "مدين", "دائن"],
+                      filtered.map((row) => [
+                        row.referenceNo,
+                        String(row.date || row.postedAt || "").slice(0, 10),
+                        SOURCE_LABEL[row.source] || row.source,
+                        row.description || "",
+                        row.totalDebit,
+                        row.totalCredit,
+                      ]),
+                    ),
+                  group: "تصدير",
+                },
+              ]}
+            />
+          </div>
+        </div>
+      }
+    >
+      <OpsDashPanel title="قيود اليومية" bodyClassName="p-0">
         <SmartFilterBar
           pageId="accounting-journals"
           searchPlaceholder="بحث بالمرجع أو البيان"
@@ -368,7 +373,7 @@ export const AccountingJournals: React.FC = () => {
           onPageChange={setPage}
           itemLabel="قيد"
         />
-      </Card>
+      </OpsDashPanel>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
@@ -563,6 +568,6 @@ export const AccountingJournals: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

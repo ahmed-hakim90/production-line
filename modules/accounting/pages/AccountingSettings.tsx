@@ -1,9 +1,9 @@
 import React, { useEffect, useState } from "react";
-import { RefreshCw, Save, Settings2 } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
+import { RefreshCw, Save } from "lucide-react";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
@@ -62,36 +62,25 @@ export const AccountingSettingsPage: React.FC = () => {
 
   if (loading || !settings) {
     return (
-      <div className="erp-ds-clean space-y-5" dir="rtl">
-        <PageHeader
-          title="إعدادات الحسابات"
-          subtitle="السنة المالية والتقريب والتقييم والفترات المحاسبية"
-          icon="settings"
-          backAction={false}
-        />
+      <ModuleOpsPageShell
+        eyebrow="إعدادات الحسابات"
+        rangeLabel="السنة المالية والتقريب والتقييم والفترات المحاسبية"
+        dir="rtl"
+      >
         <Skeleton className="h-64 w-full rounded-xl" />
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="إعدادات الحسابات"
-        subtitle="السنة المالية والتقريب والتقييم والفترات المحاسبية"
-        icon="settings"
-        backAction={false}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="إعدادات الحسابات"
+      rangeLabel="السنة المالية والتقريب والتقييم والفترات المحاسبية"
+      dir="rtl"
+    >
       <div className="grid gap-4 xl:grid-cols-[1fr_380px]">
-        <Card className="shadow-none">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-base">
-              <Settings2 className="h-4 w-4" />
-              السياسات المحاسبية
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-4 md:grid-cols-2">
+        <OpsDashPanel title="السياسات المحاسبية">
+          <div className="grid gap-4 md:grid-cols-2">
             <div>
               <Label>العملة</Label>
               <Input
@@ -215,14 +204,11 @@ export const AccountingSettingsPage: React.FC = () => {
                 حفظ الإعدادات
               </Button>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
 
-        <Card className="h-fit shadow-none">
-          <CardHeader>
-            <CardTitle className="text-base">الفترات المحاسبية</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <OpsDashPanel title="الفترات المحاسبية" className="h-fit">
+          <div className="space-y-3">
             {Array.from({ length: 6 }, (_, index) => {
               const date = new Date();
               date.setMonth(date.getMonth() - index);
@@ -273,60 +259,55 @@ export const AccountingSettingsPage: React.FC = () => {
                 </div>
               );
             })}
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </div>
 
-      <Card className="shadow-none">
-        <CardHeader>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <div>
-              <CardTitle className="text-base">
-                ربط فروع الصيانة بالحسابات ومراكز التكلفة
-              </CardTitle>
-              <p className="mt-1 text-xs text-muted-foreground">
-                اختر مركز التكلفة فقط ثم احفظ — النظام يجهّز الشجرة الافتراضية
-                ويربط حسابات التحصيل والإيراد والخصم تلقائيًا. لن يُسمح بالتحصيل
-                قبل اكتمال هذا الربط.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {can("accounting.accounts.manage") ? (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  disabled={busy}
-                  onClick={() =>
-                    void run(
-                      accountingService.seedDefaults,
-                      "تم استكمال الحسابات الافتراضية الناقصة دون تغيير الحسابات الحالية.",
-                    )
-                  }
-                >
-                  <RefreshCw className="ms-1 h-4 w-4" />
-                  استكمال الشجرة الافتراضية
-                </Button>
-              ) : null}
-              <Badge
-                variant={
-                  (readiness?.repairBranches || []).every(
-                    (branch) => branch.ready,
+      <OpsDashPanel
+        title="ربط فروع الصيانة بالحسابات ومراكز التكلفة"
+        action={
+          <div className="flex flex-wrap items-center gap-2">
+            {can("accounting.accounts.manage") ? (
+              <Button
+                size="sm"
+                variant="outline"
+                disabled={busy}
+                onClick={() =>
+                  void run(
+                    accountingService.seedDefaults,
+                    "تم استكمال الحسابات الافتراضية الناقصة دون تغيير الحسابات الحالية.",
                   )
-                    ? "default"
-                    : "destructive"
                 }
               >
-                {
-                  (readiness?.repairBranches || []).filter(
-                    (branch) => branch.ready,
-                  ).length
-                }
-                /{readiness?.repairBranches.length || 0} فرع جاهز
-              </Badge>
-            </div>
+                <RefreshCw className="ms-1 h-4 w-4" />
+                استكمال الشجرة الافتراضية
+              </Button>
+            ) : null}
+            <Badge
+              variant={
+                (readiness?.repairBranches || []).every(
+                  (branch) => branch.ready,
+                )
+                  ? "default"
+                  : "destructive"
+              }
+            >
+              {
+                (readiness?.repairBranches || []).filter(
+                  (branch) => branch.ready,
+                ).length
+              }
+              /{readiness?.repairBranches.length || 0} فرع جاهز
+            </Badge>
           </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
+        }
+      >
+        <p className="mb-4 text-xs text-muted-foreground">
+          اختر مركز التكلفة فقط ثم احفظ — النظام يجهّز الشجرة الافتراضية
+          ويربط حسابات التحصيل والإيراد والخصم تلقائيًا. لن يُسمح بالتحصيل
+          قبل اكتمال هذا الربط.
+        </p>
+        <div className="space-y-4">
           {(readiness?.repairBranches || []).map((branch) => {
             const defaults =
               readiness?.defaultRepairAccountingAccounts || {};
@@ -533,8 +514,8 @@ export const AccountingSettingsPage: React.FC = () => {
               لا توجد فروع صيانة لربطها.
             </p>
           ) : null}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
-import { Card, Button, SearchableSelect } from '../components/UI';
+import { Button, SearchableSelect } from '../components/UI';
 import { SuppliesReceiptPrint } from '../components/SuppliesReceiptPrint';
 import { suppliesReceiptService } from '../services/suppliesReceiptService';
 import { warehouseService } from '../services/warehouseService';
@@ -606,17 +607,14 @@ export const SuppliesReceipt: React.FC = () => {
   );
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader
-        title={consumableMode ? 'استلام مستهلكات' : 'استلام مستلزمات'}
-        subtitle={
-          consumableMode
-            ? 'إضافة مواد استهلاكية لأي مخزن نشط — مع اعتماد قبل إدخال الرصيد.'
-            : 'استلام بأمر توريد أو حاوية/شحنة: منتج مفكك بمكوناته من الـ BOM أو مكونات مستقلة — مع اعتماد قبل إدخال الرصيد.'
-        }
-        icon="inventory_2"
-      />
-
+    <ModuleOpsPageShell
+      eyebrow={consumableMode ? 'استلام مستهلكات' : 'استلام مستلزمات'}
+      rangeLabel={
+        consumableMode
+          ? 'إضافة مواد استهلاكية لأي مخزن نشط — مع اعتماد قبل إدخال الرصيد.'
+          : 'استلام بأمر توريد أو حاوية/شحنة: منتج مفكك بمكوناته من الـ BOM أو مكونات مستقلة — مع اعتماد قبل إدخال الرصيد.'
+      }
+    >
       {!consumableMode && (
         <MaterialsWarehouseScopeBanner
           scoped={scoped}
@@ -625,7 +623,7 @@ export const SuppliesReceipt: React.FC = () => {
         />
       )}
 
-      <Card title={consumableMode ? 'إنشاء إذن استلام مستهلكات' : 'إنشاء إذن استلام مستلزمات'}>
+      <OpsDashPanel accent="inventory" title={consumableMode ? 'إنشاء إذن استلام مستهلكات' : 'إنشاء إذن استلام مستلزمات'}>
         <div className="grid grid-cols-1 items-end gap-3 p-4 lg:grid-cols-[minmax(180px,0.8fr)_minmax(250px,1fr)_minmax(280px,1.4fr)]">
           <label className="space-y-1">
             <span className="text-xs font-bold text-slate-500">مخزن الاستلام</span>
@@ -675,10 +673,10 @@ export const SuppliesReceipt: React.FC = () => {
             {canPrint ? 'حفظ مسودة وطباعة' : 'حفظ مسودة'}
           </Button>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {groups.map((group, gIndex) => (
-        <Card
+        <OpsDashPanel accent="inventory"
           key={group.key}
           className="!p-0 overflow-hidden"
           title={`منتج مفكك #${gIndex + 1}${group.productName ? ` — ${group.productName}` : ''}`}
@@ -756,11 +754,11 @@ export const SuppliesReceipt: React.FC = () => {
           <div className="flex gap-2 p-4">
             <Button variant="secondary" disabled={busy} onClick={() => addGroupLine(group.key)}>إضافة مكون للمجموعة</Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       ))}
 
       {standaloneLines.length > 0 && (
-        <Card className="!p-0 overflow-hidden" title="مكونات مستقلة">
+        <OpsDashPanel accent="inventory" className="!p-0 overflow-hidden" title="مكونات مستقلة">
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
@@ -783,11 +781,11 @@ export const SuppliesReceipt: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-[360px_1fr]">
-        <Card className="!p-0 overflow-hidden" title="إذونات الاستلام">
+        <OpsDashPanel accent="inventory" className="!p-0 overflow-hidden" title="إذونات الاستلام">
           {orders.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-slate-400">لا توجد إذونات استلام بعد.</p>
           ) : (
@@ -827,9 +825,9 @@ export const SuppliesReceipt: React.FC = () => {
               />
             </>
           )}
-        </Card>
+        </OpsDashPanel>
 
-        <Card
+        <OpsDashPanel accent="inventory"
           className="!p-0 overflow-hidden"
           title={selectedOrder ? `تفاصيل ${selectedOrder.referenceNo}` : 'التفاصيل'}
         >
@@ -1025,7 +1023,7 @@ export const SuppliesReceipt: React.FC = () => {
               اختر إذناً لعرض تفاصيله.
             </p>
           )}
-        </Card>
+        </OpsDashPanel>
       </div>
 
       <div
@@ -1043,6 +1041,6 @@ export const SuppliesReceipt: React.FC = () => {
       >
         <SuppliesReceiptPrint ref={printRef} order={printOrder} printSettings={printTemplate} />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

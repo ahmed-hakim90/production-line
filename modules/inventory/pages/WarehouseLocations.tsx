@@ -2,8 +2,9 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseRackService } from '../services/warehouseRackService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
@@ -579,20 +580,17 @@ export const WarehouseLocations: React.FC = () => {
   }
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader
-        title="لوكيشنات المخازن"
-        subtitle="إنشاء راكات وأرفف داخل كل مخزن وتحديد الرف الافتراضي لكل مكون."
-        icon="grid_view"
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="لوكيشنات المخازن"
+      rangeLabel="إنشاء راكات وأرفف داخل كل مخزن وتحديد الرف الافتراضي لكل مكون"
+    >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
         settingsPath={settingsPath}
       />
 
-      <Card title="اختيار المخزن">
+      <OpsDashPanel title="اختيار المخزن" accent="inventory">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 p-4">
           <select
             className="rounded-lg border px-3 py-2 text-sm disabled:opacity-70"
@@ -615,9 +613,9 @@ export const WarehouseLocations: React.FC = () => {
             أصناف لها رف افتراضي موقوف: {defaultWarnings.slice(0, 6).join('، ')}
           </div>
         )}
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="إجراءات سريعة">
+      <OpsDashPanel title="إجراءات سريعة" accent="inventory">
         <div className="flex flex-wrap gap-3 p-4">
           <Button
             variant="primary"
@@ -635,9 +633,9 @@ export const WarehouseLocations: React.FC = () => {
           <Button variant="secondary" disabled={!canManage} onClick={() => setModal('import')}>رفع Excel</Button>
           <Button variant="secondary" onClick={downloadImportTemplate}>تحميل نموذج Excel</Button>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="الرف الافتراضي للصنف">
+      <OpsDashPanel title="الرف الافتراضي للصنف" accent="inventory">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 p-4">
           <select
             className="rounded-lg border px-3 py-2 text-sm md:col-span-2"
@@ -667,9 +665,9 @@ export const WarehouseLocations: React.FC = () => {
             حفظ الافتراضي
           </Button>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="!p-0 overflow-hidden" title="المخزن ← الراك ← الأرفف">
+      <OpsDashPanel title="المخزن ← الراك ← الأرفف" accent="inventory" bodyClassName="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -743,7 +741,7 @@ export const WarehouseLocations: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {modal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={closeModal}>
@@ -899,6 +897,6 @@ export const WarehouseLocations: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageHeader } from '@/components/PageHeader';
-import { Button, Card } from '@/components/UI';
+import { Button } from '@/components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '@/components/SelectableTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -200,32 +202,29 @@ export const ProductionAttendance: React.FC = () => {
   ], [busyId, deleteRows]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="سجل حضور الإنتاج"
-        subtitle="الحضور والغياب المسجل وقت حفظ تقارير الإنتاج فقط، وليس بتوليد يومي تلقائي."
-        icon="fact_check"
-        moreActions={[
-          { label: 'تحديث', icon: 'refresh', onClick: () => void reload(), disabled: loading },
-        ]}
-      />
-
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-          <p className="text-xs text-[var(--color-text-muted)]">إجمالي السجلات</p>
-          <p className="text-2xl font-black tabular-nums">{stats.total}</p>
+    <ModuleOpsPageShell
+      eyebrow="سجل حضور الإنتاج"
+      rangeLabel="الحضور والغياب المسجل وقت حفظ تقارير الإنتاج فقط، وليس بتوليد يومي تلقائي"
+      hero={[
+        { key: 'total', label: 'إجمالي السجلات', value: stats.total },
+        { key: 'present', label: 'حضور', value: stats.present },
+        { key: 'absent', label: 'غياب', value: stats.absent },
+      ]}
+      onRefresh={() => void reload()}
+      refreshing={loading}
+      actions={(
+        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+          <PageHeader
+            title=""
+            backAction={false}
+            moreActions={[
+              { label: 'تحديث', icon: 'refresh', onClick: () => void reload(), disabled: loading },
+            ]}
+          />
         </div>
-        <div className="rounded-[var(--border-radius-lg)] border border-emerald-200 bg-emerald-50/60 p-4">
-          <p className="text-xs text-emerald-700">حضور</p>
-          <p className="text-2xl font-black tabular-nums text-emerald-700">{stats.present}</p>
-        </div>
-        <div className="rounded-[var(--border-radius-lg)] border border-rose-200 bg-rose-50/60 p-4">
-          <p className="text-xs text-rose-700">غياب</p>
-          <p className="text-2xl font-black tabular-nums text-rose-700">{stats.absent}</p>
-        </div>
-      </div>
-
-      <Card className="!p-0 overflow-hidden">
+      )}
+    >
+      <OpsDashPanel title="سجلات الحضور" accent="production" bodyClassName="p-0 overflow-hidden">
       <SmartFilterBar
       pageId="production-attendance"
         searchPlaceholder="بحث باسم العامل أو التقرير..."
@@ -313,7 +312,7 @@ export const ProductionAttendance: React.FC = () => {
         emptyTitle="لا توجد سجلات حضور إنتاج"
         emptySubtitle="سيتم إنشاء السجلات عند حفظ أو إغلاق تقرير إنتاج يحتوي على عمال."
       />
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

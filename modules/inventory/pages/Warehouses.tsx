@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button } from '../components/UI';
 import { warehouseService } from '../services/warehouseService';
 import type { Warehouse, WarehouseRole } from '../types';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -219,27 +220,27 @@ export const Warehouses: React.FC = () => {
   }
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader
-        title="المخازن"
-        subtitle={
-          scoped
-            ? 'عرض مساحة المخزن المرتبطة بحسابك.'
-            : 'عرض كل المخازن ومساحاتها بفلاتر الدور والفرع. عند الحذف يُزال المخزن مع كل الحركات والأرصدة المرتبطة به نهائيًا.'
-        }
-        primaryAction={
-          canCreateWarehouse
-            ? {
-                label: 'إضافة مخزن',
-                icon: 'add',
-                onClick: openCreate,
-                dataModalKey: MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE,
-              }
-            : undefined
-        }
-      />
-
-      <Card title="قائمة المخازن">
+    <ModuleOpsPageShell
+      eyebrow="المخازن"
+      rangeLabel={
+        scoped
+          ? 'عرض مساحة المخزن المرتبطة بحسابك.'
+          : 'عرض كل المخازن ومساحاتها بفلاتر الدور والفرع. عند الحذف يُزال المخزن مع كل الحركات والأرصدة المرتبطة به نهائيًا.'
+      }
+      actions={
+        canCreateWarehouse ? (
+          <Button
+            type="button"
+            size="sm"
+            onClick={openCreate}
+            data-modal-key={MODAL_KEYS.INVENTORY_WAREHOUSES_CREATE}
+          >
+            إضافة مخزن
+          </Button>
+        ) : undefined
+      }
+    >
+      <OpsDashPanel title="قائمة المخازن" accent="inventory" bodyClassName="p-0">
         <SmartFilterBar
           pageId="warehouses"
           searchPlaceholder="بحث بالاسم أو الكود..."
@@ -428,8 +429,7 @@ export const Warehouses: React.FC = () => {
             />
           </>
         )}
-      </Card>
-
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

@@ -2,10 +2,9 @@ import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { Package } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { KPICard } from '@/src/components/erp/KPICard';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { formatNumber } from '../../../utils/calculations';
@@ -225,32 +224,40 @@ export const PackagingControl: React.FC = () => {
     return <PageContentSkeleton variant="dashboard" />;
   }
 
-  return (
-    <div className="erp-ds-clean erp-dashboard-theme space-y-6">
-      <PageHeader
-        title="تحكم التغليف"
-        subtitle={
-          configured
-            ? `تحت التسليم → بانتظار التغليف («${sourceWarehouse?.name || 'بانتظار التغليف'}») → «${targetWarehouse?.name || 'منتج تام'}»`
-            : 'حدّد مخازن تحت التسليم / بانتظار التغليف / المنتج التام في توجيه المخازن'
-        }
-        icon={<Package size={18} />}
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            <GhostButton iconName="refresh" tone="neutral" onClick={() => void reload()} disabled={loading}>
-              تحديث
-            </GhostButton>
-            {can('reports.view') || can('reports.packaging.create') ? (
-              <Link to={withTenantPath(tenantSlug, '/reports')}>
-                <PrimaryButton iconName="description" tone="execute">
-                  تقرير تغليف
-                </PrimaryButton>
-              </Link>
-            ) : null}
-          </div>
-        )}
-      />
+  const packagingHero = useMemo(
+    () => [
+      { key: 'wip', label: 'تحت التسليم (وحدات)', value: formatNumber(wipTotalQty) },
+      { key: 'pending', label: 'استلام معلّق', value: pendingHandovers.length },
+      { key: 'remaining', label: 'متبقي للاستلام', value: formatNumber(handoverRemainingQty) },
+      { key: 'staging', label: 'بانتظار التغليف', value: formatNumber(stagingTotalQty) },
+      { key: 'transfers', label: 'تحويلات تغليف معلّقة', value: pendingPackaging },
+    ],
+    [wipTotalQty, pendingHandovers.length, handoverRemainingQty, stagingTotalQty, pendingPackaging],
+  );
 
+  return (
+    <ModuleOpsPageShell
+      eyebrow="تحكم التغليف"
+      rangeLabel={
+        configured
+          ? `تحت التسليم → بانتظار التغليف («${sourceWarehouse?.name || 'بانتظار التغليف'}») → «${targetWarehouse?.name || 'منتج تام'}»`
+          : 'حدّد مخازن تحت التسليم / بانتظار التغليف / المنتج التام في توجيه المخازن'
+      }
+      hero={packagingHero}
+      onRefresh={() => void reload()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          {can('reports.view') || can('reports.packaging.create') ? (
+            <Link to={withTenantPath(tenantSlug, '/reports')}>
+              <PrimaryButton iconName="description" tone="execute">
+                تقرير تغليف
+              </PrimaryButton>
+            </Link>
+          ) : null}
+        </div>
+      )}
+    >
       {!configured && (
         <p className="text-sm font-medium text-amber-800 bg-amber-50 border border-amber-100 rounded-lg px-4 py-3">
           التوجيه غير مكتمل: عيّن مخزن تحت التسليم وبانتظار التغليف والمنتج التام من الإعدادات.
@@ -259,14 +266,6 @@ export const PackagingControl: React.FC = () => {
           </Link>
         </p>
       )}
-
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KPICard label="تحت التسليم (وحدات)" value={formatNumber(wipTotalQty)} iconType="metric" color="amber" loading={loading} />
-        <KPICard label="استلام معلّق" value={pendingHandovers.length} iconType="trend" color="amber" loading={loading} />
-        <KPICard label="متبقي للاستلام" value={formatNumber(handoverRemainingQty)} iconType="metric" color="indigo" loading={loading} />
-        <KPICard label="بانتظار التغليف" value={formatNumber(stagingTotalQty)} iconType="metric" color="green" loading={loading} />
-        <KPICard label="تحويلات تغليف معلّقة" value={pendingPackaging} iconType="trend" color="indigo" loading={loading} />
-      </div>
 
       <div className="flex flex-wrap gap-2">
         {wipWarehouseId && can('inventory.view') && (
@@ -300,16 +299,16 @@ export const PackagingControl: React.FC = () => {
         )}
       </div>
 
-      <Card className="border-slate-200 shadow-none overflow-hidden">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-slate-800">
-            طابور استلام التغليف (تحت التسليم)
-          </CardTitle>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+      <OpsDashPanel
+        title="طابور استلام التغليف (تحت التسليم)"
+        accent="production"
+        bodyClassName="p-0"
+        action={(
+          <p className="text-xs text-[var(--color-text-muted)]">
             أكّد الكمية الفعلية. الاستلام الجزئي يبقي المتبقي معلّقًا. الإقفال بفرق يسجّل النقص على المحوّل.
           </p>
-        </CardHeader>
-        <CardContent className="p-0">
+        )}
+      >
           <div className="overflow-x-auto">
             <table className="erp-table w-full">
               <thead className="erp-thead">
@@ -424,19 +423,18 @@ export const PackagingControl: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="border-slate-200 shadow-none overflow-hidden">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-slate-800">
-            أرصدة بانتظار التغليف
-          </CardTitle>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
+      <OpsDashPanel
+        title="أرصدة بانتظار التغليف"
+        accent="production"
+        bodyClassName="p-0"
+        action={(
+          <p className="text-xs text-[var(--color-text-muted)]">
             كميات أكدها مشرف التغليف وجاهزة لتقرير التغليف ثم التحويل إلى منتج تام.
           </p>
-        </CardHeader>
-        <CardContent className="p-0">
+        )}
+      >
           <div className="overflow-x-auto">
             <table className="erp-table w-full">
               <thead className="erp-thead">
@@ -487,14 +485,9 @@ export const PackagingControl: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
-      <Card className="border-slate-200 shadow-none">
-        <CardHeader>
-          <CardTitle className="text-sm font-medium text-slate-800">آخر حركات المخزن</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
+      <OpsDashPanel title="آخر حركات المخزن" accent="production">
           {transactions.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)]">لا توجد حركات حديثة.</p>
           ) : (
@@ -513,8 +506,7 @@ export const PackagingControl: React.FC = () => {
               </div>
             ))
           )}
-        </CardContent>
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
