@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, KPIBox, Badge, Button, SearchableSelect } from '../components/UI';
+import { KPIBox, Badge, Button, SearchableSelect } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { getDocs } from 'firebase/firestore';
 import * as XLSX from 'xlsx';
 import { useAppStore } from '@/store/useAppStore';
@@ -1011,7 +1012,27 @@ export const HRDashboard: React.FC = () => {
       refreshing={loading}
       secondarySummary="إجراءات وبحث سريع"
       secondary={(
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="space-y-3">
+          {alertItems.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {alertItems.map((a, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => navigate(a.path)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all hover:shadow-sm
+                    bg-${a.color}-50 dark:bg-${a.color}-900/20
+                    border-${a.color}-200 dark:border-${a.color}-800
+                    text-${a.color}-700 dark:text-${a.color}-400`}
+                >
+                  <span className="material-icons-round text-sm">{a.icon}</span>
+                  {a.text}
+                  <span className="material-icons-round text-xs opacity-50">arrow_forward</span>
+                </button>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap items-center gap-2">
           {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
           <Button
             type="button"
@@ -1054,6 +1075,7 @@ export const HRDashboard: React.FC = () => {
               onChange={(val) => { if (val) navigate(`/hr/employees/${val}`); }}
               placeholder="بحث بالاسم أو الكود..."
             />
+          </div>
           </div>
         </div>
       )}
@@ -1725,26 +1747,6 @@ export const HRDashboard: React.FC = () => {
         </div>
       )}
 
-      {/* â”€â”€ Alert Bar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      {alertItems.length > 0 && (
-        <div className="flex flex-wrap gap-2">
-          {alertItems.map((a, i) => (
-            <button
-              key={i}
-              onClick={() => navigate(a.path)}
-              className={`flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] text-xs font-bold border transition-all hover:shadow-sm
-                bg-${a.color}-50 dark:bg-${a.color}-900/20
-                border-${a.color}-200 dark:border-${a.color}-800
-                text-${a.color}-700 dark:text-${a.color}-400`}
-            >
-              <span className="material-icons-round text-sm">{a.icon}</span>
-              {a.text}
-              <span className="material-icons-round text-xs opacity-50">arrow_forward</span>
-            </button>
-          ))}
-        </div>
-      )}
-
       {/* â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ
           SECTION 2 — مؤشرات شهرية (Monthly Overview)
       â•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گâ•گ */}
@@ -1783,77 +1785,122 @@ export const HRDashboard: React.FC = () => {
         </div>
 
         {/* Recent Leaves + Loans */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <Card title="آخر طلبات الإجازات">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <OpsDashPanel title="آخر طلبات الإجازات" accent="hr">
             {recentLeaves.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد طلبات</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="erp-table w-full text-sm">
-                  <thead className="erp-thead">
-                    <tr>
-                      <th className="erp-th">الموظف</th>
-                      <th className="erp-th">النوع</th>
-                      <th className="erp-th">الأيام</th>
-                      <th className="erp-th">الحالة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentLeaves.map((l) => {
-                      const emp = employees.find((e) => e.id === l.employeeId || e.userId === l.employeeId);
-                      return (
-                        <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
-                          <td className="py-2.5 px-2 font-bold text-[var(--color-text)]">{emp?.name || l.employeeId}</td>
-                          <td className="py-2.5 px-2 text-slate-500">{LEAVE_TYPE_LABELS[l.leaveType]}</td>
-                          <td className="py-2.5 px-2 font-mono text-[var(--color-text-muted)]">{l.totalDays}</td>
-                          <td className="py-2.5 px-2">
-                            <Badge variant={STATUS_VARIANT[l.finalStatus] ?? 'neutral'}>{STATUS_LABELS[l.finalStatus] ?? l.finalStatus}</Badge>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <>
+                <div className="erp-mobile-card-list p-2">
+                  {recentLeaves.map((l) => {
+                    const emp = employees.find((e) => e.id === l.employeeId || e.userId === l.employeeId);
+                    return (
+                      <div
+                        key={`leave-m-${l.id}`}
+                        className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <p className="text-sm font-bold text-[var(--color-text)]">{emp?.name || l.employeeId}</p>
+                          <Badge variant={STATUS_VARIANT[l.finalStatus] ?? 'neutral'}>
+                            {STATUS_LABELS[l.finalStatus] ?? l.finalStatus}
+                          </Badge>
+                        </div>
+                        <div className="mt-2 text-xs text-[var(--color-text-muted)] space-y-1">
+                          <p><span className="font-bold">النوع:</span> {LEAVE_TYPE_LABELS[l.leaveType]}</p>
+                          <p><span className="font-bold">الأيام:</span> {l.totalDays}</p>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="erp-desktop-table overflow-x-auto">
+                  <table className="erp-table w-full text-sm">
+                    <thead className="erp-thead">
+                      <tr>
+                        <th className="erp-th">الموظف</th>
+                        <th className="erp-th">النوع</th>
+                        <th className="erp-th">الأيام</th>
+                        <th className="erp-th">الحالة</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {recentLeaves.map((l) => {
+                        const emp = employees.find((e) => e.id === l.employeeId || e.userId === l.employeeId);
+                        return (
+                          <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                            <td className="py-2.5 px-2 font-bold text-[var(--color-text)]">{emp?.name || l.employeeId}</td>
+                            <td className="py-2.5 px-2 text-slate-500">{LEAVE_TYPE_LABELS[l.leaveType]}</td>
+                            <td className="py-2.5 px-2 font-mono text-[var(--color-text-muted)]">{l.totalDays}</td>
+                            <td className="py-2.5 px-2">
+                              <Badge variant={STATUS_VARIANT[l.finalStatus] ?? 'neutral'}>{STATUS_LABELS[l.finalStatus] ?? l.finalStatus}</Badge>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
             <Button variant="ghost" size="sm" className="w-full mt-4" onClick={() => navigate('/hr/leave-requests')}>
               عرض كل الإجازات
             </Button>
-          </Card>
+          </OpsDashPanel>
 
-          <Card title="آخر طلبات السُلف">
+          <OpsDashPanel title="آخر طلبات السُلف" accent="hr">
             {recentLoans.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)] text-center py-6">لا توجد سُلف</p>
             ) : (
-              <div className="overflow-x-auto">
-                <table className="erp-table w-full text-sm">
-                  <thead className="erp-thead">
-                    <tr>
-                      <th className="erp-th">الموظف</th>
-                      <th className="erp-th">النوع</th>
-                      <th className="erp-th">المبلغ</th>
-                      <th className="erp-th">الحالة</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentLoans.map((l) => (
-                      <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
-                        <td className="py-2.5 px-2 font-bold text-[var(--color-text)]">{l.employeeName || l.employeeId}</td>
-                        <td className="py-2.5 px-2 text-slate-500">{LOAN_TYPE_LABELS[l.loanType]}</td>
-                        <td className="py-2.5 px-2 font-mono text-[var(--color-text-muted)]">{formatCurrency(l.loanAmount)}</td>
-                        <td className="py-2.5 px-2">
-                          <Badge variant={STATUS_VARIANT[l.status] ?? 'neutral'}>{STATUS_LABELS[l.status] ?? l.status}</Badge>
-                        </td>
+              <>
+                <div className="erp-mobile-card-list p-2">
+                  {recentLoans.map((l) => (
+                    <div
+                      key={`loan-m-${l.id}`}
+                      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-bold text-[var(--color-text)]">{l.employeeName || l.employeeId}</p>
+                        <Badge variant={STATUS_VARIANT[l.status] ?? 'neutral'}>
+                          {STATUS_LABELS[l.status] ?? l.status}
+                        </Badge>
+                      </div>
+                      <div className="mt-2 text-xs text-[var(--color-text-muted)] space-y-1">
+                        <p><span className="font-bold">النوع:</span> {LOAN_TYPE_LABELS[l.loanType]}</p>
+                        <p><span className="font-bold">المبلغ:</span> {formatCurrency(l.loanAmount)}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="erp-desktop-table overflow-x-auto">
+                  <table className="erp-table w-full text-sm">
+                    <thead className="erp-thead">
+                      <tr>
+                        <th className="erp-th">الموظف</th>
+                        <th className="erp-th">النوع</th>
+                        <th className="erp-th">المبلغ</th>
+                        <th className="erp-th">الحالة</th>
                       </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                    </thead>
+                    <tbody>
+                      {recentLoans.map((l) => (
+                        <tr key={l.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                          <td className="py-2.5 px-2 font-bold text-[var(--color-text)]">{l.employeeName || l.employeeId}</td>
+                          <td className="py-2.5 px-2 text-slate-500">{LOAN_TYPE_LABELS[l.loanType]}</td>
+                          <td className="py-2.5 px-2 font-mono text-[var(--color-text-muted)]">{formatCurrency(l.loanAmount)}</td>
+                          <td className="py-2.5 px-2">
+                            <Badge variant={STATUS_VARIANT[l.status] ?? 'neutral'}>{STATUS_LABELS[l.status] ?? l.status}</Badge>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
             )}
             <Button variant="ghost" size="sm" className="w-full mt-4" onClick={() => navigate('/hr/loan-requests')}>
               عرض كل السُلف
             </Button>
-          </Card>
+          </OpsDashPanel>
         </div>
       </section>
 
@@ -1909,20 +1956,36 @@ export const HRDashboard: React.FC = () => {
         </div>
       </section>
 
-      {/* â•گâ•گâ•گ SECTION 4 — Top 5 متأخرين â•گâ•گâ•گ */}
-      <section>
-        <h3 className="text-base font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
-          <span className="material-icons-round text-rose-500 text-lg">schedule</span>
-          أعلى 5 موظفين تأخيراً — {getMonthKey()}
-        </h3>
-        <Card>
-          {top5Late.length === 0 ? (
-            <div className="py-8 text-center text-[var(--color-text-muted)]">
-              <span className="material-icons-round text-3xl mb-2 block opacity-30">check_circle</span>
-              <p className="text-sm">لا يوجد تأخير هذا الشهر</p>
+      <OpsDashPanel title={`أعلى 5 موظفين تأخيراً — ${getMonthKey()}`} accent="hr">
+        {top5Late.length === 0 ? (
+          <div className="py-8 text-center text-[var(--color-text-muted)]">
+            <span className="material-icons-round text-3xl mb-2 block opacity-30">check_circle</span>
+            <p className="text-sm">لا يوجد تأخير هذا الشهر</p>
+          </div>
+        ) : (
+          <>
+            <div className="erp-mobile-card-list p-2 md:hidden">
+              {top5Late.map((item, i) => (
+                <div
+                  key={`late-m-${item.employeeId}`}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="text-sm font-bold text-[var(--color-text)]">{item.employeeName}</p>
+                    <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
+                      i === 0 ? 'bg-rose-100 text-rose-700' :
+                      i === 1 ? 'bg-amber-100 text-amber-700' :
+                      'bg-slate-100 text-slate-600'
+                    }`}>{i + 1}</span>
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--color-text-muted)]">
+                    <span className="font-bold text-rose-600">{item.totalLateMinutes} د تأخير</span>
+                    <span>{item.lateDays} يوم</span>
+                  </div>
+                </div>
+              ))}
             </div>
-          ) : (
-            <div className="overflow-x-auto">
+            <div className="erp-desktop-table hidden overflow-x-auto md:block">
               <table className="erp-table w-full text-sm">
                 <thead>
                   <tr className="border-b border-[var(--color-border)]">
@@ -1950,9 +2013,9 @@ export const HRDashboard: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          )}
-        </Card>
-      </section>
+          </>
+        )}
+      </OpsDashPanel>
 
       {/* SECTION 5 — ملخص السُلف */}
       <section>
@@ -2018,9 +2081,8 @@ export const HRDashboard: React.FC = () => {
           تحليلات
         </h3>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Department breakdown */}
-          <Card title="توزيع الموظفين حسب القسم">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 mb-6">
+          <OpsDashPanel title="توزيع الموظفين حسب القسم" accent="hr">
             {deptBreakdown.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد أقسام</p>
             ) : (
@@ -2042,11 +2104,10 @@ export const HRDashboard: React.FC = () => {
                 })}
               </div>
             )}
-          </Card>
+          </OpsDashPanel>
 
-          {/* Employment type + Leave type */}
-          <div className="space-y-6">
-            <Card title="أنواع التوظيف">
+          <div className="space-y-3">
+            <OpsDashPanel title="أنواع التوظيف" accent="hr">
               <div className="grid grid-cols-2 gap-2">
                 {Object.entries(empKpis.byType).map(([type, count]) => (
                   <div key={type} className="flex items-center gap-2 p-3 bg-[#f8f9fa]/50 rounded-[var(--border-radius-base)]">
@@ -2060,9 +2121,9 @@ export const HRDashboard: React.FC = () => {
                   </div>
                 ))}
               </div>
-            </Card>
+            </OpsDashPanel>
 
-            <Card title="الإجازات المعتمدة حسب النوع">
+            <OpsDashPanel title="الإجازات المعتمدة حسب النوع" accent="hr">
               {Object.keys(leaveKpis.byType).length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-4">لا توجد بيانات</p>
               ) : (
@@ -2080,7 +2141,7 @@ export const HRDashboard: React.FC = () => {
                   ))}
                 </div>
               )}
-            </Card>
+            </OpsDashPanel>
           </div>
         </div>
 

@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import { useRepairJobs } from '../hooks/useRepairJobs';
@@ -134,13 +134,11 @@ export const RepairMyJobs: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلباتك كفني.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="طلباتي" dir={dir}>
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض طلباتك كفني.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
@@ -156,20 +154,17 @@ export const RepairMyJobs: React.FC = () => {
       : 'لا توجد طلبات مسندة إليك. من الاستقبال: افتح الطلب واختر الفني ثم احفظ الإسناد (مع ربط الموظف بالحساب).');
 
   return (
-    <div className="erp-ds-clean space-y-4 p-3 md:p-6" dir={dir}>
-      <PageHeader
-        title="طلباتي"
-        subtitle="الطلبات المسندة إليك — اضغط لفتح الورشة"
-        primaryAction={{
-          label: 'تحديث',
-          icon: 'refresh',
-          onClick: () => void refetch(),
-          disabled: isFetching,
-        }}
-      />
-
-      <Card>
-        <CardContent className="p-0">
+    <RepairOpsPageShell
+      eyebrow="طلباتي"
+      dir={dir}
+      hero={[
+        { key: 'total', label: 'مسند إليّ', value: visibleJobs.length },
+        { key: 'open', label: 'مفتوح', value: visibleJobs.filter((j) => !isClosedJobStatus(String(j.status || ''))).length },
+      ]}
+      onRefresh={() => void refetch()}
+      refreshing={isFetching}
+    >
+      <OpsDashPanel title="طلباتي المسندة" accent="repair" bodyClassName="p-0">
           <SmartFilterBar
             pageId="repair-my-jobs"
             searchValue={search}
@@ -191,8 +186,7 @@ export const RepairMyJobs: React.FC = () => {
             }}
           />
 
-          {/* Mobile cards */}
-          <div className="space-y-2 p-3 md:hidden">
+          <div className="erp-mobile-card-list space-y-2 p-3 md:hidden">
             {loading ? (
               <p className="py-8 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
                 جاري التحميل...
@@ -211,8 +205,7 @@ export const RepairMyJobs: React.FC = () => {
             )}
           </div>
 
-          {/* Desktop table */}
-          <div className="hidden overflow-x-auto md:block">
+          <div className="erp-desktop-table hidden overflow-x-auto md:block">
             <table className="table erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
@@ -266,8 +259,7 @@ export const RepairMyJobs: React.FC = () => {
             onPageChange={setPage}
             itemLabel="طلب"
           />
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
       <div className="md:hidden">
         <Link to={withTenantPath(tenantSlug, '/')}>
@@ -276,7 +268,7 @@ export const RepairMyJobs: React.FC = () => {
           </Button>
         </Link>
       </div>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

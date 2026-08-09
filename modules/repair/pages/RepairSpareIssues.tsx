@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
 import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
@@ -57,6 +58,7 @@ const fmt = (n: number) =>
   new Intl.NumberFormat('ar-EG', { maximumFractionDigits: 4 }).format(Number(n || 0));
 
 export const RepairSpareIssues: React.FC = () => {
+  const { dir } = useAppDirection();
   const { can } = usePermission();
   const canView = can('repairSpareIssues.view');
   const canCreate = can('repairSpareIssues.create');
@@ -211,32 +213,38 @@ export const RepairSpareIssues: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5">
-        <PageHeader title="سندات صرف قطع الغيار" icon="assignment_turned_in" />
-        <p className="text-sm text-slate-500">ليس لديك صلاحية عرض سندات صرف قطع الغيار.</p>
-      </div>
+      <RepairOpsPageShell eyebrow="سندات صرف قطع الغيار" dir={dir}>
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض سندات صرف قطع الغيار.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 sm:space-y-5 px-1 sm:px-0">
-      <PageHeader
-        title="سندات صرف قطع الغيار"
-        subtitle="تحضير باللوكيشن ثم اعتماد وصرف وطباعة — بنفس أسلوب إذن صرف الإنتاج"
-        icon="assignment_turned_in"
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <ListViewToggle value={boardView} onChange={setBoardView} />
-            {canCreate ? (
-              <Button type="button" className="w-full sm:w-auto" onClick={() => setShowCreate(true)}>
-                سند صرف جديد
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
-
-      <div className="flex flex-col gap-2 rounded-xl border bg-card px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+    <RepairOpsPageShell
+      eyebrow="سندات صرف قطع الغيار"
+      dir={dir}
+      hero={[
+        { key: 'pending', label: 'معلّق', value: pendingCount, accent: pendingCount > 0 },
+        { key: 'total', label: 'السندات', value: filtered.length },
+        { key: 'branches', label: 'الفروع', value: branches.length },
+      ]}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <ListViewToggle value={boardView} onChange={setBoardView} />
+          {canCreate ? (
+            <Button type="button" size="sm" onClick={() => setShowCreate(true)}>
+              سند صرف جديد
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
+      <OpsDashPanel title="فلاتر" accent="repair" bodyClassName="p-3 sm:p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         <label className="text-xs font-medium text-muted-foreground sm:sr-only">الحالة</label>
         <select
           className="w-full rounded-lg border bg-background px-3 py-2 text-sm sm:w-auto"
@@ -256,10 +264,10 @@ export const RepairSpareIssues: React.FC = () => {
           {pendingCount > 0 ? ` · معلّق: ${pendingCount}` : ''}
         </span>
       </div>
+      </OpsDashPanel>
 
-      {/* Physical LTR row: details LEFT, list RIGHT — content stays RTL. */}
       {boardView === 'kanban' ? (
-        <Card className="!p-3 sm:!p-4">
+        <OpsDashPanel title="لوحة السندات" accent="repair" bodyClassName="p-3 sm:p-4">
           <StatusKanbanBoard
             columns={spareKanbanColumns}
             items={filtered
@@ -282,15 +290,12 @@ export const RepairSpareIssues: React.FC = () => {
               </>
             )}
           />
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
       <div className="flex flex-col xl:flex-row gap-4 items-stretch" dir="ltr">
         <div ref={detailPanelRef} className="order-2 xl:order-1 min-w-0 flex-1 w-full" dir="rtl">
-        <Card className="!p-0 overflow-hidden h-full">
-          <div className="border-b px-4 py-3 font-bold text-sm">
-            {selected ? `تفاصيل ${selected.referenceNo}` : 'التفاصيل'}
-          </div>
+        <OpsDashPanel title={selected ? `تفاصيل ${selected.referenceNo}` : 'التفاصيل'} accent="repair" bodyClassName="p-0 overflow-hidden h-full">
           {!selected ? (
             <p className="hidden px-4 py-16 text-center text-sm text-muted-foreground xl:block">
               اختر سنداً من القائمة لعرض التحضير والإجراءات.
@@ -443,12 +448,12 @@ export const RepairSpareIssues: React.FC = () => {
               </div>
             </>
           )}
-        </Card>
+        </OpsDashPanel>
         </div>
 
         {boardView === 'table' ? (
         <div className="order-1 w-full xl:order-2 xl:w-[360px] xl:shrink-0" dir="rtl">
-        <Card className="!p-0 overflow-hidden h-full">
+        <OpsDashPanel title="قائمة السندات" accent="repair" bodyClassName="p-0 overflow-hidden h-full">
           <div className="flex flex-wrap gap-2 border-b px-3 pb-2 pt-3">
             {([
               ['pending', `معلّق (${pendingCount})`],
@@ -524,7 +529,7 @@ export const RepairSpareIssues: React.FC = () => {
               itemLabel="سند"
             />
           ) : null}
-        </Card>
+        </OpsDashPanel>
         </div>
         ) : null}
       </div>
@@ -539,6 +544,6 @@ export const RepairSpareIssues: React.FC = () => {
         onCreated={() => void load()}
         branches={branches}
       />
-    </div>
+    </RepairOpsPageShell>
   );
 };

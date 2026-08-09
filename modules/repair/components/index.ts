@@ -1,3 +1,5 @@
+export { RepairOpsPageShell } from './RepairOpsPageShell';
+export type { RepairOpsHeroKpi } from './RepairOpsPageShell';
 export { StatusBadge } from './StatusBadge';
 export { DeliveryReceiptPDF } from './DeliveryReceiptPDF';
 export { RepairJobPrint } from './RepairJobPrint';

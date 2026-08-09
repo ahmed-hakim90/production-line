@@ -10,9 +10,9 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { withTenantPath } from "@/lib/tenantPaths";
 import { DomainHomeShell } from "@/modules/dashboards/components/DomainHomeShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { usePermission } from "@/utils/permissions";
 import { AccountingPeriodToolbar } from "../components/AccountingPeriodToolbar";
 import { useAccountingBaseData } from "../hooks/useAccountingBaseData";
@@ -161,6 +161,7 @@ export const AccountingDashboard: React.FC = () => {
   return (
     <DomainHomeShell
       denseHero
+      eyebrow="لوحة الحسابات"
       hero={hero}
       onRefresh={() => {
         void reload();
@@ -174,14 +175,39 @@ export const AccountingDashboard: React.FC = () => {
           onToChange={setTo}
         />
       )}
+      secondarySummary="اختصارات التشغيل"
+      secondary={(
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {QUICK_LINKS.filter(
+            (item) => !item.permission || can(item.permission),
+          ).map((item) => {
+            const Icon = item.icon;
+            return (
+              <Link
+                key={item.path}
+                to={withTenantPath(tenantSlug, item.path)}
+                className="flex items-center justify-between rounded-xl border p-3 transition-colors hover:bg-muted/40"
+              >
+                <div className="flex items-center gap-3">
+                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
+                    <Icon className="h-4 w-4" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-medium">{item.label}</p>
+                    <p className="text-xs text-muted-foreground">{item.desc}</p>
+                  </div>
+                </div>
+                <ArrowLeft className="h-4 w-4 text-muted-foreground" />
+              </Link>
+            );
+          })}
+        </div>
+      )}
       dir="rtl"
     >
-      <div className="grid gap-4 lg:grid-cols-2">
-        <Card className="shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">سلامة الدفتر</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+      <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
+        <OpsDashPanel title="سلامة الدفتر">
+          <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">إجمالي المدين</span>
               <strong className="tabular-nums">
@@ -204,14 +230,11 @@ export const AccountingDashboard: React.FC = () => {
               <span className="text-muted-foreground">عدد القيود المرحّلة</span>
               <strong>{filteredEntries.length}</strong>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
 
-        <Card className="shadow-none">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">جاهزية الحسابات</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 text-sm">
+        <OpsDashPanel title="جاهزية الحسابات">
+          <div className="space-y-3 text-sm">
             <div className="flex justify-between">
               <span className="text-muted-foreground">الحسابات النشطة</span>
               <strong>
@@ -258,40 +281,9 @@ export const AccountingDashboard: React.FC = () => {
                 إنشاء الشجرة الافتراضية
               </Button>
             ) : null}
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </div>
-
-      <Card className="shadow-none">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">اختصارات التشغيل</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {QUICK_LINKS.filter(
-            (item) => !item.permission || can(item.permission),
-          ).map((item) => {
-            const Icon = item.icon;
-            return (
-              <Link
-                key={item.path}
-                to={withTenantPath(tenantSlug, item.path)}
-                className="flex items-center justify-between rounded-xl border p-3 transition-colors hover:bg-muted/40"
-              >
-                <div className="flex items-center gap-3">
-                  <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-muted">
-                    <Icon className="h-4 w-4" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{item.label}</p>
-                    <p className="text-xs text-muted-foreground">{item.desc}</p>
-                  </div>
-                </div>
-                <ArrowLeft className="h-4 w-4 text-muted-foreground" />
-              </Link>
-            );
-          })}
-        </CardContent>
-      </Card>
     </DomainHomeShell>
   );
 };

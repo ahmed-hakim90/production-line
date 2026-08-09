@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, useLocation, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -61,6 +62,7 @@ type LocationState = {
 };
 
 export const RepairComplaints: React.FC = () => {
+  const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const location = useLocation();
   const { can } = usePermission();
@@ -432,43 +434,44 @@ export const RepairComplaints: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-4 p-4 md:p-6">
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض شكاوى الصيانة.</p>
-          </CardContent>
-        </Card>
-      </div>
+      <RepairOpsPageShell eyebrow="شكاوى الصيانة" dir={dir}>
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض شكاوى الصيانة.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6">
-      <PageHeader
-        title="شكاوى الصيانة"
-        subtitle="تسجيل ومتابعة شكاوى العملاء المرتبطة بطلبات الصيانة"
-        actions={
-          <div className="flex flex-wrap items-center gap-2">
-            <ListViewToggle value={boardView} onChange={setBoardView} />
-            {canManage ? (
-              <Button
-                type="button"
-                onClick={() => {
-                  setCreateForm((prev) => ({
-                    ...prev,
-                    branchId: prev.branchId || userBranchIds[0] || visibleBranches[0]?.id || '',
-                  }));
-                  setCreateOpen(true);
-                }}
-              >
-                تسجيل شكوى
-              </Button>
-            ) : null}
-          </div>
-        }
-      />
-
-      <Card className="!p-4">
+    <RepairOpsPageShell
+      eyebrow="شكاوى الصيانة"
+      dir={dir}
+      hero={[{ key: 'total', label: 'الشكاوى', value: filtered.length }]}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <ListViewToggle value={boardView} onChange={setBoardView} />
+          {canManage ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => {
+                setCreateForm((prev) => ({
+                  ...prev,
+                  branchId: prev.branchId || userBranchIds[0] || visibleBranches[0]?.id || '',
+                }));
+                setCreateOpen(true);
+              }}
+            >
+              تسجيل شكوى
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
+      <OpsDashPanel title="قائمة الشكاوى" accent="repair" bodyClassName="p-0">
+        <div className="p-3 sm:p-4">
         <SmartFilterBar
           pageId="repair-complaints-list"
           searchPlaceholder="بحث بالموضوع، العميل، الهاتف، الإيصال..."
@@ -503,7 +506,7 @@ export const RepairComplaints: React.FC = () => {
             if (key === 'branchId') setBranchFilter(value);
           }}
           extra={
-            <Button type="button" variant="secondary" onClick={() => void load()} disabled={loading}>
+            <Button type="button" variant="secondary" size="sm" onClick={() => void load()} disabled={loading}>
               تحديث
             </Button>
           }
@@ -539,8 +542,37 @@ export const RepairComplaints: React.FC = () => {
             />
           ) : (
             <>
-              <div className="overflow-x-auto rounded-lg border">
-                <table className="erp-table w-full text-right">
+              <div className="erp-mobile-card-list space-y-2 md:hidden">
+                {loading ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">جاري التحميل...</p>
+                ) : paged.length === 0 ? (
+                  <p className="py-8 text-center text-sm text-muted-foreground">لا توجد شكاوى مطابقة.</p>
+                ) : (
+                  paged.map((row) => (
+                    <button
+                      key={`m-${row.id}`}
+                      type="button"
+                      className="block w-full rounded-xl border bg-card p-3 text-start shadow-sm"
+                      onClick={() => openDetail(row)}
+                    >
+                      <p className="text-sm font-medium leading-snug line-clamp-2">{row.subject}</p>
+                      <p className="mt-1 text-xs text-muted-foreground">{row.customerName}</p>
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <ErpStatusBadge
+                          label={REPAIR_COMPLAINT_STATUS_LABELS[row.status]}
+                          type={repairComplaintStatusChipType(row.status)}
+                        />
+                        {row.receiptNo ? (
+                          <span className="font-mono text-[11px] text-primary">#{row.receiptNo}</span>
+                        ) : null}
+                      </div>
+                    </button>
+                  ))
+                )}
+              </div>
+
+              <div className="erp-desktop-table hidden overflow-x-auto md:block">
+                <table className="table erp-table w-full text-right text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">الموضوع</th>
@@ -617,7 +649,8 @@ export const RepairComplaints: React.FC = () => {
             </>
           )}
         </div>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
       <Dialog open={createOpen} onOpenChange={setCreateOpen}>
         <DialogContent className="max-w-lg">
@@ -957,7 +990,7 @@ export const RepairComplaints: React.FC = () => {
           ) : null}
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

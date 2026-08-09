@@ -4,3 +4,4 @@ export * from './OperationsDashboardBoard';
 export * from './DashboardProgressGauge';
 export * from './ModuleChartsHomeBoard';
 export * from './DomainHomeShell';
+export * from './ModuleOpsPageShell';
