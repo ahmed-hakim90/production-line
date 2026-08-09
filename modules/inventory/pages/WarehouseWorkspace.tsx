@@ -521,7 +521,7 @@ export const WarehouseWorkspace: React.FC = () => {
         <OpsDashPanel title="أصناف لها رصيد" accent="inventory">
           <div className="text-2xl font-black">{totalSkus}</div>
         </OpsDashPanel>
-        <Card title="تحت الحد الأدنى">
+        <OpsDashPanel title="تحت الحد الأدنى" accent="inventory">
           <div className="text-2xl font-black">{lowStock}</div>
           {isCentralSparePartsWarehouse && warehouse.id ? (
             <Link
@@ -551,7 +551,7 @@ export const WarehouseWorkspace: React.FC = () => {
                 </Link>
               ) : null}
             </OpsDashPanel>
-            <Card title="بانتظار استلام المراكز">
+            <OpsDashPanel title="بانتظار استلام المراكز" accent="inventory">
               <div className="text-2xl font-black">{awaitingReceipt}</div>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 معتمد من المسؤول — ينتظر تأكيد المركز
@@ -560,10 +560,10 @@ export const WarehouseWorkspace: React.FC = () => {
           </>
         ) : (
           <>
-            <Card title="تحويلات معلّقة">
+            <OpsDashPanel title="تحويلات معلّقة" accent="inventory">
               <div className="text-2xl font-black">{pendingTransfers.length}</div>
             </OpsDashPanel>
-            <Card title="طلبات تموين نشطة">
+            <OpsDashPanel title="طلبات تموين نشطة" accent="inventory">
               <div className="text-2xl font-black">
                 {centralWorkQueue + awaitingReceipt}
               </div>
@@ -576,7 +576,7 @@ export const WarehouseWorkspace: React.FC = () => {
       </div>
 
       {(showAddPart || showCountImport || isCentralSparePartsWarehouse) ? (
-        <Card title="تحكم المخزن">
+        <OpsDashPanel title="تحكم المخزن" accent="inventory">
           <p className="text-xs text-[var(--color-text-muted)] mb-3">
             {isCentralSparePartsWarehouse
               ? 'إضافة وارد، صرف تموين للمراكز، متابعة أرصدة المراكز والسحب للرئيسي — من هنا مباشرة.'
@@ -649,7 +649,7 @@ export const WarehouseWorkspace: React.FC = () => {
       ) : null}
 
       {actions.length > 0 ? (
-        <Card title={isCentralSparePartsWarehouse ? 'استعلامات وجرد' : 'إجراءات هذا المخزن'}>
+        <OpsDashPanel title={isCentralSparePartsWarehouse ? 'استعلامات وجرد' : 'إجراءات هذا المخزن'} accent="inventory">
           <div className="grid gap-2 md:grid-cols-2">
             {actions.map((action) => (
               <Link
@@ -668,7 +668,7 @@ export const WarehouseWorkspace: React.FC = () => {
       {(warehouse.warehouseRole === 'spare_parts_central'
         || warehouse.warehouseRole === 'maintenance_center')
         && (isCentralSparePartsWarehouse ? pendingReplenishments.length > 0 : replenishments.length > 0) ? (
-        <Card title={isCentralSparePartsWarehouse ? 'طابور تموين يحتاج إجراء' : 'طلبات تموين قطع الغيار'}>
+        <OpsDashPanel title={isCentralSparePartsWarehouse ? 'طابور تموين يحتاج إجراء' : 'طلبات تموين قطع الغيار'} accent="inventory">
           <div className="space-y-2">
             {(isCentralSparePartsWarehouse ? pendingReplenishments : replenishments).map((row) => {
               const path = warehouse.warehouseRole === 'maintenance_center'
@@ -710,7 +710,7 @@ export const WarehouseWorkspace: React.FC = () => {
       ) : null}
 
       {warehouse.warehouseRole === 'final_product' && pendingTransfers.length > 0 ? (
-        <Card title="تحويلات تحتاج متابعة / اعتماد">
+        <OpsDashPanel title="تحويلات تحتاج متابعة / اعتماد" accent="inventory">
           <div className="space-y-2">
             {pendingTransfers.map((row) => (
               <div key={row.id} className="text-sm border-b border-[var(--color-border)]/50 py-2">
@@ -759,7 +759,7 @@ export const WarehouseWorkspace: React.FC = () => {
             </div>
           )}
         </OpsDashPanel>
-        <Card title="أحدث الحركات">
+        <OpsDashPanel title="أحدث الحركات" accent="inventory">
           {transactions.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)]">لا حركات بعد.</p>
           ) : (
@@ -787,10 +787,6 @@ export const WarehouseWorkspace: React.FC = () => {
             </div>
           )}
         </OpsDashPanel>
-      </div>
-
-      <div className="flex justify-end">
-        <Button type="button" variant="ghost" onClick={() => void load()}>تحديث</Button>
       </div>
 
       {showAddPart && linkedBranch?.id ? (
@@ -834,6 +830,6 @@ export const WarehouseWorkspace: React.FC = () => {
           onCreated={(sessionId) => void openCreatedCountSession(sessionId)}
         />
       ) : null}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -358,59 +360,41 @@ export const Organization: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text)]">الهيكل التنظيمي</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">إدارة الأقسام والمناصب والورديات والجزاءات والبدلات</p>
+    <ModuleOpsPageShell
+      eyebrow="الهيكل التنظيمي"
+      rangeLabel="إدارة الأقسام والمناصب والورديات والجزاءات والبدلات"
+      hero={[
+        { key: 'departments', label: 'الأقسام', value: departments.filter((d) => d.isActive).length },
+        { key: 'positions', label: 'المناصب', value: positions.filter((p) => p.isActive).length },
+        { key: 'no-manager', label: 'موظفون بلا مدير', value: employeeHierarchySummary.withoutManager },
+        { key: 'shifts', label: 'الورديات', value: shifts.filter((s) => s.isActive).length },
+        { key: 'penalties', label: 'الجزاءات', value: penalties.filter((p) => p.isActive).length },
+        { key: 'allowances', label: 'البدلات', value: allowances.filter((a) => a.isActive).length },
+      ]}
+      actions={canEdit ? (
+        <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.ORGANIZATION_CREATE} disabled={tab === 'employees'}>
+          <span className="material-icons-round text-lg">add</span>
+          {ADD_LABELS[tab]}
+        </Button>
+      ) : undefined}
+    >
+      <OpsDashPanel title="التبويبات" accent="hr">
+        <div className="flex gap-1 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 overflow-x-auto">
+          {TABS.map((t) => (
+            <button key={t.key} onClick={() => setTab(t.key)}
+              className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--border-radius-base)] text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
+                tab === t.key ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
+              }`}>
+              <span className="material-icons-round text-lg">{t.icon}</span>
+              {t.label}
+            </button>
+          ))}
         </div>
-        {canEdit && (
-          <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.ORGANIZATION_CREATE} disabled={tab === 'employees'}>
-            <span className="material-icons-round text-lg">add</span>
-            {ADD_LABELS[tab]}
-          </Button>
-        )}
-      </div>
-
-      {/* Stats */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          { label: 'الأقسام', count: departments.filter((d) => d.isActive).length, icon: 'business', color: 'text-blue-500 bg-blue-500/10' },
-          { label: 'المناصب', count: positions.filter((p) => p.isActive).length, icon: 'work', color: 'text-emerald-500 bg-emerald-500/10' },
-          { label: 'موظفون بلا مدير', count: employeeHierarchySummary.withoutManager, icon: 'account_tree', color: 'text-orange-500 bg-orange-500/10' },
-          { label: 'الورديات', count: shifts.filter((s) => s.isActive).length, icon: 'schedule', color: 'text-violet-500 bg-violet-500/10' },
-          { label: 'الجزاءات', count: penalties.filter((p) => p.isActive).length, icon: 'gavel', color: 'text-rose-500 bg-rose-500/10' },
-          { label: 'البدلات', count: allowances.filter((a) => a.isActive).length, icon: 'card_giftcard', color: 'text-teal-500 bg-teal-500/10' },
-        ].map((s) => (
-          <div key={s.label} className="bg-[var(--color-card)] p-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] flex items-center gap-3">
-            <div className={`w-10 h-10 ${s.color} rounded-[var(--border-radius-base)] flex items-center justify-center`}>
-              <span className="material-icons-round text-xl">{s.icon}</span>
-            </div>
-            <div>
-              <p className="text-[10px] text-[var(--color-text-muted)] font-medium">{s.label}</p>
-              <p className="text-lg font-black">{s.count}</p>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Tabs */}
-      <div className="flex gap-1 bg-[#f0f2f5] rounded-[var(--border-radius-lg)] p-1 overflow-x-auto">
-        {TABS.map((t) => (
-          <button key={t.key} onClick={() => setTab(t.key)}
-            className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-[var(--border-radius-base)] text-xs sm:text-sm font-bold transition-all whitespace-nowrap ${
-              tab === t.key ? 'bg-primary text-white shadow-md' : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
-            }`}>
-            <span className="material-icons-round text-lg">{t.icon}</span>
-            {t.label}
-          </button>
-        ))}
-      </div>
+      </OpsDashPanel>
 
       {/* ── Departments Tab ── */}
       {tab === 'departments' && (
-        <Card>
+        <OpsDashPanel title="الأقسام" accent="hr">
           <div className="mb-4 rounded-[var(--border-radius-lg)] border border-blue-200 bg-blue-50 p-4 text-sm font-bold text-blue-800">
             يمكن اختيار نفس الموظف كمدير لأكثر من قسم. أي موظف يكون مديراً لقسم سيستطيع إنشاء طلبات إنتاج لموظفي هذا القسم من صفحة طلبات الإنتاج.
           </div>
@@ -436,12 +420,12 @@ export const Organization: React.FC = () => {
               ))}
             </DataTable>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* ── Positions Tab ── */}
       {tab === 'positions' && (
-        <Card>
+        <OpsDashPanel title="المناصب" accent="hr">
           {positions.length === 0 ? <EmptyState icon="work" label="لا يوجد مناصب" sub='اضغط "إضافة منصب" للبدء' /> : (
             <DataTable headers={['المنصب', 'القسم', { label: 'المستوى', center: true }, { label: 'دخول النظام', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {positions.map((p) => (
@@ -456,7 +440,7 @@ export const Organization: React.FC = () => {
               ))}
             </DataTable>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* ── Employee Hierarchy Tab ── */}
@@ -470,7 +454,7 @@ export const Organization: React.FC = () => {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-[minmax(280px,360px)_1fr] gap-4">
-            <Card>
+            <OpsDashPanel title="الأقسام والمناصب" accent="hr">
               <div className="space-y-3">
                 <div>
                   <h2 className="font-black text-[var(--color-text)]">الأقسام والمناصب</h2>
@@ -568,9 +552,9 @@ export const Organization: React.FC = () => {
                   ))}
                 </div>
               </div>
-            </Card>
+            </OpsDashPanel>
 
-            <Card>
+            <OpsDashPanel title="تعديل التسلسل الوظيفي" accent="hr">
               {!selectedEmployee ? (
                 <EmptyState icon="account_tree" label="اختر موظفًا" sub="سيظهر نموذج تعديل التسلسل الوظيفي هنا" />
               ) : (
@@ -662,14 +646,14 @@ export const Organization: React.FC = () => {
                   </div>
                 </div>
               )}
-            </Card>
+            </OpsDashPanel>
           </div>
         </div>
       )}
 
       {/* ── Shifts Tab ── */}
       {tab === 'shifts' && (
-        <Card>
+        <OpsDashPanel title="الورديات" accent="hr">
           {shifts.length === 0 ? <EmptyState icon="schedule" label="لا يوجد ورديات" sub='اضغط "إضافة وردية" للبدء' /> : (
             <DataTable headers={['الوردية', { label: 'من', center: true }, { label: 'إلى', center: true }, { label: 'استراحة', center: true }, { label: 'سماح تأخير', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {shifts.map((s) => (
@@ -685,12 +669,12 @@ export const Organization: React.FC = () => {
               ))}
             </DataTable>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* ── Penalties Tab ── */}
       {tab === 'penalties' && (
-        <Card>
+        <OpsDashPanel title="الجزاءات" accent="hr">
           {penalties.length === 0 ? <EmptyState icon="gavel" label="لا يوجد جزاءات" sub='اضغط "إضافة جزاء" لإنشاء قاعدة جزاء' /> : (
             <DataTable headers={['الجزاء', { label: 'النوع', center: true }, { label: 'طريقة الحساب', center: true }, { label: 'القيمة', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {penalties.map((p) => (
@@ -705,12 +689,12 @@ export const Organization: React.FC = () => {
               ))}
             </DataTable>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* ── Late Rules Tab ── */}
       {tab === 'lateRules' && (
-        <Card>
+        <OpsDashPanel title="قواعد التأخير" accent="hr">
           <div className="mb-4 p-3 rounded-[var(--border-radius-base)] bg-amber-50 border border-amber-200">
             <p className="text-xs font-bold text-amber-700">
               قواعد التأخير بتحدد الخصم حسب عدد دقائق التأخير. كل قاعدة تغطي نطاقاً معيناً من الدقائق.
@@ -729,12 +713,12 @@ export const Organization: React.FC = () => {
               ))}
             </DataTable>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* ── Allowances Tab ── */}
       {tab === 'allowances' && (
-        <Card>
+        <OpsDashPanel title="البدلات" accent="hr">
           {allowances.length === 0 ? <EmptyState icon="card_giftcard" label="لا يوجد بدلات" sub='اضغط "إضافة بدل" لإنشاء نوع بدل' /> : (
             <DataTable headers={['البدل', { label: 'طريقة الحساب', center: true }, { label: 'القيمة', center: true }, { label: 'الحالة', center: true }]} canEdit={canEdit}>
               {allowances.map((a) => (
@@ -748,7 +732,7 @@ export const Organization: React.FC = () => {
               ))}
             </DataTable>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* ── Delete Confirmation Modal ── */}
@@ -767,7 +751,7 @@ export const Organization: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 
