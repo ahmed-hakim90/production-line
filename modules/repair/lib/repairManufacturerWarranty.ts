@@ -6,7 +6,7 @@
  * - some products → partial (bill non-warranty lines only)
  * - none → standard collection
  */
-import type { RepairJobProduct, RepairPartUsage, RepairWarrantyScope } from '../types';
+import type { RepairPartUsage, RepairWarrantyScope } from '../types';
 
 export const REPAIR_WARRANTY_SETTLEMENT = 'warranty' as const;
 
@@ -21,7 +21,10 @@ export const MANUFACTURER_WARRANTY_SCOPE_LABEL: Record<'none' | 'partial' | 'man
   manufacturer: 'داخل الضمان',
 };
 
-type WarrantyProductFlag = Pick<RepairJobProduct, 'inWarranty' | 'itemId'> | null | undefined;
+type WarrantyProductFlag = {
+  inWarranty?: boolean | null;
+  itemId?: string | null;
+} | null | undefined;
 
 export function jobHasInWarrantyProduct(
   products: Array<WarrantyProductFlag> | null | undefined,
@@ -90,8 +93,9 @@ export function isPartialManufacturerWarrantyJob(job: {
 }
 
 /**
- * True when the job has manufacturer warranty coverage (full or partial).
- * Prefer `isFullManufacturerWarrantyJob` for settlementType === 'warranty'.
+ * Alias for full manufacturer warranty only (settlementType === 'warranty').
+ * Does NOT include partial/mixed jobs — use `hasManufacturerWarrantyCoverage` or
+ * `isPartialManufacturerWarrantyJob` when mixed coverage matters.
  */
 export function isManufacturerWarrantyJob(job: {
   warrantyScope?: string | null;
@@ -132,7 +136,7 @@ export function isWarrantySettlementAuth(auth: {
 
 /** Prefer inventory issue cost snapshot; fall back to qty × unitCost only when snapshot missing. */
 export function sumWarrantyPartsIssueCost(
-  partsUsed: Array<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot'> | null | undefined> | null | undefined,
+  partsUsed: Array<Partial<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot'>> | null | undefined> | null | undefined,
 ): number {
   let sum = 0;
   for (const raw of partsUsed || []) {
@@ -160,7 +164,7 @@ export function sumWarrantyPartsIssueCost(
 export function sumJobManufacturerWarrantyPartsCost(job: {
   warrantyScope?: string | null;
   jobProducts?: Array<WarrantyProductFlag> | null;
-  partsUsed?: Array<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot' | 'productItemId' | 'scope'> | null | undefined> | null;
+  partsUsed?: Array<Partial<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot' | 'productItemId' | 'scope'>> | null | undefined> | null;
 }): number {
   if (isFullManufacturerWarrantyJob(job)) {
     return sumWarrantyPartsIssueCost(job.partsUsed);
@@ -179,7 +183,7 @@ export function sumManufacturerWarrantyPartsCost(
   jobs: Array<{
     warrantyScope?: string | null;
     jobProducts?: Array<WarrantyProductFlag> | null;
-    partsUsed?: Array<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot' | 'productItemId' | 'scope'> | null | undefined> | null;
+    partsUsed?: Array<Partial<Pick<RepairPartUsage, 'quantity' | 'unitCost' | 'unitCostSnapshot' | 'totalCostSnapshot' | 'productItemId' | 'scope'>> | null | undefined> | null;
   }>,
 ): number {
   return Math.round(

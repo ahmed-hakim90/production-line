@@ -7,7 +7,8 @@ const money = (value) => {
     return Number.isFinite(n) ? Math.round(Math.max(0, n) * 100) / 100 : 0;
 };
 const isWarrantyJob = (job) => {
-    if (String(job.warrantyScope || '') === 'manufacturer')
+    const scope = String(job.warrantyScope || '');
+    if (scope === 'manufacturer' || scope === 'partial')
         return true;
     return (Array.isArray(job.jobProducts) ? job.jobProducts : [])
         .some((raw) => Boolean(raw.inWarranty));

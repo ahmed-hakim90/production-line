@@ -55,7 +55,6 @@ import {
   resolveManufacturingItemName,
 } from '../../../utils/manufacturingItemLabels';
 import { Card, KPIBox, Badge, Button } from '../components/UI';
-import { PageHeader } from '@/src/components/erp/PageHeader';
 import { KPICard } from '@/src/components/erp/KPICard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -1887,23 +1886,14 @@ export const AdminDashboard: React.FC = () => {
 
      
 
-      {/* â”€â”€ Header â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <PageHeader
-        title="لوحة مدير النظام"
-        subtitle="كروت مؤشرات + رسوم لكل موديول"
-        actions={
-          isFinalLoading ? (
-            <span className="text-[12px] text-[var(--color-text-muted)] flex items-center gap-1">
-              {renderDashboardIcon('sync', 'text-[14px] animate-spin')}
-              جاري التحديث...
-            </span>
-          ) : undefined
-        }
-      />
+      <ModuleChartsHomeBoard />
 
-      {/* â”€â”€ Period Filter â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      <details className="ops-dash-secondary">
+        <summary>تقارير وتفاصيل إضافية (اختياري)</summary>
+        <div className="ops-dash-secondary__body">
+
       <SmartFilterBar
-      pageId="dashboard-admin-main"
+        pageId="dashboard-admin-main"
         periods={(Object.keys(PRESET_LABELS) as PeriodPreset[]).map((key) => ({
           value: key,
           label: PRESET_LABELS[key],
@@ -1929,8 +1919,9 @@ export const AdminDashboard: React.FC = () => {
           }
         }}
         extra={(
-          <div className="inline-flex h-[34px] items-center rounded-lg border border-slate-200 px-2.5 text-xs text-slate-500">
+          <div className="inline-flex h-[34px] items-center rounded-lg border border-[var(--color-border)] px-2.5 text-xs text-[var(--color-text-muted)]">
             {monthlyCostMode ? 'مصدر التكلفة: الحساب الشهري المعتمد' : 'مصدر التكلفة: حساب لحظي (fallback)'}
+            {isFinalLoading ? ' · جاري التحديث…' : ''}
           </div>
         )}
       />
@@ -1947,12 +1938,6 @@ export const AdminDashboard: React.FC = () => {
           <span>لا توجد تقارير إنتاج في الفترة المحددة.</span>
         </div>
       )}
-
-      <ModuleChartsHomeBoard title="" subtitle="" />
-
-      <details className="ops-dash-secondary">
-        <summary>تقارير وتفاصيل إضافية (اختياري)</summary>
-        <div className="ops-dash-secondary__body">
 
       {quickActions.length > 0 && (
         <Card>

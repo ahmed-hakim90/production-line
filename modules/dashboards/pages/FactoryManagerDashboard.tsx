@@ -938,10 +938,5 @@ export const FactoryManagerDashboard: React.FC = () => {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
-  return (
-    <ModuleChartsHomeBoard
-      title="لوحة مدير المصنع"
-      subtitle="كروت مؤشرات + رسوم لكل موديول"
-    />
-  );
+  return <ModuleChartsHomeBoard />;
 };

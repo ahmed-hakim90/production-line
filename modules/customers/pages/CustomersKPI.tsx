@@ -76,6 +76,7 @@ export const CustomersKPI: React.FC = () => {
 
   const sizeFromQuery = String(searchParams.get('size') || '').trim();
   const followUpFromQuery = String(searchParams.get('followUp') || '').trim();
+  const activeFromQuery = String(searchParams.get('active') || '').trim();
 
   const [rows, setRows] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
@@ -91,7 +92,9 @@ export const CustomersKPI: React.FC = () => {
       ? followUpFromQuery
       : 'all',
   );
-  const [metricsFilter, setMetricsFilter] = useState('all');
+  const [metricsFilter, setMetricsFilter] = useState(
+    activeFromQuery === '1' || activeFromQuery === 'true' ? 'active' : 'all',
+  );
   const [page, setPage] = useState(1);
 
   useEffect(() => {
@@ -101,7 +104,10 @@ export const CustomersKPI: React.FC = () => {
     if (followUpFromQuery === 'needs_call' || followUpFromQuery === 'followed_up' || followUpFromQuery === 'none') {
       setFollowUpFilter(followUpFromQuery);
     }
-  }, [sizeFromQuery, followUpFromQuery]);
+    if (activeFromQuery === '1' || activeFromQuery === 'true') {
+      setMetricsFilter('active');
+    }
+  }, [sizeFromQuery, followUpFromQuery, activeFromQuery]);
 
   const [importOpen, setImportOpen] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -157,7 +163,9 @@ export const CustomersKPI: React.FC = () => {
     if (followUpFilter !== 'all') {
       list = list.filter((c) => (c.followUpStatus || 'none') === followUpFilter);
     }
-    if (metricsFilter === 'with_volume') {
+    if (metricsFilter === 'active') {
+      list = list.filter((c) => c.isActive !== false);
+    } else if (metricsFilter === 'with_volume') {
       list = list.filter((c) => c.businessVolume != null);
     } else if (metricsFilter === 'with_balance') {
       list = list.filter((c) => c.balance != null);
@@ -367,6 +375,7 @@ export const CustomersKPI: React.FC = () => {
                 key: 'metrics',
                 placeholder: 'كل المؤشرات',
                 options: [
+                  { value: 'active', label: 'نشط' },
                   { value: 'with_volume', label: 'لديه حجم شغل' },
                   { value: 'with_balance', label: 'لديه رصيد' },
                   { value: 'missing', label: 'بدون مؤشرات' },

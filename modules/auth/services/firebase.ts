@@ -625,6 +625,8 @@ export type PublicRepairApprovalEstimate = {
     quantity: number;
     unitPrice: number;
     lineTotal: number;
+    inWarranty?: boolean;
+    warrantyLabel?: string;
   }>;
   products: Array<{
     name: string;

@@ -4,13 +4,19 @@
  * Cloud Function mirrors the same shape (functions cannot import app modules).
  */
 
-import { manufacturerWarrantyLineLabel } from './repairManufacturerWarranty';
+import {
+  isFullManufacturerWarrantyJob,
+  manufacturerWarrantyLineLabel,
+  warrantyProductItemIds,
+} from './repairManufacturerWarranty';
 
 export type PublicRepairApprovalPartLine = {
   partName: string;
   quantity: number;
   unitPrice: number;
   lineTotal: number;
+  inWarranty: boolean;
+  warrantyLabel: string;
 };
 
 export type PublicRepairApprovalProductLine = {
@@ -36,7 +42,7 @@ export type PublicRepairApprovalView = {
   productsCost: number;
   warrantyProductsCost: number;
   billableProductsCost: number;
-  /** Total presented to the customer (estimatedCost when set, else computed billable). */
+  /** Prefer computed billable total; fall back to stored estimate when computed is 0. */
   estimatedTotal: number;
   parts: PublicRepairApprovalPartLine[];
   products: PublicRepairApprovalProductLine[];
@@ -64,10 +70,12 @@ export type PublicRepairApprovalJobSource = {
   estimatedCost?: unknown;
   finalCost?: unknown;
   finalCostOverride?: unknown;
+  warrantyScope?: unknown;
   partsUsed?: Array<{
     partName?: unknown;
     quantity?: unknown;
     unitCost?: unknown;
+    productItemId?: unknown;
   }> | unknown;
   jobProducts?: Array<{
     productName?: unknown;
@@ -75,6 +83,7 @@ export type PublicRepairApprovalJobSource = {
     estimatedCost?: unknown;
     finalCost?: unknown;
     inWarranty?: unknown;
+    itemId?: unknown;
   }> | unknown;
 };
 
@@ -82,23 +91,33 @@ export type PublicRepairApprovalJobSource = {
 export function buildPublicRepairApprovalView(
   job: PublicRepairApprovalJobSource,
 ): PublicRepairApprovalView {
+  const rawProducts = Array.isArray(job.jobProducts) ? job.jobProducts : [];
+  const fullWarranty = isFullManufacturerWarrantyJob({
+    warrantyScope: job.warrantyScope == null ? undefined : String(job.warrantyScope),
+    jobProducts: rawProducts,
+  });
+  const warrantyIds = warrantyProductItemIds(rawProducts);
+
   const rawParts = Array.isArray(job.partsUsed) ? job.partsUsed : [];
   const parts: PublicRepairApprovalPartLine[] = rawParts
     .slice(0, 50)
     .map((row) => {
       const partName = text(row?.partName, 120) || 'قطعة غيار';
       const quantity = Math.max(0, Math.round(Number(row?.quantity || 0)));
-      const unitPrice = money(row?.unitCost);
+      const productItemId = String(row?.productItemId || '').trim();
+      const inWarranty = fullWarranty || Boolean(productItemId && warrantyIds.has(productItemId));
+      const unitPrice = inWarranty ? 0 : money(row?.unitCost);
       return {
         partName,
         quantity,
         unitPrice,
         lineTotal: money(quantity * unitPrice),
+        inWarranty,
+        warrantyLabel: manufacturerWarrantyLineLabel(inWarranty),
       };
     })
     .filter((row) => row.quantity > 0);
 
-  const rawProducts = Array.isArray(job.jobProducts) ? job.jobProducts : [];
   const products: PublicRepairApprovalProductLine[] = rawProducts
     .slice(0, 30)
     .map((row) => {
@@ -118,8 +137,8 @@ export function buildPublicRepairApprovalView(
     .filter((row) => row.name.length > 0);
 
   const partsCost = money(parts.reduce((sum, row) => sum + row.lineTotal, 0));
-  const laborCost = money(job.laborCost);
-  const serviceOnlyCost = money(job.serviceOnlyCost);
+  const laborCost = fullWarranty ? 0 : money(job.laborCost);
+  const serviceOnlyCost = fullWarranty ? 0 : money(job.serviceOnlyCost);
   const billableProductsCost = money(
     products.filter((row) => !row.inWarranty).reduce((sum, row) => sum + row.lineCost, 0),
   );
@@ -131,10 +150,9 @@ export function buildPublicRepairApprovalView(
   const productsCost = billableProductsCost;
   const computed = money(partsCost + laborCost + serviceOnlyCost + productsCost);
   const estimatedStored = money(job.estimatedCost);
-  const estimatedTotal =
-    estimatedStored > 0
-      ? estimatedStored
-      : money(job.finalCostOverride ?? (computed > 0 ? computed : job.finalCost));
+  const estimatedTotal = computed > 0
+    ? computed
+    : (estimatedStored > 0 ? estimatedStored : money(job.finalCostOverride ?? job.finalCost));
 
   return {
     receiptNo: text(job.receiptNo, 64),

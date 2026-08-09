@@ -47,6 +47,7 @@ import {
 } from '../lib/repairAdminDashboardMetrics';
 import { normalizeTreasuryMonth } from '../lib/repairTreasuryMonthlyClose';
 import { summarizeRepairUnrepairableReasons } from '../lib/repairUnrepairableAnalytics';
+import { sumManufacturerWarrantyPartsCost } from '../lib/repairManufacturerWarranty';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -444,6 +445,12 @@ export const RepairAdminDashboard: React.FC = () => {
     ),
     [jobs, allowedBranchIds],
   );
+  const warrantyPartsCost = useMemo(
+    () => sumManufacturerWarrantyPartsCost(
+      jobs.filter((job) => allowedBranchIds.includes(String(job.branchId || ''))),
+    ),
+    [jobs, allowedBranchIds],
+  );
 
   const canViewJobs = can('repair.view') || can('repair.adminDashboard.view');
   const canViewReplenishment =
@@ -624,7 +631,7 @@ export const RepairAdminDashboard: React.FC = () => {
       {!loading && !emptyBranches && (
         <>
           {/* Overview KPIs: always 2 per row on mobile/tablet */}
-          <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-3 xl:grid-cols-5">
+          <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-3 xl:grid-cols-6">
             <Card className="shadow-sm">
               <CardContent className="space-y-1 p-3 md:pt-5">
                 <p className="text-[11px] text-muted-foreground md:text-xs">إجمالي الطلبات</p>
@@ -653,6 +660,13 @@ export const RepairAdminDashboard: React.FC = () => {
               <CardContent className="space-y-1 p-3 md:pt-5">
                 <p className="text-[11px] text-muted-foreground md:text-xs">مبيعات قطع الغيار</p>
                 <p className="text-xl font-bold text-sky-600 tabular-nums md:text-2xl">{fmt(overview.partsRevenue)}</p>
+              </CardContent>
+            </Card>
+            <Card className="shadow-sm">
+              <CardContent className="space-y-1 p-3 md:pt-5">
+                <p className="text-[11px] text-muted-foreground md:text-xs">تكلفة قطع تحت ضمان</p>
+                <p className="text-xl font-bold text-violet-700 tabular-nums md:text-2xl dark:text-violet-300">{fmt(warrantyPartsCost)}</p>
+                <p className="text-[10px] text-muted-foreground">من تكلفة الصرف الفعلية (ليس سعر البيع)</p>
               </CardContent>
             </Card>
           </div>

@@ -36,17 +36,34 @@ const baseJob = {
   assert.equal(view.partsCost, 1250);
   assert.equal(view.laborCost, 150);
   assert.equal(view.estimatedTotal, 1400);
+  assert.equal(view.parts[0]?.inWarranty, false);
   assert.ok(!('technicianId' in view));
   assert.ok(!('approvalTokenHash' in view));
   assert.ok(!('materialId' in (view.parts[0] || {})));
 }
 
 {
+  // Prefer computed billable total over a higher stored estimate.
   const view = buildPublicRepairApprovalView({
     ...baseJob,
     estimatedCost: 2000,
   });
-  assert.equal(view.estimatedTotal, 2000);
+  assert.equal(view.estimatedTotal, 1400);
+}
+
+{
+  // When computed is 0, fall back to stored estimate.
+  const view = buildPublicRepairApprovalView({
+    receiptNo: 'REP-stored',
+    customerName: 'سعد',
+    customerPhone: '011',
+    laborCost: 0,
+    serviceOnlyCost: 0,
+    estimatedCost: 350,
+    partsUsed: [],
+    jobProducts: [],
+  });
+  assert.equal(view.estimatedTotal, 350);
 }
 
 {
@@ -93,6 +110,36 @@ const baseJob = {
   assert.equal(view.billableProductsCost, 200);
   assert.equal(view.warrantyProductsCost, 500);
   assert.equal(view.estimatedTotal, 200);
+}
+
+{
+  // Partial warranty: parts linked to warranty productItemId are free.
+  const view = buildPublicRepairApprovalView({
+    receiptNo: 'REP-partial',
+    customerName: 'مختلط',
+    customerPhone: '0100',
+    warrantyScope: 'partial',
+    laborCost: 100,
+    serviceOnlyCost: 0,
+    estimatedCost: 9999,
+    jobProducts: [
+      { productName: 'مضمون', quantity: 1, itemId: 'p-w', finalCost: 400, inWarranty: true },
+      { productName: 'مدفوع', quantity: 1, itemId: 'p-b', finalCost: 150, inWarranty: false },
+    ],
+    partsUsed: [
+      { partName: 'قطعة ضمان', quantity: 1, unitCost: 800, productItemId: 'p-w' },
+      { partName: 'قطعة مدفوعة', quantity: 1, unitCost: 200, productItemId: 'p-b' },
+    ],
+  });
+  assert.equal(view.parts.length, 2);
+  assert.equal(view.parts[0]?.inWarranty, true);
+  assert.equal(view.parts[0]?.lineTotal, 0);
+  assert.equal(view.parts[0]?.warrantyLabel, 'داخل الضمان');
+  assert.equal(view.parts[1]?.inWarranty, false);
+  assert.equal(view.parts[1]?.lineTotal, 200);
+  assert.equal(view.partsCost, 200);
+  assert.equal(view.billableProductsCost, 150);
+  assert.equal(view.estimatedTotal, 450); // 200 parts + 100 labor + 150 product
 }
 
 console.log('repair-approval-public.test.ts: ok');

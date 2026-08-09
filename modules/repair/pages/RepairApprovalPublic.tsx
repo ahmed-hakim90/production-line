@@ -163,8 +163,15 @@ export const RepairApprovalPublic: React.FC = () => {
                               ×{part.quantity.toLocaleString('ar-EG')}
                               {part.unitPrice > 0 ? ` · ${fmtMoney(part.unitPrice)} للوحدة` : ''}
                             </div>
+                            {part.inWarranty ? (
+                              <div className="text-xs font-medium text-sky-700">
+                                {part.warrantyLabel || 'داخل الضمان'}
+                              </div>
+                            ) : null}
                           </div>
-                          <div className="shrink-0 font-medium tabular-nums">{fmtMoney(part.lineTotal)}</div>
+                          <div className="shrink-0 font-medium tabular-nums">
+                            {part.inWarranty ? 'مجاني' : fmtMoney(part.lineTotal)}
+                          </div>
                         </div>
                       ))}
                     </div>

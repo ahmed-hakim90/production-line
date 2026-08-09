@@ -13,7 +13,6 @@ import {
 import { RefreshCw } from 'lucide-react';
 import { formatCost } from '@/utils/costCalculations';
 import { formatNumber } from '@/utils/calculations';
-import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { OpsDashPanel } from './OperationsDashboardBoard';
 import { DashboardProgressGauge } from './DashboardProgressGauge';
 import { useHomeModuleCharts } from '../hooks/useHomeModuleCharts';
@@ -28,10 +27,10 @@ import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 
 type Props = {
+  /** Optional small eyebrow above KPIs — avoid large page titles here. */
   title?: string;
   subtitle?: string;
   headerExtra?: React.ReactNode;
-  /** When false, period filter is omitted (parent owns filtering). Default true. */
   showPeriodFilter?: boolean;
 };
 
@@ -39,6 +38,8 @@ type ModuleAccent = 'production' | 'inventory' | 'costs' | 'hr' | 'quality' | 'r
 
 const CHART_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' };
 const GRID_STROKE = 'color-mix(in srgb, var(--color-border) 80%, transparent)';
+
+const PERIOD_ORDER: HomeChartsPeriodPreset[] = ['today', 'week', 'month', '3months', 'custom'];
 
 function ChartTooltip({ active, payload, label }: {
   active?: boolean;
@@ -187,11 +188,11 @@ function ModuleBarChart({
 }
 
 /**
- * Donezo-like home: 4 KPI cards + one chart panel per permitted module.
+ * Data-first home board: KPIs + module charts up front; period tools stay compact below.
  */
 export const ModuleChartsHomeBoard: React.FC<Props> = ({
-  title = 'لوحة التحكم',
-  subtitle = 'مؤشرات ورسوم لكل موديول',
+  title,
+  subtitle,
   headerExtra,
   showPeriodFilter = true,
 }) => {
@@ -222,69 +223,17 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
-  const showTitle = Boolean(title?.trim());
+  const showEyebrow = Boolean(title?.trim());
   const showPlanGauge = hero.planAchievement > 0 || data.planTotalCount > 0;
 
   return (
-    <div className="erp-dashboard-theme ops-dash-board">
-      <header className="ops-dash-header">
-        {showTitle ? (
-          <div className="min-w-0">
-            <h1 className="ops-dash-header__title">{title}</h1>
-            {subtitle ? <p className="ops-dash-header__subtitle">{subtitle}</p> : null}
-          </div>
-        ) : (
-          <span />
-        )}
-        <div className="ops-dash-header__tools">
-          {showPeriodFilter ? (
-            <div className="ops-dash-header__filter">
-              <SmartFilterBar
-                pageId="home-module-charts"
-                periods={(Object.keys(HOME_CHARTS_PERIOD_LABELS) as HomeChartsPeriodPreset[]).map((key) => ({
-                  value: key,
-                  label: HOME_CHARTS_PERIOD_LABELS[key],
-                }))}
-                activePeriod={preset}
-                onPeriodChange={(value) => setPreset(value as HomeChartsPeriodPreset)}
-                advancedFilters={[
-                  { key: 'dateFrom', label: 'من تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[140px]' },
-                  { key: 'dateTo', label: 'إلى تاريخ', placeholder: '', options: [], type: 'date', width: 'w-[140px]' },
-                ]}
-                advancedFilterValues={{
-                  dateFrom: customStart || period.start,
-                  dateTo: customEnd || period.end,
-                }}
-                onAdvancedFilterChange={(key, value) => {
-                  if (key === 'dateFrom') {
-                    setCustomStart(value);
-                    setPreset('custom');
-                  }
-                  if (key === 'dateTo') {
-                    setCustomEnd(value);
-                    setPreset('custom');
-                  }
-                }}
-              />
-            </div>
-          ) : null}
-          <div className="ops-dash-refresh">
-            <span className="ops-dash-refresh__time">
-              آخر تحديث: {formatLoadedAt(data.loadedAt)}
-            </span>
-            <button
-              type="button"
-              className="ops-dash-refresh__btn"
-              disabled={data.loading}
-              onClick={() => setRefreshToken((n) => n + 1)}
-            >
-              <RefreshCw className={`h-3.5 w-3.5 ${data.loading ? 'animate-spin' : ''}`} />
-              تحديث
-            </button>
-          </div>
-          {headerExtra}
-        </div>
-      </header>
+    <div className="erp-dashboard-theme ops-dash-board ops-dash-board--data-first">
+      {showEyebrow ? (
+        <p className="ops-dash-eyebrow">
+          {title}
+          {subtitle?.trim() ? ` · ${subtitle}` : ''}
+        </p>
+      ) : null}
 
       <div className="ops-dash-kpi-grid">
         <div className="ops-dash-kpi-card ops-dash-kpi-card--accent">
@@ -536,6 +485,68 @@ export const ModuleChartsHomeBoard: React.FC<Props> = ({
           )}
         </ModulePanel>
       </div>
+
+      {(showPeriodFilter || headerExtra) && (
+        <div className="ops-dash-toolbar">
+          {showPeriodFilter ? (
+            <div className="ops-dash-toolbar__periods">
+              {PERIOD_ORDER.map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  className={`ops-dash-period-chip${preset === key ? ' is-active' : ''}`}
+                  onClick={() => setPreset(key)}
+                >
+                  {HOME_CHARTS_PERIOD_LABELS[key]}
+                </button>
+              ))}
+              {preset === 'custom' ? (
+                <div className="ops-dash-custom-dates">
+                  <input
+                    type="date"
+                    value={customStart || period.start}
+                    onChange={(e) => {
+                      setCustomStart(e.target.value);
+                      setPreset('custom');
+                    }}
+                    aria-label="من تاريخ"
+                  />
+                  <input
+                    type="date"
+                    value={customEnd || period.end}
+                    onChange={(e) => {
+                      setCustomEnd(e.target.value);
+                      setPreset('custom');
+                    }}
+                    aria-label="إلى تاريخ"
+                  />
+                </div>
+              ) : null}
+            </div>
+          ) : (
+            <span />
+          )}
+          <div className="ops-dash-toolbar__meta">
+            <span className="ops-dash-toolbar__range">
+              {period.start} → {period.end}
+            </span>
+            <div className="ops-dash-refresh">
+              <span className="ops-dash-refresh__time">{formatLoadedAt(data.loadedAt)}</span>
+              <button
+                type="button"
+                className="ops-dash-refresh__btn"
+                disabled={data.loading}
+                onClick={() => setRefreshToken((n) => n + 1)}
+                title="تحديث البيانات"
+              >
+                <RefreshCw className={`h-3.5 w-3.5 ${data.loading ? 'animate-spin' : ''}`} />
+                تحديث
+              </button>
+            </div>
+            {headerExtra}
+          </div>
+        </div>
+      )}
     </div>
   );
 };

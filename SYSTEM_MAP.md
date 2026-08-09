@@ -17,7 +17,7 @@
 | MOD / 02 | Production | Plans, lines, reports, routing, packaging |
 | MOD / 03 | Manufacturing / Catalog | Materials, product BOM, categories |
 | MOD / 04 | Inventory | Warehouses, balances, transfers, production issues |
-| MOD / 05 | Repair | Jobs, custody, spare parts, RSI vouchers, treasury |
+| MOD / 05 | Repair | Jobs, custody, spare parts, RSI vouchers, treasury; manufacturer warranty (full/partial per product) |
 | MOD / 06 | Customers | Customer master + repair links |
 | MOD / 07 | HR | Employees, attendance, payroll, approvals |
 | MOD / 08 | Accounting / Costs | Journals, valuation, monthly production cost |
@@ -29,7 +29,7 @@
 1. **Catalog** — manufactured products (`isManufactured`) + materials/BOM  
 2. **Production plan / report** → **production issue** (prepare by location → approve → issue → print)  
 3. Stock moves supplies → floor → WIP → finished  
-4. **Repair** (parallel): receive → diagnose (auto status) → part/service → estimate → customer approval → repair/parts → ready → deliver; status roles configured in repair settings  
+4. **Repair** (parallel): receive (per-product `inWarranty`) → diagnose (auto status) → part/service → estimate → customer approval → repair/parts → ready → deliver; status roles configured in repair settings. Manufacturer warranty: all lines → full `WAR-…` close without collect; mixed → bill non-warranty only + `warrantyAllowances` on deliver  
 
 5. **Center replenishment** (parallel): center request → central approve/prepare/responsible → center receive (stock in on receive only)
 

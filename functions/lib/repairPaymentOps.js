@@ -5,16 +5,18 @@ import { getDb } from './adminApp.js';
 import { loadProtectedRepairServiceCatalog } from './repairServiceCatalogOps.js';
 import { loadCustomerType, pickRepairSalePrice, roundRepairMoney } from './repairSalePrice.js';
 import { buildWarrantySettlementTotals } from './repairWarrantyAccountingPolicy.js';
+import { isFullManufacturerWarrantyJob, isPartialManufacturerWarrantyJob, isWarrantyAttributedPart, resolveManufacturerWarrantyScope, warrantyProductItemIds, } from './repairManufacturerWarranty.js';
 import { isStatusRole, loadTenantWorkflowStatuses, resolveNextStatusForAction, statusIdForRole, } from './repairStatusAdvance.js';
 const db = getDb();
 const WARRANTY_SETTLEMENT = 'warranty';
-const isManufacturerWarrantyJob = (job) => {
-    if (String(job.warrantyScope || '') === 'manufacturer')
-        return true;
-    const products = Array.isArray(job.jobProducts) ? job.jobProducts : [];
-    return products.some((row) => Boolean(row.inWarranty));
-};
 const isWarrantySettlement = (row) => Boolean(row && String(row.settlementType || '') === WARRANTY_SETTLEMENT);
+const jobWarrantyScope = (job) => {
+    const products = Array.isArray(job.jobProducts) ? job.jobProducts : [];
+    const stored = String(job.warrantyScope || '');
+    if (stored === 'manufacturer' || stored === 'partial' || stored === 'none')
+        return stored;
+    return resolveManufacturerWarrantyScope(products);
+};
 const roundMoney = (value) => {
     const n = Number(value || 0);
     if (!Number.isFinite(n))
@@ -117,30 +119,46 @@ const computeBreakdown = async (tenantId, job) => {
     const catalog = protectedCatalog.services.filter((row) => row.enabled !== false);
     const serviceById = new Map(catalog.map((row) => [row.id, row]));
     const products = Array.isArray(job.jobProducts) ? job.jobProducts : [];
+    const scope = jobWarrantyScope(job);
+    const fullWarranty = scope === 'manufacturer';
+    const warrantyIds = warrantyProductItemIds(products);
     const serviceQty = new Map();
+    let warrantyServiceInternalCost = 0;
     for (const product of products) {
         const quantity = Math.max(1, Math.round(Number(product.quantity || 1)));
+        const inWarranty = Boolean(product.inWarranty);
         const serviceIds = Array.isArray(product.serviceIds) ? product.serviceIds.map(String) : [];
         for (const id of serviceIds) {
-            if (!serviceById.has(id)) {
+            const service = serviceById.get(id);
+            if (!service) {
                 throw new HttpsError('failed-precondition', `الخدمة ${id} غير موجودة أو غير مفعلة في كتالوج الأسعار.`);
             }
-            serviceQty.set(id, (serviceQty.get(id) || 0) + quantity);
+            const prev = serviceQty.get(id) || { quantity: 0, warrantyQuantity: 0 };
+            prev.quantity += quantity;
+            if (fullWarranty || inWarranty) {
+                prev.warrantyQuantity += quantity;
+                warrantyServiceInternalCost = roundMoney(warrantyServiceInternalCost + quantity * roundMoney(service.internalCost));
+            }
+            serviceQty.set(id, prev);
         }
     }
-    const serviceLines = Array.from(serviceQty.entries()).map(([id, quantity]) => {
+    const serviceLines = Array.from(serviceQty.entries()).map(([id, agg]) => {
         const service = serviceById.get(id);
+        const billableQty = fullWarranty ? 0 : Math.max(0, agg.quantity - agg.warrantyQuantity);
         return {
             id,
             name: service.name,
-            quantity,
+            quantity: billableQty,
+            warrantyQuantity: fullWarranty ? agg.quantity : agg.warrantyQuantity,
             unitPrice: roundMoney(service.price),
             unitInternalCost: roundMoney(service.internalCost),
-            internalCostTotal: roundMoney(quantity * service.internalCost),
-            lineTotal: roundMoney(quantity * service.price),
+            internalCostTotal: roundMoney(billableQty * service.internalCost),
+            lineTotal: roundMoney(billableQty * service.price),
+            warrantyLineTotal: roundMoney((fullWarranty ? agg.quantity : agg.warrantyQuantity) * service.price),
         };
     });
     let serviceGross = roundMoney(serviceLines.reduce((sum, row) => sum + row.lineTotal, 0));
+    let warrantyServiceGross = roundMoney(serviceLines.reduce((sum, row) => sum + row.warrantyLineTotal, 0));
     const usages = Array.isArray(job.partsUsed) ? job.partsUsed : [];
     const unlinkedUsage = usages.find((row) => Number(row.quantity || 0) > 0 && !String(row.materialId || '').trim());
     if (unlinkedUsage) {
@@ -164,6 +182,7 @@ const computeBreakdown = async (tenantId, job) => {
         return [snap.id, roundRepairMoney(sale)];
     }));
     const partByMaterial = new Map();
+    const warrantyUsages = [];
     for (const usage of usages) {
         const qty = Math.max(0, Number(usage.quantity || 0));
         const materialId = String(usage.materialId || '').trim();
@@ -171,36 +190,114 @@ const computeBreakdown = async (tenantId, job) => {
         if (unitPrice === undefined || unitPrice < 0) {
             throw new HttpsError('failed-precondition', 'قطعة غيار مرتبطة غير موجودة أو خارج الشركة.');
         }
-        const previous = partByMaterial.get(materialId);
-        partByMaterial.set(materialId, {
+        const onWarranty = isWarrantyAttributedPart(usage, warrantyIds, fullWarranty);
+        if (onWarranty)
+            warrantyUsages.push(usage);
+        const previous = partByMaterial.get(materialId) || {
             id: materialId,
-            name: String(usage.partName || previous?.name || materialId),
-            quantity: roundMoney((previous?.quantity || 0) + qty),
+            name: String(usage.partName || materialId),
+            quantity: 0,
+            warrantyQuantity: 0,
             unitPrice,
-        });
+        };
+        previous.name = String(usage.partName || previous.name || materialId);
+        if (fullWarranty || onWarranty) {
+            previous.warrantyQuantity = roundMoney(previous.warrantyQuantity + qty);
+        }
+        if (!fullWarranty && !onWarranty) {
+            previous.quantity = roundMoney(previous.quantity + qty);
+        }
+        partByMaterial.set(materialId, previous);
     }
     const partLines = Array.from(partByMaterial.values()).map((row) => ({
-        ...row,
+        id: row.id,
+        name: row.name,
+        quantity: row.quantity,
+        warrantyQuantity: row.warrantyQuantity,
+        unitPrice: row.unitPrice,
         lineTotal: roundMoney(row.quantity * row.unitPrice),
+        warrantyLineTotal: roundMoney(row.warrantyQuantity * row.unitPrice),
     }));
-    const partsGross = roundMoney(partLines.reduce((sum, row) => sum + row.lineTotal, 0));
+    let partsGross = roundMoney(partLines.reduce((sum, row) => sum + row.lineTotal, 0));
+    let warrantyPartsGross = roundMoney(partLines.reduce((sum, row) => sum + row.warrantyLineTotal, 0));
     const fallbackGross = roundMoney(job.finalCostOverride ?? job.finalCost);
-    if (serviceGross + partsGross <= 0 && fallbackGross > 0) {
-        serviceGross = fallbackGross;
-        serviceLines.push({ id: 'legacy-service', name: 'خدمة صيانة', quantity: 1, unitPrice: fallbackGross, unitInternalCost: 0, internalCostTotal: 0, lineTotal: fallbackGross });
+    if (serviceGross + partsGross + warrantyServiceGross + warrantyPartsGross <= 0 && fallbackGross > 0) {
+        if (fullWarranty) {
+            warrantyServiceGross = fallbackGross;
+            serviceLines.push({
+                id: 'legacy-service',
+                name: 'خدمة صيانة',
+                quantity: 0,
+                warrantyQuantity: 1,
+                unitPrice: fallbackGross,
+                unitInternalCost: 0,
+                internalCostTotal: 0,
+                lineTotal: 0,
+                warrantyLineTotal: fallbackGross,
+            });
+        }
+        else {
+            serviceGross = fallbackGross;
+            serviceLines.push({
+                id: 'legacy-service',
+                name: 'خدمة صيانة',
+                quantity: 1,
+                warrantyQuantity: 0,
+                unitPrice: fallbackGross,
+                unitInternalCost: 0,
+                internalCostTotal: 0,
+                lineTotal: fallbackGross,
+                warrantyLineTotal: 0,
+            });
+        }
     }
-    const warrantyServiceInternalCost = roundMoney(serviceLines.reduce((sum, row) => sum + roundMoney(row.internalCostTotal), 0));
-    const warrantyPartsActualCost = sumPartsActualCost(usages);
+    if (fullWarranty) {
+        // Customer-facing gross mirrors total value; settlement zeros net via 100% allowance.
+        const totalService = roundMoney(warrantyServiceGross);
+        const totalParts = roundMoney(warrantyPartsGross);
+        const warrantyPartsActualCost = sumPartsActualCost(usages);
+        return {
+            catalogRevision: protectedCatalog.revision,
+            warrantyScope: scope,
+            serviceLines: serviceLines.map((row) => ({
+                ...row,
+                quantity: row.warrantyQuantity,
+                lineTotal: row.warrantyLineTotal,
+                internalCostTotal: roundMoney(row.warrantyQuantity * row.unitInternalCost),
+            })),
+            partLines: partLines.map((row) => ({
+                ...row,
+                quantity: row.warrantyQuantity,
+                lineTotal: row.warrantyLineTotal,
+            })),
+            serviceGross: totalService,
+            partsGross: totalParts,
+            grossAmount: roundMoney(totalService + totalParts),
+            warrantyServiceGross: totalService,
+            warrantyPartsGross: totalParts,
+            warrantyGrossAmount: roundMoney(totalService + totalParts),
+            warrantyServiceInternalCost,
+            warrantyPartsActualCost,
+            warrantyActualCost: roundMoney(warrantyServiceInternalCost + warrantyPartsActualCost),
+        };
+    }
+    const warrantyPartsActualCost = sumPartsActualCost(warrantyUsages.length ? warrantyUsages : []);
     return {
         catalogRevision: protectedCatalog.revision,
+        warrantyScope: scope,
         serviceLines,
         partLines,
         serviceGross: roundMoney(serviceGross),
-        partsGross,
+        partsGross: roundMoney(partsGross),
         grossAmount: roundMoney(serviceGross + partsGross),
-        warrantyServiceInternalCost,
-        warrantyPartsActualCost,
-        warrantyActualCost: roundMoney(warrantyServiceInternalCost + warrantyPartsActualCost),
+        warrantyServiceGross,
+        warrantyPartsGross,
+        warrantyGrossAmount: roundMoney(warrantyServiceGross + warrantyPartsGross),
+        warrantyServiceInternalCost: scope === 'partial' ? warrantyServiceInternalCost : 0,
+        warrantyPartsActualCost: scope === 'partial' ? warrantyPartsActualCost : 0,
+        warrantyActualCost: scope === 'partial'
+            ? roundMoney(warrantyServiceInternalCost + warrantyPartsActualCost)
+            : 0,
     };
 };
 const paymentStatus = (net, paid) => {
@@ -338,14 +435,20 @@ async function prepareAuthorization(actor, data) {
     if (!costCenterSnap.exists || String(costCenterSnap.data()?.tenantId || '') !== actor.tenantId || costCenterSnap.data()?.isActive === false) {
         throw new HttpsError('failed-precondition', 'مركز تكلفة الفرع غير صالح أو غير نشط.');
     }
-    const warrantyJob = isManufacturerWarrantyJob(scoped.job);
+    const warrantyScope = jobWarrantyScope(scoped.job);
+    const warrantyJob = isFullManufacturerWarrantyJob(scoped.job);
+    const partialWarranty = isPartialManufacturerWarrantyJob(scoped.job);
     const discountRequested = String(data.discountType || 'none') !== 'none'
         && roundMoney(data.discountValue) > 0;
     if (warrantyJob && discountRequested) {
         throw new HttpsError('failed-precondition', 'طلب ضمان المصنّع يحصل على إعفاء ضمان كامل تلقائيًا. لا يُطبَّق خصم يدوي إضافي.');
     }
     const breakdown = await computeBreakdown(actor.tenantId, scoped.job);
-    if (!warrantyJob && breakdown.grossAmount <= 0) {
+    const hasAnyPricedWork = breakdown.grossAmount > 0 || roundMoney(breakdown.warrantyGrossAmount) > 0;
+    if (!warrantyJob && !hasAnyPricedWork) {
+        throw new HttpsError('failed-precondition', 'لا يمكن إنشاء إذن دفع بقيمة صفر. اختر خدمة صيانة مسعّرة أو قطعة غيار أولًا ثم أعد تجهيز الإذن.');
+    }
+    if (!warrantyJob && breakdown.grossAmount <= 0 && !partialWarranty) {
         throw new HttpsError('failed-precondition', 'لا يمكن إنشاء إذن دفع بقيمة صفر. اختر خدمة صيانة مسعّرة أو قطعة غيار أولًا ثم أعد تجهيز الإذن.');
     }
     const totals = warrantyJob
@@ -369,7 +472,7 @@ async function prepareAuthorization(actor, data) {
             }
         }
         const liveJob = jobSnap.data();
-        if (warrantyJob !== isManufacturerWarrantyJob(liveJob)) {
+        if (warrantyScope !== jobWarrantyScope(liveJob)) {
             throw new HttpsError('failed-precondition', 'تغيّر وضع الضمان على الطلب. أعد تجهيز الإذن.');
         }
         const currentFin = (finSnap.data() || {});
@@ -405,9 +508,13 @@ async function prepareAuthorization(actor, data) {
             ...totals,
             serviceLines: breakdown.serviceLines,
             partLines: breakdown.partLines,
-            warrantyServiceInternalCost: warrantyJob ? breakdown.warrantyServiceInternalCost : 0,
-            warrantyPartsActualCost: warrantyJob ? breakdown.warrantyPartsActualCost : 0,
-            warrantyActualCost: warrantyJob ? breakdown.warrantyActualCost : 0,
+            warrantyScope,
+            warrantyServiceGross: roundMoney(breakdown.warrantyServiceGross),
+            warrantyPartsGross: roundMoney(breakdown.warrantyPartsGross),
+            warrantyGrossAmount: roundMoney(breakdown.warrantyGrossAmount),
+            warrantyServiceInternalCost: (warrantyJob || partialWarranty) ? breakdown.warrantyServiceInternalCost : 0,
+            warrantyPartsActualCost: (warrantyJob || partialWarranty) ? breakdown.warrantyPartsActualCost : 0,
+            warrantyActualCost: (warrantyJob || partialWarranty) ? breakdown.warrantyActualCost : 0,
             serviceCatalogRevision: breakdown.catalogRevision,
             taxRate: 0,
             taxAmount: 0,
@@ -463,7 +570,8 @@ async function prepareAuthorization(actor, data) {
         const technical = sanitizeJobTechnicalData(scoped.job);
         tx.update(scoped.jobRef, {
             ...technical,
-            warrantyScope: warrantyJob ? 'manufacturer' : (String(liveJob.warrantyScope || '') || 'none'),
+            warrantyScope,
+            ...(warrantyJob || partialWarranty ? { warranty: 'none' } : {}),
             estimatedCost: FieldValue.delete(),
             finalCostOverride: FieldValue.delete(),
             finalCost: FieldValue.delete(),
@@ -887,50 +995,79 @@ async function deliver(actor, data) {
             throw new HttpsError('failed-precondition', 'إذن الضمان يجب أن يكون بدون رصيد متبقٍ.');
         }
         const accounts = accountSeeds(actor.tenantId, liveAccounting.accountingAccounts);
-        const serviceGross = roundMoney(fin.serviceGross);
-        const partsGross = roundMoney(fin.partsGross);
+        const billableServiceGross = roundMoney(fin.serviceGross);
+        const billablePartsGross = roundMoney(fin.partsGross);
+        const warrantyServiceGross = roundMoney(fin.warrantyServiceGross);
+        const warrantyPartsGross = roundMoney(fin.warrantyPartsGross);
+        const warrantyGross = roundMoney(fin.warrantyGrossAmount ?? (warrantyServiceGross + warrantyPartsGross));
         const discount = roundMoney(fin.discountAmount);
         const paid = roundMoney(fin.paidAmount);
         const gross = roundMoney(fin.grossAmount);
-        if (!warrantySettlement && gross <= 0) {
+        const partialWarranty = !warrantySettlement
+            && (String(fin.warrantyScope || job.warrantyScope || '') === 'partial' || warrantyGross > 0);
+        if (!warrantySettlement && gross <= 0 && warrantyGross <= 0) {
             throw new HttpsError('failed-precondition', 'إذن الدفع الحالي قيمته صفر وغير صالح للتسليم. أضف خدمة مسعّرة أو قطعة غيار ثم أنشئ إصدارًا جديدًا.');
         }
         const costCenterId = liveAccounting.costCenterId;
-        const warrantyPartsActualCost = warrantySettlement ? sumPartsActualCost(job.partsUsed) : 0;
-        const warrantyServiceInternalCost = warrantySettlement ? roundMoney(fin.warrantyServiceInternalCost) : 0;
-        if (!journalSnap.exists && gross > 0) {
+        const warrantyPartsActualCost = warrantySettlement
+            ? sumPartsActualCost(job.partsUsed)
+            : (partialWarranty ? roundMoney(fin.warrantyPartsActualCost) : 0);
+        const warrantyServiceInternalCost = (warrantySettlement || partialWarranty)
+            ? roundMoney(fin.warrantyServiceInternalCost)
+            : 0;
+        // Full warranty: serviceGross/partsGross already hold the full amounts.
+        const journalServiceCredit = warrantySettlement
+            ? billableServiceGross
+            : roundMoney(billableServiceGross + warrantyServiceGross);
+        const journalPartsCredit = warrantySettlement
+            ? billablePartsGross
+            : roundMoney(billablePartsGross + warrantyPartsGross);
+        const journalTotal = roundMoney(journalServiceCredit + journalPartsCredit);
+        if (!journalSnap.exists && journalTotal > 0) {
             const debitLines = warrantySettlement
-                ? [{ accountCode: accounts.WARRANTY_ALLOWANCES.code, accountName: accounts.WARRANTY_ALLOWANCES.name, debit: gross, credit: 0, costCenterId }]
+                ? [{ accountCode: accounts.WARRANTY_ALLOWANCES.code, accountName: accounts.WARRANTY_ALLOWANCES.name, debit: journalTotal, credit: 0, costCenterId }]
                 : [
                     ...(paid > 0 ? [{ accountCode: accounts.CUSTOMER_DEPOSITS.code, accountName: accounts.CUSTOMER_DEPOSITS.name, debit: paid, credit: 0, costCenterId }] : []),
                     ...(balance > 0 ? [{ accountCode: accounts.RECEIVABLES.code, accountName: accounts.RECEIVABLES.name, debit: balance, credit: 0, costCenterId }] : []),
                     ...(discount > 0 ? [{ accountCode: accounts.DISCOUNTS.code, accountName: accounts.DISCOUNTS.name, debit: discount, credit: 0, costCenterId }] : []),
+                    ...(warrantyGross > 0 ? [{ accountCode: accounts.WARRANTY_ALLOWANCES.code, accountName: accounts.WARRANTY_ALLOWANCES.name, debit: warrantyGross, credit: 0, costCenterId }] : []),
                 ];
             const creditLines = [
-                ...(serviceGross > 0 ? [{ accountCode: accounts.SERVICE_REVENUE.code, accountName: accounts.SERVICE_REVENUE.name, debit: 0, credit: serviceGross, costCenterId }] : []),
-                ...(partsGross > 0 ? [{ accountCode: accounts.PARTS_REVENUE.code, accountName: accounts.PARTS_REVENUE.name, debit: 0, credit: partsGross, costCenterId }] : []),
+                ...(journalServiceCredit > 0 ? [{ accountCode: accounts.SERVICE_REVENUE.code, accountName: accounts.SERVICE_REVENUE.name, debit: 0, credit: journalServiceCredit, costCenterId }] : []),
+                ...(journalPartsCredit > 0 ? [{ accountCode: accounts.PARTS_REVENUE.code, accountName: accounts.PARTS_REVENUE.name, debit: 0, credit: journalPartsCredit, costCenterId }] : []),
             ];
+            const totalDebit = roundMoney(debitLines.reduce((sum, row) => sum + row.debit, 0));
+            const totalCredit = roundMoney(creditLines.reduce((sum, row) => sum + row.credit, 0));
+            if (totalDebit !== totalCredit) {
+                throw new HttpsError('failed-precondition', 'قيد التسليم غير متوازن. أعد تجهيز إذن الدفع.');
+            }
             tx.create(journalRef, {
                 tenantId: actor.tenantId, branchId: scoped.branchId, costCenterId,
-                source: warrantySettlement ? 'repair_warranty_delivery' : 'repair_delivery', sourceId: jobId,
+                source: warrantySettlement
+                    ? 'repair_warranty_delivery'
+                    : (warrantyGross > 0 ? 'repair_partial_warranty_delivery' : 'repair_delivery'),
+                sourceId: jobId,
                 referenceNo: `DEL-${String(job.receiptNo || jobId)}`, status: 'posted', postedAt: at,
-                createdBy: actor.uid, createdByName: actor.displayName, totalDebit: gross, totalCredit: gross,
+                createdBy: actor.uid, createdByName: actor.displayName, totalDebit, totalCredit,
                 lines: [...debitLines, ...creditLines],
             });
         }
         const authorizationNo = String(job.deliveryAuthorizationNo || `DEL-${String(job.receiptNo || jobId)}`);
         const history = Array.isArray(job.statusHistory) ? [...job.statusHistory] : [];
         history.push({ status: 'delivered', at, technicianId: actor.uid });
+        const resolvedScope = warrantySettlement
+            ? 'manufacturer'
+            : (partialWarranty ? 'partial' : (String(job.warrantyScope || '') || 'none'));
         tx.update(scoped.jobRef, {
             status: 'delivered', statusHistory: history, deliveredAt: at, resolvedAt: String(job.resolvedAt || at),
             isClosed: true, closedReason: 'delivered',
             financialState: warrantySettlement
                 ? 'warranty_settled'
                 : (balance > 0 ? 'delivered_on_credit' : 'settled'),
-            warrantyScope: warrantySettlement ? 'manufacturer' : (String(job.warrantyScope || '') || FieldValue.delete()),
+            warrantyScope: resolvedScope,
             deliveryAuthorizationNo: authorizationNo, deliveryAuthorizationIssuedAt: at,
             deliveryAuthorizationIssuedBy: actor.uid, deliveryAuthorizationIssuedByName: actor.displayName,
-            warranty: warrantySettlement ? 'none' : String(data.warranty || job.warranty || 'none'),
+            warranty: (warrantySettlement || partialWarranty) ? 'none' : String(data.warranty || job.warranty || 'none'),
             updatedAt: at,
         });
         tx.update(finRef, {
@@ -951,12 +1088,16 @@ async function deliver(actor, data) {
         tx.set(eventRef, {
             tenantId: actor.tenantId, branchId: scoped.branchId, jobId, at, actorUid: actor.uid,
             actorName: actor.displayName, action: 'status_change',
-            domainEvent: warrantySettlement ? 'job.delivered_warranty' : 'job.delivered',
+            domainEvent: warrantySettlement
+                ? 'job.delivered_warranty'
+                : (partialWarranty ? 'job.delivered_partial_warranty' : 'job.delivered'),
             eventSchemaVersion: 1,
             statusBefore: String(job.status || ''), statusAfter: 'delivered',
             note: warrantySettlement
                 ? 'تسليم ضمان مصنّع — إعفاء كامل للعميل مع إثبات قيمة الضمان'
-                : 'تم التسليم بواسطة الاستقبال بعد التحقق المالي',
+                : (partialWarranty
+                    ? 'تسليم طلب مختلط — تحصيل غير الضمان وإثبات مسموح الضمان للمنتجات المشمولة'
+                    : 'تم التسليم بواسطة الاستقبال بعد التحقق المالي'),
         });
         return { deliveryAuthorizationNo: authorizationNo, duplicated: false, warrantySettlement };
     });

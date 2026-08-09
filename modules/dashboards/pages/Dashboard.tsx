@@ -612,10 +612,7 @@ export const Dashboard: React.FC = () => {
 
   return (
     <div className="erp-dashboard-theme">
-      <ModuleChartsHomeBoard
-        title="لوحة التشغيل"
-        subtitle="كروت مؤشرات + رسوم لكل موديول"
-      />
+      <ModuleChartsHomeBoard />
 
       {/* â”€â”€ Set Target Modal â”€â”€ */}
 
