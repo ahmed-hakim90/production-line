@@ -1,7 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { withTenantPath } from '@/lib/tenantPaths';
@@ -26,7 +25,8 @@ import { RepairCallCenterJobPanel } from '../components/RepairCallCenterJobPanel
 import { customerService } from '@/modules/customers/services/customerService';
 import { CUSTOMER_TYPE_LABELS, type Customer } from '@/modules/customers/types';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
-import { PageHeader } from '@/components/PageHeader';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 
 const MIN_SEARCH_LENGTH = 3;
 const CUSTOMER_JOBS_PAGE_SIZE = 20;
@@ -284,44 +284,23 @@ export const RepairCallCenter: React.FC = () => {
   const showDevicesCard = Boolean(searchReady && devices.length > 0);
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
-      <PageHeader
-        title="مركز الاتصال"
-        subtitle={`بحث برقم الهاتف أو الإيصال أو اسم العميل — سجل الطلبات ومتابعة العملاء. النطاق: ${canViewAllCallCenter ? 'كل فروع الصيانة' : `فروعك (${userBranchIds.length || 0})`}`}
-        icon="search"
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
-              <Button variant="outline" size="sm">كل الطلبات</Button>
-            </Link>
-            <Link to={withTenantPath(tenantSlug, '/repair')}>
-              <Button variant="outline" size="sm">لوحة الصيانة</Button>
-            </Link>
-          </div>
-        )}
-      />
-
-      <Card>
-        <CardHeader>
-          <CardTitle>بحث</CardTitle>
-          <CardDescription>
-            أدخل رقم الهاتف، رقم الإيصال، أو اسم العميل (3 أحرف على الأقل). يُفلتر محليًا على الطلبات المحمّلة.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-3 md:flex-row md:items-end">
-          <div className="flex-1 space-y-1.5">
-            <Input
-              placeholder="مثال: 01001234567 أو REP-1024 أو أحمد"
-              value={searchInput}
-              onChange={(e) => setSearchInput(e.target.value)}
-              className="text-lg"
-            />
-          </div>
-          <Button type="button" variant="secondary" onClick={() => void refetch()} disabled={loading || isFetching || !searchReady}>
-            تحديث
-          </Button>
+    <RepairOpsPageShell
+      eyebrow="مركز الاتصال"
+      dir={dir}
+      rangeLabel={canViewAllCallCenter ? 'النطاق: كل فروع الصيانة' : `النطاق: فروعك (${userBranchIds.length || 0})`}
+      onRefresh={() => void refetch()}
+      refreshing={loading || isFetching}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
+            <Button variant="outline" size="sm">كل الطلبات</Button>
+          </Link>
+          <Link to={withTenantPath(tenantSlug, '/repair')}>
+            <Button variant="outline" size="sm">لوحة الصيانة</Button>
+          </Link>
           <Button
             type="button"
+            size="sm"
             onClick={() =>
               openNewTicket({
                 ...resolvedPrefillCustomer,
@@ -332,8 +311,24 @@ export const RepairCallCenter: React.FC = () => {
           >
             تسجيل بلاغ صيانة سريع
           </Button>
-        </CardContent>
-      </Card>
+        </div>
+      )}
+    >
+      <OpsDashPanel title="بحث" accent="repair">
+        <p className="mb-3 text-xs text-muted-foreground">
+          أدخل رقم الهاتف، رقم الإيصال، أو اسم العميل (3 أحرف على الأقل). يُفلتر محليًا على الطلبات المحمّلة.
+        </p>
+        <div className="flex flex-col gap-3 md:flex-row md:items-end">
+          <div className="flex-1 space-y-1.5">
+            <Input
+              placeholder="مثال: 01001234567 أو REP-1024 أو أحمد"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+              className="text-lg"
+            />
+          </div>
+        </div>
+      </OpsDashPanel>
 
       {debouncedSearch.length > 0 && debouncedSearch.length < MIN_SEARCH_LENGTH && (
         <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
@@ -368,14 +363,13 @@ export const RepairCallCenter: React.FC = () => {
           }
         >
           {showCustomerCard ? (
-            <Card className="h-full">
-              <CardHeader>
-                <CardTitle className="text-base">
-                  {masterCustomer ? 'عميل الماستر' : 'بيانات العميل (من آخر طلب)'}
-                </CardTitle>
-                {crmLoading ? <CardDescription>جاري مطابقة الماستر…</CardDescription> : null}
-              </CardHeader>
-              <CardContent className="grid gap-2 sm:grid-cols-2 text-sm">
+            <OpsDashPanel
+              title={masterCustomer ? 'عميل الماستر' : 'بيانات العميل (من آخر طلب)'}
+              accent="repair"
+              className="h-full"
+            >
+              {crmLoading ? <p className="mb-2 text-xs text-muted-foreground">جاري مطابقة الماستر…</p> : null}
+              <div className="grid gap-2 sm:grid-cols-2 text-sm">
                 {masterCustomer ? (
                   <>
                     <div>
@@ -430,19 +424,16 @@ export const RepairCallCenter: React.FC = () => {
                     {branchNameById[latestCustomer.branchId || ''] || latestCustomer.branchId || '—'}
                   </div>
                 ) : null}
-              </CardContent>
-            </Card>
+              </div>
+            </OpsDashPanel>
           ) : null}
 
           {showDevicesCard ? (
-            <Card className="h-full">
-              <CardHeader>
-                <CardTitle className="text-base">آخر أجهزة اتصلحت له</CardTitle>
-                <CardDescription>
-                  مجمّعة من الطلبات السابقة — اختر جهازًا لنسخه في البلاغ الجديد.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="max-h-64 space-y-2 overflow-y-auto">
+            <OpsDashPanel title="آخر أجهزة اتصلحت له" accent="repair" className="h-full">
+              <p className="mb-2 text-xs text-muted-foreground">
+                مجمّعة من الطلبات السابقة — اختر جهازًا لنسخه في البلاغ الجديد.
+              </p>
+              <div className="max-h-64 space-y-2 overflow-y-auto">
                 {devices.slice(0, 12).map((d) => {
                   const productId = d.productId;
                   return (
@@ -490,25 +481,23 @@ export const RepairCallCenter: React.FC = () => {
                     </div>
                   );
                 })}
-              </CardContent>
-            </Card>
+              </div>
+            </OpsDashPanel>
           ) : null}
         </div>
       )}
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between gap-2">
-          <div>
-            <CardTitle>طلبات العميل</CardTitle>
-            <CardDescription>
-              {searchReady
-                ? `النتائج: ${customerJobs.length} — إجمالي محمّل: ${rawJobs.length}`
-                : 'أدخل نص البحث لعرض الطلبات المطابقة.'}
-            </CardDescription>
-          </div>
-          {isFetching ? <Badge variant="secondary">جاري التحديث…</Badge> : null}
-        </CardHeader>
-        <CardContent>
+      <OpsDashPanel
+        title="طلبات العميل"
+        accent="repair"
+        bodyClassName="p-0"
+        action={isFetching ? <Badge variant="secondary">جاري التحديث…</Badge> : undefined}
+      >
+        <p className="border-b px-3 py-2 text-xs text-muted-foreground md:px-4">
+          {searchReady
+            ? `النتائج: ${customerJobs.length} — إجمالي محمّل: ${rawJobs.length}`
+            : 'أدخل نص البحث لعرض الطلبات المطابقة.'}
+        </p>
           <div className="erp-mobile-card-list p-2">
             {!searchReady && (
               <p className="py-6 text-center text-sm text-muted-foreground">
@@ -616,8 +605,7 @@ export const RepairCallCenter: React.FC = () => {
               itemLabel="طلب"
             />
           ) : null}
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
       <RepairCallCenterJobPanel
         open={detailOpen}
@@ -627,7 +615,7 @@ export const RepairCallCenter: React.FC = () => {
         actorUid={actorUid}
         actorName={actorName}
       />
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

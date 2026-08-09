@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import {
   Dialog,
   DialogContent,
@@ -630,43 +630,49 @@ export const RepairBranches: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
-      <PageHeader
-        title="فروع الصيانة"
-        subtitle="إدارة فروع مراكز الصيانة والمخزن المرتبط والمسؤول والفنيين."
-        icon="warehouse"
-        primaryAction={{
-          label: 'إضافة فرع',
-          icon: 'add',
-          onClick: openCreateModal,
-        }}
-        secondaryAction={{
-          label: custodyMigrating ? 'جاري ترحيل العهدة…' : 'تهيئة مخازن العهدة',
-          icon: 'sync',
-          onClick: () => {
-            setCustodyMigrating(true);
-            void (async () => {
-              let cursor = '';
-              let custodyJobs = 0;
-              let cancelledForReview = 0;
-              let branches = 0;
-              for (let page = 0; page < 50; page += 1) {
-                const result = await repairCustomerOperationsService.backfillCustomerCustody(cursor);
-                branches = result.branches;
-                custodyJobs += result.custodyJobs;
-                cancelledForReview += result.cancelledForReview;
-                if (!result.truncated || !result.nextCursor || result.nextCursor === cursor) break;
-                cursor = result.nextCursor;
-              }
-              toast.success(`تمت تهيئة ${branches} مركز ومراجعة ${custodyJobs} طلب. الملغى للمراجعة: ${cancelledForReview}.`);
-            })()
-              .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'تعذر ترحيل العهدة.'))
-              .finally(() => setCustodyMigrating(false));
-          },
-        }}
-      />
-
-      <Card className="!p-4">
+    <RepairOpsPageShell
+      eyebrow="فروع الصيانة"
+      dir={dir}
+      hero={[{ key: 'total', label: 'الفروع', value: filteredRows.length }]}
+      onRefresh={() => void loadBranches({ force: true })}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={custodyMigrating}
+            onClick={() => {
+              setCustodyMigrating(true);
+              void (async () => {
+                let cursor = '';
+                let custodyJobs = 0;
+                let cancelledForReview = 0;
+                let branchCount = 0;
+                for (let page = 0; page < 50; page += 1) {
+                  const result = await repairCustomerOperationsService.backfillCustomerCustody(cursor);
+                  branchCount = result.branches;
+                  custodyJobs += result.custodyJobs;
+                  cancelledForReview += result.cancelledForReview;
+                  if (!result.truncated || !result.nextCursor || result.nextCursor === cursor) break;
+                  cursor = result.nextCursor;
+                }
+                toast.success(`تمت تهيئة ${branchCount} مركز ومراجعة ${custodyJobs} طلب. الملغى للمراجعة: ${cancelledForReview}.`);
+              })()
+                .catch((e: unknown) => toast.error(e instanceof Error ? e.message : 'تعذر ترحيل العهدة.'))
+                .finally(() => setCustodyMigrating(false));
+            }}
+          >
+            {custodyMigrating ? 'جاري ترحيل العهدة…' : 'تهيئة مخازن العهدة'}
+          </Button>
+          <Button type="button" size="sm" onClick={openCreateModal}>
+            إضافة فرع
+          </Button>
+        </div>
+      )}
+    >
+      <OpsDashPanel title="قائمة الفروع" accent="repair" bodyClassName="p-0">
         <SmartFilterBar
           pageId="repair-branches"
           searchPlaceholder="بحث بالاسم أو الهاتف أو العنوان أو المسؤول أو كود المخزن..."
@@ -688,14 +694,10 @@ export const RepairBranches: React.FC = () => {
           onFilterChange={(key, value) => {
             if (key === 'main') setMainFilter(value);
           }}
-          extra={(
-            <Button type="button" variant="secondary" onClick={() => void loadBranches({ force: true })} disabled={loading}>
-              تحديث
-            </Button>
-          )}
+          className="mb-0 border-0 rounded-none"
         />
 
-        <div className="mt-4 overflow-x-auto rounded-lg border">
+        <div className="overflow-x-auto border-t">
           <table className="erp-table w-full text-right">
             <thead className="erp-thead">
               <tr>
@@ -775,7 +777,7 @@ export const RepairBranches: React.FC = () => {
             itemLabel="فرع"
           />
         ) : null}
-      </Card>
+      </OpsDashPanel>
 
       <Dialog
         open={branchModalOpen}
@@ -1163,7 +1165,7 @@ export const RepairBranches: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 
