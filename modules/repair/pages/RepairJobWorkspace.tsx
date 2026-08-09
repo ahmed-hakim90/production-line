@@ -31,7 +31,8 @@ import type { Material } from '@/modules/manufacturing/types';
 import { REPAIR_DOMAIN_EVENT_VERSION } from '../utils/repairDomainEvents';
 import { StatusBadge } from '../components/StatusBadge';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
-import { PageHeader } from '@/components/PageHeader';
+import { RepairOpsPageShell } from '@/modules/repair/components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import type {
   FirestoreUserWithRepair,
   RepairBranch,
@@ -607,21 +608,45 @@ export const RepairJobWorkspace: React.FC = () => {
     }
   };
 
+  const workshopBackPath = withTenantPath(
+    tenantSlug,
+    technicianMode ? '/repair/my-jobs' : job?.id ? `/repair/jobs/${job.id}` : '/repair/jobs',
+  );
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate(workshopBackPath)}>
+      رجوع
+    </Button>
+  );
+
   if (loading && !job) {
     return (
-      <div className="p-6" dir={dir}>
-        <p className="text-muted-foreground">جاري تحميل الطلب…</p>
-      </div>
+      <RepairOpsPageShell
+        className="mx-auto max-w-3xl lg:max-w-6xl"
+        dir={dir}
+        eyebrow="ورشة الصيانة"
+        actions={shellBackAction}
+      >
+        <OpsDashPanel title="جاري التحميل" accent="repair">
+          <p className="text-sm text-muted-foreground">جاري تحميل الطلب…</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
   if (!job) {
     return (
-      <div className="p-6" dir={dir}>
-        <p>الطلب غير موجود.</p>
-        <Button variant="outline" className="mt-2" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
-          رجوع
-        </Button>
-      </div>
+      <RepairOpsPageShell
+        className="mx-auto max-w-3xl lg:max-w-6xl"
+        dir={dir}
+        eyebrow="ورشة الصيانة"
+        actions={shellBackAction}
+      >
+        <OpsDashPanel title="الطلب غير موجود" accent="repair">
+          <p className="text-sm">الطلب غير موجود.</p>
+          <Button variant="outline" className="mt-2" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
+            رجوع
+          </Button>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
@@ -648,23 +673,18 @@ export const RepairJobWorkspace: React.FC = () => {
     }`;
 
   return (
-    <div
-      className="erp-ds-clean mx-auto w-full max-w-3xl space-y-3 px-1 pb-[calc(6.5rem+env(safe-area-inset-bottom))] sm:px-2 lg:max-w-6xl lg:pb-8"
+    <RepairOpsPageShell
+      className="mx-auto max-w-3xl space-y-3 pb-[calc(6.5rem+env(safe-area-inset-bottom))] lg:max-w-6xl lg:pb-8"
       dir={dir}
+      eyebrow="ورشة الصيانة"
+      rangeLabel={`#${job.receiptNo} · ${deviceSummary}`}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <StatusBadge status={job.status} />
+          {shellBackAction}
+        </div>
+      )}
     >
-      <PageHeader
-        title={`ورشة #${job.receiptNo}`}
-        subtitle={deviceSummary}
-        icon="fact_check"
-        backAction={{
-          to: withTenantPath(
-            tenantSlug,
-            technicianMode ? '/repair/my-jobs' : `/repair/jobs/${job.id}`,
-          ),
-        }}
-        actions={<StatusBadge status={job.status} />}
-      />
-
       {/* Sticky: steps + photo/history — below fixed topbar */}
       <div className="sticky top-[52px] z-30 -mx-1 border-b bg-background/95 px-1 py-2 backdrop-blur supports-[backdrop-filter]:bg-background/90 sm:mx-0 sm:rounded-xl sm:border sm:px-2">
         <div className="mb-2 flex gap-1 lg:hidden" role="tablist" aria-label="خطوات الورشة">
@@ -783,7 +803,8 @@ export const RepairJobWorkspace: React.FC = () => {
       ) : null}
 
       {/* Always-visible job context */}
-      <div className="rounded-xl border bg-muted/25 px-3 py-2.5 text-sm space-y-2">
+      <OpsDashPanel title="بيانات الطلب" accent="repair">
+        <div className="text-sm space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <StatusBadge status={job.status} />
           <span className="text-xs text-muted-foreground">{currentStatusLabel}</span>
@@ -802,19 +823,17 @@ export const RepairJobWorkspace: React.FC = () => {
           <span>استحقاق: <strong className="text-foreground">{job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : '—'}</strong></span>
           <span>فرع: <strong className="text-foreground">{branch?.name || '—'}</strong></span>
         </div>
-      </div>
+        </div>
+      </OpsDashPanel>
 
       <div className="flex flex-col gap-3">
         {/* 1 — Diagnosis (first for technicians) */}
-        <section className={`rounded-xl border bg-card p-3 space-y-3 shadow-sm ${showDiagnose ? '' : 'hidden lg:block'}`}>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">1</span>
-            <div>
-              <h2 className="text-base font-semibold leading-none">التشخيص والخدمات</h2>
-              <p className="mt-1 text-xs text-muted-foreground">اكتب التشخيص واختر الخدمات المنفذة</p>
-            </div>
-          </div>
-
+        <OpsDashPanel
+          title="التشخيص والخدمات"
+          accent="repair"
+          className={showDiagnose ? '' : 'hidden lg:block'}
+          bodyClassName="space-y-3"
+        >
           {!canEditWorkshop ? (
             <p className="rounded-md border border-dashed px-3 py-2 text-sm text-muted-foreground">
               عرض فقط — لا صلاحية تعديل ورشة.
@@ -904,19 +923,15 @@ export const RepairJobWorkspace: React.FC = () => {
           >
             التالي: {serviceOnly ? 'إنهاء الطلب' : 'قطع الغيار'}
           </Button>
-        </section>
+        </OpsDashPanel>
 
         {/* 2 — Parts */}
-        <section className={`rounded-xl border bg-card p-3 space-y-3 shadow-sm ${showParts ? '' : 'hidden lg:block'}`}>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">2</span>
-            <div>
-              <h2 className="text-base font-semibold leading-none">قطع الغيار</h2>
-              <p className="mt-1 text-xs text-muted-foreground">
-                {serviceOnly ? 'مقفولة — خدمة فقط' : 'اطلب قطعة من مخزن المركز أو المركزي'}
-              </p>
-            </div>
-          </div>
+        <OpsDashPanel
+          title="قطع الغيار"
+          accent="repair"
+          className={showParts ? '' : 'hidden lg:block'}
+          bodyClassName="space-y-3"
+        >
 
           {serviceOnly ? (
             <p className="rounded-md border border-dashed px-3 py-3 text-sm text-muted-foreground">
@@ -1030,17 +1045,15 @@ export const RepairJobWorkspace: React.FC = () => {
               التالي: إنهاء
             </Button>
           </div>
-        </section>
+        </OpsDashPanel>
 
         {/* 3 — Finish */}
-        <section className={`rounded-xl border bg-card p-3 space-y-3 shadow-sm ${showFinish ? '' : 'hidden lg:block'}`}>
-          <div className="flex items-center gap-2">
-            <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary">3</span>
-            <div>
-              <h2 className="text-base font-semibold leading-none">إنهاء الطلب</h2>
-              <p className="mt-1 text-xs text-muted-foreground">جاهز للتسليم أو غير قابل للإصلاح</p>
-            </div>
-          </div>
+        <OpsDashPanel
+          title="إنهاء الطلب"
+          accent="repair"
+          className={showFinish ? '' : 'hidden lg:block'}
+          bodyClassName="space-y-3"
+        >
           <div className="flex flex-wrap items-center gap-2">
             <StatusBadge status={job.status} />
             <span className="text-sm text-muted-foreground">{currentStatusLabel}</span>
@@ -1102,7 +1115,7 @@ export const RepairJobWorkspace: React.FC = () => {
           >
             رجوع للخطوة السابقة
           </Button>
-        </section>
+        </OpsDashPanel>
       </div>
 
       {/* Mobile sticky CTA — contextual to step */}
@@ -1174,7 +1187,7 @@ export const RepairJobWorkspace: React.FC = () => {
           ) : null}
         </div>
       </div>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

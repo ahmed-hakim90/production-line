@@ -3,9 +3,10 @@ import { useParams } from 'react-router-dom';
 import { Camera, LogOut, PackagePlus, RefreshCw, Trash2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { StatusBadge as ErpStatusBadge } from '@/src/components/erp/StatusBadge';
 import {
   createCustomerServiceRequestCallable,
@@ -258,12 +259,9 @@ export const CustomerPortal: React.FC = () => {
   if (!token || !home) {
     return (
       <div className="min-h-screen bg-slate-50 p-4" dir="rtl">
-        <div className="mx-auto flex min-h-[80vh] max-w-md items-center">
-          <Card className="w-full shadow-sm">
-            <CardHeader>
-              <CardTitle className="text-center text-2xl">بوابة العميل</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+        <RepairOpsPageShell className="mx-auto flex min-h-[80vh] max-w-md items-center" eyebrow="الصيانة" rangeLabel="بوابة العميل">
+          <OpsDashPanel title="بوابة العميل" accent="repair">
+            <div className="space-y-4">
               <p className="text-center text-sm text-muted-foreground">
                 أدخل كود العميل ورمز PIN للمتابعة وإنشاء طلبات الصيانة.
               </p>
@@ -294,38 +292,33 @@ export const CustomerPortal: React.FC = () => {
               >
                 {loading ? 'جاري الدخول…' : 'دخول'}
               </Button>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </OpsDashPanel>
+        </RepairOpsPageShell>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-slate-50 p-3 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:p-6 md:pb-[calc(5.5rem+env(safe-area-inset-bottom))]" dir="rtl">
-      <div className="mx-auto max-w-5xl space-y-4">
-        <Card>
-          <CardContent className="flex flex-wrap items-center justify-between gap-3 pt-6">
-            <div>
-              <h1 className="text-xl font-bold sm:text-2xl">مرحبًا، {home.customer.name}</h1>
-              <p className="text-sm text-muted-foreground">كود العميل: {home.customer.code}</p>
-            </div>
-            <Button variant="outline" size="sm" disabled={loading} onClick={() => void loadHome(token)}>
-              <RefreshCw className="ms-1 size-4" />
-              تحديث
-            </Button>
-          </CardContent>
-        </Card>
-
+      <RepairOpsPageShell
+        className="mx-auto max-w-5xl"
+        eyebrow="الصيانة"
+        rangeLabel={`مرحبًا، ${home.customer.name} — كود العميل: ${home.customer.code}`}
+        actions={(
+          <Button variant="outline" size="sm" disabled={loading} onClick={() => void loadHome(token)}>
+            <RefreshCw className="ms-1 size-4" />
+            تحديث
+          </Button>
+        )}
+      >
         {tab === 'compose' && (
-          <Card>
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <PackagePlus className="size-5" />
-                إنشاء طلب صيانة
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <OpsDashPanel
+            title="إنشاء طلب صيانة"
+            accent="repair"
+            action={<PackagePlus className="size-5 text-muted-foreground" aria-hidden />}
+          >
+            <div className="space-y-4">
               <div className="rounded-lg border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900">
                 امسح كل منتجاتك وأضفها هنا، ثم اضغط «حفظ وإرسال الطلب» مرة واحدة. كل المنتجات ستُحفظ داخل نفس الطلب.
               </div>
@@ -437,40 +430,37 @@ export const CustomerPortal: React.FC = () => {
                     ? 'أضف المنتجات أولًا ثم احفظ الطلب'
                     : `حفظ وإرسال الطلب (${requestUnitsCount} وحدة)`}
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         )}
 
         {tab === 'requests' && (
           <div className="grid gap-3 md:grid-cols-2">
             {combined.length === 0 ? (
-              <Card className="md:col-span-2">
-                <CardContent className="space-y-4 py-10 text-center">
+              <OpsDashPanel title="الطلبات" accent="repair" className="md:col-span-2">
+                <div className="space-y-4 py-6 text-center">
                   <p className="text-muted-foreground">لا توجد طلبات بعد.</p>
                   <Button type="button" onClick={() => setTab('compose')}>
                     <PackagePlus className="ms-1 size-4" />
                     إنشاء طلب جديد
                   </Button>
-                </CardContent>
-              </Card>
+                </div>
+              </OpsDashPanel>
             ) : (
               combined.map((row) => {
                 const status = portalStatusMeta(row.kind, String(row.status || ''));
                 return (
-                  <Card key={`${row.kind}-${row.id}`}>
-                    <CardContent className="space-y-3 pt-5">
+                  <OpsDashPanel key={`${row.kind}-${row.id}`} title={row.label || row.id || '—'} accent="repair">
+                    <div className="space-y-3">
                       <div className="flex flex-wrap items-start justify-between gap-2">
-                        <div>
-                          <div className="font-semibold">{row.label || row.id}</div>
-                          <div className="text-xs text-muted-foreground">{row.kind}</div>
-                        </div>
+                        <div className="text-xs text-muted-foreground">{row.kind}</div>
                         <ErpStatusBadge label={status.label} type={status.type} />
                       </div>
                       <div className="text-xs text-muted-foreground">
                         {formatRepairOpsDate(String(row.updatedAt || row.createdAt || ''))}
                       </div>
-                    </CardContent>
-                  </Card>
+                    </div>
+                  </OpsDashPanel>
                 );
               })
             )}
@@ -478,11 +468,8 @@ export const CustomerPortal: React.FC = () => {
         )}
 
         {tab === 'timeline' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>آخر التحديثات</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
+          <OpsDashPanel title="آخر التحديثات" accent="repair">
+            <div className="space-y-3">
               {(home.events || []).length === 0 ? (
                 <p className="py-6 text-center text-sm text-muted-foreground">لا توجد تحديثات بعد.</p>
               ) : (
@@ -494,16 +481,13 @@ export const CustomerPortal: React.FC = () => {
                   </div>
                 ))
               )}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         )}
 
         {tab === 'profile' && (
-          <Card>
-            <CardHeader>
-              <CardTitle>بياناتي</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <OpsDashPanel title="بياناتي" accent="repair">
+            <div className="space-y-4">
               <div className="grid gap-3 md:grid-cols-2">
                 <div>
                   <Label>الكود</Label>
@@ -526,10 +510,10 @@ export const CustomerPortal: React.FC = () => {
                 <LogOut className="ms-1 size-4" />
                 تسجيل الخروج
               </Button>
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         )}
-      </div>
+      </RepairOpsPageShell>
 
       <CustomerPortalBottomBar
         activeTab={tab}

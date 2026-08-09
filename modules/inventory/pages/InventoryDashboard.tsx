@@ -237,18 +237,16 @@ export const InventoryDashboard: React.FC = () => {
         </OpsDashPanel>
       </div>
 
-      <OpsDashPanel title="طابور المراجعة" accent="inventory">
-        <InventoryActionQueue
-          tenantPath={tenantPath}
-          loading={data.loading}
-          transfers={data.queueTransfers}
-          transfersTotal={data.pendingTransfersCount}
-          issues={data.queueIssues}
-          issuesTotal={data.pendingIssuesCount}
-          receipts={data.queueReceipts}
-          receiptsTotal={data.awaitingReceiptsCount}
-        />
-      </OpsDashPanel>
+      <InventoryActionQueue
+        tenantPath={tenantPath}
+        loading={data.loading}
+        transfers={data.queueTransfers}
+        transfersTotal={data.pendingTransfersCount}
+        issues={data.queueIssues}
+        issuesTotal={data.pendingIssuesCount}
+        receipts={data.queueReceipts}
+        receiptsTotal={data.awaitingReceiptsCount}
+      />
 
       <details className="ops-dash-secondary">
         <summary>مراجعة تفصيلية (حركات / صرف / استلام / تحويل)</summary>
@@ -281,22 +279,18 @@ export const InventoryDashboard: React.FC = () => {
       </details>
 
       <div className={`grid grid-cols-1 gap-3 ${canExceptions ? 'xl:grid-cols-2' : ''}`}>
-        <OpsDashPanel title="صحة المخازن" accent="inventory">
-          <WarehouseHealthGrid
+        <WarehouseHealthGrid
+          loading={data.loading}
+          rows={data.warehouseHealth}
+          onSelectWarehouse={(id) => data.setWarehouseId(id)}
+        />
+        {canExceptions ? (
+          <InventoryExceptionsPreview
+            tenantPath={tenantPath}
             loading={data.loading}
-            rows={data.warehouseHealth}
-            onSelectWarehouse={(id) => data.setWarehouseId(id)}
+            rows={data.exceptionPreview}
           />
-        </OpsDashPanel>
-        {canExceptions && (
-          <OpsDashPanel title="استثناءات سريعة" accent="inventory">
-            <InventoryExceptionsPreview
-              tenantPath={tenantPath}
-              loading={data.loading}
-              rows={data.exceptionPreview}
-            />
-          </OpsDashPanel>
-        )}
+        ) : null}
       </div>
     </DomainHomeShell>
   );

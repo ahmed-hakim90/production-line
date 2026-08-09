@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import {
   getRepairApprovalPublicCallable,
   isConfigured,
@@ -104,203 +105,203 @@ export const RepairApprovalPublic: React.FC = () => {
   const canDecide = Boolean(estimate && estimate.approvalStatus === 'pending' && !done);
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4" dir={dir}>
-      <div className="max-w-lg mx-auto space-y-4">
-        <Card className="border-primary/20">
-          <CardHeader>
-            <CardTitle>موافقة العميل على التقدير</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {loadingEstimate ? (
-              <p className="text-sm text-muted-foreground">جاري تحميل تفاصيل التقدير…</p>
-            ) : null}
+    <div className="min-h-screen bg-slate-50" dir={dir}>
+      <RepairOpsPageShell
+        className="max-w-lg mx-auto"
+        eyebrow="الصيانة"
+        rangeLabel="موافقة العميل على التقدير — لا يُطلب تسجيل دخول"
+        dir={dir}
+      >
+        <OpsDashPanel title="موافقة العميل على التقدير" accent="repair">
+          {loadingEstimate ? (
+            <p className="text-sm text-muted-foreground">جاري تحميل تفاصيل التقدير…</p>
+          ) : null}
 
-            {estimate ? (
-              <div className="space-y-4 text-sm">
-                <div className="rounded-lg border bg-white p-3 space-y-2">
-                  <div className="flex items-center justify-between gap-2 flex-wrap">
-                    <span className="font-medium">بيانات العميل</span>
-                    <Badge variant="outline">{approvalStatusLabel(estimate.approvalStatus)}</Badge>
-                  </div>
-                  <div className="grid gap-1.5">
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">الاسم</span>
-                      <span className="font-medium text-end">{estimate.customerName || '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">الهاتف</span>
-                      <span className="font-medium tabular-nums text-end" dir="ltr">{estimate.customerPhone || '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">رقم الإيصال</span>
-                      <span className="font-medium tabular-nums">{estimate.receiptNo || '—'}</span>
-                    </div>
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">الجهاز</span>
-                      <span className="font-medium text-end">
-                        {[estimate.deviceBrand, estimate.deviceModel].filter(Boolean).join(' ') || '—'}
-                        {estimate.deviceType ? ` (${estimate.deviceType})` : ''}
-                      </span>
-                    </div>
-                    {estimate.problemDescription ? (
-                      <div className="pt-1 border-t">
-                        <div className="text-muted-foreground mb-1">وصف العطل</div>
-                        <p className="leading-relaxed">{estimate.problemDescription}</p>
-                      </div>
-                    ) : null}
-                  </div>
+          {estimate ? (
+            <div className="space-y-4 text-sm">
+              <div className="rounded-lg border bg-white p-3 space-y-2">
+                <div className="flex items-center justify-between gap-2 flex-wrap">
+                  <span className="font-medium">بيانات العميل</span>
+                  <Badge variant="outline">{approvalStatusLabel(estimate.approvalStatus)}</Badge>
                 </div>
-
-                {estimate.parts.length > 0 ? (
-                  <div className="rounded-lg border bg-white p-3 space-y-2">
-                    <div className="font-medium">قطع الغيار المقترحة</div>
-                    <div className="divide-y rounded-md border">
-                      {estimate.parts.map((part, idx) => (
-                        <div key={`${part.partName}-${idx}`} className="flex items-start justify-between gap-3 px-3 py-2">
-                          <div className="min-w-0">
-                            <div className="font-medium">{part.partName}</div>
-                            <div className="text-xs text-muted-foreground tabular-nums">
-                              ×{part.quantity.toLocaleString('ar-EG')}
-                              {part.unitPrice > 0 ? ` · ${fmtMoney(part.unitPrice)} للوحدة` : ''}
-                            </div>
-                            {part.inWarranty ? (
-                              <div className="text-xs font-medium text-sky-700">
-                                {part.warrantyLabel || 'داخل الضمان'}
-                              </div>
-                            ) : null}
-                          </div>
-                          <div className="shrink-0 font-medium tabular-nums">
-                            {part.inWarranty ? 'مجاني' : fmtMoney(part.lineTotal)}
-                          </div>
-                        </div>
-                      ))}
-                    </div>
+                <div className="grid gap-1.5">
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">الاسم</span>
+                    <span className="font-medium text-end">{estimate.customerName || '—'}</span>
                   </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed p-3 text-muted-foreground">
-                    لا توجد قطع غيار مسجّلة على هذا التقدير حالياً.
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">الهاتف</span>
+                    <span className="font-medium tabular-nums text-end" dir="ltr">{estimate.customerPhone || '—'}</span>
                   </div>
-                )}
-
-                {estimate.products.length > 0 ? (
-                  <div className="rounded-lg border bg-white p-3 space-y-2">
-                    <div className="font-medium">تفصيل المنتجات</div>
-                    <div className="divide-y rounded-md border">
-                      {estimate.products.map((row, idx) => (
-                        <div key={`${row.name}-${idx}`} className="flex items-center justify-between gap-3 px-3 py-2">
-                          <div className="min-w-0">
-                            <div>
-                              {row.name}
-                              <span className="text-muted-foreground text-xs ms-1">×{row.quantity}</span>
-                            </div>
-                            <div className={`text-xs font-medium ${row.inWarranty ? 'text-sky-700' : 'text-muted-foreground'}`}>
-                              {row.warrantyLabel || (row.inWarranty ? 'داخل الضمان' : 'بدون ضمان')}
-                            </div>
-                          </div>
-                          <span className="tabular-nums font-medium">
-                            {row.inWarranty ? 'مجاني' : fmtMoney(row.lineCost)}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">رقم الإيصال</span>
+                    <span className="font-medium tabular-nums">{estimate.receiptNo || '—'}</span>
                   </div>
-                ) : null}
-
-                <div className="rounded-lg border bg-slate-50 p-3 space-y-2">
-                  <div className="font-medium">تفصيل الحساب</div>
-                  <div className="flex justify-between gap-2 text-xs text-muted-foreground">
-                    <span>إذن الدفع</span>
-                    <span className="tabular-nums">{estimate.authorizationNo} · إصدار {estimate.revision}</span>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">الجهاز</span>
+                    <span className="font-medium text-end">
+                      {[estimate.deviceBrand, estimate.deviceModel].filter(Boolean).join(' ') || '—'}
+                      {estimate.deviceType ? ` (${estimate.deviceType})` : ''}
+                    </span>
                   </div>
-                  {estimate.partsCost > 0 ? (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">قطع الغيار</span>
-                      <span className="tabular-nums">{fmtMoney(estimate.partsCost)}</span>
+                  {estimate.problemDescription ? (
+                    <div className="pt-1 border-t">
+                      <div className="text-muted-foreground mb-1">وصف العطل</div>
+                      <p className="leading-relaxed">{estimate.problemDescription}</p>
                     </div>
                   ) : null}
-                  {estimate.laborCost > 0 ? (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">أجور الصيانة</span>
-                      <span className="tabular-nums">{fmtMoney(estimate.laborCost)}</span>
-                    </div>
-                  ) : null}
-                  {estimate.serviceOnlyCost > 0 ? (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">خدمة</span>
-                      <span className="tabular-nums">{fmtMoney(estimate.serviceOnlyCost)}</span>
-                    </div>
-                  ) : null}
-                  {(estimate.billableProductsCost ?? estimate.productsCost) > 0 ? (
-                    <div className="flex justify-between gap-2">
-                      <span className="text-muted-foreground">منتجات بدون ضمان</span>
-                      <span className="tabular-nums">{fmtMoney(estimate.billableProductsCost ?? estimate.productsCost)}</span>
-                    </div>
-                  ) : null}
-                  {Number(estimate.warrantyProductsCost || 0) > 0 ? (
-                    <div className="flex justify-between gap-2 text-sky-800">
-                      <span>منتجات داخل الضمان</span>
-                      <span className="tabular-nums">مجاني</span>
-                    </div>
-                  ) : null}
-                  {estimate.discountAmount > 0 ? (
-                    <div className="flex justify-between gap-2 text-rose-700">
-                      <span>الخصم المعتمد</span>
-                      <span className="tabular-nums">- {fmtMoney(estimate.discountAmount)}</span>
-                    </div>
-                  ) : null}
-                  <div className="flex justify-between gap-2 border-t pt-2 text-base">
-                    <span className="font-bold">صافي المطلوب</span>
-                    <span className="font-bold tabular-nums text-primary">{fmtMoney(estimate.estimatedTotal)}</span>
-                  </div>
                 </div>
               </div>
-            ) : null}
 
-            {error ? <p className="text-sm text-red-600">{error}</p> : null}
+              {estimate.parts.length > 0 ? (
+                <div className="rounded-lg border bg-white p-3 space-y-2">
+                  <div className="font-medium">قطع الغيار المقترحة</div>
+                  <div className="divide-y rounded-md border">
+                    {estimate.parts.map((part, idx) => (
+                      <div key={`${part.partName}-${idx}`} className="flex items-start justify-between gap-3 px-3 py-2">
+                        <div className="min-w-0">
+                          <div className="font-medium">{part.partName}</div>
+                          <div className="text-xs text-muted-foreground tabular-nums">
+                            ×{part.quantity.toLocaleString('ar-EG')}
+                            {part.unitPrice > 0 ? ` · ${fmtMoney(part.unitPrice)} للوحدة` : ''}
+                          </div>
+                          {part.inWarranty ? (
+                            <div className="text-xs font-medium text-sky-700">
+                              {part.warrantyLabel || 'داخل الضمان'}
+                            </div>
+                          ) : null}
+                        </div>
+                        <div className="shrink-0 font-medium tabular-nums">
+                          {part.inWarranty ? 'مجاني' : fmtMoney(part.lineTotal)}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <div className="rounded-lg border border-dashed p-3 text-muted-foreground">
+                  لا توجد قطع غيار مسجّلة على هذا التقدير حالياً.
+                </div>
+              )}
 
-            {done ? (
-              <p className="text-emerald-700 font-medium">
-                {done === 'approved' ? 'تم تسجيل موافقتكم. شكراً لكم.' : 'تم تسجيل الرفض. يمكنكم التواصل مع الفرع.'}
+              {estimate.products.length > 0 ? (
+                <div className="rounded-lg border bg-white p-3 space-y-2">
+                  <div className="font-medium">تفصيل المنتجات</div>
+                  <div className="divide-y rounded-md border">
+                    {estimate.products.map((row, idx) => (
+                      <div key={`${row.name}-${idx}`} className="flex items-center justify-between gap-3 px-3 py-2">
+                        <div className="min-w-0">
+                          <div>
+                            {row.name}
+                            <span className="text-muted-foreground text-xs ms-1">×{row.quantity}</span>
+                          </div>
+                          <div className={`text-xs font-medium ${row.inWarranty ? 'text-sky-700' : 'text-muted-foreground'}`}>
+                            {row.warrantyLabel || (row.inWarranty ? 'داخل الضمان' : 'بدون ضمان')}
+                          </div>
+                        </div>
+                        <span className="tabular-nums font-medium">
+                          {row.inWarranty ? 'مجاني' : fmtMoney(row.lineCost)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="rounded-lg border bg-slate-50 p-3 space-y-2">
+                <div className="font-medium">تفصيل الحساب</div>
+                <div className="flex justify-between gap-2 text-xs text-muted-foreground">
+                  <span>إذن الدفع</span>
+                  <span className="tabular-nums">{estimate.authorizationNo} · إصدار {estimate.revision}</span>
+                </div>
+                {estimate.partsCost > 0 ? (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">قطع الغيار</span>
+                    <span className="tabular-nums">{fmtMoney(estimate.partsCost)}</span>
+                  </div>
+                ) : null}
+                {estimate.laborCost > 0 ? (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">أجور الصيانة</span>
+                    <span className="tabular-nums">{fmtMoney(estimate.laborCost)}</span>
+                  </div>
+                ) : null}
+                {estimate.serviceOnlyCost > 0 ? (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">خدمة</span>
+                    <span className="tabular-nums">{fmtMoney(estimate.serviceOnlyCost)}</span>
+                  </div>
+                ) : null}
+                {(estimate.billableProductsCost ?? estimate.productsCost) > 0 ? (
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">منتجات بدون ضمان</span>
+                    <span className="tabular-nums">{fmtMoney(estimate.billableProductsCost ?? estimate.productsCost)}</span>
+                  </div>
+                ) : null}
+                {Number(estimate.warrantyProductsCost || 0) > 0 ? (
+                  <div className="flex justify-between gap-2 text-sky-800">
+                    <span>منتجات داخل الضمان</span>
+                    <span className="tabular-nums">مجاني</span>
+                  </div>
+                ) : null}
+                {estimate.discountAmount > 0 ? (
+                  <div className="flex justify-between gap-2 text-rose-700">
+                    <span>الخصم المعتمد</span>
+                    <span className="tabular-nums">- {fmtMoney(estimate.discountAmount)}</span>
+                  </div>
+                ) : null}
+                <div className="flex justify-between gap-2 border-t pt-2 text-base">
+                  <span className="font-bold">صافي المطلوب</span>
+                  <span className="font-bold tabular-nums text-primary">{fmtMoney(estimate.estimatedTotal)}</span>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+
+          {done ? (
+            <p className="text-emerald-700 font-medium">
+              {done === 'approved' ? 'تم تسجيل موافقتكم. شكراً لكم.' : 'تم تسجيل الرفض. يمكنكم التواصل مع الفرع.'}
+            </p>
+          ) : canDecide ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                راجعوا التفاصيل أعلاه ثم أكّدوا أو ارفضوا التقدير. لا يُطلب تسجيل دخول.
               </p>
-            ) : canDecide ? (
-              <>
-                <p className="text-sm text-muted-foreground">
-                  راجعوا التفاصيل أعلاه ثم أكّدوا أو ارفضوا التقدير. لا يُطلب تسجيل دخول.
-                </p>
-                <div className="space-y-2">
-                  <Label htmlFor="rej-note">ملاحظة عند الرفض (اختياري)</Label>
-                  <Input
-                    id="rej-note"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="سبب الرفض أو استفسار"
-                  />
-                </div>
-                <div className="flex flex-col sm:flex-row gap-2">
-                  <ToneActionButton
-                    action="approve"
-                    className="flex-1 min-h-12"
-                    disabled={loading || !jobId || !token}
-                    loading={loading}
-                    onClick={() => void submit('approved')}
-                  >
-                    موافقة على التقدير
-                  </ToneActionButton>
-                  <ToneActionButton
-                    action="reject"
-                    className="flex-1 min-h-12"
-                    disabled={loading || !jobId || !token}
-                    loading={loading}
-                    onClick={() => void submit('rejected')}
-                  >
-                    رفض
-                  </ToneActionButton>
-                </div>
-              </>
-            ) : null}
-          </CardContent>
-        </Card>
-      </div>
+              <div className="space-y-2">
+                <Label htmlFor="rej-note">ملاحظة عند الرفض (اختياري)</Label>
+                <Input
+                  id="rej-note"
+                  value={note}
+                  onChange={(e) => setNote(e.target.value)}
+                  placeholder="سبب الرفض أو استفسار"
+                />
+              </div>
+              <div className="flex flex-col sm:flex-row gap-2">
+                <ToneActionButton
+                  action="approve"
+                  className="flex-1 min-h-12"
+                  disabled={loading || !jobId || !token}
+                  loading={loading}
+                  onClick={() => void submit('approved')}
+                >
+                  موافقة على التقدير
+                </ToneActionButton>
+                <ToneActionButton
+                  action="reject"
+                  className="flex-1 min-h-12"
+                  disabled={loading || !jobId || !token}
+                  loading={loading}
+                  onClick={() => void submit('rejected')}
+                >
+                  رفض
+                </ToneActionButton>
+              </div>
+            </>
+          ) : null}
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     </div>
   );
 };

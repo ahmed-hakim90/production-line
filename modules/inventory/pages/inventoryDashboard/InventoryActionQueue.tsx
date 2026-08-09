@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type {
@@ -38,16 +38,14 @@ export const InventoryActionQueue: React.FC<Props> = ({
     return (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {Array.from({ length: 3 }).map((_, i) => (
-          <Card key={`queue-sk-${i}`} className="border-slate-200 shadow-none">
-            <CardHeader>
+          <OpsDashPanel key={`queue-sk-${i}`} accent="inventory">
+            <div className="space-y-2">
               <Skeleton className="h-5 w-40" />
-            </CardHeader>
-            <CardContent className="space-y-2">
               {Array.from({ length: 3 }).map((__, j) => (
                 <Skeleton key={`q-row-${i}-${j}`} className="h-12 w-full rounded-lg" />
               ))}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         ))}
       </div>
     );
@@ -55,19 +53,19 @@ export const InventoryActionQueue: React.FC<Props> = ({
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-      <Card className="border-slate-200 shadow-none">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-sm font-medium text-slate-800">
-            تحويلات معلقة ({transfersTotal})
-          </CardTitle>
+      <OpsDashPanel
+        title={`تحويلات معلقة (${transfersTotal})`}
+        accent="inventory"
+        action={
           <Link
             to={tenantPath('/inventory/transfer-approvals')}
             className="text-xs font-medium text-primary hover:underline"
           >
             عرض الكل
           </Link>
-        </CardHeader>
-        <CardContent className="space-y-2">
+        }
+      >
+        <div className="space-y-2">
           {transfers.length === 0 ? (
             <QueueEmpty text="لا توجد تحويلات بانتظار الاعتماد." />
           ) : (
@@ -89,22 +87,22 @@ export const InventoryActionQueue: React.FC<Props> = ({
               </Link>
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border-slate-200 shadow-none">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-sm font-medium text-slate-800">
-            صرف إنتاج معلق ({issuesTotal})
-          </CardTitle>
+      <OpsDashPanel
+        title={`صرف إنتاج معلق (${issuesTotal})`}
+        accent="inventory"
+        action={
           <Link
             to={tenantPath('/inventory/production-issues')}
             className="text-xs font-medium text-primary hover:underline"
           >
             عرض الكل
           </Link>
-        </CardHeader>
-        <CardContent className="space-y-2">
+        }
+      >
+        <div className="space-y-2">
           {issues.length === 0 ? (
             <QueueEmpty text="لا يوجد صرف إنتاج بانتظار التنفيذ." />
           ) : (
@@ -129,22 +127,22 @@ export const InventoryActionQueue: React.FC<Props> = ({
               </Link>
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
-      <Card className="border-slate-200 shadow-none">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-          <CardTitle className="text-sm font-medium text-slate-800">
-            استلامات بانتظار ({receiptsTotal})
-          </CardTitle>
+      <OpsDashPanel
+        title={`استلامات بانتظار (${receiptsTotal})`}
+        accent="inventory"
+        action={
           <Link
             to={tenantPath('/inventory/raw-materials/receive')}
             className="text-xs font-medium text-primary hover:underline"
           >
             عرض الكل
           </Link>
-        </CardHeader>
-        <CardContent className="space-y-2">
+        }
+      >
+        <div className="space-y-2">
           {receipts.length === 0 ? (
             <QueueEmpty text="لا توجد استلامات بانتظار الاعتماد أو التنفيذ." />
           ) : (
@@ -170,8 +168,8 @@ export const InventoryActionQueue: React.FC<Props> = ({
               </Link>
             ))
           )}
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
     </div>
   );
 };

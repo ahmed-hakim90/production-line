@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { formatNumber } from '../../../../utils/calculations';
@@ -177,17 +177,19 @@ export const InventoryReviewTabs: React.FC<Props> = ({
   const showSkeleton = loading || (reviewTab === 'movements' && txLoading);
 
   return (
-    <Card className="border-slate-200 shadow-none">
-      <CardHeader className="space-y-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <CardTitle className="text-sm font-medium text-slate-800">مراجعة العمليات</CardTitle>
-          <Link
-            to={tenantPath(activeHref)}
-            className="text-xs font-medium text-primary hover:underline"
-          >
-            التفاصيل الكاملة
-          </Link>
-        </div>
+    <OpsDashPanel
+      title="مراجعة العمليات"
+      accent="inventory"
+      action={
+        <Link
+          to={tenantPath(activeHref)}
+          className="text-xs font-medium text-primary hover:underline"
+        >
+          التفاصيل الكاملة
+        </Link>
+      }
+    >
+      <div className="space-y-4">
         <div className="flex flex-wrap gap-2">
           {TABS.map((tab) => (
             <button
@@ -248,9 +250,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
             onChange={setTransferStatusFilter}
           />
         )}
-      </CardHeader>
 
-      <CardContent>
         {showSkeleton ? (
           <div className="space-y-2">
             {Array.from({ length: 5 }).map((_, i) => (
@@ -448,7 +448,7 @@ export const InventoryReviewTabs: React.FC<Props> = ({
             </table>
           </div>
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </OpsDashPanel>
   );
 };

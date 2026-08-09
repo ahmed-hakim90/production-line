@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { Skeleton } from '@/components/ui/skeleton';
 import type { ExceptionPreviewRow } from './useInventoryControlData';
@@ -25,17 +25,19 @@ const kindType: Record<ExceptionPreviewRow['kind'], 'danger' | 'warning' | 'info
 
 export const InventoryExceptionsPreview: React.FC<Props> = ({ tenantPath, loading, rows }) => {
   return (
-    <Card className="border-slate-200 shadow-none">
-      <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0">
-        <CardTitle className="text-sm font-medium text-slate-800">استثناءات تحتاج مراجعة</CardTitle>
+    <OpsDashPanel
+      title="استثناءات تحتاج مراجعة"
+      accent="inventory"
+      action={
         <Link
           to={tenantPath('/inventory/exceptions')}
           className="text-xs font-medium text-primary hover:underline"
         >
           كل الاستثناءات
         </Link>
-      </CardHeader>
-      <CardContent className="space-y-2">
+      }
+    >
+      <div className="space-y-2">
         {loading ? (
           Array.from({ length: 4 }).map((_, i) => (
             <Skeleton key={`ex-sk-${i}`} className="h-12 w-full rounded-lg" />
@@ -59,7 +61,7 @@ export const InventoryExceptionsPreview: React.FC<Props> = ({ tenantPath, loadin
             </div>
           ))
         )}
-      </CardContent>
-    </Card>
+      </div>
+    </OpsDashPanel>
   );
 };

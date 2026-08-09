@@ -1,6 +1,7 @@
 import React, { useCallback, useRef, useState } from 'react';
-import { Card, Button } from '../components/UI';
-import { PageHeader } from '../../../components/PageHeader';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { toast } from '../../../components/Toast';
 import { DEFAULT_PRINT_TEMPLATE } from '../../../utils/dashboardConfig';
 import {
@@ -114,14 +115,12 @@ export const ImageExportShowcase: React.FC = () => {
   const bulkTotals = computePrintTotals(DEMO_BULK_ROWS, DEMO_PRINT_TEMPLATE.decimalPlaces ?? 0);
 
   return (
-    <div className="space-y-6 p-4 max-w-5xl mx-auto">
-      <PageHeader
-        title="معمل تصدير الصور"
-        subtitle="نفس قالب التقرير لكل من PNG ومشاركة واتساب"
-        backAction={{ to: '/settings' }}
-      />
-
-      <Card title="إرشادات المنصة">
+    <ModuleOpsPageShell
+      eyebrow="النظام"
+      rangeLabel="معمل تصدير الصور — نفس قالب التقرير لكل من PNG ومشاركة واتساب"
+      className="max-w-5xl mx-auto"
+    >
+      <OpsDashPanel title="إرشادات المنصة" accent="quality">
         <ul className="text-sm text-[var(--color-text-muted)] space-y-2 list-disc pr-5">
           <li>
             على الهاتف: غالباً تُفتح نافذة المشاركة مع إرفاق الصورة مباشرة عند اختيار واتساب.
@@ -131,9 +130,9 @@ export const ImageExportShowcase: React.FC = () => {
             (عند الدعم) ثم فتح واتساب ويب للصق بالاختصار Ctrl+V.
           </li>
         </ul>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="1) تقرير إنتاج (صف واحد — PrintReportLayout)">
+      <OpsDashPanel title="1) تقرير إنتاج (صف واحد — PrintReportLayout)" accent="quality">
         <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-white p-2 mb-4">
           <SingleReportPrint
             ref={singleRef}
@@ -157,9 +156,9 @@ export const ImageExportShowcase: React.FC = () => {
             مشاركة واتساب
           </Button>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="2) إذن تحويل مخزن (نفس القالب)">
+      <OpsDashPanel title="2) إذن تحويل مخزن (نفس القالب)" accent="quality">
         <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-white p-2 mb-4">
           <StockTransferShareCard
             ref={transferRef}
@@ -183,9 +182,9 @@ export const ImageExportShowcase: React.FC = () => {
             مشاركة واتساب
           </Button>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="3) تقرير إنتاج مجمّع (جدول التقارير الكامل)">
+      <OpsDashPanel title="3) تقرير إنتاج مجمّع (جدول التقارير الكامل)" accent="quality">
         <div className="overflow-x-auto border border-[var(--color-border)] rounded-lg bg-slate-50 p-2 mb-4">
           <ProductionReportPrint
             ref={bulkRef}
@@ -211,7 +210,7 @@ export const ImageExportShowcase: React.FC = () => {
             مشاركة واتساب
           </Button>
         </div>
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

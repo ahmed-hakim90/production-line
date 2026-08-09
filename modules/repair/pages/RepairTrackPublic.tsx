@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useParams } from 'react-router-dom';
 import { Check, Circle } from 'lucide-react';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { isConfigured, trackRepairJobPublicCallable, type PublicRepairTrackResult } from '../../../services/firebase';
 import type { RepairJobStatus } from '../types';
 import { REPAIR_JOB_STATUS_LABELS } from '../types';
@@ -123,18 +124,15 @@ export const RepairTrackPublic: React.FC = () => {
   const isTerminalBad = result?.status === 'cancelled' || result?.status === 'unrepairable';
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4" dir={dir}>
-      <div className="max-w-2xl mx-auto space-y-4">
-        <Card className="border-primary/20 bg-gradient-to-l from-primary/5 via-sky-50 to-white">
-          <CardContent className="pt-6">
-            <h1 className="text-2xl font-bold">تتبع طلب الصيانة</h1>
-            <p className="text-sm text-muted-foreground mt-1">أدخل بيانات الطلب لمعرفة الحالة الحالية.</p>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader><CardTitle>بيانات البحث</CardTitle></CardHeader>
-          <CardContent className="grid md:grid-cols-2 gap-2">
+    <div className="min-h-screen bg-slate-50" dir={dir}>
+      <RepairOpsPageShell
+        className="max-w-2xl mx-auto"
+        eyebrow="الصيانة"
+        rangeLabel="تتبع طلب الصيانة — أدخل بيانات الطلب لمعرفة الحالة الحالية"
+        dir={dir}
+      >
+        <OpsDashPanel title="بيانات البحث" accent="repair">
+          <div className="grid md:grid-cols-2 gap-2">
             <div><Label>رقم الإيصال</Label><Input value={receiptNo} onChange={(e) => setReceiptNo(e.target.value)} placeholder="REP-0001" /></div>
             <div>
               <Label htmlFor="repair-track-phone">رقم الهاتف</Label>
@@ -154,15 +152,18 @@ export const RepairTrackPublic: React.FC = () => {
                 {loading ? 'جاري البحث...' : 'تتبع'}
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
 
-        {error && <Card><CardContent className="pt-6 text-rose-600 text-sm">{error}</CardContent></Card>}
+        {error ? (
+          <OpsDashPanel accent="repair">
+            <p className="text-rose-600 text-sm">{error}</p>
+          </OpsDashPanel>
+        ) : null}
 
         {result && (
-          <Card>
-            <CardHeader><CardTitle>نتيجة التتبع</CardTitle></CardHeader>
-            <CardContent className="space-y-4 text-sm">
+          <OpsDashPanel title="نتيجة التتبع" accent="repair">
+            <div className="space-y-4 text-sm">
               <div className="flex items-center gap-2 flex-wrap">
                 <span>الإيصال:</span>
                 <Badge variant="outline">{result.receiptNo}</Badge>
@@ -241,10 +242,10 @@ export const RepairTrackPublic: React.FC = () => {
                   ))}
                 </div>
               ) : null}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         )}
-      </div>
+      </RepairOpsPageShell>
     </div>
   );
 };

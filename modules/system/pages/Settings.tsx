@@ -57,7 +57,8 @@ import { useSettingsDraft } from '../hooks/useSettingsDraft';
 import { useSystemSettingsController, type SettingsSectionKey } from '../hooks/useSystemSettingsController';
 import { useBackupRestore } from '../hooks/useBackupRestore';
 import { getSettingsSection } from '../settings/settingsSections';
-import { PageHeader } from '../../../components/PageHeader';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { CompanyTenantSection } from '../components/settings/CompanyTenantSection';
 import { UiDensitySection } from '../components/settings/UiDensitySection';
 import { DefaultHomePathSection } from '../components/settings/DefaultHomePathSection';
@@ -762,20 +763,20 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
   }, [hasUnsavedChanges]);
 
   return (
-    <div className="space-y-6 erp-ds-clean">
-      <PageHeader
-        title={sectionMeta.label}
-        subtitle={sectionMeta.subtitle}
-        backAction={false}
-        primaryAction={activeSection === 'backup' ? undefined : {
-          label: 'حفظ الصفحة',
-          icon: 'save',
-          onClick: () => handleSave(activeSection),
-          disabled: saving || !activeSectionHasUnsavedChanges,
-        }}
-        loading={saving}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="النظام"
+      rangeLabel={`${sectionMeta.label} — ${sectionMeta.subtitle}`}
+      actions={activeSection === 'backup' ? undefined : (
+        <Button
+          variant="primary"
+          onClick={() => handleSave(activeSection)}
+          disabled={saving || !activeSectionHasUnsavedChanges}
+        >
+          <span className="material-icons-round text-[15px]">save</span>
+          {saving ? 'جاري الحفظ…' : 'حفظ الصفحة'}
+        </Button>
+      )}
+    >
       {activeSectionHasUnsavedChanges && (
         <div className="flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-medium bg-accent text-accent-foreground border border-border">
           <span className="material-icons-round text-base">info</span>
@@ -1110,6 +1111,6 @@ export const Settings: React.FC<SettingsProps> = ({ section = 'general' }) => {
           isSuperAdmin={isSuperAdmin}
         />
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
