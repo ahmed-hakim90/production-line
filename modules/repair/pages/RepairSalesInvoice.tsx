@@ -1239,7 +1239,100 @@ export const RepairSalesInvoicePage: React.FC = () => {
           )}
           className="mb-0 border-0 rounded-none"
         />
-        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
+        <div className="erp-mobile-card-list p-2">
+          {loading && Array.from({ length: 4 }).map((_, i) => (
+            <div key={`inv-m-skel-${i}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+              <Skeleton className="h-5 w-full rounded-md" />
+            </div>
+          ))}
+          {!loading && pagedInvoices.map((row) => {
+            const selected = printableInvoice?.id === row.id;
+            const cancelled = isCancelledInvoice(row);
+            return (
+              <div
+                key={`m-${row.id}`}
+                className={`cursor-pointer rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${selected ? 'ring-1 ring-primary/40' : ''}`}
+                onClick={() => setLastSavedInvoiceId(row.id || null)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault();
+                    setLastSavedInvoiceId(row.id || null);
+                  }
+                }}
+                role="button"
+                tabIndex={0}
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Badge variant="outline">{row.invoiceNo}</Badge>
+                    <p className="mt-1 truncate text-sm font-semibold">{row.customerName || 'عميل نقدي'}</p>
+                    <p className="text-xs text-muted-foreground" dir="ltr">{row.customerPhone || '—'}</p>
+                  </div>
+                  <ErpStatusBadge
+                    label={invoiceStatusLabel(row)}
+                    type={repairInvoiceActiveChipType(cancelled)}
+                  />
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">الإجمالي</dt>
+                    <dd className="font-semibold tabular-nums">{fmt(Number(row.total || 0))}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-muted-foreground">البنود</dt>
+                    <dd className="tabular-nums">{Number(row.lines?.length || 0)}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[10px] text-muted-foreground">التاريخ</dt>
+                    <dd className="text-xs tabular-nums">{new Date(row.createdAt).toLocaleString('ar-EG')}</dd>
+                  </div>
+                </dl>
+                <div className="mt-2 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+                  {['draft', 'pending_discount_approval', 'ready_to_post'].includes(String(row.status || '')) && canEditInvoice(row) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => startEditInvoice(row)}
+                    >
+                      <Pencil className="me-1 h-3.5 w-3.5 text-sky-600" />
+                      تعديل
+                    </Button>
+                  )}
+                  {row.status === 'pending_discount_approval' && can('repair.discounts.approve') && (
+                    <>
+                      <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void handleResolveInvoiceDiscount(row, true)}>اعتماد</Button>
+                      <Button type="button" variant="ghost" size="sm" disabled={saving} onClick={() => void handleResolveInvoiceDiscount(row, false)}>رفض</Button>
+                    </>
+                  )}
+                  {row.status === 'ready_to_post' && canCreate && (
+                    <Button type="button" variant="outline" size="sm" disabled={saving} onClick={() => void handlePostInvoice(row)}>ترحيل</Button>
+                  )}
+                  {row.status === 'posted' && canCancelInvoice(row) && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setCancelTarget(row);
+                        setCancelReason('');
+                      }}
+                    >
+                      <XCircle className="me-1 h-3.5 w-3.5 text-rose-600" />
+                      إلغاء
+                    </Button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {!loading && filteredInvoices.length === 0 && (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              لا توجد فواتير مطابقة للفلاتر الحالية.
+            </p>
+          )}
+        </div>
+        <div className="erp-desktop-table erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[980px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>

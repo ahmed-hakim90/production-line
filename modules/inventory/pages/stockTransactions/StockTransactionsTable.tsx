@@ -63,8 +63,170 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
   onSharePending,
   onOpenPendingEdit,
 }) => (
-  <div className="overflow-x-auto">
-    <table className="erp-table w-full text-right border-collapse">
+  <>
+    <div className="erp-mobile-card-list p-2">
+      {loading &&
+        Array.from({ length: 4 }).map((_, i) => (
+          <div key={`tx-m-skel-${i}`} className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3">
+            <Skeleton className="h-5 w-full rounded-md" />
+          </div>
+        ))}
+      {!loading && combinedRows.length === 0 && (
+        <p className="py-8 text-center text-sm text-slate-400">لا توجد حركات مطابقة.</p>
+      )}
+      {!loading &&
+        combinedRows.map((entry) => {
+          if (entry.kind === 'transaction') {
+            const tx = entry.tx;
+            const qtyNode =
+              tx.movementType === 'TRANSFER' ? (
+                <span className="font-bold tabular-nums text-emerald-600">
+                  {(() => {
+                    const display = getTransferDisplay(withResolvedUnitsPerCarton(tx), transferDisplayUnit);
+                    return `${formatNumber(display.quantity)} ${display.unitLabel}`;
+                  })()}
+                </span>
+              ) : (
+                <span className={`font-black tabular-nums ${tx.quantity >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
+                  {tx.quantity >= 0 ? '+' : ''}
+                  {formatNumber(tx.quantity)}
+                </span>
+              );
+            return (
+              <div
+                key={`m-tx-${tx.id}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold truncate">{tx.itemName}</p>
+                    <p className="font-mono text-xs text-[var(--color-text-muted)]">{tx.itemCode}</p>
+                  </div>
+                  <Badge variant="info">{movementLabel[tx.movementType] ?? tx.movementType}</Badge>
+                </div>
+                <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">الكمية</dt>
+                    <dd>{qtyNode}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">المخزن</dt>
+                    <dd className="truncate">{warehouseMap.get(tx.warehouseId) ?? tx.warehouseId}</dd>
+                  </div>
+                  <div className="col-span-2">
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">التاريخ</dt>
+                    <dd className="text-xs tabular-nums">{new Date(tx.createdAt).toLocaleString('ar-EG')}</dd>
+                  </div>
+                </dl>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  {perm.export && (
+                    <TableIconAction action="export" onClick={() => onExportExcel([tx])} title="تصدير Excel" aria-label={`تصدير Excel للحركة ${tx.itemName}`} />
+                  )}
+                  {perm.print && tx.movementType === 'TRANSFER' && (
+                    <TableIconAction action="print" onClick={() => void onPrintTransfer(tx)} disabled={processing} aria-label={`طباعة تحويلة ${tx.referenceNo ?? ''}`} />
+                  )}
+                  {perm.print && tx.movementType === 'TRANSFER' && (
+                    <TableIconAction action="share" onClick={() => void onShareTransfer(tx)} disabled={processing} title="مشاركة واتساب" aria-label={`مشاركة تحويلة ${tx.referenceNo ?? ''} على واتساب`} />
+                  )}
+                  {perm.edit && (
+                    <TableIconAction action="edit" onClick={() => void onEditRow(tx)} disabled={processing} aria-label={`تعديل حركة ${tx.itemName}`} />
+                  )}
+                  {perm.delete && (
+                    <TableIconAction action="delete" onClick={() => void onDeleteRows([tx])} disabled={processing} aria-label={`حذف حركة ${tx.itemName}`} />
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          if (entry.kind === 'approved_transfer') {
+            const group = entry.group;
+            const qtySummary = group.lines
+              .slice(0, 2)
+              .map((line) => {
+                const display = getTransferDisplay(withResolvedUnitsPerCarton(line), transferDisplayUnit);
+                return `${formatNumber(display.quantity)} ${display.unitLabel}`;
+              })
+              .join('، ');
+            const fromName = warehouseMap.get(group.fromWarehouseId) ?? group.fromWarehouseId;
+            const toName = warehouseMap.get(group.toWarehouseId) ?? group.toWarehouseId;
+            return (
+              <div
+                key={`m-approved-${group.referenceNo}`}
+                className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-3 shadow-sm dark:bg-emerald-900/10"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="text-sm font-bold">تحويلة #{group.referenceNo}</p>
+                    <p className="text-xs text-slate-500">{group.lines.length} صنف</p>
+                  </div>
+                  <Badge variant="success">معتمدة</Badge>
+                </div>
+                <p className="mt-2 text-sm">{fromName} ← {toName}</p>
+                <p className="text-sm font-bold tabular-nums text-emerald-700">
+                  {qtySummary}{group.lines.length > 2 ? ' ...' : ''}
+                </p>
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <TableIconAction action="view" onClick={() => onOpenApproved(group)} disabled={processing} title="عرض التفاصيل" aria-label={`عرض تفاصيل التحويلة ${group.referenceNo}`} />
+                  {perm.print && group.lines[0] && (
+                    <TableIconAction action="print" onClick={() => void onPrintTransfer(group.lines[0])} disabled={processing} aria-label={`طباعة التحويلة ${group.referenceNo}`} />
+                  )}
+                  {perm.print && group.lines[0] && (
+                    <TableIconAction action="share" onClick={() => void onShareTransfer(group.lines[0], 'transfer')} disabled={processing} title="مشاركة واتساب" aria-label={`مشاركة التحويلة ${group.referenceNo}`} />
+                  )}
+                  {perm.export && (
+                    <TableIconAction action="export" onClick={() => onExportExcel(group.lines)} title="تصدير Excel" aria-label={`تصدير Excel للتحويلة ${group.referenceNo}`} />
+                  )}
+                  {perm.delete && group.lines[0] && (
+                    <TableIconAction action="delete" onClick={() => void onDeleteRows([group.lines[0]])} disabled={processing} aria-label={`حذف التحويلة ${group.referenceNo}`} />
+                  )}
+                </div>
+              </div>
+            );
+          }
+
+          const row = entry.row;
+          const qtySummary = row.lines
+            .slice(0, 2)
+            .map((line) => {
+              const display = getTransferDisplay(withResolvedUnitsPerCarton(line), transferDisplayUnit);
+              return `${formatNumber(display.quantity)} ${display.unitLabel}`;
+            })
+            .join('، ');
+          const fromName = warehouseMap.get(row.fromWarehouseId) ?? row.fromWarehouseId;
+          const toName = warehouseMap.get(row.toWarehouseId) ?? row.toWarehouseId;
+          return (
+            <div
+              key={`m-pending-${row.id}`}
+              className="rounded-xl border border-amber-200 bg-amber-50/40 p-3 shadow-sm dark:bg-amber-900/10"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold">تحويلة معلقة #{row.referenceNo}</p>
+                  <p className="text-xs text-slate-500">{row.lines.length} صنف</p>
+                </div>
+                <Badge variant="warning">معلقة</Badge>
+              </div>
+              <p className="mt-2 text-sm">{fromName} ← {toName}</p>
+              <p className="text-sm font-bold tabular-nums text-amber-700">
+                {qtySummary}{row.lines.length > 2 ? ' ...' : ''}
+              </p>
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                <TableIconAction action="view" onClick={() => onOpenPending(row)} disabled={processing} title="عرض التفاصيل" aria-label={`عرض تحويلة معلقة ${row.referenceNo}`} />
+                <TableIconAction action="print" onClick={() => void onPrintPending(row)} disabled={processing} aria-label={`طباعة تحويلة معلقة ${row.referenceNo}`} />
+                {perm.print && (
+                  <TableIconAction action="share" onClick={() => void onSharePending(row)} disabled={processing} title="مشاركة واتساب" aria-label={`مشاركة تحويلة معلقة ${row.referenceNo}`} />
+                )}
+                {perm.edit && (
+                  <TableIconAction action="edit" onClick={() => onOpenPendingEdit(row)} disabled={processing} aria-label={`تعديل تحويلة معلقة ${row.referenceNo}`} />
+                )}
+              </div>
+            </div>
+          );
+        })}
+    </div>
+    <div className="erp-desktop-table erp-table-wrap overflow-x-auto">
+    <table className="erp-table w-full min-w-[960px] text-right border-collapse">
       <thead className="erp-thead">
         <tr>
           <th className="erp-th text-center">
@@ -361,5 +523,6 @@ export const StockTransactionsTable: React.FC<StockTransactionsTableProps> = ({
           })}
       </tbody>
     </table>
-  </div>
+    </div>
+  </>
 );

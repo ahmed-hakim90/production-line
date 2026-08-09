@@ -666,93 +666,157 @@ export const LeaveRequests: React.FC = () => {
             <p className="text-sm font-bold text-slate-500">لا توجد طلبات إجازة</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full text-sm">
-              <thead className="erp-thead">
-                <tr>
-                  {showEmployeeColumn && <th className="erp-th">الموظف</th>}
-                  <th className="erp-th">النوع</th>
-                  <th className="erp-th">من</th>
-                  <th className="erp-th">إلى</th>
-                  <th className="erp-th">الأيام</th>
-                  <th className="erp-th">تؤثر على الراتب</th>
-                  <th className="erp-th">الحالة</th>
-                  <th className="erp-th">مراحل الموافقة</th>
-                  <th className="erp-th">المعتمد الحالي / حتى يصل لي</th>
-                  {canDelete && <th className="erp-th text-center">حذف</th>}
-                </tr>
-              </thead>
-              <tbody>
-                {filtered.map((req) => {
-                  const statusCfg = STATUS_CONFIG[req.finalStatus];
-                  const pendingSummary = getPendingChainSummary(req);
-                  return (
-                    <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
-                      {showEmployeeColumn && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
-                      <td className="py-3 px-3">
-                        <Badge variant="info">{leaveTypeByKey[req.leaveType]?.label || req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType}</Badge>
-                      </td>
-                      <td className="py-3 px-3 font-mono text-xs" dir="ltr">{req.startDate}</td>
-                      <td className="py-3 px-3 font-mono text-xs" dir="ltr">{req.endDate}</td>
-                      <td className="py-3 px-3 font-bold">{req.totalDays}</td>
-                      <td className="py-3 px-3">
-                        {(typeof req.leaveTypeIsPaid === 'boolean' ? !req.leaveTypeIsPaid : req.affectsSalary)
-                          ? <span className="text-rose-500 font-bold">نعم</span>
-                          : <span className="text-[var(--color-text-muted)]">لا</span>}
-                      </td>
-                      <td className="py-3 px-3">
-                        <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="flex items-center gap-1">
-                          {req.approvalChain.length === 0 ? (
-                            <span className="text-xs text-slate-400">—</span>
-                          ) : (
-                            req.approvalChain.map((step, i) => {
-                              const stepCfg = STATUS_CONFIG[step.status];
-                              return (
-                                <span
-                                  key={i}
-                                  className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
-                                    ${step.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
-                                      step.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
-                                      'bg-[#f0f2f5] text-[var(--color-text-muted)]'}`}
-                                  title={`مستوى ${step.level} — ${stepCfg.label}`}
-                                >
-                                  {step.level}
-                                </span>
-                              );
-                            })
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3 px-3">
-                        <div className="space-y-1">
-                          <div className="text-xs font-bold text-[var(--color-text)]">
-                            الآن: {pendingSummary.currentApprover}
-                          </div>
-                          <div className="text-[11px] text-[var(--color-text-muted)]">
-                            {pendingSummary.untilMe}
-                          </div>
-                        </div>
-                      </td>
-                      {canDelete && (
-                        <td className="py-3 px-3 text-center">
-                          <button
-                            onClick={() => setDeleteConfirm(req.id!)}
-                            className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
-                            title="حذف الطلب"
-                          >
-                            <span className="material-icons-round text-lg">delete</span>
-                          </button>
+          <>
+            <div className="erp-mobile-card-list p-2">
+              {filtered.map((req) => {
+                const statusCfg = STATUS_CONFIG[req.finalStatus];
+                const pendingSummary = getPendingChainSummary(req);
+                return (
+                  <div
+                    key={`m-${req.id}`}
+                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        {showEmployeeColumn && (
+                          <p className="text-sm font-bold truncate">{getEmpName(req.employeeId)}</p>
+                        )}
+                        <Badge variant="info">
+                          {leaveTypeByKey[req.leaveType]?.label || req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType}
+                        </Badge>
+                      </div>
+                      <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <dt className="text-[10px] text-[var(--color-text-muted)]">من</dt>
+                        <dd className="font-mono text-xs" dir="ltr">{req.startDate}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[10px] text-[var(--color-text-muted)]">إلى</dt>
+                        <dd className="font-mono text-xs" dir="ltr">{req.endDate}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[10px] text-[var(--color-text-muted)]">الأيام</dt>
+                        <dd className="font-bold">{req.totalDays}</dd>
+                      </div>
+                      <div>
+                        <dt className="text-[10px] text-[var(--color-text-muted)]">تؤثر على الراتب</dt>
+                        <dd>
+                          {(typeof req.leaveTypeIsPaid === 'boolean' ? !req.leaveTypeIsPaid : req.affectsSalary)
+                            ? <span className="text-rose-500 font-bold">نعم</span>
+                            : <span className="text-[var(--color-text-muted)]">لا</span>}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="mt-2 text-xs font-bold text-[var(--color-text)]">
+                      الآن: {pendingSummary.currentApprover}
+                    </p>
+                    <p className="text-[11px] text-[var(--color-text-muted)]">{pendingSummary.untilMe}</p>
+                    {canDelete && (
+                      <div className="mt-2">
+                        <button
+                          type="button"
+                          onClick={() => setDeleteConfirm(req.id!)}
+                          className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                        >
+                          <span className="material-icons-round text-base">delete</span>
+                          حذف
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            <div className="erp-desktop-table erp-table-wrap overflow-x-auto">
+              <table className="erp-table w-full min-w-[860px] text-sm">
+                <thead className="erp-thead">
+                  <tr>
+                    {showEmployeeColumn && <th className="erp-th">الموظف</th>}
+                    <th className="erp-th">النوع</th>
+                    <th className="erp-th">من</th>
+                    <th className="erp-th">إلى</th>
+                    <th className="erp-th">الأيام</th>
+                    <th className="erp-th">تؤثر على الراتب</th>
+                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">مراحل الموافقة</th>
+                    <th className="erp-th">المعتمد الحالي / حتى يصل لي</th>
+                    {canDelete && <th className="erp-th text-center">حذف</th>}
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((req) => {
+                    const statusCfg = STATUS_CONFIG[req.finalStatus];
+                    const pendingSummary = getPendingChainSummary(req);
+                    return (
+                      <tr key={req.id} className="border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30">
+                        {showEmployeeColumn && <td className="py-3 px-3 font-bold">{getEmpName(req.employeeId)}</td>}
+                        <td className="py-3 px-3">
+                          <Badge variant="info">{leaveTypeByKey[req.leaveType]?.label || req.leaveTypeLabel || LEAVE_TYPE_LABELS[req.leaveType] || req.leaveType}</Badge>
                         </td>
-                      )}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+                        <td className="py-3 px-3 font-mono text-xs" dir="ltr">{req.startDate}</td>
+                        <td className="py-3 px-3 font-mono text-xs" dir="ltr">{req.endDate}</td>
+                        <td className="py-3 px-3 font-bold">{req.totalDays}</td>
+                        <td className="py-3 px-3">
+                          {(typeof req.leaveTypeIsPaid === 'boolean' ? !req.leaveTypeIsPaid : req.affectsSalary)
+                            ? <span className="text-rose-500 font-bold">نعم</span>
+                            : <span className="text-[var(--color-text-muted)]">لا</span>}
+                        </td>
+                        <td className="py-3 px-3">
+                          <Badge variant={statusCfg.variant}>{statusCfg.label}</Badge>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="flex items-center gap-1">
+                            {req.approvalChain.length === 0 ? (
+                              <span className="text-xs text-slate-400">—</span>
+                            ) : (
+                              req.approvalChain.map((step, i) => {
+                                const stepCfg = STATUS_CONFIG[step.status];
+                                return (
+                                  <span
+                                    key={i}
+                                    className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
+                                      ${step.status === 'approved' ? 'bg-emerald-100 text-emerald-700' :
+                                        step.status === 'rejected' ? 'bg-rose-100 text-rose-700' :
+                                        'bg-[#f0f2f5] text-[var(--color-text-muted)]'}`}
+                                    title={`مستوى ${step.level} — ${stepCfg.label}`}
+                                  >
+                                    {step.level}
+                                  </span>
+                                );
+                              })
+                            )}
+                          </div>
+                        </td>
+                        <td className="py-3 px-3">
+                          <div className="space-y-1">
+                            <div className="text-xs font-bold text-[var(--color-text)]">
+                              الآن: {pendingSummary.currentApprover}
+                            </div>
+                            <div className="text-[11px] text-[var(--color-text-muted)]">
+                              {pendingSummary.untilMe}
+                            </div>
+                          </div>
+                        </td>
+                        {canDelete && (
+                          <td className="py-3 px-3 text-center">
+                            <button
+                              onClick={() => setDeleteConfirm(req.id!)}
+                              className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
+                              title="حذف الطلب"
+                            >
+                              <span className="material-icons-round text-lg">delete</span>
+                            </button>
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </Card>
 

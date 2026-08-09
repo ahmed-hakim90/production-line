@@ -443,6 +443,104 @@ export const RepairPayments: React.FC = () => {
     });
   };
 
+  const renderAuthActions = (
+    auth: RepairPaymentAuthorization,
+    job: RepairJob | undefined,
+  ) => (
+    <div className="flex min-w-0 flex-wrap gap-1">
+      <Badge variant="outline">
+        {isZeroValueAuthorization(auth)
+          ? "غير صالح — بدون تسعير"
+          : statusLabel(auth.status, auth)}
+      </Badge>
+      {isWarrantySettlementAuth(auth) ? (
+        <Badge variant="secondary">ضمان مصنّع — بدون تحصيل</Badge>
+      ) : null}
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => startPrint(auth)}
+        title="طباعة إذن الدفع"
+      >
+        <Printer className="h-3.5 w-3.5" />
+      </Button>
+      <Button
+        size="sm"
+        variant="outline"
+        disabled={exportingPdf}
+        onClick={() => exportDocument(auth)}
+        title="تنزيل إذن الدفع PDF"
+      >
+        <Download className="h-3.5 w-3.5" />
+      </Button>
+      {job?.status === "ready" &&
+      Number(auth.paidAmount || 0) === 0 &&
+      auth.status !== "void" ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => openRepriceModal(job, auth)}
+        >
+          إعادة تسعير
+        </Button>
+      ) : null}
+      {can("repair.payments.collect") &&
+      !isWarrantySettlementAuth(auth) &&
+      job?.status === "ready" &&
+      (auth.status === "approved" ||
+        auth.status === "partial") ? (
+        <Button
+          size="sm"
+          onClick={() => {
+            setCollectAuth(auth);
+            setAmount(String(auth.balanceDue));
+          }}
+        >
+          <CreditCard className="ms-1 h-3.5 w-3.5" />
+          تحصيل
+        </Button>
+      ) : null}
+      {job?.status === "ready" &&
+      can("repair.jobs.reception") &&
+      !isZeroValueAuthorization(auth) &&
+      (auth.status === "paid" ||
+        auth.creditApprovalStatus === "approved") ? (
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={() => void deliver(auth)}
+        >
+          تسليم المنتج
+        </Button>
+      ) : null}
+      {job?.status === "ready" &&
+      auth.balanceDue > 0 &&
+      auth.creditApprovalStatus !== "approved" &&
+      can("repair.credit.request") ? (
+        <Button
+          size="sm"
+          variant="secondary"
+          onClick={() => void requestCredit(auth)}
+        >
+          طلب تسليم برصيد
+        </Button>
+      ) : null}
+      {job?.id ? (
+        <Link
+          to={withTenantPath(
+            tenantSlug,
+            `/repair/jobs/${job.id}`,
+          )}
+        >
+          <Button size="sm" variant="outline">
+            فتح الطلب
+          </Button>
+        </Link>
+      ) : null}
+    </div>
+  );
+
   return (
     <div dir={dir} className="erp-ds-clean space-y-5 p-4 md:p-6">
       <PageHeader
@@ -648,8 +746,55 @@ export const RepairPayments: React.FC = () => {
           <CardTitle className="text-base">أذونات الدفع والتحصيل</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full text-sm">
+          <div className="erp-mobile-card-list p-2">
+            {authorizations.map((auth) => {
+              const job = jobById.get(auth.jobId);
+              return (
+                <div
+                  key={`m-${auth.id}`}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-mono text-sm font-semibold">{auth.authorizationNo}</p>
+                      <p className="mt-0.5 text-sm font-semibold">#{auth.receiptNo}</p>
+                      <p className="text-xs text-muted-foreground">{job?.customerName || "—"}</p>
+                    </div>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">الإجمالي</dt>
+                      <dd className="tabular-nums">{money(auth.grossAmount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">الخصم</dt>
+                      <dd className="tabular-nums text-rose-600">{money(auth.discountAmount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">الصافي</dt>
+                      <dd className="font-semibold tabular-nums">{money(auth.netAmount)}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-[10px] text-muted-foreground">المدفوع</dt>
+                      <dd className="tabular-nums text-emerald-600">{money(auth.paidAmount)}</dd>
+                    </div>
+                    <div className="col-span-2">
+                      <dt className="text-[10px] text-muted-foreground">المتبقي</dt>
+                      <dd className="font-semibold tabular-nums text-amber-700">{money(auth.balanceDue)}</dd>
+                    </div>
+                  </dl>
+                  <div className="mt-2">{renderAuthActions(auth, job)}</div>
+                </div>
+              );
+            })}
+            {!loading && authorizations.length === 0 ? (
+              <p className="py-8 text-center text-sm text-muted-foreground">
+                لا توجد أذونات دفع بعد.
+              </p>
+            ) : null}
+          </div>
+          <div className="erp-desktop-table erp-table-wrap overflow-x-auto">
+            <table className="erp-table w-full min-w-[960px] text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الإذن</th>
@@ -687,100 +832,7 @@ export const RepairPayments: React.FC = () => {
                       <td className="p-2 text-amber-700">
                         {money(auth.balanceDue)}
                       </td>
-                      <td className="p-2">
-                        <div className="flex min-w-[220px] flex-wrap gap-1">
-                          <Badge variant="outline">
-                            {isZeroValueAuthorization(auth)
-                              ? "غير صالح — بدون تسعير"
-                              : statusLabel(auth.status, auth)}
-                          </Badge>
-                          {isWarrantySettlementAuth(auth) ? (
-                            <Badge variant="secondary">ضمان مصنّع — بدون تحصيل</Badge>
-                          ) : null}
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={() => startPrint(auth)}
-                            title="طباعة إذن الدفع"
-                          >
-                            <Printer className="h-3.5 w-3.5" />
-                          </Button>
-                          <Button
-                            size="sm"
-                            variant="outline"
-                            disabled={exportingPdf}
-                            onClick={() => exportDocument(auth)}
-                            title="تنزيل إذن الدفع PDF"
-                          >
-                            <Download className="h-3.5 w-3.5" />
-                          </Button>
-                          {job?.status === "ready" &&
-                          Number(auth.paidAmount || 0) === 0 &&
-                          auth.status !== "void" ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              disabled={busy}
-                              onClick={() => openRepriceModal(job, auth)}
-                            >
-                              إعادة تسعير
-                            </Button>
-                          ) : null}
-                          {can("repair.payments.collect") &&
-                          !isWarrantySettlementAuth(auth) &&
-                          job?.status === "ready" &&
-                          (auth.status === "approved" ||
-                            auth.status === "partial") ? (
-                            <Button
-                              size="sm"
-                              onClick={() => {
-                                setCollectAuth(auth);
-                                setAmount(String(auth.balanceDue));
-                              }}
-                            >
-                              <CreditCard className="ms-1 h-3.5 w-3.5" />
-                              تحصيل
-                            </Button>
-                          ) : null}
-                          {job?.status === "ready" &&
-                          can("repair.jobs.reception") &&
-                          !isZeroValueAuthorization(auth) &&
-                          (auth.status === "paid" ||
-                            auth.creditApprovalStatus === "approved") ? (
-                            <Button
-                              size="sm"
-                              disabled={busy}
-                              onClick={() => void deliver(auth)}
-                            >
-                              تسليم المنتج
-                            </Button>
-                          ) : null}
-                          {job?.status === "ready" &&
-                          auth.balanceDue > 0 &&
-                          auth.creditApprovalStatus !== "approved" &&
-                          can("repair.credit.request") ? (
-                            <Button
-                              size="sm"
-                              variant="secondary"
-                              onClick={() => void requestCredit(auth)}
-                            >
-                              طلب تسليم برصيد
-                            </Button>
-                          ) : null}
-                          {job?.id ? (
-                            <Link
-                              to={withTenantPath(
-                                tenantSlug,
-                                `/repair/jobs/${job.id}`,
-                              )}
-                            >
-                              <Button size="sm" variant="outline">
-                                فتح الطلب
-                              </Button>
-                            </Link>
-                          ) : null}
-                        </div>
-                      </td>
+                      <td className="p-2">{renderAuthActions(auth, job)}</td>
                     </tr>
                   );
                 })}

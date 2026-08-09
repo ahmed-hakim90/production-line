@@ -596,67 +596,120 @@ const MonthlyAdvanceTable: React.FC<{
   onDisburse: (loan: FirestoreEmployeeLoan) => void;
   onDelete: (id: string) => void;
 }> = ({ loans, employeeMap, canDisburse, canDelete, actionLoading, onDisburse, onDelete }) => (
-  <div className="overflow-x-auto">
-    <table className="erp-table w-full text-sm">
-      <thead className="erp-thead">
-        <tr>
-          <th className="erp-th">الكود</th>
-          <th className="erp-th">الموظف</th>
-          <th className="erp-th">المبلغ</th>
-          <th className="erp-th">الشهر</th>
-          <th className="erp-th">السبب</th>
-          <th className="erp-th text-center">حالة الصرف</th>
-          {canDisburse && <th className="erp-th text-center">إجراء</th>}
-          {canDelete && <th className="erp-th text-center">حذف</th>}
-        </tr>
-      </thead>
-      <tbody>
-        {loans.map((loan) => {
-          const emp = employeeMap.get(loan.employeeId);
-          const isProcessing = actionLoading === loan.id;
-          return (
-            <tr key={loan.id} className={`border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30 ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
-              <td className="py-3 px-3 font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</td>
-              <td className="py-3 px-3 font-bold">{loan.employeeName || emp?.name || loan.employeeId}</td>
-              <td className="py-3 px-3 font-bold text-primary">{formatCurrency(loan.loanAmount)}</td>
-              <td className="py-3 px-3 font-mono text-xs" dir="ltr">{loan.month || loan.startMonth}</td>
-              <td className="py-3 px-3 text-[var(--color-text-muted)] text-xs max-w-[200px] truncate">{loan.reason || '—'}</td>
-              <td className="py-3 px-3 text-center">
-                {loan.disbursed ? (
-                  <Badge variant="success">تم الصرف</Badge>
-                ) : (
-                  <Badge variant="warning">لم يُصرف</Badge>
-                )}
-              </td>
+  <>
+    <div className="erp-mobile-card-list p-2">
+      {loans.map((loan) => {
+        const emp = employeeMap.get(loan.employeeId);
+        const isProcessing = actionLoading === loan.id;
+        return (
+          <div
+            key={`m-${loan.id}`}
+            className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-bold truncate">{loan.employeeName || emp?.name || loan.employeeId}</p>
+                <p className="font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</p>
+              </div>
+              {loan.disbursed ? <Badge variant="success">تم الصرف</Badge> : <Badge variant="warning">لم يُصرف</Badge>}
+            </div>
+            <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt className="text-[10px] text-[var(--color-text-muted)]">المبلغ</dt>
+                <dd className="font-bold text-primary">{formatCurrency(loan.loanAmount)}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] text-[var(--color-text-muted)]">الشهر</dt>
+                <dd className="font-mono text-xs" dir="ltr">{loan.month || loan.startMonth}</dd>
+              </div>
+              <div className="col-span-2">
+                <dt className="text-[10px] text-[var(--color-text-muted)]">السبب</dt>
+                <dd className="text-xs text-[var(--color-text-muted)]">{loan.reason || '—'}</dd>
+              </div>
+            </dl>
+            <div className="mt-2 flex flex-wrap gap-1.5">
               {canDisburse && (
-                <td className="py-3 px-3 text-center">
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={() => onDisburse(loan)}
-                    disabled={isProcessing}
-                  >
-                    {isProcessing ? 'جاري...' : loan.disbursed ? 'تراجع' : 'صرف'}
-                  </Button>
-                </td>
+                <Button size="sm" variant="ghost" onClick={() => onDisburse(loan)} disabled={isProcessing}>
+                  {isProcessing ? 'جاري...' : loan.disbursed ? 'تراجع' : 'صرف'}
+                </Button>
               )}
               {canDelete && (
-                <td className="py-3 px-3 text-center">
-                  <button
-                    onClick={() => onDelete(loan.id!)}
-                    className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
-                    title="حذف السلفة"
-                  >
-                    <span className="material-icons-round text-lg">delete</span>
-                  </button>
-                </td>
+                <button
+                  type="button"
+                  onClick={() => onDelete(loan.id!)}
+                  className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                >
+                  <span className="material-icons-round text-base">delete</span>
+                  حذف
+                </button>
               )}
-            </tr>
-          );
-        })}
-      </tbody>
-    </table>
-  </div>
+            </div>
+          </div>
+        );
+      })}
+    </div>
+    <div className="erp-desktop-table erp-table-wrap overflow-x-auto">
+      <table className="erp-table w-full min-w-[720px] text-sm">
+        <thead className="erp-thead">
+          <tr>
+            <th className="erp-th">الكود</th>
+            <th className="erp-th">الموظف</th>
+            <th className="erp-th">المبلغ</th>
+            <th className="erp-th">الشهر</th>
+            <th className="erp-th">السبب</th>
+            <th className="erp-th text-center">حالة الصرف</th>
+            {canDisburse && <th className="erp-th text-center">إجراء</th>}
+            {canDelete && <th className="erp-th text-center">حذف</th>}
+          </tr>
+        </thead>
+        <tbody>
+          {loans.map((loan) => {
+            const emp = employeeMap.get(loan.employeeId);
+            const isProcessing = actionLoading === loan.id;
+            return (
+              <tr key={loan.id} className={`border-b border-[var(--color-border)] hover:bg-[#f8f9fa]/30 ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}>
+                <td className="py-3 px-3 font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</td>
+                <td className="py-3 px-3 font-bold">{loan.employeeName || emp?.name || loan.employeeId}</td>
+                <td className="py-3 px-3 font-bold text-primary">{formatCurrency(loan.loanAmount)}</td>
+                <td className="py-3 px-3 font-mono text-xs" dir="ltr">{loan.month || loan.startMonth}</td>
+                <td className="py-3 px-3 text-[var(--color-text-muted)] text-xs max-w-[200px] truncate">{loan.reason || '—'}</td>
+                <td className="py-3 px-3 text-center">
+                  {loan.disbursed ? (
+                    <Badge variant="success">تم الصرف</Badge>
+                  ) : (
+                    <Badge variant="warning">لم يُصرف</Badge>
+                  )}
+                </td>
+                {canDisburse && (
+                  <td className="py-3 px-3 text-center">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => onDisburse(loan)}
+                      disabled={isProcessing}
+                    >
+                      {isProcessing ? 'جاري...' : loan.disbursed ? 'تراجع' : 'صرف'}
+                    </Button>
+                  </td>
+                )}
+                {canDelete && (
+                  <td className="py-3 px-3 text-center">
+                    <button
+                      onClick={() => onDelete(loan.id!)}
+                      className="p-1.5 rounded-[var(--border-radius-base)] hover:bg-rose-50 dark:hover:bg-rose-900/30 text-rose-400 hover:text-rose-600 transition-colors"
+                      title="حذف السلفة"
+                    >
+                      <span className="material-icons-round text-lg">delete</span>
+                    </button>
+                  </td>
+                )}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  </>
 );
 
 const InstallmentTable: React.FC<{
@@ -670,8 +723,93 @@ const InstallmentTable: React.FC<{
   onDisburse: (loan: FirestoreEmployeeLoan) => void;
   onDelete: (id: string) => void;
 }> = ({ loans, employeeMap, expandedLoan, setExpandedLoan, canDisburse, canDelete, actionLoading, onDisburse, onDelete }) => (
-  <div className="overflow-x-auto">
-    <table className="erp-table w-full text-sm">
+  <>
+    <div className="erp-mobile-card-list p-2">
+      {loans.map((loan) => {
+        const emp = employeeMap.get(loan.employeeId);
+        const isExpanded = expandedLoan === loan.id;
+        const paidInstallments = loan.totalInstallments - loan.remainingInstallments;
+        const progress = loan.totalInstallments > 0 ? Math.round((paidInstallments / loan.totalInstallments) * 100) : 0;
+        const isProcessing = actionLoading === loan.id;
+        return (
+          <div
+            key={`m-${loan.id}`}
+            className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${loan.disbursed ? 'bg-emerald-50/30 dark:bg-emerald-900/5' : ''}`}
+          >
+            <div className="flex items-start justify-between gap-2">
+              <div className="min-w-0">
+                <p className="text-sm font-bold truncate">{loan.employeeName || emp?.name || loan.employeeId}</p>
+                <p className="font-mono text-xs text-slate-500">{loan.employeeCode || emp?.code || '—'}</p>
+              </div>
+              <Badge variant={LOAN_STATUS_VARIANT[loan.status]}>{LOAN_STATUS_LABELS[loan.status]}</Badge>
+            </div>
+            <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+              <div>
+                <dt className="text-[10px] text-[var(--color-text-muted)]">المبلغ</dt>
+                <dd className="font-bold">{formatCurrency(loan.loanAmount)}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] text-[var(--color-text-muted)]">القسط</dt>
+                <dd>{formatCurrency(loan.installmentAmount)}</dd>
+              </div>
+              <div>
+                <dt className="text-[10px] text-[var(--color-text-muted)]">المتبقي</dt>
+                <dd className={`font-bold ${loan.remainingInstallments === 0 ? 'text-emerald-500' : 'text-amber-600'}`}>
+                  {loan.remainingInstallments}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-[10px] text-[var(--color-text-muted)]">البداية</dt>
+                <dd className="font-mono text-xs" dir="ltr">{loan.startMonth}</dd>
+              </div>
+            </dl>
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-xs font-bold mb-1">
+                <span className="text-[var(--color-text-muted)]">التقدم</span>
+                <span className="text-primary">{progress}%</span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-2">
+                <div className="bg-primary h-2 rounded-full transition-all" style={{ width: `${progress}%` }} />
+              </div>
+            </div>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {canDisburse ? (
+                <Button size="sm" variant="ghost" onClick={() => onDisburse(loan)} disabled={isProcessing}>
+                  {isProcessing ? 'جاري...' : loan.disbursed ? 'تم ✓' : 'صرف'}
+                </Button>
+              ) : (
+                loan.disbursed ? <Badge variant="success">تم</Badge> : <Badge variant="warning">لا</Badge>
+              )}
+              {canDelete && (
+                <button
+                  type="button"
+                  onClick={() => onDelete(loan.id!)}
+                  className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-rose-600 hover:bg-rose-50"
+                >
+                  <span className="material-icons-round text-base">delete</span>
+                  حذف
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setExpandedLoan(isExpanded ? null : loan.id!)}
+                className="inline-flex items-center gap-1 rounded-[var(--border-radius-base)] px-2 py-1.5 text-xs font-bold text-primary"
+              >
+                <span className="material-icons-round text-base">{isExpanded ? 'expand_less' : 'expand_more'}</span>
+                تفاصيل
+              </button>
+            </div>
+            {isExpanded && loan.reason && (
+              <p className="mt-2 text-xs text-slate-500">
+                <span className="font-bold">السبب: </span>{loan.reason}
+              </p>
+            )}
+          </div>
+        );
+      })}
+    </div>
+    <div className="erp-desktop-table erp-table-wrap overflow-x-auto">
+    <table className="erp-table w-full min-w-[900px] text-sm">
       <thead className="erp-thead">
         <tr>
           <th className="erp-th">الكود</th>
@@ -805,6 +943,7 @@ const InstallmentTable: React.FC<{
         })}
       </tbody>
     </table>
-  </div>
+    </div>
+  </>
 );
 
