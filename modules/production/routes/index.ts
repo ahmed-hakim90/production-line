@@ -5,6 +5,10 @@ const SupervisorDashboard = lazyNamed(
   () => import('../../dashboards/pages/SupervisorDashboard'),
   'SupervisorDashboard',
 );
+const ProductionDashboard = lazyNamed(
+  () => import('../pages/ProductionDashboard'),
+  'ProductionDashboard',
+);
 const Lines = lazyNamed(() => import('../pages/Lines'), 'Lines');
 const LineDetails = lazyNamed(() => import('../pages/LineDetails'), 'LineDetails');
 const ProductionPlans = lazyNamed(() => import('../pages/ProductionPlans'), 'ProductionPlans');
@@ -40,6 +44,19 @@ const SupplyCyclesList = lazyNamed(() => import('../pages/SupplyCyclesList'), 'S
 const SupplyCycleDetail = lazyNamed(() => import('../pages/SupplyCycleDetail'), 'SupplyCycleDetail');
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
+  {
+    path: '/production',
+    permissionsAny: [
+      'plans.view',
+      'workOrders.view',
+      'reports.view',
+      'factoryDashboard.view',
+      'quickAction.view',
+      'dashboard.view',
+    ],
+    component: ProductionDashboard,
+    skeleton: 'dashboard',
+  },
   {
     path: '/supervisor',
     permissionsAny: ['employeeDashboard.view', 'quickAction.view'],

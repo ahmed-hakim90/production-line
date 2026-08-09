@@ -17,6 +17,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { withTenantPath } from '@/lib/tenantPaths';
@@ -36,14 +38,25 @@ import { resolveRepairSettings } from '../config/repairSettings';
 import { useRepairJobs } from '../hooks/useRepairJobs';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflowNormalize';
-import { isRepairJobOpenStatus } from '../lib/repairTechnicianHomeMetrics';
+import {
+  buildRepairOpenAgingBars,
+  isRepairJobOpenStatus,
+} from '../lib/repairTechnicianHomeMetrics';
 import { StatusBadge } from '../components/StatusBadge';
-import { PageHeader } from '@/components/PageHeader';
 import { RepairAdminDashboard } from './RepairAdminDashboard';
 
 const num = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 const shortDay = (isoDate: string) =>
   new Intl.DateTimeFormat('ar-EG', { weekday: 'short', day: '2-digit' }).format(new Date(isoDate));
+
+const CHART_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' };
+const GRID_STROKE = 'color-mix(in srgb, var(--color-border) 80%, transparent)';
+
+function shortId(id: string): string {
+  const t = String(id || '').trim();
+  if (!t || t === 'غير_مسند') return 'غير مسند';
+  return t.length > 10 ? `${t.slice(0, 8)}…` : t;
+}
 
 const RepairOperationalDashboard: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
@@ -54,6 +67,7 @@ const RepairOperationalDashboard: React.FC = () => {
   const userRoleName = useAppStore((s) => s.userRoleName);
   const systemSettings = useAppStore((s) => s.systemSettings);
   const currentEmployee = useAppStore((s) => s.currentEmployee);
+  const rawEmployees = useAppStore((s) => s._rawEmployees);
   const repairCtx = useMemo(
     () =>
       resolveRepairAccessContext({
@@ -67,6 +81,7 @@ const RepairOperationalDashboard: React.FC = () => {
   const technicianIds = useRepairTechnicianIds(userProfile, currentEmployee?.id);
   const repairSettings = useMemo(() => resolveRepairSettings(systemSettings), [systemSettings]);
   const [branches, setBranches] = useState<RepairBranch[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
   const userBranchIds = useMemo(
     () =>
       resolveAccessibleRepairBranchIds({
@@ -90,15 +105,37 @@ const RepairOperationalDashboard: React.FC = () => {
     technicianIds,
   });
 
+  const techLabelById = useMemo(() => {
+    const map = new Map<string, string>();
+    rawEmployees.forEach((employee) => {
+      const name = String(employee.name || '').trim();
+      if (!name) return;
+      const empId = String(employee.id || '').trim();
+      const userId = String(employee.userId || '').trim();
+      if (empId) map.set(empId, name);
+      if (userId && !map.has(userId)) map.set(userId, name);
+    });
+    return map;
+  }, [rawEmployees]);
+
+  const resolveTechLabel = (id: string) => {
+    const key = String(id || '').trim() || 'غير_مسند';
+    if (key === 'غير_مسند') return 'غير مسند';
+    return techLabelById.get(key) || shortId(key);
+  };
+
+  const openStatusIds = repairSettings.workflow.openStatusIds;
+
   const kpis = useMemo(() => {
-    const openIds = repairSettings.workflow.openStatusIds;
-    const openJobs = jobs.filter((j) => isRepairJobOpenStatus(j.status, openIds)).length;
+    const openJobs = jobs.filter((j) => isRepairJobOpenStatus(j.status, openStatusIds)).length;
     const pendingDelivery = jobs.filter((j) => mapLegacyRepairStatus(j.status) === 'ready').length;
     const all = jobs.length || 1;
     const successRate = (jobs.filter((j) => isDeliveredStatus(j.status)).length / all) * 100;
     return { openJobs, pendingDelivery, successRate };
-  }, [jobs, repairSettings.workflow.openStatusIds]);
+  }, [jobs, openStatusIds]);
+
   const recent = useMemo(() => jobs.slice(0, 6), [jobs]);
+
   const statusChartData = useMemo(
     () =>
       (repairSettings.workflow.statuses.map((s) => s.id).length > 0
@@ -113,46 +150,50 @@ const RepairOperationalDashboard: React.FC = () => {
       }).filter((row) => row.value > 0),
     [jobs, repairSettings.workflow.statuses, repairSettings.statusMap],
   );
+
   const dailyTrendData = useMemo(() => {
     const days = Array.from({ length: 14 }).map((_, idx) => {
       const d = new Date();
       d.setDate(d.getDate() - (13 - idx));
       const key = d.toISOString().slice(0, 10);
-      return { key, day: shortDay(key), total: 0 };
+      return { key, day: shortDay(key), created: 0, delivered: 0 };
     });
     const dayMap = new Map(days.map((d) => [d.key, d]));
     jobs.forEach((job) => {
-      const key = String(job.createdAt || '').slice(0, 10);
-      const row = dayMap.get(key);
-      if (row) row.total += 1;
+      const createdKey = String(job.createdAt || '').slice(0, 10);
+      const createdRow = dayMap.get(createdKey);
+      if (createdRow) createdRow.created += 1;
+      if (isDeliveredStatus(job.status)) {
+        const deliveredKey = String(job.deliveredAt || job.resolvedAt || job.closedAt || '').slice(0, 10);
+        const deliveredRow = dayMap.get(deliveredKey);
+        if (deliveredRow) deliveredRow.delivered += 1;
+      }
     });
     return days;
   }, [jobs]);
 
   const delayedCount = useMemo(() => {
     const now = Date.now();
-    const openIds = repairSettings.workflow.openStatusIds;
     return jobs.filter(
       (j) =>
-        isRepairJobOpenStatus(j.status, openIds)
+        isRepairJobOpenStatus(j.status, openStatusIds)
         && j.dueAt
         && Date.parse(String(j.dueAt)) < now,
     ).length;
-  }, [jobs, repairSettings.workflow.openStatusIds]);
+  }, [jobs, openStatusIds]);
 
   const workloadRows = useMemo(() => {
     const m = new Map<string, number>();
-    const openIds = repairSettings.workflow.openStatusIds;
     jobs.forEach((j) => {
-      if (!isRepairJobOpenStatus(j.status, openIds)) return;
+      if (!isRepairJobOpenStatus(j.status, openStatusIds)) return;
       const key = String(j.technicianId || '').trim() || 'غير_مسند';
       m.set(key, (m.get(key) || 0) + 1);
     });
     return Array.from(m.entries())
-      .map(([id, count]) => ({ id, count }))
+      .map(([id, count]) => ({ id, name: resolveTechLabel(id), count }))
       .sort((a, b) => b.count - a.count)
       .slice(0, 14);
-  }, [jobs, repairSettings.workflow.openStatusIds]);
+  }, [jobs, openStatusIds, techLabelById]);
 
   const avgResolutionHours = useMemo(() => {
     const rows = jobs.filter((j) => isDeliveredStatus(j.status) && typeof j.resolutionMinutes === 'number');
@@ -180,190 +221,154 @@ const RepairOperationalDashboard: React.FC = () => {
       .slice(0, 10);
   }, [jobs]);
 
+  const agingBars = useMemo(
+    () => buildRepairOpenAgingBars(jobs, openStatusIds),
+    [jobs, openStatusIds],
+  );
 
   const unassignedCount = jobs.filter((job) => !job.technicianId && !isDeliveredStatus(job.status)).length;
   const waitingCustomerCount = jobs.filter((job) => ['estimate_ready', 'waiting_approval'].includes(job.status)).length;
   const waitingPartsCount = jobs.filter((job) => job.status === 'waiting_parts').length;
   const inWorkshopCount = jobs.filter((job) => ['diagnosing', 'repairing', 'testing'].includes(job.status)).length;
 
-  const kpiCards = [
-    { key: 'open', label: 'طلبات مفتوحة', value: kpis.openJobs, tone: '' },
+  const handleRefresh = () => {
+    setRefreshing(true);
+    void Promise.resolve(refetchJobs()).finally(() => setRefreshing(false));
+  };
+
+  const hero = [
+    {
+      key: 'open',
+      label: 'طلبات مفتوحة',
+      value: num(kpis.openJobs),
+      accent: true as const,
+    },
     {
       key: 'delayed',
-      label: 'متأخرة عن الموعد',
-      value: delayedCount,
-      tone: 'border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20',
-      titleTone: 'text-amber-900 dark:text-amber-200',
-      valueTone: 'text-amber-800 dark:text-amber-200',
-    },
-    { key: 'ready', label: 'جاهز للدفع/التسليم', value: kpis.pendingDelivery, tone: '' },
-    { key: 'unassigned', label: 'غير مسند', value: unassignedCount, tone: '' },
-    {
-      key: 'waiting_customer',
-      label: 'انتظار العميل',
-      value: waitingCustomerCount,
-      tone: '',
-      valueTone: 'text-violet-700 dark:text-violet-300',
+      label: 'متأخرة',
+      value: num(delayedCount),
+      toneClassName: delayedCount > 0 ? 'ops-dash-kpi-card--warn' : undefined,
     },
     {
-      key: 'waiting_parts',
-      label: 'انتظار قطع',
-      value: waitingPartsCount,
-      tone: '',
-      valueTone: 'text-orange-700 dark:text-orange-300',
+      key: 'ready',
+      label: 'جاهز للدفع/التسليم',
+      value: num(kpis.pendingDelivery),
+    },
+    {
+      key: 'success',
+      label: 'نسبة النجاح',
+      value: `${kpis.successRate.toFixed(1)}%`,
+    },
+    {
+      key: 'unassigned',
+      label: 'غير مسند',
+      value: num(unassignedCount),
     },
     {
       key: 'workshop',
-      label: 'قيد الإصلاح/الاختبار',
-      value: inWorkshopCount,
-      tone: '',
-      valueTone: 'text-sky-700 dark:text-sky-300',
+      label: 'الورشة',
+      value: num(inWorkshopCount),
+      meta: `قطع ${num(waitingPartsCount)} · عميل ${num(waitingCustomerCount)}`,
     },
-  ] as const;
-
-  const metricCards = [
-    { key: 'success', label: 'نسبة إنهاء الطلبات', value: `${kpis.successRate.toFixed(1)}%` },
-    { key: 'total', label: 'إجمالي الطلبات', value: num(jobs.length) },
-    { key: 'avg', label: 'متوسط مدة الإصلاح (ساعة)', value: avgResolutionHours.toFixed(1) },
-    {
-      key: 'warranty',
-      label: 'تكلفة قطع تحت ضمان',
-      value: `${num(warrantyPartsCost)} ج.م`,
-      hint: 'من تكلفة الصرف الفعلية (ليس سعر البيع)',
-    },
-  ] as const;
+  ];
 
   return (
-    <div className="erp-ds-clean space-y-3 p-3 sm:p-4 md:space-y-4 md:p-6">
-      <PageHeader
-        title="لوحة الصيانة"
-        subtitle="لوحة تشغيل الاستقبال: الوارد والإسناد والانتظار والإصلاح والتحصيل والتسليم."
-        icon="layout_dashboard"
-        primaryAction={can('repair.jobs.create') ? {
-          label: 'جهاز جديد',
-          icon: 'add',
-          onClick: () => navigate(withTenantPath(tenantSlug, '/repair/jobs/new')),
-        } : undefined}
-        actions={(
-          <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+    <DomainHomeShell
+      denseHero
+      hero={hero}
+      onRefresh={handleRefresh}
+      refreshing={refreshing}
+      secondarySummary="إجراءات وروابط الصيانة"
+      secondary={(
+        <div className="flex flex-wrap gap-2">
+          {can('repair.jobs.create') && (
             <Button
-              variant="secondary"
-              type="button"
               size="sm"
-              className="shrink-0"
-              onClick={() => {
-                void refetchJobs();
-              }}
+              type="button"
+              onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs/new'))}
             >
-              تحديث
+              جهاز جديد
             </Button>
-            <Link to={withTenantPath(tenantSlug, '/repair/call-center')} className="shrink-0">
-              <Button variant="outline" size="sm">مركز الاتصال</Button>
+          )}
+          <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
+            <Button variant="outline" size="sm">مركز الاتصال</Button>
+          </Link>
+          <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
+            <Button variant="outline" size="sm">عرض الطلبات</Button>
+          </Link>
+          {(can('repair.customerRequests.view') || can('repair.customerRequests.assign') || can('repair.customerRequests.receive')) && (
+            <Link to={withTenantPath(tenantSlug, '/repair/customer-requests')}>
+              <Button variant="outline" size="sm">طلبات العملاء</Button>
             </Link>
-            <Link to={withTenantPath(tenantSlug, '/repair/jobs')} className="shrink-0">
-              <Button variant="outline" size="sm">عرض الطلبات</Button>
+          )}
+          {(can('repair.custody.view') || can('repair.custody.handover')) && (
+            <Link to={withTenantPath(tenantSlug, '/repair/custody-stock')}>
+              <Button variant="outline" size="sm">العهدة</Button>
             </Link>
-            {(can('repair.customerRequests.view') || can('repair.customerRequests.assign') || can('repair.customerRequests.receive')) && (
-              <Link to={withTenantPath(tenantSlug, '/repair/customer-requests')} className="shrink-0">
-                <Button variant="outline" size="sm">طلبات العملاء</Button>
-              </Link>
-            )}
-            {(can('repair.custody.view') || can('repair.custody.handover')) && (
-              <Link to={withTenantPath(tenantSlug, '/repair/custody-stock')} className="shrink-0">
-                <Button variant="outline" size="sm">العهدة</Button>
-              </Link>
-            )}
-            {(can('repair.replacements.view') || can('repair.replacements.approve') || can('repair.replacements.deliver')) && (
-              <Link to={withTenantPath(tenantSlug, '/repair/replacements')} className="shrink-0">
-                <Button variant="outline" size="sm">الاستبدال</Button>
-              </Link>
-            )}
-            <Link to={withTenantPath(tenantSlug, '/repair/parts')} className="shrink-0">
-              <Button variant="outline" size="sm">قطع الغيار</Button>
+          )}
+          {(can('repair.replacements.view') || can('repair.replacements.approve') || can('repair.replacements.deliver')) && (
+            <Link to={withTenantPath(tenantSlug, '/repair/replacements')}>
+              <Button variant="outline" size="sm">الاستبدال</Button>
             </Link>
-          </div>
-        )}
-      />
-
-      {/* KPI cards: 2 per row on mobile/tablet, denser on desktop */}
-      <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-4 xl:grid-cols-7">
-        {kpiCards.map((card) => (
-          <Card key={card.key} className={`shadow-sm ${card.tone}`}>
-            <CardHeader className="space-y-0 p-3 pb-1 md:p-4 md:pb-2">
-              <CardTitle className={`text-[11px] leading-snug text-muted-foreground sm:text-xs md:text-sm ${'titleTone' in card ? card.titleTone : ''}`}>
-                {card.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
-              <p className={`text-2xl font-bold tabular-nums md:text-3xl ${'valueTone' in card ? card.valueTone : ''}`}>
-                {num(card.value)}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
-      </div>
-
-      {/* Summary metrics: 2 per row until large screens */}
-      <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-4">
-        {metricCards.map((card) => (
-          <Card key={card.key} className="shadow-sm">
-            <CardHeader className="space-y-0 p-3 pb-1 md:p-4 md:pb-2">
-              <CardTitle className="text-[11px] leading-snug text-muted-foreground sm:text-xs md:text-sm">
-                {card.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="p-3 pt-0 md:p-4 md:pt-0">
-              <p className="text-xl font-semibold tabular-nums md:text-2xl">{card.value}</p>
-              {'hint' in card && card.hint ? (
-                <p className="mt-1 text-[10px] leading-snug text-muted-foreground md:text-xs">{card.hint}</p>
-              ) : null}
-            </CardContent>
-          </Card>
-        ))}
+          )}
+          <Link to={withTenantPath(tenantSlug, '/repair/parts')}>
+            <Button variant="outline" size="sm">قطع الغيار</Button>
+          </Link>
+        </div>
+      )}
+    >
+      <div className="ops-module-charts__qty-row" style={{ gridTemplateColumns: 'repeat(4, minmax(0, 1fr))' }}>
+        <div className="ops-module-charts__qty">
+          <p className="ops-module-charts__qty-label">نسبة إنهاء الطلبات</p>
+          <p className="ops-module-charts__qty-value">{kpis.successRate.toFixed(1)}%</p>
+        </div>
+        <div className="ops-module-charts__qty">
+          <p className="ops-module-charts__qty-label">إجمالي الطلبات</p>
+          <p className="ops-module-charts__qty-value">{num(jobs.length)}</p>
+        </div>
+        <div className="ops-module-charts__qty">
+          <p className="ops-module-charts__qty-label">متوسط المدة (ساعة)</p>
+          <p className="ops-module-charts__qty-value">{avgResolutionHours.toFixed(1)}</p>
+        </div>
+        <div className="ops-module-charts__qty">
+          <p className="ops-module-charts__qty-label">تكلفة قطع تحت ضمان</p>
+          <p className="ops-module-charts__qty-value">{num(warrantyPartsCost)}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-        <Card className="shadow-sm">
-          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
-            <CardTitle className="text-sm md:text-base">عبء الفنيين (طلبات مفتوحة)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-56 min-w-0 px-2 pb-3 md:h-64 md:px-6 md:pb-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={workloadRows} layout="vertical" margin={{ left: 4, right: 8 }}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis type="number" allowDecimals={false} />
-                <YAxis type="category" dataKey="id" width={72} tick={{ fontSize: 10 }} />
+        <OpsDashPanel title="عبء الفنيين (طلبات مفتوحة)" accent="repair">
+          <div className="ops-module-charts__chart" dir="ltr">
+            <ResponsiveContainer>
+              <BarChart data={workloadRows} layout="vertical" margin={{ left: 8, right: 12, top: 8, bottom: 8 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                <YAxis type="category" dataKey="name" width={88} tick={CHART_TICK} axisLine={false} tickLine={false} />
                 <Tooltip formatter={(v: number) => num(v)} />
-                <Bar dataKey="count" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
+                <Bar dataKey="count" name="العدد" fill="#0ea5e9" radius={[0, 8, 8, 0]} barSize={12} />
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm">
-          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
-            <CardTitle className="text-sm md:text-base">أكثر الموديلات ظهورًا في الورشة</CardTitle>
-          </CardHeader>
-          <CardContent className="h-56 min-w-0 px-2 pb-3 md:h-64 md:px-6 md:pb-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topModels}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="name" interval={0} angle={-18} textAnchor="end" height={70} tick={{ fontSize: 10 }} />
-                <YAxis allowDecimals={false} />
+          </div>
+        </OpsDashPanel>
+        <OpsDashPanel title="أكثر الموديلات ظهورًا في الورشة" accent="repair">
+          <div className="ops-module-charts__chart" dir="ltr">
+            <ResponsiveContainer>
+              <BarChart data={topModels} margin={{ left: 0, right: 8, top: 8, bottom: 24 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                <XAxis dataKey="name" interval={0} angle={-18} textAnchor="end" height={56} tick={CHART_TICK} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
                 <Tooltip formatter={(v: number) => num(v)} />
-                <Bar dataKey="count" fill="#6366f1" radius={[6, 6, 0, 0]} />
+                <Bar dataKey="count" name="العدد" fill="#6366f1" radius={[8, 8, 0, 0]} barSize={16} />
               </BarChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </div>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Card className="shadow-sm xl:col-span-1">
-          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
-            <CardTitle className="text-sm md:text-base">توزيع حالات الطلبات</CardTitle>
-          </CardHeader>
-          <CardContent className="h-60 min-w-0 px-2 md:h-72 md:px-6">
-            <ResponsiveContainer width="100%" height="100%">
+        <OpsDashPanel title="توزيع حالات الطلبات" accent="repair" className="xl:col-span-1">
+          <div className="ops-module-charts__chart" dir="ltr">
+            <ResponsiveContainer>
               <PieChart>
                 <Pie data={statusChartData} dataKey="value" nameKey="name" innerRadius={44} outerRadius={78} paddingAngle={2}>
                   {statusChartData.map((entry) => (
@@ -378,35 +383,45 @@ const RepairOperationalDashboard: React.FC = () => {
                 />
               </PieChart>
             </ResponsiveContainer>
-          </CardContent>
-          <CardContent className="px-3 pb-3 pt-0 md:px-6 md:pb-6">
-            <div className="flex flex-wrap gap-1.5 md:gap-2">
-              {statusChartData.map((entry) => (
-                <Badge key={entry.key} variant="outline" className="gap-1 text-[10px] md:text-xs">
-                  <span className="inline-block h-2 w-2 rounded-full" style={{ background: repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b' }} />
-                  {entry.name}: {num(entry.value)}
-                </Badge>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-        <Card className="shadow-sm xl:col-span-2">
-          <CardHeader className="p-3 pb-2 md:p-6 md:pb-4">
-            <CardTitle className="text-sm md:text-base">اتجاه الطلبات اليومية (آخر 14 يوم)</CardTitle>
-          </CardHeader>
-          <CardContent className="h-60 min-w-0 px-2 pb-3 md:h-72 md:px-6 md:pb-6">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={dailyTrendData}>
-                <CartesianGrid strokeDasharray="3 3" />
-                <XAxis dataKey="day" tick={{ fontSize: 10 }} />
-                <YAxis allowDecimals={false} />
+          </div>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {statusChartData.map((entry) => (
+              <Badge key={entry.key} variant="outline" className="gap-1 text-[10px]">
+                <span className="inline-block h-2 w-2 rounded-full" style={{ background: repairSettings.statusMap[entry.key]?.color || REPAIR_JOB_STATUS_COLORS[entry.key] || '#64748b' }} />
+                {entry.name}: {num(entry.value)}
+              </Badge>
+            ))}
+          </div>
+        </OpsDashPanel>
+        <OpsDashPanel title="وارد وتسليم (آخر 14 يوم)" accent="repair" className="xl:col-span-2">
+          <div className="ops-module-charts__chart ops-module-charts__chart--tall" dir="ltr">
+            <ResponsiveContainer>
+              <LineChart data={dailyTrendData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                <XAxis dataKey="day" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
                 <Tooltip formatter={(value: number) => num(value)} />
-                <Line type="monotone" dataKey="total" stroke="#2563eb" strokeWidth={3} dot={{ r: 3 }} />
+                <Line type="monotone" dataKey="created" name="وارد" stroke="#2563eb" strokeWidth={2.5} dot={{ r: 2 }} />
+                <Line type="monotone" dataKey="delivered" name="تسليم" stroke="#059669" strokeWidth={2.5} dot={{ r: 2 }} />
               </LineChart>
             </ResponsiveContainer>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </div>
+
+      <OpsDashPanel title="عمر الطلبات المفتوحة" accent="repair">
+        <div className="ops-module-charts__chart" dir="ltr">
+          <ResponsiveContainer>
+            <BarChart data={agingBars} margin={{ left: 0, right: 8, top: 8, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+              <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
+              <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
+              <Tooltip formatter={(v: number) => num(v)} />
+              <Bar dataKey="value" name="العدد" fill="#d97706" radius={[8, 8, 0, 0]} barSize={22} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      </OpsDashPanel>
 
       <Card className="shadow-sm">
         <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-3 md:p-6">
@@ -435,7 +450,7 @@ const RepairOperationalDashboard: React.FC = () => {
           {recent.length === 0 && <div className="text-muted-foreground">لا توجد طلبات حتى الآن.</div>}
         </CardContent>
       </Card>
-    </div>
+    </DomainHomeShell>
   );
 };
 

@@ -4,6 +4,8 @@
  */
 import assert from 'node:assert/strict';
 import {
+  buildRepairOpenAgingBars,
+  buildRepairTechnicianDailyOutcomes,
   formatRepairTechnicianDeviceLabel,
   isRepairJobDelayed,
   resolveRepairTechnicianHomeRange,
@@ -137,6 +139,55 @@ function job(partial: Partial<RepairTechnicianHomeJob> & { status: string }): Re
     formatRepairTechnicianDeviceLabel(job({ status: 'ready', deviceBrand: 'LG', deviceModel: 'X' })),
     'LG X',
   );
+}
+
+{
+  const range = {
+    startMs: Date.parse('2026-08-14T00:00:00'),
+    endMs: Date.parse('2026-08-15T23:59:59.999'),
+  };
+  const daily = buildRepairTechnicianDailyOutcomes(
+    [
+      job({ id: 'c1', status: 'repairing', createdAt: '2026-08-14T10:00:00' }),
+      job({
+        id: 'f1',
+        status: 'delivered',
+        createdAt: '2026-08-10T10:00:00',
+        deliveredAt: '2026-08-15T12:00:00',
+      }),
+      job({
+        id: 'u1',
+        status: 'unrepairable',
+        createdAt: '2026-08-14T08:00:00',
+        resolvedAt: '2026-08-14T18:00:00',
+      }),
+    ],
+    range,
+  );
+  assert.equal(daily.length, 2);
+  const day14 = daily[0];
+  const day15 = daily[1];
+  assert.equal(day14.created, 2);
+  assert.equal(day14.unrepairable, 1);
+  assert.equal(day15.fixed, 1);
+}
+
+{
+  const nowMs = Date.parse('2026-08-15T12:00:00Z');
+  const bars = buildRepairOpenAgingBars(
+    [
+      job({ id: 'fresh', status: 'repairing', createdAt: '2026-08-15T06:00:00Z' }),
+      job({ id: 'week', status: 'repairing', createdAt: '2026-08-07T12:00:00Z' }),
+      job({ id: 'old', status: 'repairing', createdAt: '2026-07-01T12:00:00Z' }),
+      job({ id: 'closed', status: 'delivered', createdAt: '2026-07-01T12:00:00Z' }),
+    ],
+    OPEN,
+    nowMs,
+  );
+  assert.equal(bars.length, 5);
+  assert.equal(bars.reduce((s, b) => s + b.value, 0), 3);
+  assert.ok(bars[0].value >= 1, 'fresh job in 0–1 day bucket');
+  assert.ok(bars[4].value >= 1, 'old job in +14 day bucket');
 }
 
 console.log('repair-technician-home-metrics.test.ts: ok');
