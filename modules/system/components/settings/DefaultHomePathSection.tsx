@@ -1,18 +1,15 @@
 import React from 'react';
-import { Card } from '../UI';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type DefaultHomePathSectionProps = {
   value: string;
   onChange: (v: string) => void;
 };
-
 const OPTIONS: { value: string; label: string }[] = [
   { value: '', label: 'افتراضي — لوحات التحكم حسب الدور' },
 ];
-
 /** Tenant default route after opening home `/`. */
 export const DefaultHomePathSection: React.FC<DefaultHomePathSectionProps> = ({ value, onChange }) => (
-  <Card title="الصفحة الرئيسية بعد تسجيل الدخول">
+  <OpsDashPanel title="الصفحة الرئيسية بعد تسجيل الدخول">
     <p className="text-xs text-[var(--color-text-muted)] mb-3">
       حالياً المسار الوحيد المتاح هو لوحات التحكم حسب الدور. خيارات مسارات إضافية ستُضاف هنا عند تفعيلها في النظام.
     </p>
@@ -27,5 +24,5 @@ export const DefaultHomePathSection: React.FC<DefaultHomePathSectionProps> = ({ 
         </option>
       ))}
     </select>
-  </Card>
+  </OpsDashPanel>
 );

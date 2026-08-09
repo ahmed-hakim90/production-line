@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { db, isConfigured } from '@/services/firebase';
 import { useAppStore } from '@/store/useAppStore';
-import { Card, Button } from '../UI';
+import { Button } from '../UI';
 import type { FirestoreTenant, ThemeSettings } from '@/types';
 import {
   ACTIVITY_PACK_IDS,
@@ -12,7 +12,7 @@ import {
   type ActivityPackId,
 } from '@/lib/activityPacks';
 import { toast } from 'sonner';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   const tenantId = useAppStore((s) => s.userProfile?.tenantId);
   const [name, setName] = useState('');
@@ -22,7 +22,6 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
-
   useEffect(() => {
     if (!isConfigured || !tenantId) {
       setLoading(false);
@@ -48,7 +47,6 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
       cancelled = true;
     };
   }, [tenantId]);
-
   const togglePack = (pack: ActivityPackId) => {
     setPacks((prev) => {
       if (prev.includes(pack)) {
@@ -61,7 +59,6 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
       return [...prev, pack];
     });
   };
-
   const save = async () => {
     if (!isAdmin || !tenantId || !isConfigured) return;
     setSaving(true);
@@ -90,11 +87,9 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
       setSaving(false);
     }
   };
-
   if (!tenantId) return null;
-
   return (
-    <Card title="بيانات الشركة" className="bg-white border-slate-200 rounded-xl shadow-none">
+    <OpsDashPanel title="بيانات الشركة" className="bg-white border-slate-200 rounded-xl shadow-none">
       {err ? <p className="text-sm text-rose-600 mb-3">{err}</p> : null}
       {loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل...</p>
@@ -128,7 +123,6 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
               disabled={!isAdmin}
             />
           </div>
-
           <div className="rounded-xl border border-[var(--color-border)] bg-[#f8f9fa]/80 p-3 space-y-2">
             <p className="text-sm font-bold text-[var(--color-text)]">باقات النشاط (Module Apps)</p>
             <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
@@ -153,7 +147,6 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
               ))}
             </div>
           </div>
-
           {isAdmin ? (
             <Button type="button" onClick={() => void save()} disabled={saving}>
               {saving ? 'جاري الحفظ...' : 'حفظ بيانات الشركة'}
@@ -161,6 +154,6 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
           ) : null}
         </div>
       )}
-    </Card>
+    </OpsDashPanel>
   );
 };

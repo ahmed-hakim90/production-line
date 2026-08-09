@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from "react";
-import { PageHeader } from "@/components/PageHeader";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
+import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -72,38 +72,32 @@ export const AccountingRepairPnl: React.FC = () => {
       onRefresh={() => void reload()}
       refreshing={loading}
       actions={
-        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-          <PageHeader
-            title=""
-            backAction={false}
-            moreActions={[
-              {
-                label: "تصدير CSV",
-                icon: "download",
-                onClick: () =>
-                  exportAccountingCsv(
-                    "repair-pnl.csv",
-                    ["البند", "المبلغ"],
-                    [
-                      ["إيراد خدمات", pnl.serviceRevenue],
-                      ["إيراد قطع", pnl.partsRevenue],
-                      ["إيرادات متنوعة", pnl.miscIncome],
-                      ["خصومات", pnl.discounts],
-                      ["صافي الإيراد", pnl.netRevenue],
-                      ["تكلفة قطع الغيار", pnl.partsCogs],
-                      ["مصروفات تشغيل", pnl.operatingExpenses],
-                      ["ربح التشغيل", pnl.operatingProfit],
-                      ...pnl.expensesByType.map(
-                        (row) =>
-                          [`مصروف: ${row.label}`, row.amount] as [string, number],
-                      ),
-                    ],
-                  ),
-                group: "تصدير",
-              },
-            ]}
-          />
-        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() =>
+            exportAccountingCsv(
+              "repair-pnl.csv",
+              ["البند", "المبلغ"],
+              [
+                ["إيراد خدمات", pnl.serviceRevenue],
+                ["إيراد قطع", pnl.partsRevenue],
+                ["إيرادات متنوعة", pnl.miscIncome],
+                ["خصومات", pnl.discounts],
+                ["صافي الإيراد", pnl.netRevenue],
+                ["تكلفة قطع الغيار", pnl.partsCogs],
+                ["مصروفات تشغيل", pnl.operatingExpenses],
+                ["ربح التشغيل", pnl.operatingProfit],
+                ...pnl.expensesByType.map(
+                  (row) =>
+                    [`مصروف: ${row.label}`, row.amount] as [string, number],
+                ),
+              ],
+            )
+          }
+        >
+          تصدير CSV
+        </Button>
       }
     >
       <OpsDashPanel title="الفترة ومركز التكلفة">

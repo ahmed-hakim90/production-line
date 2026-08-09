@@ -1,35 +1,30 @@
 import React from 'react';
 import { BellRing, Columns3, GripVertical, Landmark, type LucideIcon } from 'lucide-react';
-import { Card } from '../UI';
 import type { DashboardDisplaySettings } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type GeneralDashboardDisplaySectionProps = {
   isAdmin: boolean;
   localDashboardDisplay: DashboardDisplaySettings;
   setLocalDashboardDisplay: React.Dispatch<React.SetStateAction<DashboardDisplaySettings>>;
 };
-
 const DASHBOARD_DISPLAY_ICON_MAP: Record<string, LucideIcon> = {
   account_balance: Landmark,
   notifications_active: BellRing,
   drag_indicator: GripVertical,
   view_column: Columns3,
 };
-
 const DashboardDisplayIcon = ({ name }: { name: string }) => {
   const Icon = DASHBOARD_DISPLAY_ICON_MAP[name] ?? Columns3;
   return <Icon size={18} className="text-primary" />;
 };
-
 export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySectionProps> = ({
   isAdmin,
   localDashboardDisplay,
   setLocalDashboardDisplay,
 }) => {
   if (!isAdmin) return null;
-
   return (
-    <Card title="إعدادات لوحة التحكم">
+    <OpsDashPanel title="إعدادات لوحة التحكم">
       <div className="space-y-4">
         {([
           { key: 'showCostWidgets' as keyof DashboardDisplaySettings, label: 'عرض عناصر التكاليف', icon: 'account_balance', desc: 'إظهار عناصر التكلفة والتحليل المالي في لوحات التحكم' },
@@ -52,7 +47,6 @@ export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySec
             </button>
           </div>
         ))}
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-base)] flex items-center justify-center shrink-0">
@@ -80,6 +74,6 @@ export const GeneralDashboardDisplaySection: React.FC<GeneralDashboardDisplaySec
           </div>
         </div>
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

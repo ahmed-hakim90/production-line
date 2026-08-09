@@ -1,14 +1,12 @@
 import React, { useMemo } from 'react';
 import type { FirestoreEmployee, PlanSettings } from '../../../../types';
-import { Card } from '../UI';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type Props = {
   isAdmin: boolean;
   localPlanSettings: PlanSettings;
   setLocalPlanSettings: React.Dispatch<React.SetStateAction<PlanSettings>>;
   employees: FirestoreEmployee[];
 };
-
 export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
   isAdmin,
   localPlanSettings,
@@ -25,7 +23,6 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
         if (accessA !== accessB) return accessA - accessB;
         return String(a.name || '').localeCompare(String(b.name || ''), 'ar');
       });
-
     return rows.map((employee) => ({
       id: employee.id!,
       label: `${employee.code ? `${employee.code} — ` : ''}${employee.name || 'موظف'}${employee.hasSystemAccess || employee.userId ? ' (له حساب)' : ''}`,
@@ -37,9 +34,7 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
     ))),
     [approverOptions, employees],
   );
-
   if (!isAdmin) return null;
-
   const updateApprover = (
     key: 'productionRequestFirstApproverEmployeeId' | 'productionRequestFinalApproverEmployeeId',
     value: string,
@@ -65,7 +60,6 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
       };
     });
   };
-
   const selectApprover = (
     label: string,
     hint: string,
@@ -87,9 +81,8 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
       </select>
     </div>
   );
-
   return (
-    <Card title="إعدادات طلبات الإنتاج">
+    <OpsDashPanel title="إعدادات طلبات الإنتاج">
       <div className="space-y-4">
         <div>
           <p className="text-sm font-bold text-[var(--color-text)]">أين تذهب طلبات الإنتاج؟</p>
@@ -97,7 +90,6 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
             ستذهب طلبات الإجازة والسلفة والجزاء التي ينشئها الإنتاج إلى الموافقين المحددين هنا. يجب تحديد الموافق الأول على الأقل، والموافق النهائي اختياري.
           </p>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {selectApprover(
             'الموافق الأول',
@@ -112,7 +104,6 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
             (value) => updateApprover('productionRequestFinalApproverEmployeeId', value),
           )}
         </div>
-
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <p className="text-sm font-bold text-[var(--color-text)]">جهات الاطلاع</p>
           <p className="text-xs text-[var(--color-text-muted)] mb-3">
@@ -138,13 +129,12 @@ export const ProductionRequestRoutingSettingsSection: React.FC<Props> = ({
             </div>
           )}
         </div>
-
         {approverOptions.length === 0 && (
           <p className="text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
             لا يوجد موظفون نشطون للاختيار. اربط المستخدم بسجل موظف حتى تظهر الطلبات في مركز الموافقات.
           </p>
         )}
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

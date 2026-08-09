@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, Save } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
@@ -109,23 +108,18 @@ export const AccountingChartOfAccounts: React.FC = () => {
             </Button>
           ) : null}
           {can("accounting.accounts.manage") ? (
-            <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-              <PageHeader
-                title=""
-                backAction={false}
-                moreActions={[
-                  {
-                    label: "استكمال الشجرة الافتراضية",
-                    icon: "auto_fix_high",
-                    onClick: () =>
-                      void run(
-                        accountingService.seedDefaults,
-                        "تم استكمال الحسابات الافتراضية.",
-                      ),
-                  },
-                ]}
-              />
-            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() =>
+                void run(
+                  accountingService.seedDefaults,
+                  "تم استكمال الحسابات الافتراضية.",
+                )
+              }
+            >
+              استكمال الشجرة الافتراضية
+            </Button>
           ) : null}
         </div>
       }

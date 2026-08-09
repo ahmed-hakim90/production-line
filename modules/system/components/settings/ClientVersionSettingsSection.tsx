@@ -1,9 +1,8 @@
 import React from 'react';
 import { Loader2, Save } from 'lucide-react';
-import { Card, Button } from '../UI';
-
+import { Button } from '../UI';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 const BUILD_VERSION = __APP_VERSION__;
-
 type ClientVersionSettingsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
@@ -19,7 +18,6 @@ type ClientVersionSettingsSectionProps = {
   setLocalClientUpdateMessageAr: (v: string) => void;
   onSave: () => void;
 };
-
 export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSectionProps> = ({
   isAdmin,
   saving,
@@ -35,11 +33,9 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
   onSave,
 }) => {
   if (!isAdmin) return null;
-
   const savedMinTrimmed = (firestoreMinimumClientVersion ?? '').trim();
   const savedMsgTrimmed = (firestoreClientUpdateMessageAr ?? '').trim();
   const savedForce = firestoreForceClientUpdate === true;
-
   return (
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -57,8 +53,7 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
           حفظ
         </Button>
       </div>
-
-      <Card className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
+      <OpsDashPanel className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
         <div className="space-y-3">
           <div className="flex items-center gap-2 text-sm font-semibold text-[var(--color-text)]">
             <span className="material-icons-round text-primary text-xl">cloud</span>
@@ -88,15 +83,13 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
             ) : null}
           </div>
         </div>
-      </Card>
-
-      <Card className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
+      </OpsDashPanel>
+      <OpsDashPanel className="bg-[var(--color-card)] border-[var(--color-border)] rounded-xl shadow-none">
         <div className="space-y-4">
           <div className="rounded-lg bg-[var(--color-bg)] border border-[var(--color-border)] px-4 py-3 text-sm">
             <span className="text-[var(--color-text-muted)]">إصدار البناء الحالي (من آخر نشر): </span>
             <span className="font-mono font-semibold text-[var(--color-text)]">{BUILD_VERSION}</span>
           </div>
-
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-[var(--color-text)]">أقل إصدار مسموح (x.y.z)</span>
             <input
@@ -111,7 +104,6 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
               يجب أن تطابق صيغة الإصدار في package.json بعد النشر.
             </span>
           </label>
-
           <label className="flex items-center gap-2 cursor-pointer">
             <input
               type="checkbox"
@@ -121,7 +113,6 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
             />
             <span className="text-sm font-medium text-[var(--color-text)]">تفعيل التحديث الإجباري</span>
           </label>
-
           <label className="block space-y-1.5">
             <span className="text-sm font-medium text-[var(--color-text)]">رسالة للمستخدم (اختياري)</span>
             <textarea
@@ -131,12 +122,11 @@ export const ClientVersionSettingsSection: React.FC<ClientVersionSettingsSection
               onChange={(e) => setLocalClientUpdateMessageAr(e.target.value)}
             />
           </label>
-
           <p className="text-xs text-accent-foreground border border-border rounded-lg px-3 py-2 bg-accent">
             تنبيه: ارفع الحد الأدنى فقط بعد نشر build يحمل نفس الرقم أو أعلى، وإلا سيُحتجز المستخدمون في حلقة تحديث.
           </p>
         </div>
-      </Card>
+      </OpsDashPanel>
     </div>
   );
 };

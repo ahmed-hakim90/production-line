@@ -1,34 +1,29 @@
 import React from 'react';
 import { ArrowLeftRight, Clock3, Factory, type LucideIcon } from 'lucide-react';
-import { Card } from '../UI';
 import type { AlertToggleSettings } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type GeneralAlertsSectionProps = {
   isAdmin: boolean;
   localAlertToggles: AlertToggleSettings;
   setLocalAlertToggles: React.Dispatch<React.SetStateAction<AlertToggleSettings>>;
 };
-
 const ALERT_ICON_MAP: Record<string, LucideIcon> = {
   schedule: Clock3,
   production_quantity_limits: Factory,
   compare_arrows: ArrowLeftRight,
 };
-
 const AlertIcon = ({ name }: { name: string }) => {
   const Icon = ALERT_ICON_MAP[name] ?? Clock3;
   return <Icon size={18} className="text-primary" />;
 };
-
 export const GeneralAlertsSection: React.FC<GeneralAlertsSectionProps> = ({
   isAdmin,
   localAlertToggles,
   setLocalAlertToggles,
 }) => {
   if (!isAdmin) return null;
-
   return (
-    <Card title="إعدادات التنبيهات">
+    <OpsDashPanel title="إعدادات التنبيهات">
       <div className="space-y-4">
         {([
           { key: 'enablePlanDelayAlert' as keyof AlertToggleSettings, label: 'تنبيه تأخر الخطة', icon: 'schedule', desc: 'إرسال تنبيه عند تأخر خطة الإنتاج عن الموعد المحدد' },
@@ -52,6 +47,6 @@ export const GeneralAlertsSection: React.FC<GeneralAlertsSectionProps> = ({
           </div>
         ))}
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

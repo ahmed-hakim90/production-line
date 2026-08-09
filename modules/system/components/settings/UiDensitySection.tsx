@@ -1,8 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Card } from '../UI';
 import { applyUiDensity, readUiDensity, writeUiDensity, type UiDensityMode } from '@/core/ui-engine/density/uiDensity';
 import { useAppStore } from '@/store/useAppStore';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 /**
  * تفضيل محلي (localStorage). عند وجود كثافة في «محرك المظهر» المحفوظة تُطبَّق على الجلسة عبر `applyAppTheme`
  * ويُفضّل مواءمة هذا القسم معها بعد التحميل أو تحديث الإعدادات.
@@ -10,22 +9,19 @@ import { useAppStore } from '@/store/useAppStore';
 export const UiDensitySection: React.FC = () => {
   const [mode, setMode] = useState<UiDensityMode>(() => readUiDensity());
   const savedDensity = useAppStore((s) => s.systemSettings?.theme?.density);
-
   useEffect(() => {
     if (!savedDensity || savedDensity === readUiDensity()) return;
     setMode(savedDensity);
     writeUiDensity(savedDensity);
     applyUiDensity(savedDensity);
   }, [savedDensity]);
-
   const onChange = useCallback((next: UiDensityMode) => {
     setMode(next);
     writeUiDensity(next);
     applyUiDensity(next);
   }, []);
-
   return (
-    <Card title="كثافة الواجهة (محلي)">
+    <OpsDashPanel title="كثافة الواجهة (محلي)">
       <p className="text-xs text-[var(--color-text-muted)] mb-4">
         يضبط المسافات والخطوط على هذا المتصفح فقط. الكثافة الافتراضية للمؤسسة تُحفظ من «محرك المظهر» في
         الإعدادات العامة؛ عند تغييرها هنا دون حفظ الثيم قد تُستبدل عند إعادة تحميل الصفحة.
@@ -52,6 +48,6 @@ export const UiDensitySection: React.FC = () => {
           </button>
         ))}
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

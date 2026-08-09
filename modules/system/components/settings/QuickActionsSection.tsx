@@ -1,7 +1,7 @@
 import React from 'react';
-import { Button, Card } from '../UI';
+import { Button } from '../UI';
 import type { QuickActionColor, QuickActionItem } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type QuickActionDef = {
   key: string;
   label: string;
@@ -11,13 +11,11 @@ type QuickActionDef = {
   icon: string;
   color: QuickActionColor;
 };
-
 type QuickActionColorOption = {
   value: QuickActionColor;
   label: string;
   classes: string;
 };
-
 type QuickActionsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
@@ -34,7 +32,6 @@ type QuickActionsSectionProps = {
   quickActionIcons: string[];
   quickActionColors: QuickActionColorOption[];
 };
-
 export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
   isAdmin,
   saving,
@@ -52,7 +49,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
   quickActionColors,
 }) => {
   if (!isAdmin) return null;
-
   return (
     <>
       <div className="flex items-center justify-between">
@@ -64,8 +60,7 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
           {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </Button>
       </div>
-
-      <Card title="قائمة الأزرار السريعة">
+      <OpsDashPanel title="قائمة الأزرار السريعة">
         <p className="page-subtitle mb-3">الترتيب هنا هو نفس ترتيب الأزرار في لوحة مدير المصنع</p>
         <div className="space-y-3">
           {localQuickActions.length === 0 && (
@@ -74,7 +69,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
               <p className="mt-2 text-sm font-bold text-slate-500">لا توجد إجراءات سريعة حتى الآن</p>
             </div>
           )}
-
           {localQuickActions.map((item, index) => {
             const selectedColor = quickActionColors.find((c) => c.value === item.color) ?? quickActionColors[0];
             return (
@@ -120,7 +114,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                     </button>
                   </div>
                 </div>
-
                 {editingQuickActionId === item.id && (
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 p-4 rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/40 border border-[var(--color-border)]">
                     <div className="space-y-2">
@@ -133,7 +126,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                         placeholder="مثال: إدخال سريع"
                       />
                     </div>
-
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-500">الإجراء</label>
                       <select
@@ -157,7 +149,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                         ))}
                       </select>
                     </div>
-
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-500">الأيقونة</label>
                       <select
@@ -170,7 +161,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                         ))}
                       </select>
                     </div>
-
                     <div className="space-y-2">
                       <label className="text-xs font-bold text-slate-500">اللون</label>
                       <div className="flex flex-wrap gap-2">
@@ -185,7 +175,6 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
                         ))}
                       </div>
                     </div>
-
                     <div className="lg:col-span-2 text-[11px] font-medium text-[var(--color-text-muted)] flex flex-wrap items-center gap-3">
                       <span>النوع: <span className="font-bold text-[var(--color-text-muted)]">{item.actionType}</span></span>
                       {item.target && <span>المسار: <span className="font-mono">{item.target}</span></span>}
@@ -197,13 +186,12 @@ export const QuickActionsSection: React.FC<QuickActionsSectionProps> = ({
             );
           })}
         </div>
-
         <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
           <Button variant="outline" onClick={addQuickAction}>
             إضافة زر سريع
           </Button>
         </div>
-      </Card>
+      </OpsDashPanel>
     </>
   );
 };

@@ -1,9 +1,7 @@
 import React from 'react';
-import { Card } from '../UI';
 import type { BrandingSettings } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type SelectOption = { value: string; label: string };
-
 type GeneralBrandingSectionProps = {
   isAdmin: boolean;
   localBranding: BrandingSettings;
@@ -14,7 +12,6 @@ type GeneralBrandingSectionProps = {
   currencies: SelectOption[];
   timezones: SelectOption[];
 };
-
 export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
   isAdmin,
   localBranding,
@@ -26,9 +23,8 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
   timezones,
 }) => {
   if (!isAdmin) return null;
-
   return (
-    <Card title="هوية المصنع">
+    <OpsDashPanel title="هوية المصنع">
       <div className="space-y-5">
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -47,7 +43,6 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
             onChange={(e) => setLocalBranding((p) => ({ ...p, factoryName: e.target.value }))}
           />
         </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -78,7 +73,6 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
             )}
           </div>
         </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -97,7 +91,6 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
             {currencies.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
           </select>
         </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -117,6 +110,6 @@ export const GeneralBrandingSection: React.FC<GeneralBrandingSectionProps> = ({
           </select>
         </div>
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

@@ -5,14 +5,12 @@ import {
   isOperationPathEnabled,
   patchOperationPathControl,
 } from '../../lib/operationPathSettings';
-import { Card } from '../UI';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type Props = {
   isAdmin: boolean;
   value: OperationPathSettings;
   onChange: React.Dispatch<React.SetStateAction<OperationPathSettings>>;
 };
-
 const ToggleButton: React.FC<{
   checked: boolean;
   label: string;
@@ -37,26 +35,22 @@ const ToggleButton: React.FC<{
     />
   </button>
 );
-
 export const OperationPathSettingsSection: React.FC<Props> = ({
   isAdmin,
   value,
   onChange,
 }) => {
   if (!isAdmin) return null;
-
   return (
-    <Card title="مسارات تنفيذ العمليات">
+    <OpsDashPanel title="مسارات تنفيذ العمليات">
       <div className="space-y-5">
         <p className="text-xs leading-6 text-[var(--color-text-muted)]">
           كل عملية لها منطق تنفيذ موحد، ويمكن تشغيل أو إيقاف كل نقطة دخول مستقلة. الإيقاف يُراجع مرة أخرى داخل أكشن الحفظ ولا يعتمد على إخفاء الزر فقط.
         </p>
-
         {OPERATION_PATH_REGISTRY
           .map((operation) => {
             const control = value.operations?.[operation.key];
             const operationEnabled = control?.enabled !== false;
-
             return (
               <section
                 key={operation.key}
@@ -79,7 +73,6 @@ export const OperationPathSettingsSection: React.FC<Props> = ({
                     ))}
                   />
                 </div>
-
                 <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                   {operation.paths.map((path) => {
                     const pathEnabled = isOperationPathEnabled(value, operation.key, path.key);
@@ -116,6 +109,6 @@ export const OperationPathSettingsSection: React.FC<Props> = ({
             );
           })}
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

@@ -1,5 +1,4 @@
 import React, { useState } from 'react';
-import { Card } from '../UI';
 import type { InventoryRoutingSettings, PlanSettings, ProductionWorkerSettings } from '../../../../types';
 import { syncPlanSettingsWarehouseRouting } from '../../../inventory/lib/syncPlanSettingsWarehouseRouting';
 import { createEmptyInventoryRouting } from '../../../inventory/lib/recommendedInventoryRouting';
@@ -8,7 +7,7 @@ import {
   resolveReportBehaviorSettings,
 } from '../../../production/lib/reportBehaviorSettings';
 import { useAppStore } from '../../../../store/useAppStore';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type Props = {
   isAdmin: boolean;
   localPlanSettings: PlanSettings;
@@ -16,7 +15,6 @@ type Props = {
   localProductionWorkerSettings: ProductionWorkerSettings;
   setLocalProductionWorkerSettings: React.Dispatch<React.SetStateAction<ProductionWorkerSettings>>;
 };
-
 export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
   isAdmin,
   localPlanSettings,
@@ -27,20 +25,16 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
   const updateSystemSettings = useAppStore((s) => s.updateSystemSettings);
   const [savingIssueRequirement, setSavingIssueRequirement] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
-
   if (!isAdmin) return null;
-
   const behavior = resolveReportBehaviorSettings({ planSettings: localPlanSettings });
   const synced = syncPlanSettingsWarehouseRouting(localPlanSettings);
   const routing = { ...createEmptyInventoryRouting(), ...synced.inventoryRouting };
   const conflictBomAndIssue =
     Boolean(routing.autoConsumeBomOnProductionReport) &&
     routing.requireIssuedProductionIssueOnReport !== false;
-
   const patchPlan = (patch: Partial<PlanSettings>) => {
     setLocalPlanSettings((prev) => syncPlanSettingsWarehouseRouting({ ...prev, ...patch }));
   };
-
   const patchBehavior = (patch: Partial<PlanSettings['reportBehavior']>) => {
     setLocalPlanSettings((prev) => ({
       ...prev,
@@ -51,7 +45,6 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
       },
     }));
   };
-
   const patchRouting = (patch: Partial<InventoryRoutingSettings>) => {
     setLocalPlanSettings((prev) =>
       syncPlanSettingsWarehouseRouting({
@@ -60,7 +53,6 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
       }),
     );
   };
-
   const handleRequireIssuedProductionIssueToggle = async () => {
     if (savingIssueRequirement) return;
     const previousLocalPlan = localPlanSettings;
@@ -73,11 +65,9 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
         requireIssuedProductionIssueOnReport: requireIssued,
       },
     });
-
     setSavingIssueRequirement(true);
     setMessage('جار حفظ إعداد إذن الصرف...');
     setLocalPlanSettings(nextLocalPlan);
-
     try {
       const currentSettings = useAppStore.getState().systemSettings;
       const currentPlan = syncPlanSettingsWarehouseRouting({
@@ -104,7 +94,6 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
       setSavingIssueRequirement(false);
     }
   };
-
   const toggle = (label: string, hint: string, checked: boolean, onToggle: () => void, disabled = false) => (
     <div className="flex items-start gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
       <div className="flex-1 min-w-0">
@@ -121,9 +110,8 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
       </button>
     </div>
   );
-
   return (
-    <Card title="قواعد تقارير الإنتاج">
+    <OpsDashPanel title="قواعد تقارير الإنتاج">
       <div className="space-y-4">
         <div>
           <p className="text-sm font-bold text-[var(--color-text)]">كل ما يمنع أو يسمح بحفظ التقرير من مكان واحد</p>
@@ -131,9 +119,7 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
             هذه القواعد تقرأها شاشة الإدخال السريع، صفحة التقارير، مودال إنشاء التقرير، والاستيراد عبر نفس منطق الحفظ.
           </p>
         </div>
-
         {message && <p className="text-sm font-medium text-slate-600">{message}</p>}
-
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">schedule</span>
@@ -156,7 +142,6 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
             <span className="text-sm font-bold text-[var(--color-text-muted)]">ساعة</span>
           </div>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {toggle('السماح بالتقارير بدون خطة', 'عند الإيقاف لن يحفظ النظام تقرير إنتاج بدون خطة أو أمر شغل مناسب.', localPlanSettings.allowReportWithoutPlan !== false, () => patchPlan({ allowReportWithoutPlan: !localPlanSettings.allowReportWithoutPlan }))}
           {toggle('السماح بالإنتاج الزائد', 'عند الإيقاف يمنع التقرير إذا كانت الخطة وصلت للكمية المخططة.', localPlanSettings.allowOverProduction !== false, () => patchPlan({ allowOverProduction: !localPlanSettings.allowOverProduction }))}
@@ -192,7 +177,6 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
             },
           })))}
         </div>
-
         {conflictBomAndIssue && (
           <div className="rounded-lg border border-rose-300 bg-rose-50 px-4 py-3 text-sm text-rose-950">
             <p className="font-bold">تعارض إعدادات</p>
@@ -209,6 +193,6 @@ export const ProductionReportBehaviorSettingsSection: React.FC<Props> = ({
           </div>
         )}
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

@@ -1,11 +1,11 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { SingleReportPrint } from '../../../production/components/ProductionReportPrint';
-import { Card, Button } from '../UI';
+import { Button } from '../UI';
 import type { PaperOrientation, PaperSize, PrintTemplateSettings, PrintThemePreset } from '../../../../types';
 import type { ReportPrintRow } from '../../../production/components/ProductionReportPrint';
 import { getPrintThemePresetDefaults } from '../../../../utils/printTheme';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type PrintTemplateSettingsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
@@ -20,7 +20,6 @@ type PrintTemplateSettingsSectionProps = {
   onReset: () => void;
   sampleRows: ReportPrintRow[];
 };
-
 export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSectionProps> = ({
   isAdmin,
   saving,
@@ -36,7 +35,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
   sampleRows,
 }) => {
   if (!isAdmin) return null;
-
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -57,8 +55,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
           </Button>
         </div>
       </div>
-
-      <Card title="الشعار والعنوان">
+      <OpsDashPanel title="الشعار والعنوان">
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -101,7 +98,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               )}
             </div>
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -119,7 +115,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               onChange={(e) => setLocalPrint((p) => ({ ...p, headerText: e.target.value }))}
             />
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -137,7 +132,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               onChange={(e) => setLocalPrint((p) => ({ ...p, footerText: e.target.value }))}
             />
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -163,7 +157,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               />
             </div>
           </div>
-
           <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -174,7 +167,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 <p className="text-xs text-[var(--color-text-muted)]">يُطبق على كل التقارير المطبوعة. يُنصح باختيار ERPNext للتقارير الرسمية.</p>
               </div>
             </div>
-
             <div className="flex flex-wrap gap-2">
               {([
                 ['erpnext', 'ERPNext'],
@@ -218,7 +210,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
                 </button>
               ))}
             </div>
-
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
               {([
                 { key: 'textColor' as const, label: 'لون النص' },
@@ -252,9 +243,8 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
           </div>
         </div>
-      </Card>
-
-      <Card title="الورق والهوامش">
+      </OpsDashPanel>
+      <OpsDashPanel title="الورق والهوامش">
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -282,7 +272,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               ))}
             </div>
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -310,7 +299,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               ))}
             </div>
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -330,7 +318,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               onChange={(e) => setLocalPrint((p) => ({ ...p, copies: Math.max(1, Math.min(10, Number(e.target.value))) }))}
             />
           </div>
-
           <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -366,7 +353,6 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
               ))}
             </div>
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -387,9 +373,8 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             />
           </div>
         </div>
-      </Card>
-
-      <Card title="عناصر التقرير">
+      </OpsDashPanel>
+      <OpsDashPanel title="عناصر التقرير">
         <div className="space-y-3">
           {([
             { key: 'showWaste' as const, label: 'عرض الهالك', icon: 'delete_sweep', desc: 'إظهار عمود ونسبة الهالك في التقرير' },
@@ -430,14 +415,12 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
             </div>
           ))}
         </div>
-      </Card>
-
+      </OpsDashPanel>
       <div className="flex justify-end">
         <Button onClick={onReset} variant="ghost" solid={false}>
           إعادة تعيين للقيم الافتراضية
         </Button>
       </div>
-
       {showPreview && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
@@ -484,8 +467,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
           </div>
         </div>
       )}
-
-      <Card title="معمل تصدير الصور وواتساب">
+      <OpsDashPanel title="معمل تصدير الصور وواتساب">
         <p className="text-sm text-[var(--color-text-muted)] mb-3">
           جرّب تصدير PNG ومشاركة واتساب بنفس قالب التقرير الموحّد (تقرير إنتاج، تحويل مخزن، تقرير مجمّع).
         </p>
@@ -496,7 +478,7 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
           <span className="material-icons-round text-base">open_in_new</span>
           فتح معمل التصدير
         </Link>
-      </Card>
+      </OpsDashPanel>
     </>
   );
 };

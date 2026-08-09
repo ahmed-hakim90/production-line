@@ -1,8 +1,8 @@
 import React from 'react';
-import { Button, Card } from '../UI';
+import { Button } from '../UI';
 import { ALL_DASHBOARD_WIDGET_DEFS, CUSTOM_WIDGET_TYPES } from '../../../../utils/dashboardConfig';
 import type { CustomWidgetConfig, CustomWidgetType, WidgetConfig } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type WidgetFormState = {
   dashboardKey: string;
   type: CustomWidgetType;
@@ -14,7 +14,6 @@ type WidgetFormState = {
   unit: string;
   target: string;
 };
-
 type DashboardWidgetsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
@@ -35,7 +34,6 @@ type DashboardWidgetsSectionProps = {
   onSave: () => void;
   onMoveWidgetToDashboard: (fromKey: string, toKey: string, widgetId: string) => void;
 };
-
 export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = ({
   isAdmin,
   saving,
@@ -57,7 +55,6 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
   onMoveWidgetToDashboard,
 }) => {
   if (!isAdmin) return null;
-
   return (
     <>
       <div className="flex items-center justify-between">
@@ -69,8 +66,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
           {saving ? 'جاري الحفظ...' : 'حفظ التغييرات'}
         </Button>
       </div>
-
-      <Card title="اختيار لوحة التحكم">
+      <OpsDashPanel title="اختيار لوحة التحكم">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {Object.entries(dashboardLabels).map(([dashboardKey, dashboardLabel]) => (
             <button
@@ -86,9 +82,8 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             </button>
           ))}
         </div>
-      </Card>
-
-      <Card title={`عناصر ${dashboardLabels[selectedDashboardKey] || 'لوحة التحكم'}`}>
+      </OpsDashPanel>
+      <OpsDashPanel title={`عناصر ${dashboardLabels[selectedDashboardKey] || 'لوحة التحكم'}`}>
         <p className="page-subtitle mb-3">اسحب لإعادة الترتيب، وفعّل/عطّل العرض حسب الحاجة</p>
         <div className="space-y-1">
           {(localWidgets[selectedDashboardKey] || selectedWidgetDefs(selectedDashboardKey).map((def) => ({ id: def.id, visible: true }))).map((widget, index) => {
@@ -96,7 +91,6 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             const def = defs.find((d) => d.id === widget.id) ?? ALL_DASHBOARD_WIDGET_DEFS[widget.id];
             if (!def) return null;
             const isCustom = localCustomWidgets.some((custom) => custom.id === widget.id);
-
             return (
               <div
                 key={widget.id}
@@ -174,9 +168,8 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             );
           })}
         </div>
-      </Card>
-
-      <Card title="إنشاء Widget جديد">
+      </OpsDashPanel>
+      <OpsDashPanel title="إنشاء Widget جديد">
         <p className="page-subtitle mb-3">Builder بسيط لعنصر Dashboard جديد</p>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="space-y-1">
@@ -285,7 +278,7 @@ export const DashboardWidgetsSection: React.FC<DashboardWidgetsSectionProps> = (
             إضافة Widget
           </Button>
         </div>
-      </Card>
+      </OpsDashPanel>
     </>
   );
 };

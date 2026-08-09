@@ -1,10 +1,11 @@
 import React from 'react';
-import { Card, Button } from '../UI';
+import { Button } from '../UI';
 import type {
   BackupFile,
   BackupHistoryEntry,
   RestoreMode,
 } from '../../../../services/backupService';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 
 type BackupRestoreSectionProps = {
   isAdmin: boolean;
@@ -37,7 +38,6 @@ type BackupRestoreSectionProps = {
   setUseServerImport: React.Dispatch<React.SetStateAction<boolean>>;
   isSuperAdmin: boolean;
 };
-
 export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
   isAdmin,
   backupMessage,
@@ -70,7 +70,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
   isSuperAdmin,
 }) => {
   if (!isAdmin) return null;
-
   return (
     <>
       {backupMessage && (
@@ -88,7 +87,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
           </button>
         </div>
       )}
-
       {backupProgress && (
         <div className="bg-blue-50 dark:bg-blue-900/10 border border-blue-200 dark:border-blue-800 rounded-[var(--border-radius-lg)] p-4">
           <div className="flex items-center justify-between mb-2">
@@ -106,8 +104,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
           </div>
         </div>
       )}
-
-      <Card title="تصدير نسخة احتياطية">
+      <OpsDashPanel title="تصدير نسخة احتياطية">
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
@@ -125,7 +122,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               تصدير كامل
             </Button>
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-amber-500/10 flex items-center justify-center shrink-0">
@@ -150,7 +146,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               </Button>
             </div>
           </div>
-
           <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-3 flex-1 min-w-0">
               <div className="w-12 h-12 rounded-[var(--border-radius-lg)] bg-violet-500/10 flex items-center justify-center shrink-0">
@@ -168,9 +163,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
             </Button>
           </div>
         </div>
-      </Card>
-
-      <Card title="المجموعات المشمولة في النسخة الكاملة">
+      </OpsDashPanel>
+      <OpsDashPanel title="المجموعات المشمولة في النسخة الكاملة">
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {[
             { title: 'الإنتاج', icon: 'factory', color: 'text-primary', items: ['المنتجات', 'خطوط الإنتاج', 'تقارير الإنتاج', 'خطط الإنتاج', 'حالة الخطط', 'إعدادات خط المنتج'] },
@@ -197,9 +191,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
             </div>
           ))}
         </div>
-      </Card>
-
-      <Card title="استعادة من نسخة احتياطية">
+      </OpsDashPanel>
+      <OpsDashPanel title="استعادة من نسخة احتياطية">
         <div className="space-y-6">
           <div className="flex flex-col gap-4">
             <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
@@ -240,7 +233,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                 )}
               </div>
             </div>
-
             {importValidation && (
               <div className={`flex items-start gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
                 importValidation.valid
@@ -287,7 +279,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
               </div>
             )}
           </div>
-
           {importFile && (
             <div className="space-y-3">
               <p className="text-sm font-bold text-[var(--color-text)]">وضع الاستعادة</p>
@@ -339,7 +330,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                   );
                 })}
               </div>
-
               {restoreMode !== 'merge' && (
                 <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${
                   restoreMode === 'full_reset'
@@ -360,7 +350,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                         : 'تحذير: سيتم استبدال المجموعات المشمولة. سيتم إنشاء نسخة احتياطية تلقائية أولاً.'}
                 </div>
               )}
-
               <div className="space-y-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 bg-[var(--color-muted)]/10">
                 <p className="text-sm font-bold text-[var(--color-text)]">خيارات الاستعادة</p>
                 <label className="flex items-start gap-3 cursor-pointer">
@@ -391,7 +380,6 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
                   </label>
                 ) : null}
               </div>
-
               <div className="flex justify-end">
                 <Button
                   onClick={() => setShowConfirmRestore(true)}
@@ -405,9 +393,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
             </div>
           )}
         </div>
-      </Card>
-
-      <Card title="قواعد الأمان">
+      </OpsDashPanel>
+      <OpsDashPanel title="قواعد الأمان">
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 bg-emerald-50 dark:bg-emerald-900/10 rounded-[var(--border-radius-lg)] border border-emerald-200">
             <div className="flex items-center gap-2 mb-2">
@@ -433,9 +420,8 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
             <p className="text-xs text-violet-600/80">بعد الاستعادة يتم إعادة حساب التكاليف وتحديث لوحات التحكم تلقائياً</p>
           </div>
         </div>
-      </Card>
-
-      <Card title="سجل النسخ الاحتياطية">
+      </OpsDashPanel>
+      <OpsDashPanel title="سجل النسخ الاحتياطية">
         {historyLoading ? (
           <div className="flex items-center justify-center py-8 gap-2 text-slate-400">
             <span className="material-icons-round animate-spin">refresh</span>
@@ -489,8 +475,7 @@ export const BackupRestoreSection: React.FC<BackupRestoreSectionProps> = ({
             ))}
           </div>
         )}
-      </Card>
-
+      </OpsDashPanel>
       {showConfirmRestore && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md">

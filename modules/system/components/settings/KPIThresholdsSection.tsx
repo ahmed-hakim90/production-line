@@ -1,8 +1,8 @@
 import React from 'react';
-import { Button, Card } from '../UI';
+import { Button } from '../UI';
 import { KPI_DEFINITIONS, DEFAULT_KPI_THRESHOLDS } from '../../../../utils/dashboardConfig';
 import type { KPIThreshold } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type KPIThresholdsSectionProps = {
   isAdmin: boolean;
   saving: boolean;
@@ -10,7 +10,6 @@ type KPIThresholdsSectionProps = {
   setLocalKPIs: React.Dispatch<React.SetStateAction<Record<string, KPIThreshold>>>;
   onSave: () => void;
 };
-
 export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
   isAdmin,
   saving,
@@ -19,7 +18,6 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
   onSave,
 }) => {
   if (!isAdmin) return null;
-
   return (
     <>
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -33,8 +31,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
           حفظ التغييرات
         </Button>
       </div>
-
-      <Card>
+      <OpsDashPanel>
         <div className="md:hidden space-y-2.5">
           {KPI_DEFINITIONS.map((kpi) => {
             const threshold = localKPIs[kpi.key] || DEFAULT_KPI_THRESHOLDS[kpi.key];
@@ -168,9 +165,8 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
             </tbody>
           </table>
         </div>
-      </Card>
-
-      <Card title="معاينة الألوان">
+      </OpsDashPanel>
+      <OpsDashPanel title="معاينة الألوان">
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
           {KPI_DEFINITIONS.map((kpi) => {
             const threshold = localKPIs[kpi.key] || DEFAULT_KPI_THRESHOLDS[kpi.key];
@@ -210,7 +206,7 @@ export const KPIThresholdsSection: React.FC<KPIThresholdsSectionProps> = ({
           <span className="material-icons-round text-sm">restart_alt</span>
           إعادة تعيين للقيم الافتراضية
         </button>
-      </Card>
+      </OpsDashPanel>
     </>
   );
 };

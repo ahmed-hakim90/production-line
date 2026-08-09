@@ -1,22 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import { Save } from 'lucide-react';
 import { toast } from 'sonner';
-import { Card, Button } from '../UI';
+import { Button } from '../UI';
 import type { Warehouse, WarehouseLocationSettings } from '../../../inventory/types';
 import { warehouseLocationSettingsService } from '../../../inventory/services/warehouseLocationSettingsService';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type Props = {
   isAdmin: boolean;
   inventoryWarehouses: Warehouse[];
 };
-
 export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inventoryWarehouses }) => {
   const [warehouseId, setWarehouseId] = useState('');
   const [settings, setSettings] = useState<WarehouseLocationSettings | null>(null);
   const [saving, setSaving] = useState(false);
-
   const selectedWarehouse = inventoryWarehouses.find((w) => w.id === warehouseId);
-
   const load = async (id = warehouseId) => {
     const resolvedId = id || inventoryWarehouses[0]?.id || '';
     if (!resolvedId) return;
@@ -25,15 +22,12 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
     const row = await warehouseLocationSettingsService.get(resolvedId, wh?.name);
     setSettings(row);
   };
-
   useEffect(() => {
     void load();
   }, [inventoryWarehouses]);
-
   const patch = (next: Partial<WarehouseLocationSettings>) => {
     setSettings((prev) => prev ? { ...prev, ...next } : prev);
   };
-
   const save = async () => {
     if (!isAdmin || !selectedWarehouse?.id || !settings) return;
     setSaving(true);
@@ -50,7 +44,6 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
       setSaving(false);
     }
   };
-
   const toggle = (label: string, hint: string, checked: boolean, onToggle: () => void, disabled = false) => (
     <div className="flex items-start gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
       <div className="flex-1">
@@ -67,11 +60,9 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
       </button>
     </div>
   );
-
   if (!isAdmin) return null;
-
   return (
-    <Card title="إعدادات لوكيشن المخازن">
+    <OpsDashPanel title="إعدادات لوكيشن المخازن">
       <div className="space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div>
@@ -83,7 +74,6 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
             {saving ? 'جاري الحفظ...' : 'حفظ إعدادات اللوكيشن'}
           </Button>
         </div>
-
         <select
           className="w-full max-w-md border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm font-bold py-2.5 px-3"
           value={warehouseId}
@@ -91,7 +81,6 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
         >
           {inventoryWarehouses.map((w) => <option key={w.id} value={w.id}>{w.name} ({w.code})</option>)}
         </select>
-
         {settings && (
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {toggle(
@@ -121,8 +110,7 @@ export const WarehouseLocationSettingsSection: React.FC<Props> = ({ isAdmin, inv
             )}
           </div>
         )}
-
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

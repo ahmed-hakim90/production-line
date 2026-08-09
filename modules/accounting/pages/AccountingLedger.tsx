@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { PageHeader } from "@/components/PageHeader";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter";
 import { AccountingPeriodToolbar } from "../components/AccountingPeriodToolbar";
@@ -56,37 +56,30 @@ export const AccountingLedger: React.FC = () => {
       onRefresh={() => void reload()}
       refreshing={loading}
       actions={
-        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-          <PageHeader
-            title=""
-            backAction={false}
-            moreActions={[
-              {
-                label: "طباعة",
-                icon: "print",
-                onClick: () => window.print(),
-                group: "تصدير",
-              },
-              {
-                label: "تصدير CSV",
-                icon: "download",
-                onClick: () =>
-                  exportAccountingCsv(
-                    "general-ledger.csv",
-                    ["التاريخ", "المرجع", "البيان", "مدين", "دائن", "الرصيد"],
-                    ledger.map((row) => [
-                      row.date,
-                      row.referenceNo,
-                      row.description,
-                      row.debit,
-                      row.credit,
-                      row.balance,
-                    ]),
-                  ),
-                group: "تصدير",
-              },
-            ]}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => window.print()}>
+            طباعة
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              exportAccountingCsv(
+                "general-ledger.csv",
+                ["التاريخ", "المرجع", "البيان", "مدين", "دائن", "الرصيد"],
+                ledger.map((row) => [
+                  row.date,
+                  row.referenceNo,
+                  row.description,
+                  row.debit,
+                  row.credit,
+                  row.balance,
+                ]),
+              )
+            }
+          >
+            تصدير CSV
+          </Button>
         </div>
       }
     >

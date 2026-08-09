@@ -15,9 +15,10 @@ import {
   UserPlus,
   type LucideIcon,
 } from 'lucide-react';
-import { Card, Button } from '../UI';
+import { Button } from '../UI';
 import { EXPORT_IMPORT_PAGE_REGISTRY, getExportImportPageControl } from '../../../../utils/exportImportControls';
 import type { ExportImportSettings } from '../../../../types';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 
 type ExportImportSettingsSectionProps = {
   isAdmin: boolean;
@@ -34,7 +35,6 @@ type ExportImportSettingsSectionProps = {
   ) => void;
   onSave: () => void;
 };
-
 const SETTINGS_ICON_MAP: Record<string, LucideIcon> = {
   description: FileText,
   assignment: ScrollText,
@@ -50,7 +50,6 @@ const SETTINGS_ICON_MAP: Record<string, LucideIcon> = {
   check: Check,
   info: Info,
 };
-
 const SettingsIcon = ({
   name,
   className,
@@ -63,7 +62,6 @@ const SettingsIcon = ({
   const Icon = SETTINGS_ICON_MAP[name] ?? Circle;
   return <Icon size={size} className={className} />;
 };
-
 export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionProps> = ({
   isAdmin,
   saving,
@@ -72,7 +70,6 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
   onSave,
 }) => {
   if (!isAdmin) return null;
-
   return (
     <>
       <div className="erp-page-head">
@@ -86,8 +83,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
           حفظ إعدادات التصدير/الاستيراد
         </Button>
       </div>
-
-      <Card title="تحكم الصفحات">
+      <OpsDashPanel title="تحكم الصفحات">
         <div className="space-y-3">
           {EXPORT_IMPORT_PAGE_REGISTRY.map((page) => {
             const control = getExportImportPageControl(localExportImport, page.key);
@@ -129,7 +125,6 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
                       <option value="outline">شكل حدود فقط</option>
                     </select>
                   </div>
-
                   <div className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] space-y-3">
                     <div className="flex items-center justify-between">
                       <p className="text-sm font-bold text-[var(--color-text)]">زر الاستيراد</p>
@@ -161,9 +156,8 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             );
           })}
         </div>
-      </Card>
-
-      <Card title="التصدير (Excel Export)">
+      </OpsDashPanel>
+      <OpsDashPanel title="التصدير (Excel Export)">
         <div className="space-y-3">
           {[
             { section: 'تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'description', color: 'text-blue-500', features: ['تصدير التقارير بالتاريخ والخط والمنتج والتصفية', 'تكلفة الوحدة (حسب الصلاحية)', 'بيانات أمر الشغل (الكمية والعمالة المخططة)', 'صف إجمالي بالمجاميع'] },
@@ -201,9 +195,8 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             </div>
           ))}
         </div>
-      </Card>
-
-      <Card title="الاستيراد (Excel Import)">
+      </OpsDashPanel>
+      <OpsDashPanel title="الاستيراد (Excel Import)">
         <div className="space-y-3">
           {[
             { section: 'استيراد تقارير الإنتاج', page: 'صفحة التقارير', path: '/reports', icon: 'upload_file', color: 'text-blue-500', features: ['رفع ملف Excel يحتوي على تقارير الإنتاج', 'مطابقة تلقائية للخط والمنتج والتصفية (بالاسم أو الكود)', 'كشف التكرار مع التقارير الموجودة', 'معاينة البيانات قبل الحفظ مع عرض الأخطاء', 'تحميل نموذج Excel فارغ مع قوائم الاختيار'] },
@@ -236,9 +229,8 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             </div>
           ))}
         </div>
-      </Card>
-
-      <Card title="القوالب (Templates)">
+      </OpsDashPanel>
+      <OpsDashPanel title="القوالب (Templates)">
         <p className="text-sm text-[var(--color-text-muted)] mb-4">يمكنك تحميل نماذج Excel فارغة مع أسماء الأعمدة الصحيحة وقوائم الاختيار لتسهيل عملية الاستيراد.</p>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {[
@@ -258,8 +250,7 @@ export const ExportImportSettingsSection: React.FC<ExportImportSettingsSectionPr
             </div>
           ))}
         </div>
-      </Card>
-
+      </OpsDashPanel>
       <div className="p-4 rounded-[var(--border-radius-lg)] bg-accent border border-border flex items-start gap-3">
         <SettingsIcon name="info" className="text-accent-foreground mt-0.5" />
         <div className="text-sm text-accent-foreground">

@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, Button } from '../UI';
+import { Button } from '../UI';
 import { resolveContentMaxWidthForPath } from '@/core/ui-engine/theme/tenantTheme';
 import type { ThemeSettings } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type ThemePresetOption = {
   id: string;
   name: string;
@@ -11,12 +11,10 @@ type ThemePresetOption = {
   swatches?: [string, string, string];
   partialTheme: Partial<ThemeSettings>;
 };
-
 type FontFamilyOption = {
   value: string;
   label: string;
 };
-
 type GeneralThemeSectionProps = {
   isAdmin: boolean;
   localTheme: ThemeSettings;
@@ -25,7 +23,6 @@ type GeneralThemeSectionProps = {
   fontFamilies: FontFamilyOption[];
   defaultTheme: ThemeSettings;
 };
-
 export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
   isAdmin,
   localTheme,
@@ -39,17 +36,14 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
     () => resolveContentMaxWidthForPath(previewPath, localTheme),
     [previewPath, localTheme],
   );
-
   useEffect(() => {
     if (previewPath === '/') return;
     const keys = Object.keys(localTheme.pageLayoutOverrides ?? {});
     if (!keys.includes(previewPath)) setPreviewPath('/');
   }, [localTheme.pageLayoutOverrides, previewPath]);
-
   if (!isAdmin) return null;
-
   return (
-    <Card title="محرك المظهر">
+    <OpsDashPanel title="محرك المظهر">
       <div className="space-y-6">
         <div>
           <div className="flex items-center gap-2 mb-3">
@@ -103,13 +97,11 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             })}
           </div>
         </div>
-
         <div className="flex items-center gap-3">
           <div className="flex-1 h-px bg-slate-200" />
           <span className="text-xs text-[var(--color-text-muted)] font-bold">أو خصّص بنفسك</span>
           <div className="flex-1 h-px bg-slate-200" />
         </div>
-
         <div>
           <p className="text-sm font-bold text-[var(--color-text)] mb-3">الألوان</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -141,7 +133,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             ))}
           </div>
         </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -173,7 +164,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             ))}
           </div>
         </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -192,7 +182,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             {fontFamilies.map((f) => <option key={f.value} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>)}
           </select>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex items-center gap-3 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -254,7 +243,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
           </div>
         </div>
-
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="flex items-center gap-3 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -288,7 +276,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
               </div>
             </div>
           </div>
-
           <div className="flex items-center gap-3 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
               <span className="material-icons-round text-primary">subtitles</span>
@@ -322,7 +309,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
           </div>
         </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -353,7 +339,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             ))}
           </div>
         </div>
-
         <div className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-3 flex-1 min-w-0">
             <div className="w-10 h-10 rounded-[var(--border-radius-base)] bg-primary/10 flex items-center justify-center shrink-0">
@@ -385,7 +370,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             ))}
           </div>
         </div>
-
         <div>
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">aspect_ratio</span>
@@ -422,7 +406,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
                 onChange={(e) => setLocalTheme((p) => ({ ...p, contentMaxWidth: e.target.value.trim() || undefined }))}
               />
             </div>
-
             <div>
               <div className="flex items-center justify-between gap-2 mb-2">
                 <div>
@@ -505,7 +488,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
           </div>
         </div>
-
         <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
           <p className="text-xs font-bold text-[var(--color-text-muted)] px-4 py-2.5 bg-[var(--color-bg)] border-b border-[var(--color-border)]">
             معاينة مباشرة
@@ -598,7 +580,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
           </div>
         </div>
-
         <div className="flex flex-wrap gap-2">
           {([
             { label: 'رئيسي', color: localTheme.primaryColor },
@@ -615,7 +596,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
             </div>
           ))}
         </div>
-
         <Button
           variant="ghost"
           onClick={() => setLocalTheme({ ...defaultTheme })}
@@ -624,6 +604,6 @@ export const GeneralThemeSection: React.FC<GeneralThemeSectionProps> = ({
           إعادة تعيين للقيم الافتراضية
         </Button>
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Plus, RotateCcw } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
@@ -136,38 +135,29 @@ export const AccountingJournals: React.FC = () => {
               قيد جديد
             </Button>
           ) : null}
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-            <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: "طباعة",
-                  icon: "print",
-                  onClick: () => window.print(),
-                  group: "تصدير",
-                },
-                {
-                  label: "تصدير CSV",
-                  icon: "download",
-                  onClick: () =>
-                    exportAccountingCsv(
-                      "journal-entries.csv",
-                      ["المرجع", "التاريخ", "المصدر", "البيان", "مدين", "دائن"],
-                      filtered.map((row) => [
-                        row.referenceNo,
-                        String(row.date || row.postedAt || "").slice(0, 10),
-                        SOURCE_LABEL[row.source] || row.source,
-                        row.description || "",
-                        row.totalDebit,
-                        row.totalCredit,
-                      ]),
-                    ),
-                  group: "تصدير",
-                },
-              ]}
-            />
-          </div>
+          <Button size="sm" variant="outline" onClick={() => window.print()}>
+            طباعة
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() =>
+              exportAccountingCsv(
+                "journal-entries.csv",
+                ["المرجع", "التاريخ", "المصدر", "البيان", "مدين", "دائن"],
+                filtered.map((row) => [
+                  row.referenceNo,
+                  String(row.date || row.postedAt || "").slice(0, 10),
+                  SOURCE_LABEL[row.source] || row.source,
+                  row.description || "",
+                  row.totalDebit,
+                  row.totalCredit,
+                ]),
+              )
+            }
+          >
+            تصدير CSV
+          </Button>
         </div>
       }
     >

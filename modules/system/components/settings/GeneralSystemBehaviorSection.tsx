@@ -1,7 +1,6 @@
 import React from 'react';
-import { Card } from '../UI';
 import type { PlanSettings } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type GeneralSystemBehaviorSectionProps = {
   isAdmin: boolean;
   localPlanSettings: PlanSettings;
@@ -9,7 +8,6 @@ type GeneralSystemBehaviorSectionProps = {
   allPermissions: string[];
   hrUsers: Array<{ id: string; label: string }>;
 };
-
 export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSectionProps> = ({
   isAdmin,
   localPlanSettings,
@@ -18,9 +16,8 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
   hrUsers,
 }) => {
   if (!isAdmin) return null;
-
   return (
-    <Card title="سلوك النظام">
+    <OpsDashPanel title="سلوك النظام">
       <div className="space-y-4">
         {([
           { key: 'allowMultipleActivePlans' as keyof PlanSettings, label: 'السماح بخطط متعددة نشطة على نفس الخط', icon: 'playlist_add', desc: 'عند التعطيل لن يُسمح بإنشاء خطة جديدة على خط يحتوي بالفعل على خطة نشطة.' },
@@ -46,7 +43,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             </button>
           </div>
         ))}
-
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2 mb-3">
@@ -66,7 +62,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <span className="text-sm font-bold text-[var(--color-text-muted)]">%</span>
             </div>
           </div>
-
           <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2 mb-3">
               <span className="material-icons-round text-primary text-lg">speed</span>
@@ -81,7 +76,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <option value="weighted">مرجّح</option>
             </select>
           </div>
-
           <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
             <div className="flex items-center gap-2 mb-3">
               <span className="material-icons-round text-primary text-lg">equalizer</span>
@@ -97,7 +91,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
               <option value="monthly">شهري</option>
             </select>
           </div>
-
           <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] sm:col-span-3">
             <div className="flex items-center gap-2 mb-3">
               <span className="material-icons-round text-primary text-lg">event_repeat</span>
@@ -123,7 +116,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             </div>
           </div>
         </div>
-
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-2">
             <span className="material-icons-round text-primary text-lg">inventory_2</span>
@@ -144,7 +136,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             placeholder="SC"
           />
         </div>
-
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] space-y-4">
           <div className="flex items-center gap-2 mb-1">
             <span className="material-icons-round text-primary text-lg">qr_code_2</span>
@@ -240,7 +231,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             </div>
           </div>
         </div>
-
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
             <span className="material-icons-round text-primary text-lg">filter_alt</span>
@@ -256,7 +246,6 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             placeholder="حقن"
           />
         </div>
-
        
         <div className="p-4 bg-[var(--color-bg)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
           <div className="flex items-center gap-2 mb-3">
@@ -329,8 +318,7 @@ export const GeneralSystemBehaviorSection: React.FC<GeneralSystemBehaviorSection
             </div>
           )}
         </div>
-
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

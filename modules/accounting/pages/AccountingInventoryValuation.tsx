@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from "react";
-import { PageHeader } from "@/components/PageHeader";
 import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "@/components/Toast";
 import { DataPaginationFooter } from "@/src/components/erp/DataPaginationFooter";
@@ -84,39 +84,31 @@ export const AccountingInventoryValuation: React.FC = () => {
       onRefresh={() => void load()}
       refreshing={loading}
       actions={
-        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-          <PageHeader
-            title=""
-            backAction={false}
-            moreActions={[
-              {
-                label: "طباعة",
-                icon: "print",
-                onClick: () => window.print(),
-                group: "تصدير",
-              },
-              {
-                label: "تصدير CSV",
-                icon: "download",
-                onClick: () => {
-                  if (!valuation) return;
-                  exportAccountingCsv(
-                    "inventory-valuation.csv",
-                    ["المخزن", "الكود", "الصنف", "الكمية", "تكلفة الوحدة", "القيمة"],
-                    filteredRows.map((row) => [
-                      row.warehouseName,
-                      row.itemCode,
-                      row.itemName,
-                      row.quantity,
-                      row.unitCost,
-                      row.value,
-                    ]),
-                  );
-                },
-                group: "تصدير",
-              },
-            ]}
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="outline" onClick={() => window.print()}>
+            طباعة
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => {
+              if (!valuation) return;
+              exportAccountingCsv(
+                "inventory-valuation.csv",
+                ["المخزن", "الكود", "الصنف", "الكمية", "تكلفة الوحدة", "القيمة"],
+                filteredRows.map((row) => [
+                  row.warehouseName,
+                  row.itemCode,
+                  row.itemName,
+                  row.quantity,
+                  row.unitCost,
+                  row.value,
+                ]),
+              );
+            }}
+          >
+            تصدير CSV
+          </Button>
         </div>
       }
     >

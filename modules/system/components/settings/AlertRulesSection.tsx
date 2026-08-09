@@ -1,10 +1,9 @@
 import React from 'react';
-import { Card, Button } from '../UI';
+import { Button } from '../UI';
 import { DEFAULT_ALERT_SETTINGS } from '../../../../utils/dashboardConfig';
 import type { AlertSettings } from '../../../../types';
-
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 type AlertField = { key: keyof AlertSettings; label: string; icon: string; unit: string; description: string };
-
 type AlertRulesSectionProps = {
   isAdmin: boolean;
   saving: boolean;
@@ -13,7 +12,6 @@ type AlertRulesSectionProps = {
   onSave: () => void;
   alertFields: AlertField[];
 };
-
 export const AlertRulesSection: React.FC<AlertRulesSectionProps> = ({
   isAdmin,
   saving,
@@ -23,7 +21,6 @@ export const AlertRulesSection: React.FC<AlertRulesSectionProps> = ({
   alertFields,
 }) => {
   if (!isAdmin) return null;
-
   return (
     <>
       <div className="flex items-center justify-between">
@@ -37,8 +34,7 @@ export const AlertRulesSection: React.FC<AlertRulesSectionProps> = ({
           حفظ التغييرات
         </Button>
       </div>
-
-      <Card>
+      <OpsDashPanel>
         <div className="space-y-6">
           {alertFields.map((field) => (
             <div key={field.key} className="flex flex-col sm:flex-row sm:items-center gap-4 p-4 bg-[#f8f9fa] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
@@ -67,9 +63,8 @@ export const AlertRulesSection: React.FC<AlertRulesSectionProps> = ({
             </div>
           ))}
         </div>
-      </Card>
-
-      <Card title="القيم الافتراضية">
+      </OpsDashPanel>
+      <OpsDashPanel title="القيم الافتراضية">
         <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-4">
           {alertFields.map((field) => (
             <div key={field.key} className="text-center p-3 bg-[#f8f9fa] rounded-[var(--border-radius-lg)]">
@@ -87,7 +82,7 @@ export const AlertRulesSection: React.FC<AlertRulesSectionProps> = ({
           <span className="material-icons-round text-sm">restart_alt</span>
           إعادة تعيين للقيم الافتراضية
         </button>
-      </Card>
+      </OpsDashPanel>
     </>
   );
 };
