@@ -2241,16 +2241,16 @@ export const Products: React.FC = () => {
       eyebrow="إدارة المنتجات"
       rangeLabel="ترتيب الاستيراد: مواد تصنيعية ← بيانات المنتجات ← مكونات (BOM/قطع صيانة)"
       actions={(
-        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreateProductModal ? (
+            <Button onClick={openCreate} data-modal-key={MODAL_KEYS.PRODUCTS_CREATE}>
+              <span className="material-icons-round text-sm">add</span>
+              منتج جديد
+            </Button>
+          ) : null}
           <PageHeader
             title=""
             backAction={false}
-            primaryAction={canCreateProductModal ? {
-              label: 'منتج جديد',
-              icon: 'add',
-              onClick: openCreate,
-              dataModalKey: MODAL_KEYS.PRODUCTS_CREATE,
-            } : undefined}
             moreActions={[
               {
                 label: 'تصدير بيانات المنتجات (للاستيراد)',

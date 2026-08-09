@@ -1,7 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/UI';
 import { SelectableTable, type TableBulkAction, type TableColumn } from '@/components/SelectableTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
@@ -212,17 +211,6 @@ export const ProductionAttendance: React.FC = () => {
       ]}
       onRefresh={() => void reload()}
       refreshing={loading}
-      actions={(
-        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-          <PageHeader
-            title=""
-            backAction={false}
-            moreActions={[
-              { label: 'تحديث', icon: 'refresh', onClick: () => void reload(), disabled: loading },
-            ]}
-          />
-        </div>
-      )}
     >
       <OpsDashPanel title="سجلات الحضور" accent="production" bodyClassName="p-0 overflow-hidden">
       <SmartFilterBar

@@ -1,7 +1,6 @@
 import React, { useMemo, useState } from 'react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { toast } from 'sonner';
-import { PageHeader } from '@/components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/modules/production/components/UI';
@@ -183,34 +182,29 @@ export const MaterialCategories: React.FC = () => {
             </Button>
           ) : null}
           {canManage ? (
-            <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-              <PageHeader
-                title=""
-                backAction={false}
-                moreActions={[
-                  {
-                    label: migrating ? 'جاري الترحيل...' : 'ترحيل من أسماء قديمة',
-                    onClick: () => void (async () => {
-                      if (!window.confirm('ربط المواد بفئات من حقل categoryName القديم؟')) return;
-                      setMigrating(true);
-                      try {
-                        const { migrateMaterialCategoriesV1 } = await import(
-                          '../../catalog/services/categoryMigration'
-                        );
-                        const r = await migrateMaterialCategoriesV1();
-                        toast.success(`تم ترحيل ${r.categoriesCreated} فئة وربط ${r.materialsUpdated} مادة.`);
-                        await loadData();
-                      } catch {
-                        toast.error('فشل ترحيل الفئات.');
-                      } finally {
-                        setMigrating(false);
-                      }
-                    })(),
-                    disabled: migrating,
-                  },
-                ]}
-              />
-            </div>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={migrating}
+              onClick={() => void (async () => {
+                if (!window.confirm('ربط المواد بفئات من حقل categoryName القديم؟')) return;
+                setMigrating(true);
+                try {
+                  const { migrateMaterialCategoriesV1 } = await import(
+                    '../../catalog/services/categoryMigration'
+                  );
+                  const r = await migrateMaterialCategoriesV1();
+                  toast.success(`تم ترحيل ${r.categoriesCreated} فئة وربط ${r.materialsUpdated} مادة.`);
+                  await loadData();
+                } catch {
+                  toast.error('فشل ترحيل الفئات.');
+                } finally {
+                  setMigrating(false);
+                }
+              })()}
+            >
+              {migrating ? 'جاري الترحيل...' : 'ترحيل من أسماء قديمة'}
+            </Button>
           ) : null}
         </div>
       )}

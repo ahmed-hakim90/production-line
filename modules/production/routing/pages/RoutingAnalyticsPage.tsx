@@ -17,7 +17,6 @@ import { KPIBox, LoadingSkeleton, SearchableSelect } from '@/modules/production/
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
 import { toast } from '@/components/Toast';
@@ -36,12 +35,9 @@ import { formatRoutingFirestoreInstant } from '../domain/formatFirestore';
 
 function ChartCard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <Card className="shadow-sm">
-      <CardHeader className="border-b bg-muted/30 px-4 py-3 sm:px-6">
-        <CardTitle className="text-base font-semibold">{title}</CardTitle>
-      </CardHeader>
-      <CardContent className="p-4 sm:p-6">{children}</CardContent>
-    </Card>
+    <OpsDashPanel title={title} accent="production">
+      {children}
+    </OpsDashPanel>
   );
 }
 
@@ -252,40 +248,44 @@ export const RoutingAnalyticsPage: React.FC = () => {
 
   if (!can('routing.analytics')) {
     return (
-      <div className="erp-ds-clean w-full min-w-0">
-        <Card className="shadow-sm">
-          <CardContent className="space-y-4 p-4 sm:p-6">
+      <ModuleOpsPageShell
+        className="w-full min-w-0"
+        eyebrow="تحليلات مسارات الإنتاج"
+        rangeLabel="مقارنة القياسي بالفعلي والتكلفة حسب الخطوة"
+      >
+        <OpsDashPanel accent="production">
+          <div className="space-y-4">
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               ليس لديك صلاحية عرض تحليلات المسارات.
             </div>
             <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/production/routing')}>
               مسارات الإنتاج
             </Button>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   const detailPanel = (
     <div className="min-w-0 space-y-5 order-2 xl:order-1">
-      <Card className="shadow-sm">
-        <CardHeader className="px-4 py-3 sm:px-6">
-          <CardTitle className="text-base">تفاصيل التنفيذ المختار</CardTitle>
-          <CardDescription>تُحدَّث الكروت والرسوم تلقائياً عند اختيار تنفيذ من القائمة أو البطاقات.</CardDescription>
-        </CardHeader>
-      </Card>
+      <OpsDashPanel
+        title="تفاصيل التنفيذ المختار"
+        accent="production"
+      >
+        <p className="text-sm text-muted-foreground">
+          تُحدَّث الكروت والرسوم تلقائياً عند اختيار تنفيذ من القائمة أو البطاقات.
+        </p>
+      </OpsDashPanel>
 
       {selectedId && execQuery.isFetching && !execution && (
         <LoadingSkeleton rows={6} type="card" />
       )}
 
       {selectedId && !execQuery.isFetching && !execution && (
-        <Card className="shadow-sm">
-          <CardContent className="py-6">
-            <p className="text-center text-sm text-muted-foreground">تعذر تحميل بيانات هذا التنفيذ.</p>
-          </CardContent>
-        </Card>
+        <OpsDashPanel accent="production">
+          <p className="py-6 text-center text-sm text-muted-foreground">تعذر تحميل بيانات هذا التنفيذ.</p>
+        </OpsDashPanel>
       )}
 
       {execution && (
@@ -326,18 +326,13 @@ export const RoutingAnalyticsPage: React.FC = () => {
       )}
 
       {bottleneck && (
-        <Card className="shadow-sm">
-          <CardHeader className="border-b bg-muted/30 px-4 py-3 sm:px-6">
-            <CardTitle className="text-base font-semibold">اختناق مُقترَح</CardTitle>
-          </CardHeader>
-          <CardContent className="p-4 sm:p-6">
-            <p className="text-sm leading-relaxed">
-              أعلى تأثير حسب الانحراف والتكلفة: <strong>{bottleneck.name}</strong> —{' '}
-              {formatDurationSeconds(bottleneck.actualDurationSeconds ?? 0)} فعلي مقابل{' '}
-              {formatDurationSeconds(bottleneck.standardDurationSeconds)} قياسي، تكلفة تقريبية {bottleneck.laborCost.toFixed(2)}
-            </p>
-          </CardContent>
-        </Card>
+        <OpsDashPanel title="اختناق مُقترَح" accent="production">
+          <p className="text-sm leading-relaxed">
+            أعلى تأثير حسب الانحراف والتكلفة: <strong>{bottleneck.name}</strong> —{' '}
+            {formatDurationSeconds(bottleneck.actualDurationSeconds ?? 0)} فعلي مقابل{' '}
+            {formatDurationSeconds(bottleneck.standardDurationSeconds)} قياسي، تكلفة تقريبية {bottleneck.laborCost.toFixed(2)}
+          </p>
+        </OpsDashPanel>
       )}
 
       {steps.length > 0 && (
@@ -391,28 +386,25 @@ export const RoutingAnalyticsPage: React.FC = () => {
       )}
 
       {!selectedId && !isLoading && filteredExecutions.length > 0 && (
-        <Card className="shadow-sm">
-          <CardContent className="py-8">
-            <p className="text-center text-sm text-muted-foreground">
-              اختر تنفيذاً من القائمة (عريض) أو البطاقات (ضيق) لعرض المؤشرات والرسوم هنا.
-            </p>
-          </CardContent>
-        </Card>
+        <OpsDashPanel accent="production">
+          <p className="py-8 text-center text-sm text-muted-foreground">
+            اختر تنفيذاً من القائمة (عريض) أو البطاقات (ضيق) لعرض المؤشرات والرسوم هنا.
+          </p>
+        </OpsDashPanel>
       )}
     </div>
   );
 
   const tablePanel = (
     <div className="min-w-0 order-1 xl:order-2 xl:max-h-[calc(100vh-8rem)] xl:flex xl:flex-col">
-      <Card
+      <OpsDashPanel
+        title="تنفيذات مكتملة"
+        accent="production"
         className={cn(
-          'shadow-sm xl:flex xl:min-h-0 xl:flex-1 xl:flex-col',
+          'xl:flex xl:min-h-0 xl:flex-1 xl:flex-col',
         )}
+        bodyClassName="flex min-h-0 flex-1 flex-col gap-4"
       >
-        <CardHeader className="border-b bg-muted/30 px-4 py-3 sm:px-6">
-          <CardTitle className="text-base font-semibold">تنفيذات مكتملة</CardTitle>
-        </CardHeader>
-        <CardContent className="flex min-h-0 flex-1 flex-col gap-4 p-4 sm:p-6">
           <div className="grid max-w-full shrink-0 grid-cols-1 gap-3">
             <div className="space-y-1.5">
               <Label className="text-xs font-semibold text-muted-foreground">تصفية بالمنتج</Label>
@@ -463,12 +455,12 @@ export const RoutingAnalyticsPage: React.FC = () => {
                 {filteredExecutions.map((e) => {
                   const supervisorLabel = resolveSupervisorLabel(e.supervisorId);
                   return (
-                    <Card
+                    <div
                       key={e.id}
                       role="button"
                       tabIndex={0}
                       data-state={selectedId === e.id ? 'selected' : undefined}
-                      className={cn('border shadow-sm', rowSelectClass(e.id))}
+                      className={cn('rounded-lg border bg-card shadow-sm', rowSelectClass(e.id))}
                       onClick={() => setSelectedId(e.id)}
                       onKeyDown={(ev) => {
                         if (ev.key === 'Enter' || ev.key === ' ') {
@@ -477,7 +469,7 @@ export const RoutingAnalyticsPage: React.FC = () => {
                         }
                       }}
                     >
-                      <CardContent className="space-y-3 p-4">
+                      <div className="space-y-3 p-4">
                         <div className="break-words text-start font-medium leading-snug">{productName(e.productId)}</div>
                         <div className="grid grid-cols-2 gap-2 text-sm tabular-nums">
                           <div>
@@ -520,8 +512,8 @@ export const RoutingAnalyticsPage: React.FC = () => {
                             حذف
                           </Button>
                         )}
-                      </CardContent>
-                    </Card>
+                      </div>
+                    </div>
                   );
                 })}
               </div>
@@ -533,8 +525,7 @@ export const RoutingAnalyticsPage: React.FC = () => {
               اختر بطاقة لتحديث اللوحة.
             </p>
           )}
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
     </div>
   );
 

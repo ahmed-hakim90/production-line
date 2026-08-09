@@ -1,6 +1,5 @@
 import React, { useCallback, useMemo, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '../../../components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge, SearchableSelect } from '../components/UI';
@@ -314,17 +313,12 @@ export const SupplyCyclesList: React.FC = () => {
               دورة جديدة
             </Button>
           ) : null}
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-            <PageHeader
-              title=""
-              backAction={false}
-              moreActions={
-                canExportFromPage
-                  ? [{ label: 'تصدير Excel', icon: 'download', onClick: handleExportList, group: 'تصدير' }]
-                  : []
-              }
-            />
-          </div>
+          {canExportFromPage ? (
+            <Button type="button" size="sm" variant="outline" onClick={handleExportList}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير Excel
+            </Button>
+          ) : null}
         </div>
       )}
     >

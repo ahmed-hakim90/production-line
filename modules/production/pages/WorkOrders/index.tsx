@@ -693,16 +693,16 @@ export const WorkOrders: React.FC = () => {
         { key: 'overdue', label: 'متأخر', value: kpis.overdue },
       ]}
       actions={(
-        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {canCreateWorkOrder ? (
+            <Button variant="primary" onClick={handleOpenCreate} data-modal-key={MODAL_KEYS.WORK_ORDERS_CREATE}>
+              <span className="material-icons-round text-sm">add</span>
+              أمر شغل جديد
+            </Button>
+          ) : null}
           <PageHeader
             title=""
             backAction={false}
-            primaryAction={canCreateWorkOrder ? {
-              label: 'أمر شغل جديد',
-              icon: 'add',
-              onClick: handleOpenCreate,
-              dataModalKey: MODAL_KEYS.WORK_ORDERS_CREATE,
-            } : undefined}
             moreActions={[
               {
                 label: 'طلب صرف إنتاج',

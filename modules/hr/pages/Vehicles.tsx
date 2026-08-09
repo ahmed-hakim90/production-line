@@ -12,7 +12,6 @@ import type { FirestoreVehicle } from '../types';
 import type { FirestoreEmployee } from '@/types';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
-import { PageHeader } from '../../../components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useCachedPageLoad } from '../../shared/hooks/useCachedPageLoad';
@@ -195,21 +194,12 @@ export const Vehicles: React.FC = () => {
           <Button type="button" onClick={openCreate} data-modal-key={MODAL_KEYS.VEHICLES_CREATE}>
             إضافة مركبة
           </Button>
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-            <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: 'تصدير Excel',
-                  icon: 'download',
-                  group: 'تصدير',
-                  hidden: !canExportFromPage || vehicles.length === 0,
-                  onClick: handleExport,
-                },
-              ]}
-            />
-          </div>
+          {canExportFromPage && vehicles.length > 0 ? (
+            <Button type="button" variant="outline" onClick={handleExport}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير Excel
+            </Button>
+          ) : null}
         </div>
       )}
     >

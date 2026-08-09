@@ -5,12 +5,8 @@ import { PageHeader } from '@/components/PageHeader';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
-import {
-  DetailPageStickyHeader,
-  SectionSkeleton,
-  SURFACE_CARD,
-} from '@/src/components/erp/DetailPageChrome';
-import { Card as ErpCard, KPIBox, Badge } from '../components/UI';
+import { DetailPageStickyHeader, SectionSkeleton, SURFACE_CARD } from '@/src/components/erp/DetailPageChrome';
+import { KPIBox, Badge } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { usePermission } from '../../../utils/permissions';
@@ -18,26 +14,10 @@ import { reportService } from '@/modules/production/services/reportService';
 import { workOrderService } from '@/modules/production/services/workOrderService';
 import { productionWorkerService } from '@/modules/production/services/productionWorkerService';
 import { employeeService } from '../../hr/employeeService';
-import {
-  calculateWorkOrderExecutionMetrics,
-  getExecutionDeviationTone,
-  formatNumber,
-  calculateWasteRatio,
-  getTodayDateString,
-  getReportWaste,
-  normalizeDateInputToYmd,
-  sumMaxWorkHoursByDate,
-} from '../../../utils/calculations';
+import { calculateWorkOrderExecutionMetrics, getExecutionDeviationTone, formatNumber, calculateWasteRatio, getTodayDateString, getReportWaste, normalizeDateInputToYmd, sumMaxWorkHoursByDate } from '../../../utils/calculations';
 import { JOB_LEVEL_LABELS, type JobLevel } from '../../hr/types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
-import {
-  DEFAULT_PRODUCTION_WORKER_SETTINGS,
-  type ProductionReport,
-  type ProductionPlan,
-  type FirestoreEmployee,
-  type WorkOrder,
-  type ProductionWorker,
-} from '../../../types';
+import { DEFAULT_PRODUCTION_WORKER_SETTINGS, type ProductionReport, type ProductionPlan, type FirestoreEmployee, type WorkOrder, type ProductionWorker } from '../../../types';
 import { calculateSupervisorTeamBonusEstimate } from '../services/productionBonusEngine';
 import type { FirestoreDepartment, FirestoreJobPosition, FirestoreShift } from '../../hr/types';
 import { getDocs } from 'firebase/firestore';
@@ -45,27 +25,9 @@ import { departmentsRef, jobPositionsRef, shiftsRef } from '../../hr/collections
 import { ProductionReportPrint, mapReportsToPrintRows, computePrintTotals } from '../components/ProductionReportPrint';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
-import {
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts';
-import {
-  fetchCachedPageData,
-  peekPageDataCache,
-} from '../../shared/lib/pageDataCache';
-import {
-  PRODUCTION_REPORT_CREATE_PATHS,
-  PRODUCTION_REPORT_OPERATION_KEYS,
-  isOperationPathEnabled,
-} from '../../system/lib/operationPathSettings';
+import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
+import { fetchCachedPageData, peekPageDataCache } from '../../shared/lib/pageDataCache';
+import { PRODUCTION_REPORT_CREATE_PATHS, PRODUCTION_REPORT_OPERATION_KEYS, isOperationPathEnabled } from '../../system/lib/operationPathSettings';
 
 // â”€â”€â”€ Performance Score â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -1029,7 +991,6 @@ export const SupervisorDetails: React.FC = () => {
       </OpsDashPanel>
 
       <OpsDashPanel title="خطط إنتاج المشرف" accent="hr">
-      <ErpCard title="خطط إنتاج المشرف">
         {visibleSupervisorPlanRows.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)]">
             <span className="material-icons-round text-4xl mb-2 block opacity-40">event_note</span>
@@ -1155,7 +1116,6 @@ export const SupervisorDetails: React.FC = () => {
             </div>
           </div>
         )}
-      </ErpCard>
       </OpsDashPanel>
 
       <OpsDashPanel title="تقييم الفريق والمكافأة" accent="hr">
@@ -1195,7 +1155,7 @@ export const SupervisorDetails: React.FC = () => {
       </div>
 
       <div className="grid grid-cols-1 xl:grid-cols-2 gap-4 mb-4">
-        <ErpCard title="أعلى 5 عمال">
+        <OpsDashPanel title="أعلى 5 عمال" accent="hr">
           {topWorkerRows.length === 0 ? (
             <p className="py-6 text-center text-sm font-medium text-[var(--color-text-muted)]">لا توجد بيانات أهداف عمال في الفترة.</p>
           ) : (
@@ -1222,9 +1182,9 @@ export const SupervisorDetails: React.FC = () => {
               </table>
             </div>
           )}
-        </ErpCard>
+        </OpsDashPanel>
 
-        <ErpCard title="أقل 5 عمال">
+        <OpsDashPanel title="أقل 5 عمال" accent="hr">
           {bottomWorkerRows.length === 0 ? (
             <p className="py-6 text-center text-sm font-medium text-[var(--color-text-muted)]">لا توجد بيانات أهداف عمال في الفترة.</p>
           ) : (
@@ -1251,10 +1211,10 @@ export const SupervisorDetails: React.FC = () => {
               </table>
             </div>
           )}
-        </ErpCard>
+        </OpsDashPanel>
       </div>
 
-      <ErpCard title="تقييم عمال المشرف">
+      <OpsDashPanel title="تقييم عمال المشرف" accent="hr">
         <div className="flex flex-col gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[#f8f9fa]/70 p-4 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <h4 className="font-bold text-[var(--color-text)]">صفحة مستقلة لتقييم العمالة</h4>
@@ -1270,9 +1230,9 @@ export const SupervisorDetails: React.FC = () => {
             فتح صفحة التقييم
           </Button>
         </div>
-      </ErpCard>
+      </OpsDashPanel>
 
-      <ErpCard title="حساب المكافأة من أهداف العمال">
+      <OpsDashPanel title="حساب المكافأة من أهداف العمال" accent="hr">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
           <div className="rounded-[var(--border-radius-base)] bg-[#f8f9fa] border border-[var(--color-border)] p-3 text-center">
             <p className="text-xs font-bold text-[var(--color-text-muted)]">إجمالي أهداف الفريق</p>
@@ -1323,7 +1283,7 @@ export const SupervisorDetails: React.FC = () => {
             </table>
           </div>
         )}
-      </ErpCard>
+      </OpsDashPanel>
       </OpsDashPanel>
 
       <OpsDashPanel title="التقارير والتحليل" accent="hr">
@@ -1348,7 +1308,7 @@ export const SupervisorDetails: React.FC = () => {
       {/* â”€â”€ Tab: Production â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'production' && (
         <div className="space-y-6">
-          <ErpCard title="انضباط تنفيذ أوامر الشغل">
+          <OpsDashPanel title="انضباط تنفيذ أوامر الشغل" accent="hr">
             {activeExecutionRows.length === 0 ? (
               <div className="text-center py-8 text-[var(--color-text-muted)]">
                 <span className="material-icons-round text-4xl mb-2 block opacity-40">assignment</span>
@@ -1406,9 +1366,9 @@ export const SupervisorDetails: React.FC = () => {
                 </table>
               </div>
             )}
-          </ErpCard>
+          </OpsDashPanel>
           {/* Charts with tab switcher */}
-          <ErpCard>
+          <OpsDashPanel accent="hr">
             <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
               <div className="flex items-center gap-2">
                 <span className="material-icons-round text-primary">show_chart</span>
@@ -1482,11 +1442,11 @@ export const SupervisorDetails: React.FC = () => {
                 </ResponsiveContainer>
               </div>
             )}
-          </ErpCard>
+          </OpsDashPanel>
 
           {/* Production by product */}
           {productStats.length > 0 && (
-            <ErpCard title="الإنتاج حسب المنتج">
+            <OpsDashPanel title="الإنتاج حسب المنتج" accent="hr">
               <div style={{ width: '100%', height: 280 }} dir="ltr">
                 <ResponsiveContainer>
                   <BarChart data={productStats} layout="vertical" margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
@@ -1500,11 +1460,11 @@ export const SupervisorDetails: React.FC = () => {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-            </ErpCard>
+            </OpsDashPanel>
           )}
 
           {/* Reports table */}
-          <ErpCard className="!p-0 border-none overflow-hidden " title="">
+          <OpsDashPanel accent="hr" className="!p-0 border-none overflow-hidden " title="">
             <div className="px-6 py-4 border-b border-[var(--color-border)]">
               <h3 className="text-lg font-bold">سجل التقارير</h3>
               {reports.length > 0 && periodReports.length === 0 && (
@@ -1561,7 +1521,7 @@ export const SupervisorDetails: React.FC = () => {
                 </span>
               </div>
             )}
-          </ErpCard>
+          </OpsDashPanel>
         </div>
       )}
 
@@ -1569,18 +1529,18 @@ export const SupervisorDetails: React.FC = () => {
       {activeTab === 'lines' && (
         <div className="space-y-6">
           {lineStats.length === 0 ? (
-            <ErpCard>
+            <OpsDashPanel accent="hr">
               <div className="text-center py-12 text-slate-400">
                 <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
                 <p className="font-bold">لا توجد خطوط إنتاج مرتبطة</p>
               </div>
-            </ErpCard>
+            </OpsDashPanel>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {lineStats.map((line) => {
                 const lineWasteRatio = calculateWasteRatio(line.waste, line.produced + line.waste);
                 return (
-                  <ErpCard key={line.lineId}>
+                  <OpsDashPanel accent="hr" key={line.lineId}>
                     <div className="flex items-center justify-between mb-4">
                       <div className="flex items-center gap-3">
                         <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 flex items-center justify-center">
@@ -1613,7 +1573,7 @@ export const SupervisorDetails: React.FC = () => {
                         <p className={`text-lg font-bold ${lineWasteRatio > 5 ? 'text-rose-700' : 'text-amber-700'}`}>{lineWasteRatio}%</p>
                       </div>
                     </div>
-                  </ErpCard>
+                  </OpsDashPanel>
                 );
               })}
             </div>
@@ -1623,7 +1583,7 @@ export const SupervisorDetails: React.FC = () => {
 
       {/* â”€â”€ Tab: HR Info â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activeTab === 'info' && (
-        <ErpCard title="بيانات الموظف">
+        <OpsDashPanel title="بيانات الموظف" accent="hr">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {[
               { label: 'القسم', value: getDepartmentName(employee.departmentId), icon: 'business' },
@@ -1648,13 +1608,13 @@ export const SupervisorDetails: React.FC = () => {
               </div>
             ))}
           </div>
-        </ErpCard>
+        </OpsDashPanel>
       )}
 
       </OpsDashPanel>
 
       <OpsDashPanel title="التنبيهات" accent="hr">
-      <ErpCard>
+      <OpsDashPanel accent="hr">
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-amber-500">notifications_active</span>
           <h3 className="text-lg font-bold">التنبيهات</h3>
@@ -1676,7 +1636,7 @@ export const SupervisorDetails: React.FC = () => {
             </div>
           ))}
         </div>
-      </ErpCard>
+      </OpsDashPanel>
       </OpsDashPanel>
 
       {/* Hidden print template */}
@@ -1693,6 +1653,4 @@ export const SupervisorDetails: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
-
 

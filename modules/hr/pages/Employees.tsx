@@ -955,16 +955,16 @@ export const Employees: React.FC = () => {
         { key: 'pending', label: 'في انتظار الموافقة', value: summaryKpis.pending },
       ]}
       actions={(
-        <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {can('employees.create') ? (
+            <Button onClick={openCreate} data-modal-key={MODAL_KEYS.EMPLOYEES_CREATE}>
+              <span className="material-icons-round text-sm">add</span>
+              إضافة موظف
+            </Button>
+          ) : null}
           <PageHeader
             title=""
             backAction={false}
-            primaryAction={can('employees.create') ? {
-              label: 'إضافة موظف',
-              icon: 'add',
-              onClick: openCreate,
-              dataModalKey: MODAL_KEYS.EMPLOYEES_CREATE,
-            } : undefined}
             moreActions={[
               {
                 label: 'تصدير Excel',

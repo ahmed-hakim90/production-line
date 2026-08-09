@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Badge, Button, Card } from '../components/UI';
+import { Badge, Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -168,13 +168,13 @@ export const QualityWorkers: React.FC = () => {
       actions={<Badge variant="info">إجمالي التعيينات: {list.length}</Badge>}
     >
       {message && (
-        <Card>
+        <OpsDashPanel accent="quality">
           <p className="text-sm font-semibold text-[var(--color-text)]">{message}</p>
-        </Card>
+        </OpsDashPanel>
       )}
 
       <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-        <Card className="xl:col-span-1" title={form.id ? 'تعديل تعيين' : 'تعيين عامل جودة'}>
+        <OpsDashPanel className="xl:col-span-1" title={form.id ? 'تعديل تعيين' : 'تعيين عامل جودة'}>
           <form onSubmit={onSubmit} className="space-y-3">
             <div className="space-y-1">
               <label className="block text-sm font-bold text-[var(--color-text)]">الموظف</label>
@@ -253,7 +253,7 @@ export const QualityWorkers: React.FC = () => {
               )}
             </div>
           </form>
-        </Card>
+        </OpsDashPanel>
 
         <OpsDashPanel className="xl:col-span-2" title="تعيينات الجودة الحالية" accent="quality" bodyClassName="p-0">
           <SmartFilterBar
@@ -331,5 +331,4 @@ export const QualityWorkers: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
 

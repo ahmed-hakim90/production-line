@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
@@ -29,12 +29,7 @@ import { LEAVE_TYPE_LABELS } from '../types';
 import { formatNumber } from '../../../utils/calculations';
 import type { FirestoreEmployee } from '../../../types';
 import { EMPLOYMENT_TYPE_LABELS } from '../../../types';
-import {
-  fetchCachedPageData,
-  invalidatePageDataCache,
-  peekPageDataCache,
-  setPageDataCache,
-} from '../../shared/lib/pageDataCache';
+import { fetchCachedPageData, invalidatePageDataCache, peekPageDataCache, setPageDataCache } from '../../shared/lib/pageDataCache';
 
 type SelfServiceTab = 'approvals' | 'attendance' | 'leave' | 'loan' | 'payroll' | 'requests';
 
@@ -545,24 +540,24 @@ export const EmployeeSelfService: React.FC = () => {
       {!loading && activeTab === 'attendance' && (
         <div className="space-y-6">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <Card className="p-4">
+            <OpsDashPanel className="p-4">
               <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">إجمالي الأيام</p>
               <p className="text-xl font-bold">{formatNumber(attendanceStats.total)}</p>
-            </Card>
-            <Card className="p-4">
+            </OpsDashPanel>
+            <OpsDashPanel className="p-4">
               <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">حاضر</p>
               <p className="text-xl font-bold text-emerald-600">{formatNumber(attendanceStats.present)}</p>
-            </Card>
-            <Card className="p-4">
+            </OpsDashPanel>
+            <OpsDashPanel className="p-4">
               <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">غائب</p>
               <p className="text-xl font-bold text-rose-600">{formatNumber(attendanceStats.absent)}</p>
-            </Card>
-            <Card className="p-4">
+            </OpsDashPanel>
+            <OpsDashPanel className="p-4">
               <p className="text-[var(--color-text-muted)] text-xs font-medium mb-1">متأخر</p>
               <p className="text-xl font-bold text-amber-600">{formatNumber(attendanceStats.late)}</p>
-            </Card>
+            </OpsDashPanel>
           </div>
-          <Card title="سجل الحضور الأخير">
+          <OpsDashPanel title="سجل الحضور الأخير">
             <div className="overflow-x-auto">
               <table className="erp-table w-full text-right">
                 <thead className="erp-thead">
@@ -604,12 +599,12 @@ export const EmployeeSelfService: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
       {!loading && activeTab === 'approvals' && canViewApprovals && (
-        <Card title="طلبات تتطلب إجراءك">
+        <OpsDashPanel title="طلبات تتطلب إجراءك">
           <div className="space-y-4">
             <div className="flex items-center justify-between rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[#f8fafc] p-4">
               <div>
@@ -667,13 +662,13 @@ export const EmployeeSelfService: React.FC = () => {
               </table>
             </div>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {!loading && activeTab === 'leave' && (
         <div className="space-y-6">
           {leaveBalance && (
-            <Card title="رصيد الإجازات (المستخدم والمتاح)">
+            <OpsDashPanel title="رصيد الإجازات (المستخدم والمتاح)">
               <div className="overflow-x-auto rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
                 <table className="erp-table w-full text-sm text-right">
                   <thead className="erp-thead">
@@ -713,9 +708,9 @@ export const EmployeeSelfService: React.FC = () => {
                   ? `${leaveTypeByKey[leaveUsageSummary.lastUsedLeave.leaveType]?.label || LEAVE_TYPE_LABELS[leaveUsageSummary.lastUsedLeave.leaveType] || leaveUsageSummary.lastUsedLeave.leaveType} - ${formatDateAr(leaveUsageSummary.lastUsedLeave.date)} (${formatNumber(leaveUsageSummary.lastUsedLeave.totalDays)} يوم)`
                   : 'لا يوجد استخدام معتمد حتى الآن'}
               </div>
-            </Card>
+            </OpsDashPanel>
           )}
-          <Card title="طلب إجازة جديد">
+          <OpsDashPanel title="طلب إجازة جديد">
             <div className="space-y-4 max-w-xl">
               <div>
                 <label className="block text-sm font-bold text-[var(--color-text)] mb-1">نوع الإجازة</label>
@@ -781,14 +776,14 @@ export const EmployeeSelfService: React.FC = () => {
                 {submitting ? 'جاري الإرسال...' : 'إرسال الطلب'}
               </Button>
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
       {!loading && activeTab === 'loan' && (
         <div className="space-y-6">
           {loans.length > 0 && (
-            <Card title="السُلف">
+            <OpsDashPanel title="السُلف">
               <div className="overflow-x-auto">
                 <table className="erp-table w-full text-sm text-right">
                   <thead className="erp-thead">
@@ -837,9 +832,9 @@ export const EmployeeSelfService: React.FC = () => {
                   </tbody>
                 </table>
               </div>
-            </Card>
+            </OpsDashPanel>
           )}
-          <Card title="طلب سلفة جديدة">
+          <OpsDashPanel title="طلب سلفة جديدة">
             <div className="space-y-4 max-w-xl">
               <div>
                 <label className="block text-sm font-bold text-[var(--color-text)] mb-1">مبلغ السلفة (ج.م)</label>
@@ -897,12 +892,12 @@ export const EmployeeSelfService: React.FC = () => {
                 {loanSubmitting ? 'جاري الإرسال...' : 'إرسال الطلب'}
               </Button>
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
       {!loading && activeTab === 'payroll' && (
-        <Card title="معلومات الراتب">
+        <OpsDashPanel title="معلومات الراتب">
           <div className="space-y-4 max-w-xl">
             <div className="grid grid-cols-2 gap-4">
               <div>
@@ -975,11 +970,11 @@ export const EmployeeSelfService: React.FC = () => {
               </p>
             )}
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {!loading && activeTab === 'requests' && (
-        <Card title="طلباتي (إجازات وسُلف)">
+        <OpsDashPanel title="طلباتي (إجازات وسُلف)">
           <div className="overflow-x-auto">
             <table className="erp-table w-full text-right">
               <thead className="erp-thead">
@@ -1033,13 +1028,10 @@ export const EmployeeSelfService: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
       </OpsDashPanel>
     </ModuleOpsPageShell>
   );
 };
-
-
-
 

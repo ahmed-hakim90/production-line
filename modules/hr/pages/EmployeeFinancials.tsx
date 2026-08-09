@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { Button, Badge, SearchableSelect } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -579,17 +579,20 @@ export const EmployeeFinancials: React.FC = () => {
 
       {/* ════════════════ Bulk Form ════════════════ */}
       {showBulkForm && (
-        <Card title={
-          <div className="flex items-center justify-between w-full">
-            <span className="flex items-center gap-2">
-              <span className="material-icons-round text-primary">group_add</span>
-              إضافة جماعية — {TAB_CONFIG.find((t) => t.key === activeTab)?.label}
-            </span>
-            <button onClick={() => setShowBulkForm(false)} className="p-1 text-[var(--color-text-muted)] hover:text-slate-600 rounded-[var(--border-radius-base)]">
+        <OpsDashPanel
+          title={`إضافة جماعية — ${TAB_CONFIG.find((t) => t.key === activeTab)?.label || ''}`}
+          accent="hr"
+          action={(
+            <button
+              type="button"
+              onClick={() => setShowBulkForm(false)}
+              className="p-1 text-[var(--color-text-muted)] hover:text-slate-600 rounded-[var(--border-radius-base)]"
+              aria-label="إغلاق"
+            >
               <span className="material-icons-round">close</span>
             </button>
-          </div>
-        }>
+          )}
+        >
           {/* Step 1: Common fields */}
           <div className="mb-6">
             <h4 className="text-sm font-bold text-[var(--color-text)] mb-3 flex items-center gap-2">
@@ -802,7 +805,7 @@ export const EmployeeFinancials: React.FC = () => {
             </Button>
             <Button variant="outline" onClick={() => setShowBulkForm(false)}>إلغاء</Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* ════════════════ Data Tables ════════════════ */}

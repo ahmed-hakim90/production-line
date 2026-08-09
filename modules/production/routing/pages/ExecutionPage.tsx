@@ -7,9 +7,9 @@ import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { LoadingSkeleton } from '@/modules/production/components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { SearchableSelect } from '@/components/UI';
@@ -302,16 +302,16 @@ export const ExecutionPage: React.FC = () => {
         eyebrow="تنفيذ المسار"
         rangeLabel="تنفيذ خطوات مسار الإنتاج وحفظ الأداء"
       >
-        <Card className="shadow-sm">
-          <CardContent className="space-y-4 p-4 sm:p-6">
+        <OpsDashPanel accent="production">
+          <div className="space-y-4">
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
               ليس لديك صلاحية تنفيذ مسارات الإنتاج.
             </div>
             <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/production/routing')}>
               مسارات الإنتاج
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </ModuleOpsPageShell>
     );
   }
@@ -328,14 +328,14 @@ export const ExecutionPage: React.FC = () => {
     return (
       <ModuleOpsPageShell className="mx-auto w-full min-w-0 max-w-lg" eyebrow="تنفيذ المسار" rangeLabel="تنفيذ غير موجود">
         <PageHeader title="تنفيذ غير موجود" subtitle="قد يكون الرابط قديماً أو تم حذف السجل" icon="factory" />
-        <Card className="shadow-sm">
-          <CardContent className="space-y-4 p-4 sm:p-6">
+        <OpsDashPanel title="تنفيذ غير موجود" accent="production">
+          <div className="space-y-4">
             <p className="text-center text-sm text-muted-foreground">لم يتم العثور على التنفيذ.</p>
             <Button type="button" size="lg" className="w-full min-h-11" onClick={() => navigate('/production/routing')}>
               العودة لمسارات الإنتاج
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </ModuleOpsPageShell>
     );
   }
@@ -391,12 +391,8 @@ export const ExecutionPage: React.FC = () => {
           </Button>
         </div>
 
-        <Card className="shadow-sm">
-          <CardContent className="space-y-4 p-4 sm:p-6">
-            <div className="flex items-center gap-2 border-b border-border pb-2 text-xs font-bold text-muted-foreground">
-              <span className="material-icons-round text-sm">visibility</span>
-              معاينة سريعة
-            </div>
+        <OpsDashPanel title="معاينة سريعة" accent="production">
+          <div className="space-y-4">
             <div className="grid grid-cols-2 gap-3 text-sm">
               <div className="rounded-lg border bg-muted/40 p-3">
                 <p className="text-[10px] font-semibold text-muted-foreground">المنتج</p>
@@ -426,8 +422,8 @@ export const ExecutionPage: React.FC = () => {
                   كفاءة العمالة (إصدار قديم): {(execution.laborEfficiency * 100).toFixed(1)}%
                 </p>
               )}
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
 
         <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
           <Button
@@ -472,8 +468,8 @@ export const ExecutionPage: React.FC = () => {
           iconColor="text-sky-600 dark:text-sky-400"
           backAction={{ onClick: () => navigate('/production/routing'), label: 'مسارات الإنتاج' }}
         />
-        <Card className="shadow-sm">
-          <CardContent className="space-y-4 p-4 sm:p-6">
+        <OpsDashPanel accent="production">
+          <div className="space-y-4">
             <div className="space-y-1.5">
               <Label className="text-sm font-semibold text-muted-foreground">المنتج</Label>
               <SearchableSelect
@@ -496,8 +492,8 @@ export const ExecutionPage: React.FC = () => {
             <Button size="lg" className="w-full min-h-14 text-lg" disabled={!productId} onClick={() => setPhase('preview')}>
               التالي
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </ModuleOpsPageShell>
     );
   }
@@ -517,8 +513,8 @@ export const ExecutionPage: React.FC = () => {
           iconColor="text-amber-800 dark:text-amber-300"
           backAction={{ onClick: () => setPhase('pick'), label: 'الخطوة السابقة' }}
         />
-        <Card className="shadow-sm">
-          <CardContent className="space-y-6 p-4 sm:p-6">
+        <OpsDashPanel accent="production">
+          <div className="space-y-6">
             <p className="text-sm font-semibold text-foreground">
               المنتج: <span className="font-bold text-primary">{pickedProductLabel}</span>
             </p>
@@ -555,8 +551,8 @@ export const ExecutionPage: React.FC = () => {
                 رجوع
               </Button>
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </ModuleOpsPageShell>
     );
   }
@@ -577,8 +573,8 @@ export const ExecutionPage: React.FC = () => {
           iconColor="text-violet-700 dark:text-violet-300"
           backAction={{ onClick: () => navigate('/production/routing'), label: 'مسارات الإنتاج' }}
         />
-        <Card className="shadow-sm">
-          <CardContent className="space-y-6 p-4 sm:p-6">
+        <OpsDashPanel accent="production">
+          <div className="space-y-6">
             <div className="rounded-lg border bg-muted/30 p-3">
               <div className="mb-2 flex items-center justify-between gap-3 text-xs text-muted-foreground">
                 <span>تقدم التنفيذ</span>
@@ -718,8 +714,8 @@ export const ExecutionPage: React.FC = () => {
               </Button>
             )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </ModuleOpsPageShell>
     );
   }

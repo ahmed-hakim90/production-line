@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Badge, Button } from '../components/UI';
+import { Badge, Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton, TableSkeleton } from '@/src/shared/ui/skeletons';
@@ -584,7 +584,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
       ) : (
         <div className="space-y-3">
           {(config.leaveReasons || []).map((reason, idx) => (
-            <Card key={`${reason.code || 'leave_reason'}-${idx}`}>
+            <OpsDashPanel key={`${reason.code || 'leave_reason'}-${idx}`} accent="hr">
               <div className="grid grid-cols-1 sm:grid-cols-[1fr_1.5fr_auto] gap-4 items-start">
                 <div>
                   <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">
@@ -625,7 +625,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
                   </Button>
                 )}
               </div>
-            </Card>
+            </OpsDashPanel>
           ))}
         </div>
       )}
@@ -901,7 +901,7 @@ const PayrollPreviewPanel: React.FC = () => {
         </div>
       </div>
 
-      <Card title="معاينة كشف المرتبات">
+      <OpsDashPanel title="معاينة كشف المرتبات" accent="hr">
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
@@ -930,9 +930,9 @@ const PayrollPreviewPanel: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="معاينة الكشف (كشف راتب تجريبي)">
+      <OpsDashPanel title="معاينة الكشف (كشف راتب تجريبي)" accent="hr">
         <div className="border border-[var(--color-border)] rounded-[var(--border-radius-lg)] bg-[#f8f9fa]/40 p-4 space-y-4">
           <div className="flex items-center justify-between border-b border-[var(--color-border)] pb-3">
             <div>
@@ -985,7 +985,7 @@ const PayrollPreviewPanel: React.FC = () => {
             <span className="text-xl font-black text-primary font-mono">4,440.00</span>
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
     </div>
   );
 };

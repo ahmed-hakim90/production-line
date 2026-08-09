@@ -2,7 +2,8 @@ import React, { useCallback, useState } from 'react';
 import type { ProductionLineWorkerAssignment } from '@/types';
 import { getTodayDateString } from '@/utils/calculations';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
-import { Badge, Button, Card } from './UI';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Badge, Button } from './UI';
 import { useAppStore } from '@/store/useAppStore';
 import {
   PERMANENT_WORKER_ASSIGNMENT_PATHS,
@@ -137,12 +138,13 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
 
   return (
     <>
-      <Card title="الخطوط المعينة">
-        {canManage && (
-          <div className="flex justify-end mb-3 -mt-1">
-            <Button variant="outline" onClick={openCreate}>تعيين خط</Button>
-          </div>
-        )}
+      <OpsDashPanel
+        title="الخطوط المعينة"
+        accent="production"
+        action={canManage ? (
+          <Button variant="outline" onClick={openCreate}>تعيين خط</Button>
+        ) : undefined}
+      >
         <table className="w-full text-sm">
           <thead>
             <tr className="text-[var(--color-text-muted)]">
@@ -186,7 +188,7 @@ export const ProductionWorkerLineAssignmentsSection: React.FC<Props> = ({
             )}
           </tbody>
         </table>
-      </Card>
+      </OpsDashPanel>
 
       {showModal && canManage && (
         <div

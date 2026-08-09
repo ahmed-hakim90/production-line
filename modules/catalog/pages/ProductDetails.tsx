@@ -47,7 +47,6 @@ import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPag
 import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
   DetailPageStickyHeader,
@@ -823,12 +822,14 @@ export const ProductDetails: React.FC = () => {
                 );
               })}
             </div>
-            <Card className={cn("overflow-hidden p-0 shadow-none", NESTED_TILE)}>
-              <CardContent className="p-4">
-                <div className="mb-3 flex items-center justify-between gap-2">
-                  <h3 className="text-sm font-semibold text-slate-900 dark:text-foreground">متوسط تكلفة الإنتاج للفترة</h3>
-                  <span className="text-xs font-medium text-slate-600 dark:text-muted-foreground">{periodCostLabel}</span>
-                </div>
+            <OpsDashPanel
+              title="متوسط تكلفة الإنتاج للفترة"
+              accent="production"
+              className={cn("overflow-hidden shadow-none", NESTED_TILE)}
+              action={
+                <span className="text-xs font-medium text-slate-600 dark:text-muted-foreground">{periodCostLabel}</span>
+              }
+            >
                 <div className="grid grid-cols-1 gap-2">
                   <div className="space-y-1 rounded-lg p-3" style={{ background: "rgb(var(--color-primary) / 0.12)" }}>
                     <p className="text-xs font-medium text-foreground">الفترة المحددة (من الفلاتر)</p>
@@ -869,8 +870,7 @@ export const ProductDetails: React.FC = () => {
                     </div>
                   ))}
                 </div>
-              </CardContent>
-            </Card>
+            </OpsDashPanel>
           </div>
         )}
       </OpsDashPanel>

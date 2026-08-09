@@ -12,7 +12,7 @@ import {
   SectionSkeleton,
   SURFACE_CARD,
 } from '@/src/components/erp/DetailPageChrome';
-import { Card as ErpCard, KPIBox, Badge } from '../components/UI';
+import { KPIBox, Badge } from '../components/UI';
 import { LineProductWorkerTargetsSection } from '../components/LineProductWorkerTargetsSection';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -865,7 +865,7 @@ export const LineDetails: React.FC = () => {
       {canViewCosts && (
         <OpsDashPanel title="التكاليف والتوزيع" accent="production">
       {lineAllocatedCosts && (
-        <ErpCard>
+        <OpsDashPanel accent="production">
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-violet-500">account_balance</span>
@@ -923,10 +923,10 @@ export const LineDetails: React.FC = () => {
               لا توجد توزيعات تكلفة غير مباشرة على هذا الخط خلال الشهر الحالي.
             </div>
           )}
-        </ErpCard>
+        </OpsDashPanel>
       )}
 
-        <ErpCard>
+        <OpsDashPanel accent="production">
           <div className="flex items-center justify-between gap-2 mb-4">
             <div className="flex items-center gap-2">
               <span className="material-icons-round text-emerald-500">manage_accounts</span>
@@ -971,14 +971,14 @@ export const LineDetails: React.FC = () => {
               لا توجد تقارير كافية لحساب تكلفة المشرف على هذا الخط.
             </div>
           )}
-        </ErpCard>
+        </OpsDashPanel>
         </OpsDashPanel>
       )}
 
       {/* â”€â”€ Plan Health Block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activePlan && planHealth && healthCfg && (
         <OpsDashPanel title="صحة الخطة" accent="production">
-        <ErpCard>
+        <OpsDashPanel accent="production">
           <div className="flex items-center gap-2 mb-5">
             <span className="material-icons-round text-violet-500">monitor_heart</span>
             <h3 className="text-lg font-bold">صحة الخطة</h3>
@@ -1034,13 +1034,13 @@ export const LineDetails: React.FC = () => {
               <p className="text-[10px] text-[var(--color-text-muted)] mt-1">{healthCfg.desc}</p>
             </div>
           </div>
-        </ErpCard>
+        </OpsDashPanel>
         </OpsDashPanel>
       )}
 
       {/* â”€â”€ Charts with Tab Switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <OpsDashPanel title="تحليل الأداء" accent="production">
-      <ErpCard>
+      <OpsDashPanel accent="production">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
             <span className="material-icons-round text-primary">show_chart</span>
@@ -1125,12 +1125,12 @@ export const LineDetails: React.FC = () => {
             </ResponsiveContainer>
           </div>
         )}
-      </ErpCard>
+      </OpsDashPanel>
       </OpsDashPanel>
 
       {/* â”€â”€ Capacity Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <OpsDashPanel title="مؤشرات الإنتاجية" accent="production">
-      <ErpCard>
+      <OpsDashPanel accent="production">
         <div className="flex items-center gap-2 mb-5">
           <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
           <h3 className="text-lg font-bold">مؤشرات الإنتاجية</h3>
@@ -1189,22 +1189,22 @@ export const LineDetails: React.FC = () => {
             </div>
           </div>
         )}
-      </ErpCard>
+      </OpsDashPanel>
       </OpsDashPanel>
 
       <OpsDashPanel title="كمية إنتاج العامل (منتج × خط)" accent="production">
-      <ErpCard>
+      <OpsDashPanel accent="production">
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-primary">flag</span>
           <h3 className="text-lg font-bold">كمية إنتاج العامل اليومية</h3>
         </div>
         {id ? <LineProductWorkerTargetsSection lineId={id} /> : null}
-      </ErpCard>
+      </OpsDashPanel>
       </OpsDashPanel>
 
       {/* â”€â”€ Alerts Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <OpsDashPanel title="التنبيهات" accent="production">
-      <ErpCard>
+      <OpsDashPanel accent="production">
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-amber-500">notifications_active</span>
           <h3 className="text-lg font-bold">التنبيهات</h3>
@@ -1226,13 +1226,13 @@ export const LineDetails: React.FC = () => {
             </div>
           ))}
         </div>
-      </ErpCard>
+      </OpsDashPanel>
       </OpsDashPanel>
 
       {/* â”€â”€ Active Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {can('workOrders.view') && lineWorkOrders.length > 0 && (
         <OpsDashPanel title="أوامر الشغل المرتبطة" accent="production">
-        <ErpCard className="!p-0 border-none overflow-hidden " title="">
+        <OpsDashPanel accent="production" className="!p-0 border-none overflow-hidden " title="">
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
             <span className="material-icons-round text-primary">assignment</span>
             <h3 className="text-lg font-bold">أوامر الشغل المرتبطة</h3>
@@ -1275,13 +1275,13 @@ export const LineDetails: React.FC = () => {
               );
             })}
           </div>
-        </ErpCard>
+        </OpsDashPanel>
         </OpsDashPanel>
       )}
 
       {/* â”€â”€ Reports Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <OpsDashPanel title="سجل التقارير" accent="production">
-      <ErpCard className="!p-0 border-none overflow-hidden " title="">
+      <OpsDashPanel accent="production" className="!p-0 border-none overflow-hidden " title="">
         <div className="px-6 py-4 border-b border-[var(--color-border)]">
           <h3 className="text-lg font-bold">سجل التقارير</h3>
         </div>
@@ -1341,7 +1341,7 @@ export const LineDetails: React.FC = () => {
             </span>
           </div>
         )}
-      </ErpCard>
+      </OpsDashPanel>
       </OpsDashPanel>
 
       {/* View Workers Modal */}

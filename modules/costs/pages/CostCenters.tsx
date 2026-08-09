@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Download, Eye, Pencil, Trash2 } from 'lucide-react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Badge, Button } from '../../../components/UI';
+import { Badge, Button } from '../../../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { DataTable, type Column } from '../../../src/components/erp/DataTable';
@@ -366,7 +366,7 @@ export const CostCenters: React.FC = () => {
       ) : viewMode === 'cards' ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
           {filteredCenters.map((cc) => (
-            <Card key={cc.id} className="transition-all hover:ring-2 hover:ring-primary/10">
+            <OpsDashPanel key={cc.id} accent="costs" className="transition-all hover:ring-2 hover:ring-primary/10">
               <div className="flex justify-between items-start mb-4">
                 <div className="flex items-center gap-3">
                   <div className={`w-10 h-10 rounded-[var(--border-radius-base)] flex items-center justify-center ${
@@ -434,7 +434,7 @@ export const CostCenters: React.FC = () => {
                   </>
                 )}
               </div>
-            </Card>
+            </OpsDashPanel>
           ))}
         </div>
       ) : (
@@ -470,7 +470,4 @@ export const CostCenters: React.FC = () => {
     </ModuleOpsPageShell>
   );
 };
-
-
-
 

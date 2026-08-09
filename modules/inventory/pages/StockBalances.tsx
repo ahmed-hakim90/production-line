@@ -223,8 +223,7 @@ export const StockBalances: React.FC = () => {
       rangeLabel="عرض الرصيد الحالي لكل صنف داخل كل مخزن"
       actions={(
         <div className="flex flex-wrap items-center gap-2">
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-            <PageHeader
+          <PageHeader
               title=""
               backAction={false}
               moreActions={[
@@ -272,7 +271,6 @@ export const StockBalances: React.FC = () => {
                 },
               ]}
             />
-          </div>
         </div>
       )}
     >

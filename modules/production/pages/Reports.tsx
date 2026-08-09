@@ -4003,8 +4003,7 @@ export const Reports: React.FC = () => {
               إنشاء تقرير
             </Button>
           ) : null}
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-      <PageHeader
+          <PageHeader
         title=""
         backAction={false}
         moreActions={[
@@ -4112,7 +4111,6 @@ export const Reports: React.FC = () => {
           },
         ]}
       />
-          </div>
         </div>
       )}
     >

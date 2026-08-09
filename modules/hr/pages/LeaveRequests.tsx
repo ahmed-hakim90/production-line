@@ -22,7 +22,6 @@ import type {
   ApprovalStatus,
 } from '../types';
 import { LEAVE_TYPE_LABELS } from '../types';
-import { PageHeader } from '../../../components/PageHeader';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -474,25 +473,16 @@ export const LeaveRequests: React.FC = () => {
               {showForm ? 'إغلاق' : 'طلب إجازة'}
             </Button>
           ) : null}
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-            <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: 'تصدير Excel',
-                  icon: 'download',
-                  group: 'تصدير',
-                  hidden: !canExportFromPage || filtered.length === 0,
-                  onClick: () => {
-                    const employeeMap = new Map<string, { name: string }>();
-                    empNameMap.forEach((name, id) => employeeMap.set(id, { name }));
-                    exportLeaveRequests(filtered, employeeMap);
-                  },
-                },
-              ]}
-            />
-          </div>
+          {canExportFromPage && filtered.length > 0 ? (
+            <Button type="button" variant="outline" onClick={() => {
+              const employeeMap = new Map<string, { name: string }>();
+              empNameMap.forEach((name, id) => employeeMap.set(id, { name }));
+              exportLeaveRequests(filtered, employeeMap);
+            }}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير Excel
+            </Button>
+          ) : null}
         </div>
       }
     >

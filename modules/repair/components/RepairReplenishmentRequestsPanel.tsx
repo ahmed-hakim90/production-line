@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { toast } from '../../../components/Toast';
@@ -140,14 +140,10 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
   };
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-start justify-between gap-3 space-y-0">
-        <div>
-          <CardTitle className="text-base">تموين قطع الغيار من المخزن الرئيسي</CardTitle>
-          <CardDescription>
-            أنشئ الطلب واستلم الرصيد من داخل الصيانة — بدون فتح موديول المخازن.
-          </CardDescription>
-        </div>
+    <OpsDashPanel
+      title="تموين قطع الغيار من المخزن الرئيسي"
+      accent="repair"
+      action={(
         <div className="flex items-center gap-2 flex-wrap">
           <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
             تحديث
@@ -163,8 +159,12 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
             </Button>
           )}
         </div>
-      </CardHeader>
-      <CardContent className="space-y-4">
+      )}
+    >
+      <p className="mb-4 text-sm text-muted-foreground">
+        أنشئ الطلب واستلم الرصيد من داخل الصيانة — بدون فتح موديول المخازن.
+      </p>
+      <div className="space-y-4">
         {!toWarehouseId ? (
           <p className="text-sm text-muted-foreground">اختر فرعًا مربوطًا بمخزن صيانة لعرض الطلبات.</p>
         ) : null}
@@ -329,7 +329,7 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
             </table>
           </div>
         )}
-      </CardContent>
+      </div>
 
       <RepairReplenishmentRequestPreviewModal
         request={previewRequest}
@@ -341,6 +341,6 @@ export const RepairReplenishmentRequestsPanel: React.FC<Props> = ({
         receiving={Boolean(previewRequest?.id && busyId === String(previewRequest.id))}
         onConfirmReceive={(requestId) => void receiveRequest(requestId)}
       />
-    </Card>
+    </OpsDashPanel>
   );
 };

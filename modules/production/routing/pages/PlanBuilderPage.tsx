@@ -17,9 +17,9 @@ import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { LoadingSkeleton } from '@/modules/production/components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
 import { toast } from '@/components/Toast';
 import {
   usePublishRoutingPlanMutation,
@@ -49,8 +49,8 @@ function StatCard({
   iconClassName?: string;
 }) {
   return (
-    <Card className="shadow-sm">
-      <CardContent className="flex items-center gap-3 p-4">
+    <OpsDashPanel accent="production" className="shadow-sm">
+      <div className="flex items-center gap-3">
         <div
           className={cn(
             'flex size-10 shrink-0 items-center justify-center rounded-lg border bg-muted/60 text-muted-foreground',
@@ -63,8 +63,8 @@ function StatCard({
           <p className="text-xs font-medium leading-none text-muted-foreground">{label}</p>
           <p className="truncate text-lg font-semibold tabular-nums leading-tight tracking-tight">{value}</p>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </OpsDashPanel>
   );
 }
 
@@ -317,8 +317,8 @@ export const PlanBuilderPage: React.FC = () => {
           )}
 
           {!readonly && (
-            <Card className="shadow-sm">
-              <CardContent className="space-y-4 p-4">
+            <OpsDashPanel title="تارجت المسار" accent="production">
+              <div className="space-y-4">
                 <label className="text-sm font-semibold text-foreground" htmlFor="routing-target-seconds">
                   تارجت المسار (ثانية/وحدة) — لاحتساب المتوقع في تقارير الإنتاج
                 </label>
@@ -386,15 +386,12 @@ export const PlanBuilderPage: React.FC = () => {
                     الناتج: {calculatedTargetUnitSeconds > 0 ? `${calculatedTargetUnitSeconds} ثانية/وحدة` : 'أدخل الكمية ومدة التشغيل لعرض التارجت بالثواني.'}
                   </p>
                 </div>
-              </CardContent>
-            </Card>
+              </div>
+            </OpsDashPanel>
           )}
 
-          <Card className="overflow-hidden shadow-sm">
-            <CardHeader className="border-b bg-muted/30 px-4 py-3 sm:px-6">
-              <CardTitle className="text-base font-semibold">خطوات المسار</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4 p-4 sm:p-6">
+          <OpsDashPanel title="خطوات المسار" accent="production" className="overflow-hidden">
+            <div className="space-y-4">
               {readonly && (
                 <p className="text-sm leading-relaxed text-muted-foreground">
                   هذه القراءة فقط. لإنشاء إصدار جديد استخدم «تعديل (إصدار جديد)» من قائمة مسارات الإنتاج.
@@ -452,23 +449,23 @@ export const PlanBuilderPage: React.FC = () => {
                   </SortableContext>
                 </div>
               </DndContext>
-            </CardContent>
-            <CardFooter className="flex flex-col-reverse gap-3 border-t bg-muted/20 px-4 py-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-6">
-              <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/production/routing')}>
-                رجوع لمسارات الإنتاج
-              </Button>
-              {!effectiveReadonly && (
-                <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-2">
-                  <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={addRow}>
-                    إضافة خطوة
-                  </Button>
-                  <Button type="button" className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={publish.isPending}>
-                    {publish.isPending ? 'جاري الحفظ…' : 'حفظ كإصدار جديد'}
-                  </Button>
-                </div>
-              )}
-            </CardFooter>
-          </Card>
+              <div className="flex flex-col-reverse gap-3 border-t border-border pt-4 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+                <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/production/routing')}>
+                  رجوع لمسارات الإنتاج
+                </Button>
+                {!effectiveReadonly && (
+                  <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:gap-2">
+                    <Button type="button" variant="secondary" className="w-full sm:w-auto" onClick={addRow}>
+                      إضافة خطوة
+                    </Button>
+                    <Button type="button" className="w-full sm:w-auto" onClick={() => void handleSave()} disabled={publish.isPending}>
+                      {publish.isPending ? 'جاري الحفظ…' : 'حفظ كإصدار جديد'}
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </OpsDashPanel>
 
           {!effectiveReadonly && (
             <p className="flex items-start gap-2 text-xs text-muted-foreground">

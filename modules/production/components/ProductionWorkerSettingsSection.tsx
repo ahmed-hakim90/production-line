@@ -5,7 +5,7 @@ import {
   DEFAULT_PRODUCTION_WORKER_PERFORMANCE_SETTINGS,
   DEFAULT_SUPERVISOR_BONUS_SETTINGS,
 } from '@/types';
-import { Card } from './UI';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 
 type Props = {
   value: ProductionWorkerSettings;
@@ -69,7 +69,7 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
   };
 
   return (
-    <Card title="إعدادات عمال الإنتاج">
+    <OpsDashPanel title="إعدادات عمال الإنتاج" accent="production">
       <div className="space-y-6">
         <div className="space-y-3">
           <p className="text-sm font-bold text-[var(--color-text)]">تقارير الإنتاج</p>
@@ -370,6 +370,6 @@ export const ProductionWorkerSettingsSection: React.FC<Props> = ({ value, onChan
           </div>
         </div>
       </div>
-    </Card>
+    </OpsDashPanel>
   );
 };

@@ -326,7 +326,7 @@ export const StockCounts: React.FC = () => {
           <div className="space-y-3">
             {visibleSessions.map((session) => (
               <div key={session.id} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
-                <div className="erp-page-head">
+                <div className="flex items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-bold text-[var(--color-text)]">{session.warehouseName}</p>
                     <p className="text-xs text-slate-400">{new Date(session.createdAt).toLocaleString('ar-EG')}</p>

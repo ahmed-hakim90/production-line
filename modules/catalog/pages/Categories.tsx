@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Lock, Loader2, Unlock } from 'lucide-react';
 import { toast } from 'sonner';
 import { useTranslation } from 'react-i18next';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Button } from '../../production/components/UI';
+import { Button } from '../../production/components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useResourcePermission } from '@/utils/useResourcePermission';
@@ -350,7 +350,7 @@ export const Categories: React.FC = () => {
         </div>
       )}
     >
-      <Card className="space-y-4">
+      <OpsDashPanel accent="production" bodyClassName="space-y-4">
 
         {(canCreate || canEdit) && (
           <div className="grid grid-cols-1 sm:grid-cols-6 gap-3">
@@ -426,7 +426,7 @@ export const Categories: React.FC = () => {
             </div>
           </div>
         )}
-      </Card>
+      </OpsDashPanel>
 
       <OpsDashPanel title="شجرة الفئات" accent="production" bodyClassName="p-0 overflow-hidden">
         <div className="overflow-x-auto">

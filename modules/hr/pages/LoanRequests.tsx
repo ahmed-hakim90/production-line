@@ -17,7 +17,6 @@ import type {
   LoanType,
 } from '../types';
 import { LOAN_TYPE_LABELS } from '../types';
-import { PageHeader } from '../../../components/PageHeader';
 import {
   fetchCachedPageData,
   invalidatePageDataCache,
@@ -344,21 +343,12 @@ export const LoanRequests: React.FC = () => {
               {showForm ? 'إغلاق' : 'سلفة جديدة'}
             </Button>
           ) : null}
-          <div className="[&_.erp-page-title-block]:hidden [&_.erp-page-head]:m-0 [&_.erp-page-head]:min-h-0 [&_.erp-page-head]:border-0 [&_.erp-page-head]:p-0">
-            <PageHeader
-              title=""
-              backAction={false}
-              moreActions={[
-                {
-                  label: 'تصدير Excel',
-                  icon: 'download',
-                  group: 'تصدير',
-                  hidden: !canExportFromPage,
-                  onClick: handleExport,
-                },
-              ]}
-            />
-          </div>
+          {canExportFromPage ? (
+            <Button type="button" variant="outline" onClick={handleExport}>
+              <span className="material-icons-round text-sm">download</span>
+              تصدير Excel
+            </Button>
+          ) : null}
         </div>
       }
     >

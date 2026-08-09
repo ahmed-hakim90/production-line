@@ -1,17 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { employeeService } from '../employeeService';
 import { performanceService } from '../services/performanceService';
-import {
-  GRADE_CONFIG,
-  calculateAttendanceScore,
-  calculateGrade,
-  calculateOverallScore,
-  calculatePunctualityScore,
-} from '../utils/performanceCalculator';
+import { GRADE_CONFIG, calculateAttendanceScore, calculateGrade, calculateOverallScore, calculatePunctualityScore } from '../utils/performanceCalculator';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
@@ -281,7 +275,7 @@ export const EmployeeEvaluation: React.FC = () => {
             const gradeCfg = GRADE_CONFIG[grade];
 
             return (
-              <Card key={emp.id}>
+              <OpsDashPanel key={emp.id}>
                 <div className="flex flex-col lg:flex-row lg:items-center gap-4">
                   <div className="lg:w-48 shrink-0">
                     <p className="font-bold text-[var(--color-text)]">{emp.name}</p>
@@ -360,7 +354,7 @@ export const EmployeeEvaluation: React.FC = () => {
                     حفظ
                   </Button>
                 </div>
-              </Card>
+              </OpsDashPanel>
             );
           })}
         </div>
