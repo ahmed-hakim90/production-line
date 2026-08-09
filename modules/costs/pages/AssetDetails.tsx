@@ -1,17 +1,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '../../../components/PageHeader';
 import { Button } from '@/components/ui/button';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useShallowStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
 import type { Asset, AssetDepreciationMethod } from '../../../types';
-import {
-  DetailCollapsibleSection,
-  DetailPageShell,
-  DetailPageStickyHeader,
-  NESTED_TILE,
-} from '@/src/components/erp/DetailPageChrome';
+import { NESTED_TILE } from '@/src/components/erp/DetailPageChrome';
 import { cn } from '@/lib/utils';
 import { hideZeroForInput } from '@/lib/inputDisplayValue';
 
@@ -74,14 +70,22 @@ export const AssetDetails: React.FC = () => {
     ? `${remainingMonths} شهر`
     : 'منتهي / غير متاح';
 
+  const backAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate('/costs/assets')}>
+      الرجوع
+    </Button>
+  );
+
   if (!asset) {
     return (
-      <DetailPageShell>
-        <PageHeader title="تفاصيل الأصل" subtitle="لم يتم العثور على الأصل مسجل" icon="search_off" />
-        <Button variant="outline" onClick={() => navigate('/costs/assets')}>
-          عودة إلى قائمة الأصول
-        </Button>
-      </DetailPageShell>
+      <ModuleOpsPageShell eyebrow="تفاصيل الأصل" actions={backAction}>
+        <OpsDashPanel title="لم يتم العثور على الأصل" accent="costs">
+          <p className="text-sm text-muted-foreground">لم يتم العثور على الأصل مسجل</p>
+          <Button variant="outline" className="mt-3" onClick={() => navigate('/costs/assets')}>
+            عودة إلى قائمة الأصول
+          </Button>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -110,30 +114,26 @@ export const AssetDetails: React.FC = () => {
   };
 
   return (
-    <DetailPageShell>
-      <DetailPageStickyHeader>
-        <PageHeader
-          title={`تفاصيل الأصل: ${asset.name}`}
-          subtitle="تعديل بيانات الأصل ومراجعة سجل الإهلاك"
-          icon="precision_manufacturing"
-          backAction={{ to: '/costs/assets', label: 'الرجوع' }}
-          primaryAction={canEdit ? {
-            label: saving ? 'جاري الحفظ...' : 'حفظ التعديلات',
-            icon: 'save',
-            onClick: handleSave,
-            disabled: saving,
-          } : undefined}
-          moreActions={canDelete ? [{
-            label: deleting ? 'جاري الحذف...' : 'حذف الأصل',
-            icon: 'delete',
-            onClick: handleDelete,
-            disabled: deleting,
-            danger: true,
-          }] : undefined}
-        />
-      </DetailPageStickyHeader>
-
-      <DetailCollapsibleSection title="بيانات الأصل" defaultOpen>
+    <ModuleOpsPageShell
+      eyebrow="تفاصيل الأصل"
+      rangeLabel={`${asset.name} — تعديل بيانات الأصل ومراجعة سجل الإهلاك`}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {backAction}
+          {canEdit ? (
+            <Button type="button" disabled={saving} onClick={() => void handleSave()}>
+              {saving ? 'جاري الحفظ...' : 'حفظ التعديلات'}
+            </Button>
+          ) : null}
+          {canDelete ? (
+            <Button type="button" variant="destructive" disabled={deleting} onClick={() => void handleDelete()}>
+              {deleting ? 'جاري الحذف...' : 'حذف الأصل'}
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
+      <OpsDashPanel title="بيانات الأصل" accent="costs">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <label className="erp-field">
             <span className="erp-field-label">اسم الأصل</span>
@@ -200,9 +200,9 @@ export const AssetDetails: React.FC = () => {
             <textarea className="erp-field-input py-2" placeholder="أي وصف أو بيانات إضافية عن الأصل" value={String(form.notes || '')} onChange={(e) => setForm((p) => ({ ...p, notes: e.target.value }))} disabled={!canEdit} />
           </label>
         </div>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="ملخص مالي" defaultOpen>
+      <OpsDashPanel title="ملخص مالي" accent="costs">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
           <div className={cn('space-y-1 p-4', NESTED_TILE)}>
             <div className="text-xs text-slate-600 dark:text-muted-foreground">الإهلاك الشهري</div>
@@ -217,9 +217,9 @@ export const AssetDetails: React.FC = () => {
             <div className="text-lg font-bold tabular-nums text-primary">{currentValueComputed.toFixed(2)}</div>
           </div>
         </div>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="سجل الإهلاك الشهري" defaultOpen>
+      <OpsDashPanel title="سجل الإهلاك الشهري" accent="costs">
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
@@ -247,7 +247,7 @@ export const AssetDetails: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </DetailCollapsibleSection>
-    </DetailPageShell>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

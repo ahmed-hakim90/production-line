@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { TableIconAction, ToneActionButton } from '@/src/components/erp';
 import {
@@ -12,7 +13,7 @@ import {
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { exportGenericRows } from '@/utils/exportExcel';
-import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { Button, Badge, SearchableSelect } from '../components/UI';
 import { employeeService } from '@/modules/hr/employeeService';
 import { leaveBalanceService, leaveRequestService } from '@/modules/hr/leaveService';
 import { createLeaveRequest } from '@/modules/hr/usecases/createLeaveRequest';
@@ -1182,23 +1183,28 @@ export const SupervisorTeamActions: React.FC = () => {
   }
 
   if (!canUsePage) {
-    return <Card><p className="text-sm font-bold text-rose-600">غير مصرح بعرض طلبات الإنتاج.</p></Card>;
+    return (
+      <OpsDashPanel accent="production">
+        <p className="text-sm font-bold text-rose-600 p-4">غير مصرح بعرض طلبات الإنتاج.</p>
+      </OpsDashPanel>
+    );
   }
 
   return (
-    <div className="max-w-full overflow-x-hidden space-y-6">
-      <PageHeader
-        title="طلبات الإنتاج"
-        subtitle="إنشاء طلبات للموظفين ضمن الأقسام المتاحة لك، ثم متابعتها وتصديرها كملف Excel"
-        icon="assignment"
-        primaryAction={canCreateProductionRequests ? {
-          label: 'طلب جديد',
-          icon: 'add',
-          onClick: () => setCreateModalOpen(true),
-          disabled: workerOptions.length === 0,
-        } : undefined}
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="الإنتاج"
+      rangeLabel="إنشاء ومتابعة طلبات الإجازة والسلف والجزاءات لعمال الإنتاج"
+      hero={[
+        { key: 'user', label: 'المستخدم الحالي', value: resolvedSupervisor?.name || userDisplayName || '—', accent: true },
+        { key: 'pending', label: 'طلبات تنتظر قرارك', value: actionableApprovalCount },
+        { key: 'team', label: 'العمال المتاحين', value: teamWorkers.length },
+      ]}
+      actions={canCreateProductionRequests ? (
+        <Button size="sm" onClick={() => setCreateModalOpen(true)} disabled={workerOptions.length === 0}>
+          طلب جديد
+        </Button>
+      ) : undefined}
+    >
       {toast && (
         <div className={`rounded-[var(--border-radius-lg)] border px-4 py-3 text-sm font-bold ${
           toast.type === 'success'
@@ -1210,38 +1216,18 @@ export const SupervisorTeamActions: React.FC = () => {
         </div>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">المستخدم الحالي</p>
-          <p className="text-lg font-black text-[var(--color-text)]">{resolvedSupervisor?.name || userDisplayName || '—'}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">
-            {teamScopeLabel} — المتاحين: {teamWorkers.length}
-          </p>
-        </Card>
-        <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">طلبات تنتظر قرارك</p>
-          <p className="text-lg font-black text-[var(--color-text)]">{actionableApprovalCount}</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">{approvalRequests.length} طلب ظاهر لك للمتابعة</p>
-        </Card>
-        <Card>
-          <p className="text-xs font-bold text-[var(--color-text-muted)] mb-1">إنشاء الطلبات</p>
-          <p className="text-lg font-black text-[var(--color-text)]">إجازة / سلفة / جزاء</p>
-          <p className="text-xs text-[var(--color-text-muted)] mt-1">تذهب الطلبات للموافقين المحددين في إعدادات النظام</p>
-        </Card>
-      </div>
-
-      <Card>
-        <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-          <div>
-            <h3 className="text-base font-black text-[var(--color-text)]">تقرير Excel للطلبات</h3>
-            <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">
-              اختر فترة ونوع الطلب والحالة لتصفية القائمة أدناه، ثم صدّر النتائج الظاهرة في ملف واحد.
-            </p>
-          </div>
-          <Button variant="outline" onClick={handleExportFilteredReport} disabled={reportExportRows.length === 0}>
+      <OpsDashPanel
+        title="تقرير Excel للطلبات"
+        accent="production"
+        action={(
+          <Button variant="outline" size="sm" onClick={handleExportFilteredReport} disabled={reportExportRows.length === 0}>
             {`تصدير التقرير (${reportExportRows.length})`}
           </Button>
-        </div>
+        )}
+      >
+        <p className="mb-4 text-xs font-bold text-[var(--color-text-muted)]">
+          اختر فترة ونوع الطلب والحالة لتصفية القائمة أدناه، ثم صدّر النتائج الظاهرة في ملف واحد.
+        </p>
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
           <div>
             <label className="mb-2 block text-xs font-black text-[var(--color-text-muted)]">من تاريخ الطلب</label>
@@ -1288,7 +1274,7 @@ export const SupervisorTeamActions: React.FC = () => {
             </Button>
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       <div className="flex flex-wrap gap-2 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] w-fit">
         {[
@@ -1313,25 +1299,28 @@ export const SupervisorTeamActions: React.FC = () => {
       </div>
 
       {activePageTab === 'history' ? (
-        <Card>
-          <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <h3 className="text-base font-black text-[var(--color-text)]">سجل طلبات الإنتاج</h3>
-              <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">يعرض الطلبات المعتمدة والمرفوضة والملغاة ضمن نطاقك الحالي.</p>
-            </div>
+        <OpsDashPanel
+          title="سجل طلبات الإنتاج"
+          accent="production"
+          bodyClassName="p-0"
+          action={(
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={handleExportHistory} disabled={filteredHistoryRequests.length === 0}>
+              <Button variant="outline" size="sm" onClick={handleExportHistory} disabled={filteredHistoryRequests.length === 0}>
                 تصدير Excel
               </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => { void handleExportApprovalsPdf(); }}
                 disabled={filteredHistoryRequests.length === 0 || exportingApprovalsPdf}
               >
                 {exportingApprovalsPdf ? 'جاري التصدير...' : 'تصدير PDF'}
               </Button>
             </div>
-          </div>
+          )}
+        >
+          <div className="p-4">
+          <p className="mb-4 text-xs font-bold text-[var(--color-text-muted)]">يعرض الطلبات المعتمدة والمرفوضة والملغاة ضمن نطاقك الحالي.</p>
 
           <div className="mb-4 grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,220px)_minmax(0,1fr)_auto] lg:items-end">
             <div>
@@ -1437,27 +1426,29 @@ export const SupervisorTeamActions: React.FC = () => {
               })}
             </div>
           )}
-        </Card>
+          </div>
+        </OpsDashPanel>
       ) : activePageTab === 'approvals' ? (
-        <Card>
-          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <h3 className="text-base font-black text-[var(--color-text)]">طلبات الإنتاج وحالاتها</h3>
-              <p className="mt-1 text-xs font-bold text-[var(--color-text-muted)]">تابع المرحلة الحالية أو صدّر الطلبات الظاهرة كملف Excel أو PDF.</p>
-            </div>
+        <OpsDashPanel
+          title="طلبات الإنتاج وحالاتها"
+          accent="production"
+          action={(
             <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={handleExportApprovals} disabled={filteredApprovalRequests.length === 0}>
+              <Button variant="outline" size="sm" onClick={handleExportApprovals} disabled={filteredApprovalRequests.length === 0}>
                 تصدير Excel
               </Button>
               <Button
                 variant="outline"
+                size="sm"
                 onClick={() => { void handleExportApprovalsPdf(); }}
                 disabled={filteredApprovalRequests.length === 0 || exportingApprovalsPdf}
               >
                 {exportingApprovalsPdf ? 'جاري التصدير...' : 'تصدير PDF'}
               </Button>
             </div>
-          </div>
+          )}
+        >
+          <p className="mb-4 text-xs font-bold text-[var(--color-text-muted)]">تابع المرحلة الحالية أو صدّر الطلبات الظاهرة كملف Excel أو PDF.</p>
           {approvalsLoading ? (
             <div className="text-sm font-bold text-[var(--color-text-muted)] py-8 text-center">جاري تحميل طلبات الاعتماد...</div>
           ) : filteredApprovalRequests.length === 0 ? (
@@ -1598,30 +1589,26 @@ export const SupervisorTeamActions: React.FC = () => {
               })}
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       ) : canCreateProductionRequests ? (
-        <Card>
-          <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-            <div>
-              <h3 className="text-lg font-black text-[var(--color-text)]">إنشاء طلب إنتاج جديد</h3>
-              <p className="text-sm text-[var(--color-text-muted)] mt-1">
-                اختر العامل ونوع الطلب داخل نافذة واحدة، ثم أرسله لمسار اعتماد الإدارة الحالي.
-              </p>
-            </div>
-            <Button onClick={() => setCreateModalOpen(true)} disabled={workerOptions.length === 0}>
-              طلب جديد
-            </Button>
-          </div>
+        <OpsDashPanel title="إنشاء طلب إنتاج جديد" accent="production" action={(
+          <Button size="sm" onClick={() => setCreateModalOpen(true)} disabled={workerOptions.length === 0}>
+            طلب جديد
+          </Button>
+        )}>
+          <p className="text-sm text-[var(--color-text-muted)]">
+            اختر العامل ونوع الطلب داخل نافذة واحدة، ثم أرسله لمسار اعتماد الإدارة الحالي.
+          </p>
           {workerOptions.length === 0 && (
             <div className="mt-4 text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
               لا يوجد عمال إنتاج متاحون لك حالياً. تأكد من ربط العاملين بخطوط الإنتاج المناسبة.
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       ) : (
-        <Card>
+        <OpsDashPanel accent="production">
           <p className="text-sm font-bold text-[var(--color-text-muted)]">هذه الصفحة مخصصة للاطلاع فقط لهذا المستخدم.</p>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {canCreateProductionRequests && (
@@ -1639,7 +1626,7 @@ export const SupervisorTeamActions: React.FC = () => {
 
           <div className="min-h-0 flex-1 overflow-y-auto overscroll-y-contain px-3 py-4 sm:px-6 sm:py-5">
             <div className="space-y-4 sm:space-y-5">
-              <Card title="١. اختيار العامل">
+              <OpsDashPanel title="١. اختيار العامل" accent="production">
                 {workerOptions.length === 0 ? (
                   <div className="text-sm font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4">
                     لا يوجد عمال إنتاج متاحون لك حالياً. تأكد من ربط العاملين بخطوط الإنتاج المناسبة.
@@ -1655,7 +1642,7 @@ export const SupervisorTeamActions: React.FC = () => {
                     <p className="text-xs font-bold text-[var(--color-text-muted)]">ابدأ باختيار العامل حتى تظهر بياناته والحقول المناسبة للطلب.</p>
                   </div>
                 )}
-              </Card>
+              </OpsDashPanel>
 
               {selectedWorker && (
                 <>
@@ -1694,7 +1681,7 @@ export const SupervisorTeamActions: React.FC = () => {
                     </div>
                   </div>
 
-                <Card title="٢. نوع الطلب">
+                <OpsDashPanel title="٢. نوع الطلب" accent="production">
                   <div className="grid grid-cols-3 gap-2 sm:gap-3">
                     {ACTION_TABS.map((tab) => (
                       <button
@@ -1724,9 +1711,9 @@ export const SupervisorTeamActions: React.FC = () => {
                       </button>
                     ))}
                   </div>
-                </Card>
+                </OpsDashPanel>
 
-                <Card title={`٣. تفاصيل ${activeActionTab.label}`}>
+                <OpsDashPanel title={`٣. تفاصيل ${activeActionTab.label}`} accent="production">
                   {activeTab === 'leave' && (
                     <div className="space-y-4">
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -1884,9 +1871,9 @@ export const SupervisorTeamActions: React.FC = () => {
                       </div>
                     </div>
                   )}
-                </Card>
+                </OpsDashPanel>
 
-                  <Card title="٤. مراجعة وإرسال">
+                  <OpsDashPanel title="٤. مراجعة وإرسال" accent="production">
                     <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 flex-1">
                       <div className="rounded-[var(--border-radius-lg)] bg-[#f8f9fa] border border-[var(--color-border)] p-3">
@@ -1909,9 +1896,9 @@ export const SupervisorTeamActions: React.FC = () => {
                       </div>
                     </div>
                   </div>
-                </Card>
+                </OpsDashPanel>
 
-                <Card title="آخر طلبات العامل">
+                <OpsDashPanel title="آخر طلبات العامل" accent="production">
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                     <div className="space-y-3">
                       {recentLeaves.slice(0, 3).map((row) => (
@@ -1938,7 +1925,7 @@ export const SupervisorTeamActions: React.FC = () => {
                       {recentLoans.length === 0 && <p className="text-sm text-slate-500">لا توجد سلف حديثة.</p>}
                     </div>
                   </div>
-                </Card>
+                </OpsDashPanel>
                 </>
               )}
             </div>
@@ -2040,6 +2027,6 @@ export const SupervisorTeamActions: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

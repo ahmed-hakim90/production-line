@@ -1,6 +1,6 @@
 import React, { useState, useCallback, useMemo } from 'react';
 import { toast } from 'sonner';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
@@ -172,14 +172,8 @@ export const DelegationManagement: React.FC = () => {
       )}
     >
       {showForm && (
-        <Card>
-          <div className="space-y-5">
-            <h3 className="font-bold text-lg flex items-center gap-2">
-              <span className="material-icons-round text-primary">person_add</span>
-              إنشاء تفويض جديد
-            </h3>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <OpsDashPanel title="إنشاء تفويض جديد" accent="hr">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-1.5">
                 <label className="block text-sm font-bold text-[var(--color-text)]">المفوّض إليه *</label>
                 <select
@@ -239,13 +233,12 @@ export const DelegationManagement: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex justify-end">
-              <Button onClick={handleCreate} disabled={saving}>
-                {saving ? 'جاري الحفظ...' : 'إنشاء التفويض'}
-              </Button>
-            </div>
+          <div className="flex justify-end pt-2">
+            <Button onClick={handleCreate} disabled={saving}>
+              {saving ? 'جاري الحفظ...' : 'إنشاء التفويض'}
+            </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {delegations.length === 0 ? (

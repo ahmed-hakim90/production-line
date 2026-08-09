@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Plus, Trash2, Loader2, FileSpreadsheet } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -91,17 +92,15 @@ export const MaterialPlanningRun: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <PageHeader
-        title="تشغيل تخطيط المواد"
-        subtitle="تفجير BOM لعدة منتجات وحساب الاحتياجات والنواقص"
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="تخطيط المواد"
+      rangeLabel="تفجير BOM لعدة منتجات وحساب الاحتياجات والنواقص"
+    >
       {!canGenerate && (
         <p className="text-sm text-muted-foreground">لا توجد صلاحية لتوليد الاحتياجات</p>
       )}
 
-      <div className="space-y-2">
+      <OpsDashPanel title="مدخلات التشغيل" accent="plans">
         {rows.map((row) => (
           <div key={row.key} className="flex flex-wrap items-center gap-2">
             <select
@@ -148,12 +147,12 @@ export const MaterialPlanningRun: React.FC = () => {
             {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : 'توليد الاحتياجات'}
           </Button>
         </div>
-      </div>
+      </OpsDashPanel>
 
       {error && <p className="text-sm text-destructive">{error}</p>}
 
       {lines && (
-        <div className="rounded-lg border p-4">
+        <OpsDashPanel title="نتيجة الاحتياجات" accent="plans">
           <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
             <p className="text-sm font-medium">
               التكلفة التقديرية الإجمالية: {arNum(totalEstimatedCost(lines))} ج.م
@@ -213,8 +212,8 @@ export const MaterialPlanningRun: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </div>
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

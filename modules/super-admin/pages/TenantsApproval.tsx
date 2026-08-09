@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { Button } from '@/components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { tenantService } from '../../../services/tenantService';
 import { useAppStore } from '../../../store/useAppStore';
 import type { PendingTenant } from '../../../types';
@@ -43,37 +45,49 @@ export const TenantsApproval: React.FC = () => {
   };
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <h1 className="text-xl font-bold mb-4">موافقة على تسجيل شركات جديدة</h1>
-      {error ? <p className="text-rose-600 text-sm mb-3">{error}</p> : null}
-      {loading ? (
-        <p className="text-[var(--color-text-muted)]">جاري التحميل...</p>
-      ) : items.length === 0 ? (
-        <p className="text-[var(--color-text-muted)]">لا توجد طلبات معلقة.</p>
-      ) : (
-        <ul className="space-y-3">
-          {items.map((row) => (
-            <li
-              key={row.id}
-              className="border border-[var(--color-border)] rounded-lg p-4 flex flex-wrap items-center justify-between gap-3 bg-[var(--color-card)]"
-            >
-              <div>
-                <p className="font-semibold">{row.name}</p>
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  @{row.slug} — {row.adminEmail}
-                </p>
-              </div>
-              <Button
-                type="button"
-                disabled={busyId === row.id}
-                onClick={() => void approve(row.id)}
+    <ModuleOpsPageShell
+      className="max-w-4xl mx-auto"
+      eyebrow="إدارة المنصة"
+      rangeLabel="موافقة على تسجيل شركات جديدة وتفعيل المستأجرين"
+      onRefresh={() => void load()}
+      refreshing={loading}
+    >
+      {error ? (
+        <OpsDashPanel accent="quality">
+          <p className="text-rose-600 text-sm">{error}</p>
+        </OpsDashPanel>
+      ) : null}
+
+      <OpsDashPanel title="طلبات التسجيل المعلقة" accent="quality">
+        {loading ? (
+          <p className="text-[var(--color-text-muted)]">جاري التحميل...</p>
+        ) : items.length === 0 ? (
+          <p className="text-[var(--color-text-muted)]">لا توجد طلبات معلقة.</p>
+        ) : (
+          <ul className="space-y-3">
+            {items.map((row) => (
+              <li
+                key={row.id}
+                className="border border-[var(--color-border)] rounded-lg p-4 flex flex-wrap items-center justify-between gap-3 bg-[var(--color-card)]"
               >
-                {busyId === row.id ? 'جاري الموافقة...' : 'موافقة وتفعيل'}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+                <div>
+                  <p className="font-semibold">{row.name}</p>
+                  <p className="text-sm text-[var(--color-text-muted)]">
+                    @{row.slug} — {row.adminEmail}
+                  </p>
+                </div>
+                <Button
+                  type="button"
+                  disabled={busyId === row.id}
+                  onClick={() => void approve(row.id)}
+                >
+                  {busyId === row.id ? 'جاري الموافقة...' : 'موافقة وتفعيل'}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

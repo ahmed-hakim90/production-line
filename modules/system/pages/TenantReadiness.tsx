@@ -1,9 +1,7 @@
 import React from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { KPICard } from '@/src/components/erp/KPICard';
-import { PrimaryButton } from '@/src/components/erp/ActionButton';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Skeleton } from '@/components/ui/skeleton';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { tenantReadinessService } from '../services/tenantReadinessService';
@@ -31,17 +29,21 @@ export const TenantReadiness: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="جاهزية المستأجر"
-        subtitle="فحص إعداد التشغيل الأساسي قبل الاعتماد على التقارير والمخزون"
-        actions={
-          <PrimaryButton onClick={() => void load()} disabled={loading} iconName="refresh" tone="neutral">
-            إعادة الفحص
-          </PrimaryButton>
-        }
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="النظام"
+      rangeLabel="فحص إعداد التشغيل الأساسي قبل الاعتماد على التقارير والمخزون"
+      hero={result ? [
+        { key: 'percent', label: 'نسبة الجاهزية', value: `${result.percent}%`, accent: true },
+        { key: 'score', label: 'فحوصات ناجحة', value: `${result.score}/${result.total}` },
+        {
+          key: 'status',
+          label: 'الحالة',
+          value: result.percent >= 80 ? 'جاهز للتشغيل' : 'يتطلب إعداداً',
+        },
+      ] : undefined}
+      onRefresh={() => void load()}
+      refreshing={loading}
+    >
       {loading && !result ? (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -49,57 +51,41 @@ export const TenantReadiness: React.FC = () => {
           ))}
         </div>
       ) : result ? (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <KPICard label="نسبة الجاهزية" value={`${result.percent}%`} iconType="metric" color="indigo" />
-            <KPICard label="فحوصات ناجحة" value={`${result.score}/${result.total}`} iconType="metric" color="green" />
-            <KPICard
-              label="الحالة"
-              value={result.percent >= 80 ? 'جاهز للتشغيل' : 'يتطلب إعداداً'}
-              iconType="metric"
-              color={result.percent >= 80 ? 'green' : 'amber'}
-            />
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>قائمة الفحوصات</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {result.checks.map((check) => (
-                <div
-                  key={check.id}
-                  className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ${
-                    check.ok
-                      ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-900/10'
-                      : 'border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-900/10'
-                  }`}
-                >
-                  <div className="flex items-start gap-3">
-                    <span
-                      className={`material-icons-round text-xl ${check.ok ? 'text-emerald-600' : 'text-amber-600'}`}
-                    >
-                      {check.ok ? 'check_circle' : 'error_outline'}
-                    </span>
-                    <div>
-                      <p className="font-bold text-sm text-[var(--color-text)]">{check.label}</p>
-                      <p className="text-xs text-[var(--color-text-muted)]">{check.detail}</p>
-                    </div>
+        <OpsDashPanel title="قائمة الفحوصات" accent="quality">
+          <div className="space-y-3">
+            {result.checks.map((check) => (
+              <div
+                key={check.id}
+                className={`flex flex-wrap items-center justify-between gap-3 rounded-lg border px-4 py-3 ${
+                  check.ok
+                    ? 'border-emerald-200 bg-emerald-50/50 dark:border-emerald-900/40 dark:bg-emerald-900/10'
+                    : 'border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-900/10'
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <span
+                    className={`material-icons-round text-xl ${check.ok ? 'text-emerald-600' : 'text-amber-600'}`}
+                  >
+                    {check.ok ? 'check_circle' : 'error_outline'}
+                  </span>
+                  <div>
+                    <p className="font-bold text-sm text-[var(--color-text)]">{check.label}</p>
+                    <p className="text-xs text-[var(--color-text-muted)]">{check.detail}</p>
                   </div>
-                  {!check.ok && (
-                    <Link
-                      to={withTenantPath(tenantSlug, check.fixPath)}
-                      className="text-xs font-bold text-primary hover:underline"
-                    >
-                      إصلاح ←
-                    </Link>
-                  )}
                 </div>
-              ))}
-            </CardContent>
-          </Card>
-        </>
+                {!check.ok && (
+                  <Link
+                    to={withTenantPath(tenantSlug, check.fixPath)}
+                    className="text-xs font-bold text-primary hover:underline"
+                  >
+                    إصلاح ←
+                  </Link>
+                )}
+              </div>
+            ))}
+          </div>
+        </OpsDashPanel>
       ) : null}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

@@ -18,8 +18,9 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -478,13 +479,25 @@ export const CustomerDetail: React.FC = () => {
     });
   };
 
+  const customersListPath = withTenantPath(tenantSlug, '/customers');
+  const backAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate(customersListPath)}>
+      كل العملاء
+    </Button>
+  );
+
   if (!can('customers.view')) {
-    return <div className="p-6 text-sm text-muted-foreground">ليس لديك صلاحية عرض العملاء.</div>;
+    return (
+      <ModuleOpsPageShell eyebrow="بطاقة العميل">
+        <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض العملاء.</p>
+      </ModuleOpsPageShell>
+    );
   }
 
   if (loading) {
     return (
-      <div className="space-y-4">
+      <ModuleOpsPageShell eyebrow="بطاقة العميل" actions={backAction}>
+        <div className="space-y-4">
         <div className="space-y-2">
           <Skeleton className="h-8 w-64" />
           <Skeleton className="h-4 w-80" />
@@ -498,20 +511,16 @@ export const CustomerDetail: React.FC = () => {
           <Skeleton className="h-80 rounded-xl lg:col-span-1" />
           <Skeleton className="h-80 rounded-xl lg:col-span-2" />
         </div>
-      </div>
+        </div>
+      </ModuleOpsPageShell>
     );
   }
 
   if (error || !customer) {
     return (
-      <div className="space-y-4">
-        <PageHeader
-          title="بطاقة العميل"
-          subtitle="تعذر عرض البيانات"
-          backAction={{ to: withTenantPath(tenantSlug, '/customers'), label: 'كل العملاء' }}
-        />
-        <Card className={cn(SURFACE_CARD)}>
-          <CardContent className="flex flex-col items-start gap-3 p-6">
+      <ModuleOpsPageShell eyebrow="بطاقة العميل" actions={backAction}>
+        <OpsDashPanel title="تعذر عرض البيانات" accent="customers">
+          <div className="flex flex-col items-start gap-3">
             <p className="text-sm text-rose-700">{error || 'العميل غير موجود.'}</p>
             <div className="flex flex-wrap gap-2">
               <Button type="button" variant="outline" onClick={() => void load()}>
@@ -521,9 +530,9 @@ export const CustomerDetail: React.FC = () => {
                 <Link to={withTenantPath(tenantSlug, '/customers')}>العودة للقائمة</Link>
               </Button>
             </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -546,34 +555,38 @@ export const CustomerDetail: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-4">
+    <ModuleOpsPageShell
+      eyebrow="بطاقة العميل"
+      rangeLabel={`${customer.code} · ${CUSTOMER_TYPE_LABELS[customer.type]}`}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {backAction}
+          {canCreateRepair ? (
+            <Button type="button" variant="outline" onClick={openNewRepairJob}>
+              طلب صيانة
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => navigate(withTenantPath(tenantSlug, '/customers/kpi'))}
+            >
+              مؤشرات العملاء
+            </Button>
+          )}
+          {canEdit ? (
+            <Button type="button" onClick={openEdit}>
+              تعديل
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
       <PageHeader
         title={customer.name}
-        subtitle={`${customer.code} · ${CUSTOMER_TYPE_LABELS[customer.type]} · بطاقة ماستر وسجل حركات عبر الموديولات`}
+        subtitle="بطاقة ماستر وسجل حركات عبر الموديولات"
         icon="user"
-        backAction={{ to: withTenantPath(tenantSlug, '/customers'), label: 'كل العملاء' }}
-        primaryAction={
-          canEdit
-            ? {
-                label: 'تعديل',
-                icon: 'edit',
-                onClick: openEdit,
-              }
-            : undefined
-        }
-        secondaryAction={
-          canCreateRepair
-            ? {
-                label: 'طلب صيانة',
-                icon: 'add',
-                onClick: openNewRepairJob,
-              }
-            : {
-                label: 'مؤشرات العملاء',
-                icon: 'bar_chart',
-                onClick: () => navigate(withTenantPath(tenantSlug, '/customers/kpi')),
-              }
-        }
+        backAction={false}
         moreActions={[
           {
             label: 'مؤشرات العملاء',
@@ -599,11 +612,6 @@ export const CustomerDetail: React.FC = () => {
               else setPortalPinConfirmOpen(true);
             },
             hidden: !canManagePortalPin || portalPinSaving,
-          },
-          {
-            label: 'كل العملاء',
-            icon: 'search',
-            onClick: () => navigate(withTenantPath(tenantSlug, '/customers')),
           },
         ]}
         extra={
@@ -707,14 +715,10 @@ export const CustomerDetail: React.FC = () => {
         />
       </div>
 
-      <Card className={cn(SURFACE_CARD)}>
-        <CardHeader className="pb-3">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <CardTitle className="text-base">التحليل المالي للعميل</CardTitle>
-              <CardDescription>الصيانة والضمان وفواتير البضاعة من بداية التعامل أو خلال الفترة المحددة.</CardDescription>
-            </div>
-            <div className="flex flex-wrap items-end gap-2">
+      <OpsDashPanel title="التحليل المالي للعميل" accent="customers">
+        <div className="space-y-4">
+          <p className="text-sm text-muted-foreground">الصيانة والضمان وفواتير البضاعة من بداية التعامل أو خلال الفترة المحددة.</p>
+          <div className="flex flex-wrap items-end gap-2">
               <div>
                 <Label className="text-xs">من</Label>
                 <Input type="date" className="mt-1 h-9 w-[150px]" value={financialFrom} onChange={(e) => setFinancialFrom(e.target.value)} />
@@ -730,9 +734,6 @@ export const CustomerDetail: React.FC = () => {
               }}>السنة الحالية</Button>
               <Button type="button" size="sm" variant="ghost" onClick={() => { setFinancialFrom(''); setFinancialTo(''); }}>كل التاريخ</Button>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent className="space-y-4">
           {financialError ? <div className="rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-700">{financialError}</div> : null}
           {financialLoading ? (
             <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-lg" />)}</div>
@@ -824,16 +825,13 @@ export const CustomerDetail: React.FC = () => {
               ) : null}
             </>
           ) : null}
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className={cn('lg:col-span-1', SURFACE_CARD)}>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-base">بيانات الماستر</CardTitle>
-            <CardDescription>مصدر الحقيقة لبيانات العميل</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-1 divide-y divide-border/70">
+        <OpsDashPanel title="بيانات الماستر" accent="customers" className="lg:col-span-1">
+          <p className="mb-3 text-sm text-muted-foreground">مصدر الحقيقة لبيانات العميل</p>
+          <div className="space-y-1 divide-y divide-border/70">
             <DataRow icon={Building2} label="الكود" mono>
               {customer.code}
             </DataRow>
@@ -887,23 +885,23 @@ export const CustomerDetail: React.FC = () => {
               {customer.updatedAt ? new Date(customer.updatedAt).toLocaleString('ar-EG') : '—'}
               {customer.updatedByName ? ` · ${customer.updatedByName}` : ''}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
 
-        <Card className={cn('lg:col-span-2', SURFACE_CARD)}>
-          <CardHeader className="pb-3">
-            <div className="flex flex-wrap items-start justify-between gap-3">
-              <div>
-                <CardTitle className="text-base">سجل الحركات</CardTitle>
-                <CardDescription>
-                  أحداث الصيانة والعملاء المرتبطة بهذا الملف — الأحدث أولاً.
-                </CardDescription>
-              </div>
-              <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium tabular-nums text-slate-700 dark:bg-muted dark:text-muted-foreground">
-                {activityCounts.all} حركة
-              </span>
-            </div>
-            <div className="flex flex-wrap gap-1.5 pt-2" role="tablist" aria-label="فلتر الحركات">
+        <OpsDashPanel
+          title="سجل الحركات"
+          accent="customers"
+          className="lg:col-span-2"
+          action={(
+            <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium tabular-nums text-slate-700 dark:bg-muted dark:text-muted-foreground">
+              {activityCounts.all} حركة
+            </span>
+          )}
+        >
+          <p className="mb-3 text-sm text-muted-foreground">
+            أحداث الصيانة والعملاء المرتبطة بهذا الملف — الأحدث أولاً.
+          </p>
+          <div className="flex flex-wrap gap-1.5 pb-2" role="tablist" aria-label="فلتر الحركات">
               {filterChips.map((chip) => {
                 const active = activityFilter === chip.key;
                 return (
@@ -926,8 +924,6 @@ export const CustomerDetail: React.FC = () => {
                 );
               })}
             </div>
-          </CardHeader>
-          <CardContent>
             {filteredActivities.length === 0 ? (
               <div className="flex flex-col items-center justify-center gap-2 rounded-xl border border-dashed bg-slate-50/80 px-4 py-12 text-center dark:bg-muted/30">
                 <Activity className="size-8 text-muted-foreground/70" aria-hidden />
@@ -1010,8 +1006,7 @@ export const CustomerDetail: React.FC = () => {
                 })}
               </ol>
             )}
-          </CardContent>
-        </Card>
+        </OpsDashPanel>
       </div>
 
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
@@ -1143,6 +1138,6 @@ export const CustomerDetail: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Button, Badge, SearchableSelect } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { useAppStore } from '@/store/useAppStore';
 import { getDocs } from 'firebase/firestore';
@@ -530,61 +532,50 @@ export const EmployeeFinancials: React.FC = () => {
     : filteredDeductions.length;
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)] flex items-center gap-2">
-            <span className="material-icons-round text-primary">account_balance_wallet</span>
-            بدلات وخصومات الموظفين
-          </h2>
-          <p className="page-subtitle">
-            إدارة البدلات والخصومات والسلف والإجازات والجزاءات — شهر {filterMonth}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          {dataCount > 0 && canExportFromPage && (
-            <Button variant={pageControl.exportVariant} onClick={handleExport}>
-              <span className="material-icons-round text-sm">download</span>
-              تصدير Excel
+    <ModuleOpsPageShell
+      eyebrow="بدلات وخصومات الموظفين"
+      rangeLabel={`إدارة البدلات والخصومات والسلف والإجازات والجزاءات — شهر ${filterMonth}`}
+      actions={dataCount > 0 && canExportFromPage ? (
+        <Button variant={pageControl.exportVariant} onClick={handleExport}>
+          <span className="material-icons-round text-sm">download</span>
+          تصدير Excel
+        </Button>
+      ) : undefined}
+    >
+      <OpsDashPanel title="التبويبات والفلاتر" accent="hr">
+        <div className="flex flex-col gap-3">
+          <div className="flex gap-1 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] overflow-x-auto">
+            {TAB_CONFIG.map((tab) => (
+              <button
+                key={tab.key}
+                onClick={() => { setActiveTab(tab.key); setShowBulkForm(false); }}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all whitespace-nowrap ${
+                  activeTab === tab.key
+                    ? 'bg-[var(--color-card)] text-primary'
+                    : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
+                }`}
+              >
+                <span className="material-icons-round text-sm">{tab.icon}</span>
+                {tab.label}
+              </button>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            <input type="month" className={inputCls + ' !w-auto'} value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} />
+            <SearchableSelect
+              options={[{ value: '', label: 'كل الموظفين' }, ...empOptions]}
+              value={filterEmpId}
+              onChange={setFilterEmpId}
+              placeholder="فلتر بالموظف..."
+              className="sm:w-56"
+            />
+            <Button variant="primary" onClick={openBulkForm}>
+              <span className="material-icons-round text-sm">group_add</span>
+              إضافة جماعية
             </Button>
-          )}
+          </div>
         </div>
-      </div>
-
-      {/* Tabs + Filters */}
-      <div className="erp-page-head">
-        <div className="flex gap-1 bg-[#f0f2f5] p-1 rounded-[var(--border-radius-lg)] overflow-x-auto">
-          {TAB_CONFIG.map((tab) => (
-            <button
-              key={tab.key}
-              onClick={() => { setActiveTab(tab.key); setShowBulkForm(false); }}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-[var(--border-radius-base)] text-sm font-bold transition-all whitespace-nowrap ${
-                activeTab === tab.key
-                  ? 'bg-[var(--color-card)] text-primary'
-                  : 'text-slate-500 hover:text-[var(--color-text)] dark:hover:text-[var(--color-text-muted)]'
-              }`}
-            >
-              <span className="material-icons-round text-sm">{tab.icon}</span>
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        <div className="flex gap-2 items-center">
-          <input type="month" className={inputCls + ' !w-auto'} value={filterMonth} onChange={(e) => setFilterMonth(e.target.value)} />
-          <SearchableSelect
-            options={[{ value: '', label: 'كل الموظفين' }, ...empOptions]}
-            value={filterEmpId}
-            onChange={setFilterEmpId}
-            placeholder="فلتر بالموظف..."
-            className="sm:w-56"
-          />
-          <Button variant="primary" onClick={openBulkForm}>
-            <span className="material-icons-round text-sm">group_add</span>
-            إضافة جماعية
-          </Button>
-        </div>
-      </div>
+      </OpsDashPanel>
 
       {/* ════════════════ Bulk Form ════════════════ */}
       {showBulkForm && (
@@ -818,7 +809,7 @@ export const EmployeeFinancials: React.FC = () => {
 
       {/* Allowances Table */}
       {activeTab === 'allowances' && (
-        <Card>
+        <OpsDashPanel title="البدلات" accent="hr">
           {filteredAllowances.length === 0 ? (
             <div className="text-center py-12">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">card_giftcard</span>
@@ -857,12 +848,12 @@ export const EmployeeFinancials: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Deductions Table */}
       {activeTab === 'deductions' && (
-        <Card>
+        <OpsDashPanel title="الخصومات" accent="hr">
           {filteredDeductions.length === 0 ? (
             <div className="text-center py-12">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">money_off</span>
@@ -903,12 +894,12 @@ export const EmployeeFinancials: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Loans Table */}
       {activeTab === 'loans' && (
-        <Card>
+        <OpsDashPanel title="السُلف" accent="hr">
           {filteredLoans.length === 0 ? (
             <div className="text-center py-12">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">payments</span>
@@ -952,12 +943,12 @@ export const EmployeeFinancials: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Leaves Table */}
       {activeTab === 'leaves' && (
-        <Card>
+        <OpsDashPanel title="الإجازات" accent="hr">
           {filteredLeaves.length === 0 ? (
             <div className="text-center py-12">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">beach_access</span>
@@ -997,12 +988,12 @@ export const EmployeeFinancials: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Penalties Table */}
       {activeTab === 'penalties' && (
-        <Card>
+        <OpsDashPanel title="الجزاءات" accent="hr">
           {filteredDeductions.length === 0 ? (
             <div className="text-center py-12">
               <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">gavel</span>
@@ -1042,9 +1033,9 @@ export const EmployeeFinancials: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

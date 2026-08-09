@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Card, Badge, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton, TableSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -1357,20 +1359,24 @@ export const HRSettings: React.FC = () => {
 
   if (!configs || !draft) {
     return (
-      <div className="text-center py-16">
-        <span className="material-icons-round text-4xl text-[var(--color-text-muted)] mb-4">error_outline</span>
-        <p className="text-[var(--color-text-muted)]">فشل في تحميل الإعدادات</p>
-        <Button
-          variant="outline"
-          onClick={() => {
-            invalidatePageDataCache(HR_SETTINGS_CACHE_KEY);
-            void loadConfigs({ force: true });
-          }}
-          className="mt-4"
-        >
-          إعادة المحاولة
-        </Button>
-      </div>
+      <ModuleOpsPageShell eyebrow="إعدادات الموارد البشرية" rangeLabel="مركز التحكم المتقدم — إدارة جميع إعدادات الموارد البشرية">
+        <OpsDashPanel title="فشل في تحميل الإعدادات" accent="hr">
+          <div className="text-center py-8">
+            <span className="material-icons-round text-4xl text-[var(--color-text-muted)] mb-4">error_outline</span>
+            <p className="text-[var(--color-text-muted)]">فشل في تحميل الإعدادات</p>
+            <Button
+              variant="outline"
+              onClick={() => {
+                invalidatePageDataCache(HR_SETTINGS_CACHE_KEY);
+                void loadConfigs({ force: true });
+              }}
+              className="mt-4"
+            >
+              إعادة المحاولة
+            </Button>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -1379,27 +1385,17 @@ export const HRSettings: React.FC = () => {
   const FormComponent = TAB_FORMS[activeTab];
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-            <span className="material-icons-round text-primary text-2xl">tune</span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">إعدادات الموارد البشرية</h1>
-            <p className="text-sm text-slate-400">مركز التحكم المتقدم — إدارة جميع إعدادات الموارد البشرية</p>
-          </div>
-        </div>
-        {readOnly && (
-          <Badge variant="warning">
-            <span className="material-icons-round text-xs ml-1">lock</span>
-            للقراءة فقط
-          </Badge>
-        )}
-      </div>
-
-      {/* Tab Navigation */}
+    <ModuleOpsPageShell
+      eyebrow="إعدادات الموارد البشرية"
+      rangeLabel="مركز التحكم المتقدم — إدارة جميع إعدادات الموارد البشرية"
+      actions={readOnly ? (
+        <Badge variant="warning">
+          <span className="material-icons-round text-xs ml-1">lock</span>
+          للقراءة فقط
+        </Badge>
+      ) : undefined}
+    >
+      <OpsDashPanel title={activeTabMeta.label} accent="hr">
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]">
         <div className="flex overflow-x-auto border-b border-[var(--color-border)]">
           {HR_CONFIG_TABS.map((tab) => (
@@ -1611,6 +1607,7 @@ export const HRSettings: React.FC = () => {
           )}
         </div>
       </div>
+      </OpsDashPanel>
 
       {/* Confirmation Dialogs */}
       <ConfirmDialog
@@ -1642,7 +1639,7 @@ export const HRSettings: React.FC = () => {
           {toast.message}
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

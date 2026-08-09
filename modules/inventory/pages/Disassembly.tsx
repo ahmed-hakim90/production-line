@@ -1,7 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { TableIconAction } from '@/src/components/erp';
-import { Card, Button } from '../components/UI';
+import { Button } from '../components/UI';
 import { disassemblyService } from '../services/disassemblyService';
 import { warehouseService } from '../services/warehouseService';
 import { warehouseLocationService } from '../services/warehouseLocationService';
@@ -229,16 +230,17 @@ export const Disassembly: React.FC = () => {
   }
 
   return (
-    <div className="erp-ds-clean space-y-5">
-      <PageHeader title="تفكيك عكسي" subtitle="طلب تفكيك مع اعتماد قبل خصم المنتج وإرجاع مكوناته حسب BOM." icon="inventory_2" />
-
+    <ModuleOpsPageShell
+      eyebrow="المخزون"
+      rangeLabel="طلب تفكيك مع اعتماد قبل خصم المنتج وإرجاع مكوناته حسب BOM"
+    >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
         settingsPath={settingsPath}
       />
 
-      <Card title="بيانات التفكيك">
+      <OpsDashPanel title="بيانات التفكيك" accent="inventory">
         <div className="grid grid-cols-1 md:grid-cols-6 gap-3 p-4">
           <select className="rounded-lg border px-3 py-2 text-sm md:col-span-2" value={productId} onChange={(e) => setProductId(e.target.value)}>
             <option value="">اختر المنتج</option>
@@ -258,10 +260,10 @@ export const Disassembly: React.FC = () => {
           <Button onClick={() => void preview()}>تجهيز المكونات</Button>
         </div>
         {message && <p className="px-4 pb-4 text-sm font-bold text-primary">{message}</p>}
-      </Card>
+      </OpsDashPanel>
 
       {lines.length > 0 && (
-        <Card className="!p-0 overflow-hidden" title="مكونات التفكيك">
+        <OpsDashPanel title="مكونات التفكيك" accent="inventory" bodyClassName="p-0 overflow-hidden">
           <table className="w-full text-sm">
             <thead>
               <tr className="bg-slate-50 border-b">
@@ -305,10 +307,10 @@ export const Disassembly: React.FC = () => {
           <div className="p-4">
             <Button variant="primary" onClick={() => void createRequest()}>حفظ طلب التفكيك</Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      <Card className="!p-0 overflow-hidden" title="طلبات التفكيك">
+      <OpsDashPanel title="طلبات التفكيك" accent="inventory" bodyClassName="p-0 overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
@@ -365,7 +367,7 @@ export const Disassembly: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

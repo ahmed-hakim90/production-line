@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Badge, Button } from '../components/UI';
+import { Badge, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { productionLineWorkerAssignmentService } from '../services/productionLineWorkerAssignmentService';
@@ -748,17 +750,21 @@ export const LineWorkerAssignment: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean space-y-6">
-      {/* Header */}
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">ربط العمالة الدائم بالخط</h2>
-          <p className="page-subtitle">إدارة الربط الدائم بين عمال الإنتاج وخطوط الإنتاج. التاريخ هنا لعرض حضور/حالة اليوم فقط ولا يُستخدم كربط يومي.</p>
-        </div>
-      </div>
-
-      {/* Controls */}
-      <Card>
+    <ModuleOpsPageShell
+      eyebrow="الإنتاج"
+      rangeLabel="إدارة الربط الدائم بين عمال الإنتاج وخطوط الإنتاج. التاريخ هنا لعرض حضور/حالة اليوم فقط ولا يُستخدم كربط يومي."
+      actions={(
+        <Button
+          onClick={() => void handleClearPermanentAssignments()}
+          disabled={loading || clearingPermanentAssignments || cancellablePermanentAssignments.length === 0}
+        >
+          {clearingPermanentAssignments
+            ? 'جاري الإلغاء...'
+            : (selectedLineId ? 'إلغاء عمال الخط' : 'إلغاء عمال كل الخطوط')}
+        </Button>
+      )}
+    >
+      <OpsDashPanel title="الفلاتر والتحكم" accent="production">
         <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-stretch sm:items-end">
           <div className="w-full sm:w-44">
             <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">التاريخ</label>
@@ -783,28 +789,15 @@ export const LineWorkerAssignment: React.FC = () => {
               </SelectContent>
             </Select>
           </div>
-          <Button
-            onClick={() => void handleClearPermanentAssignments()}
-            disabled={loading || clearingPermanentAssignments || cancellablePermanentAssignments.length === 0}
-            className="h-[42px] shrink-0"
-          >
-            {clearingPermanentAssignments
-              ? 'جاري الإلغاء...'
-              : (selectedLineId ? 'إلغاء عمال الخط' : 'إلغاء عمال كل الخطوط')}
-          </Button>
         </div>
         <p className="mt-3 text-xs font-bold text-amber-700 dark:text-amber-300">
           تم إيقاف النسخ اليومي. أي إضافة من هذه الصفحة تنشئ ربطاً دائماً في سجل عمال الإنتاج، وليس سجل حضور يومي.
         </p>
-      </Card>
+      </OpsDashPanel>
 
       {selectedLineId && (
-        <Card className="relative z-20 !overflow-visible">
+        <OpsDashPanel title="إضافة عامل للربط الدائم" accent="production" className="relative z-20 !overflow-visible">
           <div className="space-y-3">
-            <div className="flex items-center gap-2 mb-1">
-              <span className="material-icons-round text-primary text-xl">person_add</span>
-              <h3 className="font-bold text-base">إضافة عامل للربط الدائم</h3>
-            </div>
             <p className="text-xs text-[var(--color-text-muted)] font-medium">
               يتم إنشاء الربط الدائم من اليوم. لا يتم إنشاء سجل حضور يومي إلا من مسارات الحضور/التقرير.
             </p>
@@ -877,21 +870,15 @@ export const LineWorkerAssignment: React.FC = () => {
               </Button>
             </div>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      {/* Current Line Workers */}
       {selectedLineId && (
-        <Card>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-round text-primary">groups</span>
-              <h3 className="font-bold text-base">
-                عمالة {getLineName(selectedLineId)} المرتبطة دائماً
-              </h3>
-              <Badge variant="info">{currentLinePermanentAssignments.length} عامل</Badge>
-            </div>
-          </div>
+        <OpsDashPanel
+          title={`عمالة ${getLineName(selectedLineId)} المرتبطة دائماً`}
+          accent="production"
+          action={<Badge variant="info">{currentLinePermanentAssignments.length} عامل</Badge>}
+        >
           {currentLineLegacyAssignments.length > 0 && (
             <div className="mb-4 rounded-[var(--border-radius-lg)] border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-bold text-amber-700">
               يوجد {currentLineLegacyAssignments.length} سجل يومي قديم لهذا الخط. هذه السجلات تظهر في الملخص فقط ولا تعتبر ربطاً دائماً للإلغاء.
@@ -971,17 +958,19 @@ export const LineWorkerAssignment: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
-      {/* Daily Report - All Lines */}
-      <Card>
-        <div className="flex items-center gap-2 mb-4">
-          <span className="material-icons-round text-primary">summarize</span>
-          <h3 className="font-bold text-base">ملخص الربط وحالة اليوم</h3>
-          <Badge variant="info">{permanentAssignmentsCount} ربط دائم</Badge>
-          {legacyAssignmentsCount > 0 && <Badge variant="warning">{legacyAssignmentsCount} سجل يومي قديم</Badge>}
-        </div>
+      <OpsDashPanel
+        title="ملخص الربط وحالة اليوم"
+        accent="production"
+        action={(
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge variant="info">{permanentAssignmentsCount} ربط دائم</Badge>
+            {legacyAssignmentsCount > 0 && <Badge variant="warning">{legacyAssignmentsCount} سجل يومي قديم</Badge>}
+          </div>
+        )}
+      >
 
         {lineGroups.length === 0 ? (
           <div className="text-center py-8">
@@ -1059,7 +1048,7 @@ export const LineWorkerAssignment: React.FC = () => {
             </div>
           </>
         )}
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

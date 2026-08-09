@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Card, Button } from '../components/UI';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
@@ -363,37 +364,30 @@ export const ItemCard: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="p-6">
-        <PageHeader title="كارت الصنف" />
+      <ModuleOpsPageShell eyebrow="كارت الصنف">
         <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية عرض هذه الصفحة.</p>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <PageHeader
-        title="كارت الصنف"
-        subtitle="اختر صنفاً لعرض أرصدته ومكوناته وحركاته، مع إمكانية الطباعة مثل كروت المنتجات."
-        actions={(
-          <div className="flex flex-wrap gap-2">
-            {selected?.itemType === 'finished_good' ? (
-              <Button type="button" variant="secondary" onClick={() => void openCountCard()}>
-                كارت جرد المكونات
-              </Button>
-            ) : null}
-            <Button
-              type="button"
-              disabled={!printModel}
-              onClick={() => handlePrint()}
-            >
-              طباعة الكارت
+    <ModuleOpsPageShell
+      eyebrow="كارت الصنف"
+      rangeLabel="اختر صنفاً لعرض أرصدته ومكوناته وحركاته، مع إمكانية الطباعة مثل كروت المنتجات."
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          {selected?.itemType === 'finished_good' ? (
+            <Button type="button" variant="secondary" onClick={() => void openCountCard()}>
+              كارت جرد المكونات
             </Button>
-          </div>
-        )}
-      />
-
-      <Card title="اختيار الصنف">
+          ) : null}
+          <Button type="button" disabled={!printModel} onClick={() => handlePrint()}>
+            طباعة الكارت
+          </Button>
+        </div>
+      )}
+    >
+      <OpsDashPanel title="اختيار الصنف" accent="inventory">
         <div className="grid gap-3 md:grid-cols-4">
           <label className="text-sm font-semibold space-y-1">
             <span>نوع الصنف</span>
@@ -464,30 +458,30 @@ export const ItemCard: React.FC = () => {
             </ul>
           )}
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {!itemId ? (
-        <Card>
+        <OpsDashPanel title="اختر صنفاً" accent="inventory">
           <p className="text-sm text-[var(--color-text-muted)] py-8 text-center">
             اختر صنفاً من القائمة لعرض الكارت.
           </p>
-        </Card>
+        </OpsDashPanel>
       ) : loading && !selected ? (
-        <Card>
+        <OpsDashPanel title="جاري التحميل" accent="inventory">
           <p className="text-sm text-[var(--color-text-muted)] py-8 text-center">جاري التحميل…</p>
-        </Card>
+        </OpsDashPanel>
       ) : selected ? (
         <>
-          <Card title="بيانات الصنف">
+          <OpsDashPanel title="بيانات الصنف" accent="inventory">
             <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4 text-sm">
               <p><span className="font-bold">الاسم:</span> {selected.name}</p>
               <p><span className="font-bold">الكود:</span> <span className="font-mono">{selected.code || '—'}</span></p>
               <p><span className="font-bold">النوع:</span> {itemTypeLabel(selected.itemType)}</p>
               <p><span className="font-bold">الوحدة:</span> {selected.unit || '—'}</p>
             </div>
-          </Card>
+          </OpsDashPanel>
 
-          <Card title="الأرصدة حسب المخزن">
+          <OpsDashPanel title="الأرصدة حسب المخزن" accent="inventory">
             {itemBalances.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)]">لا يوجد رصيد.</p>
             ) : (
@@ -518,9 +512,9 @@ export const ItemCard: React.FC = () => {
                 </table>
               </div>
             )}
-          </Card>
+          </OpsDashPanel>
 
-          <Card title="المكونات (BOM)">
+          <OpsDashPanel title="المكونات (BOM)" accent="inventory">
             {bomLines.length === 0 ? (
               <p className="text-sm text-[var(--color-text-muted)]">لا توجد مكونات مرتبطة.</p>
             ) : (
@@ -553,9 +547,9 @@ export const ItemCard: React.FC = () => {
                 </table>
               </div>
             )}
-          </Card>
+          </OpsDashPanel>
 
-          <Card title="الحركات">
+          <OpsDashPanel title="الحركات" accent="inventory">
             <div className="overflow-x-auto">
               <table className="erp-table w-full">
                 <thead className="erp-thead">
@@ -608,7 +602,7 @@ export const ItemCard: React.FC = () => {
                 </Button>
               </div>
             ) : null}
-          </Card>
+          </OpsDashPanel>
         </>
       ) : null}
 
@@ -625,6 +619,6 @@ export const ItemCard: React.FC = () => {
         warningText={countWarning}
         onClose={() => setCountPreviewOpen(false)}
       />
-    </div>
+    </ModuleOpsPageShell>
   );
 };

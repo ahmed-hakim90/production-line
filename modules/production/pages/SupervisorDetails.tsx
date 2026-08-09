@@ -2,11 +2,10 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
-  DetailCollapsibleSection,
-  DetailPageShell,
   DetailPageStickyHeader,
   SectionSkeleton,
   SURFACE_CARD,
@@ -855,6 +854,11 @@ export const SupervisorDetails: React.FC = () => {
   const pageBackAction = isSelfSupervisorPage
     ? { to: '/', label: 'رجوع للوحة' }
     : { to: '/supervisors', label: 'رجوع' };
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate(pageBackAction.to)}>
+      {pageBackAction.label}
+    </Button>
+  );
   const notFoundMessage = isSelfSupervisorPage
     ? 'لا توجد بيانات مشرف مرتبطة بحسابك الحالي'
     : 'المشرف غير موجود';
@@ -863,34 +867,33 @@ export const SupervisorDetails: React.FC = () => {
 
   if (loading) {
     return (
-      <DetailPageShell>
+      <ModuleOpsPageShell eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} actions={shellBackAction}>
         <DetailPageStickyHeader>
-          <PageHeader title={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} backAction={pageBackAction} loading />
-          <Card className={SURFACE_CARD}>
+          <PageHeader title={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} loading backAction={false} />
+          <OpsDashPanel title="جاري التحميل" accent="hr">
             <SectionSkeleton rows={2} height={38} />
-          </Card>
+          </OpsDashPanel>
         </DetailPageStickyHeader>
-        <Card className={SURFACE_CARD}>
+        <OpsDashPanel title="مؤشرات الأداء" accent="hr">
           <SectionSkeleton rows={6} height={68} />
-        </Card>
-      </DetailPageShell>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!employee) {
     return (
-      <DetailPageShell>
-        <PageHeader title={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} backAction={pageBackAction} />
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="space-y-4 p-6 text-center">
+      <ModuleOpsPageShell eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} actions={shellBackAction}>
+        <OpsDashPanel title={notFoundMessage} accent="hr">
+          <div className="space-y-4 text-center">
             <span className="material-icons-round block text-6xl opacity-30 text-muted-foreground">person_off</span>
             <p className="text-lg font-bold text-destructive">{notFoundMessage}</p>
             <Button type="button" variant="outline" onClick={() => navigate(pageBackAction.to)}>
               {pageBackAction.label}
             </Button>
-          </CardContent>
-        </Card>
-      </DetailPageShell>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -898,13 +901,13 @@ export const SupervisorDetails: React.FC = () => {
   const scoreBadge = performanceScore >= 85 ? { variant: 'success' as const, label: 'ممتاز' } : performanceScore >= 70 ? { variant: 'warning' as const, label: 'جيد' } : { variant: 'danger' as const, label: 'ضعيف' };
 
   return (
-    <DetailPageShell>
+    <ModuleOpsPageShell eyebrow={isSelfSupervisorPage ? 'عمالتي وتقييماتهم' : 'تفاصيل المشرف'} actions={shellBackAction}>
       <DetailPageStickyHeader>
         <PageHeader
           title={employee.name}
-          subtitle={`${supervisorPageSubtitle} آ· متوسط ${avgWorkersPerReport} عامل`}
+          subtitle={`${supervisorPageSubtitle} · متوسط ${avgWorkersPerReport} عامل`}
           icon="user"
-          backAction={pageBackAction}
+          backAction={false}
           secondaryAction={!isSelfSupervisorPage ? { label: 'الملف الشخصي', icon: 'user', onClick: () => navigate(`/hr/employees/${employee.id || id}`) } : undefined}
           moreActions={can('print') ? [{ label: 'طباعة', icon: 'print', onClick: () => { handlePrint(); }, group: 'تصدير' }] : undefined}
           extra={(
@@ -921,8 +924,8 @@ export const SupervisorDetails: React.FC = () => {
             </div>
           )}
         />
-        <Card className={SURFACE_CARD}>
-          <CardContent className="flex flex-wrap items-center justify-end gap-3 p-4">
+        <OpsDashPanel title="الفترة" accent="hr">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
               {PERIOD_OPTIONS.map((opt) => (
                 <Button
@@ -937,11 +940,11 @@ export const SupervisorDetails: React.FC = () => {
                 </Button>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </DetailPageStickyHeader>
 
-      <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
+      <OpsDashPanel title="مؤشرات الأداء" accent="hr">
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         {/* <KPIBox label="إنتاج اليوم" value={formatNumber(todayProduced)} icon="today" colorClass="bg-emerald-50 text-emerald-600" /> */}
         <KPIBox label="إنتاج الأسبوع" value={formatNumber(weekProduced)} icon="date_range" colorClass="bg-blue-50 text-blue-600 dark:bg-blue-900/20" />
@@ -1023,9 +1026,9 @@ export const SupervisorDetails: React.FC = () => {
           trendUp={executionSummary.weightedDeviation !== null && executionSummary.weightedDeviation >= 0}
         />
       </div>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="خطط إنتاج المشرف" defaultOpen>
+      <OpsDashPanel title="خطط إنتاج المشرف" accent="hr">
       <ErpCard title="خطط إنتاج المشرف">
         {visibleSupervisorPlanRows.length === 0 ? (
           <div className="text-center py-8 text-[var(--color-text-muted)]">
@@ -1153,9 +1156,9 @@ export const SupervisorDetails: React.FC = () => {
           </div>
         )}
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="تقييم الفريق والمكافأة" defaultOpen>
+      <OpsDashPanel title="تقييم الفريق والمكافأة" accent="hr">
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
         <KPIBox
           label="عمالة مرتبطة"
@@ -1321,9 +1324,9 @@ export const SupervisorDetails: React.FC = () => {
           </div>
         )}
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="التقارير والتحليل" defaultOpen>
+      <OpsDashPanel title="التقارير والتحليل" accent="hr">
       {/* â”€â”€ Detail Tabs â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="flex flex-wrap gap-1">
         {DETAIL_TABS.map((tab) => (
@@ -1648,9 +1651,9 @@ export const SupervisorDetails: React.FC = () => {
         </ErpCard>
       )}
 
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="التنبيهات" defaultOpen>
+      <OpsDashPanel title="التنبيهات" accent="hr">
       <ErpCard>
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-amber-500">notifications_active</span>
@@ -1674,7 +1677,7 @@ export const SupervisorDetails: React.FC = () => {
           ))}
         </div>
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
       {/* Hidden print template */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
@@ -1687,7 +1690,7 @@ export const SupervisorDetails: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
-    </DetailPageShell>
+    </ModuleOpsPageShell>
   );
 };
 

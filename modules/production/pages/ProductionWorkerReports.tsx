@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button, LoadingSkeleton } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button, LoadingSkeleton } from '../components/UI';
 import { ProductionWorkerReportPrint } from '../components/ProductionWorkerReportPrint';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -517,42 +518,31 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
     ?? (kind === 'daily' ? DAILY_EMPTY_MESSAGE : 'لا توجد بيانات للفترة المحددة.');
 
   if (!canView) {
-    return <Card><p className="p-4 text-sm">غير مصرح بعرض تقارير عمال الإنتاج</p></Card>;
+    return (
+      <OpsDashPanel accent="production">
+        <p className="p-4 text-sm">غير مصرح بعرض تقارير عمال الإنتاج</p>
+      </OpsDashPanel>
+    );
   }
 
-  return (
-    <div className="space-y-4">
-      {embedded ? (
-        <Card>
-          <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-black text-[var(--color-text)]">{title}</h2>
-              <p className="mt-1 text-sm text-[var(--color-text-muted)]">تقارير الأداء والمكافآت من نفس مساحة العمال.</p>
-            </div>
-            <div className="flex flex-wrap gap-2">
-              <Button variant="outline" onClick={exportExcel}>تصدير Excel</Button>
-              <Button
-                onClick={() => void exportPdf()}
-                disabled={exportingPdf || loading || filteredRows.length === 0}
-              >
-                {exportingPdf ? 'جاري التصدير...' : 'تصدير PDF'}
-              </Button>
-            </div>
-          </div>
-        </Card>
-      ) : (
-        <PageHeader
-          title={title}
-          subtitle="تقارير الأداء والمكافآت"
-          secondaryAction={{ label: 'تصدير Excel', onClick: exportExcel }}
-          primaryAction={{
-            label: exportingPdf ? 'جاري التصدير...' : 'تصدير PDF',
-            onClick: () => void exportPdf(),
-            disabled: exportingPdf || loading || filteredRows.length === 0,
-          }}
-        />
-      )}
-      <Card>
+  const reportPanel = (
+    <OpsDashPanel
+      title={embedded ? title : undefined}
+      accent="production"
+      action={embedded ? (
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={exportExcel}>تصدير Excel</Button>
+          <Button
+            size="sm"
+            onClick={() => void exportPdf()}
+            disabled={exportingPdf || loading || filteredRows.length === 0}
+          >
+            {exportingPdf ? 'جاري التصدير...' : 'تصدير PDF'}
+          </Button>
+        </div>
+      ) : undefined}
+      bodyClassName="p-0"
+    >
         <div className="flex flex-wrap gap-3 p-4 border-b border-[var(--color-border)]">
           <select className="border rounded-lg p-2" value={kind} onChange={(e) => setKind(e.target.value as ReportKind)}>
             <option value="daily">إنجاز يومي</option>
@@ -623,7 +613,48 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
             )}
           </div>
         )}
-      </Card>
+    </OpsDashPanel>
+  );
+
+  if (embedded) {
+    return (
+      <div className="space-y-4">
+        {reportPanel}
+        <ProductionWorkerReportPrint
+          ref={printRef}
+          title={title}
+          subtitle={printSubtitle}
+          columns={printColumns}
+          rows={filteredRows}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <ModuleOpsPageShell
+      eyebrow="عمال الإنتاج"
+      rangeLabel={title}
+      hero={[
+        { key: 'rows', label: 'الصفوف المعروضة', value: formatNumber(filteredRows.length), accent: true },
+        { key: 'present', label: 'أيام حضور', value: formatNumber(periodPresenceSummary.present) },
+        { key: 'absent', label: 'أيام غياب', value: formatNumber(periodPresenceSummary.absent) },
+        { key: 'noTarget', label: 'أيام بدون هدف', value: formatNumber(periodPresenceSummary.noTarget) },
+      ]}
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" onClick={exportExcel}>تصدير Excel</Button>
+          <Button
+            size="sm"
+            onClick={() => void exportPdf()}
+            disabled={exportingPdf || loading || filteredRows.length === 0}
+          >
+            {exportingPdf ? 'جاري التصدير...' : 'تصدير PDF'}
+          </Button>
+        </div>
+      )}
+    >
+      {reportPanel}
 
       <ProductionWorkerReportPrint
         ref={printRef}
@@ -632,6 +663,6 @@ export const ProductionWorkerReports: React.FC<ProductionWorkerReportsProps> = (
         columns={printColumns}
         rows={filteredRows}
       />
-    </div>
+    </ModuleOpsPageShell>
   );
 };

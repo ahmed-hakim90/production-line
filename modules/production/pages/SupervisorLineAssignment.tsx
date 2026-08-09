@@ -2,6 +2,8 @@ import React, { memo, useEffect, useMemo, useState } from 'react';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useSupervisorStore } from '../stores/useSupervisorStore';
 import type {
   HistoryPeriod,
@@ -346,84 +348,28 @@ export const SupervisorLineAssignment: React.FC = () => {
   };
 
   return (
-    <div className="erp-ds-clean min-h-full space-y-4 bg-gray-50 p-4 font-sans">
-      <section className="rounded-xl border border-gray-200 bg-white p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div className="flex items-start gap-2">
-            <div className="mt-0.5 flex h-8 w-8 items-center justify-center rounded-lg border border-gray-200 bg-white text-gray-600">
-              <svg viewBox="0 0 24 24" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.8">
-                <path d="M16 7a3 3 0 1 1 0 6a3 3 0 0 1 0-6Z" />
-                <path d="M8 8a2.5 2.5 0 1 1 0 5a2.5 2.5 0 0 1 0-5Z" />
-                <path d="M13 17.2c.7-1.3 2.1-2.2 3.8-2.2c2.4 0 4.2 1.6 4.2 3.5V20h-8" />
-                <path d="M2 19c0-1.9 1.8-3.5 4.2-3.5S10.5 17.1 10.5 19V20H2v-1Z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-lg font-medium text-gray-800">توزيع المشرفين على الخطوط</h1>
-              <p className="text-xs font-normal text-gray-500">
-                تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط
-              </p>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-normal text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
-              onClick={() => void saveAll()}
-              disabled={pendingCount === 0 || isSaving}
-            >
-              {pendingCount > 0 ? `حفظ الكل (${toAr(pendingCount)})` : 'حفظ الكل'}
-            </Button>
-            <Button
-              type="button"
-              className="rounded-lg px-4 py-2 text-sm font-normal text-white disabled:cursor-not-allowed disabled:opacity-50"
-              style={{ backgroundColor: 'rgb(var(--color-primary))' }}
-              onClick={() => void handleRefresh()}
-              disabled={refreshing || isSaving}
-            >
-              {refreshing ? 'جاري التحديث...' : 'تحديث'}
-            </Button>
-          </div>
-        </div>
-      </section>
-
-      <section className="grid grid-cols-1 gap-3 md:grid-cols-3">
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gray-100 text-gray-600">
-              <span className="text-sm">#</span>
-            </div>
-            <div>
-              <p className="text-xs font-normal text-gray-500">إجمالي التعيينات</p>
-              <p className="text-xl font-medium text-gray-800">{toAr(totalLines)}</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg text-[rgb(var(--color-primary))]" style={{ backgroundColor: 'rgb(var(--color-primary) / 0.12)' }}>
-              <span className="text-sm">✓</span>
-            </div>
-            <div>
-              <p className="text-xs font-normal text-gray-500">تم تعيين مشرف</p>
-              <p className="text-xl font-medium" style={{ color: 'rgb(var(--color-primary))' }}>{toAr(assignedCount)}</p>
-            </div>
-          </div>
-        </div>
-        <div className="rounded-xl border border-gray-200 bg-white p-3">
-          <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-lg text-[#BA7517]" style={{ backgroundColor: '#FAEEDA' }}>
-              <span className="text-sm">!</span>
-            </div>
-            <div>
-              <p className="text-xs font-normal text-gray-500">بدون مشرف</p>
-              <p className="text-xl font-medium" style={{ color: '#BA7517' }}>{toAr(unassignedCount)}</p>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      <section className="rounded-xl border border-gray-200 bg-white p-0">
+    <ModuleOpsPageShell
+      eyebrow="الإنتاج"
+      rangeLabel="تكليف ثابت مع تاريخ سريان وسجل تغييرات محفوظ لكل خط"
+      hero={[
+        { key: 'total', label: 'إجمالي التعيينات', value: toAr(totalLines) },
+        { key: 'assigned', label: 'تم تعيين مشرف', value: toAr(assignedCount), toneClassName: 'ops-dash-kpi-card--accent' },
+        { key: 'unassigned', label: 'بدون مشرف', value: toAr(unassignedCount) },
+      ]}
+      onRefresh={() => void handleRefresh()}
+      refreshing={refreshing}
+      actions={(
+        <Button
+          type="button"
+          className="rounded-lg border border-gray-200 px-4 py-2 text-sm font-normal text-gray-700 disabled:cursor-not-allowed disabled:opacity-50"
+          onClick={() => void saveAll()}
+          disabled={pendingCount === 0 || isSaving}
+        >
+          {pendingCount > 0 ? `حفظ الكل (${toAr(pendingCount)})` : 'حفظ الكل'}
+        </Button>
+      )}
+    >
+      <OpsDashPanel accent="production" bodyClassName="p-0 overflow-hidden">
         <SmartFilterBar
       pageId="supervisor-line-assignment"
           className="mb-0 border-0 rounded-xl"
@@ -474,7 +420,7 @@ export const SupervisorLineAssignment: React.FC = () => {
             </div>
           }
         />
-      </section>
+      </OpsDashPanel>
 
       {toast && (
         <div
@@ -489,18 +435,20 @@ export const SupervisorLineAssignment: React.FC = () => {
       )}
 
       {isLoading && lines.length === 0 ? (
-        <section className="rounded-xl border border-gray-200 bg-white p-6 text-center text-sm font-normal text-gray-500">
-          جاري تحميل البيانات...
-        </section>
+        <OpsDashPanel title="جاري تحميل البيانات" accent="production">
+          <p className="text-center text-sm font-normal text-gray-500 py-4">جاري تحميل البيانات...</p>
+        </OpsDashPanel>
       ) : (
         <>
-          <section>
-            <div className="mb-2 flex items-center gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">خطوط بدون مشرف</p>
+          <OpsDashPanel
+            title="خطوط بدون مشرف"
+            accent="production"
+            action={(
               <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: '#FAEEDA', color: '#BA7517' }}>
                 {toAr(withoutSupervisor.length)}
               </span>
-            </div>
+            )}
+          >
             <div className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
               {withoutSupervisor.map((line) => (
                 <LineCard
@@ -522,15 +470,17 @@ export const SupervisorLineAssignment: React.FC = () => {
                 </div>
               )}
             </div>
-          </section>
+          </OpsDashPanel>
 
-          <section>
-            <div className="mb-2 flex items-center gap-2">
-              <p className="text-xs font-medium uppercase tracking-wide text-gray-400">خطوط بها مشرف</p>
+          <OpsDashPanel
+            title="خطوط بها مشرف"
+            accent="production"
+            action={(
               <span className="rounded-full px-2 py-0.5 text-xs font-normal" style={{ backgroundColor: 'rgb(var(--color-primary) / 0.12)', color: 'rgb(var(--color-primary))' }}>
                 {toAr(withSupervisor.length)}
               </span>
-            </div>
+            )}
+          >
             <div className={`grid gap-3 ${viewMode === 'grid' ? 'grid-cols-1 lg:grid-cols-2' : 'grid-cols-1'}`}>
               {withSupervisor.map((line) => (
                 <LineCard
@@ -552,9 +502,9 @@ export const SupervisorLineAssignment: React.FC = () => {
                 </div>
               )}
             </div>
-          </section>
+          </OpsDashPanel>
         </>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

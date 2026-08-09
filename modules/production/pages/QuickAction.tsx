@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react'
 import { flushSync } from 'react-dom';
 import { Plus } from 'lucide-react';
 import { useAppStore } from '../../../store/useAppStore';
-import { Card, Button, SearchableSelect } from '../components/UI';
+import { Button, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import {
   exportAsImage,
@@ -67,7 +67,8 @@ import {
 } from '../utils/lineWorkerLaborRoles';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { getReportDuplicateMessage } from '../utils/reportDuplicateError';
-import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import {
   Select,
   SelectContent,
@@ -1565,24 +1566,21 @@ export const QuickAction: React.FC = () => {
 
   if (!quickActionCreateEnabled) {
     return (
-      <div className="erp-ds-clean space-y-6">
-        <PageHeader title="الإدخال السريع" subtitle="هذا المسار متوقف من إعدادات النظام" />
-        <Card>
-          <div className="p-6 text-center text-sm font-medium text-[var(--color-text-muted)]">
+      <ModuleOpsPageShell eyebrow="الإدخال السريع" rangeLabel="هذا المسار متوقف من إعدادات النظام">
+        <OpsDashPanel title="المسار غير مفعّل" accent="production">
+          <p className="text-center text-sm font-medium text-[var(--color-text-muted)]">
             استخدم مسارًا آخر مفعّلًا لإنشاء تقرير الإنتاج أو راجع مسؤول النظام.
-          </div>
-        </Card>
-      </div>
+          </p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-6">
-      <PageHeader
-        title="إدخال سريع"
-        subtitle="إدخال بيانات الإنتاج بسرعة — حفظ، تصدير ومشاركة."
-        icon="bolt"
-      />
+    <ModuleOpsPageShell
+      eyebrow="الإدخال السريع"
+      rangeLabel="إدخال بيانات الإنتاج بسرعة — حفظ، تصدير ومشاركة."
+    >
 
       {forceInjectionOnly && (
         <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
@@ -1602,7 +1600,7 @@ export const QuickAction: React.FC = () => {
       )}
 
       {!saved ? (
-        <Card title="بيانات التقرير">
+        <OpsDashPanel title="بيانات التقرير" accent="production">
           {/* Work Order Selector — list is scoped to the report supervisor */}
           {(reportBehavior.requireWorkOrderOnQuickAction || can('workOrders.view')) && (
             <div className="mb-5">
@@ -2198,7 +2196,7 @@ export const QuickAction: React.FC = () => {
               مسح
             </Button> */}
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : (
         <div className="space-y-4">
           {/* Success Banner */}
@@ -2233,7 +2231,7 @@ export const QuickAction: React.FC = () => {
 
           {/* Preview (visible on screen) */}
           {printReport && (
-            <Card className="!p-0 overflow-hidden">
+            <OpsDashPanel title="معاينة التقرير" accent="production" bodyClassName="p-0 overflow-hidden">
               <div className="px-5 py-3 bg-[#f8f9fa]/50 border-b border-[var(--color-border)] flex items-center gap-2">
                 <span className="material-icons-round text-sm text-slate-400">visibility</span>
                 <span className="text-xs font-bold text-slate-500">معاينة التقرير</span>
@@ -2298,7 +2296,7 @@ export const QuickAction: React.FC = () => {
                   </div>
                 )}
               </div>
-            </Card>
+            </OpsDashPanel>
           )}
         </div>
       )}
@@ -2561,6 +2559,6 @@ export const QuickAction: React.FC = () => {
         <SingleReportPrint ref={printRef} report={printReport} printSettings={printTemplate} />
       </div>
 
-    </div>
+    </ModuleOpsPageShell>
   );
 };

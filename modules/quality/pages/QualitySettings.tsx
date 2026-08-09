@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Badge, Button, Card } from '../components/UI';
+import { Badge, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -343,27 +345,25 @@ export const QualitySettings: React.FC = () => {
   if (loading && reasons.length === 0) return <PageContentSkeleton variant="form" />;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-[var(--color-text)]">إعدادات الجودة</h1>
-          <p className="text-sm text-[var(--color-text-muted)] mt-1">مركز ضبط سياسات الجودة وكتالوج أسباب العيوب.</p>
-        </div>
+    <ModuleOpsPageShell
+      eyebrow="إعدادات الجودة"
+      rangeLabel="مركز ضبط سياسات الجودة وكتالوج أسباب العيوب"
+      actions={(
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant={policies.closeRequiresQualityApproval ? 'warning' : 'neutral'}>
             إغلاق أمر الشغل: {policies.closeRequiresQualityApproval ? 'يتطلب اعتماد جودة' : 'مفتوح بدون اعتماد'}
           </Badge>
           <Badge variant="info">الأسباب الفعالة: {activeReasonsCount}</Badge>
         </div>
-      </div>
-
-      {message && (
-        <Card>
-          <p className="text-sm font-semibold text-[var(--color-text)]">{message}</p>
-        </Card>
       )}
+    >
+      {message ? (
+        <OpsDashPanel accent="quality">
+          <p className="text-sm font-semibold text-[var(--color-text)]">{message}</p>
+        </OpsDashPanel>
+      ) : null}
 
-      <Card>
+      <OpsDashPanel accent="quality">
         <div className="flex flex-wrap gap-2">
           {SETTINGS_TABS.map((tab) => {
             const isActive = activeTab === tab.key;
@@ -384,10 +384,10 @@ export const QualitySettings: React.FC = () => {
             );
           })}
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {activeTab === 'policies' && (
-        <Card title="سياسات الاعتماد والإغلاق">
+        <OpsDashPanel title="سياسات الاعتماد والإغلاق" accent="quality">
           <div className="space-y-6">
             <div className="flex items-start justify-between gap-4 p-4 rounded-[var(--border-radius-base)] border border-[var(--color-border)]">
               <div>
@@ -419,12 +419,12 @@ export const QualitySettings: React.FC = () => {
               </Button>
             </div>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {activeTab === 'reasonCatalog' && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Card className="xl:col-span-1" title={reasonForm.id ? 'تعديل سبب عيب' : 'إضافة سبب عيب'}>
+          <OpsDashPanel className="xl:col-span-1" title={reasonForm.id ? 'تعديل سبب عيب' : 'إضافة سبب عيب'} accent="quality">
             <form onSubmit={onSubmitReason} className="space-y-3">
               <div className="space-y-1">
                 <label className="block text-sm font-bold text-[var(--color-text)]">الكود</label>
@@ -502,9 +502,9 @@ export const QualitySettings: React.FC = () => {
                 )}
               </div>
             </form>
-          </Card>
+          </OpsDashPanel>
 
-          <Card className="xl:col-span-2" title="قائمة أسباب العيوب">
+          <OpsDashPanel className="xl:col-span-2" title="قائمة أسباب العيوب" accent="quality">
             <div className="overflow-x-auto">
               <table className="erp-table min-w-full text-sm">
                 <thead className="erp-thead">
@@ -556,13 +556,13 @@ export const QualitySettings: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
       {activeTab === 'inspectionTemplates' && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Card className="xl:col-span-1" title="إضافة/تعديل قالب فحص">
+          <OpsDashPanel className="xl:col-span-1" title="إضافة/تعديل قالب فحص" accent="quality">
             <form className="space-y-3" onSubmit={saveTemplate}>
               <input
                 value={templateForm.name}
@@ -609,8 +609,8 @@ export const QualitySettings: React.FC = () => {
               />
               <Button type="submit" disabled={!canManageSettings}>حفظ القالب</Button>
             </form>
-          </Card>
-          <Card className="xl:col-span-2" title="قوالب الفحص">
+          </OpsDashPanel>
+          <OpsDashPanel className="xl:col-span-2" title="قوالب الفحص" accent="quality">
             <div className="space-y-2">
               {inspectionTemplates.map((tpl) => (
                 <div key={tpl.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-start justify-between gap-3">
@@ -651,13 +651,13 @@ export const QualitySettings: React.FC = () => {
               ))}
               {inspectionTemplates.length === 0 && <p className="text-sm text-slate-500">لا توجد قوالب فحص.</p>}
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
       {activeTab === 'samplingPlans' && (
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
-          <Card className="xl:col-span-1" title="إضافة/تعديل خطة معاينة">
+          <OpsDashPanel className="xl:col-span-1" title="إضافة/تعديل خطة معاينة" accent="quality">
             <form className="space-y-3" onSubmit={saveSampling}>
               <select
                 value={samplingForm.productId}
@@ -699,8 +699,8 @@ export const QualitySettings: React.FC = () => {
               />
               <Button type="submit" disabled={!canManageSettings}>حفظ خطة المعاينة</Button>
             </form>
-          </Card>
-          <Card className="xl:col-span-2" title="خطط المعاينة">
+          </OpsDashPanel>
+          <OpsDashPanel className="xl:col-span-2" title="خطط المعاينة" accent="quality">
             <div className="space-y-2">
               {samplingPlans.map((plan) => (
                 <div key={plan.id} className="p-3 rounded-[var(--border-radius-base)] border border-[var(--color-border)] flex items-center justify-between gap-3">
@@ -741,12 +741,12 @@ export const QualitySettings: React.FC = () => {
               ))}
               {samplingPlans.length === 0 && <p className="text-sm text-slate-500">لا توجد خطط معاينة.</p>}
             </div>
-          </Card>
+          </OpsDashPanel>
         </div>
       )}
 
       {activeTab === 'reworkPolicies' && (
-        <Card title="سياسات إعادة التشغيل">
+        <OpsDashPanel title="سياسات إعادة التشغيل" accent="quality">
           <div className="space-y-3">
             <label className="inline-flex items-center gap-2 text-sm font-semibold">
               <input
@@ -779,11 +779,11 @@ export const QualitySettings: React.FC = () => {
               <Button onClick={saveReworkPolicies} disabled={!canManageSettings}>حفظ سياسات Rework</Button>
             </div>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {activeTab === 'printTemplates' && (
-        <Card title="قوالب الطباعة">
+        <OpsDashPanel title="قوالب الطباعة" accent="quality">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <input
               value={printTemplates.headerText}
@@ -830,9 +830,9 @@ export const QualitySettings: React.FC = () => {
           <div className="mt-4 flex justify-end">
             <Button onClick={savePrintTemplates} disabled={!canManageSettings}>حفظ قالب الطباعة</Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useParams, useSearchParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { KPIBox, Badge, Button, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { formatNumber, getTodayDateString } from '@/utils/calculations';
@@ -389,25 +390,36 @@ export const ProductionWorkerDetails: React.FC = () => {
     setTargetForm({ productId: '', lineId: '', dailyTargetQty: 0, effectiveFrom: today });
   };
 
-  if (loading) return <LoadingSkeleton rows={8} />;
+  const backAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate('/production-workers')}>
+      رجوع
+    </Button>
+  );
+
+  if (loading) {
+    return (
+      <ModuleOpsPageShell eyebrow="تفاصيل عامل الإنتاج" actions={backAction}>
+        <LoadingSkeleton rows={8} />
+      </ModuleOpsPageShell>
+    );
+  }
   if (!worker) {
     return (
-      <Card>
-        <p className="p-4">العامل غير موجود</p>
-        <Button variant="outline" onClick={() => navigate('/production-workers')}>رجوع</Button>
-      </Card>
+      <ModuleOpsPageShell eyebrow="تفاصيل عامل الإنتاج" actions={backAction}>
+        <OpsDashPanel title="العامل غير موجود" accent="production">
+          <p className="p-4">العامل غير موجود</p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title={worker.name}
-        subtitle={`كود: ${worker.code}`}
-        secondaryAction={{ label: 'رجوع', onClick: () => navigate('/production-workers') }}
-      />
-
-      <Card>
+    <ModuleOpsPageShell
+      eyebrow="تفاصيل عامل الإنتاج"
+      rangeLabel={`${worker.name} · كود: ${worker.code}`}
+      actions={backAction}
+    >
+      <OpsDashPanel title="فترة التحليل" accent="production">
         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
           <div>
             <p className="text-sm font-semibold text-[var(--color-text)]">فترة تحليل الحضور والإنتاج</p>
@@ -420,7 +432,7 @@ export const ProductionWorkerDetails: React.FC = () => {
             onChange={(e) => setSelectedMonth(e.target.value || currentMonth())}
           />
         </div>
-      </Card>
+      </OpsDashPanel>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         <KPIBox label="إنتاج اليوم" value={formatNumber(todayStats?.outputQty ?? 0)} icon="today" />
@@ -436,7 +448,7 @@ export const ProductionWorkerDetails: React.FC = () => {
         <KPIBox label="أيام بدون هدف" value={formatNumber(periodPresence.noTarget)} icon="flag" colorClass="bg-amber-50 text-amber-600" />
       </div>
 
-      <Card title="الملف الشخصي">
+      <OpsDashPanel title="الملف الشخصي" accent="production">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
           <p><strong>الموظف المرتبط:</strong> {linkedEmployee?.name ?? '—'}</p>
           <p><strong>الحالة:</strong> <Badge variant={worker.isActive === false ? 'danger' : 'success'}>{worker.isActive === false ? 'غير نشط' : 'نشط'}</Badge></p>
@@ -444,7 +456,7 @@ export const ProductionWorkerDetails: React.FC = () => {
           <p><strong>نسبة الحضور:</strong> {periodPresence.percentage}%</p>
           <p><strong>وظائف الخط خلال الفترة:</strong> {roleSummary.length > 0 ? roleSummary.map(([label, count]) => `${label} (${formatNumber(count)})`).join('، ') : '—'}</p>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       <ProductionWorkerLineAssignmentsSection
         workerId={id!}
@@ -455,7 +467,7 @@ export const ProductionWorkerDetails: React.FC = () => {
       />
 
       {(activeTab === 'targets' || canManageTargets) && (
-        <Card title="أهداف المنتجات">
+        <OpsDashPanel title="أهداف المنتجات" accent="production">
           {canManageTargets && (
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
               <select className="border rounded-lg p-2" value={targetForm.productId} onChange={(e) => setTargetForm({ ...targetForm, productId: e.target.value })}>
@@ -490,10 +502,10 @@ export const ProductionWorkerDetails: React.FC = () => {
               ))}
             </tbody>
           </table>
-        </Card>
+        </OpsDashPanel>
       )}
 
-      <Card title="تفصيل الحضور والإنتاج اليومي">
+      <OpsDashPanel title="تفصيل الحضور والإنتاج اليومي" accent="production">
         <div className="erp-table-wrap overflow-x-auto">
           <table className="w-full min-w-[980px] text-sm">
             <thead>
@@ -531,7 +543,7 @@ export const ProductionWorkerDetails: React.FC = () => {
             <p className="p-4 text-sm text-[var(--color-text-muted)]">لا توجد تكليفات أو تقارير إنتاج لهذه الفترة.</p>
           )}
         </div>
-      </Card>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

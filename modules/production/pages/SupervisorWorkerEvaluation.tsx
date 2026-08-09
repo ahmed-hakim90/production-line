@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Star } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
@@ -19,7 +20,7 @@ import {
   fetchCachedPageData,
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
-import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
+import { Button, Badge, LoadingSkeleton } from '../components/UI';
 import {
   LINE_WORKER_LABOR_ROLE_LABELS,
   resolveLineWorkerLaborRole,
@@ -717,37 +718,20 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
 
   if (!employee) {
     return (
-      <Card>
+      <OpsDashPanel accent="production">
         <div className="p-6 text-center text-sm font-medium text-[var(--color-text-muted)]">
           لم يتم العثور على بيانات المشرف.
         </div>
-      </Card>
+      </OpsDashPanel>
     );
   }
 
-  return (
-    <div className="space-y-4">
-      {embedded ? (
-        <Card>
-          <div className="p-4">
-            <h2 className="text-lg font-black text-[var(--color-text)]">تقييم عمال المشرف</h2>
-            <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-              {employee.name ? `تقييم العمالة - ${employee.name}` : 'تقييم العمالة'}
-            </p>
-          </div>
-        </Card>
-      ) : (
-        <PageHeader
-          title="تقييم عمال المشرف"
-          subtitle={employee.name ? `صفحة مستقلة لتقييم العمالة - ${employee.name}` : 'صفحة مستقلة لتقييم العمالة'}
-          secondaryAction={{
-            label: 'رجوع للمشرف',
-            onClick: () => navigate(id ? `/supervisors/${encodeURIComponent(id)}` : '/my-workers'),
-          }}
-        />
-      )}
-
-      <Card>
+  const evaluationPanel = (
+    <OpsDashPanel
+      title={embedded ? 'تقييم عمال المشرف' : 'تقييم يومي / دوري'}
+      accent="production"
+      bodyClassName="p-0"
+    >
         <div className="flex flex-col gap-3 border-b border-[var(--color-border)] p-4 lg:flex-row lg:items-end lg:justify-between">
           <div>
             <h3 className="text-base font-bold text-[var(--color-text)]">تقييم يومي / دوري</h3>
@@ -1029,7 +1013,34 @@ export const SupervisorWorkerEvaluation: React.FC<SupervisorWorkerEvaluationProp
             )}
           </div>
         )}
-      </Card>
-    </div>
+    </OpsDashPanel>
+  );
+
+  if (embedded) {
+    return <div className="space-y-4">{evaluationPanel}</div>;
+  }
+
+  return (
+    <ModuleOpsPageShell
+      eyebrow="عمال الإنتاج"
+      rangeLabel={employee.name ? `تقييم العمالة — ${employee.name}` : 'تقييم العمالة'}
+      hero={[
+        { key: 'workers', label: 'العمالة المعروضة', value: teamWorkerRows.length, accent: true },
+        { key: 'reports', label: 'تقارير الفترة', value: periodReports.length },
+        { key: 'plans', label: 'خطط الفترة', value: periodPlans.length },
+      ]}
+      actions={(
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          onClick={() => navigate(id ? `/supervisors/${encodeURIComponent(id)}` : '/my-workers')}
+        >
+          رجوع للمشرف
+        </Button>
+      )}
+    >
+      {evaluationPanel}
+    </ModuleOpsPageShell>
   );
 };

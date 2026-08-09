@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "react-router-dom";
+import { useTenantNavigate } from "@/lib/useTenantNavigate";
 import {
   BarChart3,
   Boxes,
@@ -42,13 +43,13 @@ import type { IndirectCostItem } from "@/src/components/erp/IndirectCostCards";
 import { calculateWasteRatio } from "@/utils/calculations";
 import { usePermission } from "../../../utils/permissions";
 import { PageHeader } from "@/components/PageHeader";
+import { ModuleOpsPageShell } from "@/modules/dashboards/components/ModuleOpsPageShell";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import {
-  DetailCollapsibleSection,
-  DetailPageShell,
   DetailPageStickyHeader,
   FIELD_ON_PANEL,
   NESTED_TILE,
@@ -174,6 +175,12 @@ const resolveIndirectIconType = (label: string): IndirectCostItem["iconType"] =>
 
 export const ProductDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
+  const navigate = useTenantNavigate();
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate("/products")}>
+      رجوع
+    </Button>
+  );
   const { openModal } = useGlobalModalManager();
   const { can } = usePermission();
   const canManageMaterials = can("costs.manage") || can("products.edit");
@@ -631,12 +638,11 @@ export const ProductDetails: React.FC = () => {
 
   if (isError) {
     return (
-      <DetailPageShell>
-        <PageHeader title="تفاصيل المنتج" backAction={{ to: "/products", label: "رجوع" }} />
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="p-4 text-sm text-destructive">تعذر تحميل بيانات المنتج. حاول مرة أخرى.</CardContent>
-        </Card>
-      </DetailPageShell>
+      <ModuleOpsPageShell eyebrow="تفاصيل المنتج" actions={shellBackAction}>
+        <OpsDashPanel title="تعذر تحميل بيانات المنتج" accent="production">
+          <p className="text-sm text-destructive">تعذر تحميل بيانات المنتج. حاول مرة أخرى.</p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -648,21 +654,21 @@ export const ProductDetails: React.FC = () => {
     ) : null;
 
   return (
-    <DetailPageShell>
+    <ModuleOpsPageShell eyebrow="تفاصيل المنتج" actions={shellBackAction}>
       <DetailPageStickyHeader>
         {isLoading || !sectionReady.header || !data ? (
           <>
-            <PageHeader title="تفاصيل المنتج" backAction={{ to: "/products", label: "رجوع" }} loading={isLoading} />
-            <Card className={SURFACE_CARD}>
+            <PageHeader title="تفاصيل المنتج" loading={isLoading} backAction={false} />
+            <OpsDashPanel title="جاري التحميل" accent="production">
               <SectionSkeleton rows={2} height={20} />
-            </Card>
+            </OpsDashPanel>
           </>
         ) : (
           <PageHeader
             title={data.header.name}
-            subtitle={`${data.header.breadcrumb} آ· الكود: ${data.header.code} آ· الفئة: ${data.header.category}`}
+            subtitle={`${data.header.breadcrumb} · الكود: ${data.header.code} · الفئة: ${data.header.category}`}
             icon="package"
-            backAction={{ to: "/products", label: "رجوع" }}
+            backAction={false}
             primaryAction={
               can("products.edit")
                 ? { label: "تعديل المنتج", icon: "edit", onClick: onEditProduct }
@@ -697,11 +703,11 @@ export const ProductDetails: React.FC = () => {
           </div>
         )}
 
-        <Card className={SURFACE_CARD}>
+        <OpsDashPanel title="الفلاتر والفترة" accent="production">
           {detailTab === "bom" ? null : isLoading || !sectionReady.filters || !data ? (
             <SectionSkeleton rows={2} height={38} />
           ) : (
-            <CardContent className="flex flex-wrap items-center gap-3 p-4">
+            <div className="flex flex-wrap items-center gap-3 p-1">
               <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
                 {PERIOD_OPTIONS.map((option) => (
                   <Button
@@ -757,24 +763,24 @@ export const ProductDetails: React.FC = () => {
                   className={cn("h-9 rounded-md border px-3 text-sm text-foreground", FIELD_ON_PANEL)}
                 />
               </div>
-            </CardContent>
+            </div>
           )}
-        </Card>
+        </OpsDashPanel>
       </DetailPageStickyHeader>
 
       {detailTab === "bom" && id ? (
-        <DetailCollapsibleSection title="BOM والمواد" defaultOpen>
+        <OpsDashPanel title="BOM والمواد" accent="production">
           <ProductBomSection
             productId={id}
             canManage={canManageMaterials || can("bom.manage")}
             userId={uid}
           />
-        </DetailCollapsibleSection>
+        </OpsDashPanel>
       ) : null}
 
       {detailTab === "overview" && (
       <>
-      <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
+      <OpsDashPanel title="مؤشرات الأداء" accent="production">
         {isLoading || !sectionReady.kpis || !data ? (
           <SectionSkeleton rows={3} height={68} />
         ) : (
@@ -799,9 +805,9 @@ export const ProductDetails: React.FC = () => {
             })}
           </div>
         )}
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="الأداء والتكلفة الشهرية" defaultOpen>
+      <OpsDashPanel title="الأداء والتكلفة الشهرية" accent="production">
         {isLoading || !sectionReady.performance || !data ? (
           <SectionSkeleton rows={4} height={62} />
         ) : (
@@ -867,9 +873,9 @@ export const ProductDetails: React.FC = () => {
             </Card>
           </div>
         )}
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="التكاليف والمواد" defaultOpen>
+      <OpsDashPanel title="التكاليف والمواد" accent="production">
         {isLoading || !sectionReady.costBreakdown || !sectionReady.rawMaterials || !sectionReady.summary || !data ? (
           <SectionSkeleton rows={10} height={24} />
         ) : (
@@ -960,9 +966,9 @@ export const ProductDetails: React.FC = () => {
             </div>
           </>
         )}
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="الإنتاج والرسوم البيانية" defaultOpen={false}>
+      <OpsDashPanel title="الإنتاج والرسوم البيانية" accent="production">
         {isLoading || !sectionReady.lineTable || !sectionReady.costTrend || !sectionReady.prodLog || !data ? (
           <SectionSkeleton rows={6} height={26} />
         ) : (
@@ -1079,9 +1085,9 @@ export const ProductDetails: React.FC = () => {
             </div>
           </div>
         )}
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="التقارير التفصيلية" defaultOpen={false}>
+      <OpsDashPanel title="التقارير التفصيلية" accent="production">
         {isLoading || !sectionReady.reports || !data ? (
           <SectionSkeleton rows={9} height={24} />
         ) : (
@@ -1159,9 +1165,9 @@ export const ProductDetails: React.FC = () => {
             </div>
           </div>
         )}
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
       </>
       )}
-    </DetailPageShell>
+    </ModuleOpsPageShell>
   );
 };

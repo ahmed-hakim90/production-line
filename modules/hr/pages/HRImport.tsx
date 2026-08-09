@@ -1,6 +1,8 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '../../../store/useAppStore';
 import { getDocs } from 'firebase/firestore';
 import { getCurrentTenantId } from '@/lib/currentTenant';
@@ -415,23 +417,16 @@ export const HRImport: React.FC = () => {
   }, [buildResult]);
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">
-            استيراد بيانات الموظفين
-          </h2>
-          <p className="page-subtitle">
-            استيراد الأقسام والمناصب والموظفين من ملف Excel
-          </p>
-        </div>
-        <Button variant="outline" onClick={() => navigate('/hr/employees')} className="self-start sm:self-auto shrink-0">
+    <ModuleOpsPageShell
+      eyebrow="استيراد بيانات الموظفين"
+      rangeLabel="استيراد الأقسام والمناصب والموظفين من ملف Excel"
+      actions={(
+        <Button variant="outline" onClick={() => navigate('/hr/employees')} className="shrink-0">
           <span className="material-icons-round text-sm">arrow_forward</span>
           العودة للموظفين
         </Button>
-      </div>
-
+      )}
+    >
       {/* Steps indicator */}
       <div className="flex items-center gap-2 text-xs font-bold">
         {(['upload', 'preview', 'importing', 'done'] as ImportStep[]).map((s, i) => {
@@ -456,7 +451,7 @@ export const HRImport: React.FC = () => {
       {/* Upload Step */}
       {step === 'upload' && (
         <>
-          <Card>
+          <OpsDashPanel title="رفع الملف" accent="hr">
             <div
               className="border-2 border-dashed border-[var(--color-border)] rounded-[var(--border-radius-lg)] p-10 text-center cursor-pointer hover:border-primary/50 hover:bg-primary/5 transition-all"
               onClick={() => !lookupsLoading && fileRef.current?.click()}
@@ -488,7 +483,7 @@ export const HRImport: React.FC = () => {
                 disabled={lookupsLoading}
               />
             </div>
-          </Card>
+          </OpsDashPanel>
 
           {parseError && (
             <div className="bg-rose-50 border border-rose-200 rounded-[var(--border-radius-lg)] p-4 flex items-center gap-3">
@@ -497,7 +492,7 @@ export const HRImport: React.FC = () => {
             </div>
           )}
 
-          <Card>
+          <OpsDashPanel title="تحميل القالب" accent="hr">
             <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
               <div className="flex-1">
                 <h3 className="text-sm font-bold text-[var(--color-text)] mb-1">تحميل القالب</h3>
@@ -510,7 +505,7 @@ export const HRImport: React.FC = () => {
                 تحميل القالب
               </Button>
             </div>
-          </Card>
+          </OpsDashPanel>
 
           {!lookupsLoading && lookups && (
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -597,7 +592,7 @@ export const HRImport: React.FC = () => {
 
           {/* Department preview */}
           {tab === 'departments' && (
-            <Card title={`الأقسام — ${result.departments.valid} صالح، ${result.departments.errors} أخطاء`}>
+            <OpsDashPanel title={`الأقسام — ${result.departments.valid} صالح، ${result.departments.errors} أخطاء`} accent="hr">
               {result.departments.rows.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات أقسام في الملف (ورقة "الأقسام")</p>
               ) : (
@@ -647,12 +642,12 @@ export const HRImport: React.FC = () => {
                   </table>
                 </div>
               )}
-            </Card>
+            </OpsDashPanel>
           )}
 
           {/* Position preview */}
           {tab === 'positions' && (
-            <Card title={`المناصب — ${result.positions.valid} صالح، ${result.positions.errors} أخطاء`}>
+            <OpsDashPanel title={`المناصب — ${result.positions.valid} صالح، ${result.positions.errors} أخطاء`} accent="hr">
               {result.positions.rows.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات مناصب في الملف (ورقة "المناصب")</p>
               ) : (
@@ -704,12 +699,12 @@ export const HRImport: React.FC = () => {
                   </table>
                 </div>
               )}
-            </Card>
+            </OpsDashPanel>
           )}
 
           {/* Employee preview */}
           {tab === 'employees' && (
-            <Card title={`الموظفون — ${result.employees.valid - result.employees.updates} جديد، ${result.employees.updates} تحديث، ${result.employees.errors} أخطاء`}>
+            <OpsDashPanel title={`الموظفون — ${result.employees.valid - result.employees.updates} جديد، ${result.employees.updates} تحديث، ${result.employees.errors} أخطاء`} accent="hr">
               {result.employees.rows.length === 0 ? (
                 <p className="text-sm text-[var(--color-text-muted)] text-center py-8">لا توجد بيانات موظفين في الملف (ورقة "الموظفين")</p>
               ) : (
@@ -814,7 +809,7 @@ export const HRImport: React.FC = () => {
                   </div>
                 </>
               )}
-            </Card>
+            </OpsDashPanel>
           )}
 
           {/* Actions */}
@@ -836,7 +831,7 @@ export const HRImport: React.FC = () => {
 
       {/* Importing Step */}
       {step === 'importing' && (
-        <Card>
+        <OpsDashPanel title="جاري الاستيراد" accent="hr">
           <div className="text-center py-12 space-y-6">
             <span className="material-icons-round text-5xl text-primary animate-spin block">sync</span>
             <div>
@@ -893,7 +888,7 @@ export const HRImport: React.FC = () => {
               </div>
             </div>
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* Done Step */}
@@ -944,7 +939,7 @@ export const HRImport: React.FC = () => {
           )}
 
           {importErrors.length > 0 && (
-            <Card title="أخطاء الاستيراد">
+            <OpsDashPanel title="أخطاء الاستيراد" accent="hr">
               <div className="max-h-40 overflow-y-auto space-y-1">
                 {importErrors.map((err, i) => (
                   <div key={i} className="flex items-start gap-2 text-xs text-rose-600">
@@ -953,7 +948,7 @@ export const HRImport: React.FC = () => {
                   </div>
                 ))}
               </div>
-            </Card>
+            </OpsDashPanel>
           )}
 
           <div className="flex gap-3">
@@ -968,7 +963,7 @@ export const HRImport: React.FC = () => {
           </div>
         </>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

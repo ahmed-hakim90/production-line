@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card } from '../components/UI';
+import { toast } from 'sonner';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
@@ -33,7 +36,6 @@ export const ReworkOrders: React.FC = () => {
   const products = useAppStore((s) => s._rawProducts);
   const [rows, setRows] = useState<QualityReworkOrder[]>([]);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
   const displayRows = useMemo(() => rows.map((row) => {
@@ -62,13 +64,11 @@ export const ReworkOrders: React.FC = () => {
   useEffect(() => qualityInspectionService.subscribeRework(setRows), []);
 
   return (
-    <div className="space-y-6">
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">Rework Orders</h2>
-          <p className="page-subtitle">متابعة حالات إعادة التشغيل</p>
-        </div>
-        <div className="erp-page-actions">
+    <ModuleOpsPageShell
+      eyebrow="أوامر إعادة التشغيل"
+      rangeLabel="متابعة حالات إعادة التشغيل"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>طباعة التقرير</Button>
           <Button
             variant="outline"
@@ -86,12 +86,9 @@ export const ReworkOrders: React.FC = () => {
                     copies: printTemplate?.copies,
                   },
                 );
-                setMessage({ type: 'success', text: 'تم تصدير تقرير إعادة التشغيل PDF بنجاح.' });
-              } catch (error) {
-                setMessage({
-                  type: 'error',
-                  text: error instanceof Error ? error.message : 'تعذر تصدير التقرير.',
-                });
+                toast.success('تم تصدير تقرير إعادة التشغيل PDF بنجاح.');
+              } catch {
+                toast.error('تعذر تصدير التقرير.');
               }
             }}
             disabled={!canPrint || rows.length === 0}
@@ -99,19 +96,9 @@ export const ReworkOrders: React.FC = () => {
             PDF
           </Button>
         </div>
-      </div>
-
-      <Card>
-        {message && (
-          <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
-            message.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60'
-              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60'
-          }`}>
-            {message.text}
-          </div>
-        )}
-        <div>
+      )}
+    >
+      <OpsDashPanel title="متابعة أوامر إعادة التشغيل" accent="quality">
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
@@ -167,12 +154,9 @@ export const ReworkOrders: React.FC = () => {
                                 updatedAt: new Date().toLocaleString(),
                                 supervisorId: workOrder.supervisorId,
                               });
-                              setMessage({ type: 'success', text: 'تم تحديث حالة أمر إعادة التشغيل.' });
-                            } catch (error) {
-                              setMessage({
-                                type: 'error',
-                                text: error instanceof Error ? error.message : 'تعذر تحديث حالة إعادة التشغيل.',
-                              });
+                              toast.success('تم تحديث حالة أمر إعادة التشغيل.');
+                            } catch {
+                              toast.error('تعذر تحديث حالة إعادة التشغيل.');
                             } finally {
                               setBusyId(null);
                             }
@@ -192,12 +176,11 @@ export const ReworkOrders: React.FC = () => {
             </tbody>
           </table>
         </div>
-        </div>
-      </Card>
+      </OpsDashPanel>
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <ReworkOrdersPrint ref={printRef} rows={printRows} printSettings={printTemplate} />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

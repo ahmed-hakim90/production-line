@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useLocation, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
-import { Card, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button } from '../components/UI';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -453,10 +454,11 @@ export const WarehouseWorkspace: React.FC = () => {
 
   if (!canEnterPage) {
     return (
-      <div className="p-6">
-        <PageHeader title="مساحة المخزن" />
-        <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية العرض.</p>
-      </div>
+      <ModuleOpsPageShell eyebrow="المخزون" rangeLabel="مساحة المخزن">
+        <OpsDashPanel accent="inventory">
+          <p className="text-sm text-[var(--color-text-muted)]">ليس لديك صلاحية العرض.</p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -476,44 +478,49 @@ export const WarehouseWorkspace: React.FC = () => {
 
   if (loading) {
     return (
-      <div className="p-6">
-        <PageHeader title="مساحة المخزن" />
-        <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل…</p>
-      </div>
+      <ModuleOpsPageShell eyebrow="المخزون" rangeLabel="مساحة المخزن">
+        <OpsDashPanel accent="inventory">
+          <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل…</p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!warehouse) {
     return (
-      <div className="p-6 space-y-3">
-        <PageHeader title="مساحة المخزن" />
-        <p className="text-sm text-rose-700">{error || 'المخزن غير موجود.'}</p>
-        <Link className="text-sm font-bold text-primary underline" to={withTenantPath(tenantSlug, backPath)}>
-          {accessDenied ? 'العودة' : backLabel}
-        </Link>
-      </div>
+      <ModuleOpsPageShell eyebrow="المخزون" rangeLabel="مساحة المخزن">
+        <OpsDashPanel accent="inventory">
+          <div className="space-y-3">
+            <p className="text-sm text-rose-700">{error || 'المخزن غير موجود.'}</p>
+            <Link className="text-sm font-bold text-primary underline" to={withTenantPath(tenantSlug, backPath)}>
+              {accessDenied ? 'العودة' : backLabel}
+            </Link>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <PageHeader
-        title={warehouse.name}
-        subtitle={`${WAREHOUSE_ROLE_LABELS[warehouse.warehouseRole || 'general']} · ${warehouse.code}`}
-        actions={(
-          <Link
-            className="text-sm font-bold text-primary underline"
-            to={withTenantPath(tenantSlug, backPath)}
-          >
-            {backLabel}
-          </Link>
-        )}
-      />
+    <ModuleOpsPageShell
+      eyebrow="المخزون"
+      rangeLabel={`${WAREHOUSE_ROLE_LABELS[warehouse.warehouseRole || 'general']} · ${warehouse.code}`}
+      onRefresh={() => void load()}
+      actions={(
+        <Link
+          className="text-sm font-bold text-primary underline"
+          to={withTenantPath(tenantSlug, backPath)}
+        >
+          {backLabel}
+        </Link>
+      )}
+    >
+      <p className="text-lg font-bold text-[var(--color-text)] -mt-2 mb-2">{warehouse.name}</p>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <Card title="أصناف لها رصيد">
+        <OpsDashPanel title="أصناف لها رصيد" accent="inventory">
           <div className="text-2xl font-black">{totalSkus}</div>
-        </Card>
+        </OpsDashPanel>
         <Card title="تحت الحد الأدنى">
           <div className="text-2xl font-black">{lowStock}</div>
           {isCentralSparePartsWarehouse && warehouse.id ? (
@@ -527,10 +534,10 @@ export const WarehouseWorkspace: React.FC = () => {
               عرض الأرصدة
             </Link>
           ) : null}
-        </Card>
+        </OpsDashPanel>
         {isCentralSparePartsWarehouse ? (
           <>
-            <Card title="بانتظارك (تموين)">
+            <OpsDashPanel title="بانتظارك (تموين)" accent="inventory">
               <div className="text-2xl font-black text-amber-700">{centralWorkQueue}</div>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 اعتماد {awaitingApprove} · تجهيز {awaitingPrepare} · موافقة {awaitingResponsible}
@@ -543,19 +550,19 @@ export const WarehouseWorkspace: React.FC = () => {
                   فتح قائمة التموين
                 </Link>
               ) : null}
-            </Card>
+            </OpsDashPanel>
             <Card title="بانتظار استلام المراكز">
               <div className="text-2xl font-black">{awaitingReceipt}</div>
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 معتمد من المسؤول — ينتظر تأكيد المركز
               </p>
-            </Card>
+            </OpsDashPanel>
           </>
         ) : (
           <>
             <Card title="تحويلات معلّقة">
               <div className="text-2xl font-black">{pendingTransfers.length}</div>
-            </Card>
+            </OpsDashPanel>
             <Card title="طلبات تموين نشطة">
               <div className="text-2xl font-black">
                 {centralWorkQueue + awaitingReceipt}
@@ -563,7 +570,7 @@ export const WarehouseWorkspace: React.FC = () => {
               <p className="text-xs text-[var(--color-text-muted)] mt-1">
                 بانتظار معالجة {centralWorkQueue} · بانتظار استلام {awaitingReceipt}
               </p>
-            </Card>
+            </OpsDashPanel>
           </>
         )}
       </div>
@@ -638,7 +645,7 @@ export const WarehouseWorkspace: React.FC = () => {
               لا يوجد فرع صيانة مربوط بهذا المخزن — لا يمكن إضافة صنف من هنا.
             </p>
           ) : null}
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
       {actions.length > 0 ? (
@@ -655,7 +662,7 @@ export const WarehouseWorkspace: React.FC = () => {
               </Link>
             ))}
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
       {(warehouse.warehouseRole === 'spare_parts_central'
@@ -699,7 +706,7 @@ export const WarehouseWorkspace: React.FC = () => {
               فتح شاشة التموين الكاملة
             </Link>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
       {warehouse.warehouseRole === 'final_product' && pendingTransfers.length > 0 ? (
@@ -724,11 +731,11 @@ export const WarehouseWorkspace: React.FC = () => {
               فتح اعتماد التحويلات
             </Link>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card title="أرصدة سريعة">
+        <OpsDashPanel title="أرصدة سريعة" accent="inventory">
           {balances.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)]">لا أرصدة بعد.</p>
           ) : (
@@ -751,7 +758,7 @@ export const WarehouseWorkspace: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
         <Card title="أحدث الحركات">
           {transactions.length === 0 ? (
             <p className="text-sm text-[var(--color-text-muted)]">لا حركات بعد.</p>
@@ -779,7 +786,7 @@ export const WarehouseWorkspace: React.FC = () => {
               </table>
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       </div>
 
       <div className="flex justify-end">

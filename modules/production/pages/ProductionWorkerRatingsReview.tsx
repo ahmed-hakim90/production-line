@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { TableIconAction } from '@/src/components/erp';
-import { Card, Button, Badge, LoadingSkeleton } from '../components/UI';
+import { Button, Badge, LoadingSkeleton } from '../components/UI';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { getTodayDateString } from '@/utils/calculations';
@@ -199,32 +200,22 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
   };
 
   if (!canView) {
-    return <Card><p className="p-4 text-sm">غير مصرح بعرض مراجعة تقييمات العمال</p></Card>;
+    return (
+      <OpsDashPanel accent="production">
+        <p className="p-4 text-sm">غير مصرح بعرض مراجعة تقييمات العمال</p>
+      </OpsDashPanel>
+    );
   }
 
-  return (
-    <div className="space-y-4">
-      {embedded ? (
-        <Card>
-          <div className="flex flex-col gap-3 p-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h2 className="text-lg font-black text-[var(--color-text)]">مراجعة تقييمات العمال</h2>
-              <p className="mt-1 text-sm text-[var(--color-text-muted)]">
-                اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة.
-              </p>
-            </div>
-            <Button type="button" variant="outline" onClick={() => void reload()}>تحديث</Button>
-          </div>
-        </Card>
-      ) : (
-        <PageHeader
-          title="مراجعة تقييمات العمال"
-          subtitle="اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة"
-          secondaryAction={{ label: 'تحديث', onClick: () => void reload() }}
-        />
-      )}
-
-      <Card>
+  const panel = (
+    <OpsDashPanel
+      title={embedded ? 'مراجعة تقييمات العمال' : undefined}
+      accent="production"
+      action={embedded ? (
+        <Button type="button" variant="outline" size="sm" onClick={() => void reload()}>تحديث</Button>
+      ) : undefined}
+      bodyClassName="p-0"
+    >
         <div className="flex flex-wrap items-end gap-3 border-b border-[var(--color-border)] p-4">
           <label className="text-sm font-bold text-[var(--color-text-muted)]">
             التاريخ
@@ -462,7 +453,21 @@ export const ProductionWorkerRatingsReview: React.FC<ProductionWorkerRatingsRevi
             )}
           </div>
         )}
-      </Card>
-    </div>
+    </OpsDashPanel>
+  );
+
+  if (embedded) {
+    return <div className="space-y-4">{panel}</div>;
+  }
+
+  return (
+    <ModuleOpsPageShell
+      eyebrow="عمال الإنتاج"
+      rangeLabel="اعتماد أو رفض تقييمات المشرفين مع تقييم وملاحظة إدارية مستقلة"
+      onRefresh={() => void reload()}
+      refreshing={loading}
+    >
+      {panel}
+    </ModuleOpsPageShell>
   );
 };

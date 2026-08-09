@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Card, Button, SearchableSelect } from '../components/UI';
+import { Button, SearchableSelect } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { createTransferRequest } from '../usecases/createTransferRequest';
 import { unwrapOrThrow } from '@/shared/usecases';
@@ -31,7 +31,8 @@ import {
   type TransferItemOption,
 } from '../utils/transferFormShared';
 import type { TransferDisplayUnitMode } from '../utils/transferUnits';
-import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { getOperationalDateString } from '../../../utils/calculations';
 import {
   INVENTORY_OPERATION_KEYS,
@@ -531,20 +532,17 @@ export const QuickWarehouseTransfer: React.FC = () => {
 
   if (!quickTransferEnabled) {
     return (
-      <Card>
-        <p className="text-sm text-muted-foreground">مسار التحويل السريع متوقف من إعدادات النظام.</p>
-      </Card>
+      <OpsDashPanel accent="inventory">
+        <p className="text-sm text-muted-foreground p-4">مسار التحويل السريع متوقف من إعدادات النظام.</p>
+      </OpsDashPanel>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-6">
-      <PageHeader
-        title="تحويل مخزن سريع"
-        subtitle="تسجيل مرجعي تحويل بين المخازن بسرعة — حفظ، مشاركة وتصدير."
-        icon="swap_horiz"
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="المخزون"
+      rangeLabel="تسجيل مرجعي تحويل بين المخازن بسرعة — حفظ، مشاركة وتصدير"
+    >
       <MaterialsWarehouseScopeBanner
         scoped={scoped}
         routingConfigured={routingConfigured}
@@ -552,7 +550,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
       />
 
       {!saved ? (
-        <Card title="بيانات التحويل">
+        <OpsDashPanel title="بيانات التحويل" accent="inventory">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
             <span className="text-[11px] text-[var(--color-text-muted)] font-medium">رقم المرجع</span>
             <span
@@ -877,7 +875,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
               مسح
             </Button>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : (
         <div className="space-y-4">
           <div className="bg-emerald-50 border border-emerald-200 rounded-[var(--border-radius-lg)] px-5 py-4 flex items-center gap-3">
@@ -913,7 +911,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
           </div>
 
           {savedPrintData && (
-            <Card className="!p-0 overflow-hidden">
+            <OpsDashPanel title="معاينة التحويلة" accent="inventory" bodyClassName="p-0 overflow-hidden">
               <div className="px-5 py-3 bg-[#f8f9fa]/50 border-b border-[var(--color-border)] flex items-center gap-2">
                 <span className="material-icons-round text-sm text-slate-400">visibility</span>
                 <span className="text-xs font-bold text-slate-500">معاينة التحويلة</span>
@@ -962,7 +960,7 @@ export const QuickWarehouseTransfer: React.FC = () => {
                   </div>
                 )}
               </div>
-            </Card>
+            </OpsDashPanel>
           )}
         </div>
       )}
@@ -978,6 +976,6 @@ export const QuickWarehouseTransfer: React.FC = () => {
           version={APP_VERSION ?? ''}
         />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

@@ -12,7 +12,8 @@ import {
   exportTenantBackupCallable,
   adminDeleteTenantCascadeCallable,
 } from '../../../modules/auth/services/firebase';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -384,16 +385,13 @@ export const TenantInsightsPage: React.FC = () => {
   };
 
   return (
-    <div className="p-4 sm:p-6 max-w-6xl mx-auto space-y-6" dir={dir}>
-      <div>
-        <h1 className="text-xl font-bold text-[var(--color-text)]">إحصائيات الشركات</h1>
-        <p className="text-sm text-[var(--color-text-muted)] mt-1 max-w-3xl leading-relaxed">
-          لكل شركة: عدد المستخدمين، عدد مجموعات Firestore التي تحتوي بيانات لهذه الشركة، وإجمالي
-          المستندات المرتبطة بـ <code className="text-xs bg-[var(--color-muted)] px-1 rounded">tenantId</code>.
-          حجم التخزين <strong>تقدير تقريبي</strong> فقط — الفوترة الفعلية لـ Firebase على مستوى المشروع
-          بالكامل ويُراجعها من Google Cloud / Firebase Console.
-        </p>
-        <div className="flex flex-wrap gap-2 mt-3">
+    <ModuleOpsPageShell
+      className="max-w-6xl mx-auto"
+      dir={dir}
+      eyebrow="إدارة المنصة"
+      rangeLabel="إحصائيات الشركات، النسخ الاحتياطية، وحجم بيانات Firestore لكل مستأجر"
+      actions={(
+        <div className="flex flex-wrap gap-2">
           <Button type="button" variant="outline" size="sm" onClick={() => void loadTenants()}>
             تحديث قائمة الشركات
           </Button>
@@ -407,28 +405,23 @@ export const TenantInsightsPage: React.FC = () => {
             استهلاك المشروع في Firebase
           </a>
         </div>
-      </div>
-
-      <Card className="border-[var(--color-border)]">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-base">نسخة احتياطية لقاعدة Firestore بالكامل (المشروع)</CardTitle>
-        </CardHeader>
-        <CardContent className="text-sm text-[var(--color-text-muted)] space-y-2">
-          <p>
-            تصدير المشروع بالكامل يتم من Google Cloud (استيراد/تصدير مجدول أو لقطة إلى Cloud Storage)، وليس
-            كملف JSON واحد من المتصفح.
-          </p>
-          <a
-            href={firestoreExportUrl}
-            target="_blank"
-            rel="noreferrer"
-            className="inline-flex items-center gap-1 font-semibold text-[rgb(var(--color-primary))] hover:underline"
-          >
-            <span className="material-icons-round text-base">open_in_new</span>
-            فتح تصدير/استيراد Firestore في Google Cloud
-          </a>
-        </CardContent>
-      </Card>
+      )}
+    >
+      <OpsDashPanel title="نسخة احتياطية لقاعدة Firestore بالكامل" accent="quality">
+        <p className="text-sm text-[var(--color-text-muted)]">
+          تصدير المشروع بالكامل يتم من Google Cloud (استيراد/تصدير مجدول أو لقطة إلى Cloud Storage)، وليس
+          كملف JSON واحد من المتصفح.
+        </p>
+        <a
+          href={firestoreExportUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="mt-2 inline-flex items-center gap-1 text-sm font-semibold text-[rgb(var(--color-primary))] hover:underline"
+        >
+          <span className="material-icons-round text-base">open_in_new</span>
+          فتح تصدير/استيراد Firestore في Google Cloud
+        </a>
+      </OpsDashPanel>
 
       {platformMessage ? (
         <p
@@ -449,9 +442,12 @@ export const TenantInsightsPage: React.FC = () => {
       {listLoading ? (
         <p className="text-sm text-[var(--color-text-muted)]">جاري تحميل الشركات...</p>
       ) : tenants.length === 0 ? (
-        <p className="text-sm text-[var(--color-text-muted)]">لا توجد شركات مسجّلة بعد.</p>
+        <OpsDashPanel accent="quality">
+          <p className="text-sm text-[var(--color-text-muted)]">لا توجد شركات مسجّلة بعد.</p>
+        </OpsDashPanel>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
+        <OpsDashPanel title="الشركات المسجّلة" accent="customers">
+          <div className="grid gap-4 sm:grid-cols-1 lg:grid-cols-2">
           {tenants.map((t) => {
             const fp = footprints[t.id] ?? { kind: 'idle' as const };
             const isOpen = expanded[t.id] ?? false;
@@ -461,10 +457,10 @@ export const TenantInsightsPage: React.FC = () => {
             const fullUrl = slug ? tenantFullUrl(slug) : '';
 
             return (
-              <Card key={t.id} className="overflow-hidden border-[var(--color-border)]">
-                <CardHeader className="pb-2 space-y-1">
+              <div key={t.id} className="overflow-hidden rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]">
+                <div className="space-y-1 p-4 pb-2">
                   <div className="flex flex-wrap items-start justify-between gap-2">
-                    <CardTitle className="text-lg font-bold leading-tight">{t.name || 'بدون اسم'}</CardTitle>
+                    <h3 className="text-lg font-bold leading-tight">{t.name || 'بدون اسم'}</h3>
                     <span
                       className={`text-xs font-semibold px-2 py-0.5 rounded-full border shrink-0 ${statusStyle(
                         t.status || 'pending',
@@ -557,8 +553,8 @@ export const TenantInsightsPage: React.FC = () => {
                       حذف كامل للبيانات
                     </Button>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-3 pt-0">
+                </div>
+                <div className="space-y-3 p-4 pt-0">
                   {meta.kind === 'loading' ? (
                     <p className="text-xs text-[var(--color-text-muted)]">جاري تحميل مسؤول الشركة والأدوار…</p>
                   ) : null}
@@ -747,11 +743,12 @@ export const TenantInsightsPage: React.FC = () => {
                       </Button>
                     </>
                   ) : null}
-                </CardContent>
-              </Card>
+                </div>
+              </div>
             );
           })}
-        </div>
+          </div>
+        </OpsDashPanel>
       )}
 
       <Dialog open={registryDialog !== null} onOpenChange={(open) => !open && setRegistryDialog(null)}>
@@ -833,6 +830,6 @@ export const TenantInsightsPage: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

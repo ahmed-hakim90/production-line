@@ -1,6 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { ImagePlus } from 'lucide-react';
-import { Button, Card } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
@@ -276,13 +278,11 @@ export const FinalInspection: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">الفحص النهائي</h2>
-          <p className="page-subtitle">تسجيل نتيجة الفحص النهائي لكل أمر شغل</p>
-        </div>
-        <div className="erp-page-actions">
+    <ModuleOpsPageShell
+      eyebrow="الفحص النهائي"
+      rangeLabel="تسجيل نتيجة الفحص النهائي لكل أمر شغل"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>طباعة التقرير</Button>
           <Button
             variant="outline"
@@ -313,9 +313,9 @@ export const FinalInspection: React.FC = () => {
             PDF
           </Button>
         </div>
-      </div>
-
-      <Card>
+      )}
+    >
+      <OpsDashPanel title="نموذج الفحص النهائي" accent="quality">
         {message && (
           <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
             message.type === 'success'
@@ -440,11 +440,11 @@ export const FinalInspection: React.FC = () => {
           </Button>
         </div>
         </div>
-      </Card>
+      </OpsDashPanel>
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <SingleFinalInspectionPrint ref={printRef} data={printData} printSettings={printTemplate} />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

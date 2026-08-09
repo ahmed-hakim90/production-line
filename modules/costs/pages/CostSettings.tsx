@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Card, Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { Button } from '../components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { formatCost, getDaysInMonth, getWorkingDaysExcludingFriday } from '../../../utils/costCalculations';
 
@@ -91,13 +93,11 @@ export const CostSettings: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">إعدادات التكلفة</h2>
-        <p className="text-sm text-[var(--color-text-muted)] font-medium">إدارة معدل الأجور وإعدادات حساب التكاليف.</p>
-      </div>
-
-      <Card title="معدل الأجور بالساعة">
+    <ModuleOpsPageShell
+      eyebrow="إعدادات التكلفة"
+      rangeLabel="إدارة معدل الأجور وإعدادات حساب التكاليف"
+    >
+      <OpsDashPanel title="معدل الأجور بالساعة" accent="costs">
         <div className="space-y-6">
           <div className="flex items-end gap-4 flex-wrap">
             <div className="flex-1 min-w-0 sm:min-w-[200px] space-y-2">
@@ -124,9 +124,9 @@ export const CostSettings: React.FC = () => {
             </p>
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="معامل تحويل اليوان الصيني">
+      <OpsDashPanel title="معامل تحويل اليوان الصيني" accent="costs">
         <div className="space-y-6">
           <div className="flex items-end gap-4 flex-wrap">
             <div className="flex-1 min-w-0 sm:min-w-[200px] space-y-2">
@@ -171,9 +171,9 @@ export const CostSettings: React.FC = () => {
             </p>
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="أيام الشغل الشهرية (إعداد عام)">
+      <OpsDashPanel title="أيام الشغل الشهرية (إعداد عام)" accent="costs">
         <div className="space-y-4">
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <div className="flex items-center gap-2">
@@ -250,8 +250,7 @@ export const CostSettings: React.FC = () => {
             هذا الإعداد عام لكل شهر ويُستخدم تلقائيًا في جميع مراكز التكلفة والحسابات اليومية. القيمة الافتراضية لأي شهر جديد = عدد أيام الشهر بدون أيام الجمعة.
           </p>
         </div>
-      </Card>
-
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

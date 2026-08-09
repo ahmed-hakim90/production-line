@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '../../../store/useAppStore';
 import { Card, Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '../../../utils/permissions';
 import { attendanceProcessingService } from '@/modules/hr/attendance/services/attendanceProcessingService';
 import { leaveRequestService, leaveBalanceService, getEmployeeLeaveUsageSummary } from '../leaveService';
@@ -509,12 +511,10 @@ export const EmployeeSelfService: React.FC = () => {
   ];
 
   return (
-    <div className="space-y-6">
-      <header>
-        <h1 className="text-2xl font-bold text-[var(--color-text)]">الخدمة الذاتية</h1>
-        <p className="text-[var(--color-text-muted)] mt-1">مرحباً، {currentEmployee.name}</p>
-      </header>
-
+    <ModuleOpsPageShell
+      eyebrow="الموارد البشرية"
+      rangeLabel={currentEmployee.name ? `مرحباً، ${currentEmployee.name}` : 'الخدمة الذاتية'}
+    >
       <div className="flex flex-wrap gap-1">
         {tabs.map((tab) => (
           <button
@@ -533,6 +533,7 @@ export const EmployeeSelfService: React.FC = () => {
         ))}
       </div>
 
+      <OpsDashPanel accent="hr">
       {loading && (
         <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-8 animate-pulse">
           <div className="h-6 bg-slate-200 rounded w-1/3 mb-4" />
@@ -1034,7 +1035,8 @@ export const EmployeeSelfService: React.FC = () => {
           </div>
         </Card>
       )}
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
 

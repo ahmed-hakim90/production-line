@@ -1,5 +1,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card } from '../components/UI';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
@@ -329,13 +331,11 @@ export const IPQC: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">IPQC</h2>
-          <p className="page-subtitle">فحص أثناء التشغيل بعينة أو سيريال محدد</p>
-        </div>
-        <div className="erp-page-actions">
+    <ModuleOpsPageShell
+      eyebrow="IPQC"
+      rangeLabel="فحص أثناء التشغيل بعينة أو سيريال محدد"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || !selectedWorkOrder}>طباعة التقرير</Button>
           <Button
             variant="outline"
@@ -366,9 +366,9 @@ export const IPQC: React.FC = () => {
             PDF
           </Button>
         </div>
-      </div>
-
-      <Card>
+      )}
+    >
+      <OpsDashPanel title="نموذج فحص IPQC" accent="quality">
         {message && (
           <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
             message.type === 'success'
@@ -504,12 +504,12 @@ export const IPQC: React.FC = () => {
         {saveDisabledReason && (
           <p className="mt-2 text-xs font-semibold text-amber-700">{saveDisabledReason}</p>
         )}
-      </Card>
+      </OpsDashPanel>
 
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <SingleIPQCPrint ref={printRef} data={printData} printSettings={printTemplate} />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

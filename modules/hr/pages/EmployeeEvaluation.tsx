@@ -1,5 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Card, Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { ToneActionButton } from '@/src/components/erp/TableIconAction';
 import { employeeService } from '../employeeService';
 import { performanceService } from '../services/performanceService';
@@ -209,12 +211,10 @@ export const EmployeeEvaluation: React.FC = () => {
   ).length;
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <div>
-          <h2 className="text-xl font-bold text-[var(--color-text)]">تقييم الموظفين</h2>
-          <p className="text-sm text-[var(--color-text-muted)] font-medium">مؤشرات الأداء الشهرية والمكافآت</p>
-        </div>
+    <ModuleOpsPageShell
+      eyebrow="تقييم الموظفين"
+      rangeLabel="مؤشرات الأداء الشهرية والمكافآت"
+      actions={(
         <div className="flex items-center gap-3">
           <input
             type="month"
@@ -234,23 +234,28 @@ export const EmployeeEvaluation: React.FC = () => {
             </ToneActionButton>
           )}
         </div>
-      </div>
-
-      <div className="flex gap-2 flex-wrap">
-        {Object.entries(GRADE_CONFIG).map(([grade, cfg]) => (
-          <span key={grade} className={`text-xs px-2 py-1 rounded-full font-bold ${cfg.bg} ${cfg.color}`}>
-            {grade} — {cfg.label}
-          </span>
-        ))}
-      </div>
-
-      {loading && employees.length === 0 ? (
-        <div className="space-y-3">
-          {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-20 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] animate-pulse" />
+      )}
+    >
+      <OpsDashPanel title="دليل التقييم" accent="hr">
+        <div className="flex gap-2 flex-wrap">
+          {Object.entries(GRADE_CONFIG).map(([grade, cfg]) => (
+            <span key={grade} className={`text-xs px-2 py-1 rounded-full font-bold ${cfg.bg} ${cfg.color}`}>
+              {grade} — {cfg.label}
+            </span>
           ))}
         </div>
+      </OpsDashPanel>
+
+      {loading && employees.length === 0 ? (
+        <OpsDashPanel title="جاري التحميل" accent="hr">
+          <div className="space-y-3">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-20 bg-[var(--color-card)] border border-[var(--color-border)] rounded-[var(--border-radius-lg)] animate-pulse" />
+            ))}
+          </div>
+        </OpsDashPanel>
       ) : (
+        <OpsDashPanel title={`تقييمات الموظفين — ${month}`} accent="hr">
         <div className="space-y-3">
           {employees.map((emp) => {
             if (!emp.id) return null;
@@ -359,7 +364,8 @@ export const EmployeeEvaluation: React.FC = () => {
             );
           })}
         </div>
+        </OpsDashPanel>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

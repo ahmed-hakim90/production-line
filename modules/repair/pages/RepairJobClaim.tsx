@@ -2,8 +2,9 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { CheckCircle2, Loader2, TriangleAlert } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { RepairOpsPageShell } from '@/modules/repair/components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { repairTechnicianService } from '../services/repairTechnicianService';
 
 export const RepairJobClaim: React.FC = () => {
@@ -34,25 +35,32 @@ export const RepairJobClaim: React.FC = () => {
   }, [claim]);
 
   const Icon = state === 'claiming' ? Loader2 : state === 'done' ? CheckCircle2 : TriangleAlert;
+
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/my-jobs'))}>
+      طلباتي
+    </Button>
+  );
+
   return (
-    <div className="flex min-h-[70vh] items-center justify-center p-4" dir="rtl">
-      <Card className="w-full max-w-md text-center">
-        <CardHeader>
-          <div className="mx-auto mb-2 rounded-full bg-muted p-3">
-            <Icon className={`size-8 ${state === 'claiming' ? 'animate-spin text-primary' : state === 'done' ? 'text-emerald-600' : 'text-rose-600'}`} />
+    <RepairOpsPageShell
+      className="flex min-h-[70vh] items-center justify-center"
+      dir="rtl"
+      eyebrow="استلام طلب صيانة"
+      actions={state === 'error' ? shellBackAction : undefined}
+    >
+      <OpsDashPanel title="استلام طلب صيانة" accent="repair" className="mx-auto w-full max-w-md text-center">
+        <div className="mx-auto mb-4 rounded-full bg-muted p-3 w-fit">
+          <Icon className={`size-8 ${state === 'claiming' ? 'animate-spin text-primary' : state === 'done' ? 'text-emerald-600' : 'text-rose-600'}`} />
+        </div>
+        <p className="text-sm text-muted-foreground">{message}</p>
+        {state === 'error' ? (
+          <div className="mt-4 flex justify-center gap-2">
+            <Button type="button" onClick={() => void claim()}>إعادة المحاولة</Button>
+            <Button type="button" variant="outline" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/my-jobs'))}>طلباتي</Button>
           </div>
-          <CardTitle>استلام طلب صيانة</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <p className="text-sm text-muted-foreground">{message}</p>
-          {state === 'error' ? (
-            <div className="flex justify-center gap-2">
-              <Button type="button" onClick={() => void claim()}>إعادة المحاولة</Button>
-              <Button type="button" variant="outline" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/my-jobs'))}>طلباتي</Button>
-            </div>
-          ) : null}
-        </CardContent>
-      </Card>
-    </div>
+        ) : null}
+      </OpsDashPanel>
+    </RepairOpsPageShell>
   );
 };

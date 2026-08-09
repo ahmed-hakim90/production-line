@@ -3,14 +3,13 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { CheckCircle2 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 import { PageHeader } from '@/components/PageHeader';
+import { RepairOpsPageShell } from '@/modules/repair/components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  DetailCollapsibleSection,
-  DetailPageShell,
   DetailPageStickyHeader,
   NESTED_TILE,
   SURFACE_CARD,
@@ -140,6 +139,11 @@ export const RepairJobDetail: React.FC = () => {
   const { jobId = '', tenantSlug = '' } = useParams<{ jobId: string; tenantSlug?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
+      رجوع
+    </Button>
+  );
   const { can } = usePermission();
   const userProfile = useAppStore((s) => s.userProfile) as FirestoreUserWithRepair | null;
   const userPermissions = useAppStore((s) => s.userPermissions);
@@ -1432,19 +1436,22 @@ export const RepairJobDetail: React.FC = () => {
 
   if (!job) {
     return (
-      <div dir={dir} className="erp-ds-clean space-y-4 p-4 md:p-6" role="status" aria-live="polite">
-        <PageHeader title="تفاصيل طلب الصيانة" subtitle="جاري تحميل الطلب…" />
-      </div>
+      <RepairOpsPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
+        <OpsDashPanel title="جاري تحميل الطلب" accent="repair">
+          <p className="text-sm text-muted-foreground">جاري تحميل الطلب…</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
   if (!canViewThisJob) {
     return (
-      <div dir={dir} className="erp-ds-clean space-y-4 p-4 md:p-6">
-        <PageHeader title="تفاصيل طلب الصيانة" />
-        <div className="rounded border border-amber-300 bg-amber-50 p-4 text-amber-900 text-sm">
-          هذا الطلب غير مسند لك، ولا تملك صلاحية عرضه.
-        </div>
-      </div>
+      <RepairOpsPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
+        <OpsDashPanel title="غير مسموح" accent="repair">
+          <p className="text-sm text-amber-900">
+            هذا الطلب غير مسند لك، ولا تملك صلاحية عرضه.
+          </p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
@@ -1466,7 +1473,7 @@ export const RepairJobDetail: React.FC = () => {
     : job;
 
   return (
-    <DetailPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir}>
+    <RepairOpsPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
       <DetailPageStickyHeader>
         <PageHeader
           title={`طلب صيانة #${job.receiptNo}`}
@@ -1476,7 +1483,7 @@ export const RepairJobDetail: React.FC = () => {
               : 'استقبال: منتجات · موافقة عميل · طباعة. الإسناد عبر QR — التشخيص من الورشة.'
           }
           icon="fact_check"
-          backAction={{ to: withTenantPath(tenantSlug, '/repair/jobs') }}
+          backAction={false}
           actions={(
             <div className="flex flex-wrap items-center gap-2">
               <StatusBadge status={job.status} size="md" />
@@ -1695,12 +1702,9 @@ export const RepairJobDetail: React.FC = () => {
       </DetailPageStickyHeader>
 
       {isDeliveredStatus(job.status) && showReopenOptions ? (
-        <Card className={cn(SURFACE_CARD)}>
-          <CardHeader>
-            <CardTitle className="text-lg">إعادة إصلاح</CardTitle>
-            <CardDescription>إنشاء طلب جديد مرتبط بالطلب الحالي.</CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-3">
+        <OpsDashPanel title="إعادة إصلاح" accent="repair">
+          <p className="mb-3 text-sm text-muted-foreground">إنشاء طلب جديد مرتبط بالطلب الحالي.</p>
+          <div className="space-y-3">
             <div className="space-y-1">
               <Label>معالجة القيد المالي السابق</Label>
               <Select value={reopenTreasuryHandling} onValueChange={(v) => setReopenTreasuryHandling(v as 'reverse' | 'keep')}>
@@ -1740,23 +1744,26 @@ export const RepairJobDetail: React.FC = () => {
             <Button onClick={() => void createReopenRepair()} disabled={isReopening}>
               {isReopening ? 'جاري الإنشاء…' : 'إنشاء طلب إعادة إصلاح'}
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       ) : null}
 
       <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
         {/* Main first for mobile readability */}
         <div className="order-1 space-y-4 lg:col-span-2">
-          <Card className={cn(SURFACE_CARD)}>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">المنتجات المستلمة</CardTitle>
-              <CardDescription>
-                عرض الاستلام — التشخيص والخدمات من الورشة.
-                {' · '}
+          <OpsDashPanel
+            title="المنتجات المستلمة"
+            accent="repair"
+            action={(
+              <span className="text-xs text-muted-foreground">
                 ضمان الطلب: {manufacturerWarrantyScopeLabel(job.warrantyScope, jobProducts)}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3">
+              </span>
+            )}
+          >
+            <p className="mb-3 text-sm text-muted-foreground">
+              عرض الاستلام — التشخيص والخدمات من الورشة.
+            </p>
+            <div className="space-y-3">
               {jobProducts.map((item, idx) => {
                 const serviceNames = (item.serviceIds || [])
                   .map((id) => enabledServices.find((service) => service.id === id)?.name || id)
@@ -1811,10 +1818,10 @@ export const RepairJobDetail: React.FC = () => {
                   وضع «خدمة فقط» — التكلفة من خدمات الكتالوج.
                 </p>
               ) : null}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
 
-          <DetailCollapsibleSection title="سجل الحالة" defaultOpen={false}>
+          <OpsDashPanel title="سجل الحالة" accent="repair">
             <div className="space-y-3">
               <div className="flex items-center justify-between gap-2 rounded border px-3 py-2">
                 <span className="text-sm text-muted-foreground">الحالة الحالية</span>
@@ -1840,19 +1847,16 @@ export const RepairJobDetail: React.FC = () => {
                 <p className="text-xs text-muted-foreground">لا يوجد سجل حالات بعد.</p>
               )}
             </div>
-          </DetailCollapsibleSection>
+          </OpsDashPanel>
         </div>
 
         <aside className="order-2 space-y-4 lg:col-span-1 lg:sticky lg:top-[4.5rem]">
           {!isDeliveredStatus(job.status) ? (
-            <Card className={cn(SURFACE_CARD)}>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">موافقة العميل</CardTitle>
-                <CardDescription>
-                  أنشئ الرابط ثم أرسله واتساب بعد الجاهزية.
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2">
+            <OpsDashPanel title="موافقة العميل" accent="repair">
+              <p className="mb-3 text-sm text-muted-foreground">
+                أنشئ الرابط ثم أرسله واتساب بعد الجاهزية.
+              </p>
+              <div className="space-y-2">
                 <div className="grid grid-cols-1 gap-2">
                   <Button
                     type="button"
@@ -1884,22 +1888,22 @@ export const RepairJobDetail: React.FC = () => {
                     زر واتساب يتفعّل بعد إنشاء الرابط.
                   </p>
                 )}
-              </CardContent>
-            </Card>
+              </div>
+            </OpsDashPanel>
           ) : null}
 
-          <Card className={cn(SURFACE_CARD)}>
-            <CardHeader className="pb-3">
-              <CardTitle className="text-base">ملخص الطلب</CardTitle>
-              <CardDescription>
-                {jobProducts.length} سطر · {productsQtyTotal} قطعة
-                {' · '}
-                {manufacturerWarrantyScopeLabel(job.warrantyScope, jobProducts)}
-                {' · '}
-                ضمان ورشة {workshopWarrantyLabel}
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-3 text-sm">
+          <OpsDashPanel
+            title="ملخص الطلب"
+            accent="repair"
+          >
+            <p className="mb-3 text-sm text-muted-foreground">
+              {jobProducts.length} سطر · {productsQtyTotal} قطعة
+              {' · '}
+              {manufacturerWarrantyScopeLabel(job.warrantyScope, jobProducts)}
+              {' · '}
+              ضمان ورشة {workshopWarrantyLabel}
+            </p>
+            <div className="space-y-3 text-sm">
               <dl className="grid grid-cols-1 gap-2">
                 <div className="flex justify-between gap-2 border-b border-border/60 pb-1.5">
                   <dt className="text-muted-foreground">التاريخ</dt>
@@ -2014,8 +2018,8 @@ export const RepairJobDetail: React.FC = () => {
                   </div>
                 </div>
               ) : null}
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
         </aside>
       </div>
 
@@ -2256,6 +2260,6 @@ export const RepairJobDetail: React.FC = () => {
           printSettings={printTemplate}
         />
       </div>
-    </DetailPageShell>
+    </RepairOpsPageShell>
   );
 }

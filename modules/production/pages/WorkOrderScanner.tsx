@@ -1,7 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Badge, Button, Card, KPIBox } from '../components/UI';
+import { Badge, Button, KPIBox } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useShallowStore } from '../../../store/useAppStore';
 import { scanEventService } from '../services/scanEventService';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
@@ -435,71 +437,72 @@ export const WorkOrderScanner: React.FC = () => {
 
   if (!workOrderId) {
     return (
-      <Card>
-        <p className="text-sm font-bold text-rose-600">رقم أمر الشغل غير صحيح.</p>
-      </Card>
+      <ModuleOpsPageShell eyebrow="الإنتاج" rangeLabel="ماسح أمر الشغل">
+        <OpsDashPanel accent="production">
+          <p className="text-sm font-bold text-rose-600">رقم أمر الشغل غير صحيح.</p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!workOrder) {
     return (
-      <Card>
-        <div className="space-y-3">
-          <p className="text-sm font-bold text-slate-500">جاري تحميل أمر الشغل...</p>
-          <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع لأوامر الشغل</Button>
-        </div>
-      </Card>
+      <ModuleOpsPageShell eyebrow="الإنتاج" rangeLabel="ماسح أمر الشغل">
+        <OpsDashPanel accent="production">
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-slate-500">جاري تحميل أمر الشغل...</p>
+            <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع لأوامر الشغل</Button>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   if (currentEmployee?.level === 2 && workOrder.supervisorId !== currentEmployee.id) {
     return (
-      <Card>
-        <div className="space-y-3">
-          <p className="text-sm font-bold text-rose-600">لا يمكنك فتح أمر شغل غير مرتبط بك كمشرف.</p>
-          <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع لأوامر الشغل</Button>
-        </div>
-      </Card>
+      <ModuleOpsPageShell eyebrow="الإنتاج" rangeLabel="ماسح أمر الشغل">
+        <OpsDashPanel accent="production">
+          <div className="space-y-3">
+            <p className="text-sm font-bold text-rose-600">لا يمكنك فتح أمر شغل غير مرتبط بك كمشرف.</p>
+            <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع لأوامر الشغل</Button>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="space-y-6">
-      <Card className="border-primary/20 bg-primary/5">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 className="text-xl font-bold text-[var(--color-text)]">ماسح أمر الشغل</h2>
-            <p className="text-sm text-slate-500">
-              {workOrder.workOrderNumber} — {productName} — {lineName}
-            </p>
-            <p className="text-xs text-[var(--color-text-muted)] mt-1">المشرف: {supervisorName}</p>
-          </div>
-          <div className="flex items-center gap-2">
-            <Badge variant={workOrder.status === 'completed' ? 'success' : workOrder.status === 'in_progress' ? 'warning' : 'info'}>
-              {workOrder.status === 'completed' ? 'مكتمل' : workOrder.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'}
-            </Badge>
-            {workOrder.status !== 'completed' && (
-              <Button
-                variant="outline"
-                onClick={handleToggleManualPause}
-                disabled={openSessionsCount === 0 && !hasActiveManualPause}
-              >
-                <span className="material-icons-round text-sm">
-                  {hasActiveManualPause ? 'play_arrow' : 'pause_circle'}
-                </span>
-                {hasActiveManualPause ? 'استئناف' : 'وقف'}
-              </Button>
-            )}
-            {workOrder.status !== 'completed' && (
-              <Button variant="primary" onClick={openCloseModal}>
-                <span className="material-icons-round text-sm">task_alt</span>
-                الانتهاء
-              </Button>
-            )}
-            <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع</Button>
-          </div>
+    <ModuleOpsPageShell
+      eyebrow="الإنتاج"
+      rangeLabel={`${workOrder.workOrderNumber} — ${productName} — ${lineName}`}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <Badge variant={workOrder.status === 'completed' ? 'success' : workOrder.status === 'in_progress' ? 'warning' : 'info'}>
+            {workOrder.status === 'completed' ? 'مكتمل' : workOrder.status === 'in_progress' ? 'قيد التنفيذ' : 'قيد الانتظار'}
+          </Badge>
+          {workOrder.status !== 'completed' && (
+            <Button
+              variant="outline"
+              onClick={handleToggleManualPause}
+              disabled={openSessionsCount === 0 && !hasActiveManualPause}
+            >
+              <span className="material-icons-round text-sm">
+                {hasActiveManualPause ? 'play_arrow' : 'pause_circle'}
+              </span>
+              {hasActiveManualPause ? 'استئناف' : 'وقف'}
+            </Button>
+          )}
+          {workOrder.status !== 'completed' && (
+            <Button variant="primary" onClick={openCloseModal}>
+              <span className="material-icons-round text-sm">task_alt</span>
+              الانتهاء
+            </Button>
+          )}
+          <Button variant="outline" onClick={() => navigate('/work-orders')}>رجوع</Button>
         </div>
-      </Card>
+      )}
+    >
+      <p className="text-xs text-[var(--color-text-muted)] -mt-2 mb-2">المشرف: {supervisorName}</p>
 
       <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4">
         <KPIBox label="وحدات مكتملة" value={summary.completedUnits} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600" />
@@ -510,7 +513,7 @@ export const WorkOrderScanner: React.FC = () => {
         <KPIBox label="متبقي على نهاية الوردية اليوم" value={workEndCountdown} icon="event_available" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
       </div>
 
-      <Card>
+      <OpsDashPanel title="تسجيل الاسكان" accent="production">
         {workOrder.status !== 'completed' ? (
           <div className="flex flex-col md:flex-row gap-3 items-stretch md:items-center">
             <div className="flex-1">
@@ -550,14 +553,15 @@ export const WorkOrderScanner: React.FC = () => {
         {scanError && (
           <p className="mt-3 text-sm font-bold text-rose-600">{scanError}</p>
         )}
-      </Card>
+      </OpsDashPanel>
 
-      <Card>
-        <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-bold">سجل الوحدات</h3>
-          <span className="text-xs text-slate-400">آخر {sessions.length} جلسة</span>
-        </div>
-        <div className="overflow-x-auto">
+      <OpsDashPanel
+        title="سجل الوحدات"
+        accent="production"
+        action={<span className="text-xs text-slate-400">آخر {sessions.length} جلسة</span>}
+        bodyClassName="p-0 overflow-hidden"
+      >
+        <div className="overflow-x-auto p-4 pt-0">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
               <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)] text-xs font-bold">
@@ -625,7 +629,7 @@ export const WorkOrderScanner: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {closeModalOpen && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => !closeBusy && setCloseModalOpen(false)}>
@@ -690,7 +694,7 @@ export const WorkOrderScanner: React.FC = () => {
         </div>
       )}
 
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

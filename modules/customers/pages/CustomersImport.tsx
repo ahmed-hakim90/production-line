@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/UI';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
@@ -201,22 +202,21 @@ export const CustomersImport: React.FC = () => {
   const activeStepIndex = step === 'upload' ? 0 : 1;
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="استيراد العملاء"
-        subtitle="رفع ماستر العملاء من Excel بالأكواد — الإنشاء/التحديث يُنفَّذ عبر «المهام»"
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => downloadCustomersTemplate()}>
-              تنزيل القالب
-            </Button>
-            <Button asChild variant="outline">
-              <Link to={withTenantPath(tenantSlug, '/customers')}>العودة للقائمة</Link>
-            </Button>
-          </div>
-        }
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="العملاء"
+      rangeLabel="رفع ماستر العملاء من Excel — الإنشاء/التحديث يُنفَّذ عبر «المهام»"
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => downloadCustomersTemplate()}>
+            تنزيل القالب
+          </Button>
+          <Button asChild variant="outline" size="sm">
+            <Link to={withTenantPath(tenantSlug, '/customers')}>العودة للقائمة</Link>
+          </Button>
+        </div>
+      )}
+    >
+      <OpsDashPanel title="استيراد العملاء" accent="customers">
       <div className="flex items-center gap-2 text-xs font-bold">
         {STEP_LABELS.map((s, i) => {
           const isPast = activeStepIndex > i;
@@ -454,6 +454,7 @@ export const CustomersImport: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

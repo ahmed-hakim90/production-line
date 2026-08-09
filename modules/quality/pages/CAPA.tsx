@@ -1,5 +1,8 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card } from '../components/UI';
+import { toast } from 'sonner';
+import { Button } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { useManagedPrint } from '@/utils/printManager';
@@ -29,7 +32,6 @@ export const CAPA: React.FC = () => {
   const products = useAppStore((s) => s._rawProducts);
   const [rows, setRows] = useState<QualityCAPA[]>([]);
   const [reasons, setReasons] = useState<{ code: string; labelAr: string }[]>([]);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const printRef = useRef<HTMLDivElement>(null);
   const handlePrint = useManagedPrint({ contentRef: printRef, printSettings: printTemplate });
   const [form, setForm] = useState({
@@ -101,23 +103,18 @@ export const CAPA: React.FC = () => {
         ownerId: '',
         dueDate: '',
       });
-      setMessage({ type: 'success', text: 'تم إنشاء CAPA بنجاح.' });
-    } catch (error) {
-      setMessage({
-        type: 'error',
-        text: error instanceof Error ? error.message : 'تعذر إنشاء CAPA.',
-      });
+      toast.success('تم إنشاء CAPA بنجاح.');
+    } catch {
+      toast.error('تعذر إنشاء CAPA.');
     }
   };
 
   return (
-    <div className="space-y-6">
-      <div className="erp-page-head">
-        <div>
-          <h2 className="page-title">CAPA</h2>
-          <p className="page-subtitle">الإجراءات التصحيحية والوقائية</p>
-        </div>
-        <div className="erp-page-actions">
+    <ModuleOpsPageShell
+      eyebrow="CAPA"
+      rangeLabel="الإجراءات التصحيحية والوقائية"
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
           <Button variant="outline" onClick={() => handlePrint()} disabled={!canPrint || rows.length === 0}>طباعة التقرير</Button>
           <Button
             variant="outline"
@@ -135,12 +132,9 @@ export const CAPA: React.FC = () => {
                     copies: printTemplate?.copies,
                   },
                 );
-                setMessage({ type: 'success', text: 'تم تصدير تقرير CAPA PDF بنجاح.' });
-              } catch (error) {
-                setMessage({
-                  type: 'error',
-                  text: error instanceof Error ? error.message : 'تعذر تصدير تقرير CAPA.',
-                });
+                toast.success('تم تصدير تقرير CAPA PDF بنجاح.');
+              } catch {
+                toast.error('تعذر تصدير تقرير CAPA.');
               }
             }}
             disabled={!canPrint || rows.length === 0}
@@ -148,18 +142,9 @@ export const CAPA: React.FC = () => {
             PDF
           </Button>
         </div>
-      </div>
-
-      <Card title="إنشاء CAPA">
-        {message && (
-          <div className={`mb-3 rounded-[var(--border-radius-base)] border px-3 py-2 text-sm font-semibold ${
-            message.type === 'success'
-              ? 'border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-900/60'
-              : 'border-rose-200 bg-rose-50 text-rose-700 dark:border-rose-900/60'
-          }`}>
-            {message.text}
-          </div>
-        )}
+      )}
+    >
+      <OpsDashPanel title="إنشاء CAPA" accent="quality">
         <div className="grid md:grid-cols-2 gap-3">
           <select
             value={form.workOrderId}
@@ -225,9 +210,9 @@ export const CAPA: React.FC = () => {
         <div className="mt-4 flex justify-end">
           <Button variant="primary" onClick={createCAPA} disabled={!canCreate || !canManageCapa}>إنشاء CAPA</Button>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card title="متابعة CAPA">
+      <OpsDashPanel title="متابعة CAPA" accent="quality">
         <div className="overflow-x-auto">
           <table className="erp-table w-full text-sm">
             <thead className="erp-thead">
@@ -273,12 +258,9 @@ export const CAPA: React.FC = () => {
                               supervisorId: linkedWorkOrder.supervisorId,
                             });
                           }
-                          setMessage({ type: 'success', text: 'تم تحديث حالة CAPA.' });
-                        } catch (error) {
-                          setMessage({
-                            type: 'error',
-                            text: error instanceof Error ? error.message : 'تعذر تحديث حالة CAPA.',
-                          });
+                          toast.success('تم تحديث حالة CAPA.');
+                        } catch {
+                          toast.error('تعذر تحديث حالة CAPA.');
                         }
                       }}
                       disabled={!canManageCapa}
@@ -294,12 +276,12 @@ export const CAPA: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <SingleCAPAPrint ref={printRef} rows={printRows} printSettings={printTemplate} />
       </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

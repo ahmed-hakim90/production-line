@@ -3,9 +3,9 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { LoadingSkeleton, SearchableSelect } from '@/modules/production/components/UI';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Table,
   TableBody,
@@ -150,45 +150,54 @@ export const RoutingPlansPage: React.FC = () => {
   );
 
   return (
-    <div className="erp-ds-clean w-full min-w-0 space-y-6 sm:space-y-8">
-      <PageHeader
-        title="مسارات الإنتاج"
-        subtitle="الخطط النشطة لكل منتج — التخطيط والتنفيذ والتحليل"
-        icon="factory"
-        iconBg="bg-emerald-500/12"
-        iconColor="text-emerald-700 dark:text-emerald-400"
-      />
+    <ModuleOpsPageShell
+      className="w-full min-w-0"
+      eyebrow="مسارات الإنتاج"
+      rangeLabel="الخطط النشطة لكل منتج — التخطيط والتنفيذ والتحليل"
+      actions={(
+        <div className="flex flex-wrap gap-2">
+          <Button type="button" variant="outline" size="sm" onClick={() => navigate('/production/routing/analytics')}>
+            تحليلات المسارات
+          </Button>
+          {can('routing.manage') ? (
+            <Button type="button" variant="outline" size="sm" onClick={() => navigate('/products')}>
+              فتح كتالوج المنتجات
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
       {isError && (
-        <Card className="border-destructive/50 bg-destructive/5">
-          <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <OpsDashPanel accent="production">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <p className="text-sm text-destructive">تعذر تحميل البيانات.</p>
             <Button type="button" variant="outline" className="w-full shrink-0 sm:w-auto" onClick={() => void refetch()}>
               إعادة المحاولة
             </Button>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       )}
-      <Card className="shadow-sm">
+      <OpsDashPanel title="الخطط النشطة" accent="production" bodyClassName="p-0">
         {isLoading ? (
-          <CardContent className="p-4 sm:p-6">
+          <div className="p-4 sm:p-6">
             <LoadingSkeleton rows={8} type="card" />
-          </CardContent>
+          </div>
         ) : sorted.length === 0 ? (
-          <CardContent className="py-10">
+          <div className="py-10 px-4">
             <p className="text-center text-sm text-muted-foreground">
               لا توجد خطط مسار نشطة. استخدم «بناء مسار لمنتج» بالأسفل لإنشاء أول مسار.
             </p>
-          </CardContent>
+          </div>
         ) : (
           <>
             <div className="space-y-3 p-4 sm:p-6 md:hidden">
               {sorted.map((plan) => (
-                <Card key={plan.id} className="border bg-card shadow-sm">
-                  <CardHeader className="space-y-1 p-4 pb-2">
-                    <CardTitle className="text-base font-semibold leading-tight">{productName(plan.productId)}</CardTitle>
-                    <CardDescription className="tabular-nums">الإصدار {plan.version}</CardDescription>
-                  </CardHeader>
-                  <CardContent className="space-y-3 p-4 pt-0">
+                <div key={plan.id} className="rounded-xl border border-[var(--color-border)] bg-card shadow-sm">
+                  <div className="space-y-1 p-4 pb-2">
+                    <h4 className="text-base font-semibold leading-tight">{productName(plan.productId)}</h4>
+                    <p className="text-sm text-muted-foreground tabular-nums">الإصدار {plan.version}</p>
+                  </div>
+                  <div className="space-y-3 p-4 pt-0">
                     <div className="space-y-1 text-sm tabular-nums">
                       <div className="font-medium">{formatDurationSeconds(plan.totalTimeSeconds)}</div>
                       <div className="text-muted-foreground text-[11px]">
@@ -210,8 +219,8 @@ export const RoutingPlansPage: React.FC = () => {
                       {formatRoutingFirestoreInstant(plan.createdAt)}
                     </div>
                     {planActions(plan, 'mobile')}
-                  </CardContent>
-                </Card>
+                  </div>
+                </div>
               ))}
             </div>
             <div className="hidden min-w-0 md:block">
@@ -259,49 +268,34 @@ export const RoutingPlansPage: React.FC = () => {
             </div>
           </>
         )}
-      </Card>
+      </OpsDashPanel>
       {can('routing.manage') && (
-        <Card className="shadow-sm">
-          <CardHeader className="border-b bg-muted/30 px-4 py-3 sm:px-6">
-            <CardTitle className="text-base font-semibold">بناء مسار لمنتج</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4 p-4 sm:p-6">
-            <p className="text-sm text-muted-foreground">
-              اختر المنتج من القائمة ثم اضغط «فتح بناء المسار». صفحة المنتجات تفتح تفاصيل المنتج في لوحة جانبية عند الضغط على الصف وليست مخصصة لاختيار مسار الإنتاج.
-            </p>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-              <div className="min-w-0 flex-1 space-y-1.5">
-                <Label className="text-xs font-semibold text-muted-foreground">المنتج</Label>
-                <SearchableSelect
-                  options={productOptions}
-                  value={pickProductId}
-                  onChange={setPickProductId}
-                  placeholder="ابحث واختر منتجاً"
-                />
-              </div>
-              <Button
-                type="button"
-                className="w-full shrink-0 sm:w-auto"
-                disabled={!pickProductId}
-                onClick={() => navigate(`/production/routing/${pickProductId}`)}
-              >
-                فتح بناء المسار
-              </Button>
+        <OpsDashPanel title="بناء مسار لمنتج" accent="production">
+          <p className="text-sm text-muted-foreground mb-4">
+            اختر المنتج من القائمة ثم اضغط «فتح بناء المسار». صفحة المنتجات تفتح تفاصيل المنتج في لوحة جانبية عند الضغط على الصف وليست مخصصة لاختيار مسار الإنتاج.
+          </p>
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+            <div className="min-w-0 flex-1 space-y-1.5">
+              <Label className="text-xs font-semibold text-muted-foreground">المنتج</Label>
+              <SearchableSelect
+                options={productOptions}
+                value={pickProductId}
+                onChange={setPickProductId}
+                placeholder="ابحث واختر منتجاً"
+              />
             </div>
-          </CardContent>
-        </Card>
+            <Button
+              type="button"
+              className="w-full shrink-0 sm:w-auto"
+              disabled={!pickProductId}
+              onClick={() => navigate(`/production/routing/${pickProductId}`)}
+            >
+              فتح بناء المسار
+            </Button>
+          </div>
+        </OpsDashPanel>
       )}
-      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
-        <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/production/routing/analytics')}>
-          تحليلات المسارات
-        </Button>
-        {can('routing.manage') && (
-          <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={() => navigate('/products')}>
-            فتح كتالوج المنتجات
-          </Button>
-        )}
-      </div>
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

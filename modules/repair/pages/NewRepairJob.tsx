@@ -1,13 +1,13 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Camera, ScanBarcode, Trash2 } from 'lucide-react';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { PageHeader } from '@/components/PageHeader';
+import { RepairOpsPageShell } from '@/modules/repair/components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { SearchableSelect } from '@/components/UI';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
@@ -370,26 +370,34 @@ export const NewRepairJob: React.FC = () => {
     }
   };
 
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
+      رجوع
+    </Button>
+  );
+
   return (
-    <div className="erp-ds-clean w-full max-w-none mx-auto space-y-4 p-4 md:p-6" dir={dir}>
+    <RepairOpsPageShell
+      className="erp-ds-clean w-full max-w-none mx-auto"
+      dir={dir}
+      eyebrow="تسجيل جهاز صيانة"
+      rangeLabel="استلام فقط: العميل والمنتجات والإكسسوارات. الخدمات والتكلفة يحددها الفني بعد الفحص."
+      actions={shellBackAction}
+    >
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-start">
         <div className="space-y-4 lg:order-1">
-          <PageHeader
-            title="تسجيل جهاز صيانة"
-            subtitle="استلام فقط: العميل والمنتجات والإكسسوارات. الخدمات والتكلفة يحددها الفني بعد الفحص."
-            icon="add"
-            backAction={{ to: withTenantPath(tenantSlug, '/repair/jobs') }}
-          />
           <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
             مسار الاستقبال: سجّل العميل والجهاز فقط. التشخيص وقطع الغيار والتكلفة تتم من شاشة الورشة بعد إسناد الفني.
           </div>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>بيانات الاستلام الأساسية</CardTitle>
-              <CardDescription>استلام فقط: بيانات العميل والمنتجات والإكسسوارات. الخدمات والتكلفة يحددها الفني لاحقًا.</CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
+          <OpsDashPanel
+            title="بيانات الاستلام الأساسية"
+            accent="repair"
+          >
+            <p className="mb-4 text-xs text-muted-foreground">
+              استلام فقط: بيانات العميل والمنتجات والإكسسوارات. الخدمات والتكلفة يحددها الفني لاحقًا.
+            </p>
+            <div className="space-y-4">
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
                 <div className="md:col-span-2 xl:col-span-3 pt-1">
                   <div className="text-sm font-semibold">1) العميل (ماستر)</div>
@@ -629,8 +637,8 @@ export const NewRepairJob: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </OpsDashPanel>
 
           <div className="flex items-center justify-end gap-2">
             <Button variant="outline" type="button" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs'))}>
@@ -643,14 +651,15 @@ export const NewRepairJob: React.FC = () => {
         </div>
         <div className="hidden lg:block lg:order-2">
           <div className="sticky top-4">
-            <Card>
-              <CardHeader className="pb-3">
-                <CardTitle className="text-base">طلبات الصيانة المفتوحة</CardTitle>
-                <CardDescription className="text-xs">
-                  {form.branchId ? 'اضغط لفتح التفاصيل' : 'جار تحديد الفرع تلقائيًا'}
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-2 max-h-[calc(100vh-8rem)] overflow-y-auto">
+            <OpsDashPanel
+              title="طلبات الصيانة المفتوحة"
+              accent="repair"
+              bodyClassName="space-y-2 max-h-[calc(100vh-8rem)] overflow-y-auto"
+            >
+              <p className="text-xs text-muted-foreground">
+                {form.branchId ? 'اضغط لفتح التفاصيل' : 'جار تحديد الفرع تلقائيًا'}
+              </p>
+              <div className="space-y-2">
                 {!form.branchId && (
                   <div className="text-xs text-muted-foreground">يتم تحديد فرع الصيانة تلقائيًا حسب المستخدم.</div>
                 )}
@@ -674,8 +683,8 @@ export const NewRepairJob: React.FC = () => {
                     <div className="text-[11px] text-muted-foreground truncate">{job.customerPhone || '-'}</div>
                   </button>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </OpsDashPanel>
           </div>
         </div>
       </div>
@@ -729,7 +738,7 @@ export const NewRepairJob: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

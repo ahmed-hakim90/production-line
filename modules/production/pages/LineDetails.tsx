@@ -3,12 +3,11 @@ import React, { useEffect, useState, useMemo, useCallback, useRef } from 'react'
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import {
-  DetailCollapsibleSection,
-  DetailPageShell,
   DetailPageStickyHeader,
   SectionSkeleton,
   SURFACE_CARD,
@@ -106,6 +105,11 @@ const PERIOD_OPTIONS: { value: Period; label: string }[] = [
 export const LineDetails: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useTenantNavigate();
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate('/lines')}>
+      رجوع
+    </Button>
+  );
   const { can } = usePermission();
   const canViewCosts = can('costs.view');
 
@@ -690,34 +694,33 @@ export const LineDetails: React.FC = () => {
 
   if (loading) {
     return (
-      <DetailPageShell>
+      <ModuleOpsPageShell eyebrow="تفاصيل الخط" actions={shellBackAction}>
         <DetailPageStickyHeader>
-          <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} loading />
-          <Card className={SURFACE_CARD}>
+          <PageHeader title="تفاصيل الخط" loading backAction={false} />
+          <OpsDashPanel title="جاري التحميل" accent="production">
             <SectionSkeleton rows={2} height={38} />
-          </Card>
+          </OpsDashPanel>
         </DetailPageStickyHeader>
-        <Card className={SURFACE_CARD}>
+        <OpsDashPanel title="مؤشرات الأداء" accent="production">
           <SectionSkeleton rows={6} height={68} />
-        </Card>
-      </DetailPageShell>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!line && !loading) {
     return (
-      <DetailPageShell>
-        <PageHeader title="تفاصيل الخط" backAction={{ to: '/lines', label: 'رجوع' }} />
-        <Card className="border-destructive/30 bg-destructive/5">
-          <CardContent className="space-y-4 p-6 text-center">
+      <ModuleOpsPageShell eyebrow="تفاصيل الخط" actions={shellBackAction}>
+        <OpsDashPanel title="خط الإنتاج غير موجود" accent="production">
+          <div className="space-y-4 text-center">
             <span className="material-icons-round block text-6xl opacity-30 text-muted-foreground">precision_manufacturing</span>
             <p className="text-lg font-bold text-destructive">خط الإنتاج غير موجود</p>
             <Button type="button" variant="outline" onClick={() => navigate('/lines')}>
               العودة لخطوط الإنتاج
             </Button>
-          </CardContent>
-        </Card>
-      </DetailPageShell>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -725,21 +728,21 @@ export const LineDetails: React.FC = () => {
   const healthCfg = planHealth ? HEALTH_STATUS_CONFIG[planHealth.status] : null;
 
   return (
-    <DetailPageShell>
+    <ModuleOpsPageShell eyebrow="تفاصيل الخط" actions={shellBackAction}>
       <DetailPageStickyHeader>
         <PageHeader
           title={line?.name ?? 'تفاصيل الخط'}
           subtitle={linePageSubtitle}
           icon="factory"
-          backAction={{ to: '/lines', label: 'رجوع' }}
+          backAction={false}
           extra={(
             <Badge variant={statusCfg.variant} pulse={line?.status === ProductionLineStatus.ACTIVE}>
               {statusCfg.label}
             </Badge>
           )}
         />
-        <Card className={SURFACE_CARD}>
-          <CardContent className="flex flex-wrap items-center justify-end gap-3 p-4">
+        <OpsDashPanel title="الفترة" accent="production">
+          <div className="flex flex-wrap items-center justify-end gap-3">
             <div className="flex flex-wrap gap-1 rounded-lg border border-slate-200/90 bg-slate-100/80 p-1 dark:border-border dark:bg-muted/40">
               {PERIOD_OPTIONS.map((opt) => (
                 <Button
@@ -754,11 +757,11 @@ export const LineDetails: React.FC = () => {
                 </Button>
               ))}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       </DetailPageStickyHeader>
 
-      <DetailCollapsibleSection title="مؤشرات الأداء" defaultOpen>
+      <OpsDashPanel title="مؤشرات الأداء" accent="production">
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-4">
         <KPIBox
           label="الإنتاج مقابل الهدف"
@@ -857,10 +860,10 @@ export const LineDetails: React.FC = () => {
           />
         )}
       </div>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
       {canViewCosts && (
-        <DetailCollapsibleSection title="التكاليف والتوزيع" defaultOpen>
+        <OpsDashPanel title="التكاليف والتوزيع" accent="production">
       {lineAllocatedCosts && (
         <ErpCard>
           <div className="flex items-center justify-between gap-2 mb-4">
@@ -969,12 +972,12 @@ export const LineDetails: React.FC = () => {
             </div>
           )}
         </ErpCard>
-        </DetailCollapsibleSection>
+        </OpsDashPanel>
       )}
 
       {/* â”€â”€ Plan Health Block â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {activePlan && planHealth && healthCfg && (
-        <DetailCollapsibleSection title="صحة الخطة" defaultOpen>
+        <OpsDashPanel title="صحة الخطة" accent="production">
         <ErpCard>
           <div className="flex items-center gap-2 mb-5">
             <span className="material-icons-round text-violet-500">monitor_heart</span>
@@ -1032,11 +1035,11 @@ export const LineDetails: React.FC = () => {
             </div>
           </div>
         </ErpCard>
-        </DetailCollapsibleSection>
+        </OpsDashPanel>
       )}
 
       {/* â”€â”€ Charts with Tab Switcher â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <DetailCollapsibleSection title="تحليل الأداء" defaultOpen>
+      <OpsDashPanel title="تحليل الأداء" accent="production">
       <ErpCard>
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 mb-4">
           <div className="flex items-center gap-2">
@@ -1123,10 +1126,10 @@ export const LineDetails: React.FC = () => {
           </div>
         )}
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
       {/* â”€â”€ Capacity Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <DetailCollapsibleSection title="مؤشرات الإنتاجية" defaultOpen>
+      <OpsDashPanel title="مؤشرات الإنتاجية" accent="production">
       <ErpCard>
         <div className="flex items-center gap-2 mb-5">
           <span className="material-icons-round text-emerald-500">precision_manufacturing</span>
@@ -1187,9 +1190,9 @@ export const LineDetails: React.FC = () => {
           </div>
         )}
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="كمية إنتاج العامل (منتج × خط)" defaultOpen={false}>
+      <OpsDashPanel title="كمية إنتاج العامل (منتج × خط)" accent="production">
       <ErpCard>
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-primary">flag</span>
@@ -1197,10 +1200,10 @@ export const LineDetails: React.FC = () => {
         </div>
         {id ? <LineProductWorkerTargetsSection lineId={id} /> : null}
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
       {/* â”€â”€ Alerts Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <DetailCollapsibleSection title="التنبيهات" defaultOpen>
+      <OpsDashPanel title="التنبيهات" accent="production">
       <ErpCard>
         <div className="flex items-center gap-2 mb-4">
           <span className="material-icons-round text-amber-500">notifications_active</span>
@@ -1224,11 +1227,11 @@ export const LineDetails: React.FC = () => {
           ))}
         </div>
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
       {/* â”€â”€ Active Work Orders â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {can('workOrders.view') && lineWorkOrders.length > 0 && (
-        <DetailCollapsibleSection title="أوامر الشغل المرتبطة" defaultOpen>
+        <OpsDashPanel title="أوامر الشغل المرتبطة" accent="production">
         <ErpCard className="!p-0 border-none overflow-hidden " title="">
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
             <span className="material-icons-round text-primary">assignment</span>
@@ -1273,11 +1276,11 @@ export const LineDetails: React.FC = () => {
             })}
           </div>
         </ErpCard>
-        </DetailCollapsibleSection>
+        </OpsDashPanel>
       )}
 
       {/* â”€â”€ Reports Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      <DetailCollapsibleSection title="سجل التقارير" defaultOpen>
+      <OpsDashPanel title="سجل التقارير" accent="production">
       <ErpCard className="!p-0 border-none overflow-hidden " title="">
         <div className="px-6 py-4 border-b border-[var(--color-border)]">
           <h3 className="text-lg font-bold">سجل التقارير</h3>
@@ -1339,7 +1342,7 @@ export const LineDetails: React.FC = () => {
           </div>
         )}
       </ErpCard>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
       {/* View Workers Modal */}
       {viewWorkersData && (
@@ -1390,7 +1393,7 @@ export const LineDetails: React.FC = () => {
           </div>
         </div>
       )}
-    </DetailPageShell>
+    </ModuleOpsPageShell>
   );
 };
 

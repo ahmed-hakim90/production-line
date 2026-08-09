@@ -1,5 +1,6 @@
 import React, { useCallback, useMemo, useState } from 'react';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/UI';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { useAppStore } from '@/store/useAppStore';
@@ -96,22 +97,18 @@ export const AttendanceMonthlyReport: React.FC = () => {
   }, [filteredRows]);
 
   return (
-    <div className="space-y-6">
-      <PageHeader
-        title="التقرير الشهري للحضور"
-        subtitle="ملخص الحضور الشهري لكل موظف مع مؤشرات الالتزام"
-        icon="analytics"
-      />
-
-      <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-        <div className="erp-kpi-card"><div className="erp-kpi-label">الموظفون</div><div className="erp-kpi-value">{kpis.totalEmployees}</div></div>
-        <div className="erp-kpi-card"><div className="erp-kpi-label">أيام العمل</div><div className="erp-kpi-value">{kpis.workDays}</div></div>
-        <div className="erp-kpi-card"><div className="erp-kpi-label">الحضور</div><div className="erp-kpi-value">{kpis.presentDays}</div></div>
-        <div className="erp-kpi-card"><div className="erp-kpi-label">الغياب</div><div className="erp-kpi-value">{kpis.absentDays}</div></div>
-        <div className="erp-kpi-card"><div className="erp-kpi-label">إضافي (دقيقة)</div><div className="erp-kpi-value">{kpis.overtimeMinutes}</div></div>
-      </div>
-
-      <div className="card overflow-x-auto p-0">
+    <ModuleOpsPageShell
+      eyebrow="الحضور والانصراف"
+      rangeLabel={`التقرير الشهري — ${month}`}
+      hero={[
+        { key: 'employees', label: 'الموظفون', value: kpis.totalEmployees, accent: true },
+        { key: 'workDays', label: 'أيام العمل', value: kpis.workDays },
+        { key: 'present', label: 'الحضور', value: kpis.presentDays },
+        { key: 'absent', label: 'الغياب', value: kpis.absentDays },
+        { key: 'overtime', label: 'إضافي (دقيقة)', value: kpis.overtimeMinutes },
+      ]}
+    >
+      <OpsDashPanel title="التقرير الشهري للحضور" accent="hr" bodyClassName="p-0 overflow-x-auto">
         <SmartFilterBar
       pageId="attendance-monthly-report"
           searchPlaceholder="بحث باسم الموظف أو الكود"
@@ -178,7 +175,7 @@ export const AttendanceMonthlyReport: React.FC = () => {
             ))}
           </tbody>
         </table>
-      </div>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

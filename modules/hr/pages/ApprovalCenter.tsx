@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, Button, Badge } from '../components/UI';
+import { Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { TableIconAction, ToneActionButton } from '@/src/components/erp';
 import { usePermission } from '@/utils/permissions';
@@ -353,14 +355,16 @@ export const ApprovalCenter: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h2 className="text-xl sm:text-2xl font-bold text-[var(--color-text)]">مركز الموافقات</h2>
-          <p className="text-sm text-[var(--color-text-muted)] font-medium">
-            مراجعة واعتماد الطلبات — {role === 'admin' ? 'مدير النظام' : role === 'hr' ? 'الموارد البشرية' : role === 'manager' ? 'مدير' : 'موظف'}
-          </p>
-        </div>
+    <ModuleOpsPageShell
+      eyebrow="الموارد البشرية"
+      rangeLabel={`مراجعة واعتماد الطلبات — ${role === 'admin' ? 'مدير النظام' : role === 'hr' ? 'الموارد البشرية' : role === 'manager' ? 'مدير' : 'موظف'}`}
+      hero={[
+        { key: 'total', label: 'إجمالي الطلبات', value: stats.total, accent: true },
+        { key: 'pending', label: 'قيد الانتظار', value: stats.pending },
+        { key: 'approved', label: 'مُعتمد', value: stats.approved },
+        { key: 'rejected', label: 'مرفوض', value: stats.rejected },
+      ]}
+      actions={(
         <div className="flex items-center gap-3">
           {actionableCount > 0 && (
             <div className="bg-amber-50 border border-amber-200 rounded-[var(--border-radius-lg)] px-4 py-2 flex items-center gap-2">
@@ -370,23 +374,8 @@ export const ApprovalCenter: React.FC = () => {
           )}
           {currentEmployee?.id && <HRNotificationBell employeeId={currentEmployee.id} />}
         </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        {[
-          { label: 'إجمالي الطلبات', value: stats.total, icon: 'inbox', color: 'text-blue-500' },
-          { label: 'قيد الانتظار', value: stats.pending, icon: 'hourglass_top', color: 'text-amber-500' },
-          { label: 'مُعتمد', value: stats.approved, icon: 'check_circle', color: 'text-emerald-500' },
-          { label: 'مرفوض', value: stats.rejected, icon: 'cancel', color: 'text-rose-500' },
-        ].map((stat) => (
-          <div key={stat.label} className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className={`material-icons-round ${stat.color} text-3xl mb-2 block`}>{stat.icon}</span>
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">{stat.label}</p>
-            <p className="text-2xl font-black">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
+      )}
+    >
       <div className="flex flex-wrap gap-2">
         {[
           { key: 'actionable', label: 'تتطلب إجرائي' },
@@ -465,17 +454,16 @@ export const ApprovalCenter: React.FC = () => {
         }}
       />
 
+      <OpsDashPanel title="الطلبات" accent="hr" bodyClassName="p-0">
       {filtered.length === 0 ? (
-        <Card>
-          <div className="text-center py-12">
-            <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">task_alt</span>
-            <p className="text-sm font-bold text-slate-500">
-              {filterStatus === 'actionable' ? 'لا توجد طلبات تتطلب إجراءك' : 'لا توجد طلبات'}
-            </p>
-          </div>
-        </Card>
+        <div className="text-center py-12 px-4">
+          <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">task_alt</span>
+          <p className="text-sm font-bold text-slate-500">
+            {filterStatus === 'actionable' ? 'لا توجد طلبات تتطلب إجراءك' : 'لا توجد طلبات'}
+          </p>
+        </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-4 p-4">
           {filtered.map((req) => {
             const typeCfg = TYPE_CONFIG[req.requestType];
             const statusCfg = getApprovalStatusDisplay(req);
@@ -585,7 +573,8 @@ export const ApprovalCenter: React.FC = () => {
           })}
         </div>
       )}
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
 

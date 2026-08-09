@@ -3,6 +3,8 @@ import { useLocation } from 'react-router-dom';
 import { toast } from 'sonner';
 import { Button, SearchableSelect } from '../components/UI';
 import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppStore } from '../../../store/useAppStore';
 import { stockService } from '../services/stockService';
 import { createStockMovement } from '../usecases/createStockMovement';
@@ -1057,22 +1059,27 @@ export const StockMovementForm: React.FC = () => {
   const labelClass = 'block text-[11.5px] font-semibold text-[var(--color-text-muted)] mb-1.5 uppercase tracking-wide';
 
   return (
-    <div className="space-y-5">
-
+    <ModuleOpsPageShell
+      eyebrow={pageTitle}
+      rangeLabel={pageSubtitle}
+      actions={
+        can('inventory.transactions.create') ? (
+          <Button
+            type="button"
+            variant="primary"
+            onClick={() => void handleSubmit('none')}
+            disabled={saving}
+          >
+            {saving ? 'جاري الحفظ...' : primarySaveLabel}
+          </Button>
+        ) : undefined
+      }
+    >
       <PageHeader
         title={pageTitle}
         subtitle={pageSubtitle}
         icon="inventory_2"
-        primaryAction={
-          can('inventory.transactions.create')
-            ? {
-                label: saving ? 'جاري الحفظ...' : primarySaveLabel,
-                icon: 'save',
-                onClick: () => void handleSubmit('none'),
-                disabled: saving,
-              }
-            : undefined
-        }
+        backAction={false}
         moreActions={[
           {
             label: 'استيراد إدخال بالكود',
@@ -1100,9 +1107,9 @@ export const StockMovementForm: React.FC = () => {
       />
 
       {/* ── Main Form Card ── */}
+      <OpsDashPanel accent="inventory" bodyClassName="p-0 overflow-hidden">
       <div
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)]"
-        style={{ boxShadow: 'var(--shadow-card)' }}
+        className="bg-[var(--color-card)]"
       >
         {/* Card header */}
         <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex flex-wrap items-center justify-between gap-2">
@@ -1572,6 +1579,7 @@ export const StockMovementForm: React.FC = () => {
           </Button>
         </div>
       </div>
+      </OpsDashPanel>
 
       {/* Hidden print component */}
       <div style={{ position: 'fixed', right: 0, top: 0, opacity: 0, pointerEvents: 'none', zIndex: 0 }}>
@@ -1630,6 +1638,6 @@ export const StockMovementForm: React.FC = () => {
         </div>
       )}
 
-    </div>
+    </ModuleOpsPageShell>
   );
 };

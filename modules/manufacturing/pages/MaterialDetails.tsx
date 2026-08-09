@@ -1,9 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Loader2, Plus, Trash2 } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { usePermission } from '@/utils/permissions';
 import { useMaterial } from '../hooks/useMaterials';
 import { useMaterialBom, useBomItemMutations } from '../hooks/useProductBom';
@@ -45,26 +46,39 @@ export const MaterialDetails: React.FC = () => {
     }
   };
 
+  const backAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate('/manufacturing/materials')}>
+      رجوع
+    </Button>
+  );
+
   if (isLoading) {
     return (
-      <div className="flex justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin" />
-      </div>
+      <ModuleOpsPageShell eyebrow="تفاصيل المادة" actions={backAction}>
+        <div className="flex justify-center py-20">
+          <Loader2 className="h-8 w-8 animate-spin" />
+        </div>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!material || !id) {
-    return <p className="p-8 text-center">المادة غير موجودة</p>;
+    return (
+      <ModuleOpsPageShell eyebrow="تفاصيل المادة" actions={backAction}>
+        <OpsDashPanel title="المادة غير موجودة" accent="production">
+          <p className="py-8 text-center text-sm text-muted-foreground">المادة غير موجودة</p>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
+    );
   }
 
   return (
-    <div className="space-y-6 p-4 md:p-6">
-      <PageHeader
-        title={material.name}
-        subtitle={`${material.code} · ${MATERIAL_TYPE_LABELS[material.type]}`}
-        backAction={{ label: 'المواد', onClick: () => navigate('/manufacturing/materials') }}
-      />
-      <div>
+    <ModuleOpsPageShell
+      eyebrow="تفاصيل المادة"
+      rangeLabel={`${material.code} · ${MATERIAL_TYPE_LABELS[material.type]}`}
+      actions={backAction}
+    >
+      <OpsDashPanel title={material.name} accent="production">
         <h3 className="mb-3 text-sm font-semibold">قائمة المواد (BOM)</h3>
         {bomLoading ? (
           <Loader2 className="h-6 w-6 animate-spin" />
@@ -127,7 +141,7 @@ export const MaterialDetails: React.FC = () => {
             )}
           </>
         )}
-      </div>
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };

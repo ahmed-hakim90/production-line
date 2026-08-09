@@ -6,6 +6,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { LoadingSkeleton } from '@/modules/production/components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -296,7 +297,11 @@ export const ExecutionPage: React.FC = () => {
 
   if (!can('routing.execute')) {
     return (
-      <div className="erp-ds-clean w-full min-w-0">
+      <ModuleOpsPageShell
+        className="w-full min-w-0"
+        eyebrow="تنفيذ المسار"
+        rangeLabel="تنفيذ خطوات مسار الإنتاج وحفظ الأداء"
+      >
         <Card className="shadow-sm">
           <CardContent className="space-y-4 p-4 sm:p-6">
             <div className="rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive">
@@ -307,21 +312,21 @@ export const ExecutionPage: React.FC = () => {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!isNew && execQuery.isLoading) {
     return (
-      <div className="erp-ds-clean mx-auto w-full min-w-0 max-w-lg">
+      <ModuleOpsPageShell className="mx-auto w-full min-w-0 max-w-lg" eyebrow="تنفيذ المسار" rangeLabel="جاري تحميل التنفيذ">
         <LoadingSkeleton rows={8} type="card" />
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!isNew && !execution) {
     return (
-      <div className="erp-ds-clean mx-auto w-full min-w-0 max-w-lg space-y-4">
+      <ModuleOpsPageShell className="mx-auto w-full min-w-0 max-w-lg" eyebrow="تنفيذ المسار" rangeLabel="تنفيذ غير موجود">
         <PageHeader title="تنفيذ غير موجود" subtitle="قد يكون الرابط قديماً أو تم حذف السجل" icon="factory" />
         <Card className="shadow-sm">
           <CardContent className="space-y-4 p-4 sm:p-6">
@@ -331,13 +336,17 @@ export const ExecutionPage: React.FC = () => {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   if (phase === 'done' && execution?.status === 'completed') {
     return (
-      <div className="erp-ds-clean mx-auto w-full min-w-0 max-w-lg space-y-5">
+      <ModuleOpsPageShell
+        className="mx-auto w-full min-w-0 max-w-lg"
+        eyebrow="تنفيذ المسار"
+        rangeLabel="اكتمل التنفيذ — تم حفظ الأداء والتكلفة"
+      >
         <PageHeader
           title="اكتمل التنفيذ"
           subtitle="تم حفظ الأداء والتكلفة — يمكنك التصدير أو المشاركة كما في الإدخال السريع"
@@ -444,13 +453,17 @@ export const ExecutionPage: React.FC = () => {
             printSettings={printTemplate}
           />
         </div>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   if (isNew && phase === 'pick') {
     return (
-      <div className="erp-ds-clean mx-auto w-full min-w-0 max-w-lg space-y-6">
+      <ModuleOpsPageShell
+        className="mx-auto w-full min-w-0 max-w-lg"
+        eyebrow="تنفيذ المسار"
+        rangeLabel="الخطوة 1 — المنتج والكمية"
+      >
         <PageHeader
           title="تنفيذ مسار"
           subtitle="الخطوة 1 — المنتج والكمية"
@@ -485,13 +498,17 @@ export const ExecutionPage: React.FC = () => {
             </Button>
           </CardContent>
         </Card>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   if (isNew && phase === 'preview') {
     return (
-      <div className="erp-ds-clean mx-auto w-full min-w-0 max-w-lg space-y-6">
+      <ModuleOpsPageShell
+        className="mx-auto w-full min-w-0 max-w-lg"
+        eyebrow="تنفيذ المسار"
+        rangeLabel="الخطوة 2 — مراجعة سريعة"
+      >
         <PageHeader
           title="خطة المسار النشطة"
           subtitle="الخطوة 2 — مراجعة سريعة"
@@ -540,14 +557,18 @@ export const ExecutionPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
 
   if (!isNew && currentStepRow) {
     return (
-      <div className="erp-ds-clean mx-auto w-full min-w-0 max-w-lg space-y-6 pb-24 md:pb-10">
+      <ModuleOpsPageShell
+        className="mx-auto w-full min-w-0 max-w-lg pb-24 md:pb-10"
+        eyebrow="تنفيذ المسار"
+        rangeLabel={currentStepRow.name}
+      >
         <PageHeader
           title={currentStepRow.name}
           subtitle={`خطوة ${stepIndex + 1} من ${execSteps.length}`}
@@ -699,14 +720,14 @@ export const ExecutionPage: React.FC = () => {
             </div>
           </CardContent>
         </Card>
-      </div>
+      </ModuleOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean mx-auto w-full min-w-0 max-w-lg">
+    <ModuleOpsPageShell className="mx-auto w-full min-w-0 max-w-lg" eyebrow="تنفيذ المسار" rangeLabel="جاري التحميل">
       <LoadingSkeleton rows={6} type="card" />
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

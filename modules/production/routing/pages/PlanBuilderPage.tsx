@@ -16,7 +16,7 @@ import { tenantHomePath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { LoadingSkeleton } from '@/modules/production/components/UI';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
@@ -253,15 +253,16 @@ export const PlanBuilderPage: React.FC = () => {
   }
 
   return (
-    <div className="erp-ds-clean w-full min-w-0 space-y-5 pb-24 md:space-y-6 md:pb-8">
-      <PageHeader
-        title="بناء مسار الإنتاج"
-        subtitle={pageSubtitle}
-        icon="factory"
-        iconBg="bg-emerald-500/15"
-        iconColor="text-emerald-600 dark:text-emerald-400"
-        backAction={{ onClick: () => navigate('/production/routing'), label: 'مسارات الإنتاج' }}
-      />
+    <ModuleOpsPageShell
+      className="w-full min-w-0 pb-24 md:pb-8"
+      eyebrow="مسارات الإنتاج"
+      rangeLabel={pageSubtitle}
+      actions={(
+        <Button type="button" variant="outline" size="sm" onClick={() => navigate('/production/routing')}>
+          مسارات الإنتاج
+        </Button>
+      )}
+    >
       {!routeProductId && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-4 py-3 text-sm text-destructive">
           معرّف المنتج غير صالح. ارجع إلى{' '}
@@ -477,7 +478,7 @@ export const PlanBuilderPage: React.FC = () => {
           )}
         </>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

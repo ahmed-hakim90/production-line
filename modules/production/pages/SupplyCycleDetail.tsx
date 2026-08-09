@@ -2,6 +2,8 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Badge, SearchableSelect } from '../components/UI';
 import { usePermission } from '../../../utils/permissions';
 import type { ProductionReport, SupplyCycle, SupplyCycleKind, SupplyCycleStatus, SupplyCycleWasteLine } from '../../../types';
@@ -26,9 +28,7 @@ import {
   peekPageDataCache,
 } from '../../shared/lib/pageDataCache';
 import {
-  DetailPageShell,
   DetailPageStickyHeader,
-  DetailCollapsibleSection,
   SectionSkeleton,
   SURFACE_CARD,
   NESTED_TILE,
@@ -45,7 +45,6 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 import {
   Dialog,
   DialogContent,
@@ -75,6 +74,11 @@ function statusVariant(s: SupplyCycleStatus): 'success' | 'warning' | 'neutral' 
 export const SupplyCycleDetail: React.FC = () => {
   const { cycleId } = useParams<{ cycleId: string }>();
   const navigate = useTenantNavigate();
+  const shellBackAction = (
+    <Button type="button" variant="ghost" onClick={() => navigate('/supply-cycles')}>
+      رجوع
+    </Button>
+  );
   const { can } = usePermission();
   const _rawProducts = useAppStore((s) => s._rawProducts);
   const _rawLines = useAppStore((s) => s._rawLines);
@@ -470,47 +474,47 @@ export const SupplyCycleDetail: React.FC = () => {
 
   if (!cycleId) {
     return (
-      <DetailPageShell className="max-w-6xl mx-auto">
+      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
         <p className="text-center text-sm text-muted-foreground py-12">معرّف غير صالح.</p>
-      </DetailPageShell>
+      </ModuleOpsPageShell>
     );
   }
 
   if (loading) {
     return (
-      <DetailPageShell className="max-w-6xl mx-auto">
+      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
         <DetailPageStickyHeader>
           <PageHeader
             title="تفاصيل دورة التوريد"
-            backAction={{ to: '/supply-cycles', label: 'رجوع' }}
             loading
+            backAction={false}
           />
-          <Card className={cn('overflow-hidden', SURFACE_CARD)}>
+          <OpsDashPanel title="جاري التحميل" accent="inventory">
             <SectionSkeleton rows={4} height={20} />
-          </Card>
+          </OpsDashPanel>
         </DetailPageStickyHeader>
-        <DetailCollapsibleSection title="بيانات الصنف والفترة" defaultOpen>
+        <OpsDashPanel title="بيانات الصنف والفترة" accent="inventory">
           <SectionSkeleton rows={5} height={14} />
-        </DetailCollapsibleSection>
-        <DetailCollapsibleSection title="ملخص الأرقام" defaultOpen>
+        </OpsDashPanel>
+        <OpsDashPanel title="ملخص الأرقام" accent="inventory">
           <SectionSkeleton rows={3} height={48} />
-        </DetailCollapsibleSection>
-      </DetailPageShell>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
   if (!cycle) {
     return (
-      <DetailPageShell className="max-w-6xl mx-auto">
-        <Card className={cn('overflow-hidden', SURFACE_CARD)}>
-          <CardContent className="py-12 text-center space-y-4">
+      <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
+        <OpsDashPanel title="الدورة غير موجودة" accent="inventory">
+          <div className="py-8 text-center space-y-4">
             <p className="text-destructive font-medium">الدورة غير موجودة أو لا تملك صلاحية عرضها.</p>
             <Button type="button" variant="outline" onClick={() => navigate('/supply-cycles')}>
               العودة لقائمة الدورات
             </Button>
-          </CardContent>
-        </Card>
-      </DetailPageShell>
+          </div>
+        </OpsDashPanel>
+      </ModuleOpsPageShell>
     );
   }
 
@@ -543,13 +547,13 @@ export const SupplyCycleDetail: React.FC = () => {
   ];
 
   return (
-    <DetailPageShell className="max-w-6xl mx-auto">
+    <ModuleOpsPageShell className="max-w-6xl mx-auto" eyebrow="تفاصيل دورة التوريد" actions={shellBackAction}>
       <DetailPageStickyHeader>
         <PageHeader
           title={cycle.batchCode}
           subtitle={cycle.externalLabel || `${KIND_LABEL[cycle.kind]} · ${resolveItemName(cycle)}`}
           icon="inventory_2"
-          backAction={{ to: '/supply-cycles', label: 'دورات التوريد' }}
+          backAction={false}
           primaryAction={
             canEdit ? { label: 'تعديل', icon: 'edit', onClick: () => setShowEdit(true) } : undefined
           }
@@ -572,8 +576,7 @@ export const SupplyCycleDetail: React.FC = () => {
           extra={headerExtra}
         />
 
-        <Card className={cn('overflow-hidden', SURFACE_CARD)}>
-          <CardContent className="p-4 md:p-5">
+        <OpsDashPanel title="ملخص سريع" accent="inventory">
             <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">المتبقي</p>
@@ -595,11 +598,10 @@ export const SupplyCycleDetail: React.FC = () => {
                 ))}
               </div>
             </div>
-          </CardContent>
-        </Card>
+        </OpsDashPanel>
       </DetailPageStickyHeader>
 
-      <DetailCollapsibleSection title="بيانات الصنف والفترة" defaultOpen>
+      <OpsDashPanel title="بيانات الصنف والفترة" accent="inventory">
         <dl className="grid gap-3 text-sm sm:grid-cols-2">
           <div className="flex justify-between gap-4 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2 dark:border-border/60 dark:bg-muted/25">
             <dt className="text-muted-foreground">الصنف</dt>
@@ -642,9 +644,9 @@ export const SupplyCycleDetail: React.FC = () => {
             </>
           )}
         </dl>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="ملخص الأرقام" defaultOpen>
+      <OpsDashPanel title="ملخص الأرقام" accent="inventory">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
           {kpiTiles.map((k) => (
             <div key={k.label} className={cn('space-y-1 p-3', NESTED_TILE)}>
@@ -661,9 +663,9 @@ export const SupplyCycleDetail: React.FC = () => {
           </p>
           <p className="mt-1 text-2xl font-bold tabular-nums text-primary">{formatNumber(totals.remaining)}</p>
         </div>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="الربط والمخزون وترحيل أول المدة" defaultOpen>
+      <OpsDashPanel title="الربط والمخزون وترحيل أول المدة" accent="inventory">
         <div className="space-y-3 text-sm">
           <p>
             <span className="text-muted-foreground">تقارير إنتاج مربوطة بهذه الدورة:</span>{' '}
@@ -693,9 +695,9 @@ export const SupplyCycleDetail: React.FC = () => {
             )}
           </div>
         </div>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="جدول صرف الإنتاج (تقارير مربوطة)" defaultOpen>
+      <OpsDashPanel title="جدول صرف الإنتاج (تقارير مربوطة)" accent="inventory">
         {cycle.kind === 'raw_material' && (
           <p className="text-sm text-muted-foreground leading-relaxed mb-3">
             لدورات <strong>الخام</strong> يُعرض «كمية الإنتاج» في التقارير للمتابعة فقط — عمود «في صرف الإنتاج» لا يُخصم
@@ -751,9 +753,9 @@ export const SupplyCycleDetail: React.FC = () => {
             </table>
           </div>
         )}
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
-      <DetailCollapsibleSection title="الهالك اليدوي" defaultOpen>
+      <OpsDashPanel title="الهالك اليدوي" accent="inventory">
         {cycle.status === 'closed' ? (
           <p className="text-sm text-muted-foreground mb-4">
             الدورة مقفلة — لا يمكن إضافة أو تعديل سطور الهالك اليدوي.
@@ -830,7 +832,7 @@ export const SupplyCycleDetail: React.FC = () => {
             </tbody>
           </table>
         </div>
-      </DetailCollapsibleSection>
+      </OpsDashPanel>
 
       <Dialog open={showEdit && canEdit} onOpenChange={(o) => !saving && setShowEdit(o)}>
         <DialogContent className="max-w-lg max-h-[90vh] overflow-y-auto sm:max-w-lg" dir="rtl">
@@ -958,6 +960,6 @@ export const SupplyCycleDetail: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </DetailPageShell>
+    </ModuleOpsPageShell>
   );
 };

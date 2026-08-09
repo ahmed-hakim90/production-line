@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
@@ -123,17 +124,16 @@ export const CustomersRepairLinkBackfill: React.FC = () => {
   };
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="ربط طلبات الصيانة بالعملاء"
-        subtitle="مطابقة الطلبات بلا customerId مع ماستر العملاء عبر رقم الهاتف (تطابق فريد فقط)."
-        actions={
-          <Button asChild variant="outline">
-            <Link to={withTenantPath(tenantSlug, '/customers')}>العودة للعملاء</Link>
-          </Button>
-        }
-      />
-
+    <ModuleOpsPageShell
+      eyebrow="العملاء"
+      rangeLabel="مطابقة طلبات الصيانة بلا customerId مع ماستر العملاء عبر رقم الهاتف"
+      actions={(
+        <Button asChild variant="outline" size="sm">
+          <Link to={withTenantPath(tenantSlug, '/customers')}>العودة للعملاء</Link>
+        </Button>
+      )}
+    >
+      <OpsDashPanel title="ربط طلبات الصيانة بالعملاء" accent="repair">
       {step === 'idle' && (
         <div className="rounded-xl border p-6 space-y-3 text-sm">
           <p>
@@ -221,6 +221,7 @@ export const CustomersRepairLinkBackfill: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+      </OpsDashPanel>
+    </ModuleOpsPageShell>
   );
 };
