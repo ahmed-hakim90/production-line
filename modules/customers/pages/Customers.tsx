@@ -23,7 +23,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { withTenantPath } from '@/lib/tenantPaths';
-import { usePermission } from '@/utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import { useAppStore } from '@/store/useAppStore';
 import { toast } from 'sonner';
 import { Pencil } from 'lucide-react';
@@ -56,10 +56,11 @@ const EMPTY_FORM = {
 
 export const Customers: React.FC = () => {
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
-  const { can } = usePermission();
-  const canCreate = can('customers.create');
-  const canEdit = can('customers.edit');
-  const canImport = can('customers.import');
+  const customerPerms = useResourcePermission('customers');
+  const canView = customerPerms.canView;
+  const canCreate = customerPerms.canCreate;
+  const canEdit = customerPerms.canEdit;
+  const canImport = customerPerms.canAction('import');
   const user = useAppStore((s) => s.userProfile);
 
   const [rows, setRows] = useState<Customer[]>([]);
@@ -191,8 +192,12 @@ export const Customers: React.FC = () => {
     }
   };
 
-  if (!can('customers.view')) {
-    return <div className="p-6 text-sm text-muted-foreground">ليس لديك صلاحية عرض العملاء.</div>;
+  if (!canView) {
+    return (
+      <ModuleOpsPageShell eyebrow="العملاء" rangeLabel="ماستر بيانات العملاء">
+        <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض العملاء.</p>
+      </ModuleOpsPageShell>
+    );
   }
 
   return (

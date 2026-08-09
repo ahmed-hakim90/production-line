@@ -6,10 +6,10 @@ import { Button } from '../components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import {
-  usePermission,
   PERMISSION_GROUPS,
   ALL_PERMISSIONS,
 } from '../../../utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import { useGlobalModalManager } from '../../../components/modal-manager/GlobalModalManager';
 import { MODAL_KEYS } from '../../../components/modal-manager/modalKeys';
 import { userService } from '../../../services/userService';
@@ -33,7 +33,10 @@ export const RolesManagement: React.FC = () => {
   const deleteRole = useAppStore((s) => s.deleteRole);
   const seedDefaultRolesCatalog = useAppStore((s) => s.seedDefaultRolesCatalog);
   const userRoleId = useAppStore((s) => s.userRoleId);
-  const { can } = usePermission();
+  const rolesPerms = useResourcePermission('roles');
+  const usersPerms = useResourcePermission('users');
+  const canManageRoles = rolesPerms.canManage || rolesPerms.canAction('manage');
+  const canManageUsers = usersPerms.canManage || usersPerms.canAction('manage');
   const { openModal } = useGlobalModalManager();
 
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
@@ -169,7 +172,7 @@ export const RolesManagement: React.FC = () => {
       eyebrow="الأدوار والصلاحيات"
       rangeLabel="إدارة الأدوار والتحكم في صلاحيات المستخدمين. لعرض من له أي دور أو تغيير دور مستخدم، استخدم «إدارة المستخدمين»"
       actions={
-        can('roles.manage') ? (
+        canManageRoles ? (
           <div className="flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
@@ -236,7 +239,7 @@ export const RolesManagement: React.FC = () => {
                       <span className="text-sm font-bold text-[var(--color-text)] tabular-nums">
                         {userCountsLoading ? '…' : visibleUserCountByRoleId[role.id!] ?? 0}
                       </span>
-                      {can('users.manage') && role.id && (
+                      {canManageUsers && role.id && (
                         <Link
                           to={withTenantPath(tenantSlug, `/system/users?role=${encodeURIComponent(role.id)}`)}
                           className="text-[11px] font-bold text-primary hover:underline"
@@ -287,7 +290,7 @@ export const RolesManagement: React.FC = () => {
 
                 {/* Card footer */}
                 <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 py-3 border-t border-[var(--color-border)] bg-[#f8f9fa]/60/30">
-                  {can('roles.manage') && (
+                  {canManageRoles && (
                     <Button
                       onClick={() => openModal(MODAL_KEYS.SYSTEM_ROLES_CREATE, { role })}
                       data-modal-key={MODAL_KEYS.SYSTEM_ROLES_CREATE}
@@ -296,7 +299,7 @@ export const RolesManagement: React.FC = () => {
                       تعديل الصلاحيات
                     </Button>
                   )}
-                  {role.id !== userRoleId && can('roles.manage') && (
+                  {role.id !== userRoleId && canManageRoles && (
                     <button
                       onClick={() => setDeleteConfirmId(role.id!)}
                       className="w-full sm:w-auto p-2 rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/20 border border-transparent hover:border-rose-200 dark:hover:border-rose-800 transition-all"

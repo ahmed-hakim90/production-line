@@ -22,6 +22,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { usePermission } from '@/utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import { useMaterials, useMaterialMutations } from '../hooks/useMaterials';
 import {
   MATERIAL_TYPE_LABELS,
@@ -120,9 +121,10 @@ function SortIcon({ active, dir }: { active: boolean; dir: 'asc' | 'desc' }) {
 export const Materials: React.FC = () => {
   const navigate = useTenantNavigate();
   const { can } = usePermission();
+  const materialsPerms = useResourcePermission('materials');
   const location = useLocation();
-  const canView = can('materials.view');
-  const canManage = can('materials.manage');
+  const canView = materialsPerms.canView;
+  const canManage = materialsPerms.canManage || materialsPerms.canAction('manage');
   const canManagePricing = can('repair.pricing.manage');
   const userRoleId = useAppStore((s) => s.userRoleId);
   const applyRole = useAppStore((s) => s._applyRole);

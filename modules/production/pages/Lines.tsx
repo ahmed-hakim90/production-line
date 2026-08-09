@@ -6,7 +6,7 @@ import { Badge, Button } from '../components/UI';
 import { formatNumber, getTodayDateString } from '../../../utils/calculations';
 import { ProductionLineStatus, FirestoreProductionLine } from '../../../types';
 import type { LineWorkerAssignment } from '../../../types';
-import { usePermission } from '../../../utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import { lineAssignmentService } from '../../../services/lineAssignmentService';
 import { supervisorLineAssignmentService } from '../services/supervisorLineAssignmentService';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
@@ -56,7 +56,8 @@ export const Lines: React.FC = () => {
   const createLineStatus = useAppStore((s) => s.createLineStatus);
   const updateLineStatus = useAppStore((s) => s.updateLineStatus);
 
-  const { can } = usePermission();
+  const linePerms = useResourcePermission('lines');
+  const lineStatusPerms = useResourcePermission('lineStatus');
   const navigate = useTenantNavigate();
   const appLoading = useAppStore((s) => s.loading);
 
@@ -294,7 +295,7 @@ export const Lines: React.FC = () => {
       eyebrow="خطوط الإنتاج"
       rangeLabel="عرض وإدارة خطوط الإنتاج فقط بأسلوب ERPNext"
       actions={
-        can('lines.create') ? (
+        linePerms.canCreate ? (
           <Button variant="primary" onClick={openCreate} data-modal-key={MODAL_KEYS.LINES_CREATE}>
             <span className="material-icons-round text-sm">add</span>
             إضافة خط إنتاج
@@ -308,7 +309,7 @@ export const Lines: React.FC = () => {
             <span className="material-icons-round text-5xl mb-3 block opacity-30">precision_manufacturing</span>
             <p className="font-bold text-lg">لا توجد خطوط إنتاج بعد</p>
             <p className="text-sm mt-1">
-              {can("lines.create")
+              {linePerms.canCreate
                 ? 'اضغط "إضافة خط إنتاج" لإضافة أول خط'
                 : 'لا توجد خطوط إنتاج لعرضها حالياً'}
             </p>
@@ -401,17 +402,17 @@ export const Lines: React.FC = () => {
                           <Button variant="primary" className="text-xs py-1.5 px-2.5" onClick={() => navigate(`/lines/${line.id}`)}>
                             <span className="material-icons-round text-sm">visibility</span>
                           </Button>
-                          {can("lineStatus.edit") && (
+                          {lineStatusPerms.canEdit && (
                             <Button variant="outline" className="text-xs py-1.5 px-2.5" onClick={() => openTargetModal(line.id, line.name)}>
                               <span className="material-icons-round text-sm">flag</span>
                             </Button>
                           )}
-                          {can("lines.edit") && (
+                          {linePerms.canEdit && (
                             <Button variant="outline" className="text-xs py-1.5 px-2.5" onClick={() => openEdit(line.id)}>
                               <span className="material-icons-round text-sm">edit</span>
                             </Button>
                           )}
-                          {can("lines.delete") && (
+                          {linePerms.canDelete && (
                             <button
                               onClick={() => setDeleteConfirmId(line.id)}
                               className="p-2 text-[var(--color-text-muted)] hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-[var(--border-radius-base)] transition-all"
@@ -440,7 +441,7 @@ export const Lines: React.FC = () => {
       )}
 
       {/* â”€â”€ Add / Edit Modal â”€â”€ */}
-      {showModal && (can("lines.create") || can("lines.edit")) && (
+      {showModal && (linePerms.canCreate || linePerms.canEdit) && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -563,7 +564,7 @@ export const Lines: React.FC = () => {
       )}
 
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
-      {deleteConfirmId && can("lines.delete") && (
+      {deleteConfirmId && linePerms.canDelete && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-rose-50 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -582,7 +583,7 @@ export const Lines: React.FC = () => {
       )}
 
       {/* â”€â”€ Set Target Modal â”€â”€ */}
-      {targetModal && can("lineStatus.edit") && (
+      {targetModal && lineStatusPerms.canEdit && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">

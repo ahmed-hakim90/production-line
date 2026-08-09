@@ -643,7 +643,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
       {(config.leaveTypes || []).map((lt, idx) => {
         const hasLockedCode = LOCKED_LEAVE_TYPE_CODES.has(String(lt.type));
         return (
-        <Card key={lt.type}>
+        <div key={lt.type} className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)] p-4">
           <div className="flex items-center justify-between gap-3 mb-4">
             <div className="flex items-center gap-3">
               <span className="material-icons-round text-primary">beach_access</span>
@@ -808,7 +808,7 @@ const LeaveForm: React.FC<TabFormProps<'leave'>> = ({ config, onChange, errors, 
               )}
             </div>
           </div>
-        </Card>
+        </div>
         );
       })}
 

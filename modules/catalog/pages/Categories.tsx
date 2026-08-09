@@ -7,7 +7,7 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { Card, Button } from '../../production/components/UI';
 import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
-import { usePermission } from '../../../utils/permissions';
+import { useResourcePermission } from '@/utils/useResourcePermission';
 import {
   categoryService,
   isProductCategoryRow,
@@ -58,13 +58,13 @@ const CATEGORIES_CACHE_KEY = 'catalog:categories';
 
 export const Categories: React.FC = () => {
   const { t } = useTranslation();
-  const { can } = usePermission();
+  const categoryPerms = useResourcePermission('catalog.categories');
   const location = useLocation();
   const navigate = useTenantNavigate();
-  const canView = can('catalog.categories.view');
-  const canCreate = can('catalog.categories.create');
-  const canEdit = can('catalog.categories.edit');
-  const canDelete = can('catalog.categories.delete');
+  const canView = categoryPerms.canView;
+  const canCreate = categoryPerms.canCreate;
+  const canEdit = categoryPerms.canEdit;
+  const canDelete = categoryPerms.canDelete;
   const rawProducts = useAppStore((s) => s._rawProducts);
 
   const initialCategoriesCache = peekPageDataCache<CategoriesPageData>(CATEGORIES_CACHE_KEY);
