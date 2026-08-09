@@ -8,10 +8,11 @@ import {
   Printer,
   WalletCards,
 } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { OpsDashPanel } from "@/modules/dashboards/components/OperationsDashboardBoard";
+import { RepairOpsPageShell } from "../components/RepairOpsPageShell";
 import {
   Dialog,
   DialogContent,
@@ -542,72 +543,31 @@ export const RepairPayments: React.FC = () => {
   );
 
   return (
-    <div dir={dir} className="erp-ds-clean space-y-5 p-4 md:p-6">
-      <PageHeader
-        title="التحصيل والتسليم"
-        subtitle="إذن الدفع، اعتماد الخصم، تسجيل الدفعات، ثم تسليم المنتج."
-        icon="payments"
-        primaryAction={{
-          label: "تحديث",
-          icon: "refresh",
-          onClick: () => void load(),
-          disabled: loading,
-        }}
-      />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">جاهز لإذن الدفع</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold">
-            {readyWithoutAuthorization.length}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">بانتظار اعتماد</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-amber-600">
-            {pendingApprovals.length}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">جاهز للتحصيل</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-sky-600">
-            {
-              authorizations.filter(
-                (r) => r.status === "approved" || r.status === "partial",
-              ).length
-            }
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm">مدفوع وجاهز للتسليم</CardTitle>
-          </CardHeader>
-          <CardContent className="text-3xl font-bold text-emerald-600">
-            {
-              authorizations.filter(
-                (r) =>
-                  r.status === "paid" &&
-                  !isZeroValueAuthorization(r) &&
-                  jobById.get(r.jobId)?.status === "ready",
-              ).length
-            }
-          </CardContent>
-        </Card>
-      </div>
+    <RepairOpsPageShell
+      eyebrow="التحصيل والتسليم"
+      dir={dir}
+      hero={[
+        { key: "ready", label: "جاهز لإذن الدفع", value: readyWithoutAuthorization.length },
+        { key: "pending", label: "بانتظار اعتماد", value: pendingApprovals.length, accent: pendingApprovals.length > 0 },
+        {
+          key: "collect",
+          label: "جاهز للتحصيل",
+          value: authorizations.filter((r) => r.status === "approved" || r.status === "partial").length,
+        },
+        {
+          key: "paid",
+          label: "مدفوع وجاهز للتسليم",
+          value: authorizations.filter(
+            (r) => r.status === "paid" && !isZeroValueAuthorization(r) && jobById.get(r.jobId)?.status === "ready",
+          ).length,
+        },
+      ]}
+      onRefresh={() => void load()}
+      refreshing={loading}
+    >
 
       {readyWithoutAuthorization.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">
-              طلبات جاهزة لتجهيز إذن الدفع
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-3 p-0 sm:p-0">
+        <OpsDashPanel title="طلبات جاهزة لتجهيز إذن الدفع" accent="repair" bodyClassName="p-0">
             <SmartFilterBar
               pageId="repair-payments-ready-auth"
               searchValue={readySearch}
@@ -683,16 +643,12 @@ export const RepairPayments: React.FC = () => {
                 itemLabel="طلب"
               />
             </div>
-          </CardContent>
-        </Card>
+        </OpsDashPanel>
       ) : null}
 
       {pendingApprovals.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">موافقات الإدارة</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
+        <OpsDashPanel title="موافقات الإدارة" accent="repair">
+          <div className="space-y-2">
             {pendingApprovals.map((approval) => (
               <div
                 key={approval.id}
@@ -737,16 +693,12 @@ export const RepairPayments: React.FC = () => {
                 )}
               </div>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       ) : null}
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">أذونات الدفع والتحصيل</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          <div className="erp-mobile-card-list p-2">
+      <OpsDashPanel title="أذونات الدفع والتحصيل" accent="repair" bodyClassName="p-0">
+          <div className="erp-mobile-card-list p-2 md:hidden">
             {authorizations.map((auth) => {
               const job = jobById.get(auth.jobId);
               return (
@@ -793,8 +745,8 @@ export const RepairPayments: React.FC = () => {
               </p>
             ) : null}
           </div>
-          <div className="erp-desktop-table erp-table-wrap overflow-x-auto">
-            <table className="erp-table w-full min-w-[960px] text-sm">
+          <div className="erp-desktop-table hidden overflow-x-auto md:block">
+            <table className="table erp-table w-full min-w-[960px] text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">الإذن</th>
@@ -849,15 +801,11 @@ export const RepairPayments: React.FC = () => {
               </tbody>
             </table>
           </div>
-        </CardContent>
-      </Card>
+      </OpsDashPanel>
 
       {payments.length > 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">آخر الإيصالات</CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
+        <OpsDashPanel title="آخر الإيصالات" accent="repair">
+          <div className="flex flex-wrap gap-2">
             {payments.slice(0, 12).map((payment) => {
               const auth = authById.get(payment.authorizationId);
               return (
@@ -902,8 +850,8 @@ export const RepairPayments: React.FC = () => {
                 </div>
               );
             })}
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       ) : null}
 
       <Dialog
@@ -1048,7 +996,7 @@ export const RepairPayments: React.FC = () => {
           printSettings={printSettings}
         />
       </div>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

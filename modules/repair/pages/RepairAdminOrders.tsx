@@ -1,8 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
 import {
   Dialog,
   DialogContent,
@@ -27,7 +28,6 @@ import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveUserRepairBranchIds } from '../types';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { isOpenRepairJob } from '../lib/repairAdminDashboardMetrics';
-import { PageHeader } from '@/components/PageHeader';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { Link, useParams } from 'react-router-dom';
 
@@ -176,32 +176,22 @@ export const RepairAdminOrders: React.FC = () => {
   );
 
   return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
-      <PageHeader
-        title="عرض طلبات الصيانة - الإدارة"
-        subtitle="متابعة الطلبات بالتفاصيل التشغيلية، والفني المسند، وحالة التسليم."
-        icon="fact_check"
-        backAction={{ to: withTenantPath(tenantSlug, '/repair') }}
-        actions={(
-          <Link to={withTenantPath(tenantSlug, '/repair')}>
-            <Button variant="outline" size="sm">لوحة الصيانة</Button>
-          </Link>
-        )}
-      />
-
-      <div className="flex flex-wrap gap-2">
-        <Badge variant="outline" className="px-3 py-1.5 text-sm">
-          متأخر (+{OVERDUE_DAYS} أيام): <span className="font-bold text-rose-600 ms-1">{CURRENCY_FMT.format(overdueCount)}</span>
-        </Badge>
-        <Badge variant="outline" className="px-3 py-1.5 text-sm">
-          بانتظار التسليم: <span className="font-bold text-amber-600 ms-1">{CURRENCY_FMT.format(pendingDeliveryCount)}</span>
-        </Badge>
-        <Badge variant="outline" className="px-3 py-1.5 text-sm">
-          جاري التسليم: <span className="font-bold text-indigo-600 ms-1">{CURRENCY_FMT.format(inDeliveryCount)}</span>
-        </Badge>
-      </div>
-
-      <Card>
+    <RepairOpsPageShell
+      eyebrow="عرض طلبات الصيانة - الإدارة"
+      dir={dir}
+      hero={[
+        { key: 'overdue', label: `متأخر (+${OVERDUE_DAYS} أيام)`, value: overdueCount, toneClassName: overdueCount > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined },
+        { key: 'pending', label: 'بانتظار التسليم', value: pendingDeliveryCount },
+        { key: 'delivery', label: 'جاري التسليم', value: inDeliveryCount },
+        { key: 'total', label: 'الظاهر', value: rows.length },
+      ]}
+      actions={(
+        <Link to={withTenantPath(tenantSlug, '/repair')}>
+          <Button variant="outline" size="sm" type="button">لوحة الصيانة</Button>
+        </Link>
+      )}
+    >
+      <OpsDashPanel title="جدول طلبات الصيانة" accent="repair" bodyClassName="p-0">
         <SmartFilterBar
       pageId="repair-admin-orders"
           searchPlaceholder="بحث: رقم الطلب، العميل، الهاتف، الجهاز، الفني"
@@ -209,28 +199,58 @@ export const RepairAdminOrders: React.FC = () => {
           onSearchChange={setSearch}
           className="mb-0 border-0 rounded-none"
         />
-      </Card>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>جدول طلبات الصيانة</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded border overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="bg-muted">
+        <div className="erp-mobile-card-list space-y-2 p-3 md:hidden">
+          {rows.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">لا توجد طلبات مطابقة للفلاتر الحالية.</p>
+          ) : (
+            rows.map((job) => {
+              const technicianId = String(job.technicianId || '').trim();
+              const technicianName = technicianNameById.get(technicianId) || (technicianId ? `ID: ${technicianId}` : 'غير مسند');
+              const elapsed = getWorkDaysElapsed(job.createdAt);
+              const overdue = isOpenJob(job, repairSettings.workflow.openStatusIds) && elapsed > OVERDUE_DAYS;
+              return (
+                <button
+                  key={`m-${job.id}`}
+                  type="button"
+                  className="block w-full rounded-xl border bg-card p-3 text-start shadow-sm transition-colors active:bg-muted/40"
+                  onClick={() => setSelectedJob(job)}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <p className="font-mono text-sm font-bold text-primary">{job.receiptNo}</p>
+                      <p className="mt-1 text-sm font-medium">{job.customerName || '—'}</p>
+                      <p className="text-xs text-muted-foreground">{branchNameById.get(String(job.branchId || '').trim()) || '—'}</p>
+                    </div>
+                    <StatusBadge status={job.status} />
+                  </div>
+                  <div className="mt-2 flex flex-wrap gap-2 text-xs text-muted-foreground">
+                    <span className="tabular-nums">{CURRENCY_FMT.format(getJobValue(job))} ج.م</span>
+                    <span>{elapsed} يوم</span>
+                    {overdue ? <Badge variant="destructive">متأخر</Badge> : null}
+                  </div>
+                  <p className="mt-1 text-xs text-muted-foreground">الفني: {technicianName}</p>
+                </button>
+              );
+            })
+          )}
+        </div>
+
+        <div className="erp-desktop-table hidden overflow-x-auto md:block">
+            <table className="table erp-table w-full text-sm">
+              <thead className="erp-thead">
                 <tr>
-                  <th className="p-2 text-right">رقم الطلب</th>
-                  <th className="p-2 text-right">اسم العميل</th>
-                  <th className="p-2 text-right">الهاتف</th>
-                  <th className="p-2 text-right">الفرع</th>
-                  <th className="p-2 text-right">القيمة</th>
-                  <th className="p-2 text-right">أيام العمل</th>
-                  <th className="p-2 text-right">الحالة</th>
-                  <th className="p-2 text-right">الجهاز</th>
-                  <th className="p-2 text-right">قطعة الغيار المطلوبة</th>
-                  <th className="p-2 text-right">الفني المسند</th>
-                  <th className="p-2 text-right">إجراءات</th>
+                  <th className="erp-th text-right">رقم الطلب</th>
+                  <th className="erp-th text-right">اسم العميل</th>
+                  <th className="erp-th text-right">الهاتف</th>
+                  <th className="erp-th text-right">الفرع</th>
+                  <th className="erp-th text-right">القيمة</th>
+                  <th className="erp-th text-right">أيام العمل</th>
+                  <th className="erp-th text-right">الحالة</th>
+                  <th className="erp-th text-right">الجهاز</th>
+                  <th className="erp-th text-right">قطعة الغيار المطلوبة</th>
+                  <th className="erp-th text-right">الفني المسند</th>
+                  <th className="erp-th text-right">إجراءات</th>
                 </tr>
               </thead>
               <tbody>
@@ -293,9 +313,8 @@ export const RepairAdminOrders: React.FC = () => {
                 )}
               </tbody>
             </table>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </OpsDashPanel>
       <RepairJobQuickDrawer
         open={Boolean(selectedJob)}
         onOpenChange={(next) => { if (!next) setSelectedJob(null); }}
@@ -343,7 +362,7 @@ export const RepairAdminOrders: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

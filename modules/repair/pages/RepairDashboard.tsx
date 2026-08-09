@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useNavigate, useParams } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import {
   Bar,
   BarChart,
@@ -275,6 +274,7 @@ const RepairOperationalDashboard: React.FC = () => {
   return (
     <DomainHomeShell
       denseHero
+      eyebrow="لوحة الصيانة"
       hero={hero}
       onRefresh={handleRefresh}
       refreshing={refreshing}
@@ -423,33 +423,77 @@ const RepairOperationalDashboard: React.FC = () => {
         </div>
       </OpsDashPanel>
 
-      <Card className="shadow-sm">
-        <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 p-3 md:p-6">
-          <CardTitle className="text-sm md:text-base">آخر الطلبات</CardTitle>
+      <OpsDashPanel
+        title="آخر الطلبات"
+        accent="repair"
+        action={(
           <Link to={withTenantPath(tenantSlug, '/repair/jobs')}>
             <Button variant="outline" size="sm" type="button">الكل</Button>
           </Link>
-        </CardHeader>
-        <CardContent className="space-y-2 p-3 pt-0 text-sm md:p-6 md:pt-0">
-          {recent.map((job) => (
-            <Link
-              key={job.id}
-              to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
-              className="flex flex-col gap-1.5 rounded-lg border px-3 py-2 transition-colors hover:bg-muted/40 sm:flex-row sm:items-center sm:justify-between"
-            >
-              <div className="flex min-w-0 items-center gap-2">
-                <Badge variant="outline" className="shrink-0">#{job.receiptNo}</Badge>
-                <span className="truncate font-medium">{job.customerName}</span>
-              </div>
-              <div className="flex min-w-0 flex-wrap items-center gap-2">
-                <span className="truncate text-muted-foreground">{job.deviceBrand} {job.deviceModel}</span>
-                <StatusBadge status={job.status} />
-              </div>
-            </Link>
-          ))}
-          {recent.length === 0 && <div className="text-muted-foreground">لا توجد طلبات حتى الآن.</div>}
-        </CardContent>
-      </Card>
+        )}
+      >
+        <div className="erp-mobile-card-list p-2 md:hidden">
+          {recent.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">لا توجد طلبات حتى الآن.</p>
+          ) : (
+            recent.map((job) => (
+              <Link
+                key={job.id}
+                to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
+                className="block rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm transition-colors active:bg-muted/40"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="font-mono text-sm font-semibold">#{job.receiptNo}</p>
+                    <p className="mt-0.5 truncate text-sm font-medium">{job.customerName}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {job.deviceBrand} {job.deviceModel}
+                    </p>
+                  </div>
+                  <StatusBadge status={job.status} />
+                </div>
+              </Link>
+            ))
+          )}
+        </div>
+        <div className="erp-desktop-table hidden overflow-x-auto md:block">
+          {recent.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">لا توجد طلبات حتى الآن.</p>
+          ) : (
+            <table className="table erp-table w-full text-sm">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th text-right">الإيصال</th>
+                  <th className="erp-th text-right">العميل</th>
+                  <th className="erp-th text-right">الجهاز</th>
+                  <th className="erp-th text-right">الحالة</th>
+                </tr>
+              </thead>
+              <tbody>
+                {recent.map((job) => (
+                  <tr key={job.id} className="border-t hover:bg-muted/40">
+                    <td className="p-2 font-mono">
+                      <Link
+                        className="text-primary underline"
+                        to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}`)}
+                      >
+                        #{job.receiptNo}
+                      </Link>
+                    </td>
+                    <td className="p-2 font-medium">{job.customerName}</td>
+                    <td className="p-2 text-muted-foreground">
+                      {job.deviceBrand} {job.deviceModel}
+                    </td>
+                    <td className="p-2">
+                      <StatusBadge status={job.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </OpsDashPanel>
     </DomainHomeShell>
   );
 };

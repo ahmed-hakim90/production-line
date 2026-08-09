@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { Headset, RefreshCw } from 'lucide-react';
+import { Headset } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { cn } from '@/lib/utils';
 import { usePermission } from '../../../utils/permissions';
@@ -27,61 +26,10 @@ import { isDeliveredStatus, mapLegacyRepairStatus } from '../utils/repairWorkflo
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { ListViewToggle, useListViewMode } from '@/src/components/erp/ListViewToggle';
 import { StatusKanbanBoard } from '@/src/components/erp/StatusKanbanBoard';
-import { PageHeader } from '@/components/PageHeader';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 
 type JobsFocusFilter = 'all' | 'open' | 'ready' | 'delivered' | 'overdue' | 'today';
-
-function SummaryMetricChip({
-  label,
-  value,
-  active,
-  tone,
-  onClick,
-  suffix,
-}: {
-  label: string;
-  value: string | number;
-  active?: boolean;
-  tone: 'neutral' | 'sky' | 'emerald' | 'amber' | 'rose' | 'violet';
-  onClick?: () => void;
-  suffix?: string;
-}) {
-  const toneClass = {
-    neutral: 'border-border/80 bg-background text-foreground',
-    sky: 'border-sky-200 bg-sky-50 text-sky-950',
-    emerald: 'border-emerald-200 bg-emerald-50 text-emerald-950',
-    amber: 'border-amber-200 bg-amber-50 text-amber-950',
-    rose: 'border-rose-200 bg-rose-50 text-rose-950',
-    violet: 'border-violet-200 bg-violet-50 text-violet-950',
-  }[tone];
-
-  const className = cn(
-    'inline-flex min-w-[6.5rem] flex-col items-start gap-0.5 rounded-xl border px-3 py-2 text-start transition-colors',
-    toneClass,
-    active && 'ring-2 ring-offset-1 ring-primary/40 shadow-sm',
-    onClick && 'cursor-pointer hover:brightness-[0.98]',
-  );
-
-  const body = (
-    <>
-      <span className="text-[11px] font-medium opacity-80">{label}</span>
-      <span className="text-base font-semibold tabular-nums tracking-tight">
-        {value}
-        {suffix ? <span className="ms-1 text-xs font-medium opacity-70">{suffix}</span> : null}
-      </span>
-    </>
-  );
-
-  if (!onClick) {
-    return <div className={className}>{body}</div>;
-  }
-
-  return (
-    <button type="button" onClick={onClick} className={className} aria-pressed={Boolean(active)}>
-      {body}
-    </button>
-  );
-}
 
 function RepairJobKanbanCardBody({
   job,
@@ -349,95 +297,51 @@ export const RepairJobs: React.FC = () => {
     if (next === 'delivered') setStatusFilter('all');
   };
 
-  return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6" dir={dir}>
-      <PageHeader
-        title="طلبات الصيانة"
-        subtitle={canShowWorkshopNav
-          ? 'تشغيل الورشة، متابعة الحالات، ومراجعة التكلفة من شاشة واحدة.'
-          : 'متابعة الطلبات والاستلام والتواصل مع العميل. شغل الورشة يظهر للفني/الإدارة.'}
-        icon="fact_check"
-        primaryAction={can('repair.jobs.create') ? {
-          label: 'جهاز جديد',
-          icon: 'add',
-          onClick: () => navigate(withTenantPath(tenantSlug, '/repair/jobs/new')),
-        } : undefined}
-        actions={(
-            <div className="flex flex-wrap items-center gap-2">
-            <Button variant="outline" type="button" size="sm" onClick={() => void refetch()} disabled={isFetching}>
-              <RefreshCw className={cn('h-3.5 w-3.5 ms-1', isFetching && 'animate-spin')} />
-              تحديث
-            </Button>
-            <ListViewToggle value={boardView} onChange={setBoardView} />
-            <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
-              <Button variant="outline" size="sm" type="button">
-                <Headset className="h-3.5 w-3.5 ms-1" />
-                مركز الاتصال
-              </Button>
-            </Link>
-          </div>
-        )}
-      />
+  const focusHero = [
+    { key: 'all', label: 'إجمالي', value: summaryAll.total, onClick: () => setFocusFilter('all'), active: focusFilter === 'all' },
+    { key: 'open', label: 'مفتوح', value: summaryAll.open, onClick: () => applyFocus('open'), active: focusFilter === 'open', toneClassName: 'ops-dash-kpi-card--tone-sky' },
+    { key: 'ready', label: 'جاهز', value: summaryAll.ready, onClick: () => applyFocus('ready'), active: focusFilter === 'ready', toneClassName: 'ops-dash-kpi-card--tone-emerald' },
+    { key: 'delivered', label: 'تم التسليم', value: summaryAll.delivered, onClick: () => applyFocus('delivered'), active: focusFilter === 'delivered' },
+    { key: 'overdue', label: 'متأخر', value: summaryAll.overdue, onClick: () => applyFocus('overdue'), active: focusFilter === 'overdue', toneClassName: summaryAll.overdue > 0 ? 'ops-dash-kpi-card--tone-rose' : undefined },
+    { key: 'today', label: 'اليوم', value: summaryAll.createdToday, onClick: () => applyFocus('today'), active: focusFilter === 'today' },
+    { key: 'revenue', label: 'قيمة ظاهرة', value: summary.revenue.toLocaleString('ar-EG'), meta: 'ج.م' },
+  ];
 
+  return (
+    <RepairOpsPageShell
+      eyebrow="طلبات الصيانة"
+      dir={dir}
+      hero={focusHero}
+      onRefresh={() => void refetch()}
+      refreshing={isFetching}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <ListViewToggle value={boardView} onChange={setBoardView} />
+          <Link to={withTenantPath(tenantSlug, '/repair/call-center')}>
+            <Button variant="outline" size="sm" type="button">
+              <Headset className="h-3.5 w-3.5 ms-1" />
+              مركز الاتصال
+            </Button>
+          </Link>
+          {can('repair.jobs.create') ? (
+            <Button type="button" size="sm" onClick={() => navigate(withTenantPath(tenantSlug, '/repair/jobs/new'))}>
+              جهاز جديد
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
       {!canShowWorkshopNav ? (
         <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
           وضع الاستقبال: يمكنك متابعة الطلبات وطباعة الإيصال ومراسلة العميل. شغل الورشة (تشخيص/قطع/تكلفة) يظهر لحسابات الفني أو الإدارة.
         </div>
       ) : null}
 
-      <div className="flex flex-wrap gap-2 rounded-xl border border-border/70 bg-muted/20 p-2.5">
-        <SummaryMetricChip
-          label="إجمالي"
-          value={summaryAll.total}
-          tone="neutral"
-          active={focusFilter === 'all'}
-          onClick={() => setFocusFilter('all')}
-        />
-        <SummaryMetricChip
-          label="مفتوح"
-          value={summaryAll.open}
-          tone="sky"
-          active={focusFilter === 'open'}
-          onClick={() => applyFocus('open')}
-        />
-        <SummaryMetricChip
-          label="جاهز"
-          value={summaryAll.ready}
-          tone="emerald"
-          active={focusFilter === 'ready'}
-          onClick={() => applyFocus('ready')}
-        />
-        <SummaryMetricChip
-          label="تم التسليم"
-          value={summaryAll.delivered}
-          tone="violet"
-          active={focusFilter === 'delivered'}
-          onClick={() => applyFocus('delivered')}
-        />
-        <SummaryMetricChip
-          label="متأخر"
-          value={summaryAll.overdue}
-          tone={summaryAll.overdue > 0 ? 'rose' : 'neutral'}
-          active={focusFilter === 'overdue'}
-          onClick={() => applyFocus('overdue')}
-        />
-        <SummaryMetricChip
-          label="اليوم"
-          value={summaryAll.createdToday}
-          tone="amber"
-          active={focusFilter === 'today'}
-          onClick={() => applyFocus('today')}
-        />
-        <SummaryMetricChip
-          label="قيمة ظاهرة"
-          value={summary.revenue.toLocaleString('ar-EG')}
-          suffix="ج.م"
-          tone="neutral"
-        />
-      </div>
-
-      <Card className="mb-0 border-0 rounded-none">
-        <CardContent className="p-0">
+      <OpsDashPanel
+        title={boardView === 'kanban' ? 'لوحة المتابعة' : 'قائمة الطلبات'}
+        accent="repair"
+        bodyClassName="p-0"
+      >
           <SmartFilterBar
             pageId="repair-jobs"
             searchValue={search}
@@ -479,19 +383,13 @@ export const RepairJobs: React.FC = () => {
             }}
             className="mb-0 border-0 rounded-none"
           />
-        </CardContent>
-      </Card>
 
       {boardView === 'kanban' && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>لوحة المتابعة</CardTitle>
-            <CardDescription>
+          <div className="overflow-x-auto p-3 pb-4 md:p-4">
+            <p className="mb-3 text-xs text-muted-foreground">
               اضغط رقم الإيصال لفتح الطلب. اسحب البطاقة بين الأعمدة لتغيير الحالة
               {canShowWorkshopNav ? '' : ' (للفني/الإدارة فقط)'}.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="overflow-x-auto pb-4">
+            </p>
             <StatusKanbanBoard
               columns={kanbanColumns}
               items={kanbanItems}
@@ -512,18 +410,12 @@ export const RepairJobs: React.FC = () => {
                 />
               )}
             />
-          </CardContent>
-        </Card>
+          </div>
       )}
 
       {boardView === 'table' && (
-        <Card>
-          <CardHeader className="pb-3">
-            <CardTitle>قائمة الطلبات</CardTitle>
-            <CardDescription>اضغط رقم الإيصال لفتح تفاصيل الطلب.</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="erp-mobile-card-list p-2">
+          <>
+            <div className="erp-mobile-card-list p-2 md:hidden">
               {loading ? (
                 <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-sm text-muted-foreground">
                   <span role="status" aria-live="polite">جاري التحميل...</span>
@@ -609,18 +501,18 @@ export const RepairJobs: React.FC = () => {
               )}
             </div>
 
-            <div className="erp-desktop-table overflow-x-auto rounded-lg border">
-              <table className="w-full text-sm">
-                <thead className="bg-muted/60">
+            <div className="erp-desktop-table hidden overflow-x-auto md:block">
+              <table className="table erp-table w-full text-sm">
+                <thead className="erp-thead">
                   <tr>
-                    <th className="p-2.5 text-right font-medium">الإيصال</th>
-                    <th className="p-2.5 text-right font-medium">العميل</th>
-                    <th className="p-2.5 text-right font-medium">الجهاز</th>
-                    <th className="p-2.5 text-right font-medium">الفرع</th>
-                    <th className="p-2.5 text-right font-medium">الحالة</th>
-                    <th className="p-2.5 text-right font-medium">التكلفة</th>
-                    <th className="p-2.5 text-right font-medium">الاستحقاق</th>
-                    <th className="p-2.5 text-right font-medium">إجراء</th>
+                    <th className="erp-th text-right">الإيصال</th>
+                    <th className="erp-th text-right">العميل</th>
+                    <th className="erp-th text-right">الجهاز</th>
+                    <th className="erp-th text-right">الفرع</th>
+                    <th className="erp-th text-right">الحالة</th>
+                    <th className="erp-th text-right">التكلفة</th>
+                    <th className="erp-th text-right">الاستحقاق</th>
+                    <th className="erp-th text-right">إجراء</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -696,9 +588,9 @@ export const RepairJobs: React.FC = () => {
                 </tbody>
               </table>
             </div>
-          </CardContent>
-        </Card>
+          </>
       )}
+      </OpsDashPanel>
       <RepairJobQuickDrawer
         open={Boolean(selectedJob)}
         onOpenChange={(next) => { if (!next) setSelectedJob(null); }}
@@ -707,7 +599,7 @@ export const RepairJobs: React.FC = () => {
         branchName={selectedJob ? branchNameById.get(String(selectedJob.branchId || '').trim()) : undefined}
         showWorkshopLink={canShowWorkshopNav}
       />
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

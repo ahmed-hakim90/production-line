@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
+import { RepairOpsPageShell } from '../components/RepairOpsPageShell';
+import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import {
   Select,
   SelectContent,
@@ -45,6 +46,7 @@ const fmt = (n: number) =>
 type ListTab = 'awaiting' | 'all';
 
 export const RepairPartsReplenishment: React.FC = () => {
+  const { dir } = useAppDirection();
   const { tenantSlug } = useParams<{ tenantSlug?: string }>();
   const { can } = usePermission();
   const canView =
@@ -221,39 +223,45 @@ export const RepairPartsReplenishment: React.FC = () => {
 
   if (!canView) {
     return (
-      <div className="erp-ds-clean space-y-5">
-        <PageHeader title="متابعة تموين قطع الغيار" icon="local_shipping" />
-        <p className="text-sm text-slate-500">ليس لديك صلاحية متابعة تموين قطع الغيار.</p>
-      </div>
+      <RepairOpsPageShell eyebrow="متابعة تموين قطع الغيار" dir={dir}>
+        <OpsDashPanel title="الصلاحيات" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية متابعة تموين قطع الغيار.</p>
+        </OpsDashPanel>
+      </RepairOpsPageShell>
     );
   }
 
   return (
-    <div className="erp-ds-clean space-y-4 sm:space-y-5 px-1 sm:px-0">
-      <PageHeader
-        title="متابعة تموين قطع الغيار"
-        subtitle="طلبات التموين من المخزن الرئيسي لهذا المركز — أنشئ الطلب واستلم الرصيد من هنا."
-        icon="local_shipping"
-        actions={(
-          <div className="flex w-full flex-wrap gap-2 sm:w-auto">
-            <Link to={withTenantPath(tenantSlug, '/repair/parts')} className="min-w-0 flex-1 sm:flex-none">
-              <Button variant="outline" className="w-full sm:w-auto">مخزون الفرع</Button>
-            </Link>
-            {canCreate && (
-              <Button
-                type="button"
-                className="min-w-0 flex-1 sm:flex-none"
-                onClick={() => setCreateOpen(true)}
-                disabled={!toWarehouseId}
-              >
-                طلب تموين
-              </Button>
-            )}
-          </div>
-        )}
-      />
-
-      <div className="flex flex-col gap-2 rounded-xl border bg-card px-3 py-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
+    <RepairOpsPageShell
+      eyebrow="متابعة تموين قطع الغيار"
+      dir={dir}
+      hero={[
+        { key: 'awaiting', label: 'بانتظار الاستلام', value: awaitingReceiptCount, accent: awaitingReceiptCount > 0 },
+        { key: 'total', label: 'الطلبات', value: filtered.length },
+      ]}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex w-full flex-wrap gap-2 sm:w-auto">
+          <Link to={withTenantPath(tenantSlug, '/repair/parts')} className="min-w-0 flex-1 sm:flex-none">
+            <Button variant="outline" size="sm" className="w-full sm:w-auto">مخزون الفرع</Button>
+          </Link>
+          {canCreate ? (
+            <Button
+              type="button"
+              size="sm"
+              className="min-w-0 flex-1 sm:flex-none"
+              onClick={() => setCreateOpen(true)}
+              disabled={!toWarehouseId}
+            >
+              طلب تموين
+            </Button>
+          ) : null}
+        </div>
+      )}
+    >
+      <OpsDashPanel title="فلاتر" accent="repair" bodyClassName="p-3 sm:p-4">
+      <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
         {(repairCtx.canViewAllBranches || branches.length > 1) && (
           <div className="w-full sm:w-[220px]">
             <Select value={selectedBranchId} onValueChange={setSelectedBranchId}>
@@ -291,9 +299,6 @@ export const RepairPartsReplenishment: React.FC = () => {
           </SelectContent>
         </Select>
         <div className="flex items-center gap-2">
-          <Button type="button" variant="outline" size="sm" onClick={() => void load()} disabled={loading}>
-            تحديث
-          </Button>
           <span className="text-xs font-semibold text-amber-700 sm:ms-auto">
             {awaitingReceiptCount > 0
               ? `${awaitingReceiptCount} بانتظار استلامك`
@@ -301,23 +306,22 @@ export const RepairPartsReplenishment: React.FC = () => {
           </span>
         </div>
       </div>
+      </OpsDashPanel>
 
       {!toWarehouseId ? (
-        <Card>
-          <CardContent className="py-10 text-center text-sm text-muted-foreground">
+        <OpsDashPanel title="اختيار الفرع" accent="repair">
+          <p className="py-6 text-center text-sm text-muted-foreground">
             اختر فرعًا مربوطًا بمخزن صيانة لعرض الطلبات.
-          </CardContent>
-        </Card>
+          </p>
+        </OpsDashPanel>
       ) : (
-        /* Physical LTR row: details LEFT, list RIGHT — content stays RTL. Mobile: list first. */
         <div className="flex flex-col items-stretch gap-4 xl:flex-row" dir="ltr">
           <div ref={detailPanelRef} className="order-2 min-w-0 w-full flex-1 xl:order-1" dir="rtl">
-            <Card className="!p-0 h-full overflow-hidden">
-              <div className="border-b px-3 py-3 sm:px-4">
-                <h2 className="text-sm font-bold">
-                  {selectedRequest ? `تفاصيل ${selectedRequest.referenceNo}` : 'التفاصيل'}
-                </h2>
-              </div>
+            <OpsDashPanel
+              title={selectedRequest ? `تفاصيل ${selectedRequest.referenceNo}` : 'التفاصيل'}
+              accent="repair"
+              bodyClassName="p-0 h-full overflow-hidden"
+            >
               {!selectedRequest ? (
                 <p className="hidden px-4 py-16 text-center text-sm text-muted-foreground xl:block">
                   اختر طلباً من القائمة لعرض التفاصيل والإجراءات.
@@ -415,11 +419,11 @@ export const RepairPartsReplenishment: React.FC = () => {
                   </div>
                 </>
               )}
-            </Card>
+            </OpsDashPanel>
           </div>
 
           <div className="order-1 w-full xl:order-2 xl:w-[360px] xl:shrink-0" dir="rtl">
-            <Card className="!p-0 h-full overflow-hidden">
+            <OpsDashPanel title="قائمة الطلبات" accent="repair" bodyClassName="p-0 h-full overflow-hidden">
               <div className="flex flex-wrap gap-2 border-b px-3 pb-2 pt-3">
                 {([
                   ['awaiting', `بانتظار استلامي (${awaitingReceiptCount})`],
@@ -485,7 +489,7 @@ export const RepairPartsReplenishment: React.FC = () => {
                   itemLabel="طلب"
                 />
               ) : null}
-            </Card>
+            </OpsDashPanel>
           </div>
         </div>
       )}
@@ -497,7 +501,7 @@ export const RepairPartsReplenishment: React.FC = () => {
         parts={parts}
         onCreated={() => void load()}
       />
-    </div>
+    </RepairOpsPageShell>
   );
 };
 

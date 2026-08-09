@@ -1,6 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -18,9 +17,10 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
-import { KPICard } from '@/src/components/erp/KPICard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -203,6 +203,40 @@ export const CustomersKPI: React.FC = () => {
     };
   }, [rows]);
 
+  const hero = useMemo(
+    () => [
+      {
+        key: 'active',
+        label: 'عملاء نشطون',
+        value: loading ? '…' : formatNumber(kpis.activeCount),
+      },
+      {
+        key: 'volume',
+        label: 'إجمالي حجم الشغل',
+        value: loading ? '…' : formatNumber(kpis.totalVolume),
+      },
+      {
+        key: 'balance',
+        label: 'إجمالي الأرصدة',
+        value: loading ? '…' : formatNumber(kpis.totalBalance),
+        toneClassName: kpis.totalBalance < 0 ? 'ops-dash-kpi-card--tone-rose' : undefined,
+      },
+      {
+        key: 'needs_call',
+        label: 'يحتاج اتصال',
+        value: loading ? '…' : formatNumber(kpis.needsCall),
+        accent: kpis.needsCall > 0,
+      },
+      {
+        key: 'size',
+        label: 'توزيع الحجم',
+        value: loading ? '…' : `${kpis.large} / ${kpis.medium} / ${kpis.small}`,
+        meta: 'كبير / متوسط / صغير',
+      },
+    ],
+    [kpis, loading],
+  );
+
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const paged = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
@@ -276,74 +310,32 @@ export const CustomersKPI: React.FC = () => {
   }
 
   return (
-    <div className="space-y-4">
-      <PageHeader
-        title="مؤشرات العملاء"
-        subtitle="حجم الشغل والرصيد من الشيت — تصنيف تلقائي ومتابعة يدوية"
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button type="button" variant="outline" onClick={() => void load()} disabled={loading}>
-              تحديث
+    <ModuleOpsPageShell
+      eyebrow="مؤشرات العملاء"
+      hero={hero}
+      onRefresh={() => void load()}
+      refreshing={loading}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          {canImport && (
+            <Button type="button" size="sm" onClick={() => setImportOpen(true)} disabled={importing}>
+              استيراد مؤشرات
             </Button>
-            {canImport && (
-              <Button type="button" onClick={() => setImportOpen(true)} disabled={importing}>
-                استيراد مؤشرات
-              </Button>
-            )}
-            <Button type="button" variant="outline" asChild>
-              <Link to={withTenantPath(tenantSlug, '/customers')}>سجل العملاء</Link>
-            </Button>
-          </div>
-        }
-      />
-
+          )}
+          <Button type="button" size="sm" variant="outline" asChild>
+            <Link to={withTenantPath(tenantSlug, '/customers')}>سجل العملاء</Link>
+          </Button>
+        </div>
+      )}
+    >
       {importing && (
         <p className="text-sm text-muted-foreground tabular-nums">
           جاري الاستيراد… {importProgress.done} / {importProgress.total}
         </p>
       )}
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-        <KPICard
-          label="عملاء نشطون"
-          value={formatNumber(kpis.activeCount)}
-          color="indigo"
-          iconType="metric"
-          loading={loading}
-        />
-        <KPICard
-          label="إجمالي حجم الشغل"
-          value={formatNumber(kpis.totalVolume)}
-          color="green"
-          iconType="trend"
-          loading={loading}
-        />
-        <KPICard
-          label="إجمالي الأرصدة"
-          value={formatNumber(kpis.totalBalance)}
-          color={kpis.totalBalance < 0 ? 'red' : 'amber'}
-          iconType="money"
-          loading={loading}
-        />
-        <KPICard
-          label="يحتاج اتصال"
-          value={formatNumber(kpis.needsCall)}
-          color="amber"
-          iconType="metric"
-          loading={loading}
-        />
-        <KPICard
-          label="توزيع الحجم"
-          value={`${kpis.large} / ${kpis.medium} / ${kpis.small}`}
-          subValue="كبير / متوسط / صغير"
-          color="gray"
-          iconType="metric"
-          loading={loading}
-        />
-      </div>
-
-      <div className="rounded-xl border bg-[var(--color-card)] overflow-hidden">
-        <div className="p-3 border-b">
+      <OpsDashPanel title="مؤشرات العملاء" accent="customers" bodyClassName="p-0">
+        <div className="p-3 sm:p-4 border-b">
           <SmartFilterBar
             pageId="customers-kpi"
             searchPlaceholder="بحث بالكود / الاسم / الموبايل…"
@@ -397,7 +389,80 @@ export const CustomersKPI: React.FC = () => {
           />
         </div>
 
-        <div className="overflow-x-auto">
+        <div className="erp-mobile-card-list space-y-2 p-3 md:hidden">
+          {loading ? (
+            Array.from({ length: 4 }).map((_, i) => (
+              <div key={`sk-m-${i}`} className="h-24 animate-pulse rounded-lg bg-muted/40" />
+            ))
+          ) : paged.length === 0 ? (
+            <p className="py-8 text-center text-sm text-muted-foreground">
+              لا توجد نتائج مطابقة للفلاتر.
+            </p>
+          ) : (
+            paged.map((c) => (
+              <div
+                key={c.id}
+                className="rounded-lg border bg-background p-3 space-y-2"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <Link
+                      className="text-sm font-semibold text-primary hover:underline tabular-nums"
+                      to={withTenantPath(tenantSlug, `/customers/${c.id}`)}
+                    >
+                      {c.code}
+                    </Link>
+                    <p className="text-sm truncate">{c.name}</p>
+                    <p className="text-xs text-muted-foreground tabular-nums">{c.phone}</p>
+                  </div>
+                  <StatusBadge
+                    type={followUpBadgeType(c.followUpStatus)}
+                    label={CUSTOMER_FOLLOW_UP_LABELS[c.followUpStatus || 'none']}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs">
+                  <div>
+                    <p className="text-muted-foreground">حجم الشغل</p>
+                    <p className="font-medium tabular-nums">{fmtMoney(c.businessVolume)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">الرصيد</p>
+                    <p className="font-medium tabular-nums">{fmtMoney(c.balance)}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">النوع</p>
+                    <p>{CUSTOMER_TYPE_LABELS[c.type]}</p>
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground">التصنيف</p>
+                    <StatusBadge
+                      type={sizeBadgeType(c.sizeTier)}
+                      label={CUSTOMER_SIZE_TIER_LABELS[c.sizeTier || 'unclassified']}
+                    />
+                  </div>
+                </div>
+                <div className="flex flex-wrap gap-1 pt-1">
+                  {canEdit && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => openFollowUp(c)}
+                      aria-label="تعديل المتابعة"
+                    >
+                      <Pencil className="h-3.5 w-3.5" />
+                    </Button>
+                  )}
+                  <Button type="button" size="sm" variant="outline" asChild>
+                    <Link to={withTenantPath(tenantSlug, `/customers/${c.id}`)}>تفاصيل</Link>
+                  </Button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+
+        <div className="hidden md:block overflow-x-auto">
           <table className="erp-table w-full">
             <thead className="erp-thead">
               <tr>
@@ -491,7 +556,7 @@ export const CustomersKPI: React.FC = () => {
           itemLabel="عميل"
           onPageChange={setPage}
         />
-      </div>
+      </OpsDashPanel>
 
       <ImportCustomerMetricsModal
         open={importOpen}
@@ -561,6 +626,6 @@ export const CustomersKPI: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </ModuleOpsPageShell>
   );
 };

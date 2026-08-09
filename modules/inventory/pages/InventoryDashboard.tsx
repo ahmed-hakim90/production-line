@@ -106,6 +106,7 @@ export const InventoryDashboard: React.FC = () => {
   return (
     <DomainHomeShell
       denseHero
+      eyebrow="لوحة المخازن"
       hero={hero}
       periods={PERIODS}
       activePeriod={data.period}

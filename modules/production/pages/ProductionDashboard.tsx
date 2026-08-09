@@ -236,6 +236,7 @@ export const ProductionDashboard: React.FC = () => {
   return (
     <DomainHomeShell
       denseHero
+      eyebrow="لوحة الإنتاج"
       hero={heroCards}
       periods={PERIODS}
       activePeriod={preset}

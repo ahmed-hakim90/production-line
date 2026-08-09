@@ -11,7 +11,6 @@ import {
   YAxis,
 } from 'recharts';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
 import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
@@ -161,11 +160,9 @@ export const RepairTechnicianHome: React.FC = () => {
   if (!canView) {
     return (
       <div className="erp-ds-clean space-y-4 p-3 md:p-6" dir={dir}>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض لوحة أداء الفني.</p>
-          </CardContent>
-        </Card>
+        <OpsDashPanel title="لوحة أداء الفني" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض لوحة أداء الفني.</p>
+        </OpsDashPanel>
       </div>
     );
   }
@@ -262,274 +259,231 @@ export const RepairTechnicianHome: React.FC = () => {
         )}
       </OpsDashPanel>
 
-      {/* Mobile: card sections — delayed first, then fixed, then unrepairable */}
-      <div className="space-y-4 md:hidden">
-        <Card className="border-amber-200/80 dark:border-amber-900/40">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-base text-amber-900 dark:text-amber-200">
-              المتأخر عن الموعد
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 p-3 pt-0">
-            {loading ? (
-              <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                جاري التحميل...
-              </p>
-            ) : metrics.delayedJobs.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">لا توجد طلبات متأخرة حالياً.</p>
-            ) : (
-              metrics.delayedJobs.map((row) => (
-                <TechJobRowCard
-                  key={row.id || row.receiptNo}
-                  job={row}
-                  dateValue={row.dueAt}
-                  tenantSlug={tenantSlug}
-                  dateTone="amber"
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
+      <OpsDashPanel title="المتأخر عن الموعد" accent="repair" className="border-amber-200/80 dark:border-amber-900/40">
+        <div className="erp-mobile-card-list p-2 md:hidden">
+          {loading ? (
+            <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+              جاري التحميل...
+            </p>
+          ) : metrics.delayedJobs.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">لا توجد طلبات متأخرة حالياً.</p>
+          ) : (
+            metrics.delayedJobs.map((row) => (
+              <TechJobRowCard
+                key={row.id || row.receiptNo}
+                job={row}
+                dateValue={row.dueAt}
+                tenantSlug={tenantSlug}
+                dateTone="amber"
+              />
+            ))
+          )}
+        </div>
+        <div className="erp-desktop-table hidden overflow-x-auto md:block">
+          <table className="table erp-table w-full text-sm">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th text-right">الإيصال</th>
+                <th className="erp-th text-right">الجهاز</th>
+                <th className="erp-th text-right">الحالة</th>
+                <th className="erp-th text-right">الاستحقاق</th>
+                <th className="erp-th text-right">فتح</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                    <span role="status" aria-live="polite">جاري التحميل...</span>
+                  </td>
+                </tr>
+              ) : metrics.delayedJobs.length === 0 ? (
+                <tr>
+                  <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                    لا توجد طلبات متأخرة حالياً.
+                  </td>
+                </tr>
+              ) : metrics.delayedJobs.map((row) => (
+                <tr key={row.id || row.receiptNo} className="border-t hover:bg-muted/40">
+                  <td className="p-2 font-mono">{row.receiptNo || '—'}</td>
+                  <td className="p-2 text-muted-foreground">{formatRepairTechnicianDeviceLabel(row)}</td>
+                  <td className="p-2">
+                    <StatusBadge status={row.status as RepairJobStatus} />
+                  </td>
+                  <td className="p-2 tabular-nums text-amber-800 dark:text-amber-200">
+                    {formatDate(row.dueAt)}
+                  </td>
+                  <td className="p-2">
+                    {row.id ? (
+                      <Link
+                        className="text-xs text-primary underline"
+                        to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
+                      >
+                        الورشة
+                      </Link>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </OpsDashPanel>
 
-        <Card>
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-base">ما تم إصلاحه — {periodLabel(period)}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 p-3 pt-0">
-            {loading ? (
-              <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                جاري التحميل...
-              </p>
-            ) : metrics.fixedJobs.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                لا توجد أجهزة تم إصلاحها في هذه الفترة.
-              </p>
-            ) : (
-              metrics.fixedJobs.map((row) => (
-                <TechJobRowCard
-                  key={row.id || row.receiptNo}
-                  job={row}
-                  dateValue={row.deliveredAt || row.resolvedAt || row.closedAt || row.updatedAt}
-                  tenantSlug={tenantSlug}
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
+      <OpsDashPanel title={`ما تم إصلاحه — ${periodLabel(period)}`} accent="repair">
+        <div className="erp-mobile-card-list p-2 md:hidden">
+          {loading ? (
+            <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+              جاري التحميل...
+            </p>
+          ) : metrics.fixedJobs.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              لا توجد أجهزة تم إصلاحها في هذه الفترة.
+            </p>
+          ) : (
+            metrics.fixedJobs.map((row) => (
+              <TechJobRowCard
+                key={row.id || row.receiptNo}
+                job={row}
+                dateValue={row.deliveredAt || row.resolvedAt || row.closedAt || row.updatedAt}
+                tenantSlug={tenantSlug}
+              />
+            ))
+          )}
+        </div>
+        <div className="erp-desktop-table hidden overflow-x-auto md:block">
+          <table className="table erp-table w-full text-sm">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th text-right">الإيصال</th>
+                <th className="erp-th text-right">الجهاز</th>
+                <th className="erp-th text-right">الحالة</th>
+                <th className="erp-th text-right">التاريخ</th>
+                <th className="erp-th text-right">فتح</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                    <span role="status" aria-live="polite">جاري التحميل...</span>
+                  </td>
+                </tr>
+              ) : metrics.fixedJobs.length === 0 ? (
+                <tr>
+                  <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                    لا توجد أجهزة تم إصلاحها في هذه الفترة.
+                  </td>
+                </tr>
+              ) : metrics.fixedJobs.map((row) => (
+                <tr key={row.id || row.receiptNo} className="border-t hover:bg-muted/40">
+                  <td className="p-2 font-mono">{row.receiptNo || '—'}</td>
+                  <td className="p-2 text-muted-foreground">{formatRepairTechnicianDeviceLabel(row)}</td>
+                  <td className="p-2">
+                    <StatusBadge status={row.status as RepairJobStatus} />
+                  </td>
+                  <td className="p-2 tabular-nums">
+                    {formatDate(row.deliveredAt || row.resolvedAt || row.closedAt || row.updatedAt)}
+                  </td>
+                  <td className="p-2">
+                    {row.id ? (
+                      <Link
+                        className="text-xs text-primary underline"
+                        to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
+                      >
+                        الورشة
+                      </Link>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </OpsDashPanel>
 
-        <Card className="border-rose-200/80 dark:border-rose-900/40">
-          <CardHeader className="p-3 pb-2">
-            <CardTitle className="text-base text-rose-900 dark:text-rose-200">
-              غير قابل للإصلاح — {periodLabel(period)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2 p-3 pt-0">
-            {loading ? (
-              <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
-                جاري التحميل...
-              </p>
-            ) : metrics.unrepairableJobs.length === 0 ? (
-              <p className="py-4 text-center text-sm text-muted-foreground">
-                لا توجد طلبات غير قابلة للإصلاح في هذه الفترة.
-              </p>
-            ) : (
-              metrics.unrepairableJobs.map((row) => (
-                <TechJobRowCard
-                  key={row.id || row.receiptNo}
-                  job={row}
-                  dateValue={row.resolvedAt || row.closedAt || row.updatedAt}
-                  tenantSlug={tenantSlug}
-                />
-              ))
-            )}
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Desktop: existing three tables */}
-      <div className="hidden gap-4 md:grid md:grid-cols-1 xl:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">ما تم إصلاحه — {periodLabel(period)}</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="table erp-table w-full text-sm">
-                <thead className="erp-thead">
-                  <tr>
-                    <th className="erp-th text-right">الإيصال</th>
-                    <th className="erp-th text-right">الجهاز</th>
-                    <th className="erp-th text-right">الحالة</th>
-                    <th className="erp-th text-right">التاريخ</th>
-                    <th className="erp-th text-right">فتح</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                        <span role="status" aria-live="polite">جاري التحميل...</span>
-                      </td>
-                    </tr>
-                  ) : metrics.fixedJobs.length === 0 ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                        لا توجد أجهزة تم إصلاحها في هذه الفترة.
-                      </td>
-                    </tr>
-                  ) : metrics.fixedJobs.map((row) => (
-                    <tr key={row.id || row.receiptNo} className="border-t hover:bg-muted/40">
-                      <td className="p-2 font-mono">{row.receiptNo || '—'}</td>
-                      <td className="p-2 text-muted-foreground">{formatRepairTechnicianDeviceLabel(row)}</td>
-                      <td className="p-2">
-                        <StatusBadge status={row.status as RepairJobStatus} />
-                      </td>
-                      <td className="p-2 tabular-nums">
-                        {formatDate(row.deliveredAt || row.resolvedAt || row.closedAt || row.updatedAt)}
-                      </td>
-                      <td className="p-2">
-                        {row.id ? (
-                          <Link
-                            className="text-xs text-primary underline"
-                            to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
-                          >
-                            الورشة
-                          </Link>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-rose-200/80 dark:border-rose-900/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base text-rose-900 dark:text-rose-200">
-              غير قابل للإصلاح — {periodLabel(period)}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="table erp-table w-full text-sm">
-                <thead className="erp-thead">
-                  <tr>
-                    <th className="erp-th text-right">الإيصال</th>
-                    <th className="erp-th text-right">الجهاز</th>
-                    <th className="erp-th text-right">الحالة</th>
-                    <th className="erp-th text-right">التاريخ</th>
-                    <th className="erp-th text-right">فتح</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                        <span role="status" aria-live="polite">جاري التحميل...</span>
-                      </td>
-                    </tr>
-                  ) : metrics.unrepairableJobs.length === 0 ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                        لا توجد طلبات غير قابلة للإصلاح في هذه الفترة.
-                      </td>
-                    </tr>
-                  ) : metrics.unrepairableJobs.map((row) => (
-                    <tr key={row.id || row.receiptNo} className="border-t hover:bg-muted/40">
-                      <td className="p-2 font-mono">{row.receiptNo || '—'}</td>
-                      <td className="p-2 text-muted-foreground">{formatRepairTechnicianDeviceLabel(row)}</td>
-                      <td className="p-2">
-                        <StatusBadge status={row.status as RepairJobStatus} />
-                      </td>
-                      <td className="p-2 tabular-nums">
-                        {formatDate(row.resolvedAt || row.closedAt || row.updatedAt)}
-                      </td>
-                      <td className="p-2">
-                        {row.id ? (
-                          <Link
-                            className="text-xs text-primary underline"
-                            to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
-                          >
-                            عرض
-                          </Link>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="border-amber-200/80 dark:border-amber-900/40">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base text-amber-900 dark:text-amber-200">المتأخر عن الموعد</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="table erp-table w-full text-sm">
-                <thead className="erp-thead">
-                  <tr>
-                    <th className="erp-th text-right">الإيصال</th>
-                    <th className="erp-th text-right">الجهاز</th>
-                    <th className="erp-th text-right">الحالة</th>
-                    <th className="erp-th text-right">الاستحقاق</th>
-                    <th className="erp-th text-right">فتح</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {loading ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                        <span role="status" aria-live="polite">جاري التحميل...</span>
-                      </td>
-                    </tr>
-                  ) : metrics.delayedJobs.length === 0 ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={5}>
-                        لا توجد طلبات متأخرة حالياً.
-                      </td>
-                    </tr>
-                  ) : metrics.delayedJobs.map((row) => (
-                    <tr key={row.id || row.receiptNo} className="border-t hover:bg-muted/40">
-                      <td className="p-2 font-mono">{row.receiptNo || '—'}</td>
-                      <td className="p-2 text-muted-foreground">{formatRepairTechnicianDeviceLabel(row)}</td>
-                      <td className="p-2">
-                        <StatusBadge status={row.status as RepairJobStatus} />
-                      </td>
-                      <td className="p-2 tabular-nums text-amber-800 dark:text-amber-200">
-                        {formatDate(row.dueAt)}
-                      </td>
-                      <td className="p-2">
-                        {row.id ? (
-                          <Link
-                            className="text-xs text-primary underline"
-                            to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
-                          >
-                            الورشة
-                          </Link>
-                        ) : '—'}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+      <OpsDashPanel
+        title={`غير قابل للإصلاح — ${periodLabel(period)}`}
+        accent="repair"
+        className="border-rose-200/80 dark:border-rose-900/40"
+      >
+        <div className="erp-mobile-card-list p-2 md:hidden">
+          {loading ? (
+            <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+              جاري التحميل...
+            </p>
+          ) : metrics.unrepairableJobs.length === 0 ? (
+            <p className="py-4 text-center text-sm text-muted-foreground">
+              لا توجد طلبات غير قابلة للإصلاح في هذه الفترة.
+            </p>
+          ) : (
+            metrics.unrepairableJobs.map((row) => (
+              <TechJobRowCard
+                key={row.id || row.receiptNo}
+                job={row}
+                dateValue={row.resolvedAt || row.closedAt || row.updatedAt}
+                tenantSlug={tenantSlug}
+              />
+            ))
+          )}
+        </div>
+        <div className="erp-desktop-table hidden overflow-x-auto md:block">
+          <table className="table erp-table w-full text-sm">
+            <thead className="erp-thead">
+              <tr>
+                <th className="erp-th text-right">الإيصال</th>
+                <th className="erp-th text-right">الجهاز</th>
+                <th className="erp-th text-right">الحالة</th>
+                <th className="erp-th text-right">التاريخ</th>
+                <th className="erp-th text-right">فتح</th>
+              </tr>
+            </thead>
+            <tbody>
+              {loading ? (
+                <tr>
+                  <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                    <span role="status" aria-live="polite">جاري التحميل...</span>
+                  </td>
+                </tr>
+              ) : metrics.unrepairableJobs.length === 0 ? (
+                <tr>
+                  <td className="p-4 text-center text-muted-foreground" colSpan={5}>
+                    لا توجد طلبات غير قابلة للإصلاح في هذه الفترة.
+                  </td>
+                </tr>
+              ) : metrics.unrepairableJobs.map((row) => (
+                <tr key={row.id || row.receiptNo} className="border-t hover:bg-muted/40">
+                  <td className="p-2 font-mono">{row.receiptNo || '—'}</td>
+                  <td className="p-2 text-muted-foreground">{formatRepairTechnicianDeviceLabel(row)}</td>
+                  <td className="p-2">
+                    <StatusBadge status={row.status as RepairJobStatus} />
+                  </td>
+                  <td className="p-2 tabular-nums">
+                    {formatDate(row.resolvedAt || row.closedAt || row.updatedAt)}
+                  </td>
+                  <td className="p-2">
+                    {row.id ? (
+                      <Link
+                        className="text-xs text-primary underline"
+                        to={withTenantPath(tenantSlug, `/repair/jobs/${row.id}/workspace`)}
+                      >
+                        عرض
+                      </Link>
+                    ) : '—'}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </OpsDashPanel>
 
       {!loading && technicianIds.length === 0 && (
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">
-              لا يمكن حساب الأداء — حسابك غير مربوط بموظف أو معرّف فني.
-            </p>
-          </CardContent>
-        </Card>
+        <OpsDashPanel title="ربط الحساب" accent="repair">
+          <p className="text-sm text-muted-foreground">
+            لا يمكن حساب الأداء — حسابك غير مربوط بموظف أو معرّف فني.
+          </p>
+        </OpsDashPanel>
       )}
     </DomainHomeShell>
   );

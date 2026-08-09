@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import { FileDown, EyeOff, UserMinus, ArrowUpDown, X } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import {
@@ -30,6 +29,7 @@ import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter'
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -533,11 +533,9 @@ export const RepairTechnicianKPIs: React.FC = () => {
   if (!canView) {
     return (
       <div className="erp-ds-clean space-y-4 p-4 md:p-6 w-full" dir={dir}>
-        <Card>
-          <CardContent className="pt-6">
-            <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض أداء الفنيين.</p>
-          </CardContent>
-        </Card>
+        <OpsDashPanel title="أداء الفنيين" accent="repair">
+          <p className="text-sm text-muted-foreground">ليس لديك صلاحية عرض أداء الفنيين.</p>
+        </OpsDashPanel>
       </div>
     );
   }
@@ -648,69 +646,64 @@ export const RepairTechnicianKPIs: React.FC = () => {
         </div>
       )}
     >
-      <Card>
-        <CardContent className="p-0">
-          <SmartFilterBar
-            pageId="repair-technician-kpis"
-            searchPlaceholder="بحث باسم الفني أو المعرف..."
-            searchValue={technicianQuery}
-            onSearchChange={setTechnicianQuery}
-            filters={[
-              {
-                key: 'branch',
-                label: 'الفرع',
-                defaultVisible: true,
-                options: [
-                  { value: 'all', label: 'كل الفروع' },
-                  ...selectableBranches.map((branch) => ({
-                    value: branch.id || '',
-                    label: branch.name,
-                  })),
-                ],
-              },
-            ]}
-            filterValues={{
-              branch: branchFilter,
-            }}
-            onFilterChange={(key, value) => {
-              if (key === 'branch') setBranchFilter(value);
-            }}
-            extra={(
-              <div className="flex items-center gap-2">
-                <Select value={sortKey} onValueChange={(v) => setSortKey(v as RepairTechKpiSortKey)}>
-                  <SelectTrigger className="h-9 w-[11rem]" aria-label="ترتيب حسب">
-                    <ArrowUpDown className="me-1.5 h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
-                    <SelectValue placeholder="ترتيب" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {SORT_OPTIONS.map((opt) => (
-                      <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                {hiddenTechnicianIds.length > 0 && (
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    onClick={() => setHiddenTechnicianIds([])}
-                  >
-                    إظهار المخفي ({hiddenTechnicianIds.length})
-                  </Button>
-                )}
-              </div>
-            )}
-            className="mb-0 border-0 rounded-none"
-          />
-        </CardContent>
-      </Card>
+      <OpsDashPanel title="فلاتر وترتيب" accent="repair" bodyClassName="p-0">
+        <SmartFilterBar
+          pageId="repair-technician-kpis"
+          searchPlaceholder="بحث باسم الفني أو المعرف..."
+          searchValue={technicianQuery}
+          onSearchChange={setTechnicianQuery}
+          filters={[
+            {
+              key: 'branch',
+              label: 'الفرع',
+              defaultVisible: true,
+              options: [
+                { value: 'all', label: 'كل الفروع' },
+                ...selectableBranches.map((branch) => ({
+                  value: branch.id || '',
+                  label: branch.name,
+                })),
+              ],
+            },
+          ]}
+          filterValues={{
+            branch: branchFilter,
+          }}
+          onFilterChange={(key, value) => {
+            if (key === 'branch') setBranchFilter(value);
+          }}
+          extra={(
+            <div className="flex items-center gap-2">
+              <Select value={sortKey} onValueChange={(v) => setSortKey(v as RepairTechKpiSortKey)}>
+                <SelectTrigger className="h-9 w-[11rem]" aria-label="ترتيب حسب">
+                  <ArrowUpDown className="me-1.5 h-3.5 w-3.5 shrink-0 opacity-60" aria-hidden />
+                  <SelectValue placeholder="ترتيب" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SORT_OPTIONS.map((opt) => (
+                    <SelectItem key={opt.value} value={opt.value}>{opt.label}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {hiddenTechnicianIds.length > 0 && (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => setHiddenTechnicianIds([])}
+                >
+                  إظهار المخفي ({hiddenTechnicianIds.length})
+                </Button>
+              )}
+            </div>
+          )}
+          className="mb-0 border-0 rounded-none"
+        />
+      </OpsDashPanel>
 
       {topPerformers.length > 0 && (
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">أبرز الأداء في الفترة</CardTitle>
-          </CardHeader>
-          <CardContent className="grid gap-2 md:grid-cols-3">
+        <OpsDashPanel title="أبرز الأداء في الفترة" accent="repair">
+          <div className="grid gap-2 md:grid-cols-3">
             {topPerformers.map((row, index) => (
               <button
                 key={row.technicianId}
@@ -731,18 +724,19 @@ export const RepairTechnicianKPIs: React.FC = () => {
                 </div>
               </button>
             ))}
-          </CardContent>
-        </Card>
+          </div>
+        </OpsDashPanel>
       )}
 
       {(attentionQueue.length > 0 || delayedInScope.length > 0) && (
         <div className="grid gap-4 lg:grid-cols-2">
           {attentionQueue.length > 0 && (
-            <Card className="border-amber-200/80 dark:border-amber-900/40">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-base text-amber-900 dark:text-amber-200">يحتاجون متابعة</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-2">
+            <OpsDashPanel
+              title="يحتاجون متابعة"
+              accent="repair"
+              className="border-amber-200/80 dark:border-amber-900/40"
+            >
+              <div className="space-y-2">
                 {attentionQueue.map((item) => (
                   <button
                     key={item.technicianId}
@@ -771,163 +765,224 @@ export const RepairTechnicianKPIs: React.FC = () => {
                     </div>
                   </button>
                 ))}
-              </CardContent>
-            </Card>
+              </div>
+            </OpsDashPanel>
           )}
 
           {delayedInScope.length > 0 && (
-            <Card className="border-rose-200/80 dark:border-rose-900/40">
-              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-base text-rose-800 dark:text-rose-200">
-                  طلبات متأخرة في الفترة
-                </CardTitle>
-                <Badge variant="destructive">{fmt(delayedInScope.length)}</Badge>
-              </CardHeader>
-              <CardContent className="p-0">
-                <div className="erp-table-wrap overflow-x-auto">
-                  <table className="w-full text-xs">
-                    <thead className="bg-muted">
-                      <tr>
-                        <th className="p-2 text-right">إيصال</th>
-                        <th className="p-2 text-right">الفني</th>
-                        <th className="p-2 text-right">الجهاز</th>
-                        <th className="p-2 text-right">موعد</th>
-                        <th className="p-2 text-right">تأخير</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {delayedInScope.slice(0, 8).map((job) => (
-                        <tr key={job.id || job.receiptNo} className="border-t">
-                          <td className="p-2 font-mono">
-                            {job.id ? (
-                              <Link
-                                className="text-primary underline"
-                                to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
-                              >
-                                {job.receiptNo || job.id.slice(0, 8)}
-                              </Link>
-                            ) : (job.receiptNo || '—')}
-                          </td>
-                          <td className="p-2">
-                            <button
-                              type="button"
-                              className="text-right text-primary underline-offset-2 hover:underline"
-                              onClick={() => {
-                                focusTechnician(technicianKeyOf(job), 'delayed');
-                              }}
+            <OpsDashPanel
+              title="طلبات متأخرة في الفترة"
+              accent="repair"
+              className="border-rose-200/80 dark:border-rose-900/40"
+              action={<Badge variant="destructive">{fmt(delayedInScope.length)}</Badge>}
+            >
+              <div className="erp-mobile-card-list p-2 md:hidden">
+                {delayedInScope.slice(0, 8).map((job) => (
+                  <div
+                    key={job.id || job.receiptNo}
+                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-mono text-sm font-semibold">
+                          {job.id ? (
+                            <Link
+                              className="text-primary underline"
+                              to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
                             >
-                              {resolveTechLabel(technicianKeyOf(job))}
-                            </button>
-                          </td>
-                          <td className="p-2 text-muted-foreground">{formatRepairTechDeviceLabel(job)}</td>
-                          <td className="p-2 tabular-nums">{formatDate(job.dueAt)}</td>
-                          <td className="p-2 tabular-nums font-semibold text-rose-600">
-                            {job.overdueDays.toFixed(0)} ي
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </CardContent>
-            </Card>
+                              {job.receiptNo || job.id.slice(0, 8)}
+                            </Link>
+                          ) : (job.receiptNo || '—')}
+                        </p>
+                        <p className="mt-0.5 text-xs text-muted-foreground">
+                          {formatRepairTechDeviceLabel(job)}
+                        </p>
+                      </div>
+                      <span className="shrink-0 text-xs font-semibold text-rose-600 tabular-nums">
+                        {job.overdueDays.toFixed(0)} ي
+                      </span>
+                    </div>
+                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
+                      <button
+                        type="button"
+                        className="text-primary underline-offset-2 hover:underline"
+                        onClick={() => focusTechnician(technicianKeyOf(job), 'delayed')}
+                      >
+                        {resolveTechLabel(technicianKeyOf(job))}
+                      </button>
+                      <span className="text-muted-foreground tabular-nums">{formatDate(job.dueAt)}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="erp-desktop-table hidden overflow-x-auto md:block">
+                <table className="table erp-table w-full text-xs">
+                  <thead className="erp-thead">
+                    <tr>
+                      <th className="erp-th text-right">إيصال</th>
+                      <th className="erp-th text-right">الفني</th>
+                      <th className="erp-th text-right">الجهاز</th>
+                      <th className="erp-th text-right">موعد</th>
+                      <th className="erp-th text-right">تأخير</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {delayedInScope.slice(0, 8).map((job) => (
+                      <tr key={job.id || job.receiptNo} className="border-t">
+                        <td className="p-2 font-mono">
+                          {job.id ? (
+                            <Link
+                              className="text-primary underline"
+                              to={withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`)}
+                            >
+                              {job.receiptNo || job.id.slice(0, 8)}
+                            </Link>
+                          ) : (job.receiptNo || '—')}
+                        </td>
+                        <td className="p-2">
+                          <button
+                            type="button"
+                            className="text-right text-primary underline-offset-2 hover:underline"
+                            onClick={() => {
+                              focusTechnician(technicianKeyOf(job), 'delayed');
+                            }}
+                          >
+                            {resolveTechLabel(technicianKeyOf(job))}
+                          </button>
+                        </td>
+                        <td className="p-2 text-muted-foreground">{formatRepairTechDeviceLabel(job)}</td>
+                        <td className="p-2 tabular-nums">{formatDate(job.dueAt)}</td>
+                        <td className="p-2 tabular-nums font-semibold text-rose-600">
+                          {job.overdueDays.toFixed(0)} ي
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </OpsDashPanel>
           )}
         </div>
       )}
 
       <div className="grid gap-4 xl:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">ملخص الفنيين</CardTitle>
-          </CardHeader>
-          <CardContent className="p-0">
-            <div className="erp-table-wrap overflow-x-auto">
-              <table className="table erp-table w-full min-w-[980px] text-sm">
-                <thead className="erp-thead">
+        <OpsDashPanel title="ملخص الفنيين" accent="repair" bodyClassName="p-0">
+          <div className="erp-mobile-card-list p-2 xl:hidden">
+            {!jobsReady ? (
+              <p className="py-4 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+                جاري التحميل...
+              </p>
+            ) : pagedRows.length === 0 ? (
+              <p className="py-4 text-center text-sm text-muted-foreground">لا توجد بيانات للفلاتر الحالية.</p>
+            ) : (
+              pagedRows.map((row) => (
+                <button
+                  key={row.technicianId}
+                  type="button"
+                  onClick={() => toggleTechnician(row.technicianId)}
+                  className={`w-full rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 text-right shadow-sm transition-colors ${
+                    selectedTechId === row.technicianId ? 'ring-2 ring-primary/30' : ''
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <p className="truncate text-sm font-semibold">{resolveTechLabel(row.technicianId)}</p>
+                    <Badge variant="secondary">{fmtPct(row.successRate)}</Badge>
+                  </div>
+                  <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground tabular-nums">
+                    <span>إجمالي {fmt(row.total)}</span>
+                    <span>تسليم {fmt(row.delivered)}</span>
+                    <span>جاري {fmt(row.open)}</span>
+                    <span className={row.delayed > 0 ? 'text-rose-600 font-semibold' : ''}>
+                      متأخر {fmt(row.delayed)}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+          <div className="erp-desktop-table hidden overflow-x-auto xl:block">
+            <table className="table erp-table w-full min-w-[980px] text-sm">
+              <thead className="erp-thead">
+                <tr>
+                  <th className="erp-th text-right">الفني</th>
+                  <th className="erp-th text-right">إجمالي</th>
+                  <th className="erp-th text-right">تسليم</th>
+                  <th className="erp-th text-right">غير قابل</th>
+                  <th className="erp-th text-right">جاري</th>
+                  <th className="erp-th text-right">متأخر</th>
+                  <th className="erp-th text-right">نجاح</th>
+                  <th className="erp-th text-right">أيام</th>
+                  <th className="erp-th text-right">إيراد</th>
+                  <th className="erp-th text-right">إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {!jobsReady ? (
                   <tr>
-                    <th className="erp-th text-right">الفني</th>
-                    <th className="erp-th text-right">إجمالي</th>
-                    <th className="erp-th text-right">تسليم</th>
-                    <th className="erp-th text-right">غير قابل</th>
-                    <th className="erp-th text-right">جاري</th>
-                    <th className="erp-th text-right">متأخر</th>
-                    <th className="erp-th text-right">نجاح</th>
-                    <th className="erp-th text-right">أيام</th>
-                    <th className="erp-th text-right">إيراد</th>
-                    <th className="erp-th text-right">إجراءات</th>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={10}>
+                      <span role="status" aria-live="polite">جاري التحميل...</span>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {!jobsReady ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={10}>
-                        <span role="status" aria-live="polite">جاري التحميل...</span>
-                      </td>
-                    </tr>
-                  ) : pagedRows.length === 0 ? (
-                    <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={10}>
-                        لا توجد بيانات للفلاتر الحالية.
-                      </td>
-                    </tr>
-                  ) : (
-                    pagedRows.map((row) => (
-                      <TechnicianRow
-                        key={row.technicianId}
-                        row={row}
-                        label={resolveTechLabel(row.technicianId)}
-                        selected={selectedTechId === row.technicianId}
-                        canUnassign={
-                          canManageBranches
-                          && row.technicianId !== UNASSIGNED_TECHNICIAN_ID
-                          && resolveUnassignBranchIds(row.technicianId).length > 0
-                        }
-                        showUnassign={canManageBranches}
-                        branchHint={
-                          row.technicianId !== UNASSIGNED_TECHNICIAN_ID && branchFilter !== 'all'
-                            ? selectableBranches.find((b) => (b.id || '') === branchFilter)?.name
-                            : undefined
-                        }
-                        onSelect={() => toggleTechnician(row.technicianId)}
-                        onHide={() =>
-                          setHiddenTechnicianIds((prev) =>
-                            prev.includes(row.technicianId) ? prev : [...prev, row.technicianId],
-                          )
-                        }
-                        onUnassign={() =>
-                          setPendingUnassign({
-                            id: row.technicianId,
-                            name: resolveTechLabel(row.technicianId),
-                          })
-                        }
-                      />
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-            <DataPaginationFooter
-              page={safePage}
-              totalPages={totalPages}
-              totalItems={technicianRows.length}
-              onPageChange={setPage}
-              itemLabel="فني"
-            />
-          </CardContent>
-        </Card>
+                ) : pagedRows.length === 0 ? (
+                  <tr>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={10}>
+                      لا توجد بيانات للفلاتر الحالية.
+                    </td>
+                  </tr>
+                ) : (
+                  pagedRows.map((row) => (
+                    <TechnicianRow
+                      key={row.technicianId}
+                      row={row}
+                      label={resolveTechLabel(row.technicianId)}
+                      selected={selectedTechId === row.technicianId}
+                      canUnassign={
+                        canManageBranches
+                        && row.technicianId !== UNASSIGNED_TECHNICIAN_ID
+                        && resolveUnassignBranchIds(row.technicianId).length > 0
+                      }
+                      showUnassign={canManageBranches}
+                      branchHint={
+                        row.technicianId !== UNASSIGNED_TECHNICIAN_ID && branchFilter !== 'all'
+                          ? selectableBranches.find((b) => (b.id || '') === branchFilter)?.name
+                          : undefined
+                      }
+                      onSelect={() => toggleTechnician(row.technicianId)}
+                      onHide={() =>
+                        setHiddenTechnicianIds((prev) =>
+                          prev.includes(row.technicianId) ? prev : [...prev, row.technicianId],
+                        )
+                      }
+                      onUnassign={() =>
+                        setPendingUnassign({
+                          id: row.technicianId,
+                          name: resolveTechLabel(row.technicianId),
+                        })
+                      }
+                    />
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+          <DataPaginationFooter
+            page={safePage}
+            totalPages={totalPages}
+            totalItems={technicianRows.length}
+            onPageChange={setPage}
+            itemLabel="فني"
+          />
+        </OpsDashPanel>
 
         <div className="space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">توزيع العبء والإيراد</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-              {!jobsReady ? (
-                <p className="text-sm text-muted-foreground" role="status">جاري التحميل...</p>
-              ) : workloadBars.length === 0 ? (
-                <p className="text-sm text-muted-foreground">لا يوجد فنيون مسندون في الفترة.</p>
-              ) : (
-                workloadBars.map((bar) => (
+          <OpsDashPanel title="توزيع العبء والإيراد" accent="repair">
+            {!jobsReady ? (
+              <p className="text-sm text-muted-foreground" role="status">جاري التحميل...</p>
+            ) : workloadBars.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا يوجد فنيون مسندون في الفترة.</p>
+            ) : (
+              <div className="space-y-3">
+                {workloadBars.map((bar) => (
                   <button
                     key={bar.technicianId}
                     type="button"
@@ -963,22 +1018,19 @@ export const RepairTechnicianKPIs: React.FC = () => {
                       </div>
                     </div>
                   </button>
-                ))
-              )}
-            </CardContent>
-          </Card>
+                ))}
+              </div>
+            )}
+          </OpsDashPanel>
 
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-base">توزيع الأعطال حسب نوع الجهاز</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2">
-              {!jobsReady ? (
-                <p className="text-sm text-muted-foreground" role="status">جاري التحميل...</p>
-              ) : deviceBars.length === 0 ? (
-                <p className="text-sm text-muted-foreground">لا توجد أجهزة في الفترة.</p>
-              ) : (
-                deviceBars.slice(0, 8).map((bar) => (
+          <OpsDashPanel title="توزيع الأعطال حسب نوع الجهاز" accent="repair">
+            {!jobsReady ? (
+              <p className="text-sm text-muted-foreground" role="status">جاري التحميل...</p>
+            ) : deviceBars.length === 0 ? (
+              <p className="text-sm text-muted-foreground">لا توجد أجهزة في الفترة.</p>
+            ) : (
+              <div className="space-y-2">
+                {deviceBars.slice(0, 8).map((bar) => (
                   <div key={bar.key} className="space-y-1">
                     <div className="flex items-center justify-between gap-2 text-sm">
                       <span className="truncate">{bar.label}</span>
@@ -993,67 +1045,64 @@ export const RepairTechnicianKPIs: React.FC = () => {
                       />
                     </div>
                   </div>
-                ))
-              )}
-            </CardContent>
-          </Card>
-
-          <Card className={selectedRow ? 'border-primary/30' : undefined}>
-            <CardHeader className="flex flex-row items-start justify-between gap-2 space-y-0 pb-2">
-              <div>
-                <CardTitle className="text-base">تحليل الفني</CardTitle>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {selectedRow
-                    ? resolveTechLabel(selectedRow.technicianId)
-                    : 'اختر فنياً من الجدول أو من أبرز الأداء.'}
-                </p>
+                ))}
               </div>
-              {selectedRow && (
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-8 w-8 shrink-0"
-                  aria-label="إغلاق التحليل"
-                  onClick={() => {
-                    setSelectedTechId(null);
-                    setCompareTechId(null);
-                    setDetailTab('overview');
-                  }}
-                >
-                  <X className="h-4 w-4" />
-                </Button>
-              )}
-            </CardHeader>
-            <CardContent>
-              {!selectedRow ? (
-                <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
-                  اضغط صف الفني لعرض تفصيل النجاح والسرعة وأنواع الأجهزة والطلبات المتأخرة.
-                </p>
-              ) : (
-                <TechnicianDetail
-                  row={selectedRow}
-                  teamDelta={teamDelta}
-                  deviceBars={selectedDeviceBars}
-                  statusBars={selectedStatusBars}
-                  jobs={selectedJobs}
-                  delayedJobs={selectedDelayedJobs}
-                  detailTab={detailTab}
-                  onDetailTabChange={setDetailTab}
-                  compareTechId={compareTechId}
-                  compareOptions={technicianRows.filter(
-                    (r) =>
-                      r.technicianId !== UNASSIGNED_TECHNICIAN_ID
-                      && r.technicianId !== selectedRow.technicianId,
-                  )}
-                  resolveTechLabel={resolveTechLabel}
-                  compareSnapshot={compareSnapshot}
-                  onCompareChange={setCompareTechId}
-                  tenantSlug={tenantSlug}
-                />
-              )}
-            </CardContent>
-          </Card>
+            )}
+          </OpsDashPanel>
+
+          <OpsDashPanel
+            title="تحليل الفني"
+            accent="repair"
+            className={selectedRow ? 'border-primary/30' : undefined}
+            action={selectedRow ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="ghost"
+                className="h-8 w-8 shrink-0"
+                aria-label="إغلاق التحليل"
+                onClick={() => {
+                  setSelectedTechId(null);
+                  setCompareTechId(null);
+                  setDetailTab('overview');
+                }}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            ) : undefined}
+          >
+            <p className="mb-3 text-xs text-muted-foreground">
+              {selectedRow
+                ? resolveTechLabel(selectedRow.technicianId)
+                : 'اختر فنياً من الجدول أو من أبرز الأداء.'}
+            </p>
+            {!selectedRow ? (
+              <p className="rounded-lg border border-dashed p-4 text-center text-sm text-muted-foreground">
+                اضغط صف الفني لعرض تفصيل النجاح والسرعة وأنواع الأجهزة والطلبات المتأخرة.
+              </p>
+            ) : (
+              <TechnicianDetail
+                row={selectedRow}
+                teamDelta={teamDelta}
+                deviceBars={selectedDeviceBars}
+                statusBars={selectedStatusBars}
+                jobs={selectedJobs}
+                delayedJobs={selectedDelayedJobs}
+                detailTab={detailTab}
+                onDetailTabChange={setDetailTab}
+                compareTechId={compareTechId}
+                compareOptions={technicianRows.filter(
+                  (r) =>
+                    r.technicianId !== UNASSIGNED_TECHNICIAN_ID
+                    && r.technicianId !== selectedRow.technicianId,
+                )}
+                resolveTechLabel={resolveTechLabel}
+                compareSnapshot={compareSnapshot}
+                onCompareChange={setCompareTechId}
+                tenantSlug={tenantSlug}
+              />
+            )}
+          </OpsDashPanel>
         </div>
       </div>
 

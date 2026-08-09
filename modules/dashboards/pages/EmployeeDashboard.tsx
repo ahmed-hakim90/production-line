@@ -1,6 +1,6 @@
 import React, { useState, useMemo, useEffect, useRef, useCallback } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { Card } from '../components/UI';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { WorkOrderPrint } from '../../production/components/ProductionReportPrint';
 import type { WorkOrderPrintData } from '../../production/components/ProductionReportPrint';
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
@@ -612,9 +612,27 @@ export const EmployeeDashboard: React.FC = () => {
       activePeriod={period}
       onPeriodChange={(value) => setPeriod(value as Period)}
       refreshing={periodLoading}
-      secondarySummary="إجراءات وروابط سريعة"
+      secondarySummary={alerts.length > 0 ? 'تنبيهات وإجراءات سريعة' : 'إجراءات وروابط سريعة'}
       secondary={(
-        <div className="flex flex-wrap gap-2">
+        <>
+          {alerts.length > 0 && (
+            <div className="space-y-1.5 mb-3">
+              {alerts.map((alert, i) => (
+                <div
+                  key={i}
+                  className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
+                    alert.type === 'danger'
+                      ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
+                      : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
+                  }`}
+                >
+                  <span className="material-icons-round text-lg">{alert.icon}</span>
+                  <span>{alert.message}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="flex flex-wrap gap-2">
           {can('quickAction.view') && (
             <PrimaryButton
               type="button"
@@ -696,16 +714,13 @@ export const EmployeeDashboard: React.FC = () => {
             </GhostButton>
           )}
         </div>
+        </>
       )}
     >
 
       {routingShortcutsVisible && (
-        <Card>
+        <OpsDashPanel title="مسارات الإنتاج" accent="production">
           <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-round text-emerald-600 dark:text-emerald-400 text-xl">alt_route</span>
-              <h3 className="text-sm font-semibold text-[var(--color-text)]">مسارات الإنتاج</h3>
-            </div>
             <p className="text-xs text-[var(--color-text-muted)]">
               ابحث عن منتج له مسار نشط، ثم اعرض الخطة أو ابدأ تنفيذ المسار.
             </p>
@@ -775,11 +790,11 @@ export const EmployeeDashboard: React.FC = () => {
               </>
             )}
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {employee?.id && (
-        <Card>
+        <OpsDashPanel title="بدء وردية عامة" accent="production">
           <ShiftLifecyclePanel
             context={{ type: 'general', label: 'بدء وردية عامة' }}
             employeeId={employee.id}
@@ -795,47 +810,50 @@ export const EmployeeDashboard: React.FC = () => {
             onClosed={refreshTodayReports}
             updateReport={updateReport}
           />
-        </Card>
-      )}
-
-      {/* â”€â”€ Alerts â”€â”€ */}
-      {alerts.length > 0 && (
-        <div className="space-y-2">
-          {alerts.map((alert, i) => (
-            <div
-              key={i}
-              className={`flex items-center gap-3 px-4 py-3 rounded-[var(--border-radius-lg)] border text-sm font-medium ${
-                alert.type === 'danger'
-                  ? 'bg-rose-50 dark:bg-rose-900/10 border-rose-200 text-rose-700'
-                  : 'bg-amber-50 dark:bg-amber-900/10 border-amber-200 text-amber-700'
-              }`}
-            >
-              <span className="material-icons-round text-lg">{alert.icon}</span>
-              <span>{alert.message}</span>
-            </div>
-          ))}
-        </div>
+        </OpsDashPanel>
       )}
 
       {can(transferApprovalPermission as any) && pendingProductionEntries.length > 0 && (
-        <Card>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-round text-amber-500">approval</span>
-              <h3 className="text-sm font-medium text-[var(--color-text)]">طلبات اعتماد دخول تم الصنع</h3>
-              <StatusBadge label={`${pendingProductionEntries.length}`} type="warning" />
-            </div>
+        <OpsDashPanel
+          title="طلبات اعتماد دخول تم الصنع"
+          accent="inventory"
+          action={(
             <GhostButton
               type="button"
               onClick={() => navigate('/inventory/transfer-approvals')}
-              className="sm:mr-auto text-xs"
+              className="text-xs"
               iconName="fact_check"
               tone="approve"
             >
               فتح شاشة الاعتماد
             </GhostButton>
+          )}
+        >
+          <div className="mb-2">
+            <StatusBadge label={`${pendingProductionEntries.length}`} type="warning" />
           </div>
-          <div className="mt-3">
+          <div className="erp-mobile-card-list p-2 md:hidden">
+            {pendingEntriesLoading ? (
+              <p className="py-4 text-center text-sm text-[var(--color-text-muted)]">جاري التحميل…</p>
+            ) : pendingProductionEntries.slice(0, 6).length === 0 ? (
+              <p className="py-4 text-center text-sm text-[var(--color-text-muted)]">لا توجد طلبات اعتماد معلقة</p>
+            ) : (
+              pendingProductionEntries.slice(0, 6).map((row) => (
+                <div
+                  key={row.id || row.referenceNo}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                >
+                  <p className="font-medium text-[#0F172A]">{row.referenceNo || '—'}</p>
+                  <p className="mt-1 text-sm text-[var(--color-text-muted)]">{row.lines[0]?.itemName || '—'}</p>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs tabular-nums text-[var(--color-text-muted)]">
+                    <span>الكمية {formatNumber(row.lines.reduce((sum, line) => sum + Number(line.quantity || 0), 0))}</span>
+                    <span>أصناف {row.lines.length}</span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+          <div className="erp-desktop-table hidden overflow-x-auto md:block">
             <DataTable
               columns={pendingEntriesColumns}
               data={pendingProductionEntries.slice(0, 6)}
@@ -843,7 +861,7 @@ export const EmployeeDashboard: React.FC = () => {
               emptyMessage="لا توجد طلبات اعتماد معلقة"
             />
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       {(can('productionIssue.request' as any) || can('inventory.view' as any) || can('productionIssue.approve' as any) || can('inventory.counts.manage' as any) || can('plans.view' as any)) &&
@@ -856,13 +874,8 @@ export const EmployeeDashboard: React.FC = () => {
           decisionSnapshot.materials.plansWithShortage > 0 ||
           (decisionSnapshot.materials.assemblableCoveragePercent != null &&
             decisionSnapshot.materials.assemblableCoveragePercent < 90)) && (
-        <Card>
-          <div className="flex flex-col gap-3">
-            <div className="flex items-center gap-2">
-              <span className="material-icons-round text-primary">rule</span>
-              <h3 className="text-sm font-medium text-[var(--color-text)]">قرارات تشغيلية اليوم</h3>
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <OpsDashPanel title="قرارات تشغيلية اليوم" accent="production">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {decisionSnapshot.issues.openCount > 0 && (
                 <button
                   type="button"
@@ -963,8 +976,7 @@ export const EmployeeDashboard: React.FC = () => {
                 </button>
               )}
             </div>
-          </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       <>
@@ -973,17 +985,14 @@ export const EmployeeDashboard: React.FC = () => {
 
             {/* الملخص والخطة — RIGHT column (col 1 in RTL) */}
             {activePlan ? (
-              <Card>
-                <div className="flex items-center gap-3 mb-5">
-                  <div className="w-10 h-10 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-                    <span className="material-icons-round text-primary">event_note</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                  <h3 className="text-base font-medium text-[var(--color-text)]">ملخص الخطة الحالية</h3>
-                    <p className="text-[11px] text-slate-400">{activePlan.productName} — {activePlan.lineName ?? ''}</p>
-                  </div>
-                <StatusBadge label={activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'} />
-                </div>
+              <OpsDashPanel
+                title="ملخص الخطة الحالية"
+                accent="plans"
+                action={(
+                  <StatusBadge label={activePlan.status === 'in_progress' ? 'قيد التنفيذ' : 'مخطط'} />
+                )}
+              >
+                <p className="text-[11px] text-slate-400 mb-4">{activePlan.productName} — {activePlan.lineName ?? ''}</p>
 
                 {/* Progress bar — prominent */}
                 <div className="mb-5">
@@ -1037,15 +1046,15 @@ export const EmployeeDashboard: React.FC = () => {
                     updateReport={updateReport}
                   />
                 )}
-              </Card>
+              </OpsDashPanel>
             ) : (
-              <Card>
+              <OpsDashPanel title="ملخص الخطة الحالية" accent="plans">
                 <div className="text-center py-8 text-slate-400">
                   <span className="material-icons-round text-5xl mb-3 block opacity-20">event_note</span>
                   <p className="font-bold text-sm">لا توجد خطط إنتاج نشطة حالياً</p>
                   <p className="text-xs mt-1 opacity-70">تواصل مع مشرف الصالة لإنشاء خطة جديدة</p>
                 </div>
-              </Card>
+              </OpsDashPanel>
             )}
 
             {/* أوامر الشغل — LEFT column */}
@@ -1053,12 +1062,12 @@ export const EmployeeDashboard: React.FC = () => {
               const myWOs = myActiveWorkOrders;
               if (myWOs.length === 0) return null;
               return (
-                <Card className="!p-0 overflow-hidden">
-                  <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center gap-2">
-                    <span className="material-icons-round text-amber-500">assignment</span>
-                    <h3 className="text-base font-medium text-[var(--color-text)]">أوامر الشغل الخاصة بك</h3>
-                    <StatusBadge label={`${myWOs.length}`} type="warning" />
-                  </div>
+                <OpsDashPanel
+                  title="أوامر الشغل الخاصة بك"
+                  accent="production"
+                  action={<StatusBadge label={`${myWOs.length}`} type="warning" />}
+                  bodyClassName="p-0"
+                >
                     <div className="divide-y divide-[var(--color-border)]">
                       {myWOs.map((wo) => {
                         const product = _rawProducts.find((p) => p.id === wo.productId);
@@ -1230,7 +1239,7 @@ export const EmployeeDashboard: React.FC = () => {
                         );
                       })}
                     </div>
-                </Card>
+                </OpsDashPanel>
               );
             })()}
           </div>

@@ -54,7 +54,8 @@ import {
   buildManufacturingItemNameMap,
   resolveManufacturingItemName,
 } from '../../../utils/manufacturingItemLabels';
-import { Card, KPIBox, Badge, Button } from '../components/UI';
+import { KPIBox, Badge, Button } from '../components/UI';
+import { OpsDashPanel } from '../components/OperationsDashboardBoard';
 import { KPICard } from '@/src/components/erp/KPICard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
@@ -1996,27 +1997,21 @@ export const AdminDashboard: React.FC = () => {
       )}
 
       {quickActions.length > 0 && (
-        <Card>
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
-            <div className="flex items-center gap-2">
-              {renderDashboardIcon('bolt', 'text-primary')}
-              <h3 className="text-sm font-bold text-[var(--color-text)]">إجراءات سريعة</h3>
-            </div>
-            <div className="flex flex-wrap gap-2 sm:mr-auto">
-              {quickActions.map((action) => (
-                <GhostButton
-                  key={action.id}
-                  onClick={() => runQuickAction(action)}
-                  className="h-9 px-3 text-sm font-medium"
-                  iconName={action.icon}
-                  tone={action.actionType === 'export_excel' ? 'export' : QUICK_ACTION_TONE[action.color]}
-                >
-                  {action.label}
-                </GhostButton>
-              ))}
-            </div>
+        <OpsDashPanel title="إجراءات سريعة" accent="production">
+          <div className="flex flex-wrap gap-2">
+            {quickActions.map((action) => (
+              <GhostButton
+                key={action.id}
+                onClick={() => runQuickAction(action)}
+                className="h-9 px-3 text-sm font-medium"
+                iconName={action.icon}
+                tone={action.actionType === 'export_excel' ? 'export' : QUICK_ACTION_TONE[action.color]}
+              >
+                {action.label}
+              </GhostButton>
+            ))}
           </div>
-        </Card>
+        </OpsDashPanel>
       )}
 
       <CustomDashboardWidgets dashboardKey="adminDashboard" systemSettings={systemSettings} />
@@ -2095,32 +2090,27 @@ export const AdminDashboard: React.FC = () => {
       </div>
       )}
 
-      <Card>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-primary/10 text-primary flex items-center justify-center shrink-0">
-                {renderDashboardIcon('bar_chart', 'text-[20px]')}
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-[var(--color-text)]">تحليل التقرير الإداري</h3>
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  قراءة عملية للفترة من {dateRange.start} إلى {dateRange.end} اعتماداً على تقارير الإنتاج الحالية.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <Badge variant="info">{reports.length} تقرير</Badge>
-              <Badge variant={reportAnalysis.warningAlerts > 0 ? 'warning' : 'success'}>
-                {reportAnalysis.warningAlerts > 0 ? `${reportAnalysis.warningAlerts} تنبيه` : 'بدون تنبيهات حرجة'}
+      <OpsDashPanel
+        title="تحليل التقرير الإداري"
+        accent="production"
+        action={(
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant="info">{reports.length} تقرير</Badge>
+            <Badge variant={reportAnalysis.warningAlerts > 0 ? 'warning' : 'success'}>
+              {reportAnalysis.warningAlerts > 0 ? `${reportAnalysis.warningAlerts} تنبيه` : 'بدون تنبيهات حرجة'}
+            </Badge>
+            {reportAnalysis.complianceRate !== null && (
+              <Badge variant={reportAnalysis.complianceRate >= 90 ? 'success' : 'warning'}>
+                الالتزام {reportAnalysis.complianceRate}%
               </Badge>
-              {reportAnalysis.complianceRate !== null && (
-                <Badge variant={reportAnalysis.complianceRate >= 90 ? 'success' : 'warning'}>
-                  الالتزام {reportAnalysis.complianceRate}%
-                </Badge>
-              )}
-            </div>
+            )}
           </div>
+        )}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-text-muted)]">
+            قراءة عملية للفترة من {dateRange.start} إلى {dateRange.end} اعتماداً على تقارير الإنتاج الحالية.
+          </p>
 
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
             <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] p-3">
@@ -2211,44 +2201,39 @@ export const AdminDashboard: React.FC = () => {
             </div>
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
 
-      <Card>
-        <div className="flex flex-col gap-4">
-          <div className="flex flex-col lg:flex-row lg:items-start lg:justify-between gap-3">
-            <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
-                {renderDashboardIcon('groups', 'text-[20px]')}
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-[var(--color-text)]">تحقيق أهداف العمالة</h3>
-                <p className="text-sm text-[var(--color-text-muted)]">
-                  متابعة إنتاج العمال الفعلي مقابل الأهداف اليومية المهيأة لليوم والأسبوع والشهر حتى الآن.
-                </p>
-                <p className="text-xs text-[var(--color-text-muted)] mt-1">
-                  يعتمد الحساب على مخرجات العمال أو هدف العامل اليومي للخط/المنتج، ولا يستخدم أهدافاً افتراضية.
-                </p>
-              </div>
-            </div>
-            <div className="flex flex-wrap gap-2 text-xs">
-              <Badge variant={laborGoalsAnalysis.hasConfiguredTargets ? (laborGoalsAnalysis.averageAchievement >= 85 ? 'success' : 'warning') : 'neutral'}>
-                {laborGoalsAnalysis.hasConfiguredTargets
-                  ? `متوسط الإنجاز ${laborGoalsAnalysis.averageAchievement}%`
-                  : 'الأهداف غير مهيأة'}
-              </Badge>
-              <Badge variant={laborGoalsAnalysis.hasConfiguredTargets ? (laborGoalsAnalysis.totalRemainingQty > 0 ? 'warning' : 'success') : 'neutral'}>
-                {laborGoalsAnalysis.hasConfiguredTargets
-                  ? `المتبقي ${formatNumber(Math.round(laborGoalsAnalysis.totalRemainingQty))} وحدة`
-                  : 'لا توجد أرقام هدف'}
-              </Badge>
-              <Badge variant="success">
-                أيام حضور {formatNumber(laborGoalsAnalysis.totalPresentAssignments)}
-              </Badge>
-              <Badge variant={laborGoalsAnalysis.totalAbsentAssignments > 0 ? 'danger' : 'neutral'}>
-                أيام غياب {formatNumber(laborGoalsAnalysis.totalAbsentAssignments)}
-              </Badge>
-            </div>
+      <OpsDashPanel
+        title="تحقيق أهداف العمالة"
+        accent="production"
+        action={(
+          <div className="flex flex-wrap gap-2 text-xs">
+            <Badge variant={laborGoalsAnalysis.hasConfiguredTargets ? (laborGoalsAnalysis.averageAchievement >= 85 ? 'success' : 'warning') : 'neutral'}>
+              {laborGoalsAnalysis.hasConfiguredTargets
+                ? `متوسط الإنجاز ${laborGoalsAnalysis.averageAchievement}%`
+                : 'الأهداف غير مهيأة'}
+            </Badge>
+            <Badge variant={laborGoalsAnalysis.hasConfiguredTargets ? (laborGoalsAnalysis.totalRemainingQty > 0 ? 'warning' : 'success') : 'neutral'}>
+              {laborGoalsAnalysis.hasConfiguredTargets
+                ? `المتبقي ${formatNumber(Math.round(laborGoalsAnalysis.totalRemainingQty))} وحدة`
+                : 'لا توجد أرقام هدف'}
+            </Badge>
+            <Badge variant="success">
+              أيام حضور {formatNumber(laborGoalsAnalysis.totalPresentAssignments)}
+            </Badge>
+            <Badge variant={laborGoalsAnalysis.totalAbsentAssignments > 0 ? 'danger' : 'neutral'}>
+              أيام غياب {formatNumber(laborGoalsAnalysis.totalAbsentAssignments)}
+            </Badge>
           </div>
+        )}
+      >
+        <div className="flex flex-col gap-4">
+          <p className="text-sm text-[var(--color-text-muted)]">
+            متابعة إنتاج العمال الفعلي مقابل الأهداف اليومية المهيأة لليوم والأسبوع والشهر حتى الآن.
+          </p>
+          <p className="text-xs text-[var(--color-text-muted)]">
+            يعتمد الحساب على مخرجات العمال أو هدف العامل اليومي للخط/المنتج، ولا يستخدم أهدافاً افتراضية.
+          </p>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">
             {laborGoalsAnalysis.periods.map((period) => {
@@ -2336,14 +2321,10 @@ export const AdminDashboard: React.FC = () => {
             <span>{laborGoalsAnalysis.summary}</span>
           </div>
         </div>
-      </Card>
+      </OpsDashPanel>
 
       {(liveScanKpis.completedUnits > 0 || liveScanKpis.inProgressUnits > 0) && (
-      <Card>
-        <div className="flex items-center gap-2 mb-4">
-          {renderDashboardIcon('bolt', 'text-blue-500')}
-          <h3 className="text-lg font-bold">الإنتاج اللحظي (الباركود)</h3>
-        </div>
+      <OpsDashPanel title="الإنتاج اللحظي (الباركود)" accent="production">
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <KPIBox label="وحدات مكتملة الآن" value={liveScanKpis.completedUnits} icon="check_circle" colorClass="bg-emerald-100 text-emerald-600" />
           <KPIBox label="وحدات قيد التشغيل" value={liveScanKpis.inProgressUnits} icon="hourglass_top" colorClass="bg-amber-100 text-amber-600" />
@@ -2353,18 +2334,17 @@ export const AdminDashboard: React.FC = () => {
         <p className="text-xs text-[var(--color-text-muted)] mt-4">
           أعلى نشاط حالي: <span className="font-bold text-[var(--color-text)]">{liveScanKpis.hotLineProduct}</span>
         </p>
-      </Card>
+      </OpsDashPanel>
       )}
 {/* â”€â”€ Product Summary Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
 {productSummary.length > 0 && (() => {
         return (
-          <Card>
+          <OpsDashPanel
+            title="ملخص المنتجات خلال الفترة"
+            accent="production"
+            action={<Badge variant="info">{productSummary.length} منتج</Badge>}
+          >
             <div className="flex flex-col gap-3 mb-4">
-              <div className="flex items-center gap-2">
-                {renderDashboardIcon('inventory_2', 'text-primary')}
-                <h3 className="text-lg font-bold">ملخص المنتجات خلال الفترة</h3>
-                <Badge variant="info">{productSummary.length} منتج</Badge>
-              </div>
               <SmartFilterBar
       pageId="dashboard-admin-products"
                 searchPlaceholder="بحث بالكود أو الاسم..."
@@ -2395,7 +2375,7 @@ export const AdminDashboard: React.FC = () => {
                 className="mb-0"
               />
             </div>
-            <div className="md:hidden space-y-2.5">
+            <div className="erp-mobile-card-list md:hidden space-y-2.5">
               {filteredProductSummary.length === 0 ? (
                 <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 text-center text-[var(--color-text-muted)] text-sm">
                   لا توجد نتائج مطابقة للفلاتر الحالية
@@ -2461,7 +2441,7 @@ export const AdminDashboard: React.FC = () => {
                 </>
               )}
             </div>
-            <div className="hidden md:block overflow-x-auto">
+            <div className="erp-desktop-table hidden overflow-x-auto md:block">
               <table className="erp-table w-full text-sm">
                 <thead className="erp-thead">
                   <tr>
@@ -2544,65 +2524,81 @@ export const AdminDashboard: React.FC = () => {
                 )}
               </table>
             </div>
-          </Card>
+          </OpsDashPanel>
         );
       })()}
 
-      <Card>
-        <div className="flex items-center justify-between gap-3 mb-3">
+      <OpsDashPanel
+        title="نواقص المكونات"
+        accent="production"
+        action={(
           <div className="flex items-center gap-2">
-            {renderDashboardIcon('report_problem', 'text-amber-600')}
-            <h3 className="text-sm font-bold text-[var(--color-text)]">نواقص المكونات</h3>
             <Badge variant="warning">{shortageRows.length}</Badge>
+            {canExportFromPage && shortageRows.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => exportProductionPlanShortages(shortageRows)}
+                className="!h-auto !px-3 !py-2 text-xs font-bold"
+              >
+                Excel
+              </Button>
+            )}
           </div>
-          {canExportFromPage && shortageRows.length > 0 && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => exportProductionPlanShortages(shortageRows)}
-              className="!h-auto !px-3 !py-2 text-xs font-bold"
-            >
-              Excel
-            </Button>
-          )}
-        </div>
+        )}
+      >
         {shortageRows.length === 0 ? (
           <div className="erp-alert erp-alert-info">
             {renderDashboardIcon('info', 'text-[18px] shrink-0')}
             <span>لا توجد نواقص مكونات مسجلة حاليًا.</span>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full text-sm" data-no-table-enhance="true">
-              <thead className="erp-thead">
-                <tr>
-                  <th className="erp-th">المنتج</th>
-                  <th className="erp-th">المكون</th>
-                  <th className="erp-th">الكمية</th>
-                  <th className="erp-th">الملحوظة</th>
-                </tr>
-              </thead>
-              <tbody>
-                {shortageRows.map((row) => (
-                  <tr key={row.id} className="border-b border-[var(--color-border)]">
-                    <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.productName}</td>
-                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.componentName}</td>
-                    <td className="py-2.5 px-3 font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</td>
-                    <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.note || '—'}</td>
+          <>
+            <div className="erp-mobile-card-list p-2 md:hidden">
+              {shortageRows.map((row) => (
+                <div
+                  key={`shortage-m-${row.id}`}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                >
+                  <p className="text-sm font-bold text-[var(--color-text)]">{row.productName}</p>
+                  <p className="mt-1 text-xs text-[var(--color-text-muted)]">{row.componentName}</p>
+                  <div className="mt-2 flex flex-wrap gap-3 text-xs">
+                    <span className="font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</span>
+                    {row.note ? <span className="text-[var(--color-text-muted)]">{row.note}</span> : null}
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="erp-desktop-table hidden overflow-x-auto md:block">
+              <table className="erp-table w-full text-sm" data-no-table-enhance="true">
+                <thead className="erp-thead">
+                  <tr>
+                    <th className="erp-th">المنتج</th>
+                    <th className="erp-th">المكون</th>
+                    <th className="erp-th">الكمية</th>
+                    <th className="erp-th">الملحوظة</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {shortageRows.map((row) => (
+                    <tr key={row.id} className="border-b border-[var(--color-border)]">
+                      <td className="py-2.5 px-3 font-bold text-[var(--color-text)]">{row.productName}</td>
+                      <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.componentName}</td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-rose-600">{formatNumber(row.shortageQty)}</td>
+                      <td className="py-2.5 px-3 text-[var(--color-text-muted)]">{row.note || '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
-      </Card>
-      <Card>
-        <div className="flex items-center justify-between gap-3 mb-3">
-          <div className="flex items-center gap-2">
-            {renderDashboardIcon('fact_check', 'text-rose-500')}
-            <h3 className="text-sm font-bold text-[var(--color-text)]">التزام المشرفين بالتقرير</h3>
-          </div>
+      </OpsDashPanel>
+      <OpsDashPanel
+        title="التزام المشرفين بالتقرير"
+        accent="production"
+        action={(
           <div className="flex items-center gap-2">
             <input
               type="date"
@@ -2620,9 +2616,9 @@ export const AdminDashboard: React.FC = () => {
             >
               أمس
             </Button>
-           
           </div>
-        </div>
+        )}
+      >
         {yesterdayComplianceLoading ? (
           <DataTable columns={complianceColumns} data={[]} isLoading emptyMessage="جاري تحميل الحالة..." />
         ) : yesterdayComplianceError ? (
@@ -2653,7 +2649,7 @@ export const AdminDashboard: React.FC = () => {
               <p className="text-xs text-[var(--color-text-muted)]">لا يوجد مشرفون مكلّفون في هذا التاريخ.</p>
             ) : (
               <div className="space-y-2">
-                <div className="md:hidden space-y-2">
+                <div className="erp-mobile-card-list p-2 md:hidden space-y-2">
                   {[
                     ...((yesterdayCompliance?.missing ?? []).map((row) => ({ ...row, submitted: false }))),
                     ...((yesterdayCompliance?.submitted ?? []).map((row) => ({ ...row, submitted: true }))),
@@ -2680,7 +2676,7 @@ export const AdminDashboard: React.FC = () => {
                     </div>
                   ))}
                 </div>
-                <div className="hidden md:block">
+                <div className="erp-desktop-table hidden overflow-x-auto md:block">
                   <DataTable
                     columns={complianceColumns}
                     data={complianceRows}
@@ -2691,12 +2687,8 @@ export const AdminDashboard: React.FC = () => {
             )}
           </>
         )}
-      </Card>
-      <Card>
-        <div className="flex items-center gap-2 mb-4">
-          {renderDashboardIcon('verified', 'text-violet-500')}
-          <h3 className="text-lg font-bold">مؤشرات الجودة</h3>
-        </div>
+      </OpsDashPanel>
+      <OpsDashPanel title="مؤشرات الجودة" accent="quality">
         <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
           <KPIBox label="وحدات مفحوصة" value={qualityKpis.inspected} icon="fact_check" colorClass="bg-blue-100 text-blue-600" />
           <KPIBox label="وحدات فاشلة" value={qualityKpis.failed} icon="error" colorClass="bg-rose-100 text-rose-600" />
@@ -2706,9 +2698,7 @@ export const AdminDashboard: React.FC = () => {
           <KPIBox label="أول مرة صحيحة (FPY)" value={qualityKpis.avgFpy} unit="%" icon="insights" colorClass="bg-emerald-100 text-emerald-600" />
           <KPIBox label="جودة بانتظار الاعتماد" value={qualityKpis.pendingQuality} icon="pending_actions" colorClass="bg-[#f0f2f5] text-[var(--color-text-muted)]" />
         </div>
-      </Card>
-
-{/* â”€â”€ Active Work Orders (same visual style) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
+      </OpsDashPanel>
 {(() => {
         const activeWOs = activeWorkOrders;
         if (activeWOs.length === 0) return null;
@@ -2945,11 +2935,7 @@ export const AdminDashboard: React.FC = () => {
       {/* â”€â”€ Production Health Score + Charts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {isVisible('health_score') && (
-        <Card>
-          <div className="flex items-center gap-2 mb-4">
-            {renderDashboardIcon('monitor_heart', 'text-rose-500')}
-            <h3 className="text-lg font-bold">صحة الإنتاج</h3>
-          </div>
+        <OpsDashPanel title="صحة الإنتاج" accent="production">
           <div className="flex justify-center py-4">
             <GaugeChart value={healthScore} label="مؤشر صحة الإنتاج" />
           </div>
@@ -2980,15 +2966,11 @@ export const AdminDashboard: React.FC = () => {
               </div>
             ))}
           </div>
-        </Card>
+        </OpsDashPanel>
         )}
 
         {/* Roles Distribution Pie */}
-        {isVisible('roles_distribution') && <Card>
-          <div className="flex items-center gap-2 mb-4">
-            {renderDashboardIcon('admin_panel_settings', 'text-indigo-500')}
-            <h3 className="text-lg font-bold">توزيع الأدوار</h3>
-          </div>
+        {isVisible('roles_distribution') && <OpsDashPanel title="توزيع الأدوار" accent="production">
           {rolesChartData.length > 0 ? (
             <div style={{ direction: 'ltr' }} className="h-56 min-h-[14rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -3026,16 +3008,12 @@ export const AdminDashboard: React.FC = () => {
               ))}
             </div>
           )}
-        </Card>}
+        </OpsDashPanel>}
       </div>
 
       {/* â”€â”€ Production vs Cost Chart (full width) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       {isVisible('production_cost_chart') && canViewCosts && (
-        <Card>
-          <div className="flex items-center gap-2 mb-4">
-            {renderDashboardIcon('show_chart', 'text-primary')}
-            <h3 className="text-lg font-bold">الإنتاج مقابل تكلفة الوحدة</h3>
-          </div>
+        <OpsDashPanel title="الإنتاج مقابل تكلفة الوحدة" accent="costs">
           {dailyChartData.length > 0 ? (
             <div style={{ direction: 'ltr' }} className="h-72 min-h-[18rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -3060,18 +3038,17 @@ export const AdminDashboard: React.FC = () => {
               لا توجد بيانات للفترة المحددة
             </div>
           )}
-        </Card>
+        </OpsDashPanel>
       )}
 
       {/* â”€â”€ System Monitoring Section â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Activity Log Snapshot */}
-        {isVisible('activity_log') && <Card>
-          <div className="flex items-center gap-2 mb-4">
-            {renderDashboardIcon('history', 'text-blue-500')}
-            <h3 className="text-lg font-bold">آخر النشاطات</h3>
-            <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">آخر 10 إجراءات</span>
-          </div>
+        {isVisible('activity_log') && <OpsDashPanel
+          title="آخر النشاطات"
+          accent="production"
+          action={<span className="text-xs text-[var(--color-text-muted)] font-medium">آخر 10 إجراءات</span>}
+        >
           {recentActivity.length > 0 ? (
             <div className="space-y-0.5 max-h-[400px] overflow-y-auto">
               {recentActivity.map((log, i) => (
@@ -3106,19 +3083,43 @@ export const AdminDashboard: React.FC = () => {
               {systemLoading ? 'جاري التحميل...' : 'لا توجد نشاطات مسجلة'}
             </div>
           )}
-        </Card>}
+        </OpsDashPanel>}
 
         {/* Cost Centers Summary */}
         {isVisible('cost_centers_summary') && canViewCosts && (
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              {renderDashboardIcon('account_balance', 'text-emerald-500')}
-              <h3 className="text-lg font-bold">ملخص مراكز التكلفة</h3>
-              <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">الشهر الحالي</span>
-            </div>
+          <OpsDashPanel
+            title="ملخص مراكز التكلفة"
+            accent="costs"
+            action={<span className="text-xs text-[var(--color-text-muted)] font-medium">الشهر الحالي</span>}
+          >
             {costCentersSummary.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="erp-table w-full text-sm">
+              <>
+                <div className="erp-mobile-card-list p-2 md:hidden">
+                  {costCentersSummary.map((cc, i) => (
+                    <div
+                      key={`cc-m-${i}`}
+                      onClick={() => navigate('/cost-centers')}
+                      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm cursor-pointer"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm font-bold text-[var(--color-text)]">{cc.name}</p>
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-bold shrink-0 ${
+                          cc.type === 'indirect'
+                            ? 'bg-amber-100 text-amber-700'
+                            : 'bg-blue-100 dark:bg-blue-900/20 text-blue-700'
+                        }`}>
+                          {cc.type === 'indirect' ? 'غير مباشر' : 'مباشر'}
+                        </span>
+                      </div>
+                      <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--color-text-muted)]">
+                        <span>{cc.amount > 0 ? `${formatCost(cc.amount)} ج.م` : '—'}</span>
+                        <span>{cc.allocated ? 'مخصّص' : 'غير مخصّص'}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="erp-desktop-table hidden overflow-x-auto md:block">
+                  <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">المركز</th>
@@ -3154,26 +3155,45 @@ export const AdminDashboard: React.FC = () => {
                     ))}
                   </tbody>
                 </table>
-              </div>
+                </div>
+              </>
             ) : (
               <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
                 {renderDashboardIcon('account_balance', 'text-3xl mb-2 block opacity-30')}
                 لا توجد مراكز تكلفة
               </div>
             )}
-          </Card>
+          </OpsDashPanel>
         )}
 
         {isVisible('monthly_depreciation_summary') && canViewCosts && (
-          <Card>
-            <div className="flex items-center gap-2 mb-4">
-              {renderDashboardIcon('event_repeat', 'text-violet-500')}
-              <h3 className="text-lg font-bold">ملخص الاهلاكات الشهرية</h3>
-              <span className="text-xs text-[var(--color-text-muted)] font-medium mr-auto">{monthlyDepreciationSummary.month}</span>
-            </div>
+          <OpsDashPanel
+            title="ملخص الاهلاكات الشهرية"
+            accent="costs"
+            action={<span className="text-xs text-[var(--color-text-muted)] font-medium">{monthlyDepreciationSummary.month}</span>}
+          >
             {monthlyDepreciationSummary.rows.length > 0 ? (
-              <div className="overflow-x-auto">
-                <table className="erp-table w-full text-sm">
+              <>
+                <div className="erp-mobile-card-list p-2 md:hidden">
+                  {monthlyDepreciationSummary.rows.map((row) => (
+                    <div
+                      key={`dep-m-${row.centerId}`}
+                      className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                    >
+                      <p className="text-sm font-bold text-[var(--color-text)]">{row.centerName}</p>
+                      <div className="mt-2 flex flex-wrap gap-3 text-xs text-[var(--color-text-muted)]">
+                        <span>أصول {formatNumber(row.assetsCount)}</span>
+                        <span className="font-bold text-violet-600">{formatCost(row.amount)} ج.م</span>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="rounded-xl border border-[var(--color-border)] bg-[var(--color-bg)] p-3 text-xs">
+                    <span className="font-bold text-[var(--color-text-muted)]">الإجمالي: </span>
+                    <span className="font-bold text-violet-600">{formatCost(monthlyDepreciationSummary.total)} ج.م</span>
+                  </div>
+                </div>
+                <div className="erp-desktop-table hidden overflow-x-auto md:block">
+                  <table className="erp-table w-full text-sm">
                   <thead className="erp-thead">
                     <tr>
                       <th className="erp-th">مركز التكلفة</th>
@@ -3200,25 +3220,22 @@ export const AdminDashboard: React.FC = () => {
                     </tr>
                   </tfoot>
                 </table>
-              </div>
+                </div>
+              </>
             ) : (
               <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">
                 {renderDashboardIcon('event_repeat', 'text-3xl mb-2 block opacity-30')}
                 لا توجد اهلاكات مسجلة لهذا الشهر
               </div>
             )}
-          </Card>
+          </OpsDashPanel>
         )}
       </div>
 
       {/* â”€â”€ Top Lines & Products â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
         {/* Top 5 Lines */}
-        {isVisible('top_lines') && <Card>
-          <div className="flex items-center gap-2 mb-4">
-            {renderDashboardIcon('precision_manufacturing', 'text-emerald-500')}
-            <h3 className="text-lg font-bold">أعلى 5 خطوط إنتاج</h3>
-          </div>
+        {isVisible('top_lines') && <OpsDashPanel title="أعلى 5 خطوط إنتاج" accent="production">
           {topLines.length > 0 ? (
             <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -3236,14 +3253,10 @@ export const AdminDashboard: React.FC = () => {
               لا توجد بيانات
             </div>
           )}
-        </Card>}
+        </OpsDashPanel>}
 
         {/* Top 5 Products */}
-        {isVisible('top_products') && <Card>
-          <div className="flex items-center gap-2 mb-4">
-            {renderDashboardIcon('inventory_2', 'text-violet-500')}
-            <h3 className="text-lg font-bold">أعلى 5 منتجات</h3>
-          </div>
+        {isVisible('top_products') && <OpsDashPanel title="أعلى 5 منتجات" accent="production">
           {topProducts.length > 0 ? (
             <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -3261,14 +3274,10 @@ export const AdminDashboard: React.FC = () => {
               لا توجد بيانات
             </div>
           )}
-        </Card>}
+        </OpsDashPanel>}
 
         {/* Top 5 Supervisors */}
-        {isVisible('top_supervisors') && <Card>
-          <div className="flex items-center gap-2 mb-4">
-            {renderDashboardIcon('supervisor_account', 'text-amber-500')}
-            <h3 className="text-lg font-bold">أعلى 5 مشرفين في الأداء</h3>
-          </div>
+        {isVisible('top_supervisors') && <OpsDashPanel title="أعلى 5 مشرفين في الأداء" accent="production">
           {topSupervisors.length > 0 ? (
             <div style={{ direction: 'ltr' }} className="h-64 min-h-[16rem] min-w-0">
               <ResponsiveContainer width="100%" height="100%">
@@ -3286,18 +3295,32 @@ export const AdminDashboard: React.FC = () => {
               لا توجد بيانات
             </div>
           )}
-        </Card>}
+        </OpsDashPanel>}
       </div>
 
       {/* â”€â”€ Product Performance Table â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-      {isVisible('product_performance') && <Card>
-        <div className="flex items-center gap-2 mb-4">
-          {renderDashboardIcon('table_chart', 'text-primary')}
-          <h3 className="text-lg font-bold">ملخص أداء المنتجات</h3>
-        </div>
+      {isVisible('product_performance') && <OpsDashPanel title="ملخص أداء المنتجات" accent="production">
         {topProducts.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="erp-table w-full text-sm">
+          <>
+            <div className="erp-mobile-card-list p-2 md:hidden">
+              {topProducts.map((p, i) => (
+                <div
+                  key={`perf-m-${p.id ?? i}`}
+                  onClick={() => navigate(`/products/${p.id}`)}
+                  className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm cursor-pointer"
+                >
+                  <p className="text-sm font-bold text-primary">{p.name}</p>
+                  <div className="mt-2 flex items-center justify-between gap-2 text-xs">
+                    <span className="font-mono font-bold">{formatNumber(p.production)}</span>
+                    <span className="text-[var(--color-text-muted)] font-bold">
+                      {kpis.totalProduction > 0 ? ((p.production / kpis.totalProduction) * 100).toFixed(1) : 0}%
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="erp-desktop-table hidden overflow-x-auto md:block">
+              <table className="erp-table w-full text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th">المنتج</th>
@@ -3327,11 +3350,12 @@ export const AdminDashboard: React.FC = () => {
                 ))}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         ) : (
           <div className="py-8 text-center text-[var(--color-text-muted)] text-sm">لا توجد بيانات</div>
         )}
-      </Card>}
+      </OpsDashPanel>}
         </div>
       </details>
 
