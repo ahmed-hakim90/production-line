@@ -14,7 +14,8 @@ import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission } from '@/utils/permissions';
 import { KPIBox, LoadingSkeleton, SearchableSelect } from '@/modules/production/components/UI';
-import { PageHeader } from '@/components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
@@ -540,18 +541,35 @@ export const RoutingAnalyticsPage: React.FC = () => {
   const showEmptyGlobal = !isLoading && completed.length === 0;
 
   return (
-    <div className="erp-ds-clean w-full min-w-0 space-y-6 sm:space-y-8">
-      <div className="flex flex-col gap-4 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-        <div className="min-w-0 flex-1">
-          <PageHeader
-            title="تحليلات مسارات الإنتاج"
-            subtitle="مقارنة القياسي بالفعلي والتكلفة حسب الخطوة — قائمة التنفيذات بجانب لوحة التفاصيل"
-            icon="bar_chart"
-            iconBg="bg-sky-500/12"
-            iconColor="text-sky-700 dark:text-sky-400"
-          />
-        </div>
-        <div className="flex w-full shrink-0 flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
+    <ModuleOpsPageShell
+      className="w-full min-w-0"
+      eyebrow="تحليلات مسارات الإنتاج"
+      rangeLabel="مقارنة القياسي بالفعلي والتكلفة حسب الخطوة"
+      hero={showEmptyGlobal ? undefined : [
+        {
+          key: 'count',
+          label: 'تنفيذات معروضة',
+          value: analyticsKpis.count,
+          accent: true,
+        },
+        {
+          key: 'qty',
+          label: 'إجمالي الكمية',
+          value: analyticsKpis.totalQty,
+        },
+        {
+          key: 'eff',
+          label: 'متوسط كفاءة الزمن',
+          value: `${(analyticsKpis.avgTimeEfficiency * 100).toFixed(1)}%`,
+        },
+        {
+          key: 'cost',
+          label: 'إجمالي التكلفة',
+          value: analyticsKpis.totalCost.toFixed(2),
+        },
+      ]}
+      actions={(
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
           <Button type="button" variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => navigate('/production/routing')}>
             مسارات الإنتاج
           </Button>
@@ -568,49 +586,19 @@ export const RoutingAnalyticsPage: React.FC = () => {
             تحديث القائمة والتفاصيل
           </Button>
         </div>
-      </div>
-
-      {showEmptyGlobal ? (
-        <Card className="shadow-sm">
-          <CardContent className="py-12">
-            <p className="text-center text-sm text-muted-foreground">لا توجد تنفيذات مكتملة بعد.</p>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <KPIBox
-              icon="fact_check"
-              label="تنفيذات معروضة"
-              value={analyticsKpis.count}
-              colorClass="bg-sky-500/15 text-sky-700 dark:text-sky-400"
-            />
-            <KPIBox
-              icon="inventory_2"
-              label="إجمالي الكمية"
-              value={analyticsKpis.totalQty}
-              colorClass="bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-            />
-            <KPIBox
-              icon="speed"
-              label="متوسط كفاءة الزمن"
-              value={`${(analyticsKpis.avgTimeEfficiency * 100).toFixed(1)}%`}
-              colorClass="bg-violet-500/15 text-violet-700 dark:text-violet-300"
-            />
-            <KPIBox
-              icon="payments"
-              label="إجمالي التكلفة"
-              value={analyticsKpis.totalCost.toFixed(2)}
-              colorClass="bg-amber-500/15 text-amber-800 dark:text-amber-300"
-            />
-          </div>
-          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] xl:gap-8">
-            {detailPanel}
-            {tablePanel}
-          </div>
-        </>
       )}
-    </div>
+    >
+      {showEmptyGlobal ? (
+        <OpsDashPanel accent="production">
+          <p className="py-8 text-center text-sm text-muted-foreground">لا توجد تنفيذات مكتملة بعد.</p>
+        </OpsDashPanel>
+      ) : (
+        <div className="grid grid-cols-1 items-start gap-4 xl:grid-cols-[minmax(0,7fr)_minmax(0,3fr)] xl:gap-6">
+          {detailPanel}
+          {tablePanel}
+        </div>
+      )}
+    </ModuleOpsPageShell>
   );
 };
 

@@ -1748,6 +1748,9 @@ export interface SystemSettings {
 
 // â”€â”€â”€ Multi-tenant â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
+/** Product packs enabled for a tenant — see `lib/activityPacks.ts`. */
+export type TenantActivityPackId = "manufacturing" | "repair";
+
 export interface FirestoreTenant {
   id?: string;
   slug: string;
@@ -1755,6 +1758,11 @@ export interface FirestoreTenant {
   phone?: string;
   address?: string;
   theme?: ThemeSettings;
+  /**
+   * Enabled activity packs (module-apps).
+   * Missing / empty → treated as manufacturing + repair (non-breaking default).
+   */
+  activityPacks?: TenantActivityPackId[];
   status: "pending" | "active" | "suspended";
   createdAt?: any;
   approvedAt?: any;

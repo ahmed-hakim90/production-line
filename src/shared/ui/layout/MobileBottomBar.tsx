@@ -2,6 +2,7 @@ import React, { useMemo } from 'react';
 import { Menu } from 'lucide-react';
 import { NavLink, useParams } from 'react-router-dom';
 import { MENU_CONFIG, canAccessMenuItem, type MenuItem } from '@/config/menu.config';
+import { isMenuGroupEnabledForPacks } from '@/lib/activityPacks';
 import { cn } from '@/lib/utils';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { usePermission } from '@/utils/permissions';
@@ -34,6 +35,13 @@ const MENU_ITEMS_BY_KEY = MENU_CONFIG.reduce<Record<string, MenuItem>>((acc, gro
   return acc;
 }, {});
 
+const MENU_GROUP_BY_ITEM_KEY = MENU_CONFIG.reduce<Record<string, string>>((acc, group) => {
+  group.children.forEach((item) => {
+    acc[item.key] = group.key;
+  });
+  return acc;
+}, {});
+
 function renderIcon(name?: string, className?: string, size = 20) {
   const Icon = resolveMenuIcon(name);
   return <Icon size={size} className={className} />;
@@ -46,6 +54,7 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ onMoreClick })
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
   const operationPaths = useAppStore((s) => s.systemSettings.operationPaths);
+  const tenantActivityPacks = useAppStore((s) => s.tenantActivityPacks);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
@@ -55,20 +64,23 @@ export const MobileBottomBar: React.FC<MobileBottomBarProps> = ({ onMoreClick })
     () =>
       BOTTOM_BAR_ITEMS.map((item) => {
         const menuItem = MENU_ITEMS_BY_KEY[item.menuItemKey];
+        const groupKey = MENU_GROUP_BY_ITEM_KEY[item.menuItemKey];
         if (
           !menuItem
+          || (groupKey && !isMenuGroupEnabledForPacks(groupKey, tenantActivityPacks))
           || !canAccessMenuItem(can, menuItem, roleKey)
           || !isMenuItemOperationPathEnabled(operationPaths, menuItem.key)
         ) return null;
         return { ...item, menuItem };
       }).filter(Boolean),
-    [can, operationPaths, roleKey],
+    [can, operationPaths, roleKey, tenantActivityPacks],
   );
 
   return (
     <nav
-      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-10px_30px_rgba(15,23,42,0.08)] backdrop-blur lg:hidden"
+      className="fixed inset-x-0 bottom-0 z-30 border-t border-[var(--color-border)] bg-[var(--color-card)]/95 px-2 pt-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-[0_-8px_24px_rgba(15,23,42,0.06)] backdrop-blur lg:hidden"
       aria-label="التنقل السريع"
+      data-hakimo-flow="bottom-nav"
     >
       <div className="mx-auto grid max-w-md grid-cols-5 items-end gap-1">
         {visibleItems.map((item) => {

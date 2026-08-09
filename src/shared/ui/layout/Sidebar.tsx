@@ -14,6 +14,7 @@ import {
 import { useAppStore } from '@/store/useAppStore';
 import { usePermission, useCurrentRole } from '@/utils/permissions';
 import { MENU_CONFIG, canAccessMenuItem, type MenuItem } from '@/config/menu.config';
+import { isMenuGroupEnabledForPacks } from '@/lib/activityPacks';
 import { useSidebar, useSidebarActiveRoute, useSidebarBadges } from './useSidebar';
 import type { SidebarIconStyle } from '@/types';
 import { resolveMenuIcon } from './menuIconMap';
@@ -107,6 +108,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const logout             = useAppStore((s) => s.logout);
   const sidebarIconStyle   = useAppStore((s) => (s.systemSettings?.theme?.sidebarIconStyle ?? 'colorful') as SidebarIconStyle);
   const operationPaths     = useAppStore((s) => s.systemSettings.operationPaths);
+  const tenantActivityPacks = useAppStore((s) => s.tenantActivityPacks);
   const sidebarCompanyTitleRaw = useAppStore((s) => {
     const tenantName = s.tenantCompanyName?.trim();
     if (tenantName) return tenantName;
@@ -249,6 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
   const visibleGroups = useMemo(
     () =>
       MENU_CONFIG
+        .filter((g) => isMenuGroupEnabledForPacks(g.key, tenantActivityPacks))
         .map((g) => {
           const children = g.children.filter((i) => (
             canAccessMenuItem(can, i, roleKey)
@@ -335,6 +338,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ open, onClose }) => {
       can,
       currentEmployee?.level,
       operationPaths,
+      tenantActivityPacks,
       repairAccess.adminSeesAllBranches,
       repairAccess.canViewAllBranches,
       repairCenterNavItems,

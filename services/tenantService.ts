@@ -16,6 +16,7 @@ import {
 import { createUserWithEmailAndPassword, deleteUser } from 'firebase/auth';
 import type { FirestoreTenant, PendingTenant, TenantSlugDoc } from '../types';
 import { setCurrentTenant } from '../lib/currentTenant';
+import { DEFAULT_ACTIVITY_PACKS } from '../lib/activityPacks';
 import { auth, db, isConfigured, resolveTenantSlugCallable } from './firebase';
 import { roleService } from '../modules/system/services/roleService';
 
@@ -103,6 +104,7 @@ export const tenantService = {
       name: input.name,
       phone: input.phone ?? '',
       address: input.address ?? '',
+      activityPacks: [...DEFAULT_ACTIVITY_PACKS],
       status: input.status ?? 'active',
       createdAt: serverTimestamp(),
     } as FirestoreTenant);
@@ -194,6 +196,7 @@ export const tenantService = {
       name: p.name,
       phone: p.phone ?? '',
       address: p.address ?? '',
+      activityPacks: [...DEFAULT_ACTIVITY_PACKS],
       status: 'active',
       createdAt: serverTimestamp(),
       approvedAt: serverTimestamp(),

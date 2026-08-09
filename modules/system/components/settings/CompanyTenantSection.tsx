@@ -4,12 +4,21 @@ import { db, isConfigured } from '@/services/firebase';
 import { useAppStore } from '@/store/useAppStore';
 import { Card, Button } from '../UI';
 import type { FirestoreTenant, ThemeSettings } from '@/types';
+import {
+  ACTIVITY_PACK_IDS,
+  ACTIVITY_PACK_LABELS,
+  resolveActivityPacks,
+  sanitizeActivityPacksForWrite,
+  type ActivityPackId,
+} from '@/lib/activityPacks';
+import { toast } from 'sonner';
 
 export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }) => {
   const tenantId = useAppStore((s) => s.userProfile?.tenantId);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [address, setAddress] = useState('');
+  const [packs, setPacks] = useState<ActivityPackId[]>(['manufacturing', 'repair']);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState('');
@@ -28,6 +37,7 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
         setName(d?.name ?? '');
         setPhone(d?.phone ?? '');
         setAddress(d?.address ?? '');
+        setPacks(resolveActivityPacks(d?.activityPacks));
       } catch {
         if (!cancelled) setErr('تعذر تحميل بيانات الشركة');
       } finally {
@@ -39,6 +49,19 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
     };
   }, [tenantId]);
 
+  const togglePack = (pack: ActivityPackId) => {
+    setPacks((prev) => {
+      if (prev.includes(pack)) {
+        if (prev.length <= 1) {
+          toast.warning('يجب الإبقاء على باقة نشاط واحدة على الأقل.');
+          return prev;
+        }
+        return prev.filter((p) => p !== pack);
+      }
+      return [...prev, pack];
+    });
+  };
+
   const save = async () => {
     if (!isAdmin || !tenantId || !isConfigured) return;
     setSaving(true);
@@ -46,15 +69,23 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
     try {
       const themeSnap = await getDoc(doc(db, 'tenants', tenantId));
       const existingTheme = (themeSnap.data() as { theme?: ThemeSettings } | undefined)?.theme;
+      const activityPacks = sanitizeActivityPacksForWrite(packs);
       await updateDoc(doc(db, 'tenants', tenantId), {
         name: name.trim(),
         phone: phone.trim(),
         address: address.trim(),
+        activityPacks,
         ...(existingTheme ? { theme: existingTheme } : {}),
       });
-      useAppStore.setState({ tenantCompanyName: name.trim() });
-    } catch (e: any) {
-      setErr(e?.message || 'فشل الحفظ');
+      useAppStore.setState({
+        tenantCompanyName: name.trim(),
+        tenantActivityPacks: activityPacks,
+      });
+      toast.success('تم حفظ بيانات الشركة وباقات النشاط.');
+    } catch (e: unknown) {
+      const message = e instanceof Error ? e.message : 'فشل الحفظ';
+      setErr(message);
+      toast.error('تعذر حفظ بيانات الشركة.');
     } finally {
       setSaving(false);
     }
@@ -68,7 +99,7 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
       {loading ? (
         <p className="text-sm text-[var(--color-text-muted)]">جاري التحميل...</p>
       ) : (
-        <div className="space-y-3 max-w-xl">
+        <div className="space-y-4 max-w-xl">
           <div>
             <label className="block text-xs font-semibold mb-1">اسم الشركة</label>
             <input
@@ -97,6 +128,32 @@ export const CompanyTenantSection: React.FC<{ isAdmin: boolean }> = ({ isAdmin }
               disabled={!isAdmin}
             />
           </div>
+
+          <div className="rounded-xl border border-[var(--color-border)] bg-[#f8f9fa]/80 p-3 space-y-2">
+            <p className="text-sm font-bold text-[var(--color-text)]">باقات النشاط (Module Apps)</p>
+            <p className="text-xs text-[var(--color-text-muted)] leading-relaxed">
+              كل باقة تظهر كموديول/تطبيق مستقل في القائمة. تعطيل «التصنيع» يخفي الإنتاج والجودة — لا يؤثر على بيانات
+              موجودة. الافتراضي للشركات الحالية: تصنيع + صيانة.
+            </p>
+            <div className="flex flex-col gap-2 pt-1">
+              {ACTIVITY_PACK_IDS.map((pack) => (
+                <label
+                  key={pack}
+                  className="flex items-center gap-2 text-sm font-medium cursor-pointer"
+                >
+                  <input
+                    type="checkbox"
+                    className="w-4 h-4 rounded border-[var(--color-border)] text-primary"
+                    checked={packs.includes(pack)}
+                    disabled={!isAdmin}
+                    onChange={() => togglePack(pack)}
+                  />
+                  {ACTIVITY_PACK_LABELS[pack]}
+                </label>
+              ))}
+            </div>
+          </div>
+
           {isAdmin ? (
             <Button type="button" onClick={() => void save()} disabled={saving}>
               {saving ? 'جاري الحفظ...' : 'حفظ بيانات الشركة'}

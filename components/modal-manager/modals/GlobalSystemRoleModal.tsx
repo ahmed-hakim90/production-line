@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Pencil, Save, ShieldPlus, X } from 'lucide-react';
+import { AlertCircle, CheckCircle2, Pencil, ShieldPlus, X } from 'lucide-react';
 import { Button } from '../../UI';
 import { useAppStore } from '../../../store/useAppStore';
 import {
@@ -8,6 +8,12 @@ import {
   ALL_PERMISSIONS,
   normalizeRolePermissions,
 } from '../../../utils/permissions';
+import {
+  getPermissionCatalogByGroup,
+  PERMISSION_CRUD_LABELS,
+  PERMISSION_CRUD_VERBS,
+  type PermissionResource,
+} from '../../../utils/permissionCatalog';
 import type { FirestoreRole } from '../../../types';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -36,11 +42,39 @@ const buildEmptyPerms = (): Record<string, boolean> => {
   return obj;
 };
 
+function CrudCell({
+  enabled,
+  disabled,
+  onToggle,
+  label,
+}: {
+  enabled: boolean;
+  disabled?: boolean;
+  onToggle?: () => void;
+  label: string;
+}) {
+  if (disabled || !onToggle) {
+    return <span className="text-[10px] text-slate-300">—</span>;
+  }
+  return (
+    <label className="inline-flex items-center justify-center gap-1 cursor-pointer" title={label}>
+      <input
+        type="checkbox"
+        checked={enabled}
+        onChange={onToggle}
+        className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
+        aria-label={label}
+      />
+    </label>
+  );
+}
+
 export const GlobalSystemRoleModal: React.FC = () => {
   const { t } = useTranslation();
   const { isOpen, payload, close } = useManagedModalController(MODAL_KEYS.SYSTEM_ROLES_CREATE);
   const createRole = useAppStore((s) => s.createRole);
   const updateRole = useAppStore((s) => s.updateRole);
+  const tenantActivityPacks = useAppStore((s) => s.tenantActivityPacks);
   const { can } = usePermission();
 
   const [editingRole, setEditingRole] = useState<FirestoreRole | null>(null);
@@ -54,6 +88,11 @@ export const GlobalSystemRoleModal: React.FC = () => {
   const enabledCount = useMemo(
     () => Object.values(editPerms).filter(Boolean).length,
     [editPerms],
+  );
+
+  const catalogSections = useMemo(
+    () => getPermissionCatalogByGroup(tenantActivityPacks),
+    [tenantActivityPacks],
   );
 
   useEffect(() => {
@@ -97,6 +136,17 @@ export const GlobalSystemRoleModal: React.FC = () => {
     });
   };
 
+  const toggleResource = (resource: PermissionResource) => {
+    const allEnabled = resource.allKeys.every((k) => editPerms[k]);
+    setEditPerms((prev) => {
+      const next = { ...prev };
+      resource.allKeys.forEach((k) => {
+        next[k] = !allEnabled;
+      });
+      return next;
+    });
+  };
+
   const handleSave = async () => {
     if (!editName.trim()) return;
     setSaving(true);
@@ -127,7 +177,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
       onClick={handleClose}
     >
       <div
-        className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[98vw] sm:w-[95vw] max-w-3xl border border-[var(--color-border)] my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-200"
+        className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[98vw] sm:w-[95vw] max-w-4xl border border-[var(--color-border)] my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
@@ -140,11 +190,12 @@ export const GlobalSystemRoleModal: React.FC = () => {
                 {editingRole ? t('modalManager.systemRole.editTitle', { name: editingRole.name }) : t('modalManager.systemRole.createTitle')}
               </h3>
               <p className="text-xs text-[var(--color-text-muted)] font-medium">
-                {t('modalManager.systemRole.enabledPermissionsCount', { enabled: enabledCount, total: ALL_PERMISSIONS.length })}
+                محرك الصلاحيات: عرض · إضافة · تعديل · حذف · إجراءات لكل صفحة
               </p>
             </div>
           </div>
           <button
+            type="button"
             onClick={handleClose}
             className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-slate-600 hover:bg-[#f0f2f5] transition-all"
           >
@@ -170,6 +221,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                 {COLOR_OPTIONS.map((opt) => (
                   <button
                     key={opt.value}
+                    type="button"
                     onClick={() => setEditColor(opt.value)}
                     className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-[11px] font-bold transition-all ${opt.value} ${
                       editColor === opt.value ? 'ring-2 ring-primary scale-105' : 'opacity-60 hover:opacity-100'
@@ -186,14 +238,14 @@ export const GlobalSystemRoleModal: React.FC = () => {
             <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'}`}>
               {saveMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
               <p className="flex-1">{saveMsg.text}</p>
-              <button onClick={() => setSaveMsg(null)}>
+              <button type="button" onClick={() => setSaveMsg(null)}>
                 <X size={16} />
               </button>
             </div>
           )}
 
-          <div className="space-y-3 max-h-[50vh] overflow-y-auto pl-1">
-            {PERMISSION_GROUPS.map((group) => {
+          <div className="space-y-3 max-h-[55vh] overflow-y-auto pl-1">
+            {catalogSections.map(({ group, resources }) => {
               const allEnabled = group.permissions.every((p) => editPerms[p.key]);
               const someEnabled = group.permissions.some((p) => editPerms[p.key]);
               const groupCount = group.permissions.filter((p) => editPerms[p.key]).length;
@@ -214,25 +266,80 @@ export const GlobalSystemRoleModal: React.FC = () => {
                       {groupCount}/{group.permissions.length}
                     </span>
                   </label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 px-4 pb-3">
-                    {group.permissions.map((perm) => (
-                      <label
-                        key={perm.key}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-[var(--border-radius-base)] cursor-pointer transition-all text-xs font-medium ${
-                          editPerms[perm.key]
-                            ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
-                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]/60'
-                        }`}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={editPerms[perm.key] || false}
-                          onChange={() => togglePerm(perm.key)}
-                          className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
-                        />
-                        {perm.label}
-                      </label>
-                    ))}
+
+                  <div className="overflow-x-auto px-2 pb-3">
+                    <table className="w-full min-w-[640px] text-xs">
+                      <thead>
+                        <tr className="text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
+                          <th className="text-right font-bold py-2 px-2">الصفحة / المورد</th>
+                          {PERMISSION_CRUD_VERBS.map((verb) => (
+                            <th key={verb} className="text-center font-bold py-2 px-1 w-14">
+                              {PERMISSION_CRUD_LABELS[verb]}
+                            </th>
+                          ))}
+                          <th className="text-right font-bold py-2 px-2">إجراءات</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {resources.map((resource) => {
+                          const rowAll = resource.allKeys.every((k) => editPerms[k]);
+                          return (
+                            <tr key={resource.id} className="border-b border-[var(--color-border)]/60 last:border-0">
+                              <td className="py-2 px-2">
+                                <label className="flex items-center gap-2 cursor-pointer font-bold text-[var(--color-text)]">
+                                  <input
+                                    type="checkbox"
+                                    checked={rowAll}
+                                    onChange={() => toggleResource(resource)}
+                                    className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-primary"
+                                  />
+                                  {resource.label}
+                                </label>
+                              </td>
+                              {PERMISSION_CRUD_VERBS.map((verb) => {
+                                const item = resource.crud[verb];
+                                return (
+                                  <td key={verb} className="text-center py-2 px-1">
+                                    <CrudCell
+                                      enabled={Boolean(item && editPerms[item.key])}
+                                      disabled={!item}
+                                      onToggle={item ? () => togglePerm(item.key) : undefined}
+                                      label={`${PERMISSION_CRUD_LABELS[verb]} — ${resource.label}`}
+                                    />
+                                  </td>
+                                );
+                              })}
+                              <td className="py-2 px-2">
+                                {resource.actions.length === 0 ? (
+                                  <span className="text-[10px] text-slate-300">—</span>
+                                ) : (
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {resource.actions.map((action) => (
+                                      <label
+                                        key={action.key}
+                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer transition-all ${
+                                          editPerms[action.key]
+                                            ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
+                                            : 'bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[#f0f2f5]'
+                                        }`}
+                                      >
+                                        <input
+                                          type="checkbox"
+                                          checked={editPerms[action.key] || false}
+                                          onChange={() => togglePerm(action.key)}
+                                          className="w-3 h-3 rounded border-[var(--color-border)] text-primary"
+                                        />
+                                        <span className="font-medium leading-none">{action.label}</span>
+                                      </label>
+                                    ))}
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
                   </div>
                 </div>
               );
@@ -249,7 +356,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
             <Button
               className="w-full sm:w-auto"
               variant="primary"
-              onClick={handleSave}
+              onClick={() => void handleSave()}
               disabled={saving || !editName.trim()}
             >
               {saving ? 'جاري...' : (editingRole ? t('modalManager.systemRole.saveChanges') : t('modalManager.systemRole.createRole'))}
@@ -260,4 +367,3 @@ export const GlobalSystemRoleModal: React.FC = () => {
     </div>
   );
 };
-

@@ -23,6 +23,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { MENU_CONFIG, canAccessMenuItem } from '@/config/menu.config';
+import { isMenuGroupEnabledForPacks } from '@/lib/activityPacks';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
 import { binaryFilterItems, buildBinarySearchIndex } from '@/utils/binarySearch';
@@ -162,6 +163,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
   const operationPaths = useAppStore((s) => s.systemSettings.operationPaths);
+  const tenantActivityPacks = useAppStore((s) => s.tenantActivityPacks);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
@@ -170,6 +172,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
   const allItems = useMemo<PaletteItem[]>(() => {
     const items: PaletteItem[] = [];
     MENU_CONFIG.forEach((group) => {
+      if (!isMenuGroupEnabledForPacks(group.key, tenantActivityPacks)) return;
       group.children.forEach((item) => {
         if (
           canAccessMenuItem(can, item, roleKey)
@@ -211,7 +214,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({ open, onClose })
       });
     });
     return items;
-  }, [can, operationPaths, roleKey]);
+  }, [can, operationPaths, roleKey, tenantActivityPacks]);
 
   const searchIndex = useMemo(
     () =>

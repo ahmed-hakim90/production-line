@@ -1,4 +1,5 @@
 import type { FirestoreRole, FirestoreUser } from '../types';
+import type { ActivityPackId } from './activityPacks';
 
 const APP_SESSION_CACHE_VERSION = 1;
 const APP_SESSION_CACHE_PREFIX = `erp.appSession.v${APP_SESSION_CACHE_VERSION}`;
@@ -11,6 +12,7 @@ export type CachedAppSession = {
   userProfile: FirestoreUser;
   role: FirestoreRole;
   tenantCompanyName?: string;
+  tenantActivityPacks?: ActivityPackId[];
   cachedAt: number;
 };
 

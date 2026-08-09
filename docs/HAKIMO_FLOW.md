@@ -1,0 +1,45 @@
+# Hakimo Flow — Design System
+
+Modern Manufacturing ERP visual language for Hakimo Production Line.
+
+**RTL native · Mobile-first · Card-based · Dashboard-driven · Domain module apps**
+
+## Tokens (defaults)
+
+| Token | Value |
+|-------|--------|
+| Primary | `#4F46E5` / hover `#4338CA` |
+| Success | `#059669` |
+| Warning | `#D97706` |
+| Danger | `#DC2626` |
+| Canvas | `#F7F9FC` |
+| Card | `#FFFFFF` |
+| Border | `#E5E7EB` |
+| Font | IBM Plex Sans Arabic |
+| Radius xl (cards) | ~22px |
+| Shadow | `0 4px 20px rgba(15,23,42,0.05)` |
+
+Defined in `src/index.css` `:root` and `DEFAULT_THEME` (`utils/dashboardConfig.ts`). Runtime merge via `themeEngine`.
+
+## Shells
+
+- **Domain homes:** `DomainHomeShell` — KPI hero → period chips → panels → secondary actions
+- **Ops lists:** `ModuleOpsPageShell` — same chrome without huge secondary panel
+- **Panels:** `OpsDashPanel` with module `accent`
+
+## Module apps
+
+Each product module feels like its own app; packs (`lib/activityPacks.ts`) gate manufacturing / repair. Permissions matrix: `utils/permissionCatalog.ts`.
+
+## Do
+
+- Large KPI numbers, short labels above, meta below
+- Soft cards, minimal borders
+- Semantic status colors (running / waiting / failed)
+- Mobile cards + desktop tables for lists
+
+## Don’t
+
+- Dense traditional ERP chrome on home boards
+- Heavy multi-layer shadows / purple glow spam
+- Copy a marketing mock 1:1 — apply the philosophy to Hakimo domains

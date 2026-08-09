@@ -58,6 +58,7 @@ import {
   syncBuiltInRolePermissionGrants,
 } from '../services/firebase';
 import { getCurrentTenantId, getCurrentTenantIdOrNull, setCurrentTenant } from '../lib/currentTenant';
+import { resolveActivityPacks, type ActivityPackId } from '../lib/activityPacks';
 import {
   clearCachedAppSession,
   readCachedAppSession,
@@ -1387,6 +1388,8 @@ interface AppState {
   userProfile: FirestoreUser | null;
   /** من مستند tenants/{id}.name — بيانات الشركة */
   tenantCompanyName: string;
+  /** Effective activity packs for this tenant (always resolved; never empty). */
+  tenantActivityPacks: ActivityPackId[];
 
   // Dynamic RBAC
   roles: FirestoreRole[];
@@ -1828,6 +1831,7 @@ export const useAppStore = create<AppState>((set, get) => ({
   userDisplayName: null,
   userProfile: null,
   tenantCompanyName: '',
+  tenantActivityPacks: ['manufacturing', 'repair'],
 
   // Dynamic RBAC defaults (empty until login)
   roles: [],
@@ -1955,6 +1959,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       userDisplayName: null,
       userProfile: null,
       tenantCompanyName: '',
+      tenantActivityPacks: ['manufacturing', 'repair'],
       userRoleId: '',
       userRoleName: '',
       userRoleColor: '',
@@ -2053,6 +2058,7 @@ export const useAppStore = create<AppState>((set, get) => ({
           userDisplayName: cachedSession.userDisplayName,
           userProfile: cachedSession.userProfile,
           tenantCompanyName: cachedSession.tenantCompanyName ?? '',
+          tenantActivityPacks: resolveActivityPacks(cachedSession.tenantActivityPacks),
         });
         get()._applyRole(cachedSession.role);
       }
@@ -2111,6 +2117,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         userProfile: userDoc,
         role,
         tenantCompanyName: get().tenantCompanyName,
+        tenantActivityPacks: get().tenantActivityPacks,
       });
       await get()._loadAppData();
       writeCachedAppSession({
@@ -2120,6 +2127,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         userProfile: userDoc,
         role,
         tenantCompanyName: get().tenantCompanyName,
+        tenantActivityPacks: get().tenantActivityPacks,
       });
       set({ loading: false });
     } catch (error) {
@@ -2281,6 +2289,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       assetDepreciations,
       systemSettings: mergedSettings,
       tenantCompanyName: tenantDoc?.name?.trim() ?? '',
+      tenantActivityPacks: resolveActivityPacks(tenantDoc?.activityPacks),
     });
 
     reapplyThemeFromAppStore(get);

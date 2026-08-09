@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
+import { toast } from 'sonner';
 import { Card, Button, Badge } from '../components/UI';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { usePermission } from '@/utils/permissions';
 import { useAppStore } from '@/store/useAppStore';
@@ -42,7 +45,6 @@ export const DelegationManagement: React.FC = () => {
 
   const [saving, setSaving] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
 
   const [toEmployeeId, setToEmployeeId] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -80,13 +82,6 @@ export const DelegationManagement: React.FC = () => {
     await reloadCached(true);
   }, [DELEGATION_CACHE_KEY, reloadCached]);
 
-  useEffect(() => {
-    if (toast) {
-      const timer = setTimeout(() => setToast(null), 4000);
-      return () => clearTimeout(timer);
-    }
-  }, [toast]);
-
   const employeeMap = useMemo(() => {
     const map = new Map<string, string>();
     employees.forEach((e: FirestoreEmployee) => { if (e.id) map.set(e.id, e.name); });
@@ -99,11 +94,11 @@ export const DelegationManagement: React.FC = () => {
 
   const handleCreate = useCallback(async () => {
     if (!toEmployeeId || !startDate || !endDate) {
-      setToast({ message: 'يرجى ملء جميع الحقول المطلوبة', type: 'error' });
+      toast.error('يرجى ملء جميع الحقول المطلوبة');
       return;
     }
     if (startDate > endDate) {
-      setToast({ message: 'تاريخ البداية يجب أن يكون قبل تاريخ النهاية', type: 'error' });
+      toast.error('تاريخ البداية يجب أن يكون قبل تاريخ النهاية');
       return;
     }
 
@@ -122,7 +117,7 @@ export const DelegationManagement: React.FC = () => {
         createdBy: myId,
       });
 
-      setToast({ message: 'تم إنشاء التفويض بنجاح', type: 'success' });
+      toast.success('تم إنشاء التفويض بنجاح');
       setShowForm(false);
       setToEmployeeId('');
       setStartDate('');
@@ -131,7 +126,7 @@ export const DelegationManagement: React.FC = () => {
       await loadData();
     } catch (err) {
       console.error('Failed to create delegation:', err);
-      setToast({ message: 'فشل في إنشاء التفويض', type: 'error' });
+      toast.error('فشل في إنشاء التفويض');
     } finally {
       setSaving(false);
     }
@@ -141,11 +136,11 @@ export const DelegationManagement: React.FC = () => {
     if (!confirm('هل أنت متأكد من إلغاء هذا التفويض؟')) return;
     try {
       await approvalDelegationService.deactivate(id);
-      setToast({ message: 'تم إلغاء التفويض', type: 'success' });
+      toast.success('تم إلغاء التفويض');
       await loadData();
     } catch (err) {
       console.error('Failed to deactivate:', err);
-      setToast({ message: 'فشل في إلغاء التفويض', type: 'error' });
+      toast.error('فشل في إلغاء التفويض');
     }
   }, [loadData]);
 
@@ -167,22 +162,15 @@ export const DelegationManagement: React.FC = () => {
   }
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
-            <span className="material-icons-round text-primary text-2xl">swap_horiz</span>
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold">إدارة التفويضات</h1>
-            <p className="text-sm text-slate-400">تفويض صلاحيات الموافقة لموظف آخر أثناء غيابك</p>
-          </div>
-        </div>
+    <ModuleOpsPageShell
+      eyebrow="إدارة التفويضات"
+      rangeLabel="تفويض صلاحيات الموافقة لموظف آخر أثناء غيابك"
+      actions={(
         <Button onClick={() => setShowForm(!showForm)}>
           {showForm ? 'إلغاء' : 'تفويض جديد'}
         </Button>
-      </div>
-
+      )}
+    >
       {showForm && (
         <Card>
           <div className="space-y-5">
@@ -261,14 +249,15 @@ export const DelegationManagement: React.FC = () => {
       )}
 
       {delegations.length === 0 ? (
-        <Card>
+        <OpsDashPanel accent="hr">
           <div className="text-center py-12">
             <span className="material-icons-round text-5xl text-[var(--color-text-muted)] dark:text-slate-600 mb-3 block">swap_horiz</span>
             <p className="text-sm font-bold text-slate-500">لا توجد تفويضات حالياً</p>
             <p className="text-xs text-[var(--color-text-muted)] mt-1">أنشئ تفويضاً لتمكين شخص آخر من الموافقة نيابةً عنك</p>
           </div>
-        </Card>
+        </OpsDashPanel>
       ) : (
+        <OpsDashPanel title="التفويضات" accent="hr">
         <div className="space-y-3">
           {delegations.map((d) => {
             const active = isDelegationActive(d);
@@ -321,19 +310,9 @@ export const DelegationManagement: React.FC = () => {
             );
           })}
         </div>
+        </OpsDashPanel>
       )}
-
-      {toast && (
-        <div className={`fixed bottom-6 left-6 z-50 px-5 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold text-white flex items-center gap-2 animate-slide-up ${
-          toast.type === 'success' ? 'bg-emerald-500' : 'bg-rose-500'
-        }`}>
-          <span className="material-icons-round text-lg">
-            {toast.type === 'success' ? 'check_circle' : 'error'}
-          </span>
-          {toast.message}
-        </div>
-      )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };
 

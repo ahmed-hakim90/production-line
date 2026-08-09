@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
-import { PageHeader } from '../../../components/PageHeader';
+import { ModuleOpsPageShell } from '@/modules/dashboards/components/ModuleOpsPageShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { Button } from '../../../components/UI';
 import {
   Select,
@@ -10,7 +11,6 @@ import {
   SelectValue,
 } from '../../../components/ui/select';
 import { DataTable, type Column } from '../../../src/components/erp/DataTable';
-import { KPICard } from '../../../src/components/erp/KPICard';
 import { useShallowStore } from '../../../store/useAppStore';
 
 type ReportMode = 'monthly' | 'yearly';
@@ -224,99 +224,89 @@ export const DepreciationReport: React.FC = () => {
     },
   ];
 
+  const cumulative = monthlyBreakdown.reduce((s, r) => s + r.amount, 0);
+
   return (
-    <div className="space-y-6 erp-ds-clean">
-      <PageHeader
-        title="تقرير الإهلاك"
-        subtitle="تحليل الإهلاك الشهري والسنوي بمراكز التكلفة مرجعية والمنتجات"
-        icon="receipt_long"
-        backAction={false}
-        extra={(
-          <div className="flex items-center gap-2">
-            <Button variant="ghost" onClick={() => navigate(-1)}>
-              <span>رجوع</span>
-            </Button>
-            <Select value={mode} onValueChange={(v) => setMode(v as ReportMode)}>
-              <SelectTrigger className="h-10 w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-sm">
-                <SelectValue placeholder="الفترة" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="monthly">شهري</SelectItem>
-                <SelectItem value="yearly">سنوي</SelectItem>
-              </SelectContent>
-            </Select>
-            <input
-              type="month"
-              className="h-10 rounded border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
-              value={month}
-              onChange={(e) => setMonth(e.target.value)}
-            />
-          </div>
-        )}
-      />
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <KPICard
-          label={`الإهلاك ${mode === 'monthly' ? 'الشهري' : 'السنوي'}`}
-          value={totalDepreciation.toFixed(2)}
-          iconType="money"
-          color="indigo"
-        />
-        <KPICard
-          label="عدد سجلات الإهلاك"
-          value={assetDepreciations.length}
-          iconType="metric"
-          color="green"
-        />
-        <KPICard
-          label="إجمالي الإهلاك (تراكمي بالتقرير)"
-          value={monthlyBreakdown.reduce((s, r) => s + r.amount, 0).toFixed(2)}
-          iconType="trend"
-          color="amber"
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-          <div className="p-4 border-b border-[var(--color-border)] text-sm font-medium">الإهلاك حسب الفترات</div>
+    <ModuleOpsPageShell
+      eyebrow="تقرير الإهلاك"
+      rangeLabel="تحليل الإهلاك الشهري والسنوي بمراكز التكلفة والمنتجات"
+      hero={[
+        {
+          key: 'period',
+          label: `الإهلاك ${mode === 'monthly' ? 'الشهري' : 'السنوي'}`,
+          value: totalDepreciation.toFixed(2),
+          accent: true,
+        },
+        {
+          key: 'records',
+          label: 'سجلات الإهلاك',
+          value: assetDepreciations.length,
+        },
+        {
+          key: 'cumulative',
+          label: 'إجمالي بالتقرير',
+          value: cumulative.toFixed(2),
+        },
+      ]}
+      actions={(
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="ghost" onClick={() => navigate(-1)}>
+            رجوع
+          </Button>
+          <Select value={mode} onValueChange={(v) => setMode(v as ReportMode)}>
+            <SelectTrigger className="h-10 w-[140px] rounded-lg border border-slate-200 bg-white px-3 text-sm">
+              <SelectValue placeholder="الفترة" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="monthly">شهري</SelectItem>
+              <SelectItem value="yearly">سنوي</SelectItem>
+            </SelectContent>
+          </Select>
+          <input
+            type="month"
+            className="h-10 rounded border border-[var(--color-border)] bg-[var(--color-card)] px-3 text-sm"
+            value={month}
+            onChange={(e) => setMonth(e.target.value)}
+            aria-label="الشهر"
+          />
+        </div>
+      )}
+    >
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        <OpsDashPanel title="الإهلاك حسب الفترات" accent="costs" bodyClassName="p-0">
           <DataTable
             columns={periodColumns}
             data={monthlyBreakdown}
             emptyMessage="لا توجد بيانات للفترة المحددة"
           />
-        </div>
-
-        <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-          <div className="p-4 border-b border-[var(--color-border)] text-sm font-medium">الإهلاك حسب المراكز</div>
+        </OpsDashPanel>
+        <OpsDashPanel title="الإهلاك حسب المراكز" accent="costs" bodyClassName="p-0">
           <DataTable
             columns={centerColumns}
             data={centerBreakdown}
             emptyMessage="لا توجد مراكز مرجعية"
           />
-        </div>
+        </OpsDashPanel>
       </div>
 
       {mode === 'monthly' && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-            <div className="p-4 border-b border-[var(--color-border)] text-sm font-medium">توزيع الإهلاك على الخطوط</div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <OpsDashPanel title="توزيع الإهلاك على الخطوط" accent="costs" bodyClassName="p-0">
             <DataTable
               columns={lineColumns}
               data={lineBreakdown}
               emptyMessage="لا يوجد توزيع متاح لهذا الشهر"
             />
-          </div>
-
-          <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-card)]">
-            <div className="p-4 border-b border-[var(--color-border)] text-sm font-medium">توزيع الإهلاك على المنتجات</div>
+          </OpsDashPanel>
+          <OpsDashPanel title="توزيع الإهلاك على المنتجات" accent="costs" bodyClassName="p-0">
             <DataTable
               columns={productColumns}
               data={productBreakdown}
               emptyMessage="لا يوجد توزيع متاح لهذا الشهر"
             />
-          </div>
+          </OpsDashPanel>
         </div>
       )}
-    </div>
+    </ModuleOpsPageShell>
   );
 };

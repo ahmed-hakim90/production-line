@@ -21,6 +21,9 @@ export {
   normalizeRolePermissions,
 } from './packagingOnlyPermissions';
 
+// Permission matrix engine: import from `@/utils/permissionCatalog`
+// (kept separate to avoid circular imports with this file).
+
 // ─── Permission Names (all known permission keys) ────────────────────────────
 
 export type Permission =
