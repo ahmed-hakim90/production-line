@@ -725,7 +725,15 @@ export const FactoryManagerDashboard: React.FC = () => {
       denseHero
       eyebrow="لوحة المصنع"
       hero={hero}
-      rangeLabel={`${preset === 'custom' && customStart && customEnd ? `${customStart} → ${customEnd}` : preset}`}
+      rangeLabel={
+        preset === 'custom' && customStart && customEnd
+          ? `${customStart} → ${customEnd}`
+          : preset === 'week'
+            ? 'آخر 7 أيام'
+            : preset === '3months'
+              ? 'آخر 3 أشهر'
+              : 'هذا الشهر'
+      }
       refreshing={loading || decisionLoading}
       secondarySummary="تنبيهات التشغيل"
       secondary={(
