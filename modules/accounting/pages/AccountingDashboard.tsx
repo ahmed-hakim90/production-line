@@ -8,14 +8,12 @@ import {
   Scale,
   Settings2,
 } from "lucide-react";
-import { PageHeader } from "@/components/PageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Skeleton } from "@/components/ui/skeleton";
 import { withTenantPath } from "@/lib/tenantPaths";
+import { DomainHomeShell } from "@/modules/dashboards/components/DomainHomeShell";
 import { usePermission } from "@/utils/permissions";
-import { AccountingKpiStrip } from "../components/AccountingKpiStrip";
 import { AccountingPeriodToolbar } from "../components/AccountingPeriodToolbar";
 import { useAccountingBaseData } from "../hooks/useAccountingBaseData";
 import {
@@ -124,71 +122,60 @@ export const AccountingDashboard: React.FC = () => {
     [trial],
   );
 
+  const net = accountingMoney(totals.revenue - totals.expenses);
   const balanceDiff = Math.abs(totals.debit - totals.credit);
   const branchesReady =
     readiness?.repairBranches.filter((branch) => branch.ready).length || 0;
   const branchesTotal = readiness?.repairBranches.length || 0;
 
+  const hero = [
+    {
+      key: "assets",
+      label: "إجمالي الأصول",
+      value: loading ? "…" : formatAccountingMoney(totals.assets),
+      accent: true as const,
+    },
+    {
+      key: "liabilities",
+      label: "الالتزامات",
+      value: loading ? "…" : formatAccountingMoney(totals.liabilities),
+    },
+    {
+      key: "revenue",
+      label: "الإيرادات",
+      value: loading ? "…" : formatAccountingMoney(totals.revenue),
+    },
+    {
+      key: "expenses",
+      label: "المصروفات",
+      value: loading ? "…" : formatAccountingMoney(totals.expenses),
+    },
+    {
+      key: "net",
+      label: "صافي الحركة",
+      value: loading ? "…" : formatAccountingMoney(net),
+      meta: `${from} → ${to}`,
+    },
+  ];
+
   return (
-    <div className="erp-ds-clean space-y-5" dir="rtl">
-      <PageHeader
-        title="لوحة الحسابات"
-        subtitle="ملخص المركز المالي والحركة المحاسبية للشركة"
-        icon="account_balance"
-        backAction={false}
-      />
-
-      <Card className="!p-0 overflow-hidden shadow-none">
-        <CardContent className="p-4">
-          <AccountingPeriodToolbar
-            from={from}
-            to={to}
-            onFromChange={setFrom}
-            onToChange={setTo}
-            onRefresh={() => void reload()}
-            refreshing={loading}
-          />
-        </CardContent>
-      </Card>
-
-      {loading ? (
-        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <Skeleton key={index} className="h-24 rounded-xl" />
-          ))}
-        </div>
-      ) : (
-        <AccountingKpiStrip
-          items={[
-            { label: "إجمالي الأصول", value: totals.assets, tone: "blue", suffix: "ج.م" },
-            {
-              label: "الالتزامات",
-              value: totals.liabilities,
-              tone: "amber",
-              suffix: "ج.م",
-            },
-            {
-              label: "الإيرادات",
-              value: totals.revenue,
-              tone: "emerald",
-              suffix: "ج.م",
-            },
-            {
-              label: "المصروفات",
-              value: totals.expenses,
-              tone: "rose",
-              suffix: "ج.م",
-            },
-            {
-              label: "صافي الحركة",
-              value: totals.revenue - totals.expenses,
-              tone: "violet",
-              suffix: "ج.م",
-            },
-          ]}
+    <DomainHomeShell
+      denseHero
+      hero={hero}
+      onRefresh={() => {
+        void reload();
+      }}
+      refreshing={loading}
+      periodExtra={(
+        <AccountingPeriodToolbar
+          from={from}
+          to={to}
+          onFromChange={setFrom}
+          onToChange={setTo}
         />
       )}
-
+      dir="rtl"
+    >
       <div className="grid gap-4 lg:grid-cols-2">
         <Card className="shadow-none">
           <CardHeader className="pb-2">
@@ -281,8 +268,7 @@ export const AccountingDashboard: React.FC = () => {
         </CardHeader>
         <CardContent className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
           {QUICK_LINKS.filter(
-            (item) =>
-              !item.permission || can(item.permission),
+            (item) => !item.permission || can(item.permission),
           ).map((item) => {
             const Icon = item.icon;
             return (
@@ -306,6 +292,6 @@ export const AccountingDashboard: React.FC = () => {
           })}
         </CardContent>
       </Card>
-    </div>
+    </DomainHomeShell>
   );
 };

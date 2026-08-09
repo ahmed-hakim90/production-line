@@ -3216,6 +3216,34 @@ input[type="radio"] {
   }
 }
 
+.ops-dash-kpi-grid--dense {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+  .ops-dash-kpi-grid--dense {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .ops-dash-kpi-grid--dense {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.ops-dash-domain-body {
+  min-width: 0;
+}
+
+.ops-dash-board--data-first .ops-dash-domain-body {
+  order: 3;
+}
+
+.ops-dash-board--data-first .ops-dash-secondary {
+  order: 4;
+}
+
 .ops-dash-kpi-card {
   position: relative;
   border-radius: calc(var(--border-radius-xl) + 2px);

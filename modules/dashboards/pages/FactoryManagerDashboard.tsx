@@ -10,6 +10,7 @@ import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { GhostButton } from '@/src/components/erp/ActionButton';
 import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
+import { OperationalDecisionQueue } from '../components/OperationalDecisionQueue';
 import { useWorkerDashboardSnapshot } from '@/modules/production/hooks/useWorkerDashboardSnapshot';
 import { reportComplianceService, type ReportComplianceSnapshot } from '../services/reportComplianceService';
 import {
@@ -938,5 +939,17 @@ export const FactoryManagerDashboard: React.FC = () => {
     return <PageContentSkeleton variant="dashboard" kpiCount={4} />;
   }
 
-  return <ModuleChartsHomeBoard />;
+  return (
+    <div className="space-y-3 md:space-y-4">
+      <ModuleChartsHomeBoard />
+      <OperationalDecisionQueue
+        snapshot={decisionSnapshot}
+        loading={decisionLoading}
+        compact
+        maxItems={8}
+        atRiskWorkOrders={workOrderRisk.atRiskCount}
+        qualityPending={qualityKpis.pendingQuality}
+      />
+    </div>
+  );
 };

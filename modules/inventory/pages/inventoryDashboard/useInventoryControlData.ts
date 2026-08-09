@@ -520,6 +520,44 @@ export function useInventoryControlData() {
       .slice(0, REVIEW_LIMIT);
   }, [filteredTransfers, transferStatusFilter]);
 
+  const movementBars = useMemo(() => {
+    const counts: Record<'IN' | 'OUT' | 'TRANSFER' | 'ADJUSTMENT', number> = {
+      IN: 0,
+      OUT: 0,
+      TRANSFER: 0,
+      ADJUSTMENT: 0,
+    };
+    transactions.forEach((tx) => {
+      const key = tx.movementType;
+      if (key in counts) counts[key as keyof typeof counts] += 1;
+    });
+    return [
+      { name: 'وارد', value: counts.IN },
+      { name: 'منصرف', value: counts.OUT },
+      { name: 'تحويل', value: counts.TRANSFER },
+      { name: 'تسوية', value: counts.ADJUSTMENT },
+    ];
+  }, [transactions]);
+
+  const riskBars = useMemo(
+    () => [
+      { name: 'أصناف تحت الحد', value: kpiSummary.lowStockCount },
+      { name: 'سالب', value: negativeItems.length },
+      { name: 'تموين', value: suppliesAlertCount },
+      { name: 'تحويل معلّق', value: pendingTransfers.length },
+      { name: 'صرف مفتوح', value: pendingIssues.length },
+      { name: 'استلامات', value: awaitingReceipts.length },
+    ],
+    [
+      kpiSummary.lowStockCount,
+      negativeItems.length,
+      suppliesAlertCount,
+      pendingTransfers.length,
+      pendingIssues.length,
+      awaitingReceipts.length,
+    ],
+  );
+
   return {
     loading,
     txLoading,
@@ -564,5 +602,7 @@ export function useInventoryControlData() {
     warehouseHealth,
     exceptionPreview,
     warehouseNameById,
+    movementBars,
+    riskBars,
   };
 }

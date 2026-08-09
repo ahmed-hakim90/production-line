@@ -1888,6 +1888,13 @@ export const AdminDashboard: React.FC = () => {
 
       <ModuleChartsHomeBoard />
 
+      <OperationalDecisionQueue
+        snapshot={decisionSnapshot}
+        loading={decisionLoading}
+        compact
+        maxItems={8}
+      />
+
       <details className="ops-dash-secondary">
         <summary>تقارير وتفاصيل إضافية (اختياري)</summary>
         <div className="ops-dash-secondary__body">
