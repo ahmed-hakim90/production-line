@@ -1,6 +1,10 @@
 import type { AppRouteDef } from '../../shared/routes';
 import { lazyNamed } from '../../shared/routes/lazyNamed';
 
+const SupervisorDashboard = lazyNamed(
+  () => import('../../dashboards/pages/SupervisorDashboard'),
+  'SupervisorDashboard',
+);
 const Lines = lazyNamed(() => import('../pages/Lines'), 'Lines');
 const LineDetails = lazyNamed(() => import('../pages/LineDetails'), 'LineDetails');
 const ProductionPlans = lazyNamed(() => import('../pages/ProductionPlans'), 'ProductionPlans');
@@ -36,6 +40,12 @@ const SupplyCyclesList = lazyNamed(() => import('../pages/SupplyCyclesList'), 'S
 const SupplyCycleDetail = lazyNamed(() => import('../pages/SupplyCycleDetail'), 'SupplyCycleDetail');
 
 export const PRODUCTION_ROUTES: AppRouteDef[] = [
+  {
+    path: '/supervisor',
+    permissionsAny: ['employeeDashboard.view', 'quickAction.view'],
+    component: SupervisorDashboard,
+    skeleton: 'dashboard',
+  },
   { path: '/lines', permission: 'lines.view', component: Lines },
   { path: '/lines/:id', permission: 'lines.view', component: LineDetails },
   { path: '/production-plans', permission: 'plans.view', component: ProductionPlans },

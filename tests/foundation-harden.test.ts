@@ -169,6 +169,8 @@ async function main() {
     true,
   );
   assert.ok(PRIVILEGED_INVENTORY_PERMISSIONS.includes('inventory.counts.manage'));
+  assert.equal(SUPERVISOR_PORTAL_PATHS.dashboard, '/supervisor');
+  assert.equal(SUPERVISOR_PORTAL_PATHS.myWorkers, '/my-workers');
   assert.equal(SUPERVISOR_PORTAL_PATHS.productionIssueRequests, '/production/issue-requests');
   assert.equal(EMPLOYEE_PORTAL_PATHS.home, '/');
 

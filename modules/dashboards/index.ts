@@ -1,6 +1,7 @@
 export { Dashboard } from './pages/Dashboard';
 export { HomeDashboardRouter } from './pages/HomeDashboardRouter';
 export { EmployeeDashboard } from './pages/EmployeeDashboard';
+export { SupervisorDashboard } from './pages/SupervisorDashboard';
 export { FactoryManagerDashboard } from './pages/FactoryManagerDashboard';
 export { AdminDashboard } from './pages/AdminDashboard';
 export * from './components';

@@ -8,6 +8,10 @@ import { resolvePortalKind } from '../lib/portalHome';
 const AdminDashboard = lazyNamed(() => import('./AdminDashboard'), 'AdminDashboard');
 const Dashboard = lazyNamed(() => import('./Dashboard'), 'Dashboard');
 const EmployeeDashboard = lazyNamed(() => import('./EmployeeDashboard'), 'EmployeeDashboard');
+const SupervisorDashboard = lazyNamed(
+  () => import('./SupervisorDashboard'),
+  'SupervisorDashboard',
+);
 const FactoryManagerDashboard = lazyNamed(
   () => import('./FactoryManagerDashboard'),
   'FactoryManagerDashboard',
@@ -34,6 +38,7 @@ export const HomeDashboardRouter: React.FC = () => {
   const roles = useAppStore((s) => s.roles);
   const userRoleId = useAppStore((s) => s.userRoleId);
   const userProfile = useAppStore((s) => s.userProfile);
+  const currentEmployee = useAppStore((s) => s.currentEmployee);
   const roleKey = useMemo(
     () => roles.find((r) => r.id === userRoleId)?.roleKey || null,
     [roles, userRoleId],
@@ -45,11 +50,14 @@ export const HomeDashboardRouter: React.FC = () => {
     inventoryWarehouseId: userProfile?.inventoryWarehouseId,
   });
 
+  const isSupervisorEmployee = currentEmployee?.level === 2;
+
   let body: React.ReactNode = <Dashboard />;
   if (portal === 'admin') body = <AdminDashboard />;
   else if (portal === 'factory_manager') body = <FactoryManagerDashboard />;
-  else if (portal === 'employee') body = <EmployeeDashboard />;
-  else if (portal === 'warehouse_manager') body = <WarehouseManagerHome />;
+  else if (portal === 'employee') {
+    body = isSupervisorEmployee ? <SupervisorDashboard /> : <EmployeeDashboard />;
+  } else if (portal === 'warehouse_manager') body = <WarehouseManagerHome />;
   else if (portal === 'repair') body = <RepairDashboard />;
   else if (portal === 'repair_technician') body = <RepairTechnicianHome />;
 

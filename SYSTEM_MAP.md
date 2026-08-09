@@ -69,6 +69,8 @@
 
 | Flow | Path |
 |------|------|
+| Production home board (KPIs + charts) | `/production` |
+| Supervisor analysis home (level 2) | `/supervisor` |
 | Warehouses hub (filters, no sidebar spam) | `/inventory/warehouses` |
 | Shelf locations | `/inventory/locations` |
 | Production issue | `/inventory/production-issues` |

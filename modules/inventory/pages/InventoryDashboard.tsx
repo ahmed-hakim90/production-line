@@ -256,6 +256,8 @@ export const InventoryDashboard: React.FC = () => {
             tenantPath={tenantPath}
             loading={data.loading}
             txLoading={data.txLoading}
+            period={data.period}
+            setPeriod={data.setPeriod}
             reviewTab={data.reviewTab}
             setReviewTab={data.setReviewTab}
             movementFilter={data.movementFilter}
