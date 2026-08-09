@@ -65,6 +65,16 @@ export function movementFateLabel(tx: Pick<
   if (module === 'component_compensation') return 'تعويض مكون';
   if (module === 'stock_count') return 'جرد';
   if (module === 'transfer_request') return 'تحويل';
+  if (module === 'spare_parts_replenishment') return 'تموين قطع غيار';
+  if (module === 'repair_spare_issue') return 'صرف قطعة صيانة';
+  if (module === 'repair_spare_return') return 'مرتجع قطعة صيانة';
+  if (module === 'repair_customer_custody') return 'عهدة عميل';
+  if (module === 'repair_unrepairable') return 'غير قابل للإصلاح';
+  if (module === 'repair_sales_invoice') return 'فاتورة قطع غيار';
+  if (module === 'disassembly') return 'تفكيك';
+  if (module === 'packaging') return 'تغليف';
+  if (module === 'production_report') return 'إنتاج';
+  if (module === 'manual_movement') return 'حركة يدوية';
   if (tx.movementType === 'IN') return 'وارد';
   if (tx.movementType === 'OUT') return 'صادر';
   if (tx.movementType === 'TRANSFER') return 'تحويل';

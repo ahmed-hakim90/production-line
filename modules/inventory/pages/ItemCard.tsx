@@ -43,6 +43,28 @@ type CatalogOption = {
   itemType: InventoryItemType;
 };
 
+type MovementCursorState = {
+  byType: Partial<Record<InventoryItemType, unknown>>;
+  hasMoreByType: Partial<Record<InventoryItemType, boolean>>;
+};
+
+function itemMovementTypes(itemType: InventoryItemType): InventoryItemType[] {
+  return itemType === 'finished_good'
+    ? ['finished_good']
+    : ['material', 'raw_material'];
+}
+
+function mergeUniqueMovements(rows: StockTransaction[]): StockTransaction[] {
+  const unique = new Map<string, StockTransaction>();
+  rows.forEach((tx) => {
+    const key = tx.id || `${tx.createdAt}-${tx.referenceNo}-${tx.quantity}-${tx.warehouseId}-${tx.movementType}`;
+    if (!unique.has(key)) unique.set(key, tx);
+  });
+  return [...unique.values()].sort((a, b) =>
+    String(b.createdAt || '').localeCompare(String(a.createdAt || '')),
+  );
+}
+
 const matchesItemBalance = (
   row: StockItemBalance,
   itemType: InventoryItemType,
@@ -75,7 +97,10 @@ export const ItemCard: React.FC = () => {
   const [bomLines, setBomLines] = useState<ItemCardBomLine[]>([]);
   const [movements, setMovements] = useState<StockTransaction[]>([]);
   const [hasMoreMovements, setHasMoreMovements] = useState(false);
-  const movementCursorRef = useRef<unknown>(null);
+  const movementCursorStateRef = useRef<MovementCursorState>({
+    byType: {},
+    hasMoreByType: {},
+  });
 
   const [countCards, setCountCards] = useState<ProductBomCountCard[]>([]);
   const [countPreviewOpen, setCountPreviewOpen] = useState(false);
@@ -200,10 +225,7 @@ export const ItemCard: React.FC = () => {
 
       const selectedOption = catalogOptions.find((opt) => opt.id === itemId);
       const ownerType = itemType === 'finished_good' ? 'product' : 'material';
-      const movementTypes: InventoryItemType[] =
-        itemType === 'finished_good'
-          ? ['finished_good']
-          : ['material', 'raw_material'];
+      const movementTypes = itemMovementTypes(itemType);
 
       const [allBalances, bomResult, ...movementPages] = await Promise.all([
         stockService.getBalances(warehouseId || undefined),
@@ -268,18 +290,15 @@ export const ItemCard: React.FC = () => {
       setBomLines(lines);
 
       if (resetMovements) {
-        const merged = movementPages
-          .flatMap((page) => page.items)
-          .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-        const unique = new Map<string, StockTransaction>();
-        merged.forEach((tx) => {
-          const key = tx.id || `${tx.createdAt}-${tx.referenceNo}-${tx.quantity}`;
-          if (!unique.has(key)) unique.set(key, tx);
+        const nextState: MovementCursorState = { byType: {}, hasMoreByType: {} };
+        movementTypes.forEach((type, index) => {
+          const page = movementPages[index];
+          nextState.byType[type] = page?.nextCursor || null;
+          nextState.hasMoreByType[type] = Boolean(page?.hasMore);
         });
-        const rows = [...unique.values()].slice(0, PAGE_SIZE);
-        setMovements(rows);
-        movementCursorRef.current = movementPages[0]?.nextCursor || null;
-        setHasMoreMovements(movementPages.some((page) => page.hasMore));
+        movementCursorStateRef.current = nextState;
+        setMovements(mergeUniqueMovements(movementPages.flatMap((page) => page.items)));
+        setHasMoreMovements(movementTypes.some((type) => nextState.hasMoreByType[type]));
       }
 
       if (!selectedOption) {
@@ -318,16 +337,42 @@ export const ItemCard: React.FC = () => {
     if (!itemId || !hasMoreMovements) return;
     setLoading(true);
     try {
-      const page = await stockService.getTransactionsPaged({
-        itemId,
-        itemType: itemType === 'raw_material' ? 'raw_material' : itemType,
-        warehouseId: warehouseId || undefined,
-        limit: PAGE_SIZE,
-        cursor: movementCursorRef.current as never,
+      const movementTypes = itemMovementTypes(itemType);
+      const openTypes = movementTypes.filter(
+        (type) => movementCursorStateRef.current.hasMoreByType[type],
+      );
+      if (openTypes.length === 0) {
+        setHasMoreMovements(false);
+        return;
+      }
+
+      const pages = await Promise.all(
+        openTypes.map((type) =>
+          stockService.getTransactionsPaged({
+            itemId,
+            itemType: type,
+            warehouseId: warehouseId || undefined,
+            limit: PAGE_SIZE,
+            cursor: (movementCursorStateRef.current.byType[type] || null) as never,
+          }),
+        ),
+      );
+
+      const nextState: MovementCursorState = {
+        byType: { ...movementCursorStateRef.current.byType },
+        hasMoreByType: { ...movementCursorStateRef.current.hasMoreByType },
+      };
+      openTypes.forEach((type, index) => {
+        const page = pages[index];
+        nextState.byType[type] = page?.nextCursor || null;
+        nextState.hasMoreByType[type] = Boolean(page?.hasMore);
       });
-      setMovements((prev) => [...prev, ...page.items]);
-      movementCursorRef.current = page.nextCursor;
-      setHasMoreMovements(page.hasMore);
+      movementCursorStateRef.current = nextState;
+
+      setMovements((prev) =>
+        mergeUniqueMovements([...prev, ...pages.flatMap((page) => page.items)]),
+      );
+      setHasMoreMovements(movementTypes.some((type) => nextState.hasMoreByType[type]));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'تعذر تحميل المزيد من الحركات.');
     } finally {
@@ -373,7 +418,7 @@ export const ItemCard: React.FC = () => {
   return (
     <ModuleOpsPageShell
       eyebrow="كارت الصنف"
-      rangeLabel="اختر صنفاً لعرض أرصدته ومكوناته وحركاته، مع إمكانية الطباعة مثل كروت المنتجات."
+      rangeLabel="دفتر حركة الصنف عبر كل المخازن (أو مخزن محدد) — صرف/وارد/تحويل/جرد/صيانة وإنتاج."
       actions={(
         <div className="flex flex-wrap gap-2">
           {selected?.itemType === 'finished_good' ? (
@@ -549,7 +594,17 @@ export const ItemCard: React.FC = () => {
             )}
           </OpsDashPanel>
 
-          <OpsDashPanel title="الحركات" accent="inventory">
+          <OpsDashPanel
+            title={`كل الحركات${warehouseId ? ' (المخزن المحدد)' : ' (كل المخازن)'}`}
+            accent="inventory"
+            action={
+              movements.length > 0 ? (
+                <span className="text-xs font-semibold text-[var(--color-text-muted)] tabular-nums">
+                  {movements.length} حركة
+                </span>
+              ) : undefined
+            }
+          >
             <div className="overflow-x-auto">
               <table className="erp-table w-full">
                 <thead className="erp-thead">
@@ -558,7 +613,7 @@ export const ItemCard: React.FC = () => {
                     <th className="erp-th">المرجع</th>
                     <th className="erp-th">المسار</th>
                     <th className="erp-th">الكمية</th>
-                    <th className="erp-th">الحالة</th>
+                    <th className="erp-th">النوع</th>
                     <th className="erp-th">ملاحظة</th>
                   </tr>
                 </thead>
