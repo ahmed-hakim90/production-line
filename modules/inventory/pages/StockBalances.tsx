@@ -386,7 +386,88 @@ export const StockBalances: React.FC = () => {
           className="mb-0 border-0 rounded-none"
         />
 
-        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
+        <div className="erp-mobile-card-list p-2">
+          {loading && Array.from({ length: 5 }).map((_, i) => (
+            <Skeleton key={`bal-m-sk-${i}`} className="h-28 w-full rounded-xl" />
+          ))}
+          {!loading && rows.length === 0 && (
+            <p className="py-10 text-center text-sm text-slate-400">لا توجد بيانات مطابقة.</p>
+          )}
+          {!loading && pagedRows.map((row) => {
+            const isLow = row.minStock > 0 && row.quantity <= row.minStock;
+            const isOut = row.quantity <= 0;
+            const isNegative = Number(row.quantity || 0) < 0;
+            const available = Number(row.availableQty ?? row.quantity ?? 0);
+            return (
+              <div
+                key={`m-${row.id}`}
+                className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0">
+                    <p className="truncate text-sm font-bold text-[var(--color-text)]">{row.itemName}</p>
+                    <p className="font-mono text-xs text-[var(--color-text-muted)]">{row.itemCode}</p>
+                    <p className="mt-1 text-xs text-[var(--color-text-muted)]">
+                      {warehouseNameById.get(row.warehouseId) ?? row.warehouseId}
+                      {' · '}
+                      {itemTypeLabel(row.itemType)}
+                    </p>
+                  </div>
+                  {isNegative ? <Badge variant="danger">سالب</Badge>
+                    : isOut ? <Badge variant="danger">نفد</Badge>
+                      : isLow ? <Badge variant="warning">منخفض</Badge>
+                        : <Badge variant="success">متوفر</Badge>}
+                </div>
+                <dl className="mt-2 grid grid-cols-3 gap-2 text-center">
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">الرصيد</dt>
+                    <dd className={`text-sm font-bold tabular-nums ${isNegative ? 'text-rose-600' : ''}`}>{formatNumber(row.quantity)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">متاح</dt>
+                    <dd className="text-sm font-bold tabular-nums">{formatNumber(available)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-[10px] text-[var(--color-text-muted)]">حد أدنى</dt>
+                    <dd className="text-sm font-bold tabular-nums">{formatNumber(row.minStock || 0)}</dd>
+                  </div>
+                </dl>
+                <div className="mt-2 flex flex-wrap gap-1.5">
+                  <Button
+                    variant="outline"
+                    className="!px-2 !py-1 text-xs"
+                    onClick={() => navigate(
+                      `/inventory/item-card?itemType=${encodeURIComponent(
+                        row.itemType === 'raw_material' ? 'material' : row.itemType,
+                      )}&itemId=${encodeURIComponent(row.itemId)}&warehouseId=${encodeURIComponent(row.warehouseId)}`,
+                    )}
+                  >
+                    كارت
+                  </Button>
+                  {can('inventory.transactions.create') ? (
+                    <Button
+                      variant="outline"
+                      className="!px-2 !py-1 text-xs"
+                      onClick={() => openModal(MODAL_KEYS.INVENTORY_STOCK_ADJUSTMENT, {
+                        warehouseId: row.warehouseId,
+                        itemType: row.itemType,
+                        itemId: row.itemId,
+                        itemName: row.itemName,
+                        itemCode: row.itemCode,
+                        createdBy: userDisplayName || userEmail || 'User',
+                        onSaved: () => void reload(),
+                      })}
+                    >
+                      تسوية
+                    </Button>
+                  ) : null}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="erp-desktop-table erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[1100px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>

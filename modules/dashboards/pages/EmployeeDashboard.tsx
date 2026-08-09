@@ -6,13 +6,11 @@ import type { WorkOrderPrintData } from '../../production/components/ProductionR
 import { useAppStore, useShallowStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import { useManagedPrint } from '@/utils/printManager';
 import { ShiftLifecyclePanel } from '../../../components/EmployeeDashboardWidget';
-import { PageHeader } from '@/src/components/erp/PageHeader';
-import { KPICard } from '@/src/components/erp/KPICard';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
-import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { DataTable, type Column } from '@/src/components/erp/DataTable';
 import { StatusBadge } from '@/src/components/erp/StatusBadge';
 import { PrimaryButton, GhostButton } from '@/src/components/erp/ActionButton';
+import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
 import {
   formatNumber,
   formatCurrency,
@@ -496,13 +494,6 @@ export const EmployeeDashboard: React.FC = () => {
     };
   }, [periodReports]);
 
-  const todayProductionHours = useMemo(() => {
-    if (!employee?.id) return 0;
-    return todayReports
-      .filter((r) => r.employeeId === employee.id)
-      .reduce((sum, r) => sum + (r.workHours || 0), 0);
-  }, [employee?.id, todayReports]);
-
   // â”€â”€ Alerts â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
   const alerts = useMemo(() => {
@@ -573,148 +564,140 @@ export const EmployeeDashboard: React.FC = () => {
           ? 'هذا الأسبوع'
           : 'هذا الشهر';
 
+  const employeeHero = [
+    {
+      key: 'prod',
+      label: `إنتاج ${periodLabel}`,
+      value: periodLoading ? '…' : formatNumber(kpis.totalProduction),
+      meta: period !== 'daily' ? `متوسط ${formatNumber(kpis.avgPerDay)} / يوم` : `${performance.reportsCount} تقرير`,
+      accent: true as const,
+    },
+    {
+      key: 'rate',
+      label: 'متوسط/ساعة',
+      value: periodLoading ? '…' : formatNumber(performance.avgPerHour),
+      meta: `${formatNumber(performance.totalHours)} ساعة`,
+    },
+    {
+      key: 'plan',
+      label: 'تحقيق الخطة',
+      value: periodLoading ? '…' : (kpis.planAchievement > 0 ? `${kpis.planAchievement}%` : '—'),
+      meta: `متبقي ${formatNumber(kpis.remaining)}`,
+    },
+    {
+      key: 'waste',
+      label: 'هالك',
+      value: periodLoading ? '…' : `${kpis.wasteRatio}%`,
+      meta: formatNumber(kpis.totalWaste),
+    },
+    {
+      key: 'wo',
+      label: 'أوامر نشطة',
+      value: formatNumber(myActiveWorkOrders.length),
+    },
+    {
+      key: 'issues',
+      label: 'صرف مفتوح',
+      value: decisionLoading ? '…' : formatNumber(decisionSnapshot.issues.openCount),
+      meta: `تغليف ${formatNumber(decisionSnapshot.packaging.awaitingUnits)}`,
+    },
+  ];
+
   return (
-    <div className="erp-dashboard-theme space-y-5">
-      <PageHeader
-        title={employee?.name ? `مرحباً، ${employee.name}` : 'لوحة الموظف'}
-        subtitle={`متابعة الأداء التشغيلي — ${periodLabel}`}
-      />
-
-      <SmartFilterBar
-      pageId="dashboard-employee"
-        periods={PERIOD_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
-        activePeriod={period}
-        onPeriodChange={(value) => setPeriod(value as Period)}
-      />
-
-      {/* â”€â”€ ROW 2: Quick Actions â”€â”€ */}
-      <div className="flex items-center gap-2 overflow-x-auto pb-1 -mx-1 px-1 sm:overflow-visible sm:pb-0 sm:mx-0 sm:px-0 sm:flex-wrap">
-        {can('quickAction.view') && (
-          <PrimaryButton
-            type="button"
-            onClick={() => navigate(EMPLOYEE_PORTAL_PATHS.quickAction)}
-            className="shrink-0"
-            iconName="bolt"
-            tone="execute"
-          >
-            الإدخال السريع
-          </PrimaryButton>
-        )}
-        {can('productionIssue.request') && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.productionIssueRequests)}
-            className="shrink-0"
-            iconName="assignment"
-            tone="view"
-          >
-            طلبات صرف الإنتاج
-          </GhostButton>
-        )}
-        {employee?.level === 2 && (
-          <>
+    <DomainHomeShell
+      denseHero
+      eyebrow={employee?.name ? `مرحباً، ${employee.name}` : 'لوحة الموظف'}
+      hero={employeeHero}
+      periods={PERIOD_OPTIONS.map((opt) => ({ value: opt.value, label: opt.label }))}
+      activePeriod={period}
+      onPeriodChange={(value) => setPeriod(value as Period)}
+      refreshing={periodLoading}
+      secondarySummary="إجراءات وروابط سريعة"
+      secondary={(
+        <div className="flex flex-wrap gap-2">
+          {can('quickAction.view') && (
+            <PrimaryButton
+              type="button"
+              onClick={() => navigate(EMPLOYEE_PORTAL_PATHS.quickAction)}
+              iconName="bolt"
+              tone="execute"
+            >
+              الإدخال السريع
+            </PrimaryButton>
+          )}
+          {can('productionIssue.request') && (
             <GhostButton
               type="button"
-              onClick={() => navigate('/my-workers')}
-              className="shrink-0"
-              iconName="supervisor_account"
+              onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.productionIssueRequests)}
+              iconName="assignment"
               tone="view"
             >
-              تفاصيل المشرف
+              طلبات صرف الإنتاج
             </GhostButton>
+          )}
+          {can('inventory.transactions.create') && (
             <GhostButton
               type="button"
-              onClick={() => navigate(SUPERVISOR_PORTAL_PATHS.workerEvaluation)}
-              className="shrink-0"
-              iconName="assignment_ind"
+              onClick={() => navigate('/inventory/movements')}
+              iconName="warehouse"
+              tone="share"
+            >
+              حركة المخزون
+            </GhostButton>
+          )}
+          {(can('departmentConsumables.view') || can('departmentConsumables.create')) && (
+            <GhostButton
+              type="button"
+              onClick={() => navigate('/inventory/department-consumables')}
+              iconName="shopping_bag"
               tone="edit"
             >
-              تقييم العمالة
+              مستهلكات الأقسام
             </GhostButton>
-          </>
-        )}
-        {can('inventory.transactions.create') && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/inventory/movements')}
-            className="shrink-0"
-            iconName="warehouse"
-            tone="share"
-          >
-            حركة المخزون
-          </GhostButton>
-        )}
-        {(can('departmentConsumables.view') || can('departmentConsumables.create')) && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/inventory/department-consumables')}
-            className="shrink-0"
-            iconName="shopping_bag"
-            tone="edit"
-          >
-            مستهلكات الأقسام
-          </GhostButton>
-        )}
-        {can('reports.componentWaste.create') && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/component-waste-reports')}
-            className="shrink-0"
-            iconName="report_problem"
-            tone="undo"
-          >
-            هالك المكونات
-          </GhostButton>
-        )}
-        {can('lineWorkers.view') && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/line-workers')}
-            className="shrink-0"
-            iconName="group_work"
-            tone="submit"
-          >
-            ربط العمالة بالخط
-          </GhostButton>
-        )}
-        {can(transferApprovalPermission as any) && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/inventory/transfer-approvals')}
-            className="shrink-0"
-            iconName="verified_user"
-            tone="approve"
-          >
-            اعتماد التحويلات
-          </GhostButton>
-        )}
-        {(can('productionIssue.request' as any) || can('productionIssue.create' as any)) && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/production/issue-requests')}
-            className="shrink-0"
-            iconName="fact_check"
-            tone="submit"
-          >
-            طلبات صرف الإنتاج
-            {decisionSnapshot.issues.openCount > 0 ? ` (${decisionSnapshot.issues.openCount})` : ''}
-          </GhostButton>
-        )}
-        {(can('reports.packaging.create' as any) || can('reports.view' as any)) && (
-          <GhostButton
-            type="button"
-            onClick={() => navigate('/production/packaging/control')}
-            className="shrink-0"
-            iconName="package_2"
-            tone="share"
-          >
-            تحكم التغليف
-            {decisionSnapshot.packaging.awaitingUnits > 0
-              ? ` (${formatNumber(decisionSnapshot.packaging.awaitingUnits)})`
-              : ''}
-          </GhostButton>
-        )}
-      </div>
+          )}
+          {can('reports.componentWaste.create') && (
+            <GhostButton
+              type="button"
+              onClick={() => navigate('/component-waste-reports')}
+              iconName="report_problem"
+              tone="undo"
+            >
+              هالك المكونات
+            </GhostButton>
+          )}
+          {can('lineWorkers.view') && (
+            <GhostButton
+              type="button"
+              onClick={() => navigate('/line-workers')}
+              iconName="group_work"
+              tone="submit"
+            >
+              ربط العمالة بالخط
+            </GhostButton>
+          )}
+          {can(transferApprovalPermission as any) && (
+            <GhostButton
+              type="button"
+              onClick={() => navigate('/inventory/transfer-approvals')}
+              iconName="verified_user"
+              tone="approve"
+            >
+              اعتماد التحويلات
+            </GhostButton>
+          )}
+          {(can('reports.packaging.create' as any) || can('reports.view' as any)) && (
+            <GhostButton
+              type="button"
+              onClick={() => navigate('/production/packaging/control')}
+              iconName="package_2"
+              tone="share"
+            >
+              تحكم التغليف
+            </GhostButton>
+          )}
+        </div>
+      )}
+    >
 
       {routingShortcutsVisible && (
         <Card>
@@ -984,43 +967,8 @@ export const EmployeeDashboard: React.FC = () => {
         </Card>
       )}
 
-      {periodLoading ? (
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {Array.from({ length: 5 }).map((_, idx) => (
-            <KPICard key={`kpi-period-loading-${idx}`} label="" value="" loading />
-          ))}
-        </div>
-      ) : (
-        <>
-          {/* â”€â”€ ROW 3: KPI Strip — all KPIs in one unified row â”€â”€ */}
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-           {/* <KPICard label="ساعات الإنتاج" value={todayProductionHours} unit="ساعة" iconType="metric" color="green" /> */}
-            <KPICard label="متوسط/ساعة" value={formatNumber(performance.avgPerHour)} unit="وحدة/ساعة" iconType="trend" color="indigo" />
-            <KPICard label="عدد التقارير" value={performance.reportsCount} unit="تقرير" iconType="metric" color="indigo" />
-            <KPICard label="إجمالي الإنتاج" value={formatNumber(kpis.totalProduction)} unit="وحدة" iconType="metric" color="indigo" />
-            <KPICard
-              label="تحقيق الخطة"
-              value={kpis.planAchievement > 0 ? `${kpis.planAchievement}%` : '—'}
-              subValue={`متبقي: ${formatNumber(kpis.remaining)} وحدة`}
-              iconType="trend"
-              color="indigo"
-            />
-          </div>
-
-          {/* متوسط يومي - أسبوع/شهر فقط */}
-          {period !== 'daily' && (
-            <div className="bg-[var(--color-card)] rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-4 flex items-center gap-4">
-              <span className="w-10 h-10 rounded-[var(--border-radius-lg)] bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center shrink-0">
-                <span className="material-icons-round text-violet-600 dark:text-violet-400">bar_chart</span>
-              </span>
-              <div>
-                <p className="text-xs font-bold text-slate-400">متوسط الإنتاج اليومي ({kpis.uniqueDays} يوم عمل)</p>
-                <p className="text-xl font-bold text-violet-600 dark:text-violet-400">{formatNumber(kpis.avgPerDay)} <span className="text-xs font-medium text-slate-400">وحدة/يوم</span></p>
-              </div>
-            </div>
-          )}
-
-          {/* â”€â”€ ROW 4: Main Content — Active Plan + Work Orders â”€â”€ */}
+      <>
+          {/* â”€â”€ Main Content — Active Plan + Work Orders â”€â”€ */}
           <div className="grid grid-cols-1 xl:grid-cols-2 gap-5 items-start">
 
             {/* الملخص والخطة — RIGHT column (col 1 in RTL) */}
@@ -1286,15 +1234,13 @@ export const EmployeeDashboard: React.FC = () => {
               );
             })()}
           </div>
-        </>
-      )}
-
+      </>
 
       {/* Hidden print component */}
       <div style={{ position: 'fixed', left: '-9999px', top: 0 }}>
         <WorkOrderPrint ref={woPrintRef} data={woPrintData} printSettings={printTemplate} />
       </div>
-    </div>
+    </DomainHomeShell>
   );
 };
 

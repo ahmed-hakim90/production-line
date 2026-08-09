@@ -87,6 +87,7 @@ export function DataTable<T>({
   footer,
   className = '',
   loading = false,
+  renderMobileCard,
 }: DataTableProps<T>) {
   const [sortColumnId, setSortColumnId] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
@@ -384,8 +385,86 @@ export function DataTable<T>({
           )}
         </div>
 
-        {/* Table */}
-        <div className="erp-table-scroll">
+        {/* Mobile cards */}
+        <div className="erp-mobile-card-list p-2 md:hidden">
+          {pageRows.length === 0 ? (
+            <div className="px-4 py-10 text-center">
+              <span className="material-icons-round mb-2 block text-[36px] text-[var(--color-text-muted)] opacity-25">{emptyIcon}</span>
+              <p className="text-[13.5px] font-semibold text-[var(--color-text)]">{emptyTitle}</p>
+              {emptySubtitle ? <p className="mt-1 text-[12px] text-[var(--color-text-muted)]">{emptySubtitle}</p> : null}
+            </div>
+          ) : (
+            pageRows.map((row) => {
+              const rowId = getId(row);
+              const isSelected = activeSelectedIds.has(rowId);
+              const [titleCol, ...metaCols] = visibleColumns;
+              const cellValue = (column: (typeof visibleColumns)[number]) => {
+                if (column.render) return column.render(row);
+                const rawValue = column.accessor(row);
+                return formatOperationDateTime(rawValue) ?? String(rawValue ?? '');
+              };
+              return (
+                <div
+                  key={`m-${rowId}`}
+                  role={onRowClick ? 'button' : undefined}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  onClick={() => onRowClick?.(row)}
+                  onKeyDown={(e) => {
+                    if (!onRowClick) return;
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      onRowClick(row);
+                    }
+                  }}
+                  className={[
+                    'rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm',
+                    onRowClick ? 'cursor-pointer active:bg-[var(--color-surface-hover)]' : '',
+                    isSelected ? 'ring-2 ring-primary/30' : '',
+                    getRowClassName?.(row) ?? '',
+                  ].join(' ')}
+                >
+                  {renderMobileCard ? (
+                    renderMobileCard(row)
+                  ) : (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          {canSelectRows ? (
+                            <div className="mb-2" onClick={(e) => e.stopPropagation()}>
+                              <Checkbox checked={isSelected} onCheckedChange={() => toggleSelection(rowId)} />
+                            </div>
+                          ) : null}
+                          {titleCol ? (
+                            <>
+                              <p className="text-[10px] font-semibold text-[var(--color-text-muted)]">{titleCol.header}</p>
+                              <div className="mt-0.5 text-sm font-bold text-[var(--color-text)]">{cellValue(titleCol)}</div>
+                            </>
+                          ) : null}
+                        </div>
+                        {renderActions ? (
+                          <div onClick={(e) => e.stopPropagation()}>{renderActions(row)}</div>
+                        ) : null}
+                      </div>
+                      {metaCols.length > 0 ? (
+                        <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5">
+                          {metaCols.slice(0, 6).map((column) => (
+                            <div key={column.id} className="min-w-0">
+                              <dt className="text-[10px] font-semibold text-[var(--color-text-muted)]">{column.header}</dt>
+                              <dd className="truncate text-xs font-medium text-[var(--color-text)]">{cellValue(column)}</dd>
+                            </div>
+                          ))}
+                        </dl>
+                      ) : null}
+                    </>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
+        {/* Desktop table */}
+        <div className="erp-desktop-table erp-table-scroll hidden md:block">
           <Table className="w-full text-right border-collapse">
             <TableHeader className="sticky top-0 z-10 bg-[var(--color-bg)]">
               <TableRow className="border-b border-[var(--color-border)] hover:bg-transparent">

@@ -82,4 +82,8 @@
 | Spare issue vouchers (list + detail like production issue) | `/repair/spare-issues` |
 | Central spare replenishment (master–detail + pending badge) | `/inventory/spare-parts-replenishment` |
 | HQ center stock / recall | `/inventory/spare-parts-center-stock`, `/inventory/spare-parts-recall` |
-| Ops decision queue (includes repair replenishment / RSI) | Dashboard `OperationalDecisionQueue` |
+| Ops decision queue (includes repair replenishment / RSI) | Dashboard `OperationalDecisionQueue` (admin/factory compact) |
+| Repair ops / admin / tech home | `/repair`, `/repair/technician` |
+| Technician team performance | `/repair/technician-kpis` |
+| Inventory analysis home | `/inventory` |
+| Accounting home (DomainHomeShell) | `/accounting` |

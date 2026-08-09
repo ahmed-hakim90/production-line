@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { toast } from '../../../../components/Toast';
 import { stockService } from '../../services/stockService';
 import { transferApprovalService } from '../../services/transferApprovalService';
 import { warehouseService } from '../../services/warehouseService';
@@ -139,6 +140,7 @@ export function useInventoryControlData() {
   const initialCore = peekPageDataCache<InventoryControlCoreData>(coreCacheKey);
 
   const [loading, setLoading] = useState(() => initialCore == null);
+  const [loadError, setLoadError] = useState(false);
   const [txLoading, setTxLoading] = useState(false);
   const [warehouses, setWarehouses] = useState<Warehouse[]>(() => initialCore?.warehouses ?? []);
   const [balances, setBalances] = useState<StockItemBalance[]>(() => initialCore?.balances ?? []);
@@ -186,10 +188,22 @@ export function useInventoryControlData() {
     const cached = peekPageDataCache<InventoryControlCoreData>(key);
     if (cached) {
       applyCoreData(cached);
+      setLoadError(false);
       setLoading(false);
     } else {
       setLoading(true);
     }
+
+    // Unblock the shell quickly — warehouse list alone is enough for hero count.
+    if (!cached) {
+      try {
+        const whs = await warehouseService.getAllWarehouses();
+        setWarehouses(whs);
+      } catch {
+        // Full load below surfaces the user-facing error.
+      }
+    }
+
     try {
       const { data } = await fetchCachedPageData(
         key,
@@ -270,6 +284,10 @@ export function useInventoryControlData() {
         { force, maxAgeMs: 45_000 },
       );
       applyCoreData(data);
+      setLoadError(false);
+    } catch {
+      setLoadError(true);
+      toast.error('تعذر تحميل لوحة المخازن. حاول التحديث.');
     } finally {
       setLoading(false);
     }
@@ -560,6 +578,7 @@ export function useInventoryControlData() {
 
   return {
     loading,
+    loadError,
     txLoading,
     refresh,
     warehouses,
