@@ -282,6 +282,11 @@ export const TransferApprovals: React.FC = () => {
     setCurrentPage(1);
   }, [statusFilter, warehouseFilter, typeTab, slaOnly]);
 
+  const pendingApprovalCount = useMemo(
+    () => requests.filter((r) => r.status === 'pending').length,
+    [requests],
+  );
+
   const bulkApproveEligible = useMemo(
     () => requests.filter((r) => r.status === 'pending' && r.id && !isSelfProductionEntryRequest(r)),
     [requests, uid, userDisplayName, userEmail],
@@ -536,6 +541,7 @@ export const TransferApprovals: React.FC = () => {
         <div>
           <h2 className="page-title">اعتماد تحويلات المخازن</h2>
           <p className="page-subtitle">
+            {pendingApprovalCount > 0 ? `بانتظار الاعتماد: ${pendingApprovalCount}. ` : ''}
             اعتماد إدخال الإنتاج يرحّل الرصيد إلى «تم الإنتاج» بانتظار التغليف. التحويلات لا تؤثر على المخزون قبل الاعتماد.
           </p>
         </div>

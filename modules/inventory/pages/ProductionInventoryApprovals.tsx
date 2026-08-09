@@ -171,6 +171,14 @@ export const ProductionInventoryApprovals: React.FC = () => {
     [receipts, safeReceiptPage],
   );
 
+  const pendingApprovalCount = useMemo(
+    () =>
+      compensations.filter((row) => row.status === 'pending').length
+      + receipts.filter((row) => row.status === 'submitted').length
+      + disassemblies.filter((row) => row.status === 'submitted').length,
+    [compensations, receipts, disassemblies],
+  );
+
   const approveCompensation = async (row: ComponentCompensationRequest) => {
     if (!row.id) return;
         try {
@@ -270,10 +278,15 @@ export const ProductionInventoryApprovals: React.FC = () => {
 
   if (!can('inventory.view')) return <p className="p-6 text-sm text-slate-500">لا تملك صلاحية عرض المخازن.</p>;
 
+  const pageSubtitle =
+    pendingApprovalCount > 0
+      ? `بانتظار الاعتماد: ${pendingApprovalCount}. اعتماد تعويضات المكونات وطلبات التفكيك واستلام المستلزمات قبل تأثيرها على المخزون.`
+      : 'اعتماد تعويضات المكونات وطلبات التفكيك واستلام المستلزمات قبل تأثيرها على المخزون.';
+
   if (loading && compensations.length === 0 && disassemblies.length === 0 && receipts.length === 0) {
     return (
       <div className="erp-ds-clean space-y-5">
-        <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle="اعتماد تعويضات المكونات وطلبات التفكيك واستلام المستلزمات قبل تأثيرها على المخزون." icon="fact_check" />
+        <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle={pageSubtitle} icon="fact_check" />
         <Skeleton className="h-48 w-full rounded-xl" />
         <Skeleton className="h-48 w-full rounded-xl" />
       </div>
@@ -282,7 +295,7 @@ export const ProductionInventoryApprovals: React.FC = () => {
 
   return (
     <div className="erp-ds-clean space-y-5">
-      <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle="اعتماد تعويضات المكونات وطلبات التفكيك واستلام المستلزمات قبل تأثيرها على المخزون." icon="fact_check" />
+      <PageHeader title="اعتمادات الإنتاج المخزنية" subtitle={pageSubtitle} icon="fact_check" />
       <Card className="!p-0 overflow-hidden" title="تعويضات المكونات">
                 <div className="erp-mobile-card-list p-2">
           {compensations.length === 0 ? (

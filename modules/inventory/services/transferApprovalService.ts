@@ -1,6 +1,7 @@
 import {
   collection,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   orderBy,
@@ -10,6 +11,7 @@ import {
   limit,
   startAfter,
   QueryDocumentSnapshot,
+  type QueryConstraint,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -301,6 +303,44 @@ export const transferApprovalService = {
       cursor = res.nextCursor;
     }
     return rows;
+  },
+
+  /** Sidebar badge: pending transfer / production-entry requests visible to the actor. */
+  async countPending(): Promise<number> {
+    if (!isConfigured) return 0;
+    const countWith = async (constraints: QueryConstraint[]): Promise<number | null> => {
+      try {
+        const snap = await getCountFromServer(tenantQuery(db, COLLECTION, ...constraints));
+        return snap.data().count;
+      } catch (error: unknown) {
+        const code = String((error as { code?: string })?.code || '').toLowerCase();
+        if (code.includes('permission-denied')) return 0;
+        console.error('transferApproval.countPending failed', {
+          message: error instanceof Error ? error.message : String(error),
+        });
+        return null;
+      }
+    };
+
+    const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+    if (!boundWarehouseId) {
+      const counted = await countWith([where('status', '==', 'pending')]);
+      if (counted != null) return counted;
+      return (await this.getByStatus('pending')).length;
+    }
+
+    const [fromCount, toCount] = await Promise.all([
+      countWith([
+        where('status', '==', 'pending'),
+        where('fromWarehouseId', '==', boundWarehouseId),
+      ]),
+      countWith([
+        where('status', '==', 'pending'),
+        where('toWarehouseId', '==', boundWarehouseId),
+      ]),
+    ]);
+    if (fromCount != null && toCount != null) return fromCount + toCount;
+    return (await this.getByStatus('pending')).length;
   },
 
   async getById(id: string): Promise<InventoryTransferRequest | null> {

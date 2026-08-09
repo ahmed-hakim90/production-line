@@ -1,4 +1,16 @@
-import { addDoc, collection, deleteDoc, doc, getDoc, getDocs, orderBy, updateDoc, where } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+  orderBy,
+  updateDoc,
+  where,
+  type QueryConstraint,
+} from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
@@ -151,6 +163,27 @@ export const suppliesReceiptService = {
       orderBy('createdAt', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as SuppliesReceiptOrder));
+  },
+
+  /** Sidebar badge: receipts submitted and waiting for approval. */
+  async countAwaitingApproval(warehouseId?: string): Promise<number> {
+    if (!isConfigured) return 0;
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return 0;
+    const constraints: QueryConstraint[] = [where('status', '==', 'submitted')];
+    if (scope.warehouseId) constraints.push(where('warehouseId', '==', scope.warehouseId));
+    try {
+      const snap = await getCountFromServer(tenantQuery(db, COLLECTION, ...constraints));
+      return snap.data().count;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return 0;
+      console.error('suppliesReceipt.countAwaitingApproval failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      const rows = await this.getAll(warehouseId);
+      return rows.filter((row) => row.status === 'submitted').length;
+    }
   },
 
   async getById(id: string): Promise<SuppliesReceiptOrder | null> {

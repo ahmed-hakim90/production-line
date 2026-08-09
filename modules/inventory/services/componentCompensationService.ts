@@ -2,11 +2,13 @@ import {
   addDoc,
   collection,
   doc,
+  getCountFromServer,
   getDoc,
   getDocs,
   orderBy,
   updateDoc,
   where,
+  type QueryConstraint,
 } from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
@@ -46,6 +48,27 @@ export const componentCompensationService = {
       orderBy('createdAt', 'desc'),
     ));
     return snap.docs.map((d) => ({ id: d.id, ...d.data() } as ComponentCompensationRequest));
+  },
+
+  /** Sidebar badge: compensation requests awaiting approve/reject. */
+  async countAwaitingApproval(warehouseId?: string): Promise<number> {
+    if (!isConfigured) return 0;
+    const scope = await resolveInventoryWarehouseReadScope(warehouseId);
+    if (scope.denied) return 0;
+    const constraints: QueryConstraint[] = [where('status', '==', 'pending')];
+    if (scope.warehouseId) constraints.push(where('warehouseId', '==', scope.warehouseId));
+    try {
+      const snap = await getCountFromServer(tenantQuery(db, COLLECTION, ...constraints));
+      return snap.data().count;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return 0;
+      console.error('componentCompensation.countAwaitingApproval failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      const rows = await this.getAll(warehouseId);
+      return rows.filter((row) => row.status === 'pending').length;
+    }
   },
 
   async getById(id: string): Promise<ComponentCompensationRequest | null> {

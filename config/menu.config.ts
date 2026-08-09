@@ -106,6 +106,18 @@ const badgeSources = {
     );
     return repairSpareIssueService.countPending();
   },
+  pendingTransferApprovals: async (): Promise<number> => {
+    const { transferApprovalService } = await import(
+      '../modules/inventory/services/transferApprovalService'
+    );
+    return transferApprovalService.countPending();
+  },
+  pendingProductionInventoryApprovals: async (): Promise<number> => {
+    const { countPendingProductionInventoryApprovals } = await import(
+      '../modules/inventory/services/productionInventoryApprovalsBadge'
+    );
+    return countPendingProductionInventoryApprovals();
+  },
 };
 
 // ─── Menu Groups ────────────────────────────────────────────────────────────
@@ -344,7 +356,14 @@ export const MENU_CONFIG: MenuGroup[] = [
         permission: 'departmentConsumables.view',
         anyOfPermissions: ['departmentConsumables.view', 'inventory.view'],
       },
-      { key: 'inv-transfer-approvals', label: 'اعتماد تحويلات المخازن', icon: 'verified_user', path: '/inventory/transfer-approvals', permission: 'inventory.view' },
+      {
+        key: 'inv-transfer-approvals',
+        label: 'اعتماد تحويلات المخازن',
+        icon: 'verified_user',
+        path: '/inventory/transfer-approvals',
+        permission: 'inventory.view',
+        badgeSource: badgeSources.pendingTransferApprovals,
+      },
       { key: 'inv-counts', label: 'جرد المخازن', icon: 'fact_check', path: '/inventory/counts', permission: 'inventory.counts.manage' },
       // إنتاج ↔ مخازن
       { key: 'inv-production-issues', label: 'صرف للإنتاج', icon: 'fact_check', path: '/inventory/production-issues', permission: 'inventory.view', badgeSource: badgeSources.pendingProductionIssueRequests },
@@ -355,6 +374,7 @@ export const MENU_CONFIG: MenuGroup[] = [
         path: '/inventory/production-approvals',
         permission: 'inventory.view',
         excludeRoleKeys: ['materials_warehouse'],
+        badgeSource: badgeSources.pendingProductionInventoryApprovals,
       },
       { key: 'inv-production-component-records', label: 'سجلات مكونات الإنتاج', icon: 'receipt_long', path: '/inventory/production-component-records', permission: 'inventory.view' },
       {

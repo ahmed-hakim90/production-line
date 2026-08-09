@@ -1,4 +1,14 @@
-import { addDoc, collection, doc, getDoc, getDocs, orderBy, updateDoc, where } from 'firebase/firestore';
+import {
+  addDoc,
+  collection,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+  orderBy,
+  updateDoc,
+  where,
+} from 'firebase/firestore';
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
@@ -73,6 +83,33 @@ export const disassemblyService = {
       { id: row.id, ...row.data() } as DisassemblyOrder,
     ])).values()]
       .sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+  },
+
+  /** Sidebar badge: disassembly orders submitted and waiting for approval. */
+  async countAwaitingApproval(): Promise<number> {
+    if (!isConfigured) return 0;
+    try {
+      const boundWarehouseId = await getCurrentBoundInventoryWarehouseId();
+      if (!boundWarehouseId) {
+        const snap = await getCountFromServer(
+          tenantQuery(db, COLLECTION, where('status', '==', 'submitted')),
+        );
+        return snap.data().count;
+      }
+      // Bound actors may appear on source and/or target — unique via getAll merge.
+      return (await this.getAll()).filter((row) => row.status === 'submitted').length;
+    } catch (error: unknown) {
+      const code = String((error as { code?: string })?.code || '').toLowerCase();
+      if (code.includes('permission-denied')) return 0;
+      console.error('disassembly.countAwaitingApproval failed', {
+        message: error instanceof Error ? error.message : String(error),
+      });
+      try {
+        return (await this.getAll()).filter((row) => row.status === 'submitted').length;
+      } catch {
+        return 0;
+      }
+    }
   },
 
   async getById(id: string): Promise<DisassemblyOrder | null> {
