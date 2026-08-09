@@ -63,6 +63,8 @@ export {
   getRequestsByStatus,
 } from './approvalEngine';
 
+export { countActionableApprovalsForCurrentUser } from './countActionableApprovalsBadge';
+
 export {
   getApprovalStatusDisplay,
   type ApprovalStatusDisplay,

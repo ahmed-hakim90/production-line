@@ -2191,6 +2191,20 @@
       ]
     },
     {
+      "collectionGroup": "supply_cycles",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "tenantId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "status",
+          "order": "ASCENDING"
+        }
+      ]
+    },
+    {
       "collectionGroup": "supply_cycle_waste_lines",
       "queryScope": "COLLECTION",
       "fields": [
