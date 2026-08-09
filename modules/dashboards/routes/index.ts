@@ -5,5 +5,5 @@ export const DASHBOARD_ROUTES: AppRouteDef[] = [
   { path: '/employee-dashboard', redirectTo: '/' },
   { path: '/factory-dashboard', redirectTo: '/' },
   { path: '/admin-dashboard', redirectTo: '/' },
-  { path: '/supervisor-dashboard', redirectTo: '/' },
+  { path: '/supervisor-dashboard', redirectTo: '/supervisor' },
 ];

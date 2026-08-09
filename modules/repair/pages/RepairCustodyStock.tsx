@@ -469,7 +469,7 @@ export const RepairCustodyStock: React.FC = () => {
           }}
         />
 
-        <div className="mt-4 -mx-1 overflow-x-auto rounded-lg border sm:mx-0">
+        <div className="erp-table-wrap mt-4 -mx-1 overflow-x-auto rounded-lg border sm:mx-0">
           <table className="erp-table w-full min-w-[720px] text-right">
             <thead className="erp-thead">
               <tr>

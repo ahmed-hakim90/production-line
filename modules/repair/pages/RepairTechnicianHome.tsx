@@ -1,10 +1,20 @@
 import React, { useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { ChevronLeft } from 'lucide-react';
-import { PageHeader } from '@/components/PageHeader';
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -13,6 +23,7 @@ import { resolveRepairSettings } from '../config/repairSettings';
 import { useRepairJobs } from '../hooks/useRepairJobs';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import {
+  buildRepairTechnicianDailyOutcomes,
   formatRepairTechnicianDeviceLabel,
   resolveRepairTechnicianHomeRange,
   summarizeRepairTechnicianHome,
@@ -26,6 +37,9 @@ const PERIOD_OPTIONS: { value: RepairTechnicianHomePeriod; label: string }[] = [
   { value: 'weekly', label: 'أسبوعي' },
   { value: 'monthly', label: 'شهري' },
 ];
+
+const CHART_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' };
+const GRID_STROKE = 'color-mix(in srgb, var(--color-border) 80%, transparent)';
 
 function num(value: number): string {
   return new Intl.NumberFormat('ar-EG').format(value);
@@ -102,7 +116,7 @@ function TechJobRowCard({
 }
 
 /**
- * View-only technician home: monthly (default) KPIs + fixed/delayed job lists.
+ * View-only technician home: period KPIs + daily outcomes chart + fixed/delayed job lists.
  * Routed as `/` portal for repair_technician — not the manager KPI screen.
  */
 export const RepairTechnicianHome: React.FC = () => {
@@ -137,6 +151,11 @@ export const RepairTechnicianHome: React.FC = () => {
     [jobs, range, repairSettings.workflow.openStatusIds],
   );
 
+  const dailyOutcomes = useMemo(
+    () => buildRepairTechnicianDailyOutcomes(jobs, range),
+    [jobs, range],
+  );
+
   const displayName = String(userDisplayName || '').trim() || 'فني الصيانة';
 
   if (!canView) {
@@ -151,109 +170,97 @@ export const RepairTechnicianHome: React.FC = () => {
     );
   }
 
+  const hero = [
+    {
+      key: 'requests',
+      label: `طلبات الفترة`,
+      value: loading ? '…' : num(metrics.requestsCount),
+      meta: periodLabel(period),
+      accent: true as const,
+    },
+    {
+      key: 'fixed',
+      label: 'تم الإصلاح',
+      value: loading ? '…' : num(metrics.fixedCount),
+    },
+    {
+      key: 'unrepairable',
+      label: 'غير قابل',
+      value: loading ? '…' : num(metrics.unrepairableCount),
+      toneClassName: 'ops-dash-kpi-card--danger',
+    },
+    {
+      key: 'delayed',
+      label: 'متأخر',
+      value: loading ? '…' : num(metrics.delayedCount),
+      toneClassName: metrics.delayedCount > 0 ? 'ops-dash-kpi-card--warn' : undefined,
+    },
+    {
+      key: 'open',
+      label: 'مفتوحة',
+      value: loading ? '…' : num(metrics.openCount),
+    },
+    {
+      key: 'success',
+      label: 'نسبة النجاح',
+      value: loading ? '…' : formatPct(metrics.successRate, metrics.completedOutcomesCount > 0),
+    },
+  ];
+
   return (
-    <div className="erp-ds-clean space-y-4 p-3 md:p-6" dir={dir}>
-      <PageHeader
-        title="لوحة الفني"
-        subtitle={`مرحباً ${displayName}`}
-        icon="engineering"
-        primaryAction={{
-          label: 'تحديث',
-          icon: 'refresh',
-          onClick: () => void refetch(),
-          disabled: isFetching,
-        }}
-        actions={(
-          <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:flex-wrap sm:items-center">
-            <div className="flex w-full items-center gap-1 rounded-lg bg-muted p-1 sm:w-auto">
-              {PERIOD_OPTIONS.map((opt) => (
-                <button
-                  key={opt.value}
-                  type="button"
-                  onClick={() => setPeriod(opt.value)}
-                  className={`flex-1 rounded-md px-3 py-1.5 text-sm font-semibold transition-colors sm:flex-none ${
-                    period === opt.value
-                      ? 'bg-background text-primary shadow-sm'
-                      : 'text-muted-foreground hover:text-foreground'
-                  }`}
-                >
-                  {opt.label}
-                </button>
-              ))}
-            </div>
-            <Link to={withTenantPath(tenantSlug, '/repair/my-jobs')} className="w-full sm:w-auto">
-              <Button className="w-full sm:w-auto" size="sm" type="button">طلباتي</Button>
-            </Link>
+    <DomainHomeShell
+      denseHero
+      dir={dir}
+      eyebrow={`مرحباً ${displayName}`}
+      hero={hero}
+      periods={PERIOD_OPTIONS}
+      activePeriod={period}
+      onPeriodChange={(value) => setPeriod(value as RepairTechnicianHomePeriod)}
+      onRefresh={() => { void refetch(); }}
+      refreshing={isFetching}
+      rangeLabel={periodLabel(period)}
+      secondarySummary="روابط سريعة"
+      secondary={(
+        <Link to={withTenantPath(tenantSlug, '/repair/my-jobs')}>
+          <Button size="sm" type="button">طلباتي</Button>
+        </Link>
+      )}
+    >
+      <OpsDashPanel title="إنجاز يومي" accent="repair">
+        {loading ? (
+          <p className="py-8 text-center text-sm text-muted-foreground" role="status" aria-live="polite">
+            جاري التحميل...
+          </p>
+        ) : dailyOutcomes.every((d) => d.created === 0 && d.fixed === 0 && d.unrepairable === 0) ? (
+          <div className="ops-module-charts__empty">
+            <span className="ops-module-charts__empty-mark" aria-hidden />
+            <p className="ops-module-charts__empty-label">لا توجد حركة في هذه الفترة</p>
+          </div>
+        ) : (
+          <div className="ops-module-charts__chart ops-module-charts__chart--tall" dir="ltr">
+            <ResponsiveContainer>
+              <ComposedChart data={dailyOutcomes} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                <XAxis dataKey="day" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
+                <Tooltip
+                  formatter={(value: number) => num(value)}
+                  contentStyle={{
+                    background: 'var(--color-card)',
+                    border: '1px solid var(--color-border)',
+                    borderRadius: 10,
+                    fontSize: 11,
+                    direction: 'rtl',
+                  }}
+                />
+                <Bar dataKey="created" name="وارد" fill="#94a3b8" radius={[4, 4, 0, 0]} barSize={10} />
+                <Bar dataKey="fixed" name="تم الإصلاح" fill="#059669" radius={[4, 4, 0, 0]} barSize={10} />
+                <Bar dataKey="unrepairable" name="غير قابل" fill="#e11d48" radius={[4, 4, 0, 0]} barSize={10} />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         )}
-      />
-
-      <div className="grid grid-cols-2 gap-2 md:gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Card>
-          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
-            <CardTitle className="text-xs text-muted-foreground md:text-sm">
-              الطلبات ({periodLabel(period)})
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <p className="text-2xl font-bold tabular-nums md:text-3xl">
-              {loading ? '…' : num(metrics.requestsCount)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
-            <CardTitle className="text-xs text-muted-foreground md:text-sm">تم الإصلاح</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <p className="text-2xl font-bold tabular-nums text-emerald-600 md:text-3xl">
-              {loading ? '…' : num(metrics.fixedCount)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-rose-200 bg-rose-50/50 dark:border-rose-900/40 dark:bg-rose-950/20">
-          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
-            <CardTitle className="text-xs text-rose-900 dark:text-rose-200 md:text-sm">
-              غير قابل للإصلاح
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <p className="text-2xl font-bold tabular-nums text-rose-700 dark:text-rose-300 md:text-3xl">
-              {loading ? '…' : num(metrics.unrepairableCount)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card className="border-amber-200 bg-amber-50/50 dark:border-amber-900/40 dark:bg-amber-950/20">
-          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
-            <CardTitle className="text-xs text-amber-900 dark:text-amber-200 md:text-sm">المتأخر</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <p className="text-2xl font-bold tabular-nums text-amber-800 dark:text-amber-200 md:text-3xl">
-              {loading ? '…' : num(metrics.delayedCount)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
-            <CardTitle className="text-xs text-muted-foreground md:text-sm">مفتوحة حالياً</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <p className="text-2xl font-bold tabular-nums md:text-3xl">
-              {loading ? '…' : num(metrics.openCount)}
-            </p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="p-3 pb-1 md:p-6 md:pb-2">
-            <CardTitle className="text-xs text-muted-foreground md:text-sm">نسبة النجاح</CardTitle>
-          </CardHeader>
-          <CardContent className="p-3 pt-0 md:p-6 md:pt-0">
-            <p className="text-2xl font-bold tabular-nums md:text-3xl">
-              {loading ? '…' : formatPct(metrics.successRate, metrics.completedOutcomesCount > 0)}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+      </OpsDashPanel>
 
       {/* Mobile: card sections — delayed first, then fixed, then unrepairable */}
       <div className="space-y-4 md:hidden">
@@ -524,7 +531,7 @@ export const RepairTechnicianHome: React.FC = () => {
           </CardContent>
         </Card>
       )}
-    </div>
+    </DomainHomeShell>
   );
 };
 

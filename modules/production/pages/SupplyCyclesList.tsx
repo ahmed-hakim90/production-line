@@ -411,7 +411,7 @@ export const SupplyCyclesList: React.FC = () => {
               )}
             </div>
           ) : (
-            <div className="erp-table-scroll overflow-x-auto">
+            <div className="erp-table-wrap erp-table-scroll overflow-x-auto">
               <table className="erp-table w-full text-right text-sm border-collapse min-w-[1000px]">
                 <thead>
                   <tr>

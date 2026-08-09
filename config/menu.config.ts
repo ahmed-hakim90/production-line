@@ -163,6 +163,32 @@ export const MENU_CONFIG: MenuGroup[] = [
     label: 'الإنتاج',
     icon: 'precision_manufacturing',
     children: [
+      {
+        key: 'production-dashboard',
+        label: 'لوحة الإنتاج',
+        icon: 'dashboard',
+        path: '/production',
+        permission: 'plans.view',
+        anyOfPermissions: [
+          'plans.view',
+          'workOrders.view',
+          'reports.view',
+          'factoryDashboard.view',
+          'quickAction.view',
+          'dashboard.view',
+        ],
+        exact: true,
+      },
+      {
+        key: 'supervisor-dashboard',
+        label: 'لوحة المشرف',
+        icon: 'engineering',
+        path: '/supervisor',
+        permission: 'employeeDashboard.view',
+        anyOfPermissions: ['employeeDashboard.view', 'quickAction.view'],
+        selfSupervisorOnly: true,
+        exact: true,
+      },
       { key: 'quick', label: 'إدخال سريع', icon: 'bolt', path: '/quick-action', permission: 'quickAction.view' },
       {
         key: 'production-requests',

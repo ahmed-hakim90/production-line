@@ -3,6 +3,7 @@ import { useEffect, useRef } from 'react';
 import type { WorkOrder, WorkOrderStatus } from '../../../../types';
 import type { WorkOrderGroupBy } from './hooks/useWorkOrderFilters';
 import { WorkOrderRow, type WorkOrderRowView } from './WorkOrderRow';
+import { WorkOrderMobileCard } from './WorkOrderMobileCard';
 import styles from './WorkOrders.module.css';
 import { TableSkeleton } from '@/src/shared/ui/skeletons';
 import { Button } from '@/components/UI';
@@ -121,35 +122,53 @@ export function WorkOrdersTable({
             </div>
           )}
 
-          <table className={`${styles.table} erp-table`}>
-            <thead>
-              <tr>
-                <th>رقم الأمر</th>
-                <th>المنتج + الخط</th>
-                <th>الكمية</th>
-                <th>التقدم</th>
-                <th>الأيام المتبقية</th>
-                <th>الانحراف</th>
-                <th>الحالة</th>
-                <th>إجراءات</th>
-              </tr>
-            </thead>
-            <tbody>
-              {group.rows.map((row) => (
-                <WorkOrderRow
-                  key={row.order.id}
-                  row={row}
-                  onRowClick={onRowClick}
-                  onStatusChange={onStatusChange}
-                  onEdit={onEdit}
-                  onCloseOrder={onCloseOrder}
-                  onDelete={onDelete}
-                  onReopenCompleted={onReopenCompleted}
-                  onOpenScanner={onOpenScanner}
-                />
-              ))}
-            </tbody>
-          </table>
+          <div className="erp-mobile-card-list p-2">
+            {group.rows.map((row) => (
+              <WorkOrderMobileCard
+                key={`m-${row.order.id}`}
+                row={row}
+                onRowClick={onRowClick}
+                onStatusChange={onStatusChange}
+                onEdit={onEdit}
+                onCloseOrder={onCloseOrder}
+                onDelete={onDelete}
+                onReopenCompleted={onReopenCompleted}
+                onOpenScanner={onOpenScanner}
+              />
+            ))}
+          </div>
+
+          <div className={`erp-desktop-table ${styles.tableScroll}`}>
+            <table className={`${styles.table} erp-table`}>
+              <thead>
+                <tr>
+                  <th>رقم الأمر</th>
+                  <th>المنتج + الخط</th>
+                  <th>الكمية</th>
+                  <th>التقدم</th>
+                  <th>الأيام المتبقية</th>
+                  <th>الانحراف</th>
+                  <th>الحالة</th>
+                  <th>إجراءات</th>
+                </tr>
+              </thead>
+              <tbody>
+                {group.rows.map((row) => (
+                  <WorkOrderRow
+                    key={row.order.id}
+                    row={row}
+                    onRowClick={onRowClick}
+                    onStatusChange={onStatusChange}
+                    onEdit={onEdit}
+                    onCloseOrder={onCloseOrder}
+                    onDelete={onDelete}
+                    onReopenCompleted={onReopenCompleted}
+                    onOpenScanner={onOpenScanner}
+                  />
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       ))}
 

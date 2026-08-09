@@ -1,9 +1,20 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
+import { OpsDashPanel } from '@/modules/dashboards/components/OperationsDashboardBoard';
 import { toast } from '../../../components/Toast';
 import { usePermission } from '../../../utils/permissions';
 import { repairBranchService } from '../services/repairBranchService';
@@ -36,7 +47,6 @@ import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveAccessibleRepairBranchIds } from '../lib/repairBranchAccess';
 import { resolveRepairSettings } from '../config/repairSettings';
 import { downloadUtf8Csv } from '../utils/csvExport';
-import { PageHeader } from '@/components/PageHeader';
 import {
   countOpenComplaints,
   countOpenSparePartsReplenishments,
@@ -48,6 +58,9 @@ import {
 import { normalizeTreasuryMonth } from '../lib/repairTreasuryMonthlyClose';
 import { summarizeRepairUnrepairableReasons } from '../lib/repairUnrepairableAnalytics';
 import { sumManufacturerWarrantyPartsCost } from '../lib/repairManufacturerWarranty';
+
+const CHART_TICK = { fontSize: 10, fill: 'var(--color-text-muted)' };
+const GRID_STROKE = 'color-mix(in srgb, var(--color-border) 80%, transparent)';
 
 const fmt = (n: number) => new Intl.NumberFormat('ar-EG').format(n);
 
@@ -529,89 +542,133 @@ export const RepairAdminDashboard: React.FC = () => {
   const loading = !branchesLoaded || (!jobsReady && allowedBranchIds.length > 0);
   const emptyBranches = branchesLoaded && allowedBranchIds.length === 0;
 
-  return (
-    <div className="erp-ds-clean space-y-4 p-3 sm:p-4 md:space-y-5 md:p-6" dir={dir}>
-      <PageHeader
-        title="لوحة أوامر الصيانة - الإدارة"
-        subtitle="مركز قيادة: طوابير التشغيل، التوريد، الخزينة، أداء الفروع، والشكاوى."
-        icon="layout_dashboard"
-        actions={(
-          <div className="flex max-w-full items-center gap-2 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            <Badge variant="secondary" className="w-fit shrink-0 text-xs">
-              عدد الفروع النشطة: {fmt(cards.length)}
-            </Badge>
-            <Link to={path('/repair/admin-orders')} className="shrink-0">
-              <Button size="sm" variant="outline">طلبات الأدمن</Button>
-            </Link>
-            {canViewJobs && (
-              <Link to={path('/repair/jobs')} className="shrink-0">
-                <Button size="sm" variant="outline">الطلبات</Button>
-              </Link>
-            )}
-            {canViewReplenishment && (
-              <Link to={path('/repair/parts-replenishment')} className="shrink-0">
-                <Button size="sm" variant="outline">التوريد</Button>
-              </Link>
-            )}
-            {canViewSpareIssues && (
-              <Link to={path('/repair/spare-issues')} className="shrink-0">
-                <Button size="sm" variant="outline">سندات الصرف</Button>
-              </Link>
-            )}
-            {canViewTreasury && (
-              <Link to={path('/repair/treasury-report')} className="shrink-0">
-                <Button size="sm" variant="outline">تقرير الخزينة</Button>
-              </Link>
-            )}
-            {canViewTechKpis && (
-              <Link to={path('/repair/technician-kpis?period=month')} className="shrink-0">
-                <Button size="sm" variant="outline">أداء الفنيين</Button>
-              </Link>
-            )}
-            {canViewComplaints && (
-              <Link to={path('/repair/complaints')} className="shrink-0">
-                <Button size="sm" variant="outline">الشكاوى</Button>
-              </Link>
-            )}
-            {canViewCustomerRequests && (
-              <Link to={path('/repair/customer-requests')} className="shrink-0">
-                <Button size="sm" variant="outline">طلبات العملاء</Button>
-              </Link>
-            )}
-            {canViewCustody && (
-              <Link to={path('/repair/custody-stock')} className="shrink-0">
-                <Button size="sm" variant="outline">العهدة</Button>
-              </Link>
-            )}
-            {canViewCustody && (
-              <Link to={path('/repair/custody-stock?stockType=unrepairable')} className="shrink-0">
-                <Button size="sm" variant="outline">غير القابل</Button>
-              </Link>
-            )}
-            {canViewReplacements && (
-              <Link to={path('/repair/replacements')} className="shrink-0">
-                <Button size="sm" variant="outline">الاستبدال</Button>
-              </Link>
-            )}
-            {canManagePricing && (
-              <Link to={path('/manufacturing/materials')} className="shrink-0">
-                <Button size="sm" variant="outline">التسعير (الماستر)</Button>
-              </Link>
-            )}
-            {canManageBranches && (
-              <Link to={path('/repair/branches')} className="shrink-0">
-                <Button size="sm" variant="outline">الفروع</Button>
-              </Link>
-            )}
-            {canViewCustomers && (
-              <Link to={path('/customers/kpi')} className="shrink-0">
-                <Button size="sm" variant="outline">مؤشرات العملاء</Button>
-              </Link>
-            )}
-          </div>
-        )}
-      />
+  const visibleQueues = queueCards.filter((card) => card.show);
+  const branchCompareBars = useMemo(
+    () =>
+      cards
+        .map((card) => ({
+          name: card.branch.name || 'فرع',
+          value: card.openJobs,
+        }))
+        .sort((a, b) => b.value - a.value),
+    [cards],
+  );
 
+  const hero = [
+    {
+      key: 'total',
+      label: 'إجمالي الطلبات',
+      value: loading ? '…' : fmt(overview.totalJobs),
+      meta: `${fmt(cards.length)} فرع`,
+      accent: true as const,
+    },
+    {
+      key: 'open',
+      label: 'قيد التنفيذ',
+      value: loading ? '…' : fmt(overview.openJobs),
+    },
+    {
+      key: 'ready',
+      label: 'جاهز للتسليم',
+      value: loading ? '…' : fmt(overview.readyJobs),
+    },
+    {
+      key: 'revenue',
+      label: 'إيراد الصيانة',
+      value: loading ? '…' : fmt(overview.revenue),
+    },
+    {
+      key: 'parts',
+      label: 'مبيعات القطع',
+      value: loading ? '…' : fmt(overview.partsRevenue),
+    },
+    {
+      key: 'warranty',
+      label: 'تكلفة ضمان',
+      value: loading ? '…' : fmt(warrantyPartsCost),
+      meta: 'تكلفة صرف فعلية',
+    },
+  ];
+
+  return (
+    <DomainHomeShell
+      denseHero
+      dir={dir}
+      hero={hero}
+      secondarySummary="إجراءات وروابط الإدارة"
+      secondary={(
+        <div className="flex flex-wrap gap-2">
+          <Link to={path('/repair/admin-orders')}>
+            <Button size="sm" variant="outline">طلبات الأدمن</Button>
+          </Link>
+          {canViewJobs && (
+            <Link to={path('/repair/jobs')}>
+              <Button size="sm" variant="outline">الطلبات</Button>
+            </Link>
+          )}
+          {canViewReplenishment && (
+            <Link to={path('/repair/parts-replenishment')}>
+              <Button size="sm" variant="outline">التوريد</Button>
+            </Link>
+          )}
+          {canViewSpareIssues && (
+            <Link to={path('/repair/spare-issues')}>
+              <Button size="sm" variant="outline">سندات الصرف</Button>
+            </Link>
+          )}
+          {canViewTreasury && (
+            <Link to={path('/repair/treasury-report')}>
+              <Button size="sm" variant="outline">تقرير الخزينة</Button>
+            </Link>
+          )}
+          {canViewTechKpis && (
+            <Link to={path('/repair/technician-kpis?period=month')}>
+              <Button size="sm" variant="outline">أداء الفنيين</Button>
+            </Link>
+          )}
+          {canViewComplaints && (
+            <Link to={path('/repair/complaints')}>
+              <Button size="sm" variant="outline">الشكاوى</Button>
+            </Link>
+          )}
+          {canViewCustomerRequests && (
+            <Link to={path('/repair/customer-requests')}>
+              <Button size="sm" variant="outline">طلبات العملاء</Button>
+            </Link>
+          )}
+          {canViewCustody && (
+            <Link to={path('/repair/custody-stock')}>
+              <Button size="sm" variant="outline">العهدة</Button>
+            </Link>
+          )}
+          {canViewCustody && (
+            <Link to={path('/repair/custody-stock?stockType=unrepairable')}>
+              <Button size="sm" variant="outline">غير القابل</Button>
+            </Link>
+          )}
+          {canViewReplacements && (
+            <Link to={path('/repair/replacements')}>
+              <Button size="sm" variant="outline">الاستبدال</Button>
+            </Link>
+          )}
+          {canManagePricing && (
+            <Link to={path('/manufacturing/materials')}>
+              <Button size="sm" variant="outline">التسعير (الماستر)</Button>
+            </Link>
+          )}
+          {canManageBranches && (
+            <Link to={path('/repair/branches')}>
+              <Button size="sm" variant="outline">الفروع</Button>
+            </Link>
+          )}
+          {canViewCustomers && (
+            <Link to={path('/customers/kpi')}>
+              <Button size="sm" variant="outline">مؤشرات العملاء</Button>
+            </Link>
+          )}
+        </div>
+      )}
+    >
       {loading && (
         <Card className="shadow-sm">
           <CardContent className="py-8 text-sm text-muted-foreground text-center">
@@ -630,76 +687,41 @@ export const RepairAdminDashboard: React.FC = () => {
 
       {!loading && !emptyBranches && (
         <>
-          {/* Overview KPIs: always 2 per row on mobile/tablet */}
-          <div className="grid grid-cols-2 gap-2 md:gap-3 lg:grid-cols-3 xl:grid-cols-6">
-            <Card className="shadow-sm">
-              <CardContent className="space-y-1 p-3 md:pt-5">
-                <p className="text-[11px] text-muted-foreground md:text-xs">إجمالي الطلبات</p>
-                <p className="text-xl font-bold tabular-nums md:text-2xl">{fmt(overview.totalJobs)}</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardContent className="space-y-1 p-3 md:pt-5">
-                <p className="text-[11px] text-muted-foreground md:text-xs">طلبات قيد التنفيذ</p>
-                <p className="text-xl font-bold text-amber-600 tabular-nums md:text-2xl">{fmt(overview.openJobs)}</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardContent className="space-y-1 p-3 md:pt-5">
-                <p className="text-[11px] text-muted-foreground md:text-xs">جاهز للتسليم</p>
-                <p className="text-xl font-bold text-indigo-600 tabular-nums md:text-2xl">{fmt(overview.readyJobs)}</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardContent className="space-y-1 p-3 md:pt-5">
-                <p className="text-[11px] text-muted-foreground md:text-xs">إيراد الصيانة</p>
-                <p className="text-xl font-bold text-emerald-600 tabular-nums md:text-2xl">{fmt(overview.revenue)}</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardContent className="space-y-1 p-3 md:pt-5">
-                <p className="text-[11px] text-muted-foreground md:text-xs">مبيعات قطع الغيار</p>
-                <p className="text-xl font-bold text-sky-600 tabular-nums md:text-2xl">{fmt(overview.partsRevenue)}</p>
-              </CardContent>
-            </Card>
-            <Card className="shadow-sm">
-              <CardContent className="space-y-1 p-3 md:pt-5">
-                <p className="text-[11px] text-muted-foreground md:text-xs">تكلفة قطع تحت ضمان</p>
-                <p className="text-xl font-bold text-violet-700 tabular-nums md:text-2xl dark:text-violet-300">{fmt(warrantyPartsCost)}</p>
-                <p className="text-[10px] text-muted-foreground">من تكلفة الصرف الفعلية (ليس سعر البيع)</p>
-              </CardContent>
-            </Card>
+          <div
+            className="ops-module-charts__qty-row"
+            style={{ gridTemplateColumns: `repeat(${Math.min(5, Math.max(2, visibleQueues.length))}, minmax(0, 1fr))` }}
+          >
+            {visibleQueues.map((card) => (
+              <Link key={card.key} to={card.to} className="ops-module-charts__qty block no-underline">
+                <p className="ops-module-charts__qty-label">{card.label}</p>
+                <p className={`ops-module-charts__qty-value ${card.tone}`}>{fmt(card.count)}</p>
+              </Link>
+            ))}
           </div>
 
-          {can('repair.finance.view') ? (
-            <Card className="shadow-sm">
-              <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
-                <CardTitle className="text-sm md:text-base">الملخص المالي المحمي</CardTitle>
-              </CardHeader>
-              <CardContent className="grid grid-cols-2 gap-2 p-3 pt-0 md:gap-3 md:p-6 md:pt-0 xl:grid-cols-5">
-                {[
-                  ['الإجمالي', overview.grossAmount, 'text-slate-700'],
-                  ['الخصومات', overview.discountAmount, 'text-rose-600'],
-                  ['الصافي', overview.netAmount, 'text-indigo-600'],
-                  ['المحصل', overview.paidAmount, 'text-emerald-600'],
-                  ['المتبقي', overview.balanceDue, 'text-amber-700'],
-                ].map(([label, value, tone]) => (
-                  <div key={String(label)} className="rounded-lg border p-2.5 md:p-3">
-                    <p className="text-[11px] text-muted-foreground md:text-xs">{label}</p>
-                    <p className={`mt-1 text-lg font-bold tabular-nums md:text-xl ${tone}`}>{fmt(Number(value))} ج.م</p>
-                  </div>
-                ))}
-              </CardContent>
-            </Card>
-          ) : null}
+          <OpsDashPanel title="مقارنة الفروع" accent="repair">
+            {branchCompareBars.length === 0 ? (
+              <p className="py-6 text-center text-sm text-muted-foreground">لا توجد فروع للمقارنة.</p>
+            ) : (
+              <div className="ops-module-charts__chart" dir="ltr">
+                <ResponsiveContainer>
+                  <BarChart data={branchCompareBars} margin={{ left: 0, right: 8, top: 8, bottom: 8 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={GRID_STROKE} vertical={false} />
+                    <XAxis dataKey="name" tick={CHART_TICK} axisLine={false} tickLine={false} />
+                    <YAxis allowDecimals={false} tick={CHART_TICK} axisLine={false} tickLine={false} width={28} />
+                    <Tooltip formatter={(v: number) => fmt(v)} />
+                    <Bar dataKey="value" name="مفتوحة" fill="#0ea5e9" radius={[8, 8, 0, 0]} barSize={22} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            )}
+          </OpsDashPanel>
 
-          <Card className="shadow-sm">
-            <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
-              <CardTitle className="text-sm md:text-base">طوابير التشغيل</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3 p-3 pt-0 md:p-6 md:pt-0">
+          <details className="ops-dash-secondary">
+            <summary>تفاصيل الطوابير</summary>
+            <div className="ops-dash-secondary__body space-y-3">
               <div className="grid grid-cols-2 gap-2 md:gap-3 xl:grid-cols-3 2xl:grid-cols-5">
-                {queueCards.filter((card) => card.show).map((card) => (
+                {visibleQueues.map((card) => (
                   <Link
                     key={card.key}
                     to={card.to}
@@ -745,8 +767,30 @@ export const RepairAdminDashboard: React.FC = () => {
                   <p className="mt-1 text-[10px] text-muted-foreground md:text-xs">أصناف تحت الحد الأدنى عبر الفروع المسموحة.</p>
                 </Link>
               </div>
-            </CardContent>
-          </Card>
+            </div>
+          </details>
+
+          {can('repair.finance.view') ? (
+            <Card className="shadow-sm">
+              <CardHeader className="p-3 pb-2 md:p-6 md:pb-2">
+                <CardTitle className="text-sm md:text-base">الملخص المالي المحمي</CardTitle>
+              </CardHeader>
+              <CardContent className="grid grid-cols-2 gap-2 p-3 pt-0 md:gap-3 md:p-6 md:pt-0 xl:grid-cols-5">
+                {[
+                  ['الإجمالي', overview.grossAmount, 'text-slate-700'],
+                  ['الخصومات', overview.discountAmount, 'text-rose-600'],
+                  ['الصافي', overview.netAmount, 'text-indigo-600'],
+                  ['المحصل', overview.paidAmount, 'text-emerald-600'],
+                  ['المتبقي', overview.balanceDue, 'text-amber-700'],
+                ].map(([label, value, tone]) => (
+                  <div key={String(label)} className="rounded-lg border p-2.5 md:p-3">
+                    <p className="text-[11px] text-muted-foreground md:text-xs">{label}</p>
+                    <p className={`mt-1 text-lg font-bold tabular-nums md:text-xl ${tone}`}>{fmt(Number(value))} ج.م</p>
+                  </div>
+                ))}
+              </CardContent>
+            </Card>
+          ) : null}
 
           <Card className="shadow-sm">
             <CardHeader className="pb-2">
@@ -1153,7 +1197,7 @@ export const RepairAdminDashboard: React.FC = () => {
           </Card>
         </>
       )}
-    </div>
+    </DomainHomeShell>
   );
 };
 

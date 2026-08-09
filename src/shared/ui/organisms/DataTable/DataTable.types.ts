@@ -63,4 +63,6 @@ export interface DataTableProps<T> {
   footer?: React.ReactNode;
   className?: string;
   loading?: boolean;
+  /** Optional custom mobile card. Defaults to title = first column + meta grid. */
+  renderMobileCard?: (item: T) => React.ReactNode;
 }

@@ -781,7 +781,7 @@ export const RepairTreasury: React.FC = () => {
             <h2 className="text-base font-semibold">حركات الجلسة الحالية</h2>
             <p className="text-xs text-muted-foreground mt-0.5">مرتبة من الأحدث — تشمل افتتاح اليوم والتحصيلات والمصروفات</p>
           </div>
-          <div className="overflow-x-auto erp-table-scroll">
+          <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
             <table className="erp-table w-full min-w-[640px] text-right border-collapse">
               <thead className="erp-thead">
                 <tr>
@@ -878,7 +878,7 @@ export const RepairTreasury: React.FC = () => {
           }}
           className="mb-0 border-0 rounded-none"
         />
-        <div className="overflow-x-auto erp-table-scroll">
+        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[900px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>

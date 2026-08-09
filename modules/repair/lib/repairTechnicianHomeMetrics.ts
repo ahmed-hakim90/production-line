@@ -227,3 +227,104 @@ export function summarizeRepairTechnicianHome(
 export function formatRepairTechnicianDeviceLabel(job: RepairTechnicianHomeJob): string {
   return deviceLabel(job);
 }
+
+export type RepairTechnicianDailyOutcome = {
+  day: string;
+  created: number;
+  fixed: number;
+  unrepairable: number;
+};
+
+/** Per-day created / fixed / unrepairable counts inside an inclusive local range. */
+export function buildRepairTechnicianDailyOutcomes(
+  jobs: readonly RepairTechnicianHomeJob[],
+  range: RepairTechnicianHomeRange,
+): RepairTechnicianDailyOutcome[] {
+  const days: RepairTechnicianDailyOutcome[] = [];
+  const dayMap = new Map<string, RepairTechnicianDailyOutcome>();
+
+  const cursor = startOfLocalDay(new Date(range.startMs));
+  const end = endOfLocalDay(new Date(range.endMs));
+  while (cursor.getTime() <= end.getTime()) {
+    const key = `${cursor.getFullYear()}-${String(cursor.getMonth() + 1).padStart(2, '0')}-${String(cursor.getDate()).padStart(2, '0')}`;
+    const label = new Intl.DateTimeFormat('ar-EG', { weekday: 'short', day: '2-digit' }).format(cursor);
+    const row: RepairTechnicianDailyOutcome = { day: label, created: 0, fixed: 0, unrepairable: 0 };
+    days.push(row);
+    dayMap.set(key, row);
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const localDayKey = (ms: number): string | null => {
+    const d = new Date(ms);
+    if (!Number.isFinite(d.getTime())) return null;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  for (const job of jobs) {
+    const createdMs = parseTime(job.createdAt);
+    if (createdMs != null && isInRange(createdMs, range)) {
+      const row = dayMap.get(localDayKey(createdMs) || '');
+      if (row) row.created += 1;
+    }
+
+    const fixedMs = resolveRepairJobFixedAtMs(job);
+    if (fixedMs != null && isInRange(fixedMs, range)) {
+      const row = dayMap.get(localDayKey(fixedMs) || '');
+      if (row) row.fixed += 1;
+    }
+
+    const canonical = mapLegacyRepairStatus(job.status);
+    if (isUnrepairableStatus(canonical)) {
+      const outcomeMs = parseTime(job.resolvedAt)
+        ?? parseTime(job.closedAt)
+        ?? parseTime(job.updatedAt)
+        ?? parseTime(job.createdAt);
+      if (outcomeMs != null && isInRange(outcomeMs, range)) {
+        const row = dayMap.get(localDayKey(outcomeMs) || '');
+        if (row) row.unrepairable += 1;
+      }
+    }
+  }
+
+  return days;
+}
+
+export type RepairOpenAgingBar = {
+  name: string;
+  value: number;
+};
+
+const OPEN_AGING_BUCKETS: { name: string; minDays: number; maxDays: number | null }[] = [
+  { name: '0–1 يوم', minDays: 0, maxDays: 1 },
+  { name: '1–3 أيام', minDays: 1, maxDays: 3 },
+  { name: '3–7 أيام', minDays: 3, maxDays: 7 },
+  { name: '7–14 يوم', minDays: 7, maxDays: 14 },
+  { name: '+14 يوم', minDays: 14, maxDays: null },
+];
+
+/** Open-job age distribution (by createdAt) for ops aging chart. */
+export function buildRepairOpenAgingBars(
+  jobs: readonly RepairTechnicianHomeJob[],
+  openStatusIds: readonly string[],
+  nowMs: number = Date.now(),
+): RepairOpenAgingBar[] {
+  const counts = OPEN_AGING_BUCKETS.map((b) => ({ name: b.name, value: 0 }));
+
+  for (const job of jobs) {
+    if (!isRepairJobOpenStatus(job.status, openStatusIds)) continue;
+    const createdMs = parseTime(job.createdAt);
+    if (createdMs == null) continue;
+    const ageDays = Math.max(0, (nowMs - createdMs) / (24 * 60 * 60 * 1000));
+    for (let i = 0; i < OPEN_AGING_BUCKETS.length; i += 1) {
+      const bucket = OPEN_AGING_BUCKETS[i];
+      const underMax = bucket.maxDays == null || ageDays < bucket.maxDays;
+      const atMin = ageDays >= bucket.minDays;
+      if (atMin && underMax) {
+        counts[i].value += 1;
+        break;
+      }
+    }
+  }
+
+  return counts;
+}

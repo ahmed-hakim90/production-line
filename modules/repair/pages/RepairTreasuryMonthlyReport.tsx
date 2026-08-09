@@ -519,7 +519,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
             {report ? `الحركات ${fmt(report.reconciliation.entriesCount)} — نواقص الوسيلة ${fmt(report.reconciliation.missingPaymentMethod)} — المركز ${fmt(report.reconciliation.missingCostCenter)} — القيد ${fmt(report.reconciliation.missingJournalReference)}` : 'لا توجد بيانات'}
           </div>
         </div>
-        <div className="overflow-x-auto erp-table-scroll">
+        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[760px] text-right border-collapse">
             <thead className="erp-thead"><tr>
               <th className="erp-th">الفرع</th><th className="erp-th">مركز التكلفة</th><th className="erp-th">وسيلة الدفع</th>
@@ -548,7 +548,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
           <h2 className="text-base font-semibold">ملخص الفروع</h2>
           <p className="text-xs text-muted-foreground mt-0.5">إيراد {fmt(totals.income)} — مصروف {fmt(totals.expense)}</p>
         </div>
-        <div className="overflow-x-auto erp-table-scroll">
+        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[800px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>
@@ -647,7 +647,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
         <div className="border-b px-4 py-3">
           <h2 className="text-base font-semibold">التفصيل اليومي</h2>
         </div>
-        <div className="overflow-x-auto erp-table-scroll">
+        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[800px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>
@@ -701,7 +701,7 @@ export const RepairTreasuryMonthlyReport: React.FC = () => {
           <h2 className="text-base font-semibold">تفاصيل الجلسات</h2>
           <p className="text-xs text-muted-foreground mt-0.5">{filteredSessions.length} جلسة مطابقة</p>
         </div>
-        <div className="overflow-x-auto erp-table-scroll">
+        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[900px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>

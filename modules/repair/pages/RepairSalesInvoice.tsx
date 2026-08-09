@@ -1080,7 +1080,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
                 )}
               </div>
             </div>
-            <div className="overflow-x-auto erp-table-scroll">
+            <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
               <table className="erp-table w-full min-w-[700px] text-right border-collapse">
                 <thead className="erp-thead">
                   <tr>
@@ -1239,7 +1239,7 @@ export const RepairSalesInvoicePage: React.FC = () => {
           )}
           className="mb-0 border-0 rounded-none"
         />
-        <div className="overflow-x-auto erp-table-scroll">
+        <div className="erp-table-wrap overflow-x-auto erp-table-scroll">
           <table className="erp-table w-full min-w-[980px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>

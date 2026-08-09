@@ -784,7 +784,7 @@ export const CustomerDetail: React.FC = () => {
                 ))}
               </div>
 
-              <div className="overflow-x-auto">
+              <div className="erp-table-wrap overflow-x-auto">
                 {financialTab === 'repairs' || financialTab === 'warranty' ? (
                   <table className="w-full min-w-[980px] text-sm">
                     <thead><tr className="border-b text-right text-xs text-muted-foreground"><th className="p-2">الطلب</th><th className="p-2">التاريخ</th><th className="p-2">المنتجات والبنود</th><th className="p-2">الضمان</th><th className="p-2">الإجمالي</th><th className="p-2">الخصم/الإعفاء</th><th className="p-2">المدفوع</th><th className="p-2">المتبقي</th><th className="p-2">التكلفة</th></tr></thead>

@@ -26,11 +26,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { PageHeader } from '@/components/PageHeader';
 import { DataPaginationFooter } from '@/src/components/erp/DataPaginationFooter';
-import { KPICard } from '@/src/components/erp/KPICard';
 import { SmartFilterBar } from '@/src/components/erp/SmartFilterBar';
 import { withTenantPath } from '@/lib/tenantPaths';
+import { DomainHomeShell } from '@/modules/dashboards/components/DomainHomeShell';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { usePermission } from '../../../utils/permissions';
@@ -543,44 +542,112 @@ export const RepairTechnicianKPIs: React.FC = () => {
     );
   }
 
-  return (
-    <div className="erp-ds-clean space-y-4 p-4 md:p-6 w-full" dir={dir}>
-      <PageHeader
-        title="أداء الفنيين"
-        subtitle={`تحليل الإنجاز والسرعة والإيراد والمتأخر — ${periodLabel}`}
-        icon="analytics"
-        backAction={{ to: withTenantPath(tenantSlug, '/repair') }}
-        actions={(
-          <div className="flex flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  className="gap-1.5"
-                  disabled={technicianRows.length === 0 && delayedInScope.length === 0}
-                >
-                  <FileDown className="h-4 w-4" aria-hidden />
-                  تصدير
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem disabled={technicianRows.length === 0} onClick={exportCsv}>
-                  ملخص الفنيين (CSV)
-                </DropdownMenuItem>
-                <DropdownMenuItem disabled={delayedInScope.length === 0} onClick={exportDelayedCsv}>
-                  الطلبات المتأخرة (CSV)
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button type="button" size="sm" variant="ghost" onClick={resetFilters}>
-              إعادة تعيين
-            </Button>
-          </div>
-        )}
-      />
+  const hero = [
+    {
+      key: 'total',
+      label: 'إجمالي الأجهزة',
+      value: jobsReady ? fmt(totals.totalJobs) : '…',
+      meta: `${fmt(totals.technicianCount)} فني`,
+      accent: true as const,
+    },
+    {
+      key: 'success',
+      label: 'نسبة النجاح',
+      value: jobsReady ? fmtPct(totals.successRate) : '…',
+      meta: 'من الطلبات المنتهية',
+    },
+    {
+      key: 'avg',
+      label: 'متوسط الإصلاح',
+      value: jobsReady ? fmtDays(totals.avgRepairDays) : '…',
+      meta: 'يوم',
+    },
+    {
+      key: 'revenue',
+      label: 'إيراد التسليم',
+      value: jobsReady ? fmtMoney(totals.revenue) : '…',
+    },
+    {
+      key: 'open',
+      label: 'جاري الآن',
+      value: jobsReady ? fmt(totals.open) : '…',
+      meta: totals.ready > 0 ? `${fmt(totals.ready)} جاهز` : undefined,
+    },
+    {
+      key: 'delayed',
+      label: 'متأخر',
+      value: jobsReady ? fmt(totals.delayed) : '…',
+      toneClassName: totals.delayed > 0 ? 'ops-dash-kpi-card--warn' : undefined,
+    },
+  ];
 
+  return (
+    <DomainHomeShell
+      denseHero
+      dir={dir}
+      eyebrow={periodLabel}
+      hero={hero}
+      periods={REPAIR_TECH_KPI_PERIODS.map((p) => ({ value: p.value, label: p.label }))}
+      activePeriod={period}
+      onPeriodChange={(value) => applyPeriod(value as RepairTechKpiPeriod)}
+      periodExtra={
+        period === 'custom' ? (
+          <div className="ops-dash-custom-dates">
+            <input
+              type="date"
+              value={from}
+              onChange={(e) => {
+                setPeriod('custom');
+                setFrom(e.target.value);
+              }}
+              aria-label="من تاريخ"
+            />
+            <input
+              type="date"
+              value={to}
+              onChange={(e) => {
+                setPeriod('custom');
+                setTo(e.target.value);
+              }}
+              aria-label="إلى تاريخ"
+            />
+          </div>
+        ) : null
+      }
+      secondarySummary="تصدير وإجراءات"
+      secondary={(
+        <div className="flex flex-wrap items-center gap-2">
+          <Link to={withTenantPath(tenantSlug, '/repair')}>
+            <Button type="button" size="sm" variant="outline">العودة للصيانة</Button>
+          </Link>
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                disabled={technicianRows.length === 0 && delayedInScope.length === 0}
+              >
+                <FileDown className="h-4 w-4" aria-hidden />
+                تصدير
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem disabled={technicianRows.length === 0} onClick={exportCsv}>
+                ملخص الفنيين (CSV)
+              </DropdownMenuItem>
+              <DropdownMenuItem disabled={delayedInScope.length === 0} onClick={exportDelayedCsv}>
+                الطلبات المتأخرة (CSV)
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+          <Button type="button" size="sm" variant="ghost" onClick={resetFilters}>
+            إعادة تعيين
+          </Button>
+        </div>
+      )}
+    >
       <Card>
         <CardContent className="p-0">
           <SmartFilterBar
@@ -588,9 +655,6 @@ export const RepairTechnicianKPIs: React.FC = () => {
             searchPlaceholder="بحث باسم الفني أو المعرف..."
             searchValue={technicianQuery}
             onSearchChange={setTechnicianQuery}
-            periods={REPAIR_TECH_KPI_PERIODS.map((p) => ({ value: p.value, label: p.label }))}
-            activePeriod={period}
-            onPeriodChange={(value) => applyPeriod(value as RepairTechKpiPeriod)}
             filters={[
               {
                 key: 'branch',
@@ -604,28 +668,12 @@ export const RepairTechnicianKPIs: React.FC = () => {
                   })),
                 ],
               },
-              ...(period === 'custom'
-                ? [
-                    { key: 'from', label: 'من تاريخ', type: 'date' as const, defaultVisible: true },
-                    { key: 'to', label: 'إلى تاريخ', type: 'date' as const, defaultVisible: true },
-                  ]
-                : []),
             ]}
             filterValues={{
               branch: branchFilter,
-              from,
-              to,
             }}
             onFilterChange={(key, value) => {
               if (key === 'branch') setBranchFilter(value);
-              if (key === 'from') {
-                setPeriod('custom');
-                setFrom(value);
-              }
-              if (key === 'to') {
-                setPeriod('custom');
-                setTo(value);
-              }
             }}
             extra={(
               <div className="flex items-center gap-2">
@@ -656,55 +704,6 @@ export const RepairTechnicianKPIs: React.FC = () => {
           />
         </CardContent>
       </Card>
-
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-3 xl:grid-cols-6">
-        <KPICard
-          label="إجمالي الأجهزة"
-          value={jobsReady ? fmt(totals.totalJobs) : '…'}
-          subValue={`${fmt(totals.technicianCount)} فني`}
-          iconType="metric"
-          color="indigo"
-          loading={!jobsReady}
-        />
-        <KPICard
-          label="نسبة النجاح"
-          value={jobsReady ? fmtPct(totals.successRate) : '…'}
-          subValue="من الطلبات المنتهية"
-          iconType="trend"
-          color={totals.successRate >= 80 ? 'green' : totals.successRate >= 50 ? 'amber' : 'red'}
-          loading={!jobsReady}
-        />
-        <KPICard
-          label="متوسط الإصلاح"
-          value={jobsReady ? fmtDays(totals.avgRepairDays) : '…'}
-          unit="يوم"
-          iconType="metric"
-          color="gray"
-          loading={!jobsReady}
-        />
-        <KPICard
-          label="إيراد التسليم"
-          value={jobsReady ? fmtMoney(totals.revenue) : '…'}
-          iconType="money"
-          color="green"
-          loading={!jobsReady}
-        />
-        <KPICard
-          label="جاري الآن"
-          value={jobsReady ? fmt(totals.open) : '…'}
-          subValue={totals.ready > 0 ? `${fmt(totals.ready)} جاهز` : undefined}
-          iconType="metric"
-          color="amber"
-          loading={!jobsReady}
-        />
-        <KPICard
-          label="متأخر عن الموعد"
-          value={jobsReady ? fmt(totals.delayed) : '…'}
-          iconType="metric"
-          color={totals.delayed > 0 ? 'red' : 'gray'}
-          loading={!jobsReady}
-        />
-      </div>
 
       {topPerformers.length > 0 && (
         <Card>
@@ -785,7 +784,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                 <Badge variant="destructive">{fmt(delayedInScope.length)}</Badge>
               </CardHeader>
               <CardContent className="p-0">
-                <div className="overflow-x-auto">
+                <div className="erp-table-wrap overflow-x-auto">
                   <table className="w-full text-xs">
                     <thead className="bg-muted">
                       <tr>
@@ -842,7 +841,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
             <CardTitle className="text-base">ملخص الفنيين</CardTitle>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="overflow-x-auto">
+            <div className="erp-table-wrap overflow-x-auto">
               <table className="table erp-table w-full min-w-[980px] text-sm">
                 <thead className="erp-thead">
                   <tr>
@@ -1115,7 +1114,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </DomainHomeShell>
   );
 };
 
@@ -1412,7 +1411,7 @@ function TechnicianDetail({
       )}
 
       {detailTab === 'delayed' && (
-        <div className="overflow-x-auto rounded border">
+        <div className="erp-table-wrap overflow-x-auto rounded border">
           <table className="w-full text-xs">
             <thead className="bg-muted">
               <tr>
@@ -1456,7 +1455,7 @@ function TechnicianDetail({
       )}
 
       {detailTab === 'recent' && (
-        <div className="overflow-x-auto rounded border">
+        <div className="erp-table-wrap overflow-x-auto rounded border">
           <table className="w-full text-xs">
             <thead className="bg-muted">
               <tr>

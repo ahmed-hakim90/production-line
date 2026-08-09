@@ -515,7 +515,7 @@ export const RepairSettings: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
+          <div className="erp-table-wrap rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
             <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">
@@ -640,7 +640,7 @@ export const RepairSettings: React.FC = () => {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
+          <div className="erp-table-wrap rounded-lg border border-[var(--color-border)]/70 bg-muted/20 overflow-x-auto overscroll-x-contain -mx-1 px-1 sm:mx-0 sm:px-0">
             <Table className="min-w-[640px]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent border-b border-[var(--color-border)]/80">

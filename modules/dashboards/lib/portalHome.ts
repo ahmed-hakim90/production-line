@@ -77,6 +77,8 @@ export function resolvePortalKind(checker: PortalPermissionChecker): PortalKind 
 
 /** Supervisor day-to-day entry points (curated; one clear path each). */
 export const SUPERVISOR_PORTAL_PATHS = {
+  dashboard: '/supervisor',
+  myWorkers: '/my-workers',
   quickAction: '/quick-action',
   productionIssueRequests: '/production/issue-requests',
   teamActions: '/production/requests',

@@ -2389,15 +2389,70 @@ table.erp-table tbody tr[data-selected="true"] {
 /* Shared responsive helpers for list pages */
 .erp-mobile-card-list {
   display: none;
+  flex-direction: column;
+  gap: 0.5rem;
 }
 
 .erp-desktop-table {
   display: block;
+  width: 100%;
+  min-width: 0;
 }
 
 .erp-table-scroll {
   overflow: auto;
   max-height: 68vh;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+/* Wide tables: prefer safe horizontal scroll over page blowout */
+.erp-table-wrap {
+  width: 100%;
+  min-width: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
+}
+
+.ops-module-charts__qty-row--4 {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 640px) {
+  .ops-module-charts__qty-row--4 {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 767px) {
+  .erp-mobile-card-list {
+    display: flex !important;
+  }
+  .erp-desktop-table {
+    display: none !important;
+  }
+
+  table.erp-table th,
+  table.erp-table td,
+  .erp-table th,
+  .erp-table td {
+    padding: 0.5rem 0.65rem;
+    font-size: 12px;
+  }
+
+  .ops-module-charts__qty-row {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  }
+}
+
+@media (min-width: 768px) {
+  .erp-mobile-card-list {
+    display: none !important;
+  }
+  .erp-desktop-table {
+    display: block !important;
+  }
 }
 
 /* Mobile + tablet-first utilities (up to 1024) */
@@ -3214,6 +3269,34 @@ input[type="radio"] {
   .ops-dash-kpi-grid {
     grid-template-columns: repeat(4, minmax(0, 1fr));
   }
+}
+
+.ops-dash-kpi-grid--dense {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@media (min-width: 768px) {
+  .ops-dash-kpi-grid--dense {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (min-width: 1280px) {
+  .ops-dash-kpi-grid--dense {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.ops-dash-domain-body {
+  min-width: 0;
+}
+
+.ops-dash-board--data-first .ops-dash-domain-body {
+  order: 3;
+}
+
+.ops-dash-board--data-first .ops-dash-secondary {
+  order: 4;
 }
 
 .ops-dash-kpi-card {
