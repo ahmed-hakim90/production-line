@@ -288,8 +288,61 @@ export const Warehouses: React.FC = () => {
           <p className="text-sm text-[var(--color-text-muted)] p-4">لا توجد مخازن مطابقة للفلاتر.</p>
         ) : (
           <>
-            <div className="overflow-x-auto">
-              <table className="erp-table w-full text-sm">
+            <div className="erp-mobile-card-list p-2">
+              {pagedRows.map((w) => {
+                const workspacePath = w.id
+                  ? ((w.warehouseRole || 'general') === 'maintenance_center'
+                    ? repairCenterWarehouseMenuPath(w.id)
+                    : `/inventory/warehouses/${w.id}`)
+                  : '';
+                const branchMeta = w.id ? warehouseBranchMap.get(w.id) : undefined;
+                return (
+                  <div
+                    key={`m-${w.id || w.code}`}
+                    className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        {w.id ? (
+                          <Link
+                            className="text-sm font-semibold text-primary underline-offset-2 hover:underline"
+                            to={withTenantPath(tenantSlug, workspacePath)}
+                          >
+                            {w.name}
+                          </Link>
+                        ) : (
+                          <p className="text-sm font-semibold">{w.name}</p>
+                        )}
+                        <p className="mt-0.5 font-mono text-xs text-muted-foreground">{w.code}</p>
+                        <p className="mt-1 text-xs text-slate-600">{ROLE_LABELS[w.warehouseRole || 'general']}</p>
+                      </div>
+                      <span className="text-xs font-bold">{w.isActive === false ? 'غير نشط' : 'نشط'}</span>
+                    </div>
+                    <dl className="mt-2 grid grid-cols-1 gap-1 text-xs text-slate-600">
+                      <div>الفرع: {branchMeta?.branchName || '—'}</div>
+                      <div>توجيه الإنتاج: {(w.id && routingUsageByWarehouseId.get(w.id)?.join('، ')) || '—'}</div>
+                    </dl>
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      {w.id ? (
+                        <Link to={withTenantPath(tenantSlug, workspacePath)}>
+                          <Button type="button" size="sm" variant="outline">مساحة المخزن</Button>
+                        </Link>
+                      ) : null}
+                      {canManage ? (
+                        <>
+                          <Button type="button" size="sm" variant="outline" onClick={() => startEdit(w)}>تعديل</Button>
+                          <Button type="button" size="sm" variant="outline" onClick={() => void handleDelete(w)} disabled={deletingId === w.id}>
+                            {deletingId === w.id ? 'جاري الحذف...' : 'حذف'}
+                          </Button>
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="erp-desktop-table overflow-x-auto">
+              <table className="erp-table w-full min-w-[860px] text-sm">
                 <thead className="erp-thead">
                   <tr>
                     <th className="erp-th text-start">الاسم</th>

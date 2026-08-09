@@ -2576,8 +2576,83 @@ export const Products: React.FC = () => {
             )}
           </div>
         ) : layoutMode === 'table' ? (
-        <div className="overflow-x-auto">
-          <table className="erp-table w-full text-right border-collapse">
+        <>
+        <div className="erp-mobile-card-list p-2">
+          {sorted.length === 0 ? (
+            <div className="px-4 py-12 text-center text-slate-400">
+              <ProductIcon name="inventory_2" className="text-5xl mb-3 block opacity-30 mx-auto" />
+              <p className="font-bold">لا توجد منتجات{search || categoryFilter || stockFilter || manufacturedFilter ? ' مطابقة للبحث' : ' بعد'}</p>
+            </div>
+          ) : (
+            paginated.map((product) => {
+              const finalBalance = productWarehouseBalances.getValue(planSettings?.finalProductWarehouseId, product.id);
+              return (
+                <div
+                  key={`m-${product.id}`}
+                  className={`rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm ${selectedIds.has(product.id) ? 'ring-1 ring-primary/40' : ''}`}
+                  onClick={() => setDetailDrawerProductId(product.id)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      setDetailDrawerProductId(product.id);
+                    }
+                  }}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      className="mt-1 cursor-pointer"
+                      checked={selectedIds.has(product.id)}
+                      onChange={() => toggleRow(product.id)}
+                      onClick={(e) => e.stopPropagation()}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-bold">{shortProductName(product.name)}</p>
+                      <p className="font-mono text-[11px] text-slate-400">{product.code}</p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-bold ${
+                          product.isManufactured === false ? 'bg-amber-50 text-amber-700' : 'bg-sky-50 text-sky-700'
+                        }`}>
+                          {product.isManufactured === false ? 'غير تصنيعي' : 'تصنيعي'}
+                        </span>
+                        {product.category ? <Badge variant="neutral">{product.category}</Badge> : null}
+                      </div>
+                    </div>
+                  </div>
+                  <dl className="mt-2 grid grid-cols-2 gap-2 text-sm">
+                    {visibleColumns.stockLevel ? (
+                      <div>
+                        <dt className="text-[10px] text-muted-foreground">منتج تام</dt>
+                        <dd className="font-bold tabular-nums">{formatNumber(finalBalance)}</dd>
+                      </div>
+                    ) : null}
+                    {canViewSellingPrice && visibleColumns.sellingPrice ? (
+                      <div>
+                        <dt className="text-[10px] text-muted-foreground">سعر البيع</dt>
+                        <dd className="tabular-nums">
+                          {formatCost((_rawProducts.find((r) => r.id === product.id)?.sellingPrice ?? 0))} ج.م
+                        </dd>
+                      </div>
+                    ) : null}
+                  </dl>
+                  <div className="mt-2 flex flex-wrap gap-1" onClick={(e) => e.stopPropagation()}>
+                    <TableIconAction action="view" onClick={() => setDetailDrawerProductId(product.id)} />
+                    {canUpdateProductModal && (
+                      <TableIconAction action="edit" onClick={() => openEdit(product.id)} />
+                    )}
+                    {can("products.delete") && (
+                      <TableIconAction action="delete" onClick={() => setDeleteConfirmId(product.id)} />
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
+        <div className="erp-desktop-table overflow-x-auto">
+          <table className="erp-table w-full min-w-[960px] text-right border-collapse">
             <thead className="erp-thead">
               <tr>
                 <th className="erp-th w-10 text-center">
@@ -2838,6 +2913,7 @@ export const Products: React.FC = () => {
             </tbody>
           </table>
         </div>
+        </>
         ) : (
         <div className="p-4">
           {sorted.length === 0 ? (

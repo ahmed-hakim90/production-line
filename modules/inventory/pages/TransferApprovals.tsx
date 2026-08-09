@@ -654,7 +654,7 @@ export const TransferApprovals: React.FC = () => {
           <div className="p-10 text-center text-sm text-slate-400">لا توجد طلبات تحويل في هذا الفلتر.</div>
         ) : (
           <div className="space-y-2.5">
-            <div className="md:hidden space-y-2.5 p-3">
+            <div className="erp-mobile-card-list p-3">
               {pagedRows.map((row) => {
                 const requestType = row.requestType || 'transfer';
                 const fromName = requestType === 'production_entry'
@@ -738,7 +738,7 @@ export const TransferApprovals: React.FC = () => {
                 );
               })}
             </div>
-            <div className="hidden md:block overflow-x-auto">
+            <div className="erp-desktop-table overflow-x-auto">
             <table className="erp-table w-full text-right border-collapse">
               <thead className="erp-thead">
                 <tr>

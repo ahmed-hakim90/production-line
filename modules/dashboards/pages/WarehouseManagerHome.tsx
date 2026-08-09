@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Link, Navigate, useParams } from 'react-router-dom';
-import { PageHeader } from '@/components/PageHeader';
+import { DomainHomeShell } from '../components/DomainHomeShell';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { withTenantPath } from '@/lib/tenantPaths';
 import { useAppStore } from '../../../store/useAppStore';
@@ -34,9 +34,9 @@ export const WarehouseManagerHome: React.FC = () => {
       .then((rows) => {
         if (!cancelled) setWarehouses(filterWarehouses(rows));
       })
-      .catch((error: any) => {
+      .catch(() => {
         if (!cancelled) {
-          setLoadError(error?.message || 'تعذر تحميل المخازن.');
+          setLoadError('تعذر تحميل المخازن. حاول مرة أخرى.');
           setWarehouses([]);
         }
       });
@@ -102,12 +102,33 @@ export const WarehouseManagerHome: React.FC = () => {
   }
 
   // Scoped to multiple / none configured — show chooser.
+  const hero = [
+    {
+      key: 'count',
+      label: 'مخازن النطاق',
+      value: String(warehouses.length),
+      accent: true,
+    },
+    {
+      key: 'greeting',
+      label: 'المستخدم',
+      value: userDisplayName || '—',
+    },
+  ];
+
   return (
-    <div className="space-y-4 p-4 md:p-6">
-      <PageHeader
-        title={`مرحباً${userDisplayName ? `، ${userDisplayName}` : ''}`}
-        subtitle="لوحة مسؤول المخزن — اختر مساحة المخزن للمتابعة."
-      />
+    <DomainHomeShell
+      denseHero
+      eyebrow="لوحة مسؤول المخزن"
+      hero={hero}
+      secondarySummary="اختيار مساحة العمل"
+      secondary={(
+        <p className="text-xs text-[var(--color-text-muted)]">
+          المسار الافتراضي المحسوب: <span dir="ltr">{homePath}</span>
+        </p>
+      )}
+      dir="rtl"
+    >
       {loadError ? (
         <p className="text-sm text-rose-700">{loadError}</p>
       ) : null}
@@ -127,7 +148,7 @@ export const WarehouseManagerHome: React.FC = () => {
                   boundWarehouseRole: w.warehouseRole,
                 }),
               )}
-              className="rounded-xl border border-[var(--color-border)] p-4 hover:bg-[var(--color-surface-hover)]"
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-4 hover:bg-[var(--color-surface-hover)]"
             >
               <div className="font-bold text-sm">{w.name}</div>
               <div className="text-xs text-[var(--color-text-muted)] mt-1">
@@ -137,9 +158,6 @@ export const WarehouseManagerHome: React.FC = () => {
           ))}
         </div>
       )}
-      <p className="text-xs text-[var(--color-text-muted)]">
-        المسار الافتراضي المحسوب: <span dir="ltr">{homePath}</span>
-      </p>
-    </div>
+    </DomainHomeShell>
   );
 };

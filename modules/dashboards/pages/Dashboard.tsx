@@ -21,6 +21,7 @@ import { filterProductionProducts } from '@/modules/production/utils/isProductio
 import { Button } from '../components/UI';
 import { PageContentSkeleton } from '@/src/shared/ui/skeletons';
 import { EmployeeDashboardWidget } from '../../../components/EmployeeDashboardWidget';
+import { DomainHomeShell } from '../components/DomainHomeShell';
 import { ModuleChartsHomeBoard } from '../components/ModuleChartsHomeBoard';
 import { useAppStore, getProductionReportsRangeCacheKey } from '../../../store/useAppStore';
 import {
@@ -606,12 +607,45 @@ export const Dashboard: React.FC = () => {
     }
   };
 
+  const fallbackHero = useMemo(
+    () => [
+      {
+        key: 'today',
+        label: 'إنتاج اليوم',
+        value: formatNumber(kpis.todayProduction),
+        accent: true,
+      },
+      {
+        key: 'month',
+        label: 'إنتاج الشهر',
+        value: formatNumber(kpis.monthlyProduction),
+      },
+      {
+        key: 'efficiency',
+        label: 'كفاءة اليوم',
+        value: `${kpis.efficiency}%`,
+      },
+      {
+        key: 'waste',
+        label: 'هدر اليوم',
+        value: `${kpis.wasteRatio}%`,
+      },
+    ],
+    [kpis],
+  );
+
   if (loading) {
     return <PageContentSkeleton variant="dashboard" kpiCount={6} />;
   }
 
   return (
-    <div className="erp-dashboard-theme">
+    <DomainHomeShell
+      denseHero
+      eyebrow="لوحة التشغيل"
+      hero={fallbackHero}
+      rangeLabel={deskTodayLabel}
+      dir="rtl"
+    >
       <ModuleChartsHomeBoard />
 
       {/* â”€â”€ Set Target Modal â”€â”€ */}
@@ -682,10 +716,6 @@ export const Dashboard: React.FC = () => {
           </div>
         </div>
       )}
-    </div>
+    </DomainHomeShell>
   );
 };
-
-
-
-

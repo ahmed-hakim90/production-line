@@ -180,45 +180,79 @@ export const PayrollAccounts: React.FC = () => {
         }
       />
 
-      <div className="card overflow-x-auto">
-        <table className="erp-table w-full text-sm">
-          <thead className="erp-thead">
-            <tr>
-              <th className="erp-th">اسم الموظف</th>
-              <th className="erp-th">القسم</th>
-              <th className="erp-th">صافي الراتب</th>
-              <th className="erp-th">حالة الصرف</th>
-              <th className="erp-th">تأكيد الصرف</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((row) => (
-              <tr key={row.id} className="border-b border-[var(--color-border)]">
-                <td className="py-2 px-2">{row.employeeName}</td>
-                <td className="py-2 px-2">{row.departmentId || '—'}</td>
-                <td className="py-2 px-2 font-mono">{fmt(Number(row.netSalary || 0))}</td>
-                <td className="py-2 px-2">{row.disbursed ? 'تم الصرف' : 'لم يُصرف'}</td>
-                <td className="py-2 px-2">
-                  <Button
-                    className="erp-filter-apply"
-                    size="sm"
-                    disabled={!!row.disbursed || !canConfirmDisbursement}
-                    onClick={() => void confirmOne(row.id)}
-                  >
-                    {row.disbursed ? 'تم ✓' : 'تأكيد الصرف'}
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
+      <div className="card !p-0 overflow-hidden">
+        <div className="erp-mobile-card-list p-2">
+          {rows.map((row) => (
+            <div
+              key={`m-${row.id}`}
+              className="rounded-xl border border-[var(--color-border)] bg-[var(--color-card)] p-3 shadow-sm"
+            >
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <p className="text-sm font-bold truncate">{row.employeeName}</p>
+                  <p className="text-xs text-[var(--color-text-muted)]">{row.departmentId || '—'}</p>
+                </div>
+                <span className="text-xs font-bold">{row.disbursed ? 'تم الصرف' : 'لم يُصرف'}</span>
+              </div>
+              <p className="mt-2 font-mono text-sm font-bold tabular-nums">{fmt(Number(row.netSalary || 0))} ج.م</p>
+              <div className="mt-2">
+                <Button
+                  className="erp-filter-apply"
+                  size="sm"
+                  disabled={!!row.disbursed || !canConfirmDisbursement}
+                  onClick={() => void confirmOne(row.id)}
+                >
+                  {row.disbursed ? 'تم ✓' : 'تأكيد الصرف'}
+                </Button>
+              </div>
+            </div>
+          ))}
+          {rows.length === 0 && (
+            <p className="py-8 text-center text-sm text-[var(--color-text-muted)]">
+              لا توجد رواتب موزعة للعرض.
+            </p>
+          )}
+        </div>
+        <div className="erp-desktop-table overflow-x-auto">
+          <table className="erp-table w-full min-w-[640px] text-sm">
+            <thead className="erp-thead">
               <tr>
-                <td colSpan={5} className="py-8 text-center text-[var(--color-text-muted)]">
-                  لا توجد رواتب موزعة للعرض.
-                </td>
+                <th className="erp-th">اسم الموظف</th>
+                <th className="erp-th">القسم</th>
+                <th className="erp-th">صافي الراتب</th>
+                <th className="erp-th">حالة الصرف</th>
+                <th className="erp-th">تأكيد الصرف</th>
               </tr>
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {rows.map((row) => (
+                <tr key={row.id} className="border-b border-[var(--color-border)]">
+                  <td className="py-2 px-2">{row.employeeName}</td>
+                  <td className="py-2 px-2">{row.departmentId || '—'}</td>
+                  <td className="py-2 px-2 font-mono">{fmt(Number(row.netSalary || 0))}</td>
+                  <td className="py-2 px-2">{row.disbursed ? 'تم الصرف' : 'لم يُصرف'}</td>
+                  <td className="py-2 px-2">
+                    <Button
+                      className="erp-filter-apply"
+                      size="sm"
+                      disabled={!!row.disbursed || !canConfirmDisbursement}
+                      onClick={() => void confirmOne(row.id)}
+                    >
+                      {row.disbursed ? 'تم ✓' : 'تأكيد الصرف'}
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {rows.length === 0 && (
+                <tr>
+                  <td colSpan={5} className="py-8 text-center text-[var(--color-text-muted)]">
+                    لا توجد رواتب موزعة للعرض.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
