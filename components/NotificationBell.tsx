@@ -136,27 +136,28 @@ export const NotificationBell: React.FC = () => {
   }, [markNotificationRead, navigate, tenantSlug]);
 
   return (
-    <div className="relative" ref={ref}>
+    <div className="relative z-[60]" ref={ref}>
       <button
         onClick={() => setOpen(!open)}
-        className="relative p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] rounded-full transition-colors group"
+        className="relative z-[60] p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] rounded-full transition-colors group"
+        aria-label={t('notifications.title')}
       >
         <Bell size={20} />
         {unreadCount > 0 && (
-          <span className="absolute top-1 left-1 min-w-[18px] h-[18px] flex items-center justify-center bg-[rgb(var(--color-danger)/0.1)]0 text-white text-[10px] font-bold rounded-full border-2 border-[var(--color-card)] px-1">
+          <span className="pointer-events-none absolute -top-0.5 -left-0.5 z-[70] min-w-[18px] h-[18px] flex items-center justify-center bg-[rgb(var(--color-danger))] text-white text-[10px] font-bold rounded-full border-2 border-[var(--color-card)] px-1 shadow-sm">
             {unreadCount > 99 ? '99+' : unreadCount}
           </span>
         )}
       </button>
 
       {open && (
-        <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 z-50 erp-notif-panel">
+        <div className="absolute left-0 top-full mt-2 w-80 sm:w-96 z-[80] erp-notif-panel">
           <div className="erp-notif-head">
             <div className="flex items-center gap-2">
               <Bell size={18} className="text-[var(--color-text-muted)]" />
               <span className="text-[13px] font-bold text-[var(--color-text)]">{t('notifications.title')}</span>
               {unreadCount > 0 && (
-                <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[rgb(var(--color-danger)/0.1)]0 text-white text-[10px] font-bold">
+                <span className="min-w-[18px] h-[18px] px-1 flex items-center justify-center rounded-full bg-[rgb(var(--color-danger))] text-white text-[10px] font-bold">
                   {unreadCount}
                 </span>
               )}

@@ -632,8 +632,8 @@ export const sendPushOnNotificationCreate = onDocumentWritten(
       },
       webpush: {
         notification: {
-          icon: '/icons/pwa-icon-192.png',
-          badge: '/icons/pwa-icon-192.png',
+          icon: '/icons/forgeops-app-icon-192.png',
+          badge: '/icons/forgeops-app-icon-192.png',
           requireInteraction: false,
           silent: false,
           vibrate: [150, 50, 150],
@@ -777,8 +777,8 @@ export const onProductionReportCreated = onDocumentCreated(
           notification: {
             title: reportTitle,
             body: reportBody,
-            icon: '/icons/pwa-icon-192.png',
-            badge: '/icons/pwa-icon-192.png',
+            icon: '/icons/forgeops-app-icon-192.png',
+            badge: '/icons/forgeops-app-icon-192.png',
             tag: `production-report-${reportId}`,
             renotify: true,
             requireInteraction: false,

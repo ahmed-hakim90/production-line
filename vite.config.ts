@@ -71,6 +71,10 @@ export default defineConfig(({ mode }) => {
           // Manifest only — no Workbox precache / runtime cache (see src/purgeLegacyPwaCaches.ts).
           injectRegister: false,
           includeAssets: [
+            'icons/forgeops-app-icon.svg',
+            'icons/forgeops-app-icon-180.png',
+            'icons/forgeops-app-icon-192.png',
+            'icons/forgeops-app-icon-512.png',
             'icons/pwa-icon.svg',
             'icons/pwa-icon-180.png',
             'icons/pwa-icon-192.png',
@@ -91,19 +95,19 @@ export default defineConfig(({ mode }) => {
             orientation: 'any',
             icons: [
               {
-                src: '/icons/pwa-icon-192.png',
+                src: '/icons/forgeops-app-icon-192.png',
                 sizes: '192x192',
                 type: 'image/png',
                 purpose: 'any',
               },
               {
-                src: '/icons/pwa-icon-512.png',
+                src: '/icons/forgeops-app-icon-512.png',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'any',
               },
               {
-                src: '/icons/pwa-icon-512.png',
+                src: '/icons/forgeops-app-icon-512.png',
                 sizes: '512x512',
                 type: 'image/png',
                 purpose: 'maskable',

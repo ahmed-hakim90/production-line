@@ -13,8 +13,8 @@ function absoluteUrl(path: string): string {
 }
 
 function buildManifest(startPath: string): Record<string, unknown> {
-  const icon192 = absoluteUrl('/icons/pwa-icon-192.png');
-  const icon512 = absoluteUrl('/icons/pwa-icon-512.png');
+  const icon192 = absoluteUrl('/icons/forgeops-app-icon-192.png');
+  const icon512 = absoluteUrl('/icons/forgeops-app-icon-512.png');
   return {
     name: PRODUCT_BRAND.name,
     short_name: PRODUCT_BRAND.name,

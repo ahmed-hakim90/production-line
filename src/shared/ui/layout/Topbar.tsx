@@ -122,7 +122,7 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
     <>
       <header
         className={[
-          'h-[52px] fixed top-0 left-0 right-0 z-40 shrink-0 overflow-hidden',
+          'h-[52px] fixed top-0 left-0 right-0 z-40 shrink-0 overflow-visible',
           isRTL
             ? (collapsed ? 'lg:right-[52px]' : 'lg:right-[260px]')
             : (collapsed ? 'lg:left-[52px]' : 'lg:left-[260px]'),
@@ -214,8 +214,8 @@ export const Topbar: React.FC<TopbarProps> = ({ onMenuToggle, onSidebarCollapseT
           </button>
         </div>
 
-        {/* ── RIGHT: actions ── */}
-        <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
+        {/* ── RIGHT: actions (overflow-visible so notification badge/panel are not clipped) ── */}
+        <div className="relative z-[50] flex items-center gap-0.5 sm:gap-1 shrink-0 overflow-visible">
 
           {/* Search icon below lg */}
           <button

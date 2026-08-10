@@ -43,8 +43,8 @@ initMessaging().then((messaging) => {
     const link = payload.data?.url || payload.data?.link || '/';
     self.registration.showNotification(title, {
       body,
-      icon: '/icons/pwa-icon-192.png',
-      badge: '/icons/pwa-icon-192.png',
+      icon: '/icons/forgeops-app-icon-192.png',
+      badge: '/icons/forgeops-app-icon-192.png',
       data: { link },
       actions: [
         { action: 'open', title: 'فتح' },
