@@ -10,6 +10,7 @@ import {
   isPermissionGroupEnabledForPacks,
   type ActivityPackId,
 } from '@/lib/activityPacks';
+import { PERMISSION_GROUPS } from '@/utils/permissions';
 
 export type PermissionCrudVerb = 'view' | 'create' | 'edit' | 'delete';
 
@@ -125,10 +126,8 @@ let cachedGroups: PermissionCatalogGroup[] | null = null;
 
 function loadLiveGroups(): PermissionCatalogGroup[] {
   if (!cachedGroups) {
-    // Lazy require keeps Firebase/store out of unit-test import graphs.
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const mod = require('./permissions') as { PERMISSION_GROUPS: PermissionCatalogGroup[] };
-    cachedGroups = mod.PERMISSION_GROUPS;
+    // ESM import (Vite/browser) — do not use Node `require` here.
+    cachedGroups = PERMISSION_GROUPS as PermissionCatalogGroup[];
   }
   return cachedGroups;
 }
