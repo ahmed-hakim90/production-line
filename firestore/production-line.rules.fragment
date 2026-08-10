@@ -124,6 +124,22 @@
         );
     }
 
+    /**
+     * Reception/desk may assign any technicianId (service validates branch list).
+     * Self-assign (technicianId == auth.uid) is only for branch technicians —
+     * blocks «إسناد لي» for reception staff who are not on technicianIds.
+     */
+    function pl_repairJobTechnicianSelfAssignOk() {
+      return !('technicianId' in request.resource.data)
+        || request.resource.data.get('technicianId', '') == resource.data.get('technicianId', '')
+        || request.resource.data.get('technicianId', '') == ''
+        || request.resource.data.get('technicianId', '') != request.auth.uid
+        || (
+          'branchId' in resource.data
+          && pl_isTechnicianAssignedToBranch(resource.data.branchId)
+        );
+    }
+
     function pl_isBranchManager(branchId) {
       return branchId != null
         && branchId != ''
@@ -910,7 +926,8 @@
       allow update: if (
         pl_hasErpPermission('repair.jobs.edit')
         || pl_hasErpPermission('repair.jobs.reception')
-      ) && pl_canUpdateRepairBranchScoped();
+      ) && pl_canUpdateRepairBranchScoped()
+        && pl_repairJobTechnicianSelfAssignOk();
       allow delete: if pl_hasErpPermission('repair.jobs.delete') && pl_canReadRepairBranchScoped();
     }
 
@@ -935,6 +952,7 @@
       ) || pl_isAssignedRepairJobTechnician(jobId);
       allow create: if (
         pl_hasErpPermission('repair.jobs.create')
+        || pl_hasErpPermission('repair.jobs.edit')
         || pl_hasErpPermission('repair.jobs.reception')
         || pl_isAssignedRepairJobTechnician(jobId)
       ) && pl_canCreateRepairBranchScoped();

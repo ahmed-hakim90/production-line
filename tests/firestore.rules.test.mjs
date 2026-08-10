@@ -325,6 +325,14 @@ const seed = async () => {
     customerPhone: '01000000000',
     finalCost: 100,
   });
+  await set('repair_jobs', 'job_unassigned_branchA', {
+    tenantId: 'tenantA',
+    branchId: 'branchA',
+    status: 'received',
+    technicianId: '',
+    customerPhone: '01000000002',
+    finalCost: 50,
+  });
   await set('repair_jobs', 'job_branchB', {
     tenantId: 'tenantA',
     branchId: 'branchB',
@@ -379,7 +387,8 @@ const seed = async () => {
     tenantId: 'tenantA',
     name: 'فرع A',
     warehouseId: 'whA',
-    technicianIds: ['emp-tech-a'],
+    // Dual-write like production: employee id + Auth uid for pl_isTechnicianAssignedToBranch.
+    technicianIds: ['emp-tech-a', 'userATechnician'],
   });
   await set('repair_branches', 'branchB', {
     tenantId: 'tenantA',
@@ -523,6 +532,45 @@ await seed();
   await assertSucceeds(receptionDb.collection('repair_jobs').doc('job_branchA').get());
   await assertSucceeds(receptionDb.collection('repair_job_financials').doc('job_branchA').get());
   await assertSucceeds(receptionDb.collection('repair_payment_authorizations').doc('job_branchA__r1').get());
+}
+
+// 4a2) Reception may assign a branch technician or clear assignment, but not self-assign via «إسناد لي».
+{
+  const receptionDb = testEnv.authenticatedContext('userAReception').firestore();
+  const jobRef = receptionDb.collection('repair_jobs').doc('job_unassigned_branchA');
+
+  await assertSucceeds(jobRef.set({
+    tenantId: 'tenantA',
+    branchId: 'branchA',
+    status: 'received',
+    technicianId: 'userATechnician',
+    customerPhone: '01000000002',
+    finalCost: 50,
+    assignedAt: '2026-08-10T00:00:00.000Z',
+    updatedAt: '2026-08-10T00:00:00.000Z',
+  }, { merge: true }));
+
+  await assertFails(jobRef.set({
+    tenantId: 'tenantA',
+    branchId: 'branchA',
+    status: 'received',
+    technicianId: 'userAReception',
+    customerPhone: '01000000002',
+    finalCost: 50,
+    assignedAt: '2026-08-10T00:01:00.000Z',
+    updatedAt: '2026-08-10T00:01:00.000Z',
+  }, { merge: true }));
+
+  await assertSucceeds(jobRef.set({
+    tenantId: 'tenantA',
+    branchId: 'branchA',
+    status: 'received',
+    technicianId: '',
+    customerPhone: '01000000002',
+    finalCost: 50,
+    assignedAt: '',
+    updatedAt: '2026-08-10T00:02:00.000Z',
+  }, { merge: true }));
 }
 
 // 4b) Center warehouse bind (inventoryWarehouseId) grants spare-parts read for that branch only.
