@@ -61,7 +61,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 
 - Roles: built-in factory + repair roles (admin, factory_manager, materials_warehouse, repair_technician, …)
 - Product modules: ~10 above
-- Integrations: Firebase (live); no separate API server
+- Integrations: Firebase (live); Vercel web hosting (live); no separate API server
 
 ## Roles (who acts where)
 
@@ -86,6 +86,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | System | Status |
 |--------|--------|
 | Firebase Auth / Firestore / Functions | Live |
+| Vercel (Vite SPA hosting) | Live — `https://production-line.vercel.app` |
 | Firestore emulator | Rules tests only |
 | FCM / Storage | Live where configured |
 
@@ -94,7 +95,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 | Flow | Path |
 |------|------|
 | Public landing (no last tenant) | `/` → `LandingPage` |
-| Resume last tenant (PWA start) | `/` → `/t/{lastSlug}/` |
+| Resume last tenant (PWA start) | `/` → `/t/{lastSlug}/` (manifest rewritten to tenant while in-app) |
 | Register company | `/register-company` |
 | Tenant login gateway | `/login` |
 | Production home board (KPIs + charts) | `/production` |

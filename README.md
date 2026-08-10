@@ -364,6 +364,25 @@ npm run changelog:auto   # توليد CHANGELOG تلقائيًا
 
 ---
 
+## 🚀 النشر للإنتاج (Vercel — الواجهة)
+
+المشروع مربوط بـ Vercel كـ Vite SPA (GitHub `main` + نشر CLI).
+
+- Production URL: https://production-line.vercel.app
+- Dashboard: https://vercel.com/hakim-dev-1/production-line
+- متغيرات `VITE_FIREBASE_*` و `VITE_PUBLIC_APP_URL` مضبوطة على Production/Preview
+- Firebase Auth authorized domains تتضمن دومين Vercel
+
+```bash
+vercel link          # مرة واحدة إن لزم
+vercel env pull      # اختياري لمزامنة محلية
+vercel deploy --prod
+```
+
+> Cloud Functions / Firestore rules تبقى عبر Firebase (`firebase deploy --only functions,...`). Vercel يستضيف الواجهة فقط.
+
+---
+
 ## 🚀 النشر للإنتاج (Firebase)
 
 ### 1) تجهيز وبناء المشروع

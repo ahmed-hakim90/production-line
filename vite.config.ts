@@ -80,10 +80,11 @@ export default defineConfig(({ mode }) => {
             name: 'ForgeOps',
             short_name: 'ForgeOps',
             description: 'Factory operations platform — production, inventory, repair, and HR',
-            theme_color: '#4F46E5',
+            theme_color: '#8f2424',
             background_color: '#f8fafc',
             display: 'standalone',
             scope: '/',
+            // Fallback only — TenantPwaManifestSync rewrites start_url to /t/{slug}/ when in a company.
             start_url: '/',
             lang: 'ar',
             // Allow portrait + landscape (tablets / installed PWA).

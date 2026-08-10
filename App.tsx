@@ -69,6 +69,7 @@ import { TenantSlugResolveProvider } from './modules/auth/context/TenantSlugReso
 import type { TenantSlugResolveValue } from './modules/auth/context/TenantSlugResolveContext';
 import { SuperAdminGuard } from './modules/super-admin/SuperAdminGuard';
 import { AppSplashScreen } from './components/system-ui/AppSplashScreen';
+import { TenantPwaManifestSync } from './components/system-ui/TenantPwaManifestSync';
 import { useAppInitialization } from './hooks/useAppInitialization';
 import { useAuthStore } from './store/useAuthStore';
 import { dismissHtmlSplash } from './lib/dismissHtmlSplash';
@@ -1229,6 +1230,7 @@ const App: React.FC = () => {
       <ModalWorkspaceMigration />
       <DailyWelcomeLauncher />
       <BrowserRouter>
+        <TenantPwaManifestSync />
         <RouterRealtimeSubscriptions />
         <LegacyHashRedirect />
         <ServiceWorkerNavigateBridge />
