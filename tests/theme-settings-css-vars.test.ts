@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { DEFAULT_THEME } from '../utils/dashboardConfig.ts';
-import { buildThemeSettingsCssVars } from '../core/ui-engine/theme/tenantTheme.ts';
+import { buildThemeSettingsCssVars } from '../core/ui-engine/theme/themeCssVars.ts';
 
 {
   const vars = buildThemeSettingsCssVars({
