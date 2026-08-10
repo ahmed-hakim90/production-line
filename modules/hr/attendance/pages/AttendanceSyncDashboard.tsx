@@ -973,7 +973,7 @@ export const AttendanceSyncDashboard: React.FC = () => {
 
       {confirmDeleteBatchId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/35 flex items-center justify-center z-[10050] p-4">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/35 p-0 sm:items-center sm:p-4">
           <div className="bg-[var(--color-card)] border border-[var(--color-border)] rounded-xl p-4 w-full max-w-md space-y-3">
             <div className="text-sm font-bold">تأكيد حذف الدفعة</div>
             <div className="text-xs text-[var(--color-text-muted)]">

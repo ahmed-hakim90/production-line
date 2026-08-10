@@ -1,9 +1,49 @@
 import path from 'path';
-import { readFileSync } from 'fs';
-import { defineConfig, loadEnv } from 'vite';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { defineConfig, loadEnv, type Plugin } from 'vite';
 import react from '@vitejs/plugin-react';
 import { VitePWA } from 'vite-plugin-pwa';
 import { visualizer } from 'rollup-plugin-visualizer';
+
+function buildFirebaseMessagingSwSource(env: Record<string, string>): string {
+  const templatePath = path.resolve(__dirname, 'public/firebase-messaging-sw.js');
+  const template = readFileSync(templatePath, 'utf-8');
+  const firebaseConfig = {
+    apiKey: env.VITE_FIREBASE_API_KEY || '',
+    authDomain: env.VITE_FIREBASE_AUTH_DOMAIN || '',
+    projectId: env.VITE_FIREBASE_PROJECT_ID || '',
+    storageBucket: env.VITE_FIREBASE_STORAGE_BUCKET || '',
+    messagingSenderId: env.VITE_FIREBASE_MESSAGING_SENDER_ID || '',
+    appId: env.VITE_FIREBASE_APP_ID || '',
+  };
+  return `/* Injected by vite firebase-messaging-sw-config plugin */\nself.__FIREBASE_CONFIG__ = ${JSON.stringify(firebaseConfig)};\n${template}`;
+}
+
+/** Inject Firebase web config into the FCM service worker for Vite dev + production builds. */
+function firebaseMessagingSwPlugin(env: Record<string, string>): Plugin {
+  const swUrl = '/firebase-messaging-sw.js';
+  return {
+    name: 'firebase-messaging-sw-config',
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        if (req.url?.split('?')[0] !== swUrl) {
+          next();
+          return;
+        }
+        const body = buildFirebaseMessagingSwSource(env);
+        res.setHeader('Content-Type', 'application/javascript; charset=utf-8');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Service-Worker-Allowed', '/firebase-cloud-messaging-push-scope');
+        res.end(body);
+      });
+    },
+    closeBundle() {
+      const outDir = path.resolve(__dirname, 'dist');
+      mkdirSync(outDir, { recursive: true });
+      writeFileSync(path.join(outDir, 'firebase-messaging-sw.js'), buildFirebaseMessagingSwSource(env), 'utf-8');
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, '.', '');
@@ -16,6 +56,7 @@ export default defineConfig(({ mode }) => {
       },
       plugins: [
         react(),
+        firebaseMessagingSwPlugin(env),
         ...(analyzeBundle
           ? [
               visualizer({
@@ -36,9 +77,9 @@ export default defineConfig(({ mode }) => {
             'icons/pwa-icon-512.png',
           ],
           manifest: {
-            name: 'Factory PRODUCTION SYSTEM',
-            short_name: 'Factory ERP',
-            description: 'Production management and tracking system',
+            name: 'ForgeOps',
+            short_name: 'ForgeOps',
+            description: 'Factory operations platform — production, inventory, repair, and HR',
             theme_color: '#4F46E5',
             background_color: '#f8fafc',
             display: 'standalone',

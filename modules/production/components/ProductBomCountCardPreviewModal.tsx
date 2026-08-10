@@ -39,17 +39,17 @@ export const ProductBomCountCardPreviewModal: React.FC<ProductBomCountCardPrevie
 
   return (
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[80] flex items-center justify-center p-3 sm:p-4"
+      className="fixed inset-0 z-[80] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={onClose}
     >
       <div
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-5xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
+        className="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:w-[95vw] sm:rounded-[var(--border-radius-xl)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-3.5 border-b border-[var(--color-border)] flex items-center justify-between gap-3 shrink-0">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-5 sm:py-3.5">
           <div className="min-w-0">
-            <p className="text-[14px] font-semibold text-[var(--color-text)]">معاينة كارت جرد الصنف</p>
-            <p className="text-xs text-[var(--color-text-muted)] mt-0.5">
+            <p className="truncate text-[14px] font-semibold text-[var(--color-text)]">معاينة كارت جرد الصنف</p>
+            <p className="mt-0.5 truncate text-xs text-[var(--color-text-muted)]">
               {loading
                 ? 'جاري تحميل المكونات والأرصدة…'
                 : cards.length === 1
@@ -60,20 +60,21 @@ export const ProductBomCountCardPreviewModal: React.FC<ProductBomCountCardPrevie
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-colors"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--border-radius-sm)] text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-surface-hover)]"
             title="إغلاق"
+            aria-label="إغلاق"
           >
             <X className="size-4" />
           </button>
         </div>
 
         {warningText && (
-          <div className="px-5 py-2.5 border-b border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))] text-xs font-bold">
+          <div className="shrink-0 border-b border-[rgb(var(--color-warning)/0.25)] bg-[rgb(var(--color-warning)/0.1)] px-5 py-2.5 text-xs font-bold text-[rgb(var(--color-warning))]">
             {warningText}
           </div>
         )}
 
-        <div className="p-3 sm:p-5 overflow-auto flex-1" style={{ background: 'var(--color-bg)' }}>
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-3 sm:p-5" style={{ background: 'var(--color-bg)' }}>
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-16 text-[var(--color-text-muted)]">
               <Loader2 className="size-5 animate-spin" />

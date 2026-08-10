@@ -6,6 +6,7 @@ Canonical English.
 
 - Pattern: `/t/:tenantSlug/...` helpers in `lib/tenantPaths.ts` (`tenantHomePath`, `tenantSlugFromPathname`, `defaultTenantSlug`).
 - Last-visited slug: `lib/lastTenantSlugStorage.ts`; preferred home: `lib/navigationRecovery.ts` → `resolvePreferredTenantHomePath()`.
+- Root `/` (`RootEntryOrLanding` in `App.tsx`): if a last-visited slug exists → tenant home; otherwise public marketing `LandingPage` (`modules/auth/pages/LandingPage.tsx`).
 - `App.tsx` gates tenant access: non–super-admin users must match `userProfile.tenantId` to the route tenant.
 
 Module routes are declared in `modules/*/routes/index.ts` and composed in `App.tsx` with `ProtectedRoute` permission keys. Menu: `config/menu.config.ts` (also filtered by operation-path enablement where registered).

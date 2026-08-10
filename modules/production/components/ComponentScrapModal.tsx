@@ -135,35 +135,35 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
   };
 
   const modalContent = (
-    <div className="pointer-events-auto fixed inset-0 z-[10050] flex items-center justify-center bg-black/45 p-4 backdrop-blur-[2px]">
+    <div className="pointer-events-auto fixed inset-0 z-[10050] flex items-end justify-center bg-black/45 p-0 backdrop-blur-[2px] sm:items-center sm:p-4">
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="component-scrap-modal-title"
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-3xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
+        className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:w-[95vw] sm:rounded-[var(--border-radius-xl)]"
       >
-        <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="w-10 h-10 shrink-0 rounded-[var(--border-radius-base)] bg-[rgb(var(--color-danger)/0.1)]0/15 dark:bg-[rgb(var(--color-danger)/0.1)]0/20 flex items-center justify-center">
-              <Package2 size={18} className="text-[rgb(var(--color-danger))] dark:text-[rgb(var(--color-danger))]" aria-hidden />
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--border-radius-base)] bg-[rgb(var(--color-danger)/0.1)]">
+              <Package2 size={18} className="text-[rgb(var(--color-danger))]" aria-hidden />
             </div>
             <div className="min-w-0">
-              <h3 id="component-scrap-modal-title" className="text-lg font-bold truncate">
+              <h3 id="component-scrap-modal-title" className="truncate text-base font-bold sm:text-lg">
                 {t('modalManager.componentScrap.title')}
               </h3>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5 leading-snug">{t('modalManager.componentScrap.subtitle')}</p>
+              <p className="mt-0.5 text-xs leading-snug text-[var(--color-text-muted)]">{t('modalManager.componentScrap.subtitle')}</p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="shrink-0 rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-muted)] hover:text-[var(--color-text)] transition-colors"
+            className="shrink-0 rounded-lg p-2 text-[var(--color-text-muted)] transition-colors hover:bg-[var(--color-muted)] hover:text-[var(--color-text)]"
             aria-label={t('ui.close')}
           >
             <X size={20} aria-hidden />
           </button>
         </div>
-        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {loading && (
             <div className="text-sm font-bold text-[var(--color-text-muted)] flex items-center gap-2">
               <Loader2 size={16} className="animate-spin" />
@@ -272,7 +272,7 @@ export const ComponentScrapModal: React.FC<ComponentScrapModalProps> = ({
             </>
           )}
         </div>
-        <div className="px-5 sm:px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3 shrink-0">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={onClose} iconName="close" tone="neutral">
             {t('ui.close')}
           </Button>

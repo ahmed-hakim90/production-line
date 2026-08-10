@@ -746,7 +746,7 @@ export const WarehouseLocations: React.FC = () => {
 
       {modal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4" onClick={closeModal}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={closeModal}>
           <div className="w-full max-w-3xl rounded-lg bg-[var(--color-card)] shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
               <h3 className="text-base font-black">

@@ -30,6 +30,7 @@ VITE_FIREBASE_STORAGE_BUCKET=your_project.appspot.com
 VITE_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
 VITE_FIREBASE_APP_ID=your_app_id
 VITE_FIREBASE_VAPID_KEY=your_web_push_vapid_key
+# Optional full Web Push public key (~87 chars). Invalid/truncated keys cause FCM 401; unset = Firebase default.
 ```
 
 لا تضع أسراراً حقيقية في Git. Never commit real secrets.

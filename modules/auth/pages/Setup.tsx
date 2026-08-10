@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import { BrandMark } from '@/components/system-ui/BrandMark';
 import { useTenantNavigate } from '@/lib/useTenantNavigate';
 import {
   bootstrapTenantAdminAccount,
@@ -90,8 +91,8 @@ export const Setup: React.FC = () => {
     return (
       <div className="erp-auth-page">
         <div className="text-center">
-          <div className="erp-auth-logo mx-auto mb-3 animate-pulse">
-            <span className="material-icons-round" style={{ fontSize: 28 }}>factory</span>
+          <div className="erp-auth-logo erp-auth-logo--mark mx-auto mb-3 animate-pulse">
+            <BrandMark size={48} />
           </div>
           <p className="text-[13px] text-[var(--color-text-muted)] font-semibold">جاري التحقق...</p>
         </div>
@@ -125,10 +126,10 @@ export const Setup: React.FC = () => {
 
         {/* Brand */}
         <div className="erp-auth-brand">
-          <div className="erp-auth-logo">
-            <span className="material-icons-round" style={{ fontSize: 28 }}>factory</span>
+          <div className="erp-auth-logo erp-auth-logo--mark">
+            <BrandMark size={48} />
           </div>
-          <div className="erp-auth-app-name">Factory ERP</div>
+          <div className="erp-auth-app-name">ForgeOps</div>
           <div className="erp-auth-app-subtitle">إعداد النظام</div>
         </div>
 
@@ -289,7 +290,7 @@ export const Setup: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          آ© {new Date().getFullYear()} Factory PRODUCTION SYSTEM
+          آ© {new Date().getFullYear()} ForgeOps
         </p>
       </div>
     </div>

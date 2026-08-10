@@ -2305,7 +2305,7 @@ export const QuickAction: React.FC = () => {
       {/* Line Workers Modal */}
       {showLineWorkers && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-end sm:items-center justify-center p-2 sm:p-4" onClick={() => setShowLineWorkers(false)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setShowLineWorkers(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[calc(100dvh-1rem)] sm:max-h-[80vh] border border-[var(--color-border)] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-4 sm:px-5 py-4 border-b border-[var(--color-border)] flex items-start justify-between gap-3 shrink-0">
               <div className="min-w-0 flex flex-wrap items-center gap-2">

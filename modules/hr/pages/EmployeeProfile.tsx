@@ -448,7 +448,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Allowance Modal */}
       {showAllowanceModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { setShowAllowanceModal(false); setAlError(''); setAlSuccess(''); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">
@@ -509,7 +509,7 @@ const FinancialsTab: React.FC<FinancialsTabProps> = ({
       {/* Add Deduction Modal */}
       {showDeductionModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { setShowDeductionModal(false); setDedError(''); setDedSuccess(''); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] border border-[var(--color-border)] p-6 max-w-md w-full shadow-2xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between mb-6">
               <h3 className="text-lg font-bold flex items-center gap-2">

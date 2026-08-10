@@ -3438,7 +3438,7 @@ export const Products: React.FC = () => {
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && canDeleteProduct && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <ProductIcon name="delete_forever" className="text-[rgb(var(--color-danger))] text-3xl" />
@@ -3463,8 +3463,8 @@ export const Products: React.FC = () => {
       {/* Import Excel Modal */}
       {showImportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { setShowImportModal(false); setImportResult(null); }}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-4">
@@ -3638,7 +3638,7 @@ export const Products: React.FC = () => {
       {showComponentsImportModal && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => {
             setShowComponentsImportModal(false);
             setComponentsImportResult(null);
@@ -3646,7 +3646,7 @@ export const Products: React.FC = () => {
           }}
         >
           <div
-            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-6xl border border-[var(--color-border)] max-h-[85vh] flex flex-col"
+            className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-6xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -3939,7 +3939,7 @@ export const Products: React.FC = () => {
       {showBulkCategoryModal && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => !bulkToggleSaving && setShowBulkCategoryModal(false)}
         >
           <div
@@ -4005,7 +4005,7 @@ export const Products: React.FC = () => {
       {showBomExportModal && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => !exportingBom && setShowBomExportModal(false)}
         >
           <div
@@ -4075,8 +4075,8 @@ export const Products: React.FC = () => {
       {/* Export Warehouse Selector Modal */}
       {showWarehouseExportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setShowWarehouseExportModal(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setShowWarehouseExportModal(false)}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">
                 <ProductIcon name="warehouse" className="text-primary" />
@@ -4090,7 +4090,7 @@ export const Products: React.FC = () => {
                 <ProductIcon name="close" />
               </button>
             </div>
-            <div className="p-6 space-y-4 overflow-y-auto flex-1 min-h-0">
+            <div className="p-6 space-y-4 min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">شهر التصدير</label>
                 <input
@@ -4229,8 +4229,8 @@ export const Products: React.FC = () => {
       {/* â”€â”€ Column Control Modal â”€â”€ */}
       {showColumnsModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setShowColumnsModal(false)}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <ProductIcon name="tune" className="text-primary" />
@@ -4240,7 +4240,7 @@ export const Products: React.FC = () => {
                 <ProductIcon name="close" />
               </button>
             </div>
-            <div className="p-6 space-y-3 overflow-y-auto flex-1 min-h-0">
+            <div className="p-6 space-y-3 min-h-0 flex-1 overflow-y-auto overscroll-contain">
               {[
                 { key: 'openingStock' as const, label: 'رصيد مفكك', icon: 'call_split' },
                 { key: 'totalProduction' as const, label: 'ما تم إنتاجه', icon: 'precision_manufacturing' },

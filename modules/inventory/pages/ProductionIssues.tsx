@@ -1306,7 +1306,7 @@ export const ProductionIssues: React.FC = () => {
       </div>
       {shortageModalOpen && shortageRows.length > 0 && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4" onClick={() => setShortageModalOpen(false)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => setShortageModalOpen(false)}>
           <div className="flex max-h-[85vh] w-full max-w-3xl flex-col rounded-lg bg-[var(--color-card)] shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
               <div>
@@ -1365,7 +1365,7 @@ export const ProductionIssues: React.FC = () => {
       )}
       {lineAction && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4" onClick={closeLineAction}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={closeLineAction}>
           <div className="w-full max-w-xl rounded-lg bg-[var(--color-card)] shadow-xl" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between border-b px-5 py-4">
               <h3 className="text-base font-black">

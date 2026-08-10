@@ -545,7 +545,7 @@ export const LoanRequests: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10050] p-4">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
               <span className="material-icons-round text-5xl text-[rgb(var(--color-danger))] mb-2">warning</span>

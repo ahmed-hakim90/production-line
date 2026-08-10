@@ -108,7 +108,7 @@ export const RepairJobProductCardPrint = React.forwardRef<HTMLDivElement, Repair
                 {brandName}
               </h1>
               <p style={{ margin: '0.3mm 0 0', fontSize: '7pt', fontWeight: 700, color: ps.primaryColor }}>
-                Factory PRODUCTION SYSTEM
+                ForgeOps
               </p>
               <p style={{ margin: '0.5mm 0 0', fontSize: '10pt', fontWeight: 900, lineHeight: 1.15 }}>
                 كارت طلب الصيانة الداخلي

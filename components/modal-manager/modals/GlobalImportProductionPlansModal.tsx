@@ -146,11 +146,11 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={handleClose}
     >
       <div
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-4xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
+        className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:w-[95vw] sm:rounded-[var(--border-radius-xl)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -172,7 +172,7 @@ export const GlobalImportProductionPlansModal: React.FC = () => {
           </button>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <input
             ref={fileInputRef}
             type="file"

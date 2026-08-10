@@ -150,8 +150,8 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
-      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[96vw] max-w-5xl max-h-[90dvh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={handleClose}>
+      <div className="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:w-[96vw] sm:rounded-[var(--border-radius-xl)]" onClick={(e) => e.stopPropagation()}>
         <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
           <div>
             <h3 className="text-lg font-bold">{t('modalManager.importSystemUsers.title')}</h3>
@@ -162,7 +162,7 @@ export const GlobalImportSystemUsersModal: React.FC = () => {
           </button>
         </div>
 
-        <div className="p-6 space-y-4 flex-1 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && void handlePickFile(e.target.files[0])} />
 
           <div className="flex flex-wrap items-center gap-2">

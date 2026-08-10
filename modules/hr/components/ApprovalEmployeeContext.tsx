@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { leaveBalanceService } from '../leaveService';
 import { attendanceLogService } from '../attendanceService';
 import { loanService } from '../loanService';
-import { LEAVE_TYPE_LABELS } from '../types';
+import { getLeaveTypesFromConfig, type LeaveTypeDefinition } from '../leaveTypes';
 
 interface ApprovalEmployeeContextProps {
   employeeId: string;
@@ -12,6 +12,7 @@ interface ApprovalEmployeeContextProps {
 
 interface ContextState {
   leaveBalance: Awaited<ReturnType<typeof leaveBalanceService.getByEmployee>> | null;
+  leaveTypes: LeaveTypeDefinition[];
   attendance: {
     presentDays: number;
     absentDays: number;
@@ -37,6 +38,7 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
   const [error, setError] = useState('');
   const [state, setState] = useState<ContextState>({
     leaveBalance: null,
+    leaveTypes: [],
     attendance: {
       presentDays: 0,
       absentDays: 0,
@@ -62,13 +64,15 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
         const startDate = from.toISOString().slice(0, 10);
         const endDate = today.toISOString().slice(0, 10);
 
-        const [balanceResult, logsResult, loansResult] = await Promise.allSettled([
+        const [balanceResult, leaveTypesResult, logsResult, loansResult] = await Promise.allSettled([
           requestType === 'leave' ? leaveBalanceService.getByEmployee(employeeId) : Promise.resolve(null),
+          requestType === 'leave' ? getLeaveTypesFromConfig() : Promise.resolve([]),
           attendanceLogService.getByEmployeeRange(employeeId, startDate, endDate),
           loanService.getByEmployee(employeeId),
         ]);
 
         const balance = balanceResult.status === 'fulfilled' ? balanceResult.value : null;
+        const leaveTypes = leaveTypesResult.status === 'fulfilled' ? leaveTypesResult.value : [];
         const logs = logsResult.status === 'fulfilled' ? logsResult.value : [];
         const loans = loansResult.status === 'fulfilled' ? loansResult.value : [];
 
@@ -92,6 +96,7 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
         if (!active) return;
         setState({
           leaveBalance: balance,
+          leaveTypes,
           attendance: { ...attendance, attendanceRate },
           loans: { count: activeLoans.length, monthlyDeduction },
         });
@@ -110,12 +115,22 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
 
   const leaveRows = useMemo(() => {
     if (!state.leaveBalance) return [];
-    return [
-      { label: LEAVE_TYPE_LABELS.annual, remaining: state.leaveBalance.annualBalance, total: 21 },
-      { label: LEAVE_TYPE_LABELS.sick, remaining: state.leaveBalance.sickBalance, total: 14 },
-      { label: LEAVE_TYPE_LABELS.emergency, remaining: state.leaveBalance.emergencyBalance, total: 5 },
-    ];
-  }, [state.leaveBalance]);
+    const balance = state.leaveBalance;
+    return state.leaveTypes
+      .filter((row) => row.key === 'annual' || row.key === 'sick' || row.key === 'emergency')
+      .map((row) => {
+        const remaining = row.key === 'annual'
+          ? balance.annualBalance
+          : row.key === 'sick'
+            ? balance.sickBalance
+            : balance.emergencyBalance;
+        return {
+          label: row.label,
+          remaining,
+          total: Number(row.defaultBalance ?? 0),
+        };
+      });
+  }, [state.leaveBalance, state.leaveTypes]);
 
   if (loading) {
     return (
@@ -145,9 +160,11 @@ export const ApprovalEmployeeContext: React.FC<ApprovalEmployeeContextProps> = (
           <>
             <div className="px-3 py-2 font-bold border-b sm:border-b-0 sm:border-l border-[var(--color-border)]">رصيد الإجازات</div>
             <div className="px-3 py-2 border-b border-[var(--color-border)]">
-              {leaveRows.map((row) => (
-                <div key={row.label}>{row.label}: {row.remaining} من {row.total}</div>
-              ))}
+              {leaveRows.length === 0
+                ? 'لا توجد أرصدة لأنواع الإجازات المعرفة في الإعدادات'
+                : leaveRows.map((row) => (
+                    <div key={row.label}>{row.label}: {row.remaining} من {row.total}</div>
+                  ))}
             </div>
           </>
         )}

@@ -351,18 +351,18 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={handleClose}>
       <div
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-lg border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
+        className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:w-[95vw] sm:rounded-[var(--border-radius-xl)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-4 sm:px-6 py-4 sm:py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-base sm:text-lg font-bold">{showEditChrome ? t('modalManager.createWorkOrder.editTitle') : t('modalManager.createWorkOrder.createTitle')}</h3>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">{showEditChrome ? t('modalManager.createWorkOrder.editTitle') : t('modalManager.createWorkOrder.createTitle')}</h3>
+          <button onClick={handleClose} className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]" aria-label={t('ui.close')}>
             <X size={20} />
           </button>
         </div>
-        <div className="p-4 sm:p-6 space-y-4 overflow-y-auto flex-1 relative">
+        <div className="relative min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {loadingEdit && (
             <div className="absolute inset-0 z-10 flex items-center justify-center rounded-[var(--border-radius-lg)] bg-[var(--color-card)]/80 backdrop-blur-[2px]">
               <Loader2 size={28} className="animate-spin text-primary" aria-hidden />
@@ -603,7 +603,7 @@ export const GlobalCreateWorkOrderModal: React.FC = () => {
             </div>
           )}
         </div>
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-between">
+        <div className="flex shrink-0 flex-wrap justify-between gap-2 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={handleClose} disabled={saving || loadingEdit} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button
             variant="primary"

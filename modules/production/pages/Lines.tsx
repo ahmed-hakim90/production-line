@@ -444,15 +444,15 @@ export const Lines: React.FC = () => {
       {/* â”€â”€ Add / Edit Modal â”€â”€ */}
       {showModal && (linePerms.canCreate || linePerms.canEdit) && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-              <h3 className="text-lg font-bold">{editId ? 'تعديل خط الإنتاج' : 'إضافة خط إنتاج جديد'}</h3>
-              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
+          <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+              <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">{editId ? 'تعديل خط الإنتاج' : 'إضافة خط إنتاج جديد'}</h3>
+              <button onClick={() => { setShowModal(false); setSaveMsg(null); }} className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]" aria-label="إغلاق">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="p-6 space-y-5">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
               {saveMsg && (
                 <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
                   <span className="material-icons-round text-base">{saveMsg.type === 'success' ? 'check_circle' : 'error'}</span>
@@ -553,7 +553,7 @@ export const Lines: React.FC = () => {
                 </span>
               </label>
             </div>
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
               <Button variant="outline" onClick={() => { setShowModal(false); setSaveMsg(null); }}>إلغاء</Button>
               <Button variant="primary" onClick={handleSave} disabled={saving || !form.name}>
                 {saving && <span className="material-icons-round animate-spin text-sm">refresh</span>}
@@ -569,7 +569,7 @@ export const Lines: React.FC = () => {
       {/* â”€â”€ Delete Confirmation â”€â”€ */}
       {deleteConfirmId && linePerms.canDelete && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-[rgb(var(--color-danger))] text-3xl">delete_forever</span>
@@ -590,18 +590,18 @@ export const Lines: React.FC = () => {
       {/* â”€â”€ Set Target Modal â”€â”€ */}
       {targetModal && lineStatusPerms.canEdit && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-            <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-              <div>
-                <h3 className="text-lg font-bold">تعيين هدف اليوم</h3>
-                <p className="text-xs text-[var(--color-text-muted)] font-medium mt-0.5">{targetModal.lineName}</p>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setTargetModal(null)}>
+          <div className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]" onClick={(e) => e.stopPropagation()}>
+            <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+              <div className="min-w-0">
+                <h3 className="truncate text-base font-bold sm:text-lg">تعيين هدف اليوم</h3>
+                <p className="mt-0.5 truncate text-xs font-medium text-[var(--color-text-muted)]">{targetModal.lineName}</p>
               </div>
-              <button onClick={() => setTargetModal(null)} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+              <button onClick={() => setTargetModal(null)} className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]" aria-label="إغلاق">
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="p-6 space-y-5">
+            <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
               <div className="space-y-2">
                 <label className="block text-sm font-bold text-[var(--color-text-muted)]">المنتج الحالي *</label>
                 <Select value={targetForm.currentProductId || 'none'} onValueChange={(value) => setTargetForm({ ...targetForm, currentProductId: value === 'none' ? '' : value })}>
@@ -653,7 +653,7 @@ export const Lines: React.FC = () => {
                 </div>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
+            <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
               <Button variant="outline" onClick={() => setTargetModal(null)}>إلغاء</Button>
               <Button
                 variant="primary"

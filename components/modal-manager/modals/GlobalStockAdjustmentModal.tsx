@@ -93,33 +93,41 @@ export const GlobalStockAdjustmentModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 z-[10050] flex items-center justify-center p-4" onClick={() => close()}>
-      <div className="bg-[var(--color-card)] rounded-xl shadow-xl w-full max-w-md border p-6 space-y-4" onClick={(e) => e.stopPropagation()}>
-        <div className="flex justify-between items-center">
-          <h3 className="font-bold text-lg">تسوية مخزون</h3>
-          <button type="button" onClick={() => close()}><X size={18} /></button>
+    <div
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4"
+      onClick={() => close()}
+    >
+      <div
+        className="flex max-h-[92dvh] w-full max-w-md flex-col overflow-hidden rounded-t-xl border bg-[var(--color-card)] shadow-xl sm:rounded-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4">
+          <h3 className="min-w-0 truncate font-bold text-base sm:text-lg">تسوية مخزون</h3>
+          <button type="button" onClick={() => close()} aria-label="إغلاق"><X size={18} /></button>
         </div>
-        <p className="text-sm text-[var(--color-text-muted)]">{data.itemName} ({data.itemCode})</p>
-        <p className="text-sm font-bold text-primary">
-          {loading ? 'جاري التحميل...' : `الرصيد الحالي: ${available ?? 0}`}
-        </p>
-        <input
-          type="number"
-          className="w-full border rounded-lg px-3 py-2"
-          placeholder="قيمة التسوية (+ أو -)"
-          value={quantity || ''}
-          onChange={(e) => setQuantity(Number(e.target.value))}
-        />
-        <select className="w-full border rounded-lg px-3 py-2 font-bold text-sm" value={reason} onChange={(e) => setReason(e.target.value as StockAdjustmentReason)}>
-          <option value="count_correction">تصحيح جرد</option>
-          <option value="damage">تلف</option>
-          <option value="missing">نقص</option>
-          <option value="extra">زيادة</option>
-          <option value="manual_correction">تصحيح يدوي</option>
-        </select>
-        <textarea className="w-full border rounded-lg px-3 py-2 text-sm" placeholder="ملاحظة" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
-        {error && <p className="text-sm text-[rgb(var(--color-danger))] font-bold">{error}</p>}
-        <div className="flex justify-end gap-2">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <p className="break-words text-sm text-[var(--color-text-muted)]">{data.itemName} ({data.itemCode})</p>
+          <p className="text-sm font-bold text-primary">
+            {loading ? 'جاري التحميل...' : `الرصيد الحالي: ${available ?? 0}`}
+          </p>
+          <input
+            type="number"
+            className="w-full rounded-lg border px-3 py-2"
+            placeholder="قيمة التسوية (+ أو -)"
+            value={quantity || ''}
+            onChange={(e) => setQuantity(Number(e.target.value))}
+          />
+          <select className="w-full rounded-lg border px-3 py-2 text-sm font-bold" value={reason} onChange={(e) => setReason(e.target.value as StockAdjustmentReason)}>
+            <option value="count_correction">تصحيح جرد</option>
+            <option value="damage">تلف</option>
+            <option value="missing">نقص</option>
+            <option value="extra">زيادة</option>
+            <option value="manual_correction">تصحيح يدوي</option>
+          </select>
+          <textarea className="w-full rounded-lg border px-3 py-2 text-sm" placeholder="ملاحظة" value={note} onChange={(e) => setNote(e.target.value)} rows={2} />
+          {error && <p className="text-sm font-bold text-[rgb(var(--color-danger))]">{error}</p>}
+        </div>
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={() => close()}>إلغاء</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>حفظ</Button>
         </div>

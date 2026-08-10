@@ -63,14 +63,14 @@ export const GlobalStockCountSessionModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 z-[10050] flex items-center justify-center p-4" onClick={() => close()}>
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={() => close()}>
       <div
-        className="bg-[var(--color-card)] rounded-xl shadow-xl w-full max-w-3xl max-h-[90vh] flex flex-col border"
+        className="flex max-h-[92dvh] w-full max-w-3xl flex-col overflow-hidden rounded-t-xl border bg-[var(--color-card)] shadow-xl sm:rounded-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-5 py-4 border-b flex justify-between items-center">
-          <div>
-            <h3 className="font-bold text-lg">جرد ومطابقة: {session.warehouseName}</h3>
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b px-4 py-3 sm:px-5 sm:py-4">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-bold sm:text-lg">جرد ومطابقة: {session.warehouseName}</h3>
             <p className="text-xs text-[var(--color-text-muted)]">
               {session.status === 'approved'
                 ? 'مطابق ومعتمد'
@@ -86,10 +86,11 @@ export const GlobalStockCountSessionModal: React.FC = () => {
               </p>
             )}
           </div>
-          <button type="button" onClick={() => close()}><X size={18} /></button>
+          <button type="button" onClick={() => close()} className="shrink-0" aria-label="إغلاق"><X size={18} /></button>
         </div>
-        <div className="p-4 overflow-auto flex-1">
-          <table className="erp-table w-full text-right text-sm">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4">
+          <div className="overflow-x-auto">
+          <table className="erp-table w-full min-w-[520px] text-right text-sm">
             <thead>
               <tr className="border-b bg-[var(--color-bg)]">
                 <th className="px-2 py-2">الصنف</th>
@@ -130,11 +131,12 @@ export const GlobalStockCountSessionModal: React.FC = () => {
               })}
             </tbody>
           </table>
+          </div>
           {session.status !== 'approved' && data.canManage && (
-            <div className="mt-4 flex items-center gap-2">
+            <div className="mt-4 flex flex-wrap items-center gap-2">
               <label className="text-sm font-bold">سبب التسوية:</label>
               <select
-                className="border rounded-lg px-2 py-1 text-sm"
+                className="rounded-lg border px-2 py-1 text-sm"
                 value={adjustmentReason}
                 onChange={(e) => setAdjustmentReason(e.target.value as StockAdjustmentReason)}
               >
@@ -146,9 +148,9 @@ export const GlobalStockCountSessionModal: React.FC = () => {
               </select>
             </div>
           )}
-          {msg && <p className="mt-2 text-sm text-[rgb(var(--color-success))] font-bold">{msg}</p>}
+          {msg && <p className="mt-2 text-sm font-bold text-[rgb(var(--color-success))]">{msg}</p>}
         </div>
-        <div className="px-5 py-3 border-t flex flex-wrap justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t px-4 py-3 sm:px-5">
           <Button variant="outline" onClick={() => close()}>إغلاق</Button>
           {session.status !== 'approved' && data.canManage && (
             <>

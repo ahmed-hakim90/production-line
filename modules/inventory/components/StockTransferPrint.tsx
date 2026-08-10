@@ -206,7 +206,7 @@ const StockTransferPermitDocument: React.FC<{
             {model.companyName}
           </h1>
           <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accent }}>
-            Factory PRODUCTION SYSTEM
+            ForgeOps
           </p>
         </div>
         <div className="shrink-0 text-left">

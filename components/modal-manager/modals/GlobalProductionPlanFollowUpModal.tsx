@@ -123,32 +123,32 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
   };
 
   const modalContent = (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4">
-      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]">
-        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-[rgb(var(--color-warning)/0.1)] rounded-[var(--border-radius-base)] flex items-center justify-center">
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+      <div className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[var(--border-radius-base)] bg-[rgb(var(--color-warning)/0.1)]">
               <AlertTriangle size={18} className="text-[rgb(var(--color-warning))]" />
             </div>
-            <div>
-              <h3 className="text-lg font-bold">{t('modalManager.productionPlanFollowUp.title')}</h3>
-              <p className="text-xs text-[var(--color-text-muted)] mt-0.5">{t('modalManager.productionPlanFollowUp.subtitle')}</p>
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-bold sm:text-lg">{t('modalManager.productionPlanFollowUp.title')}</h3>
+              <p className="mt-0.5 text-xs text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.subtitle')}</p>
             </div>
           </div>
-          <button onClick={close} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+          <button onClick={close} className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]" aria-label={t('ui.close')}>
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-xs">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2">
             <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5">
-              <p className="text-[var(--color-text-muted)] mb-1">{t('modalManager.productionPlanFollowUp.product')}</p>
-              <p className="font-bold text-[var(--color-text)]">{productName}</p>
+              <p className="mb-1 text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.product')}</p>
+              <p className="break-words font-bold text-[var(--color-text)]">{productName}</p>
             </div>
             <div className="rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-bg)] p-2.5">
-              <p className="text-[var(--color-text-muted)] mb-1">{t('modalManager.productionPlanFollowUp.line')}</p>
-              <p className="font-bold text-[var(--color-text)]">{lineName}</p>
+              <p className="mb-1 text-[var(--color-text-muted)]">{t('modalManager.productionPlanFollowUp.line')}</p>
+              <p className="break-words font-bold text-[var(--color-text)]">{lineName}</p>
             </div>
           </div>
 
@@ -157,7 +157,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
             <select
               value={componentId}
               onChange={(e) => setComponentId(e.target.value)}
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none"
+              className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-sm outline-none"
               disabled={loading}
             >
               <option value="">{t('modalManager.productionPlanFollowUp.selectComponent')}</option>
@@ -176,7 +176,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
               step="any"
               value={shortageQty || ''}
               onChange={(e) => setShortageQty(Number(e.target.value))}
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none"
+              className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-sm outline-none"
               placeholder={t('modalManager.productionPlanFollowUp.shortageQtyPlaceholder')}
             />
           </div>
@@ -187,7 +187,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
               value={note}
               onChange={(e) => setNote(e.target.value)}
               rows={3}
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3 outline-none resize-none"
+              className="w-full resize-none rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3 text-sm outline-none"
               placeholder={t('modalManager.productionPlanFollowUp.notePlaceholder')}
             />
           </div>
@@ -200,7 +200,7 @@ export const GlobalProductionPlanFollowUpModal: React.FC = () => {
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={close} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={handleSave} disabled={!canSave}>
             {saving && <Loader2 size={14} className="animate-spin" />}

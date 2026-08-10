@@ -1347,7 +1347,7 @@ export const LineDetails: React.FC = () => {
       {/* View Workers Modal */}
       {viewWorkersData && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewWorkersData(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setViewWorkersData(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-md max-h-[90dvh] flex flex-col border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2">

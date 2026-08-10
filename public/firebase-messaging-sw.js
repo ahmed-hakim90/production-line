@@ -1,14 +1,34 @@
 /* global importScripts, firebase */
+/**
+ * FCM background SW.
+ * Vite injects `self.__FIREBASE_CONFIG__` at the top during serve/build (see vite.config.ts).
+ * Firebase Hosting may still serve `/__/firebase/init.json` as a fallback.
+ */
 importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-app-compat.js');
 importScripts('https://www.gstatic.com/firebasejs/12.9.0/firebase-messaging-compat.js');
 
-async function initMessaging() {
+async function loadFirebaseConfig() {
+  const injected = self.__FIREBASE_CONFIG__ || null;
+  if (injected && injected.apiKey && injected.projectId) {
+    return injected;
+  }
   try {
     const res = await fetch('/__/firebase/init.json');
     if (!res.ok) return null;
     const config = await res.json();
-    if (!config?.apiKey) return null;
-    firebase.initializeApp(config);
+    return config?.apiKey ? config : null;
+  } catch {
+    return null;
+  }
+}
+
+async function initMessaging() {
+  try {
+    const config = await loadFirebaseConfig();
+    if (!config) return null;
+    if (!firebase.apps.length) {
+      firebase.initializeApp(config);
+    }
     return firebase.messaging();
   } catch {
     return null;

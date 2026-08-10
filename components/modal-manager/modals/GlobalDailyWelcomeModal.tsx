@@ -27,11 +27,11 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/45 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/45 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={close}
     >
       <div
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]"
+        className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center gap-3">
@@ -55,7 +55,7 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="px-6 py-5 space-y-2">
+        <div className="min-h-0 flex-1 space-y-2 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 sm:py-5">
           {isNotificationMode ? (
             <>
               {userDisplayName && (
@@ -63,18 +63,18 @@ export const GlobalDailyWelcomeModal: React.FC = () => {
                   {t('modalManager.dailyWelcome.notification.recipient', { name: userDisplayName })}
                 </p>
               )}
-              <p className="text-sm text-[var(--color-text)] leading-7">
+              <p className="text-sm leading-7 text-[var(--color-text)]">
                 {notification?.message}
               </p>
             </>
           ) : (
-            <p className="text-sm text-[var(--color-text)] leading-7">
+            <p className="text-sm leading-7 text-[var(--color-text)]">
               {t('modalManager.dailyWelcome.message')}
             </p>
           )}
         </div>
 
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex justify-end">
+        <div className="flex shrink-0 justify-end border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="primary" onClick={close} tone="approve">
             <Check size={16} />
             {t('modalManager.dailyWelcome.continue')}

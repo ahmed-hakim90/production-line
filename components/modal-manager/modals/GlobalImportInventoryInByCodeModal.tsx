@@ -281,11 +281,11 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={handleClose}
     >
       <div
-        className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[95vw] max-w-4xl border border-[var(--color-border)] max-h-[90dvh] flex flex-col"
+        className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:w-[95vw] sm:rounded-[var(--border-radius-xl)]"
         onClick={(e) => e.stopPropagation()}
       >
         <input
@@ -315,7 +315,7 @@ export const GlobalImportInventoryInByCodeModal: React.FC = () => {
           </Button>
         </div>
 
-        <div className="p-6 overflow-auto flex-1 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-auto overscroll-contain p-4 sm:p-6">
           <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3">
             <p className="text-xs text-[var(--color-text-muted)] mb-2">{t('modalManager.importInventoryInByCode.itemTypeLabel')}</p>
             <div className="flex items-center gap-2">

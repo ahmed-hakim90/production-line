@@ -1,5 +1,7 @@
 {
-  "appName": "Factory ERP",
+  "appName": "ForgeOps",
+  "appTagline": "Run production and repair from one platform",
+  "appSubtitle": "Factory operations platform",
   "language": {
     "ar": "Arabic",
     "en": "English",
@@ -330,25 +332,25 @@
     "backToDashboard": "Back to dashboard"
   },
   "authLoading": {
-    "panelDescription": "An integrated system for production, inventory, and HR management",
+    "panelDescription": "Run production and repair from one platform",
     "features": {
-      "production": "Manage production lines and plans",
-      "inventory": "Track inventory and raw materials",
-      "hr": "Manage HR and attendance",
-      "analytics": "Advanced reports and analytics"
+      "production": "Production lines and plans",
+      "inventory": "Inventory and materials",
+      "repair": "Repair and maintenance",
+      "hr": "HR and attendance"
     }
   },
   "splash": {
-    "appName": "Factory ERP",
-    "tagline": "Integrated production, inventory, and HR management",
+    "appName": "ForgeOps",
+    "tagline": "Run production and repair from one platform",
     "loading": "Loading the system...",
     "resuming": "Restoring your session...",
-    "footer": "Factory Production System",
+    "footer": "ForgeOps",
     "features": {
-      "production": "Manage production lines and plans",
-      "inventory": "Track inventory and raw materials",
-      "hr": "Manage HR and attendance",
-      "analytics": "Advanced reports and analytics"
+      "production": "Production lines and plans",
+      "inventory": "Inventory and materials",
+      "repair": "Repair and maintenance",
+      "hr": "HR and attendance"
     }
   },
   "modalManager": {
@@ -737,7 +739,8 @@
       "approveAndActivate": "Approve + activate access",
       "disableUser": "Disable user",
       "enableUser": "Enable user",
-      "hardDelete": "Hard delete"
+      "hardDelete": "Hard delete",
+      "hardDeleteConfirm": "Permanently delete this user? This cannot be undone."
     },
     "createSystemUser": {
       "requiredFieldsError": "Enter name, email, password, and role.",
@@ -991,7 +994,7 @@
     "dailyWelcome": {
       "morningGreeting": "Good morning",
       "eveningGreeting": "Good evening",
-      "subtitle": "Welcome to Factory ERP.",
+      "subtitle": "Welcome to ForgeOps.",
       "message": "Have a productive day. You can now track reports, tasks, and daily notifications with ease.",
       "continue": "Continue",
       "notification": {

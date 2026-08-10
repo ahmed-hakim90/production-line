@@ -59,6 +59,7 @@ import {
 } from './lib/navigationRecovery';
 import {
   clearLastVisitedTenantSlugIfMatches,
+  getLastVisitedTenantSlug,
   setLastVisitedTenantSlug,
 } from './lib/lastTenantSlugStorage';
 import { tenantService } from './services/tenantService';
@@ -79,10 +80,22 @@ import {
 import { AppShellSkeleton } from './src/shared/ui/skeletons';
 
 const RegisterCompany = lazyNamed(() => import('./modules/auth/pages/RegisterCompany'), 'RegisterCompany');
+const LandingPage = lazyNamed(() => import('./modules/auth/pages/LandingPage'), 'LandingPage');
 
-/** Root `/` → last visited tenant home when known, otherwise env/default tenant. */
+/**
+ * PWA / root `/`: resume last tenant when known; otherwise public marketing landing.
+ * Manifest `start_url` is `/` — returning operators skip the marketing page.
+ */
 const RootEntryOrLanding: React.FC = () => {
-  return <Navigate to={resolvePreferredTenantHomePath()} replace />;
+  const last = getLastVisitedTenantSlug();
+  if (last) {
+    return <Navigate to={tenantHomePath(last)} replace />;
+  }
+  return (
+    <Suspense fallback={<PageRouteFallback />}>
+      <LandingPage />
+    </Suspense>
+  );
 };
 const TenantLoginGateway = lazyNamed(
   () => import('./modules/auth/pages/TenantLoginGateway'),

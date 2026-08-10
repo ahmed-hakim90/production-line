@@ -567,27 +567,27 @@ export const GlobalCreateReportModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={closeModal}
     >
       <div
-        className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
+        className="relative flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">
             {form.reportType === 'component_injection'
               ? t('modalManager.createReport.createInjectionTitle')
               : form.reportType === 'packaging'
                 ? t('modalManager.createReport.createPackagingTitle')
                 : t('modalManager.createReport.createProductionTitle')}
           </h3>
-          <button onClick={closeModal} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+          <button onClick={closeModal} className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]" aria-label={t('ui.close')}>
             <X size={20} />
           </button>
         </div>
 
-        <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {canChooseReportType && (
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createReport.reportType')}</label>

@@ -739,7 +739,7 @@ export const Organization: React.FC = () => {
       {/* ── Delete Confirmation Modal ── */}
       {deleteConfirmId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-14 h-14 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <span className="material-icons-round text-3xl text-[rgb(var(--color-danger))]">delete_forever</span>

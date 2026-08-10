@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { AlertCircle, CheckCircle2, Loader2, Plus, X } from 'lucide-react';
+import { Loader2, Plus, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button } from '../../../modules/production/components/UI';
 import { useAppStore } from '../../../store/useAppStore';
 import { usePermission } from '../../../utils/permissions';
@@ -35,7 +36,6 @@ export const GlobalCreateLineModal: React.FC = () => {
   const lines = useAppStore((s) => s._rawLines);
   const [form, setForm] = useState(emptyForm);
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   if (!isOpen) return null;
   if (!can('lines.create')) return null;
@@ -66,23 +66,21 @@ export const GlobalCreateLineModal: React.FC = () => {
 
   const handleClose = () => {
     if (saving) return;
-    setMessage(null);
     close();
   };
 
   const handleSave = async () => {
     const normalizedCode = normalizeLineCode((form.code ?? '').trim() || buildCodeFromLineName(form.name ?? '') || buildGenericLineCode());
     if (!form.name || !normalizedCode) {
-      setMessage({ type: 'error', text: t('modalManager.createLine.nameOrCodeRequiredError') });
+      toast.error(t('modalManager.createLine.nameOrCodeRequiredError'));
       return;
     }
     const isDuplicateCode = lines.some((line) => normalizeLineCode(line.code ?? '') === normalizedCode);
     if (isDuplicateCode) {
-      setMessage({ type: 'error', text: t('modalManager.createLine.duplicateCodeError') });
+      toast.error(t('modalManager.createLine.duplicateCodeError'));
       return;
     }
     setSaving(true);
-    setMessage(null);
     try {
       const id = await createLine({
         ...form,
@@ -90,10 +88,11 @@ export const GlobalCreateLineModal: React.FC = () => {
         sortOrder: Math.max(1, Number(form.sortOrder || nextSortOrder)),
       });
       if (!id) throw new Error('create failed');
-      setMessage({ type: 'success', text: t('modalManager.createLine.createSuccess') });
+      toast.success(t('modalManager.createLine.createSuccess'));
       setForm(emptyForm);
+      close();
     } catch {
-      setMessage({ type: 'error', text: t('modalManager.createLine.saveError') });
+      toast.error(t('modalManager.createLine.saveError'));
     } finally {
       setSaving(false);
     }
@@ -101,24 +100,28 @@ export const GlobalCreateLineModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
-      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-lg font-bold">{t('modalManager.createLine.title')}</h3>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+    <div
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={handleClose}
+    >
+      <div
+        className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">{t('modalManager.createLine.title')}</h3>
+          <button
+            onClick={handleClose}
+            className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+            aria-label={t('ui.close')}
+          >
             <X size={20} />
           </button>
         </div>
-        <div className="p-6 space-y-5">
-          {message && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${message.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
-              {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-              <p className="flex-1">{message.text}</p>
-            </div>
-          )}
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.codeOptional')}</label>
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.code ?? ''} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder={buildCodeFromLineName(form.name) || buildGenericLineCode() || t('modalManager.createLine.codePlaceholder')} />
+            <input className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3.5 text-sm font-medium outline-none" value={form.code ?? ''} onChange={(e) => setForm({ ...form, code: e.target.value })} placeholder={buildCodeFromLineName(form.name) || buildGenericLineCode() || t('modalManager.createLine.codePlaceholder')} />
             {!form.code?.trim() && (
               <p className="text-[11px] font-bold text-[var(--color-text-muted)]">
                 سيتم توليد كود تلقائيًا: <span className="text-primary">{buildCodeFromLineName(form.name) || buildGenericLineCode()}</span>
@@ -127,12 +130,12 @@ export const GlobalCreateLineModal: React.FC = () => {
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.nameRequired')}</label>
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('modalManager.createLine.namePlaceholder')} />
+            <input className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3.5 text-sm font-medium outline-none" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder={t('modalManager.createLine.namePlaceholder')} />
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">ترتيب الظهور</label>
             <input
-              className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium"
+              className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3.5 text-sm font-medium outline-none"
               type="number"
               min={1}
               value={form.sortOrder || ''}
@@ -140,42 +143,42 @@ export const GlobalCreateLineModal: React.FC = () => {
               placeholder={`التالي: ${nextSortOrder}`}
             />
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.dailyWorkingHours')}</label>
-              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={1} max={24} value={form.dailyWorkingHours} onChange={(e) => setForm({ ...form, dailyWorkingHours: Number(e.target.value) })} />
+              <input className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3.5 text-sm font-medium outline-none" type="number" min={1} max={24} value={form.dailyWorkingHours} onChange={(e) => setForm({ ...form, dailyWorkingHours: Number(e.target.value) })} />
             </div>
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.maxWorkers')}</label>
-              <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" type="number" min={1} value={form.maxWorkers} onChange={(e) => setForm({ ...form, maxWorkers: Number(e.target.value) })} />
+              <input className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3.5 text-sm font-medium outline-none" type="number" min={1} value={form.maxWorkers} onChange={(e) => setForm({ ...form, maxWorkers: Number(e.target.value) })} />
             </div>
           </div>
           <div className="space-y-2">
             <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.createLine.status')}</label>
-            <select className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm p-3.5 outline-none font-medium" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ProductionLineStatus })}>
+            <select className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3.5 text-sm font-medium outline-none" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value as ProductionLineStatus })}>
               {statusOptions.map((opt) => (
                 <option key={opt.value} value={opt.value}>{t(`modalManager.createLine.statuses.${opt.key}`)}</option>
               ))}
             </select>
           </div>
-          <label className="flex items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-muted/30 px-4 py-3 cursor-pointer">
+          <label className="flex cursor-pointer items-start gap-3 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-muted/30 px-4 py-3">
             <input
               type="checkbox"
               className="mt-0.5 size-4 rounded border-[var(--color-border)]"
               checked={Boolean(form.isPackagingLine)}
               onChange={(e) => setForm({ ...form, isPackagingLine: e.target.checked })}
             />
-            <span className="text-sm font-bold text-[var(--color-text)] leading-relaxed">
+            <span className="text-sm font-bold leading-relaxed text-[var(--color-text)]">
               {t('modalManager.createLine.packagingLine')}
-              <span className="block text-[11px] font-semibold text-[var(--color-text-muted)] mt-1">
+              <span className="mt-1 block text-[11px] font-semibold text-[var(--color-text-muted)]">
                 {t('modalManager.createLine.packagingLineHint')}
               </span>
             </span>
           </label>
         </div>
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
-          <Button variant="primary" onClick={handleSave} disabled={saving || !form.name}>
+          <Button variant="primary" onClick={() => void handleSave()} disabled={saving || !form.name}>
             {saving && <Loader2 size={14} className="animate-spin" />}
             <Plus size={14} />
             {t('modalManager.createLine.addLine')}

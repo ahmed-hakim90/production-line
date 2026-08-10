@@ -7,8 +7,8 @@
     <meta name="theme-color" content="#4F46E5" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="Factory ERP" />
-    <title>Factory PRODUCTION SYSTEM</title>
+    <meta name="apple-mobile-web-app-title" content="ForgeOps" />
+    <title>ForgeOps</title>
     <link rel="icon" type="image/svg+xml" href="/icons/pwa-icon.svg" />
     <link rel="icon" type="image/png" sizes="192x192" href="/icons/pwa-icon-192.png" />
     <link rel="icon" type="image/png" sizes="512x512" href="/icons/pwa-icon-512.png" />
@@ -20,7 +20,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&family=Noto+Sans+Arabic:wght@300;400;500;600;700&family=Tajawal:wght@300;400;500;700&family=Rubik:wght@300;400;500;600;700&family=IBM+Plex+Sans+Arabic:wght@300;400;500;600;700&display=swap" rel="stylesheet" />
     <link href="https://fonts.googleapis.com/icon?family=Material+Icons+Round" rel="stylesheet" />
     <style>
-      /* Cold boot: branded splash */
+      /* Cold boot: branded splash — fixed ForgeOps green (not tenant theme) */
       #html-splash {
         position: fixed;
         inset: 0;
@@ -30,7 +30,7 @@
         align-items: center;
         justify-content: center;
         gap: 20px;
-        background: linear-gradient(165deg, var(--splash-brand, #4F46E5) 0%, var(--splash-brand-dark, #3b34b0) 100%);
+        background: linear-gradient(165deg, var(--splash-brand, #2D6255) 0%, var(--splash-brand-dark, #234F45) 100%);
         color: #fff;
       }
       #html-splash img {
@@ -238,47 +238,24 @@
 
     <script>
       /**
-       * Cold splash branding from cached tenant theme (tenant_theme_cache_v1).
-       * Keeps first paint aligned with applyAppTheme once React loads.
+       * Cold splash uses fixed ForgeOps brand green — never tenant theme primary.
+       * Tenant theme still applies to the app chrome after login.
        */
       (function () {
-        var KEY = 'tenant_theme_cache_v1';
-        var DEFAULT = '#4F46E5';
-        function parseHex(hex) {
-          if (!hex || typeof hex !== 'string') return null;
-          var h = hex.trim();
-          if (h.charAt(0) === '#') h = h.slice(1);
-          if (!/^[0-9a-fA-F]{6}$/.test(h) && !/^[0-9a-fA-F]{3}$/.test(h)) return null;
-          if (h.length === 3) h = h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
-          return '#' + h.toLowerCase();
-        }
-        function darken(hex, amount) {
-          var h = hex.slice(1);
-          var r = parseInt(h.slice(0,2),16), g = parseInt(h.slice(2,4),16), b = parseInt(h.slice(4,6),16);
-          function c(n){ n = Math.round(n*(1-amount)); return Math.max(0,Math.min(255,n)).toString(16).padStart(2,'0'); }
-          return '#' + c(r) + c(g) + c(b);
-        }
-        var primary = DEFAULT;
+        var SPLASH = '#2D6255';
+        var SPLASH_DARK = '#234F45';
+        var SPLASH_LIGHT = '#3A7868';
         try {
-          var raw = localStorage.getItem(KEY);
-          if (raw) {
-            var parsed = JSON.parse(raw);
-            var next = parseHex(parsed && parsed.primaryColor);
-            if (next) primary = next;
-          }
-        } catch (e) { /* ignore */ }
-        var dark = darken(primary, 0.22);
-        try {
-          document.documentElement.style.setProperty('--color-primary-hex', primary);
-          document.documentElement.style.setProperty('--splash-brand', primary);
-          document.documentElement.style.setProperty('--splash-brand-dark', dark);
+          document.documentElement.style.setProperty('--splash-brand', SPLASH);
+          document.documentElement.style.setProperty('--splash-brand-dark', SPLASH_DARK);
+          document.documentElement.style.setProperty('--splash-brand-light', SPLASH_LIGHT);
           var meta = document.querySelector('meta[name="theme-color"]');
-          if (meta) meta.setAttribute('content', primary);
+          if (meta) meta.setAttribute('content', SPLASH);
           var el = document.getElementById('html-splash');
           if (el && !el.classList.contains('html-splash--warm')) {
-            el.style.background = 'linear-gradient(165deg, ' + primary + ' 0%, ' + dark + ' 100%)';
+            el.style.background = 'linear-gradient(165deg, ' + SPLASH + ' 0%, ' + SPLASH_DARK + ' 100%)';
           }
-        } catch (e2) { /* ignore */ }
+        } catch (e) { /* ignore */ }
       })();
     </script>
 

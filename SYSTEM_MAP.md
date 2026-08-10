@@ -1,7 +1,7 @@
 # SYSTEM_MAP — Production Line ERP
 
-**Identity:** Arabic (RTL) multi-tenant factory ERP — production, inventory, repair, HR, costing.  
-**Last updated:** 2026-08-10 (repair diagnosed / تم الفحص status)
+**Identity:** Arabic (RTL) multi-tenant factory ERP **ForgeOps** — production, inventory, repair, HR, costing.  
+**Last updated:** 2026-08-10 (product brand: ForgeOps)
 
 ## Product shape — Module Apps + Domain-Driven
 
@@ -31,7 +31,7 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 - Tenant-scoped routes under `/t/:tenantSlug/...`
 - Shared permissions (`utils/permissions.ts`), menu (`config/menu.config.ts`), inventory warehouse scope
 - Visual language: **Hakimo Flow** — tokens in `src/index.css` / `DEFAULT_THEME`; runtime apply via `applyAppTheme` (`core/ui-engine/theme/tenantTheme.ts`); shells `DomainHomeShell` + `ModuleOpsPageShell`; doc `docs/HAKIMO_FLOW.md`
-- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars (`applyAppTheme`); product UI is guarded by `npm run arch:check:theme-tokens` (blocks hex + slate/gray + semantic Tailwind palettes mapped to success/warning/danger/primary/secondary; sidebar colorful + charts use `--chart-*` via `core/ui-engine/theme/chartColors.ts`). `systemSettings.printTemplate` drives paper / WhatsApp PNG plus per-document field visibility / custom lines / print font (full registry: production/worker/missing/supervisor/BOM, repair invoice/payment/spare/treasury/receipt/card/delivery, stock/item/supplies, accounting, quality, payslip, routing, catalog product detail). Preview: `/settings/reports` + `/dev/image-export`. Auth/splash follow `applyAppTheme` / cached tenant primary (`--splash-brand`); print/WhatsApp soft accents derive from `printTemplate.primaryColor` with UI theme fallback via `resolvePrintAccentHex`. Theme-preset color pickers still use literal hex by design.
+- **UI theme vs print:** `systemSettings.theme` drives on-screen CSS vars (`applyAppTheme`); product UI is guarded by `npm run arch:check:theme-tokens` (blocks hex + slate/gray + semantic Tailwind palettes mapped to success/warning/danger/primary/secondary; sidebar colorful + charts use `--chart-*` via `core/ui-engine/theme/chartColors.ts`). `systemSettings.printTemplate` drives paper / WhatsApp PNG plus per-document field visibility / custom lines / print font (full registry: production/worker/missing/supervisor/BOM, repair invoice/payment/spare/treasury/receipt/card/delivery, stock/item/supplies, accounting, quality, payslip, routing, catalog product detail). Preview: `/settings/reports` + `/dev/image-export`. Auth/splash branding panel uses **fixed ForgeOps green** (`PRODUCT_BRAND.splashHex` / `--splash-brand`) — never tenant primary. Print/WhatsApp soft accents derive from `printTemplate.primaryColor` with UI theme fallback via `resolvePrintAccentHex`. Theme-preset color pickers still use literal hex by design.
 
 ## Modules (MOD)
 
@@ -93,6 +93,10 @@ Anti-patterns: page-to-page coupling, duplicating stock logic inside repair UI, 
 
 | Flow | Path |
 |------|------|
+| Public landing (no last tenant) | `/` → `LandingPage` |
+| Resume last tenant (PWA start) | `/` → `/t/{lastSlug}/` |
+| Register company | `/register-company` |
+| Tenant login gateway | `/login` |
 | Production home board (KPIs + charts) | `/production` |
 | Supervisor analysis home (level 2) | `/supervisor` |
 | Warehouses hub (filters, no sidebar spam) | `/inventory/warehouses` |

@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Loader2, UserPlus, X } from 'lucide-react';
+import { toast } from 'sonner';
 import { Button, SearchableSelect } from '../../UI';
 import { useManagedModalController } from '../GlobalModalManager';
 import { MODAL_KEYS } from '../modalKeys';
@@ -20,7 +21,15 @@ type CreateUserPayload = {
   }) => Promise<void>;
 };
 
-type Message = { type: 'success' | 'error'; text: string } | null;
+const toUserSafeError = (error: unknown, fallback: string): string => {
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const trimmed = message.trim();
+  if (!trimmed) return fallback;
+  if (/firebase|firestore|https?:\/\/|stack|permission-denied|internal/i.test(trimmed)) {
+    return fallback;
+  }
+  return trimmed;
+};
 
 export const GlobalCreateSystemUserModal: React.FC = () => {
   const { t } = useTranslation();
@@ -31,7 +40,6 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
   const [roleId, setRoleId] = useState('');
   const [employeeId, setEmployeeId] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [message, setMessage] = useState<Message>(null);
 
   const modalPayload = payload as CreateUserPayload | undefined;
   const roles = modalPayload?.roles ?? [];
@@ -44,18 +52,16 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
     setPassword('');
     setEmployeeId('');
     setRoleId(String(roles[0]?.id || ''));
-    setMessage(null);
   }, [isOpen, roles]);
 
   if (!isOpen || !modalPayload) return null;
 
   const handleSubmit = async () => {
     if (!displayName.trim() || !email.trim() || !password.trim() || !roleId) {
-      setMessage({ type: 'error', text: t('modalManager.createSystemUser.requiredFieldsError') });
+      toast.error(t('modalManager.createSystemUser.requiredFieldsError'));
       return;
     }
     setSubmitting(true);
-    setMessage(null);
     try {
       await modalPayload.onSubmit({
         displayName: displayName.trim(),
@@ -64,10 +70,10 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
         roleId,
         employeeId: employeeId || undefined,
       });
-      setMessage({ type: 'success', text: t('modalManager.createSystemUser.createSuccess') });
+      toast.success(t('modalManager.createSystemUser.createSuccess'));
       close();
-    } catch (error: any) {
-      setMessage({ type: 'error', text: error?.message || t('modalManager.createSystemUser.createError') });
+    } catch (error: unknown) {
+      toast.error(toUserSafeError(error, t('modalManager.createSystemUser.createError')));
     } finally {
       setSubmitting(false);
     }
@@ -75,32 +81,38 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => !submitting && close()}>
-      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-2xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-lg font-bold">{t('modalManager.createSystemUser.title')}</h3>
-          <button onClick={close} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors" disabled={submitting}>
+    <div
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={() => !submitting && close()}
+    >
+      <div
+        className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">{t('modalManager.createSystemUser.title')}</h3>
+          <button
+            onClick={close}
+            className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+            disabled={submitting}
+            aria-label={t('ui.close')}
+          >
             <X size={20} />
           </button>
         </div>
-        <div className="p-6 space-y-4">
-          {message && (
-            <div className={`px-3 py-2 rounded-[var(--border-radius-base)] text-sm border ${message.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border-[rgb(var(--color-danger)/0.25)]'}`}>
-              {message.text}
-            </div>
-          )}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]" placeholder={t('modalManager.createSystemUser.namePlaceholder')} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]" placeholder={t('modalManager.createSystemUser.emailPlaceholder')} value={email} onChange={(e) => setEmail(e.target.value)} />
-            <input className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]" placeholder={t('modalManager.createSystemUser.passwordPlaceholder')} value={password} onChange={(e) => setPassword(e.target.value)} />
-            <select className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-base)] px-3 py-2 text-sm bg-[var(--color-card)] text-[var(--color-text)]" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <input className="w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-text)]" placeholder={t('modalManager.createSystemUser.namePlaceholder')} value={displayName} onChange={(e) => setDisplayName(e.target.value)} />
+            <input className="w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-text)]" placeholder={t('modalManager.createSystemUser.emailPlaceholder')} value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="off" />
+            <input type="password" className="w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-text)]" placeholder={t('modalManager.createSystemUser.passwordPlaceholder')} value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="new-password" />
+            <select className="w-full rounded-[var(--border-radius-base)] border border-[var(--color-border)] bg-[var(--color-card)] px-3 py-2 text-sm text-[var(--color-text)]" value={roleId} onChange={(e) => setRoleId(e.target.value)}>
               {roles.map((role) => (
                 <option key={role.id} value={role.id}>{role.name}</option>
               ))}
             </select>
           </div>
-          <div>
-            <label className="text-xs font-bold text-[var(--color-text-muted)] block mb-1">{t('modalManager.createSystemUser.linkEmployeeOptional')}</label>
+          <div className="min-w-0">
+            <label className="mb-1 block text-xs font-bold text-[var(--color-text-muted)]">{t('modalManager.createSystemUser.linkEmployeeOptional')}</label>
             <SearchableSelect
               options={employeeOptions}
               value={employeeId}
@@ -109,7 +121,7 @@ export const GlobalCreateSystemUserModal: React.FC = () => {
             />
           </div>
         </div>
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={close} disabled={submitting} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={() => void handleSubmit()} disabled={submitting} tone="submit">
             {submitting ? <Loader2 size={15} className="animate-spin" /> : <UserPlus size={15} />}

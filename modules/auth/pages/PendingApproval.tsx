@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { BrandMark } from '@/components/system-ui/BrandMark';
 import { useAppStore } from '../../../store/useAppStore';
 
 export const PendingApproval: React.FC = () => {
@@ -24,10 +25,10 @@ export const PendingApproval: React.FC = () => {
 
         {/* Brand */}
         <div className="erp-auth-brand">
-          <div className="erp-auth-logo">
-            <span className="material-icons-round" style={{ fontSize: 28 }}>factory</span>
+          <div className="erp-auth-logo erp-auth-logo--mark">
+            <BrandMark size={48} />
           </div>
-          <div className="erp-auth-app-name">Factory ERP</div>
+          <div className="erp-auth-app-name">ForgeOps</div>
           <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 
@@ -154,7 +155,7 @@ export const PendingApproval: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          &copy; {new Date().getFullYear()} Factory PRODUCTION SYSTEM
+          &copy; {new Date().getFullYear()} ForgeOps
         </p>
       </div>
     </div>

@@ -38,24 +38,25 @@ export const GlobalApproveTransferModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => close()}>
-      <div className="bg-[var(--color-card)] rounded-xl shadow-2xl w-full max-w-2xl max-h-[90vh] overflow-y-auto border" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex items-center justify-between sticky top-0 bg-[var(--color-card)] z-10">
-          <div>
-            <h3 className="text-lg font-bold">طلب تحويل #{request.referenceNo}</h3>
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => close()}>
+      <div className="flex max-h-[92dvh] w-full max-w-2xl flex-col overflow-hidden rounded-t-xl border bg-[var(--color-card)] shadow-2xl sm:rounded-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b bg-[var(--color-card)] px-4 py-3 sm:px-6 sm:py-4">
+          <div className="min-w-0">
+            <h3 className="truncate text-base font-bold sm:text-lg">طلب تحويل #{request.referenceNo}</h3>
             <p className="text-xs text-[var(--color-text-muted)]">{transferRequestTypeLabel(request.requestType)} — {request.status}</p>
           </div>
-          <button type="button" onClick={() => close()} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]"><X size={20} /></button>
+          <button type="button" onClick={() => close()} className="shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" aria-label="إغلاق"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-4">
-          <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div><span className="text-[var(--color-text-muted)]">من:</span> <strong>{fromName}</strong></div>
             <div><span className="text-[var(--color-text-muted)]">إلى:</span> <strong>{toName}</strong></div>
             <div><span className="text-[var(--color-text-muted)]">المنشئ:</span> {request.createdBy}</div>
             <div><span className="text-[var(--color-text-muted)]">التاريخ:</span> {new Date(request.createdAt).toLocaleString('ar-EG')}</div>
           </div>
-          {request.note && <p className="text-sm bg-[var(--color-bg)] rounded-lg p-3">{request.note}</p>}
-          <table className="w-full text-sm text-right border-collapse">
+          {request.note && <p className="rounded-lg bg-[var(--color-bg)] p-3 text-sm">{request.note}</p>}
+          <div className="overflow-x-auto">
+          <table className="w-full min-w-[280px] border-collapse text-right text-sm">
             <thead>
               <tr className="border-b text-[var(--color-text-muted)]">
                 <th className="py-2">الصنف</th>
@@ -71,8 +72,9 @@ export const GlobalApproveTransferModal: React.FC = () => {
               ))}
             </tbody>
           </table>
+          </div>
         </div>
-        <div className="px-6 py-4 border-t flex flex-wrap justify-end gap-1.5 sticky bottom-0 bg-[var(--color-card)]">
+        <div className="flex shrink-0 flex-wrap justify-end gap-1.5 border-t bg-[var(--color-card)] px-4 py-3 sm:px-6 sm:py-4">
           {data.onPrint && (
             <TableIconAction
               action="print"

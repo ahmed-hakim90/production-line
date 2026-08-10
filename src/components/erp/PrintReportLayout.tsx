@@ -171,7 +171,7 @@ export const PrintReportLayout = forwardRef<HTMLDivElement, PrintReportLayoutPro
                 {companyName}
               </h1>
               <p className="text-[10px] font-semibold mt-0.5" style={{ color: accent, letterSpacing: "normal" }}>
-                Factory PRODUCTION SYSTEM
+                ForgeOps
               </p>
             </div>
           </div>

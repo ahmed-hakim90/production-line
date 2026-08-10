@@ -169,7 +169,7 @@ export const FactoryPrintShell = forwardRef<HTMLDivElement, FactoryPrintShellPro
                 {companyName}
               </h1>
               <p className="mt-0.5 text-[10px] font-semibold" style={{ color: accent, letterSpacing: 'normal' }}>
-                Factory PRODUCTION SYSTEM
+                ForgeOps
               </p>
             </div>
           </div>

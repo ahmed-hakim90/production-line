@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { BrandMark } from '@/components/system-ui/BrandMark';
 
 type Props = {
   tenantSlug: string;
@@ -18,12 +19,10 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
     <div className="erp-auth-page has-panel">
       <div className="erp-auth-container" style={{ maxWidth: 480 }}>
         <div className="erp-auth-brand">
-          <div className="erp-auth-logo">
-            <span className="material-icons-round" style={{ fontSize: 28 }}>
-              domain
-            </span>
+          <div className="erp-auth-logo erp-auth-logo--mark">
+            <BrandMark size={48} />
           </div>
-          <div className="erp-auth-app-name">Factory ERP</div>
+          <div className="erp-auth-app-name">ForgeOps</div>
           <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
         </div>
 
@@ -84,7 +83,7 @@ export const CompanyNotApprovedPage: React.FC<Props> = ({ tenantSlug, status }) 
           </div>
         </div>
 
-        <p className="erp-auth-copyright">&copy; {new Date().getFullYear()} Factory PRODUCTION SYSTEM</p>
+        <p className="erp-auth-copyright">&copy; {new Date().getFullYear()} ForgeOps</p>
       </div>
     </div>
   );

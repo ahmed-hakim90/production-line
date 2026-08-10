@@ -115,7 +115,7 @@ export const GlobalAttendanceSignatureFixModal: React.FC = () => {
     <ManagedModalPortal>
     <div className="erp-modal-overlay" onClick={() => { if (!savingId) close(); }}>
       <div
-        className="erp-modal-panel w-[96vw] max-w-5xl max-h-[92dvh] overflow-hidden"
+        className="erp-modal-panel w-full max-w-5xl sm:w-[96vw]"
         onClick={(event) => event.stopPropagation()}
       >
         <div className="erp-modal-head">

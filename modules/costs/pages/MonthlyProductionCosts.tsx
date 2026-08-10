@@ -1778,8 +1778,8 @@ export const MonthlyProductionCosts: React.FC = () => {
 
       {showColumnsModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setShowColumnsModal(false)}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setShowColumnsModal(false)}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <div className="erp-page-actions">
                 <span className="material-icons-round text-primary">tune</span>
@@ -1789,7 +1789,7 @@ export const MonthlyProductionCosts: React.FC = () => {
                 <span className="material-icons-round">close</span>
               </button>
             </div>
-            <div className="p-6 space-y-3 overflow-y-auto flex-1 min-h-0">
+            <div className="p-6 space-y-3 min-h-0 flex-1 overflow-y-auto overscroll-contain">
               <div className="flex items-center justify-between pb-1">
                 <p className="text-sm font-bold text-[var(--color-text)]">أعمدة أساسية</p>
                 <Button variant="outline" onClick={showAllBaseColumns}>

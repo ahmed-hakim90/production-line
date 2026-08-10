@@ -488,33 +488,46 @@ export const LeaveRequests: React.FC = () => {
       }
     >
 
-      {/* Balance Cards */}
-      {balance && (
+      {/* Balance Cards — فقط الأنواع المعرفة في إعدادات الإجازات */}
+      {balance && leaveTypes.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className="material-icons-round text-[rgb(var(--color-primary))] text-3xl mb-2 block">beach_access</span>
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">سنوية</p>
-            <p className="text-2xl font-bold text-[rgb(var(--color-primary))]">{balance.annualBalance}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
-          </div>
-          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className="material-icons-round text-[rgb(var(--color-danger))] text-3xl mb-2 block">local_hospital</span>
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">مرضية</p>
-            <p className="text-2xl font-bold text-[rgb(var(--color-danger))]">{balance.sickBalance}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
-          </div>
-          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className="material-icons-round text-[rgb(var(--color-warning))] text-3xl mb-2 block">warning</span>
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">الرصيد</p>
-            <p className="text-2xl font-bold text-[rgb(var(--color-warning))]">{balance.emergencyBalance}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
-          </div>
-          <div className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
-            <span className="material-icons-round text-[var(--color-text-muted)] text-3xl mb-2 block">money_off</span>
-            <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">بدون راتب (مأخوذة)</p>
-            <p className="text-2xl font-bold text-[var(--color-text-muted)]">{balance.unpaidTaken}</p>
-            <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
-          </div>
+          {leaveTypes.map((row) => {
+            const isUnpaid = row.key === 'unpaid';
+            const value = row.key === 'annual'
+              ? balance.annualBalance
+              : row.key === 'sick'
+                ? balance.sickBalance
+                : row.key === 'emergency'
+                  ? balance.emergencyBalance
+                  : isUnpaid
+                    ? balance.unpaidTaken
+                    : Math.max(0, Number(row.defaultBalance ?? 0));
+            const icon = row.key === 'sick'
+              ? 'local_hospital'
+              : row.key === 'emergency'
+                ? 'warning'
+                : isUnpaid
+                  ? 'money_off'
+                  : 'beach_access';
+            const valueClass = row.key === 'sick'
+              ? 'text-[rgb(var(--color-danger))]'
+              : row.key === 'emergency'
+                ? 'text-[rgb(var(--color-warning))]'
+                : isUnpaid
+                  ? 'text-[var(--color-text-muted)]'
+                  : 'text-[rgb(var(--color-primary))]';
+            const iconClass = valueClass;
+            return (
+              <div key={row.key} className="bg-[var(--color-card)] p-5 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] text-center">
+                <span className={`material-icons-round ${iconClass} text-3xl mb-2 block`}>{icon}</span>
+                <p className="text-xs text-[var(--color-text-muted)] font-bold mb-1">
+                  {isUnpaid ? `${row.label} (مأخوذة)` : row.label}
+                </p>
+                <p className={`text-2xl font-bold ${valueClass}`}>{value}</p>
+                <p className="text-xs text-[var(--color-text-muted)]">يوم</p>
+              </div>
+            );
+          })}
         </div>
       )}
 
@@ -826,7 +839,7 @@ export const LeaveRequests: React.FC = () => {
       {/* Delete Confirmation Modal */}
       {deleteConfirm && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[10050] p-4">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] p-6 w-full max-w-sm shadow-2xl">
             <div className="text-center">
               <span className="material-icons-round text-5xl text-[rgb(var(--color-danger))] mb-2">warning</span>

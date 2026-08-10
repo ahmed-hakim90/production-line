@@ -121,15 +121,15 @@ export const GlobalCreateVehicleModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
-      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
-          <h3 className="text-lg font-bold">{editingId ? t('modalManager.createVehicle.editTitle') : t('modalManager.createVehicle.createTitle')}</h3>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={handleClose}>
+      <div className="flex max-h-[92dvh] w-full max-w-5xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]" onClick={(e) => e.stopPropagation()}>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">{editingId ? t('modalManager.createVehicle.editTitle') : t('modalManager.createVehicle.createTitle')}</h3>
+          <button onClick={handleClose} className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]" aria-label={t('ui.close')}>
             <X size={20} />
           </button>
         </div>
-        <div className="p-6 space-y-5 overflow-y-auto">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <div>
               <label className="block text-sm font-bold text-[var(--color-text-muted)] mb-2">{t('modalManager.createVehicle.vehicleNameRequired')}</label>

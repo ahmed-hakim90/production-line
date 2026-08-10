@@ -2002,7 +2002,7 @@ export const StockMovementForm: React.FC = () => {
       {showPrintPreview && previewData && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-center justify-center p-3 sm:p-4"
+          className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setShowPrintPreview(false)}
         >
           <div

@@ -1090,8 +1090,8 @@ export const Employees: React.FC = () => {
       {/* 6. Create/Edit Modal — Professional HR Panel */}
       {showModal && (can('employees.create') || can('employees.edit')) && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[92vh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { setShowModal(false); setSaveMsg(null); }}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[92dvh] overflow-hidden border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             {/* Header */}
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0 bg-gradient-to-l from-primary/5 to-transparent">
               <div className="flex items-center gap-3">
@@ -1130,7 +1130,7 @@ export const Employees: React.FC = () => {
               ))}
             </div>
 
-            <div className="p-6 overflow-y-auto space-y-6">
+            <div className="min-h-0 flex-1 space-y-6 overflow-y-auto overscroll-contain p-4 sm:p-6">
               {/* Validation errors */}
               {validationErrors.length > 0 && (
                 <div className="flex items-start gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] bg-[rgb(var(--color-warning)/0.1)] border border-[rgb(var(--color-warning)/0.25)]">
@@ -1471,7 +1471,7 @@ export const Employees: React.FC = () => {
       {/* Deactivate confirmation (soft delete) */}
       {deleteConfirmId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirmId(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setDeleteConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-[rgb(var(--color-warning)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <EmployeeIcon name="person_off" className="text-[rgb(var(--color-warning))] text-3xl" />
@@ -1495,7 +1495,7 @@ export const Employees: React.FC = () => {
       {/* Permanent delete confirmation (hard delete - only for inactive employees) */}
       {permanentDeleteId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setPermanentDeleteId(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setPermanentDeleteId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <EmployeeIcon name="delete_forever" className="text-[rgb(var(--color-danger))] text-3xl" />
@@ -1527,7 +1527,7 @@ export const Employees: React.FC = () => {
       {/* Reactivate confirmation */}
       {toggleConfirmId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setToggleConfirmId(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setToggleConfirmId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-[rgb(var(--color-success)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <EmployeeIcon name="person_add" className="text-[rgb(var(--color-success))] text-3xl" />
@@ -1551,7 +1551,7 @@ export const Employees: React.FC = () => {
       {/* Quick-Add Modal (Department / Position / Shift) */}
       {quickAddType && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setQuickAddType(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setQuickAddType(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-base font-bold">

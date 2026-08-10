@@ -634,7 +634,7 @@ export const WorkOrderScanner: React.FC = () => {
 
       {closeModalOpen && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => !closeBusy && setCloseModalOpen(false)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => !closeBusy && setCloseModalOpen(false)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-base font-bold mb-1">تأكيد إنهاء أمر الشغل</h3>
             <p className="text-xs text-[var(--color-text-muted)] mb-4">{workOrder.workOrderNumber} — {productName}</p>

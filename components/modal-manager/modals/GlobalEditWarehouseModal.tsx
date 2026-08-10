@@ -98,27 +98,33 @@ export const GlobalEditWarehouseModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
-      <div className="bg-[var(--color-card)] rounded-xl shadow-2xl w-full max-w-xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b flex items-center justify-between">
-          <h3 className="text-lg font-bold">تعديل مخزن</h3>
-          <button type="button" onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)]"><X size={20} /></button>
+    <div
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={handleClose}
+    >
+      <div
+        className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 sm:px-6 sm:py-4">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">تعديل مخزن</h3>
+          <button type="button" onClick={handleClose} className="shrink-0 text-[var(--color-text-muted)] hover:text-[var(--color-text)]" aria-label="إغلاق"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {message && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-lg text-sm font-bold ${message.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
+            <div className={`flex items-center gap-2 rounded-lg px-4 py-3 text-sm font-bold ${message.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
               {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-              {message.text}
+              <span className="min-w-0 break-words">{message.text}</span>
             </div>
           )}
           <input className="w-full rounded-lg border px-3 py-2.5" placeholder="اسم المخزن (حر — زي ما تحب تسمّيه)" value={name} onChange={(e) => setName(e.target.value)} />
           <input className="w-full rounded-lg border px-3 py-2.5" placeholder="الكود" value={code} onChange={(e) => setCode(e.target.value)} />
           <div>
-            <label className="block text-xs font-bold text-[var(--color-text-muted)] mb-1">الدور التشغيلي (مش الاسم)</label>
-            <select className="w-full rounded-lg border px-3 py-2.5 font-bold text-sm" value={warehouseRole} onChange={(e) => setWarehouseRole(e.target.value as WarehouseRole)}>
+            <label className="mb-1 block text-xs font-bold text-[var(--color-text-muted)]">الدور التشغيلي (مش الاسم)</label>
+            <select className="w-full rounded-lg border px-3 py-2.5 text-sm font-bold" value={warehouseRole} onChange={(e) => setWarehouseRole(e.target.value as WarehouseRole)}>
               {WAREHOUSE_ROLES.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
             </select>
-            <p className="text-[11px] text-[var(--color-text-muted)] mt-1">
+            <p className="mt-1 text-[11px] text-[var(--color-text-muted)]">
               الاسم يظهر في الشاشات؛ الدور يساعد الربط في إعدادات التوجيه.
             </p>
           </div>
@@ -127,7 +133,7 @@ export const GlobalEditWarehouseModal: React.FC = () => {
             مخزن نشط
           </label>
         </div>
-        <div className="px-6 py-4 border-t flex justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={handleClose}>إلغاء</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving}>
             {saving && <Loader2 size={14} className="animate-spin" />}

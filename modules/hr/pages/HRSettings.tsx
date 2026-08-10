@@ -340,7 +340,7 @@ const ConfirmDialog: React.FC<{
   if (!open) return null;
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
       <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl border border-[var(--color-border)] p-6 max-w-md w-full mx-4">
         <h3 className="text-lg font-bold mb-2">{title}</h3>
         <p className="text-sm text-[var(--color-text-muted)] mb-6">{message}</p>

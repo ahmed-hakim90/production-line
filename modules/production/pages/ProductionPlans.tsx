@@ -1083,7 +1083,7 @@ export const ProductionPlans: React.FC = () => {
       {/* Capacity Warning Modal */}
       {capacityWarning.show && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setCapacityWarning({ show: false, load: 0, capacity: 0 })}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setCapacityWarning({ show: false, load: 0, capacity: 0 })}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 text-center space-y-4">
               <div className="w-14 h-14 bg-[rgb(var(--color-warning)/0.1)] rounded-full flex items-center justify-center mx-auto">
@@ -1434,7 +1434,7 @@ export const ProductionPlans: React.FC = () => {
       {/* Edit Modal */}
       {editPlan && canEdit && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setEditPlan(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setEditPlan(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">تعديل الخطة</h3>
@@ -1515,7 +1515,7 @@ export const ProductionPlans: React.FC = () => {
       {/* Status Change Modal */}
       {statusPlan && canEdit && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setStatusPlan(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setStatusPlan(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <h3 className="text-lg font-bold">تغيير حالة الخطة</h3>
@@ -1547,7 +1547,7 @@ export const ProductionPlans: React.FC = () => {
       {/* Delete Confirm Modal */}
       {deletePlanId && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeletePlanId(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setDeletePlanId(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="p-6 text-center space-y-4">
               <div className="w-14 h-14 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto">

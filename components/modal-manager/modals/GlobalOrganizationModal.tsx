@@ -257,20 +257,30 @@ export const GlobalOrganizationModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { if (!saving) close(); }}>
-      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-lg font-bold">{isEdit ? t('modalManager.organization.editPrefix') : t('modalManager.organization.addPrefix')} {t(MODAL_LABEL_KEYS[tab])}</h3>
-          <button onClick={() => { if (!saving) close(); }} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+    <div
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={() => { if (!saving) close(); }}
+    >
+      <div
+        className="flex max-h-[92dvh] w-full max-w-lg flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-5">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">{isEdit ? t('modalManager.organization.editPrefix') : t('modalManager.organization.addPrefix')} {t(MODAL_LABEL_KEYS[tab])}</h3>
+          <button
+            onClick={() => { if (!saving) close(); }}
+            className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]"
+            aria-label={t('ui.close')}
+          >
             <X size={20} />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {saveMsg && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
+            <div className={`flex items-center gap-2 rounded-[var(--border-radius-lg)] border px-4 py-3 text-sm font-bold ${saveMsg.type === 'success' ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
               {saveMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-              <p className="flex-1">{saveMsg.text}</p>
-              <button onClick={() => setSaveMsg(null)} className="text-current/70 hover:text-current transition-colors">
+              <p className="min-w-0 flex-1 break-words">{saveMsg.text}</p>
+              <button onClick={() => setSaveMsg(null)} className="shrink-0 text-current/70 transition-colors hover:text-current">
                 <X size={16} />
               </button>
             </div>
@@ -306,7 +316,7 @@ export const GlobalOrganizationModal: React.FC = () => {
                   {(Object.entries(JOB_LEVEL_LABELS) as [string, string][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                 </select>
               </Field>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <Toggle value={posForm.hasSystemAccessDefault} onChange={(v) => setPosForm({ ...posForm, hasSystemAccessDefault: v })} label={t('modalManager.organization.defaultSystemAccess')} />
                 <Toggle value={posForm.isActive} onChange={(v) => setPosForm({ ...posForm, isActive: v })} label={t('modalManager.organization.active')} />
               </div>
@@ -315,19 +325,19 @@ export const GlobalOrganizationModal: React.FC = () => {
           {tab === 'shifts' && (
             <>
               <Field label={t('modalManager.organization.shiftNameRequired')}><input className={inputClass} value={shiftForm.name} onChange={(e) => setShiftForm({ ...shiftForm, name: e.target.value })} placeholder={t('modalManager.organization.shiftNamePlaceholder')} autoFocus /></Field>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label={t('modalManager.organization.startTime')}><input type="time" className={inputClass} value={shiftForm.startTime} onChange={(e) => setShiftForm({ ...shiftForm, startTime: e.target.value })} /></Field>
                 <Field label={t('modalManager.organization.endTime')}><input type="time" className={inputClass} value={shiftForm.endTime} onChange={(e) => setShiftForm({ ...shiftForm, endTime: e.target.value })} /></Field>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label={t('modalManager.organization.latestCheckInTime')}><input type="time" className={inputClass} value={shiftForm.latestCheckInTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, latestCheckInTime: e.target.value })} /></Field>
                 <Field label={t('modalManager.organization.firstCheckOutTime')}><input type="time" className={inputClass} value={shiftForm.firstCheckOutTime || ''} onChange={(e) => setShiftForm({ ...shiftForm, firstCheckOutTime: e.target.value })} /></Field>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label={t('modalManager.organization.breakMinutes')}><input type="number" min={0} className={inputClass} value={shiftForm.breakMinutes} onChange={(e) => setShiftForm({ ...shiftForm, breakMinutes: Number(e.target.value) || 0 })} /></Field>
                 <Field label={t('modalManager.organization.lateGraceMinutes')}><input type="number" min={0} className={inputClass} value={shiftForm.lateGraceMinutes} onChange={(e) => setShiftForm({ ...shiftForm, lateGraceMinutes: Number(e.target.value) || 0 })} /></Field>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <Toggle value={shiftForm.crossesMidnight} onChange={(v) => setShiftForm({ ...shiftForm, crossesMidnight: v })} label={t('modalManager.organization.crossesMidnight')} color="bg-[rgb(var(--color-warning)/0.1)]0" />
                 <Toggle value={shiftForm.isActive} onChange={(v) => setShiftForm({ ...shiftForm, isActive: v })} label={t('modalManager.organization.shiftActive')} />
               </div>
@@ -336,7 +346,7 @@ export const GlobalOrganizationModal: React.FC = () => {
           {tab === 'penalties' && (
             <>
               <Field label={t('modalManager.organization.penaltyNameRequired')}><input className={inputClass} value={penaltyForm.name} onChange={(e) => setPenaltyForm({ ...penaltyForm, name: e.target.value })} placeholder={t('modalManager.organization.penaltyNamePlaceholder')} autoFocus /></Field>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label={t('modalManager.organization.penaltyType')}>
                   <select className={selectClass} value={penaltyForm.type} onChange={(e) => setPenaltyForm({ ...penaltyForm, type: e.target.value as PenaltyType })}>
                     {Object.entries(penaltyTypeLabels).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -356,7 +366,7 @@ export const GlobalOrganizationModal: React.FC = () => {
           )}
           {tab === 'lateRules' && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <Field label={t('modalManager.organization.fromMinutes')}><input type="number" min={0} className={inputClass} value={lateRuleForm.minutesFrom} onChange={(e) => setLateRuleForm({ ...lateRuleForm, minutesFrom: Number(e.target.value) || 0 })} autoFocus /></Field>
                 <Field label={t('modalManager.organization.toMinutes')}><input type="number" min={1} className={inputClass} value={lateRuleForm.minutesTo} onChange={(e) => setLateRuleForm({ ...lateRuleForm, minutesTo: Number(e.target.value) || 0 })} /></Field>
               </div>
@@ -386,7 +396,7 @@ export const GlobalOrganizationModal: React.FC = () => {
             </>
           )}
         </div>
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-between">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <div className="text-xs text-[var(--color-text-muted)]">
             <Badge variant="neutral">{t(MODAL_LABEL_KEYS[tab])}</Badge>
           </div>

@@ -1,9 +1,11 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { PRODUCT_BRAND } from '@/lib/productBrand';
+import { BrandMark } from './BrandMark';
 import { renderAuthIcon } from './authIcons';
 
 export type AuthLoadingStateProps = {
-  /** Main heading under the icon (default: Factory ERP) */
+  /** Main heading under the icon (default: product brand) */
   title?: string;
   /** Status line below the title */
   subtitle: string;
@@ -12,12 +14,14 @@ export type AuthLoadingStateProps = {
 /**
  * Centered spinner + progress using `erp-auth-loading-*` classes from App.css.
  */
-export function AuthLoadingState({ title = 'Factory ERP', subtitle }: AuthLoadingStateProps) {
+export function AuthLoadingState({ title = PRODUCT_BRAND.name, subtitle }: AuthLoadingStateProps) {
   return (
     <div className="erp-auth-container erp-auth-loading-wrap">
       <div className="erp-auth-loading-content">
         <div className="erp-auth-loading-icon-shell">
-          <div className="erp-auth-loading-icon">{renderAuthIcon('factory', undefined, 20)}</div>
+          <div className="erp-auth-loading-icon erp-auth-loading-icon--mark">
+            <BrandMark size={40} />
+          </div>
           <div className="erp-auth-loading-ring" />
         </div>
 
@@ -45,30 +49,32 @@ export type AuthBrandedLoadingPageProps = AuthLoadingStateProps;
  */
 export function AuthBrandedLoadingPage({ title, subtitle }: AuthBrandedLoadingPageProps) {
   const { t } = useTranslation();
-  const panelFeatures: { icon: string; text: string }[] = [
-    { icon: 'precision_manufacturing', text: t('authLoading.features.production') },
-    { icon: 'inventory_2', text: t('authLoading.features.inventory') },
-    { icon: 'groups', text: t('authLoading.features.hr') },
-    { icon: 'bar_chart', text: t('authLoading.features.analytics') },
+  const panelFeatures: { icon: string; key: 'production' | 'inventory' | 'repair' | 'hr' }[] = [
+    { icon: 'precision_manufacturing', key: 'production' },
+    { icon: 'inventory_2', key: 'inventory' },
+    { icon: 'build', key: 'repair' },
+    { icon: 'groups', key: 'hr' },
   ];
 
   return (
     <div className="erp-auth-page has-panel">
       <div className="erp-auth-panel">
-        <div className="erp-auth-panel-logo">{renderAuthIcon('factory', undefined, 26)}</div>
-        <h1 className="erp-auth-panel-name">Factory ERP</h1>
+        <div className="erp-auth-panel-logo erp-auth-panel-logo--mark">
+          <BrandMark size={44} />
+        </div>
+        <h1 className="erp-auth-panel-name">{t('appName')}</h1>
         <p className="erp-auth-panel-desc">{t('authLoading.panelDescription')}</p>
         <div className="erp-auth-panel-features">
-          {panelFeatures.map(({ icon, text }) => (
-            <div key={icon} className="erp-auth-panel-feature">
+          {panelFeatures.map(({ icon, key }) => (
+            <div key={key} className="erp-auth-panel-feature">
               {renderAuthIcon(icon, undefined, 20)}
-              <span>{text}</span>
+              <span>{t(`authLoading.features.${key}`)}</span>
             </div>
           ))}
         </div>
       </div>
 
-      <AuthLoadingState title={title} subtitle={subtitle} />
+      <AuthLoadingState title={title ?? t('appName')} subtitle={subtitle} />
     </div>
   );
 }

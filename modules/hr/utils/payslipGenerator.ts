@@ -226,7 +226,7 @@ function renderPayslipBody(data: PayslipData, palette: ImageExportPalette): stri
       <div class="brand">
         ${companyLogo ? `<img src="${companyLogo}" alt="" style="max-height:40px;margin-bottom:6px;display:block;" />` : ''}
         <h1>${companyName}</h1>
-        <div class="sys">Factory PRODUCTION SYSTEM</div>
+        <div class="sys">ForgeOps</div>
       </div>
       <div>
         <div class="badge">كشف راتب</div>

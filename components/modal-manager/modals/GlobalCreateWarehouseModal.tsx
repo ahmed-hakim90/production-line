@@ -100,35 +100,41 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={handleClose}>
-      <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
-        <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
-          <h3 className="text-lg font-bold">{t('modalManager.createWarehouse.title')}</h3>
-          <button onClick={handleClose} className="text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] transition-colors">
+    <div
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={handleClose}
+    >
+      <div
+        className="flex max-h-[92dvh] w-full max-w-xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-[var(--border-radius-xl)]"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
+          <h3 className="min-w-0 truncate text-base font-bold sm:text-lg">{t('modalManager.createWarehouse.title')}</h3>
+          <button onClick={handleClose} className="shrink-0 text-[var(--color-text-muted)] transition-colors hover:text-[var(--color-text)]" aria-label={t('ui.close')}>
             <X size={20} />
           </button>
         </div>
-        <div className="p-6 space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {message && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${message.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
+            <div className={`flex items-center gap-2 rounded-[var(--border-radius-lg)] border px-4 py-3 text-sm font-bold ${message.type === 'success' ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
               {message.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-              <p className="flex-1">{message.text}</p>
+              <p className="min-w-0 flex-1 break-words">{message.text}</p>
             </div>
           )}
           <input
-            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)] outline-none"
+            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 outline-none"
             placeholder={t('modalManager.createWarehouse.namePlaceholder')}
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
           <input
-            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)] outline-none"
+            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 outline-none"
             placeholder={t('modalManager.createWarehouse.codePlaceholder')}
             value={code}
             onChange={(e) => setCode(e.target.value)}
           />
           <select
-            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2.5 bg-[var(--color-bg)] outline-none text-sm font-bold"
+            className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)] px-3 py-2.5 text-sm font-bold outline-none"
             value={warehouseRole}
             onChange={(e) => setWarehouseRole(e.target.value as WarehouseRole)}
           >
@@ -136,11 +142,11 @@ export const GlobalCreateWarehouseModal: React.FC = () => {
               <option key={r.value} value={r.value}>{r.label}</option>
             ))}
           </select>
-          <p className="text-[11px] text-[var(--color-text-muted)] -mt-2">
+          <p className="-mt-2 text-[11px] text-[var(--color-text-muted)]">
             الاسم حر (زي ما تحب تسمّيه). الدور التشغيلي منفصل ويُستخدم في توجيه الإنتاج.
           </p>
         </div>
-        <div className="px-6 py-4 border-t border-[var(--color-border)] flex items-center justify-end gap-2">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 border-t border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
           <Button variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
           <Button variant="primary" onClick={() => void handleSave()} disabled={saving || !name.trim() || !code.trim()}>
             {saving && <Loader2 size={14} className="animate-spin" />}

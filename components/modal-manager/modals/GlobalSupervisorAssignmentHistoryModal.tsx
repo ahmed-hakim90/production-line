@@ -73,14 +73,14 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
     <ManagedModalPortal>
     <div
       dir={dir}
-      className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/35 p-4"
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/35 p-0 sm:items-center sm:p-4"
       onClick={close}
     >
       <div
-        className="w-full max-w-4xl rounded-xl border border-[var(--color-border)] bg-[var(--color-card)]"
+        className="flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-card)] sm:rounded-xl"
         onClick={(event) => event.stopPropagation()}
       >
-        <div className="relative border-b border-[var(--color-border)] p-4">
+        <div className="relative shrink-0 border-b border-[var(--color-border)] p-4">
           <Button
             type="button"
             variant="outline"
@@ -92,10 +92,10 @@ export const GlobalSupervisorAssignmentHistoryModal: React.FC = () => {
           >
             {t('ui.close')}
           </Button>
-          <h3 className="text-base font-medium text-[var(--color-text)]">{t('modalManager.supervisorAssignmentHistory.title', { lineName })}</h3>
+          <h3 className="pe-20 text-base font-medium text-[var(--color-text)]">{t('modalManager.supervisorAssignmentHistory.title', { lineName })}</h3>
         </div>
 
-        <div className="max-h-[60vh] overflow-auto p-4">
+        <div className="min-h-0 flex-1 overflow-auto overscroll-contain p-4">
           {historyLoading ? (
             <p className="py-8 text-center text-sm font-normal text-[var(--color-text-muted)]">{t('modalManager.supervisorAssignmentHistory.loading')}</p>
           ) : historyError ? (

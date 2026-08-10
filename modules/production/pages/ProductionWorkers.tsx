@@ -785,7 +785,7 @@ export const ProductionWorkers: React.FC = () => {
 
       {lineTransfer && canManage && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] bg-black/40 flex items-center justify-center p-4" onClick={closeLineTransfer}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4" onClick={closeLineTransfer}>
           <div
             className="bg-[var(--color-card)] rounded-xl p-6 w-full max-w-lg space-y-4 max-h-[90vh] overflow-y-auto"
             onClick={(e) => e.stopPropagation()}

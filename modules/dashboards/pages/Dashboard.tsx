@@ -654,7 +654,7 @@ export const Dashboard: React.FC = () => {
 
       {targetModal && can("lineStatus.edit") && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setTargetModal(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setTargetModal(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)]" onClick={(e) => e.stopPropagation()}>
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between">
               <div>

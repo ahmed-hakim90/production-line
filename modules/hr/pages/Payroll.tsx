@@ -134,7 +134,7 @@ const RecordModal: React.FC<{
 
   return (
     <ManagedModalPortal>
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10050] p-4" onClick={onClose}>
+    <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/50 p-0 sm:items-center sm:p-4" onClick={onClose}>
       <div
         className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] w-[95vw] max-w-2xl max-h-[90dvh] flex flex-col shadow-2xl"
         onClick={(e) => e.stopPropagation()}

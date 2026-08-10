@@ -1513,7 +1513,7 @@ export const Materials: React.FC = () => {
 
       {showImportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/40 p-4">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4">
           <div className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-lg bg-card shadow-lg">
             <div className="flex items-center justify-between border-b px-5 py-4">
               <div>

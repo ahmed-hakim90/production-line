@@ -454,7 +454,7 @@ export const CostCenters: React.FC = () => {
       {/* Delete Confirm */}
       {deleteConfirm && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setDeleteConfirm(null)}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setDeleteConfirm(null)}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-none w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <span className="material-icons-round text-[rgb(var(--color-danger))] text-4xl mb-3">warning</span>
             <h3 className="text-lg font-medium mb-2">حذف مركز التكلفة</h3>

@@ -175,23 +175,23 @@ export const GlobalSystemRoleModal: React.FC = () => {
   return (
     <ManagedModalPortal>
     <div
-      className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[10050] flex items-start justify-center p-4 sm:p-6 overflow-y-auto"
+      className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4"
       onClick={handleClose}
     >
       <div
-        className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-[98vw] sm:w-[95vw] max-w-4xl border border-[var(--color-border)] my-4 sm:my-8 animate-in fade-in zoom-in-95 duration-200"
+        className="relative flex max-h-[92dvh] w-full max-w-4xl flex-col overflow-hidden rounded-t-[var(--border-radius-xl)] border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl duration-200 animate-in fade-in zoom-in-95 sm:rounded-[var(--border-radius-xl)]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--color-border)]">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 bg-primary/10 rounded-[var(--border-radius-lg)] flex items-center justify-center">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] px-4 py-3 sm:px-6 sm:py-4">
+          <div className="flex min-w-0 items-center gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[var(--border-radius-lg)] bg-primary/10">
               {editingRole ? <Pencil size={18} className="text-primary" /> : <ShieldPlus size={18} className="text-primary" />}
             </div>
-            <div>
-              <h3 className="text-base font-bold text-[var(--color-text)]">
+            <div className="min-w-0">
+              <h3 className="truncate text-base font-bold text-[var(--color-text)]">
                 {editingRole ? t('modalManager.systemRole.editTitle', { name: editingRole.name }) : t('modalManager.systemRole.createTitle')}
               </h3>
-              <p className="text-xs text-[var(--color-text-muted)] font-medium">
+              <p className="text-xs font-medium text-[var(--color-text-muted)]">
                 محرك الصلاحيات: عرض · إضافة · تعديل · حذف · إجراءات لكل صفحة
               </p>
             </div>
@@ -199,18 +199,19 @@ export const GlobalSystemRoleModal: React.FC = () => {
           <button
             type="button"
             onClick={handleClose}
-            className="w-8 h-8 flex items-center justify-center rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] hover:text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)] transition-all"
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[var(--border-radius-lg)] text-[var(--color-text-muted)] transition-all hover:bg-[var(--color-surface-hover)] hover:text-[var(--color-text)]"
+            aria-label={t('ui.close')}
           >
             <X size={18} />
           </button>
         </div>
 
-        <div className="p-4 sm:p-6 space-y-5 overflow-y-auto flex-1">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto overscroll-contain p-4 sm:p-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             <div className="space-y-2">
               <label className="block text-sm font-bold text-[var(--color-text-muted)]">{t('modalManager.systemRole.roleNameRequired')}</label>
               <input
-                className="w-full border border-[var(--color-border)] rounded-[var(--border-radius-lg)] text-sm focus:border-primary focus:ring-2 focus:ring-primary/20 p-3.5 outline-none font-medium transition-all"
+                className="w-full rounded-[var(--border-radius-lg)] border border-[var(--color-border)] p-3.5 text-sm font-medium outline-none transition-all focus:border-primary focus:ring-2 focus:ring-primary/20"
                 value={editName}
                 onChange={(e) => setEditName(e.target.value)}
                 placeholder={t('modalManager.systemRole.roleNamePlaceholder')}
@@ -225,8 +226,8 @@ export const GlobalSystemRoleModal: React.FC = () => {
                     key={opt.value}
                     type="button"
                     onClick={() => setEditColor(opt.value)}
-                    className={`px-3 py-1.5 rounded-[var(--border-radius-base)] text-[11px] font-bold transition-all ${opt.value} ${
-                      editColor === opt.value ? 'ring-2 ring-primary scale-105' : 'opacity-60 hover:opacity-100'
+                    className={`rounded-[var(--border-radius-base)] px-3 py-1.5 text-[11px] font-bold transition-all ${opt.value} ${
+                      editColor === opt.value ? 'scale-105 ring-2 ring-primary' : 'opacity-60 hover:opacity-100'
                     }`}
                   >
                     {t(`modalManager.systemRole.colors.${opt.key}`)}
@@ -237,23 +238,23 @@ export const GlobalSystemRoleModal: React.FC = () => {
           </div>
 
           {saveMsg && (
-            <div className={`flex items-center gap-2 px-4 py-3 rounded-[var(--border-radius-lg)] text-sm font-bold ${saveMsg.type === 'success' ? 'bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))] border border-[rgb(var(--color-success)/0.25)]' : 'bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))] border border-[rgb(var(--color-danger)/0.25)]'}`}>
+            <div className={`flex items-center gap-2 rounded-[var(--border-radius-lg)] border px-4 py-3 text-sm font-bold ${saveMsg.type === 'success' ? 'border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)] text-[rgb(var(--color-success))]' : 'border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]'}`}>
               {saveMsg.type === 'success' ? <CheckCircle2 size={16} /> : <AlertCircle size={16} />}
-              <p className="flex-1">{saveMsg.text}</p>
+              <p className="min-w-0 flex-1 break-words">{saveMsg.text}</p>
               <button type="button" onClick={() => setSaveMsg(null)}>
                 <X size={16} />
               </button>
             </div>
           )}
 
-          <div className="space-y-3 max-h-[55vh] overflow-y-auto pl-1">
+          <div className="space-y-3">
             {catalogSections.map(({ group, resources }) => {
               const allEnabled = group.permissions.every((p) => editPerms[p.key]);
               const someEnabled = group.permissions.some((p) => editPerms[p.key]);
               const groupCount = group.permissions.filter((p) => editPerms[p.key]).length;
               return (
-                <div key={group.key} className="bg-[var(--color-bg)]/60 rounded-[var(--border-radius-lg)] border border-[var(--color-border)] overflow-hidden">
-                  <label className="flex items-center gap-3 px-4 py-3 cursor-pointer hover:bg-[var(--color-surface-hover)]/50 transition-colors">
+                <div key={group.key} className="overflow-hidden rounded-[var(--border-radius-lg)] border border-[var(--color-border)] bg-[var(--color-bg)]/60">
+                  <label className="flex cursor-pointer items-center gap-3 px-4 py-3 transition-colors hover:bg-[var(--color-surface-hover)]/50">
                     <input
                       type="checkbox"
                       checked={allEnabled}
@@ -261,25 +262,25 @@ export const GlobalSystemRoleModal: React.FC = () => {
                         if (el) el.indeterminate = someEnabled && !allEnabled;
                       }}
                       onChange={() => toggleGroup(group.key)}
-                      className="w-4 h-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
+                      className="h-4 w-4 rounded border-[var(--color-border)] text-primary focus:ring-primary/20"
                     />
                     <span className="flex-1 text-sm font-bold text-[var(--color-text)]">{group.label}</span>
-                    <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${groupCount > 0 ? 'bg-primary/10 text-primary' : 'bg-[var(--color-border)] text-[var(--color-text-muted)]'}`}>
+                    <span className={`rounded-full px-2 py-0.5 text-xs font-bold ${groupCount > 0 ? 'bg-primary/10 text-primary' : 'bg-[var(--color-border)] text-[var(--color-text-muted)]'}`}>
                       {groupCount}/{group.permissions.length}
                     </span>
                   </label>
 
-                  <div className="overflow-x-auto px-2 pb-3">
-                    <table className="w-full min-w-[640px] text-xs">
+                  <div className="-mx-0 overflow-x-auto px-2 pb-3">
+                    <table className="w-full min-w-[560px] text-xs sm:min-w-[640px]">
                       <thead>
-                        <tr className="text-[var(--color-text-muted)] border-b border-[var(--color-border)]">
-                          <th className="text-right font-bold py-2 px-2">الصفحة / المورد</th>
+                        <tr className="border-b border-[var(--color-border)] text-[var(--color-text-muted)]">
+                          <th className="px-2 py-2 text-right font-bold">الصفحة / المورد</th>
                           {PERMISSION_CRUD_VERBS.map((verb) => (
-                            <th key={verb} className="text-center font-bold py-2 px-1 w-14">
+                            <th key={verb} className="w-14 px-1 py-2 text-center font-bold">
                               {PERMISSION_CRUD_LABELS[verb]}
                             </th>
                           ))}
-                          <th className="text-right font-bold py-2 px-2">إجراءات</th>
+                          <th className="px-2 py-2 text-right font-bold">إجراءات</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -287,13 +288,13 @@ export const GlobalSystemRoleModal: React.FC = () => {
                           const rowAll = resource.allKeys.every((k) => editPerms[k]);
                           return (
                             <tr key={resource.id} className="border-b border-[var(--color-border)]/60 last:border-0">
-                              <td className="py-2 px-2">
-                                <label className="flex items-center gap-2 cursor-pointer font-bold text-[var(--color-text)]">
+                              <td className="px-2 py-2">
+                                <label className="flex cursor-pointer items-center gap-2 font-bold text-[var(--color-text)]">
                                   <input
                                     type="checkbox"
                                     checked={rowAll}
                                     onChange={() => toggleResource(resource)}
-                                    className="w-3.5 h-3.5 rounded border-[var(--color-border)] text-primary"
+                                    className="h-3.5 w-3.5 rounded border-[var(--color-border)] text-primary"
                                   />
                                   {resource.label}
                                 </label>
@@ -301,7 +302,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                               {PERMISSION_CRUD_VERBS.map((verb) => {
                                 const item = resource.crud[verb];
                                 return (
-                                  <td key={verb} className="text-center py-2 px-1">
+                                  <td key={verb} className="px-1 py-2 text-center">
                                     <CrudCell
                                       enabled={Boolean(item && editPerms[item.key])}
                                       disabled={!item}
@@ -311,7 +312,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                                   </td>
                                 );
                               })}
-                              <td className="py-2 px-2">
+                              <td className="px-2 py-2">
                                 {resource.actions.length === 0 ? (
                                   <span className="text-[10px] text-[var(--color-text-muted)]">—</span>
                                 ) : (
@@ -319,7 +320,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                                     {resource.actions.map((action) => (
                                       <label
                                         key={action.key}
-                                        className={`inline-flex items-center gap-1 px-2 py-1 rounded-md cursor-pointer transition-all ${
+                                        className={`inline-flex cursor-pointer items-center gap-1 rounded-md px-2 py-1 transition-all ${
                                           editPerms[action.key]
                                             ? 'bg-primary/10 text-primary ring-1 ring-primary/20'
                                             : 'bg-[var(--color-card)] text-[var(--color-text-muted)] hover:bg-[var(--color-surface-hover)]'
@@ -329,7 +330,7 @@ export const GlobalSystemRoleModal: React.FC = () => {
                                           type="checkbox"
                                           checked={editPerms[action.key] || false}
                                           onChange={() => togglePerm(action.key)}
-                                          className="w-3 h-3 rounded border-[var(--color-border)] text-primary"
+                                          className="h-3 w-3 rounded border-[var(--color-border)] text-primary"
                                         />
                                         <span className="font-medium leading-none">{action.label}</span>
                                       </label>
@@ -349,11 +350,11 @@ export const GlobalSystemRoleModal: React.FC = () => {
           </div>
         </div>
 
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 px-4 sm:px-6 py-3 sm:py-4 border-t border-[var(--color-border)] bg-[var(--color-bg)] shrink-0">
-          <span className="text-xs text-[var(--color-text-muted)] font-bold">
+        <div className="flex shrink-0 flex-col gap-2 border-t border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-6 sm:py-4">
+          <span className="text-xs font-bold text-[var(--color-text-muted)]">
             {t('modalManager.systemRole.enabledPermissionsCount', { enabled: enabledCount, total: ALL_PERMISSIONS.length })}
           </span>
-          <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="flex w-full items-center gap-2 sm:w-auto">
             <Button className="w-full sm:w-auto" variant="outline" onClick={handleClose} iconName="close" tone="neutral">{t('ui.cancel')}</Button>
             <Button
               className="w-full sm:w-auto"

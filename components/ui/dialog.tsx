@@ -44,8 +44,15 @@ const DialogContent = React.forwardRef<
     <DialogPrimitive.Content
       ref={ref}
       className={cn(
-        `fixed left-1/2 top-1/2 ${MODAL_SHELL_Z_CLASS} grid w-[calc(100vw-1.5rem)] max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4 border bg-background p-4 shadow-lg duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-[48%] data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-[48%] sm:w-full sm:rounded-lg sm:p-6`,
-        "max-h-[min(90vh,90dvh)] overflow-y-auto overscroll-y-contain",
+        `fixed ${MODAL_SHELL_Z_CLASS} grid w-full max-w-lg gap-4 border bg-background p-4 shadow-lg duration-200`,
+        // Mobile: bottom sheet. Desktop: centered dialog.
+        "inset-x-0 bottom-0 top-auto max-h-[92dvh] translate-x-0 translate-y-0 overflow-y-auto overscroll-y-contain rounded-t-xl",
+        "data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0",
+        "data-[state=closed]:slide-out-to-bottom-4 data-[state=open]:slide-in-from-bottom-4",
+        "sm:inset-auto sm:left-1/2 sm:top-1/2 sm:w-full sm:max-h-[min(90vh,90dvh)] sm:-translate-x-1/2 sm:-translate-y-1/2 sm:rounded-lg sm:p-6",
+        "sm:data-[state=closed]:zoom-out-95 sm:data-[state=open]:zoom-in-95",
+        "sm:data-[state=closed]:slide-out-to-left-1/2 sm:data-[state=closed]:slide-out-to-top-[48%]",
+        "sm:data-[state=open]:slide-in-from-left-1/2 sm:data-[state=open]:slide-in-from-top-[48%]",
         className
       )}
       onPointerDownOutside={(event) => {

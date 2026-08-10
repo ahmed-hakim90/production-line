@@ -23,6 +23,7 @@ import {
   HR_COLLECTIONS,
 } from './collections';
 import { getLeaveTypesFromConfig } from './leaveTypes';
+import { buildLeaveTypeUsageRows, type LeaveTypeUsageItem } from './leaveUsage';
 import type {
   FirestoreLeaveRequest,
   FirestoreLeaveBalance,
@@ -30,17 +31,10 @@ import type {
   ApprovalChainItem,
   ApprovalStatus,
 } from './types';
-import { DEFAULT_LEAVE_BALANCE, LEAVE_TYPE_LABELS } from './types';
+import { DEFAULT_LEAVE_BALANCE } from './types';
 
-type PaidLeaveType = Exclude<LeaveType, 'unpaid'>;
-
-const PAID_LEAVE_TYPES: PaidLeaveType[] = ['annual', 'sick', 'emergency'];
-
-const DEFAULT_BALANCE_BY_TYPE: Record<PaidLeaveType, number> = {
-  annual: DEFAULT_LEAVE_BALANCE.annualBalance,
-  sick: DEFAULT_LEAVE_BALANCE.sickBalance,
-  emergency: DEFAULT_LEAVE_BALANCE.emergencyBalance,
-};
+export type { LeaveTypeUsageItem } from './leaveUsage';
+export { buildLeaveTypeUsageRows } from './leaveUsage';
 
 function getRequestTimeMs(req: FirestoreLeaveRequest): number {
   const created = req.createdAt;
@@ -59,17 +53,6 @@ function isWithinRange(
   if (startDate && value < startDate) return false;
   if (endDate && value > endDate) return false;
   return true;
-}
-
-export interface LeaveTypeUsageItem {
-  leaveType: LeaveType;
-  label: string;
-  approvedDaysInRange: number;
-  usedDays: number;
-  availableDays: number;
-  defaultDays: number | null;
-  approvedRequestsCount: number;
-  lastUsedDate: string | null;
 }
 
 export interface EmployeeLeaveUsageSummary {
@@ -474,55 +457,13 @@ export async function getEmployeeLeaveUsageSummary(
     }
   });
 
-  const balanceByType: Record<PaidLeaveType, number> = {
-    annual: leaveBalance.annualBalance || 0,
-    sick: leaveBalance.sickBalance || 0,
-    emergency: leaveBalance.emergencyBalance || 0,
-  };
-
-  const coreRows: LeaveTypeUsageItem[] = [
-    ...PAID_LEAVE_TYPES.map((leaveType) => {
-      const fromBalance = Math.max(0, DEFAULT_BALANCE_BY_TYPE[leaveType] - balanceByType[leaveType]);
-      return {
-        leaveType,
-        label: LEAVE_TYPE_LABELS[leaveType],
-        approvedDaysInRange: approvedDaysByType[leaveType] || 0,
-        usedDays: Math.max(approvedDaysByType[leaveType] || 0, fromBalance),
-        availableDays: Math.max(0, balanceByType[leaveType]),
-        defaultDays: DEFAULT_BALANCE_BY_TYPE[leaveType],
-        approvedRequestsCount: approvedCountByType[leaveType] || 0,
-        lastUsedDate: lastUsedDateByType[leaveType] || null,
-      };
-    }),
-    {
-      leaveType: 'unpaid',
-      label: LEAVE_TYPE_LABELS.unpaid,
-      approvedDaysInRange: approvedDaysByType.unpaid || 0,
-      usedDays: Math.max(leaveBalance.unpaidTaken || 0, approvedDaysByType.unpaid || 0),
-      availableDays: 0,
-      defaultDays: null,
-      approvedRequestsCount: approvedCountByType.unpaid || 0,
-      lastUsedDate: lastUsedDateByType.unpaid || null,
-    },
-  ];
-  const coreTypes = new Set(coreRows.map((row) => row.leaveType));
-  const customRows = configuredLeaveTypes
-    .filter((row) => !coreTypes.has(row.key))
-    .map((row) => {
-      const usedDays = approvedDaysByType[row.key] || 0;
-      const defaultDays = Number(row.defaultBalance ?? 0);
-      return {
-        leaveType: row.key,
-        label: row.label,
-        approvedDaysInRange: usedDays,
-        usedDays,
-        availableDays: Math.max(0, defaultDays - usedDays),
-        defaultDays,
-        approvedRequestsCount: approvedCountByType[row.key] || 0,
-        lastUsedDate: lastUsedDateByType[row.key] || null,
-      };
-    });
-  const perType: LeaveTypeUsageItem[] = [...coreRows, ...customRows];
+  const perType = buildLeaveTypeUsageRows({
+    configuredLeaveTypes,
+    leaveBalance,
+    approvedDaysByType,
+    approvedCountByType,
+    lastUsedDateByType,
+  });
 
   const latestReq = approvedRequests[0];
   return {

@@ -103,7 +103,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {selectedPending && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+        className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
         role="presentation"
         onClick={onClosePending}
         onKeyDown={(e) => e.key === 'Escape' && onClosePending()}
@@ -112,7 +112,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           role="dialog"
           aria-modal="true"
           aria-labelledby="stock-tx-pending-title"
-          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
+          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -130,7 +130,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               </span>
             </button>
           </div>
-          <div className="p-6 overflow-auto flex-1 space-y-4">
+          <div className="p-6 min-h-0 flex-1 space-y-4 overflow-auto overscroll-contain">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                 <p className="text-xs text-[var(--color-text-muted)]">من</p>
@@ -185,7 +185,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {selectedApprovedTransfer && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+        className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
         role="presentation"
         onClick={onCloseApproved}
         onKeyDown={(e) => e.key === 'Escape' && onCloseApproved()}
@@ -194,7 +194,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           role="dialog"
           aria-modal="true"
           aria-labelledby="stock-tx-approved-title"
-          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
+          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -212,7 +212,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               </span>
             </button>
           </div>
-          <div className="p-6 overflow-auto flex-1 space-y-4">
+          <div className="p-6 min-h-0 flex-1 space-y-4 overflow-auto overscroll-contain">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                 <p className="text-xs text-[var(--color-text-muted)]">من</p>
@@ -295,7 +295,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {selectedVoucher && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+        className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
         role="presentation"
         onClick={onCloseVoucher}
         onKeyDown={(e) => e.key === 'Escape' && onCloseVoucher()}
@@ -304,7 +304,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           role="dialog"
           aria-modal="true"
           aria-labelledby="stock-tx-voucher-title"
-          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
+          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -322,7 +322,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               </span>
             </button>
           </div>
-          <div className="p-6 overflow-auto flex-1 space-y-4">
+          <div className="p-6 min-h-0 flex-1 space-y-4 overflow-auto overscroll-contain">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="rounded-[var(--border-radius-lg)] border border-[var(--color-border)] px-3 py-2">
                 <p className="text-xs text-[var(--color-text-muted)]">المخزن</p>
@@ -407,7 +407,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
     {editPending && (
       <ManagedModalPortal>
       <div
-        className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+        className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
         role="presentation"
         onClick={() => !processing && onCloseEdit()}
         onKeyDown={(e) => e.key === 'Escape' && !processing && onCloseEdit()}
@@ -416,7 +416,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
           role="dialog"
           aria-modal="true"
           aria-labelledby="stock-tx-edit-title"
-          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
+          className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >
           <div className="px-6 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
@@ -435,7 +435,7 @@ export const StockTransactionsDialogs: React.FC<StockTransactionsDialogsProps> =
               </span>
             </button>
           </div>
-          <div className="p-6 overflow-auto flex-1 space-y-4">
+          <div className="p-6 min-h-0 flex-1 space-y-4 overflow-auto overscroll-contain">
             <div className="space-y-2">
               <label htmlFor="stock-tx-edit-note" className="text-sm font-bold text-[var(--color-text-muted)]">
                 ملاحظة

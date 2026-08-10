@@ -23,26 +23,28 @@ export const ModalShell: React.FC<ModalShellProps> = ({
 }) => (
   <ManagedModalPortal>
     <div
-      className={`fixed inset-0 ${zIndexClassName} bg-black/40 flex items-center justify-center p-4`}
+      className={`fixed inset-0 ${zIndexClassName} flex items-end justify-center bg-black/40 p-0 sm:items-center sm:p-4`}
       onClick={onClose}
       role="presentation"
     >
       <div
-        className={`bg-[var(--color-card)] rounded-xl shadow-2xl w-full ${maxWidthClassName} border border-[var(--color-border)] max-h-[90vh] flex flex-col overflow-hidden`}
+        className={`flex max-h-[92dvh] w-full ${maxWidthClassName} flex-col overflow-hidden rounded-t-xl border border-[var(--color-border)] bg-[var(--color-card)] shadow-2xl sm:rounded-xl`}
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={title}
       >
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-[var(--color-border)] bg-[var(--color-card)]">
-          <h3 className="font-bold text-[var(--color-text)]">{title}</h3>
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">
+          <h3 className="min-w-0 truncate font-bold text-[var(--color-text)]">{title}</h3>
           <Button type="button" variant="secondary" size="sm" onClick={onClose} aria-label="إغلاق">
             <X size={16} />
           </Button>
         </div>
-        <div className="p-4 overflow-y-auto flex-1 space-y-3 bg-[var(--color-card)] text-[var(--color-text)]">{children}</div>
+        <div className="min-h-0 flex-1 space-y-3 overflow-y-auto overscroll-contain bg-[var(--color-card)] p-4 text-[var(--color-text)]">
+          {children}
+        </div>
         {footer ? (
-          <div className="px-4 py-3 border-t border-[var(--color-border)] flex flex-wrap gap-2 justify-end bg-[var(--color-card)]">
+          <div className="flex shrink-0 flex-wrap justify-end gap-2 border-t border-[var(--color-border)] bg-[var(--color-card)] px-4 py-3">
             {footer}
           </div>
         ) : null}

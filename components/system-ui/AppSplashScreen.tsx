@@ -1,5 +1,6 @@
 import React, { useLayoutEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import { BrandMark } from './BrandMark';
 import { dismissHtmlSplash } from '../../lib/dismissHtmlSplash';
 
 export type AppSplashVariant = 'branded' | 'resume';
@@ -17,8 +18,8 @@ export type AppSplashScreenProps = {
 const SPLASH_FEATURES = [
   { icon: 'precision_manufacturing', key: 'production' as const },
   { icon: 'inventory_2', key: 'inventory' as const },
+  { icon: 'build', key: 'repair' as const },
   { icon: 'groups', key: 'hr' as const },
-  { icon: 'bar_chart', key: 'analytics' as const },
 ];
 
 /**
@@ -48,14 +49,7 @@ export function AppSplashScreen({ subtitle, variant = 'branded' }: AppSplashScre
           <div className="app-splash__panel-glow app-splash__panel-glow--top" />
           <div className="app-splash__panel-glow app-splash__panel-glow--bottom" />
 
-          <img
-            className="app-splash__panel-logo"
-            src="/icons/pwa-icon.svg"
-            alt=""
-            width={56}
-            height={56}
-            decoding="async"
-          />
+          <BrandMark size={56} className="app-splash__panel-logo" />
 
           <h1 className="app-splash__panel-title">{t('splash.appName')}</h1>
           <p className="app-splash__panel-desc">{t('splash.tagline')}</p>
@@ -74,28 +68,14 @@ export function AppSplashScreen({ subtitle, variant = 'branded' }: AppSplashScre
       <div className="app-splash__main">
         {!isResume && (
           <div className="app-splash__mobile-brand" aria-hidden="true">
-            <img
-              className="app-splash__mobile-logo"
-              src="/icons/pwa-icon.svg"
-              alt=""
-              width={72}
-              height={72}
-              decoding="async"
-            />
+            <BrandMark size={72} className="app-splash__mobile-logo" />
             <h1 className="app-splash__mobile-title">{t('splash.appName')}</h1>
           </div>
         )}
 
         <div className="app-splash__loader">
           <div className="app-splash__icon-shell">
-            <img
-              className="app-splash__icon"
-              src="/icons/pwa-icon.svg"
-              alt=""
-              width={64}
-              height={64}
-              decoding="async"
-            />
+            <BrandMark size={64} className="app-splash__icon" />
             <div className="app-splash__ring" />
           </div>
 

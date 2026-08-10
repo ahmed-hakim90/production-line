@@ -595,8 +595,8 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
       </div>
       {showPreview && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-5xl max-h-[92dvh] flex flex-col overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-[var(--color-border)]">
               <div className="min-w-0">
                 <h3 className="text-lg font-bold text-[var(--color-text)] flex items-center gap-2">
@@ -772,8 +772,8 @@ export const PrintTemplateSettingsSection: React.FC<PrintTemplateSettingsSection
       )}
       {showWhatsAppPreview && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 z-[10050] flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/50 p-0 backdrop-blur-sm sm:items-center sm:p-4">
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl max-h-[92dvh] flex flex-col overflow-hidden">
             <div className="flex flex-wrap items-center justify-between gap-2 p-4 border-b border-[var(--color-border)]">
               <div className="min-w-0">
                 <h3 className="text-lg font-bold text-[var(--color-text)] flex items-center gap-2">

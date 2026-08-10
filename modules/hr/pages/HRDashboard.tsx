@@ -1117,7 +1117,7 @@ export const HRDashboard: React.FC = () => {
       {qaOpen && (
         <ManagedModalPortal>
         <div className="erp-modal-overlay" onClick={() => { if (!qaSaving) { setQaOpen(''); resetQa(); setQaStaged([]); } }}>
-          <div className="erp-modal-panel relative w-[96vw] max-w-3xl max-h-[92dvh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
+          <div className="erp-modal-panel relative w-full max-w-3xl sm:w-[96vw]" onClick={(e) => e.stopPropagation()}>
 
             {/* â”€â”€ Saving overlay â”€â”€ */}
             {qaSaving && (

@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Button } from '@/components/UI';
+import { BrandMark } from '@/components/system-ui/BrandMark';
 import { useAppStore } from '../../../store/useAppStore';
 import { useTenantSlugResolve } from '../context/TenantSlugResolveContext';
 
 export const Login: React.FC = () => {
+  const { t } = useTranslation();
   const login    = useAppStore((s) => s.login);
   const register = useAppStore((s) => s.register);
   const resetUserPassword = useAppStore((s) => s.resetUserPassword);
@@ -61,21 +64,21 @@ export const Login: React.FC = () => {
 
       {/* ── Left branding panel (desktop) ── */}
       <div className="erp-auth-panel">
-        <div className="erp-auth-panel-logo">
-          <span className="material-icons-round" style={{ fontSize: 26, color: '#fff' }}>factory</span>
+        <div className="erp-auth-panel-logo erp-auth-panel-logo--mark">
+          <BrandMark size={44} />
         </div>
-        <div className="erp-auth-panel-name">Factory ERP</div>
-        <p className="erp-auth-panel-desc">نظام متكامل لإدارة الإنتاج والمخزون والموارد البشرية</p>
+        <div className="erp-auth-panel-name">{t('appName')}</div>
+        <p className="erp-auth-panel-desc">{t('appTagline')}</p>
         <div className="erp-auth-panel-features">
           {[
-            { icon: 'inventory_2',   label: 'إدارة الإنتاج والمخزون' },
-            { icon: 'groups',        label: 'إدارة الموظفين والحضور' },
-            { icon: 'bar_chart',     label: 'تقارير وتحليلات مفصلة' },
-            { icon: 'admin_panel_settings', label: 'نظام صلاحيات متقدم' },
+            { icon: 'precision_manufacturing', key: 'production' as const },
+            { icon: 'inventory_2', key: 'inventory' as const },
+            { icon: 'build', key: 'repair' as const },
+            { icon: 'groups', key: 'hr' as const },
           ].map((f) => (
-            <div key={f.icon} className="erp-auth-panel-feature">
+            <div key={f.key} className="erp-auth-panel-feature">
               <span className="material-icons-round">{f.icon}</span>
-              <span>{f.label}</span>
+              <span>{t(`authLoading.features.${f.key}`)}</span>
             </div>
           ))}
         </div>
@@ -86,11 +89,11 @@ export const Login: React.FC = () => {
 
         {/* Logo (mobile only) */}
         <div className="erp-auth-brand">
-          <div className="erp-auth-logo">
-            <span className="material-icons-round" style={{ fontSize: 26 }}>factory</span>
+          <div className="erp-auth-logo erp-auth-logo--mark">
+            <BrandMark size={48} />
           </div>
-          <div className="erp-auth-app-name">Factory ERP</div>
-          <div className="erp-auth-app-subtitle">نظام إدارة الإنتاج</div>
+          <div className="erp-auth-app-name">{t('appName')}</div>
+          <div className="erp-auth-app-subtitle">{t('appSubtitle')}</div>
         </div>
 
         {/* Card */}
@@ -335,7 +338,7 @@ export const Login: React.FC = () => {
         </div>
 
         <p className="erp-auth-copyright">
-          © {new Date().getFullYear()} Factory PRODUCTION SYSTEM
+          © {new Date().getFullYear()} ForgeOps
         </p>
       </div>
     </div>

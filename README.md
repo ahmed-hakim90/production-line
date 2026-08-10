@@ -404,16 +404,17 @@ firebase deploy --only "firestore:rules,firestore:indexes"
 
 ### المتطلبات
 - تفعيل Firebase Cloud Messaging من Firebase Console.
-- إنشاء Web Push key واستخدامه في `VITE_FIREBASE_VAPID_KEY`.
+- (موصى به) إنشاء Web Push certificate ونسخ المفتاح العام إلى `VITE_FIREBASE_VAPID_KEY`.
+  - المفتاح يجب أن يكون ~87 حرف base64url (مفتاح P-256 عام بطول 65 بايت).
+  - مفتاح ناقص/مقطوع يسبب `401` عند التسجيل؛ إن تُرك فارغًا يستخدم التطبيق مفتاح Firebase الافتراضي.
 - تشغيل التطبيق على HTTPS (Firebase Hosting موصى به).
 - قبول المستخدم لإذن الإشعارات من المتصفح.
 - مشروع Firebase على Blaze plan لتشغيل Scheduled Functions.
 
 ### كيف تعمل في النظام
-- `public/firebase-messaging-sw.js` يستقبل إشعارات الخلفية.
+- `public/firebase-messaging-sw.js` يستقبل إشعارات الخلفية (Vite يحقن إعدادات Firebase أثناء dev/build).
 - يتم حفظ توكنات الأجهزة في `user_devices`.
 - عند إنشاء مستند جديد في `notifications` يتم إرسال Push تلقائيًا عبر Cloud Function.
-
 ### اختبار سريع بعد النشر
 1. سجّل الدخول بمستخدم فعّال وافق على إذن الإشعارات.
 2. تأكد أن مستند الجهاز ظهر في `user_devices` وقيمته `enabled: true`.

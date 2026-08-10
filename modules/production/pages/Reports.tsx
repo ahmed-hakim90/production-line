@@ -4460,7 +4460,7 @@ export const Reports: React.FC = () => {
       {costDetailReport && canViewCosts && (
         <ManagedModalPortal>
         <div
-          className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4"
+          className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
           onClick={() => setCostDetailReport(null)}
         >
           <div
@@ -4775,9 +4775,9 @@ export const Reports: React.FC = () => {
       {/* Create / Edit Report Modal */}
       {showModal && (canCreateFinishedReports || can('reports.packaging.create') || can('reports.edit') || canManageComponentInjectionReports) && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4">
           <div
-            className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[90vh] flex flex-col"
+            className="relative bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
@@ -5591,7 +5591,7 @@ export const Reports: React.FC = () => {
       {/* Delete Confirmation */}
       {deleteConfirmId && can("reports.delete") && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { if (!deleteBusy) setDeleteConfirmId(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <ReportIcon name="delete_forever" className="text-[rgb(var(--color-danger))] text-3xl" />
@@ -5622,7 +5622,7 @@ export const Reports: React.FC = () => {
       {/* Bulk Delete Confirmation */}
       {bulkDeleteItems && can("reports.delete") && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { if (!bulkDeleting) setBulkDeleteItems(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-sm border border-[var(--color-border)] p-6 text-center" onClick={(e) => e.stopPropagation()}>
             <div className="w-16 h-16 bg-[rgb(var(--color-danger)/0.1)] rounded-full flex items-center justify-center mx-auto mb-4">
               <ReportIcon name="delete_sweep" className="text-[rgb(var(--color-danger))] text-3xl" />
@@ -5653,8 +5653,8 @@ export const Reports: React.FC = () => {
       {/* Import from Excel Modal */}
       {showImportModal && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
-          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[90vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { setShowImportModal(false); resetImportState(); }}>
+          <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-3xl border border-[var(--color-border)] max-h-[92dvh] flex flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
             {/* Modal Header */}
             <div className="px-5 sm:px-6 py-5 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-3">
@@ -6096,7 +6096,7 @@ export const Reports: React.FC = () => {
         ];
         return (
           <ManagedModalPortal>
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewWOReport(null)}>
+          <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setViewWOReport(null)}>
             <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
                 <div className="flex items-center gap-2">
@@ -6159,7 +6159,7 @@ export const Reports: React.FC = () => {
         if (!wo || (!wo.qualitySummary && !wo.qualityStatus && !wo.qualityReportCode)) {
           return (
             <ManagedModalPortal>
-            <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
+            <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setViewQualityReport(null)}>
               <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-md border border-[var(--color-border)] p-5" onClick={(e) => e.stopPropagation()}>
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-bold">تقرير الجودة المرتبط</h3>
@@ -6177,7 +6177,7 @@ export const Reports: React.FC = () => {
         const qs = wo.qualitySummary;
         return (
           <ManagedModalPortal>
-          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => setViewQualityReport(null)}>
+          <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => setViewQualityReport(null)}>
             <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-xl border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
               <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between">
                 <div>
@@ -6259,7 +6259,7 @@ export const Reports: React.FC = () => {
       {/* View Workers Modal */}
       {viewWorkersData && (
         <ManagedModalPortal>
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-[10050] flex items-center justify-center p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
+        <div className="fixed inset-0 z-[10050] flex items-end justify-center bg-black/40 p-0 backdrop-blur-sm sm:items-center sm:p-4" onClick={() => { setViewWorkersData(null); setViewWorkersError(null); }}>
           <div className="bg-[var(--color-card)] rounded-[var(--border-radius-xl)] shadow-2xl w-full max-w-lg max-h-[85vh] border border-[var(--color-border)] flex flex-col" onClick={(e) => e.stopPropagation()}>
             <div className="px-5 py-4 border-b border-[var(--color-border)] flex items-center justify-between shrink-0">
               <div className="flex items-center gap-2 min-w-0">
