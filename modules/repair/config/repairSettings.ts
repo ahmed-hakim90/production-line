@@ -27,7 +27,7 @@ export type ResolvedRepairStatus = {
 
 const DEFAULT_STATUSES: ResolvedRepairStatus[] = [
   { id: 'received', label: 'وارد', color: '#64748b', order: 1, isTerminal: false, isEnabled: true, role: 'intake' },
-  { id: 'diagnosing', label: 'فحص', color: '#f59e0b', order: 2, isTerminal: false, isEnabled: true, role: 'diagnosis' },
+  { id: 'diagnosing', label: 'جاري الفحص', color: '#f59e0b', order: 2, isTerminal: false, isEnabled: true, role: 'diagnosis' },
   { id: 'estimate_ready', label: 'التقدير جاهز لمراجعة الاستقبال', color: '#0284c7', order: 3, isTerminal: false, isEnabled: true, role: 'estimate_review' },
   { id: 'waiting_approval', label: 'بانتظار موافقة العميل', color: '#a855f7', order: 4, isTerminal: false, isEnabled: true, role: 'awaiting_customer' },
   { id: 'waiting_parts', label: 'بانتظار قطع الغيار', color: '#ea580c', order: 5, isTerminal: false, isEnabled: true, role: 'awaiting_parts' },

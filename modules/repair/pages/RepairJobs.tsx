@@ -7,6 +7,8 @@ import { cn } from '@/lib/utils';
 import { usePermission } from '../../../utils/permissions';
 import { useAppStore } from '../../../store/useAppStore';
 import { toast } from '../../../components/Toast';
+import { employeeService } from '../../hr/employeeService';
+import { userService } from '../../../services/userService';
 import { useRepairJobs } from '../hooks/useRepairJobs';
 import { repairBranchService } from '../services/repairBranchService';
 import { repairJobService } from '../services/repairJobService';
@@ -14,6 +16,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { RepairJobQuickDrawer } from '../components/RepairJobQuickDrawer';
 import type { FirestoreUserWithRepair, RepairJobStatus } from '../types';
 import { REPAIR_JOB_STATUSES, REPAIR_JOB_STATUS_LABELS, type RepairBranch, type RepairJob } from '../types';
+import type { FirestoreEmployee, FirestoreUser } from '../../../types';
 import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { resolveRepairSettings } from '../config/repairSettings';
@@ -35,15 +38,19 @@ function RepairJobKanbanCardBody({
   job,
   tenantSlug,
   showWorkshopLink,
+  technicianName,
 }: {
   job: RepairJob;
   tenantSlug?: string;
   showWorkshopLink: boolean;
+  technicianName?: string;
 }) {
   const cost = computeRepairJobCost(job);
   const overdue = job.dueAt && Date.parse(String(job.dueAt)) < Date.now();
   const detailPath = withTenantPath(tenantSlug, `/repair/jobs/${job.id}`);
   const workshopPath = withTenantPath(tenantSlug, `/repair/jobs/${job.id}/workspace`);
+  const techLabel = technicianName
+    || (job.technicianId ? `فني (${String(job.technicianId).slice(0, 8)}…)` : 'غير مسند');
 
   return (
     <>
@@ -60,8 +67,11 @@ function RepairJobKanbanCardBody({
       <div className="line-clamp-2 text-xs text-muted-foreground">
         {[job.deviceBrand, job.deviceModel].filter(Boolean).join(' ') || '—'}
       </div>
+      <div className="mt-1 truncate text-[11px] text-muted-foreground" title={techLabel}>
+        الفني: {techLabel}
+      </div>
       <div className="mt-2 flex items-center justify-between gap-2 text-[11px]">
-        <span className={overdue ? 'font-semibold text-rose-600' : 'text-muted-foreground'}>
+        <span className={overdue ? 'font-semibold text-[rgb(var(--color-danger))]' : 'text-muted-foreground'}>
           {job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : 'بدون موعد'}
         </span>
         <span className="font-semibold tabular-nums">
@@ -126,6 +136,7 @@ export const RepairJobs: React.FC = () => {
   });
   const [branches, setBranches] = useState<RepairBranch[]>([]);
   const [selectedJob, setSelectedJob] = useState<RepairJob | null>(null);
+  const [technicianNameById, setTechnicianNameById] = useState<Map<string, string>>(new Map());
   const userBranchIds = useMemo(
     () =>
       resolveAccessibleRepairBranchIds({
@@ -158,6 +169,36 @@ export const RepairJobs: React.FC = () => {
     void repairBranchService.list().then(setBranches);
   }, []);
   useEffect(() => {
+    void Promise.allSettled([employeeService.getAll(), userService.getAll()]).then((results) => {
+      const employees = results[0].status === 'fulfilled' ? results[0].value : [];
+      const users = results[1].status === 'fulfilled' ? results[1].value : [];
+      const map = new Map<string, string>();
+
+      const usersById = new Map<string, FirestoreUser>();
+      users.forEach((user) => {
+        const id = String(user.id || '').trim();
+        if (id) usersById.set(id, user);
+      });
+
+      employees.forEach((employee: FirestoreEmployee) => {
+        const employeeId = String(employee.id || '').trim();
+        const userId = String(employee.userId || '').trim();
+        const user = userId ? usersById.get(userId) : undefined;
+        const name = String(employee.name || user?.displayName || user?.email || '').trim();
+        if (employeeId && name) map.set(employeeId, name);
+        if (userId && name && !map.has(userId)) map.set(userId, name);
+      });
+
+      users.forEach((user) => {
+        const id = String(user.id || '').trim();
+        const name = String(user.displayName || user.email || '').trim();
+        if (id && name && !map.has(id)) map.set(id, name);
+      });
+
+      setTechnicianNameById(map);
+    });
+  }, []);
+  useEffect(() => {
     if (
       focusFromQuery === 'open'
       || focusFromQuery === 'ready'
@@ -168,6 +209,12 @@ export const RepairJobs: React.FC = () => {
       setFocusFilter(focusFromQuery);
     }
   }, [focusFromQuery]);
+
+  const resolveTechnicianName = (technicianId?: string | null) => {
+    const id = String(technicianId || '').trim();
+    if (!id) return '';
+    return technicianNameById.get(id) || '';
+  };
 
   const { jobs, loading, refetch, isFetching } = useRepairJobs({
     branchId: userBranchIds[0],
@@ -332,7 +379,7 @@ export const RepairJobs: React.FC = () => {
       )}
     >
       {!canShowWorkshopNav ? (
-        <div className="rounded-md border border-sky-200 bg-sky-50 px-3 py-2 text-sm text-sky-950">
+        <div className="rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)] px-3 py-2 text-sm text-[rgb(var(--color-primary))]">
           وضع الاستقبال: يمكنك متابعة الطلبات وطباعة الإيصال ومراسلة العميل. شغل الورشة (تشخيص/قطع/تكلفة) يظهر لحسابات الفني أو الإدارة.
         </div>
       ) : null}
@@ -407,6 +454,7 @@ export const RepairJobs: React.FC = () => {
                   job={job}
                   tenantSlug={tenantSlug}
                   showWorkshopLink={canShowWorkshopNav}
+                  technicianName={resolveTechnicianName(job.technicianId)}
                 />
               )}
             />
@@ -458,6 +506,11 @@ export const RepairJobs: React.FC = () => {
                           <p className="mt-1 text-xs text-[var(--color-text-muted)]">
                             {job.deviceBrand} {job.deviceModel}
                           </p>
+                          <p className="mt-1 text-xs text-muted-foreground">
+                            الفني:{' '}
+                            {resolveTechnicianName(job.technicianId)
+                              || (job.technicianId ? `فني (${String(job.technicianId).slice(0, 8)}…)` : 'غير مسند')}
+                          </p>
                         </div>
                         <StatusBadge status={job.status} />
                       </div>
@@ -471,7 +524,7 @@ export const RepairJobs: React.FC = () => {
                         </div>
                         <div>
                           <dt className="text-[10px] text-[var(--color-text-muted)]">الاستحقاق</dt>
-                          <dd className={cn('tabular-nums', overdue && 'font-semibold text-rose-600')}>
+                          <dd className={cn('tabular-nums', overdue && 'font-semibold text-[rgb(var(--color-danger))]')}>
                             {job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : '—'}
                           </dd>
                         </div>
@@ -508,6 +561,7 @@ export const RepairJobs: React.FC = () => {
                     <th className="erp-th text-right">الإيصال</th>
                     <th className="erp-th text-right">العميل</th>
                     <th className="erp-th text-right">الجهاز</th>
+                    <th className="erp-th text-right">الفني</th>
                     <th className="erp-th text-right">الفرع</th>
                     <th className="erp-th text-right">الحالة</th>
                     <th className="erp-th text-right">التكلفة</th>
@@ -518,7 +572,7 @@ export const RepairJobs: React.FC = () => {
                 <tbody>
                   {loading ? (
                     <tr>
-                      <td className="p-3" colSpan={8}>
+                      <td className="p-3" colSpan={9}>
                         <span role="status" aria-live="polite">جاري التحميل...</span>
                       </td>
                     </tr>
@@ -527,6 +581,8 @@ export const RepairJobs: React.FC = () => {
                     const overdue = job.dueAt
                       && Date.parse(String(job.dueAt)) < Date.now()
                       && openStatusSet.has(mapLegacyRepairStatus(job.status));
+                    const techName = resolveTechnicianName(job.technicianId)
+                      || (job.technicianId ? `فني (${String(job.technicianId).slice(0, 8)}…)` : 'غير مسند');
                     return (
                       <tr
                         key={job.id}
@@ -547,13 +603,14 @@ export const RepairJobs: React.FC = () => {
                           <div className="text-xs text-muted-foreground" dir="ltr">{job.customerPhone}</div>
                         </td>
                         <td className="p-2.5">{job.deviceBrand} {job.deviceModel}</td>
+                        <td className="p-2.5">{techName}</td>
                         <td className="p-2.5">{branchNameById.get(String(job.branchId || '')) || '—'}</td>
                         <td className="p-2.5"><StatusBadge status={job.status} /></td>
                         <td className="p-2.5 font-semibold tabular-nums">
                           {cost.finalCost.toLocaleString('ar-EG')}
                           <span className="ms-1 text-xs font-medium text-muted-foreground">ج.م</span>
                         </td>
-                        <td className={cn('p-2.5', overdue && 'font-semibold text-rose-600')}>
+                        <td className={cn('p-2.5', overdue && 'font-semibold text-[rgb(var(--color-danger))]')}>
                           {job.dueAt ? new Date(job.dueAt).toLocaleDateString('ar-EG') : '—'}
                         </td>
                         <td className="p-2.5">
@@ -580,7 +637,7 @@ export const RepairJobs: React.FC = () => {
                   })}
                   {!loading && visibleJobs.length === 0 && (
                     <tr>
-                      <td className="p-4 text-center text-muted-foreground" colSpan={8}>
+                      <td className="p-4 text-center text-muted-foreground" colSpan={9}>
                         لا توجد طلبات مطابقة للفلاتر الحالية.
                       </td>
                     </tr>
@@ -597,6 +654,7 @@ export const RepairJobs: React.FC = () => {
         job={selectedJob}
         tenantSlug={tenantSlug}
         branchName={selectedJob ? branchNameById.get(String(selectedJob.branchId || '').trim()) : undefined}
+        technicianName={selectedJob ? resolveTechnicianName(selectedJob.technicianId) : undefined}
         showWorkshopLink={canShowWorkshopNav}
       />
     </RepairOpsPageShell>

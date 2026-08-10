@@ -41,6 +41,7 @@ function job(partial: Partial<RepairTechKpiJob> & { status: string }): RepairTec
     closedAt: partial.closedAt,
     dueAt: partial.dueAt,
     revenue: partial.revenue ?? 0,
+    technicianReleaseEvents: partial.technicianReleaseEvents,
   };
 }
 
@@ -248,6 +249,59 @@ function job(partial: Partial<RepairTechKpiJob> & { status: string }): RepairTec
   assert.equal(isRepairTechKpiPeriod('week'), true);
   assert.equal(isRepairTechKpiPeriod('year'), false);
   assert.equal(isRepairTechKpiSortKey('delayed'), true);
+}
+
+{
+  const nowMs = Date.parse('2026-08-15T12:00:00');
+  const range = resolveRepairTechKpiRange('month', {}, new Date(nowMs));
+  const periodJobs: RepairTechKpiJob[] = [
+    job({
+      id: 'd1',
+      technicianId: 't1',
+      status: 'delivered',
+      createdAt: '2026-08-02T10:00:00',
+      deliveredAt: '2026-08-05T10:00:00',
+      revenue: 100,
+    }),
+  ];
+  const liveJobs: RepairTechKpiJob[] = [
+    ...periodJobs,
+    job({
+      id: 'open-now',
+      technicianId: 't1',
+      status: 'diagnosing',
+      createdAt: '2026-07-01T10:00:00', // outside period activity
+    }),
+    job({
+      id: 'released-job',
+      status: 'received',
+      createdAt: '2026-08-10T10:00:00',
+      technicianReleaseEvents: [
+        { technicianId: 't1', at: '2026-08-12T10:00:00' },
+        { technicianId: 't1', at: '2026-07-02T10:00:00' }, // outside period
+      ],
+    }),
+  ];
+
+  const rows = buildRepairTechnicianPerfRows(periodJobs, {
+    openStatusIds: OPEN,
+    nowMs,
+    liveJobs,
+    range,
+  });
+  const t1 = rows.find((r) => r.technicianId === 't1');
+  assert.ok(t1);
+  assert.equal(t1!.assignedNow, 1);
+  assert.equal(t1!.released, 1);
+  // successRate = delivered / (delivered + unrepairable + released) = 1/2
+  assert.equal(t1!.successRate, 50);
+
+  const team = summarizeRepairTechTeam(rows, periodJobs, { openStatusIds: OPEN, nowMs });
+  assert.equal(team.assignedNow, 1);
+  assert.equal(team.released, 1);
+  assert.equal(team.successRate, 50);
+  assert.equal(isRepairTechKpiSortKey('assignedNow'), true);
+  assert.equal(isRepairTechKpiSortKey('released'), true);
 }
 
 console.log('repair-technician-kpis.test.ts: ok');

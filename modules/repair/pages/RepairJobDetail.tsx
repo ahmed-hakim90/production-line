@@ -82,7 +82,10 @@ import { useAppDirection } from '@/src/shared/ui/layout/useAppDirection';
 import { resolveRepairAccessContext } from '../utils/repairAccessContext';
 import { useRepairTechnicianIds } from '../hooks/useRepairTechnicianIds';
 import { canManageRepairWorkshopWork, isSingleBranchTechnician } from '../lib/repairJobIntake';
-import { resolveTechnicianIdForJobAssignment } from '../lib/repairTechnicianAssignment';
+import {
+  isActorBranchTechnician,
+  resolveTechnicianIdForJobAssignment,
+} from '../lib/repairTechnicianAssignment';
 import { repairSparePartSalePrice } from '../utils/sparePartPricing';
 import { resolveRepairSettings, sumServiceCatalogPrices, accessoryLabelsFromIds } from '../config/repairSettings';
 import { isStatusRole } from '../lib/repairStatusAdvance';
@@ -187,6 +190,7 @@ export const RepairJobDetail: React.FC = () => {
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('');
   const [branchTechnicians, setBranchTechnicians] = useState<Array<{ id: string; userId?: string; name: string }>>([]);
   const [technicianNameById, setTechnicianNameById] = useState<Record<string, string>>({});
+  const [assignBusy, setAssignBusy] = useState(false);
   const [showReopenOptions, setShowReopenOptions] = useState(false);
   const [reopenTreasuryHandling, setReopenTreasuryHandling] = useState<'reverse' | 'keep'>('keep');
   const [selectedReopenProductIds, setSelectedReopenProductIds] = useState<string[]>([]);
@@ -508,27 +512,48 @@ export const RepairJobDetail: React.FC = () => {
     }
   };
 
+  const assignActor = () => ({
+    uid: userProfile?.id || '',
+    name: userProfile?.displayName || userProfile?.email || 'مستخدم',
+  });
+
   const assignToMe = async () => {
-    if (!canEditThisJob) {
-      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+    if (!canManageTechnicianAssignment) {
+      toast.error('ليس لديك صلاحية تغيير إسناد الفني.');
       return;
     }
     if (!userProfile?.id) return;
+    if (!isActorBranchTechnician({
+      actorUserId: userProfile.id,
+      actorEmployeeId: currentEmployee?.id,
+      branchTechnicians,
+    })) {
+      toast.error('إسناد لي متاح للفني المربوط بالفرع فقط، وليس لموظف الاستقبال.');
+      return;
+    }
+    setAssignBusy(true);
     try {
-      await repairJobService.assignTechnician(jobId, userProfile.id, {
-        uid: userProfile.id,
-        name: userProfile.displayName || userProfile.email || 'مستخدم',
-      });
-      setJob(await repairJobService.getById(jobId));
-      toast.success('تم إسناد الطلب لك.');
+      const hadAssignee = Boolean(String(job?.technicianId || '').trim());
+      const beforeStatus = mapLegacyRepairStatus(job?.status || '');
+      await repairJobService.assignTechnician(jobId, userProfile.id, assignActor());
+      const refreshed = await repairJobService.getById(jobId);
+      if (refreshed) setJob(refreshed);
+      const afterStatus = mapLegacyRepairStatus(refreshed?.status || '');
+      if (beforeStatus === 'received' && afterStatus === 'diagnosing') {
+        toast.success(hadAssignee ? 'تم تغيير الإسناد لك — الحالة صارت جاري الفحص.' : 'تم إسناد الطلب لك — الحالة صارت جاري الفحص.');
+      } else {
+        toast.success(hadAssignee ? 'تم تغيير الإسناد لك.' : 'تم إسناد الطلب لك.');
+      }
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إسناد الطلب.');
+    } finally {
+      setAssignBusy(false);
     }
   };
 
   const assignToBranchTechnician = async () => {
-    if (!canEditThisJob) {
-      toast.error('ليس لديك صلاحية تعديل هذا الطلب.');
+    if (!canManageTechnicianAssignment) {
+      toast.error('ليس لديك صلاحية تغيير إسناد الفني.');
       return;
     }
     const selectedId = String(selectedTechnicianId || '').trim();
@@ -551,15 +576,60 @@ export const RepairJobDetail: React.FC = () => {
       );
       return;
     }
+    const currentId = String(job?.technicianId || '').trim();
+    if (currentId && (currentId === assignId || currentId === selectedId)) {
+      toast.error('هذا الفني مسند بالفعل على الطلب.');
+      return;
+    }
+    setAssignBusy(true);
     try {
-      await repairJobService.assignTechnician(jobId, assignId, {
-        uid: userProfile?.id || '',
-        name: userProfile?.displayName || userProfile?.email || 'مستخدم',
-      });
-      setJob(await repairJobService.getById(jobId));
-      toast.success('تم إسناد الطلب للفني المختار.');
+      const beforeStatus = mapLegacyRepairStatus(job?.status || '');
+      await repairJobService.assignTechnician(jobId, assignId, assignActor());
+      const refreshed = await repairJobService.getById(jobId);
+      if (refreshed) setJob(refreshed);
+      const afterStatus = mapLegacyRepairStatus(refreshed?.status || '');
+      if (!currentId && beforeStatus === 'received' && afterStatus === 'diagnosing') {
+        toast.success('تم إسناد الطلب للفني — الحالة صارت جاري الفحص.');
+      } else {
+        toast.success(currentId ? 'تم تغيير الفني المسند.' : 'تم إسناد الطلب للفني المختار.');
+      }
     } catch (e: any) {
       toast.error(e?.message || 'تعذر إسناد الطلب للفني.');
+    } finally {
+      setAssignBusy(false);
+    }
+  };
+
+  const clearTechnicianAssignment = async () => {
+    if (!canManageTechnicianAssignment) {
+      toast.error('ليس لديك صلاحية فك إسناد الفني.');
+      return;
+    }
+    if (!String(job?.technicianId || '').trim()) {
+      toast.error('الطلب غير مسند أصلًا.');
+      return;
+    }
+    const ok = window.confirm(
+      'فك إسناد الفني عن هذا الطلب؟\n'
+      + 'لو الحالة «جاري الفحص» ومافيش تشخيص متسجل، هترجع «وارد».\n'
+      + 'بعدها تقدر تسند فني تاني من هنا أو يمسح QR.',
+    );
+    if (!ok) return;
+    setAssignBusy(true);
+    try {
+      await repairJobService.assignTechnician(jobId, '', assignActor());
+      const refreshed = await repairJobService.getById(jobId);
+      if (refreshed) setJob(refreshed);
+      const backToReceived = refreshed && mapLegacyRepairStatus(refreshed.status || '') === 'received';
+      toast.success(
+        backToReceived
+          ? 'تم فك الإسناد — الحالة رجعت وارد.'
+          : 'تم فك إسناد الفني.',
+      );
+    } catch (e: any) {
+      toast.error(e?.message || 'تعذر فك الإسناد.');
+    } finally {
+      setAssignBusy(false);
     }
   };
 
@@ -1297,12 +1367,40 @@ export const RepairJobDetail: React.FC = () => {
     }
   };
 
-  const canAssignTechnician = canEditThisJob;
+  const canAssignTechnician =
+    can('repair.jobs.edit')
+    || can('repair.jobs.reception');
+  const canManageTechnicianAssignment = Boolean(
+    job
+    && canAssignTechnician
+    && !isDeliveredStatus(job.status)
+    && !Boolean(job.isClosed),
+  );
+  const assignedTechnicianId = String(job?.technicianId || '').trim();
+  const assignedTechnicianLabel = assignedTechnicianId
+    ? (technicianNameById[assignedTechnicianId] || `فني (${assignedTechnicianId.slice(0, 8)}…)`)
+    : 'غير مسند';
+  const selectedAssignMatchesCurrent = Boolean(
+    assignedTechnicianId
+    && selectedTechnicianId
+    && (
+      assignedTechnicianId === selectedTechnicianId
+      || branchTechnicians.some(
+        (tech) => tech.id === selectedTechnicianId
+          && (tech.id === assignedTechnicianId || String(tech.userId || '').trim() === assignedTechnicianId),
+      )
+    ),
+  );
   const isFixedTechnicianAssignment = isSingleBranchTechnician(branch?.technicianIds)
     || branchTechnicians.length === 1;
+  const canAssignToMyselfAsTechnician = isActorBranchTechnician({
+    actorUserId: userProfile?.id,
+    actorEmployeeId: currentEmployee?.id,
+    branchTechnicians,
+  });
 
   useEffect(() => {
-    if (!job?.id || !canAssignTechnician || branchTechnicians.length === 0) return;
+    if (!job?.id || !canManageTechnicianAssignment || branchTechnicians.length === 0) return;
     const assignedId = String(job.technicianId || '').trim();
     if (!assignedId) return;
     const match = branchTechnicians.find(
@@ -1328,7 +1426,7 @@ export const RepairJobDetail: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [branchTechnicians, canAssignTechnician, job?.id, job?.technicianId, userProfile?.displayName, userProfile?.email, userProfile?.id]);
+  }, [branchTechnicians, canManageTechnicianAssignment, job?.id, job?.technicianId, userProfile?.displayName, userProfile?.email, userProfile?.id]);
 
   const canViewThisJob = !repairCtx.jobsTechnicianOnly;
   const canDeleteJob = Boolean(job) && !isDeliveredStatus(job?.status || '') && !Boolean(job?.isClosed) && canEditThisJob;
@@ -1445,7 +1543,7 @@ export const RepairJobDetail: React.FC = () => {
 
   if (!job) {
     return (
-      <RepairOpsPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
+      <RepairOpsPageShell className="w-full min-w-0 erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
         <OpsDashPanel title="جاري تحميل الطلب" accent="repair">
           <p className="text-sm text-muted-foreground">جاري تحميل الطلب…</p>
         </OpsDashPanel>
@@ -1454,9 +1552,9 @@ export const RepairJobDetail: React.FC = () => {
   }
   if (!canViewThisJob) {
     return (
-      <RepairOpsPageShell className="mx-auto max-w-6xl erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
+      <RepairOpsPageShell className="w-full min-w-0 erp-ds-clean" dir={dir} eyebrow="تفاصيل طلب الصيانة" actions={shellBackAction}>
         <OpsDashPanel title="غير مسموح" accent="repair">
-          <p className="text-sm text-amber-900">
+          <p className="text-sm text-[rgb(var(--color-warning))]">
             هذا الطلب غير مسند لك، ولا تملك صلاحية عرضه.
           </p>
         </OpsDashPanel>
@@ -1483,7 +1581,7 @@ export const RepairJobDetail: React.FC = () => {
 
   const jobSubtitle = isDeliveredStatus(job.status)
     ? 'الطلب مقفل بعد التسليم — اطبع إذن التسليم من صندوق الإقفال أو أعد فتح الإصلاح من المزيد.'
-    : 'استقبال: منتجات · موافقة عميل · طباعة. الإسناد عبر QR — التشخيص من الورشة.';
+    : 'استقبال: منتجات · موافقة عميل · طباعة. غيّر الفني أو فك الإسناد من الملخص — أو امسح QR.';
 
   const repairJobShellActions = (
     <div className="flex flex-wrap items-center gap-2">
@@ -1491,12 +1589,10 @@ export const RepairJobDetail: React.FC = () => {
       <StatusBadge status={job.status} size="md" />
       <Button
         type="button"
-        variant="outline"
-        size="sm"
-        className="font-semibold"
         iconName="print"
         tone="print"
-        solid={false}
+        solid
+        className="font-bold shadow-sm"
         title="طباعة إيصال بنسختين (مركز + عميل) والكارت الداخلي على A5"
         onClick={() => handlePrintIntakeBundle()}
       >
@@ -1514,7 +1610,7 @@ export const RepairJobDetail: React.FC = () => {
 
   return (
     <RepairOpsPageShell
-      className="mx-auto max-w-6xl erp-ds-clean"
+      className="w-full min-w-0 erp-ds-clean"
       dir={dir}
       eyebrow={`طلب صيانة #${job.receiptNo}`}
       rangeLabel={jobSubtitle}
@@ -1522,11 +1618,12 @@ export const RepairJobDetail: React.FC = () => {
     >
       <DetailPageStickyHeader>
 
-        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
           {[
             { label: 'الفرع', value: branch?.name || '—' },
             { label: 'العميل', value: job.customerName || masterCustomer?.name || '—' },
             { label: 'الهاتف', value: job.customerPhone || '—', ltr: true },
+            { label: 'الفني', value: assignedTechnicianLabel },
             {
               label: 'صافي المطلوب',
               value: financial
@@ -1551,17 +1648,17 @@ export const RepairJobDetail: React.FC = () => {
           <section
             className={
               paymentClose.step === 'print'
-                ? 'rounded-xl border border-emerald-200/90 bg-gradient-to-l from-emerald-50 via-white to-white p-4 shadow-sm ring-1 ring-emerald-100'
+                ? 'rounded-xl border border-[rgb(var(--color-success)/0.25)]/90 bg-gradient-to-l from-[rgb(var(--color-success))] via-white to-white p-4 shadow-sm ring-1 ring-[rgb(var(--color-success)/0.1)]'
                 : paymentClose.step === 'blocked'
-                  ? 'rounded-xl border border-rose-200 bg-rose-50/60 p-4 shadow-sm'
-                  : 'rounded-xl border border-sky-200 bg-gradient-to-l from-sky-50 via-white to-white p-4 shadow-sm ring-1 ring-sky-100'
+                  ? 'rounded-xl border border-[rgb(var(--color-danger)/0.25)] bg-[rgb(var(--color-danger)/0.1)]/60 p-4 shadow-sm'
+                  : 'rounded-xl border border-[rgb(var(--color-primary)/0.25)] bg-gradient-to-l from-[rgb(var(--color-primary))] via-white to-white p-4 shadow-sm ring-1 ring-[rgb(var(--color-primary)/0.1)]'
             }
           >
             <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
               <div className="min-w-0 space-y-1.5">
                 <div className="flex flex-wrap items-center gap-2">
                   {paymentClose.step === 'print' ? (
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-600" aria-hidden />
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-[rgb(var(--color-success))]" aria-hidden />
                   ) : null}
                   <h2 className="text-base font-semibold tracking-tight text-foreground">
                     {paymentClose.step === 'print'
@@ -1578,10 +1675,10 @@ export const RepairJobDetail: React.FC = () => {
                     <span
                       className={
                         paymentClose.step === 'blocked'
-                          ? 'inline-flex items-center rounded-md border border-rose-300 bg-rose-100 px-2 py-0.5 text-[11px] font-medium text-rose-800'
+                          ? 'inline-flex items-center rounded-md border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.1)] px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-danger))]'
                           : paymentClose.step === 'collect' || paymentClose.step === 'deliver'
-                            ? 'inline-flex items-center rounded-md border border-emerald-300/70 bg-emerald-100/80 px-2 py-0.5 text-[11px] font-medium text-emerald-900'
-                            : 'inline-flex items-center rounded-md border border-sky-300/70 bg-sky-100/80 px-2 py-0.5 text-[11px] font-medium text-sky-900'
+                            ? 'inline-flex items-center rounded-md border border-[rgb(var(--color-success)/0.35)]/70 bg-[rgb(var(--color-success)/0.1)]/80 px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-success))]'
+                            : 'inline-flex items-center rounded-md border border-[rgb(var(--color-primary)/0.35)]/70 bg-[rgb(var(--color-primary)/0.1)]/80 px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-primary))]'
                       }
                     >
                       {paymentClose.step === 'blocked' ? 'موقوف' : paymentClose.stepLabel}
@@ -1589,8 +1686,8 @@ export const RepairJobDetail: React.FC = () => {
                   ) : (
                     <span className={
                       paymentClose.canCollectReceivableAction
-                        ? 'inline-flex items-center rounded-md border border-amber-300/80 bg-amber-100/90 px-2 py-0.5 text-[11px] font-medium text-amber-900'
-                        : 'inline-flex items-center rounded-md border border-emerald-300/80 bg-emerald-100/90 px-2 py-0.5 text-[11px] font-medium text-emerald-900'
+                        ? 'inline-flex items-center rounded-md border border-[rgb(var(--color-warning)/0.35)]/80 bg-[rgb(var(--color-warning)/0.1)]/90 px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-warning))]'
+                        : 'inline-flex items-center rounded-md border border-[rgb(var(--color-success)/0.35)]/80 bg-[rgb(var(--color-success)/0.1)]/90 px-2 py-0.5 text-[11px] font-medium text-[rgb(var(--color-success))]'
                     }>
                       {paymentClose.isWarrantySettlement
                         ? 'ضمان — بدون تحصيل'
@@ -1599,13 +1696,13 @@ export const RepairJobDetail: React.FC = () => {
                   )}
                 </div>
                 {paymentClose.step === 'print' ? (
-                  <p className="text-sm text-emerald-950/80">
+                  <p className="text-sm text-[rgb(var(--color-success))]">
                     رقم الإذن{' '}
                     <span className="font-mono font-semibold tracking-wide" dir="ltr">
                       {job.deliveryAuthorizationNo || `DEL-${job.receiptNo}`}
                     </span>
                     {paymentClose.canCollectReceivableAction ? (
-                      <span className="mt-1 block text-amber-800">
+                      <span className="mt-1 block text-[rgb(var(--color-warning))]">
                         ذمة مفتوحة {paymentClose.balanceDue.toLocaleString('ar-EG')} ج.م — يمكن التحصيل الآن.
                       </span>
                     ) : null}
@@ -1662,7 +1759,7 @@ export const RepairJobDetail: React.FC = () => {
                     key={row.key}
                     className={
                       settledDue
-                        ? 'rounded-lg border border-emerald-200 bg-emerald-50/80 px-3 py-2.5'
+                        ? 'rounded-lg border border-[rgb(var(--color-success)/0.25)] bg-[rgb(var(--color-success)/0.1)]/80 px-3 py-2.5'
                         : 'rounded-lg border border-border/70 bg-background/95 px-3 py-2.5'
                     }
                   >
@@ -1670,7 +1767,7 @@ export const RepairJobDetail: React.FC = () => {
                     <div
                       className={
                         settledDue
-                          ? 'mt-0.5 text-base font-semibold tabular-nums tracking-tight text-emerald-800'
+                          ? 'mt-0.5 text-base font-semibold tabular-nums tracking-tight text-[rgb(var(--color-success))]'
                           : 'mt-0.5 text-base font-semibold tabular-nums tracking-tight'
                       }
                     >
@@ -1817,13 +1914,13 @@ export const RepairJobDetail: React.FC = () => {
                         <Badge
                           variant="outline"
                           className={item.inWarranty
-                            ? 'border-sky-300 bg-sky-50 text-sky-800'
-                            : 'border-slate-300 bg-slate-50 text-slate-700'}
+                            ? 'border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] text-[rgb(var(--color-primary))]'
+                            : 'border-[var(--color-border)] bg-[var(--color-bg)] text-[var(--color-text)]'}
                         >
                           {manufacturerWarrantyLineLabel(item.inWarranty)}
                         </Badge>
                         {Number(item.unrepairableQuantity || 0) > 0 ? (
-                          <Badge variant="outline" className="border-rose-300 bg-rose-50 text-rose-800">
+                          <Badge variant="outline" className="border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.1)] text-[rgb(var(--color-danger))]">
                             غير قابل {item.unrepairableQuantity}
                           </Badge>
                         ) : null}
@@ -1888,6 +1985,86 @@ export const RepairJobDetail: React.FC = () => {
         </div>
 
         <aside className="order-2 space-y-4 lg:col-span-1 lg:sticky lg:top-[4.5rem]">
+          {canManageTechnicianAssignment || assignedTechnicianId ? (
+            <OpsDashPanel title="إسناد الفني" accent="repair">
+              <p className="mb-3 text-sm text-muted-foreground">
+                {canManageTechnicianAssignment
+                  ? (canAssignToMyselfAsTechnician
+                    ? 'غيّر الفني لو مش موجود النهاردة، أو فك الإسناد عشان فني تاني يمسحه من الكارت.'
+                    : 'اختر فنيًا من قائمة الفرع ثم احفظ الإسناد. «إسناد لي» للفني المربوط بالفرع فقط.')
+                  : 'الفني الحالي على الطلب.'}
+              </p>
+              <div className="mb-3 rounded-md border bg-muted/20 px-3 py-2 text-sm">
+                <div className="text-[11px] text-muted-foreground">المسند حاليًا</div>
+                <div className="mt-0.5 font-semibold">{assignedTechnicianLabel}</div>
+              </div>
+              {canManageTechnicianAssignment ? (
+                <div className="space-y-2">
+                  {branchTechnicians.length > 0 ? (
+                    <>
+                      <div className="space-y-1">
+                        <Label>فني الفرع</Label>
+                        <Select
+                          value={selectedTechnicianId || undefined}
+                          onValueChange={setSelectedTechnicianId}
+                          disabled={assignBusy || isFixedTechnicianAssignment}
+                        >
+                          <SelectTrigger>
+                            <SelectValue placeholder="اختر فنيًا" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {branchTechnicians.map((tech) => (
+                              <SelectItem key={tech.id} value={tech.id}>
+                                {tech.name}
+                                {!tech.userId ? ' (غير مربوط بحساب)' : ''}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <Button
+                        type="button"
+                        className="w-full"
+                        disabled={assignBusy || !selectedTechnicianId || selectedAssignMatchesCurrent}
+                        onClick={() => void assignToBranchTechnician()}
+                      >
+                        {assignBusy
+                          ? 'جاري الحفظ…'
+                          : assignedTechnicianId
+                            ? 'تغيير الفني'
+                            : 'إسناد للفني المختار'}
+                      </Button>
+                    </>
+                  ) : (
+                    <p className="text-xs text-[rgb(var(--color-warning))]">
+                      لا يوجد فنيون مربوطون بهذا الفرع. أضفهم من شاشة الفروع أولًا.
+                    </p>
+                  )}
+                  <div className={`grid grid-cols-1 gap-2 ${canAssignToMyselfAsTechnician ? 'sm:grid-cols-2' : ''}`}>
+                    {canAssignToMyselfAsTechnician && userProfile?.id ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        disabled={assignBusy || assignedTechnicianId === userProfile.id}
+                        onClick={() => void assignToMe()}
+                      >
+                        إسناد لي
+                      </Button>
+                    ) : null}
+                    <Button
+                      type="button"
+                      variant="outline"
+                      disabled={assignBusy || !assignedTechnicianId}
+                      onClick={() => void clearTechnicianAssignment()}
+                    >
+                      فك الإسناد
+                    </Button>
+                  </div>
+                </div>
+              ) : null}
+            </OpsDashPanel>
+          ) : null}
+
           {!isDeliveredStatus(job.status) ? (
             <OpsDashPanel title="موافقة العميل" accent="repair">
               <p className="mb-3 text-sm text-muted-foreground">
@@ -1968,19 +2145,19 @@ export const RepairJobDetail: React.FC = () => {
                 && Number(paymentAuthorization.grossAmount || 0) <= 0
                 && Number(paymentAuthorization.warrantyGrossAmount || 0) <= 0
                 && !isWarrantySettlementAuth(paymentAuthorization) ? (
-                <div className="rounded-md border border-rose-300 bg-rose-50 p-3 text-sm text-rose-950">
+                <div className="rounded-md border border-[rgb(var(--color-danger)/0.35)] bg-[rgb(var(--color-danger)/0.1)] p-3 text-sm text-[rgb(var(--color-danger))]">
                   إذن الدفع قيمته صفر — اختر خدمة مسعّرة أو قطعة ثم جهّز إصدارًا جديدًا.
                 </div>
               ) : null}
               {paymentAuthorization && isWarrantySettlementAuth(paymentAuthorization) ? (
-                <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
+                <div className="rounded-md border border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] p-3 text-sm text-[rgb(var(--color-primary))]">
                   داخل الضمان بالكامل — إعفاء كامل بدون تحصيل.
                 </div>
               ) : null}
               {paymentAuthorization
                 && !isWarrantySettlementAuth(paymentAuthorization)
                 && (isPartialManufacturerWarrantyJob(job) || Number(paymentAuthorization.warrantyGrossAmount || 0) > 0) ? (
-                <div className="rounded-md border border-sky-300 bg-sky-50 p-3 text-sm text-sky-950">
+                <div className="rounded-md border border-[rgb(var(--color-primary)/0.35)] bg-[rgb(var(--color-primary)/0.1)] p-3 text-sm text-[rgb(var(--color-primary))]">
                   ضمان مختلط — يُحصَّل غير الضمان فقط، ومنتجات الضمان مجانية.
                   {Number(paymentAuthorization.warrantyGrossAmount || 0) > 0 ? (
                     <span className="mt-1 block tabular-nums text-xs">
@@ -1990,7 +2167,7 @@ export const RepairJobDetail: React.FC = () => {
                 </div>
               ) : null}
               {hasInWarrantyProduct && !paymentAuthorization ? (
-                <div className="rounded-md border border-sky-200 bg-sky-50/70 p-2 text-xs text-sky-950">
+                <div className="rounded-md border border-[rgb(var(--color-primary)/0.25)] bg-[rgb(var(--color-primary)/0.1)]/70 p-2 text-xs text-[rgb(var(--color-primary))]">
                   {isFullManufacturerWarrantyJob(job)
                     ? 'كل المنتجات داخل الضمان: عند الجاهزية جهّز إقفال الضمان ثم سلّم بدون تحصيل.'
                     : 'طلب مختلط: عند الجاهزية جهّز إذن الدفع — يُحصَّل غير الضمان فقط.'}
@@ -1998,8 +2175,8 @@ export const RepairJobDetail: React.FC = () => {
               ) : null}
 
               {!job.customerId && can('repair.jobs.edit') ? (
-                <div className="space-y-2 rounded-md border border-amber-300 bg-amber-50 p-2">
-                  <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-900">
+                <div className="space-y-2 rounded-md border border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] p-2">
+                  <Badge variant="outline" className="border-[rgb(var(--color-warning)/0.35)] bg-[rgb(var(--color-warning)/0.1)] text-[rgb(var(--color-warning))]">
                     غير مربوط بماستر العملاء
                   </Badge>
                   <div className="flex flex-wrap gap-2">
@@ -2047,7 +2224,7 @@ export const RepairJobDetail: React.FC = () => {
 
               {trackUrl ? (
                 <div className="flex items-center gap-3 rounded-md border p-2">
-                  <div className="rounded border bg-white p-1">
+                  <div className="rounded border bg-[var(--color-card)] p-1">
                     <QRCodeSVG value={trackUrl} size={72} includeMargin />
                   </div>
                   <div className="text-xs leading-relaxed text-muted-foreground">
@@ -2278,8 +2455,20 @@ export const RepairJobDetail: React.FC = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Off-screen system print documents — same DOM for print + PDF */}
-      <div className="pointer-events-none fixed -left-[10000px] top-0" aria-hidden>
+      {/* Off-screen system print documents — same DOM for print + PDF.
+          Park with fixed left + max-content (never viewport-width sheets).
+          Do not use height:0/overflow:hidden — exportToPDF/html2canvas needs live layout. */}
+      <div
+        aria-hidden
+        className="pointer-events-none"
+        style={{
+          position: 'fixed',
+          left: '-10000px',
+          top: 0,
+          width: 'max-content',
+          maxWidth: '148mm',
+        }}
+      >
         <RepairJobIntakePrintBundle
           ref={intakeBundlePrintRef}
           job={financialJob}

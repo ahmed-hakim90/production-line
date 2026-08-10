@@ -20,7 +20,7 @@ export const REPAIR_JOB_STATUSES = [
 export type RepairJobStatus = string;
 export const REPAIR_JOB_STATUS_LABELS: Record<string, string> = {
   received: 'وارد',
-  diagnosing: 'فحص',
+  diagnosing: 'جاري الفحص',
   estimate_ready: 'التقدير جاهز لمراجعة الاستقبال',
   waiting_approval: 'بانتظار موافقة العميل',
   waiting_parts: 'بانتظار قطع الغيار',
@@ -534,6 +534,15 @@ export interface RepairJob {
   deliveryAuthorizationIssuedBy?: string;
   deliveryAuthorizationIssuedByName?: string;
   assignedAt?: string;
+  /**
+   * Desk unassign history for technician KPI («فك إسناد»).
+   * Appended when technicianId is cleared; previous assignee is credited.
+   */
+  technicianReleaseEvents?: Array<{
+    technicianId: string;
+    at: string;
+    actorUid?: string;
+  }>;
   resolvedAt?: string;
   slaHours?: number;
   /** تاريخ الاستحقاق المتوقع — نفس «الموعد المتوقع للتسليم» */
@@ -694,7 +703,8 @@ export type RepairServiceEventAction =
   | 'photo_added'
   | 'field_update'
   | 'sla_breached'
-  | 'technician_assigned';
+  | 'technician_assigned'
+  | 'technician_unassigned';
 
 /**
  * أسماء أحداث نطاقية (نمط resource.action) للأتمتة ولوحات المراقبة.
@@ -718,6 +728,7 @@ export type RepairDomainEventName =
   | 'part.consumed'
   | 'parts.released_all'
   | 'technician.assigned'
+  | 'technician.unassigned'
   | 'repair.started'
   | 'repair.finished'
   | 'testing.started'

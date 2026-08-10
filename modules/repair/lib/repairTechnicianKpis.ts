@@ -21,7 +21,15 @@ export type RepairTechKpiSortKey =
   | 'avgRepairDays'
   | 'delayed'
   | 'open'
-  | 'delivered';
+  | 'delivered'
+  | 'assignedNow'
+  | 'released';
+
+export type RepairTechKpiReleaseEvent = {
+  technicianId: string;
+  at: string;
+  actorUid?: string;
+};
 
 export type RepairTechKpiJob = {
   id?: string;
@@ -42,6 +50,8 @@ export type RepairTechKpiJob = {
   dueAt?: string;
   /** Precomputed job revenue (final cost) — never trust client for mutations; display only. */
   revenue: number;
+  /** Desk unassign events credited to previous technicians. */
+  technicianReleaseEvents?: RepairTechKpiReleaseEvent[];
 };
 
 export type RepairTechKpiRange = {
@@ -56,12 +66,16 @@ export type RepairTechnicianPerfRow = {
   unrepairable: number;
   ready: number;
   open: number;
+  /** Open jobs currently assigned to this technician (live, not period-scoped). */
+  assignedNow: number;
+  /** Unassign (فك إسناد) events in the KPI period. */
+  released: number;
   delayed: number;
   cancelled: number;
   revenue: number;
   /** Mean calendar days assignment→delivery for delivered jobs; null when none. */
   avgRepairDays: number | null;
-  /** delivered / (delivered + unrepairable); null when no terminal outcomes. */
+  /** delivered / (delivered + unrepairable + released); null when no terminal outcomes. */
   successRate: number | null;
   /** delivered / total assigned in scope. */
   deliveryRate: number;
@@ -74,6 +88,8 @@ export type RepairTechTeamTotals = {
   delivered: number;
   unrepairable: number;
   open: number;
+  assignedNow: number;
+  released: number;
   delayed: number;
   ready: number;
   revenue: number;
@@ -240,50 +256,113 @@ export function filterRepairTechKpiJobs(
   });
 }
 
+/** Branch/query scoped jobs without period filter — for live assignedNow + release events. */
+export function filterRepairTechLiveJobs(
+  jobs: readonly RepairTechKpiJob[],
+  input: {
+    branchId?: string | 'all';
+    technicianQuery?: string;
+    technicianNameById?: ReadonlyMap<string, string>;
+    hiddenTechnicianIds?: readonly string[];
+  },
+): RepairTechKpiJob[] {
+  const branchId = input.branchId && input.branchId !== 'all' ? input.branchId : '';
+  const query = String(input.technicianQuery || '').trim().toLowerCase();
+  const hidden = new Set((input.hiddenTechnicianIds || []).map((id) => String(id || '').trim()).filter(Boolean));
+  const nameById = input.technicianNameById;
+
+  return jobs.filter((job) => {
+    if (branchId && String(job.branchId || '') !== branchId) return false;
+
+    const techId = String(job.technicianId || '').trim();
+    if (techId && hidden.has(techId)) return false;
+
+    if (query) {
+      const name = String(nameById?.get(techId) || '').trim().toLowerCase();
+      const idMatch = techId.toLowerCase().includes(query);
+      const nameMatch = name.includes(query);
+      const releaseMatch = (job.technicianReleaseEvents || []).some((ev) => {
+        const releaseTech = String(ev.technicianId || '').trim();
+        if (hidden.has(releaseTech)) return false;
+        const releaseName = String(nameById?.get(releaseTech) || '').trim().toLowerCase();
+        return releaseTech.toLowerCase().includes(query) || releaseName.includes(query);
+      });
+      const unassignedMatch = !techId && UNASSIGNED_TECHNICIAN_ID.includes(query);
+      if (!idMatch && !nameMatch && !releaseMatch && !unassignedMatch) return false;
+    }
+    return true;
+  });
+}
+
+type PerfAcc = {
+  total: number;
+  delivered: number;
+  unrepairable: number;
+  ready: number;
+  open: number;
+  assignedNow: number;
+  released: number;
+  delayed: number;
+  cancelled: number;
+  revenue: number;
+  repairDaySum: number;
+  repairDayCount: number;
+  deviceBreakdown: Record<string, number>;
+  statusBreakdown: Record<string, number>;
+};
+
+function emptyPerfAcc(): PerfAcc {
+  return {
+    total: 0,
+    delivered: 0,
+    unrepairable: 0,
+    ready: 0,
+    open: 0,
+    assignedNow: 0,
+    released: 0,
+    delayed: 0,
+    cancelled: 0,
+    revenue: 0,
+    repairDaySum: 0,
+    repairDayCount: 0,
+    deviceBreakdown: {},
+    statusBreakdown: {},
+  };
+}
+
+function ensurePerfAcc(byTech: Map<string, PerfAcc>, key: string): PerfAcc {
+  let row = byTech.get(key);
+  if (!row) {
+    row = emptyPerfAcc();
+    byTech.set(key, row);
+  }
+  return row;
+}
+
+function isReleaseInRange(at: string | undefined, range: RepairTechKpiRange): boolean {
+  const ms = parseTime(at);
+  if (ms == null) return false;
+  return ms >= range.startMs && ms <= range.endMs;
+}
+
 export function buildRepairTechnicianPerfRows(
   jobs: readonly RepairTechKpiJob[],
   input: {
     openStatusIds: readonly string[];
     nowMs?: number;
+    /** Live branch-scoped jobs (not period-filtered) for assignedNow + release credits. */
+    liveJobs?: readonly RepairTechKpiJob[];
+    range?: RepairTechKpiRange;
   },
 ): RepairTechnicianPerfRow[] {
   const nowMs = input.nowMs ?? Date.now();
   const openStatusIds = input.openStatusIds;
-  const byTech = new Map<string, {
-    total: number;
-    delivered: number;
-    unrepairable: number;
-    ready: number;
-    open: number;
-    delayed: number;
-    cancelled: number;
-    revenue: number;
-    repairDaySum: number;
-    repairDayCount: number;
-    deviceBreakdown: Record<string, number>;
-    statusBreakdown: Record<string, number>;
-  }>();
+  const byTech = new Map<string, PerfAcc>();
+  const hiddenUnassignedKey = UNASSIGNED_TECHNICIAN_ID;
 
   for (const job of jobs) {
     const key = technicianKeyOf(job);
-    let row = byTech.get(key);
-    if (!row) {
-      row = {
-        total: 0,
-        delivered: 0,
-        unrepairable: 0,
-        ready: 0,
-        open: 0,
-        delayed: 0,
-        cancelled: 0,
-        revenue: 0,
-        repairDaySum: 0,
-        repairDayCount: 0,
-        deviceBreakdown: {},
-        statusBreakdown: {},
-      };
-      byTech.set(key, row);
-    }
+    const row = ensurePerfAcc(byTech, key);
 
     const canonical = mapLegacyRepairStatus(job.status);
     row.total += 1;
@@ -316,8 +395,25 @@ export function buildRepairTechnicianPerfRows(
     }
   }
 
+  const liveJobs = input.liveJobs || jobs;
+  const range = input.range;
+  for (const job of liveJobs) {
+    const techId = String(job.technicianId || '').trim();
+    if (techId && isRepairJobOpenStatus(job.status, openStatusIds)) {
+      ensurePerfAcc(byTech, techId).assignedNow += 1;
+    }
+    if (range) {
+      for (const ev of job.technicianReleaseEvents || []) {
+        const releaseTech = String(ev.technicianId || '').trim();
+        if (!releaseTech || releaseTech === hiddenUnassignedKey) continue;
+        if (!isReleaseInRange(ev.at, range)) continue;
+        ensurePerfAcc(byTech, releaseTech).released += 1;
+      }
+    }
+  }
+
   return Array.from(byTech.entries()).map(([technicianId, row]) => {
-    const terminal = row.delivered + row.unrepairable;
+    const terminal = row.delivered + row.unrepairable + row.released;
     return {
       technicianId,
       total: row.total,
@@ -325,6 +421,8 @@ export function buildRepairTechnicianPerfRows(
       unrepairable: row.unrepairable,
       ready: row.ready,
       open: row.open,
+      assignedNow: row.assignedNow,
+      released: row.released,
       delayed: row.delayed,
       cancelled: row.cancelled,
       revenue: row.revenue,
@@ -357,6 +455,10 @@ export function sortRepairTechnicianPerfRows(
         return row.delayed;
       case 'open':
         return row.open;
+      case 'assignedNow':
+        return row.assignedNow;
+      case 'released':
+        return row.released;
       case 'delivered':
         return row.delivered;
       default:
@@ -409,7 +511,9 @@ export function summarizeRepairTechTeam(
     if (isRepairJobDelayed(job, input.openStatusIds, nowMs)) delayed += 1;
   }
 
-  const terminal = delivered + unrepairable;
+  const released = rows.reduce((sum, row) => sum + row.released, 0);
+  const assignedNow = rows.reduce((sum, row) => sum + row.assignedNow, 0);
+  const terminal = delivered + unrepairable + released;
   const assignedTechnicians = rows.filter((r) => r.technicianId !== UNASSIGNED_TECHNICIAN_ID).length;
 
   return {
@@ -417,6 +521,8 @@ export function summarizeRepairTechTeam(
     delivered,
     unrepairable,
     open,
+    assignedNow,
+    released,
     delayed,
     ready,
     revenue,
@@ -540,9 +646,15 @@ export function buildRepairTechAttentionQueue(
       reasons.push('delayed');
       score += row.delayed * 10;
     }
-    if (row.successRate != null && row.successRate < 50 && (row.delivered + row.unrepairable) >= 2) {
+    if (row.successRate != null && row.successRate < 50 && (row.delivered + row.unrepairable + row.released) >= 2) {
       reasons.push('low_success');
       score += (50 - row.successRate);
+    }
+    if (row.released > 0) {
+      score += row.released * 4;
+      if (!reasons.includes('low_success') && row.released >= 2) {
+        reasons.push('low_success');
+      }
     }
     if (
       row.avgRepairDays != null
@@ -640,6 +752,8 @@ export function isRepairTechKpiSortKey(value: string | null | undefined): value 
     || value === 'delayed'
     || value === 'open'
     || value === 'delivered'
+    || value === 'assignedNow'
+    || value === 'released'
   );
 }
 

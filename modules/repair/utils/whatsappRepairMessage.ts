@@ -4,7 +4,7 @@ import { isDeliveredStatus, mapLegacyRepairStatus } from './repairWorkflowNormal
 
 const statusLabelMap: Record<string, string> = {
   received: 'وارد',
-  diagnosing: 'تشخيص',
+  diagnosing: 'تشخيص / جاري الفحص',
   waiting_approval: 'بانتظار موافقة',
   waiting_parts: 'بانتظار قطع',
   repairing: 'إصلاح',

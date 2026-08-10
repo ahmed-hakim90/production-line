@@ -4,6 +4,7 @@ import { loadProtectedRepairServiceCatalog } from './repairServiceCatalogOps.js'
 import { decideTechnicianQrClaim } from './repairTechnicianClaimPolicy.js';
 import { recordAssignedJobFullyUnrepairable } from './repairCustomerPortalOps.js';
 import { mapLegacyRepairStatus } from './repairStatusIds.js';
+import { resolveAssignmentStatusPatch } from './repairAssignmentStatus.js';
 import { loadTenantWorkflowStatuses, resolveNextStatusForAction, resolveStatusRole, } from './repairStatusAdvance.js';
 const db = getDb();
 const requireActor = async (request) => {
@@ -135,51 +136,126 @@ const claimJobFromInternalQr = async (actor, data) => {
     if (!jobId)
         throw new HttpsError('invalid-argument', 'رقم الطلب مطلوب.');
     const jobRef = db.collection('repair_jobs').doc(jobId);
-    const jobSnap = await jobRef.get();
+    // Job + technician identity in parallel so "assigned to someone else" fails without a slow
+    // unscoped employees scan, and without waiting for a write transaction first.
+    const [jobSnap, actorIds] = await Promise.all([
+        jobRef.get(),
+        resolveActorTechnicianIds(actor),
+    ]);
     if (!jobSnap.exists)
         throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
     const job = jobSnap.data();
     if (String(job.tenantId || '') !== actor.tenantId)
         throw new HttpsError('permission-denied', 'الطلب خارج شركتك.');
     const branchId = String(job.branchId || '').trim();
-    const employeeSnap = await db.collection('employees').where('userId', '==', actor.uid).limit(20).get();
-    const employeeIds = employeeSnap.docs
-        .filter((doc) => String(doc.data().tenantId || '') === actor.tenantId)
-        .map((doc) => doc.id);
-    const actorIds = new Set([actor.uid, ...employeeIds]);
-    rejectClaimDecision(decideTechnicianQrClaim({ isClosed: job.isClosed === true,
-        status: String(job.status || ''), currentTechnicianId: String(job.technicianId || '').trim(),
-        actorUid: actor.uid, actorIds: Array.from(actorIds) }));
+    const preDecision = decideTechnicianQrClaim({
+        isClosed: job.isClosed === true,
+        status: String(job.status || ''),
+        currentTechnicianId: String(job.technicianId || '').trim(),
+        actorUid: actor.uid,
+        actorIds,
+    });
+    rejectClaimDecision(preDecision);
+    // Already owned by this technician — open workspace without a no-op transaction.
+    if (preDecision === 'already_self') {
+        return { ok: true, jobId, claimed: false };
+    }
+    // Desk assign rejects non-branch techs; QR claim must match (no cross-branch claim).
+    if (!branchId)
+        throw new HttpsError('failed-precondition', 'الطلب غير مرتبط بفرع.');
+    const branchSnap = await db.collection('repair_branches').doc(branchId).get();
+    if (!branchSnap.exists)
+        throw new HttpsError('not-found', 'فرع الطلب غير موجود.');
+    const branchData = branchSnap.data();
+    if (String(branchData.tenantId || '') !== actor.tenantId) {
+        throw new HttpsError('permission-denied', 'فرع الطلب خارج شركتك.');
+    }
+    const branchTechnicianIds = new Set((Array.isArray(branchData.technicianIds) ? branchData.technicianIds : [])
+        .map((id) => String(id || '').trim())
+        .filter(Boolean));
+    if (!actorIds.some((id) => branchTechnicianIds.has(id))) {
+        throw new HttpsError('permission-denied', 'لست فنيًا مربوطًا بفرع هذا الطلب.');
+    }
     const at = new Date().toISOString();
     let claimed = false;
+    let advancedStatus = null;
+    let statusBeforeClaim = '';
     await db.runTransaction(async (tx) => {
         const fresh = await tx.get(jobRef);
         if (!fresh.exists)
             throw new HttpsError('not-found', 'طلب الصيانة غير موجود.');
         const row = fresh.data();
         const currentTechnicianId = String(row.technicianId || '').trim();
-        const decision = decideTechnicianQrClaim({ isClosed: row.isClosed === true,
-            status: String(row.status || ''), currentTechnicianId, actorUid: actor.uid, actorIds: Array.from(actorIds) });
+        const decision = decideTechnicianQrClaim({
+            isClosed: row.isClosed === true,
+            status: String(row.status || ''),
+            currentTechnicianId,
+            actorUid: actor.uid,
+            actorIds,
+        });
         rejectClaimDecision(decision);
         if (decision === 'claim') {
-            tx.update(jobRef, { technicianId: actor.uid, assignedAt: row.assignedAt || at, updatedAt: at });
+            const patch = {
+                technicianId: actor.uid,
+                assignedAt: row.assignedAt || at,
+                updatedAt: at,
+            };
+            statusBeforeClaim = mapLegacyRepairStatus(String(row.status || ''));
+            const nextStatus = resolveAssignmentStatusPatch({
+                action: 'assign',
+                currentStatus: String(row.status || ''),
+                jobProducts: Array.isArray(row.jobProducts)
+                    ? row.jobProducts
+                    : [],
+            });
+            if (nextStatus && nextStatus !== statusBeforeClaim) {
+                const history = Array.isArray(row.statusHistory) ? [...row.statusHistory] : [];
+                history.push({
+                    status: nextStatus,
+                    at,
+                    technicianId: actor.uid,
+                    reason: 'إسناد فني عبر QR — بدء الفحص',
+                    source: 'technician_qr_claim',
+                });
+                patch.status = nextStatus;
+                patch.statusHistory = history;
+                advancedStatus = nextStatus;
+            }
+            tx.update(jobRef, patch);
             claimed = true;
         }
     });
     if (claimed) {
-        await Promise.all([
+        const events = [
             jobRef.collection('service_events').doc(`technician-qr-claim__${actor.uid}`).set({
                 tenantId: actor.tenantId, branchId, jobId, at, actorUid: actor.uid, actorName: actor.displayName,
                 action: 'technician_assigned', domainEvent: 'technician.assigned', eventSchemaVersion: 1,
                 payload: { source: 'internal_qr', technicianId: actor.uid },
             }, { merge: true }),
-            String(job.customerId || '') ? db.collection('customer_service_events').doc(`technician-qr-claim__${jobId}__${actor.uid}`).set({
+        ];
+        if (advancedStatus && advancedStatus !== statusBeforeClaim) {
+            const domainEvent = advancedStatus === 'diagnosing' && statusBeforeClaim !== 'diagnosing'
+                ? 'diagnosis.started'
+                : 'job.status_changed';
+            events.push(jobRef.collection('service_events').doc(`technician-qr-claim-status__${actor.uid}`).set({
+                tenantId: actor.tenantId, branchId, jobId, at, actorUid: actor.uid, actorName: actor.displayName,
+                action: 'status_change',
+                domainEvent,
+                eventSchemaVersion: 1,
+                statusBefore: statusBeforeClaim,
+                statusAfter: advancedStatus,
+                note: 'تقدم تلقائي بعد إسناد الفني عبر QR',
+            }, { merge: true }));
+        }
+        if (String(job.customerId || '')) {
+            events.push(db.collection('customer_service_events').doc(`technician-qr-claim__${jobId}__${actor.uid}`).set({
                 tenantId: actor.tenantId, customerId: String(job.customerId || ''), referenceType: 'repair_job', referenceId: jobId,
                 action: 'job.technician_assigned', title: 'بدأ الفني العمل على الطلب',
                 message: 'تم استلام الطلب وبدأ أحد الفنيين العمل عليه.', branchId,
                 actorUid: actor.uid, actorName: actor.displayName, createdAt: at,
-            }, { merge: true }) : Promise.resolve(),
-        ]);
+            }, { merge: true }));
+        }
+        await Promise.all(events);
     }
     return { ok: true, jobId, claimed };
 };

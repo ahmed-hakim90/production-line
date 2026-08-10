@@ -49,6 +49,7 @@ import {
   compareTechnicianToTeam,
   compareTwoTechnicians,
   filterRepairTechKpiJobs,
+  filterRepairTechLiveJobs,
   formatRepairTechDeviceLabel,
   formatRepairTechKpiPeriodLabel,
   isRepairTechKpiPeriod,
@@ -81,6 +82,8 @@ const SORT_OPTIONS: { value: RepairTechKpiSortKey; label: string }[] = [
   { value: 'revenue', label: 'الإيراد' },
   { value: 'total', label: 'إجمالي الطلبات' },
   { value: 'delivered', label: 'التسليم' },
+  { value: 'assignedNow', label: 'مسند حالياً' },
+  { value: 'released', label: 'فك إسناد' },
   { value: 'avgRepairDays', label: 'سرعة الإصلاح (أسرع أولاً)' },
   { value: 'delayed', label: 'المتأخر' },
   { value: 'open', label: 'الجاري' },
@@ -112,14 +115,23 @@ function toKpiJob(job: RepairJob): RepairTechKpiJob {
     closedAt: job.closedAt,
     dueAt: job.dueAt,
     revenue: computeRepairJobCost(job).finalCost,
+    technicianReleaseEvents: Array.isArray(job.technicianReleaseEvents)
+      ? job.technicianReleaseEvents
+          .map((ev) => ({
+            technicianId: String(ev.technicianId || '').trim(),
+            at: String(ev.at || '').trim(),
+            ...(ev.actorUid ? { actorUid: String(ev.actorUid) } : {}),
+          }))
+          .filter((ev) => ev.technicianId && ev.at)
+      : [],
   };
 }
 
 function successTone(rate: number | null): string {
   if (rate == null) return 'bg-muted-foreground/30';
-  if (rate >= 80) return 'bg-emerald-500';
-  if (rate >= 50) return 'bg-amber-500';
-  return 'bg-rose-500';
+  if (rate >= 80) return 'bg-[rgb(var(--color-success)/0.1)]0';
+  if (rate >= 50) return 'bg-[rgb(var(--color-warning)/0.1)]0';
+  return 'bg-[rgb(var(--color-danger)/0.1)]0';
 }
 
 function formatDate(value?: string): string {
@@ -322,16 +334,29 @@ export const RepairTechnicianKPIs: React.FC = () => {
     [kpiJobs, range, branchFilter, technicianQuery, technicianNameById, hiddenTechnicianIds],
   );
 
+  const liveJobs = useMemo(
+    () =>
+      filterRepairTechLiveJobs(kpiJobs, {
+        branchId: branchFilter,
+        technicianQuery,
+        technicianNameById,
+        hiddenTechnicianIds,
+      }),
+    [kpiJobs, branchFilter, technicianQuery, technicianNameById, hiddenTechnicianIds],
+  );
+
   const technicianRows = useMemo(() => {
     const rows = buildRepairTechnicianPerfRows(filtered, {
       openStatusIds: repairSettings.workflow.openStatusIds,
+      liveJobs,
+      range,
     });
     return sortRepairTechnicianPerfRows(
       rows,
       sortKey,
       sortKey === 'avgRepairDays' ? 'asc' : 'desc',
     );
-  }, [filtered, repairSettings.workflow.openStatusIds, sortKey]);
+  }, [filtered, liveJobs, range, repairSettings.workflow.openStatusIds, sortKey]);
 
   const totals = useMemo(
     () =>
@@ -481,6 +506,8 @@ export const RepairTechnicianKPIs: React.FC = () => {
         'إجمالي الطلبات',
         'تم التسليم',
         'غير قابل للإصلاح',
+        'مسند حالياً',
+        'فك إسناد',
         'جاري',
         'متأخر',
         'جاهز',
@@ -495,6 +522,8 @@ export const RepairTechnicianKPIs: React.FC = () => {
         row.total,
         row.delivered,
         row.unrepairable,
+        row.assignedNow,
+        row.released,
         row.open,
         row.delayed,
         row.ready,
@@ -567,9 +596,9 @@ export const RepairTechnicianKPIs: React.FC = () => {
     },
     {
       key: 'open',
-      label: 'جاري الآن',
-      value: jobsReady ? fmt(totals.open) : '…',
-      meta: totals.ready > 0 ? `${fmt(totals.ready)} جاهز` : undefined,
+      label: 'مسند حالياً',
+      value: jobsReady ? fmt(totals.assignedNow) : '…',
+      meta: totals.released > 0 ? `${fmt(totals.released)} فك إسناد` : (totals.ready > 0 ? `${fmt(totals.ready)} جاهز` : undefined),
     },
     {
       key: 'delayed',
@@ -720,7 +749,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                   <span>{fmt(row.delivered)} تسليم</span>
                   <span>{fmtMoney(row.revenue)} إيراد</span>
                   <span>{fmtDays(row.avgRepairDays)} يوم</span>
-                  {row.delayed > 0 && <span className="text-rose-600">{fmt(row.delayed)} متأخر</span>}
+                  {row.delayed > 0 && <span className="text-[rgb(var(--color-danger))]">{fmt(row.delayed)} متأخر</span>}
                 </div>
               </button>
             ))}
@@ -734,7 +763,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
             <OpsDashPanel
               title="يحتاجون متابعة"
               accent="repair"
-              className="border-amber-200/80 dark:border-amber-900/40"
+              className="border-[rgb(var(--color-warning)/0.25)]/80 dark:border-[rgb(var(--color-warning))]/40"
             >
               <div className="space-y-2">
                 {attentionQueue.map((item) => (
@@ -747,7 +776,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                         item.delayed > 0 ? 'delayed' : 'overview',
                       );
                     }}
-                    className="flex w-full items-start justify-between gap-3 rounded-lg border bg-amber-50/40 p-2.5 text-right transition-colors hover:bg-amber-50 dark:bg-amber-950/20 dark:hover:bg-amber-950/40"
+                    className="flex w-full items-start justify-between gap-3 rounded-lg border bg-[rgb(var(--color-warning)/0.1)]/40 p-2.5 text-right transition-colors hover:bg-[rgb(var(--color-warning)/0.1)] dark:bg-[rgb(var(--color-warning)/0.2)] dark:hover:bg-[rgb(var(--color-warning)/0.2)]"
                   >
                     <div className="min-w-0 space-y-1">
                       <p className="truncate text-sm font-semibold">{resolveTechLabel(item.technicianId)}</p>
@@ -760,7 +789,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                       </div>
                     </div>
                     <div className="shrink-0 text-left text-[11px] tabular-nums text-muted-foreground">
-                      {item.delayed > 0 && <div className="font-semibold text-rose-600">{fmt(item.delayed)} متأخر</div>}
+                      {item.delayed > 0 && <div className="font-semibold text-[rgb(var(--color-danger))]">{fmt(item.delayed)} متأخر</div>}
                       <div>{fmtPct(item.successRate)}</div>
                     </div>
                   </button>
@@ -773,7 +802,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
             <OpsDashPanel
               title="طلبات متأخرة في الفترة"
               accent="repair"
-              className="border-rose-200/80 dark:border-rose-900/40"
+              className="border-[rgb(var(--color-danger)/0.25)]/80 dark:border-[rgb(var(--color-danger))]/40"
               action={<Badge variant="destructive">{fmt(delayedInScope.length)}</Badge>}
             >
               <div className="erp-mobile-card-list p-2 md:hidden">
@@ -798,7 +827,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                           {formatRepairTechDeviceLabel(job)}
                         </p>
                       </div>
-                      <span className="shrink-0 text-xs font-semibold text-rose-600 tabular-nums">
+                      <span className="shrink-0 text-xs font-semibold text-[rgb(var(--color-danger))] tabular-nums">
                         {job.overdueDays.toFixed(0)} ي
                       </span>
                     </div>
@@ -852,7 +881,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                         </td>
                         <td className="p-2 text-muted-foreground">{formatRepairTechDeviceLabel(job)}</td>
                         <td className="p-2 tabular-nums">{formatDate(job.dueAt)}</td>
-                        <td className="p-2 tabular-nums font-semibold text-rose-600">
+                        <td className="p-2 tabular-nums font-semibold text-[rgb(var(--color-danger))]">
                           {job.overdueDays.toFixed(0)} ي
                         </td>
                       </tr>
@@ -891,8 +920,10 @@ export const RepairTechnicianKPIs: React.FC = () => {
                   <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] text-muted-foreground tabular-nums">
                     <span>إجمالي {fmt(row.total)}</span>
                     <span>تسليم {fmt(row.delivered)}</span>
+                    <span>مسند {fmt(row.assignedNow)}</span>
+                    <span>فك إسناد {fmt(row.released)}</span>
                     <span>جاري {fmt(row.open)}</span>
-                    <span className={row.delayed > 0 ? 'text-rose-600 font-semibold' : ''}>
+                    <span className={row.delayed > 0 ? 'text-[rgb(var(--color-danger))] font-semibold' : ''}>
                       متأخر {fmt(row.delayed)}
                     </span>
                   </div>
@@ -901,13 +932,15 @@ export const RepairTechnicianKPIs: React.FC = () => {
             )}
           </div>
           <div className="erp-desktop-table hidden overflow-x-auto xl:block">
-            <table className="table erp-table w-full min-w-[980px] text-sm">
+            <table className="table erp-table w-full min-w-[1100px] text-sm">
               <thead className="erp-thead">
                 <tr>
                   <th className="erp-th text-right">الفني</th>
                   <th className="erp-th text-right">إجمالي</th>
                   <th className="erp-th text-right">تسليم</th>
                   <th className="erp-th text-right">غير قابل</th>
+                  <th className="erp-th text-right">مسند</th>
+                  <th className="erp-th text-right">فك إسناد</th>
                   <th className="erp-th text-right">جاري</th>
                   <th className="erp-th text-right">متأخر</th>
                   <th className="erp-th text-right">نجاح</th>
@@ -919,13 +952,13 @@ export const RepairTechnicianKPIs: React.FC = () => {
               <tbody>
                 {!jobsReady ? (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={10}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={12}>
                       <span role="status" aria-live="polite">جاري التحميل...</span>
                     </td>
                   </tr>
                 ) : pagedRows.length === 0 ? (
                   <tr>
-                    <td className="p-4 text-center text-muted-foreground" colSpan={10}>
+                    <td className="p-4 text-center text-muted-foreground" colSpan={12}>
                       لا توجد بيانات للفلاتر الحالية.
                     </td>
                   </tr>
@@ -1002,7 +1035,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                         <div
-                          className="h-1.5 rounded-full bg-sky-500"
+                          className="h-1.5 rounded-full bg-[rgb(var(--color-primary)/0.1)]0"
                           style={{ width: `${Math.max(2, Math.min(100, bar.jobsShare))}%` }}
                         />
                       </div>
@@ -1012,7 +1045,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                       </div>
                       <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                         <div
-                          className="h-1.5 rounded-full bg-emerald-500"
+                          className="h-1.5 rounded-full bg-[rgb(var(--color-success)/0.1)]0"
                           style={{ width: `${Math.max(2, Math.min(100, bar.revenueShare))}%` }}
                         />
                       </div>
@@ -1040,7 +1073,7 @@ export const RepairTechnicianKPIs: React.FC = () => {
                     </div>
                     <div className="h-2 overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-2 rounded-full bg-sky-500"
+                        className="h-2 rounded-full bg-[rgb(var(--color-primary)/0.1)]0"
                         style={{ width: `${Math.max(2, Math.min(100, bar.share))}%` }}
                       />
                     </div>
@@ -1206,12 +1239,20 @@ function TechnicianRow({
         </div>
       </td>
       <td className="p-2 tabular-nums font-mono">{fmt(row.total)}</td>
-      <td className="p-2 tabular-nums font-mono text-emerald-700 dark:text-emerald-400">{fmt(row.delivered)}</td>
+      <td className="p-2 tabular-nums font-mono text-[rgb(var(--color-success))] dark:text-[rgb(var(--color-success))]">{fmt(row.delivered)}</td>
       <td className="p-2 tabular-nums font-mono">{fmt(row.unrepairable)}</td>
+      <td className="p-2 tabular-nums font-mono font-semibold">{fmt(row.assignedNow)}</td>
+      <td className="p-2 tabular-nums font-mono">
+        {row.released > 0 ? (
+          <span className="font-semibold text-[rgb(var(--color-warning))] dark:text-[rgb(var(--color-warning))]">{fmt(row.released)}</span>
+        ) : (
+          fmt(row.released)
+        )}
+      </td>
       <td className="p-2 tabular-nums font-mono">{fmt(row.open)}</td>
       <td className="p-2 tabular-nums font-mono">
         {row.delayed > 0 ? (
-          <span className="font-semibold text-rose-600">{fmt(row.delayed)}</span>
+          <span className="font-semibold text-[rgb(var(--color-danger))]">{fmt(row.delayed)}</span>
         ) : (
           fmt(row.delayed)
         )}
@@ -1311,6 +1352,8 @@ function TechnicianDetail({
         <MiniStat label="تسليم / إجمالي" value={`${fmt(row.delivered)} / ${fmt(row.total)}`} />
         <MiniStat label="متوسط الأيام" value={fmtDays(row.avgRepairDays)} />
         <MiniStat label="إيراد" value={fmtMoney(row.revenue)} />
+        <MiniStat label="مسند حالياً" value={fmt(row.assignedNow)} />
+        <MiniStat label="فك إسناد" value={fmt(row.released)} tone={row.released > 0 ? 'danger' : undefined} />
         <MiniStat label="جاري" value={fmt(row.open)} />
         <MiniStat label="متأخر" value={fmt(row.delayed)} tone={row.delayed > 0 ? 'danger' : undefined} />
       </div>
@@ -1447,7 +1490,7 @@ function TechnicianDetail({
                     </div>
                     <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                       <div
-                        className="h-1.5 rounded-full bg-violet-500"
+                        className="h-1.5 rounded-full bg-[rgb(var(--color-secondary)/0.1)]0"
                         style={{ width: `${Math.max(2, Math.min(100, bar.share))}%` }}
                       />
                     </div>
@@ -1493,7 +1536,7 @@ function TechnicianDetail({
                     <StatusBadge status={job.status as RepairJobStatus} />
                   </td>
                   <td className="p-2 tabular-nums">{formatDate(job.dueAt)}</td>
-                  <td className="p-2 tabular-nums font-semibold text-rose-600">
+                  <td className="p-2 tabular-nums font-semibold text-[rgb(var(--color-danger))]">
                     {job.overdueDays.toFixed(0)} ي
                   </td>
                 </tr>
@@ -1570,7 +1613,7 @@ function DeltaChip({
   let tone = 'text-foreground';
   if (betterWhen !== 'neutral' && Math.abs(value) >= 0.05) {
     const good = betterWhen === 'higher' ? value > 0 : value < 0;
-    tone = good ? 'text-emerald-600' : 'text-rose-600';
+    tone = good ? 'text-[rgb(var(--color-success))]' : 'text-[rgb(var(--color-danger))]';
   }
   return (
     <div>
@@ -1592,7 +1635,7 @@ function MiniStat({
   return (
     <div className="rounded-lg border bg-muted/20 p-2">
       <p className="text-[10px] text-muted-foreground">{label}</p>
-      <p className={`mt-0.5 text-sm font-semibold tabular-nums ${tone === 'danger' ? 'text-rose-600' : ''}`}>
+      <p className={`mt-0.5 text-sm font-semibold tabular-nums ${tone === 'danger' ? 'text-[rgb(var(--color-danger))]' : ''}`}>
         {value}
       </p>
     </div>

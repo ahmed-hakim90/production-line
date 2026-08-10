@@ -17,7 +17,13 @@ import {
 import { db, isConfigured } from '../../auth/services/firebase';
 import { getCurrentTenantId } from '../../../lib/currentTenant';
 import { tenantQuery } from '../../../lib/tenantFirestore';
-import { REPAIR_JOBS_COLLECTION, REPAIR_SERVICE_EVENTS_SUBCOLLECTION } from '../collections';
+import {
+  REPAIR_BRANCHES_COLLECTION,
+  REPAIR_JOBS_COLLECTION,
+  REPAIR_SERVICE_EVENTS_SUBCOLLECTION,
+} from '../collections';
+import { resolveAssignmentStatusPatch } from '../lib/repairAssignmentStatus';
+import { isAssignableBranchTechnicianId } from '../lib/repairTechnicianAssignment';
 import { appendRepairServiceEvent, appendRepairServiceEventTx } from './repairServiceEventService';
 import { REPAIR_DOMAIN_EVENT_VERSION, resolveDomainEventForStatusChange } from '../utils/repairDomainEvents';
 import {
@@ -539,33 +545,115 @@ export const repairJobService = {
     if (!isConfigured) return;
     const existing = await this.getById(id);
     if (!existing) return;
+    if (Boolean(existing.isClosed) || isDeliveredStatus(existing.status) || isCancelledStatus(existing.status)) {
+      throw new Error('لا يمكن تغيير إسناد فني على طلب مقفل أو مُسلَّم أو ملغي.');
+    }
     const at = nowIso();
-    let next = String(technicianId ?? '').trim();
+    const original = String(technicianId ?? '').trim();
+    let next = original;
+    let linkedEmployeeId = '';
     // Prefer Auth uid when the caller passed an employee id with a linked user,
     // so «طلباتي» (queries by login uid) always finds the job.
     if (next) {
       try {
         const { employeeService } = await import('../../hr/employeeService');
-        const employee = await employeeService.getById(next);
-        const linkedUserId = String(employee?.userId || '').trim();
-        if (linkedUserId) next = linkedUserId;
+        let employee = await employeeService.getById(next);
+        if (!employee) employee = await employeeService.getByUserId(next);
+        if (employee) {
+          linkedEmployeeId = String(employee.id || '').trim();
+          const linkedUserId = String(employee.userId || '').trim();
+          if (linkedUserId) next = linkedUserId;
+        }
       } catch {
         // Keep the provided id when employee lookup is unavailable.
       }
     }
+    if (next) {
+      const branchId = String(existing.branchId || '').trim();
+      if (!branchId) throw new Error('الطلب غير مرتبط بفرع.');
+      const branchSnap = await getDoc(doc(db, REPAIR_BRANCHES_COLLECTION, branchId));
+      if (!branchSnap.exists()) throw new Error('فرع الطلب غير موجود.');
+      const branchData = branchSnap.data() as { technicianIds?: unknown };
+      const branchTechnicianIds = Array.isArray(branchData.technicianIds)
+        ? (branchData.technicianIds as unknown[])
+        : [];
+      if (!isAssignableBranchTechnicianId({
+        assigneeId: next,
+        originalId: original,
+        linkedEmployeeId,
+        branchTechnicianIds: branchTechnicianIds as Array<string | null | undefined>,
+      })) {
+        const actorUid = String(actor?.uid || '').trim();
+        if (actorUid && (next === actorUid || original === actorUid)) {
+          throw new Error('إسناد لي متاح للفني المربوط بالفرع فقط، وليس لموظف الاستقبال.');
+        }
+        throw new Error('الفني المختار غير مربوط بهذا الفرع.');
+      }
+    }
     const prev = String(existing.technicianId || '').trim();
-    await this.update(id, { technicianId: next, assignedAt: at });
-    if (!next || prev === next) return;
+    if (prev === next) return;
+    const actorUid = String(actor?.uid || 'unknown');
+    const actorName = String(actor?.name || 'مستخدم');
+    const beforeStatus = mapLegacyRepairStatus(existing.status || '');
+    const nextStatus = resolveAssignmentStatusPatch({
+      action: next ? 'assign' : 'unassign',
+      currentStatus: existing.status,
+      jobProducts: existing.jobProducts,
+    });
+
+    // Empty technicianId = desk unassign (tech unavailable / wrong branch / handoff).
+    const patch: Partial<RepairJob> = {
+      technicianId: next,
+      assignedAt: next ? at : '',
+    };
+    if (!next && prev) {
+      const priorReleases = Array.isArray(existing.technicianReleaseEvents)
+        ? [...existing.technicianReleaseEvents]
+        : [];
+      priorReleases.push({
+        technicianId: prev,
+        at,
+        actorUid,
+      });
+      patch.technicianReleaseEvents = priorReleases.slice(-50);
+    }
+    if (nextStatus && nextStatus !== beforeStatus) {
+      const history = Array.isArray(existing.statusHistory) ? [...existing.statusHistory] : [];
+      history.push({
+        status: nextStatus,
+        at,
+        technicianId: next || prev || undefined,
+        reason: next ? 'إسناد فني — بدء الفحص' : 'فك الإسناد — إعادة لوارد',
+      });
+      patch.status = nextStatus;
+      patch.statusHistory = history;
+    }
+
+    await this.update(id, patch);
     await appendRepairServiceEvent(id, {
       tenantId: existing.tenantId,
       branchId: existing.branchId,
       at,
-      actorUid: String(actor?.uid || 'unknown'),
-      actorName: String(actor?.name || 'مستخدم'),
-      action: 'technician_assigned',
-      domainEvent: 'technician.assigned',
-      payload: { technicianId: next, previousTechnicianId: prev || null },
+      actorUid,
+      actorName,
+      action: next ? 'technician_assigned' : 'technician_unassigned',
+      domainEvent: next ? 'technician.assigned' : 'technician.unassigned',
+      payload: { technicianId: next || null, previousTechnicianId: prev || null },
     });
+    if (nextStatus && nextStatus !== beforeStatus) {
+      await appendRepairServiceEvent(id, {
+        tenantId: existing.tenantId,
+        branchId: existing.branchId,
+        at,
+        actorUid,
+        actorName,
+        action: 'status_change',
+        domainEvent: resolveDomainEventForStatusChange(beforeStatus, nextStatus),
+        statusBefore: beforeStatus,
+        statusAfter: nextStatus,
+        note: next ? 'تقدم تلقائي بعد إسناد الفني' : 'إعادة لوارد بعد فك الإسناد بدون تشخيص',
+      });
+    }
   },
 
   async changeStatus(input: {

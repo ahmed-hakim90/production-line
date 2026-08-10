@@ -181,7 +181,7 @@ const defaultStatuses = resolveRepairSettings(null).workflow.statuses;
 
 {
   const defaults = resolveRepairSettings(null);
-  assert.equal(defaults.statusMap.diagnosing?.label, 'فحص');
+  assert.equal(defaults.statusMap.diagnosing?.label, 'جاري الفحص');
   assert.equal(defaults.statusMap.diagnosing?.role, 'diagnosis');
 }
 
